@@ -624,3 +624,389 @@ class TestSippLatticePlannerAdapter:
         v2, _ = planner.plan(_obs(goal=(0.0, 3.0)))
         assert math.isfinite(v1)
         assert math.isfinite(v2)
+
+
+# -- Slice 2: time-indexed occupancy, bounded search, and commitment --
+
+from robot_sf.planner.sipp_lattice import (  # noqa: E402
+    SippLatticeSearch,
+    SippLatticeSearchPlannerAdapter,
+    build_pedestrian_occupancy_forecast,
+    build_sipp_lattice_search_adapter,
+)
+
+
+def _search_obs(
+    *,
+    robot=(0.0, 0.0),
+    heading=0.0,
+    speed=0.0,
+    goal=(1.0, 0.0),
+    pedestrian_positions=None,
+    pedestrian_velocities=None,
+    count=0,
+):
+    """Build an observation with time-indexed pedestrian dynamic state."""
+    pedestrian_positions = pedestrian_positions or []
+    if pedestrian_velocities is None:
+        pedestrian_velocities = [[0.0, 0.0] for _ in pedestrian_positions]
+    return {
+        "robot": {
+            "position": np.asarray(robot, dtype=float),
+            "heading": np.asarray([heading], dtype=float),
+            "speed": np.asarray([speed], dtype=float),
+            "radius": np.asarray([0.25], dtype=float),
+        },
+        "goal": {
+            "current": np.asarray(goal, dtype=float),
+            "next": np.asarray(goal, dtype=float),
+        },
+        "pedestrians": {
+            "positions": np.asarray(pedestrian_positions, dtype=float).reshape(-1, 2),
+            "velocities": np.asarray(pedestrian_velocities, dtype=float).reshape(-1, 2),
+            "count": np.asarray([float(count)], dtype=float),
+            "radius": 0.30,
+        },
+    }
+
+
+def _fast_config(**overrides):
+    """Config with per-primitive speed unclamped by acceleration for tractable search."""
+    params = {
+        "max_linear_acceleration": 5.0,
+        "max_expansions": 6000,
+        "planning_horizon_slots": 40,
+    }
+    params.update(overrides)
+    return build_sipp_lattice_config(params)
+
+
+class TestPedestrianOccupancyForecast:
+    """Unit tests for time-indexed pedestrian safe intervals."""
+
+    def test_no_pedestrians_is_static_and_unoccupied(self) -> None:
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.zeros((0, 2)),
+            velocities=np.zeros((0, 2)),
+            heading=0.0,
+            config=SippLatticeConfig(),
+            pedestrian_radius=0.3,
+        )
+        assert fc.status == "static"
+        assert fc.usable
+        arc = np.array([[0.0, 0.0], [0.1, 0.0], [0.2, 0.0]])
+        assert not fc.arc_occupied(arc, 5)
+
+    def test_missing_velocities_is_static_stationary(self) -> None:
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.array([[0.3, 0.0]]),
+            velocities=None,
+            heading=0.0,
+            config=SippLatticeConfig(),
+            pedestrian_radius=0.3,
+        )
+        assert fc.status == "static"
+        # Stationary pedestrian occupies the same cell at every slot.
+        arc = np.array([[0.3, 0.0]])
+        assert fc.arc_occupied(arc, 0)
+        assert fc.arc_occupied(arc, 10)
+
+    def test_geometrically_clear_arc_rejected_when_temporally_occupied(self) -> None:
+        # Pedestrian is far now (arc clear at slot 0) but crosses the arc later.
+        cfg = SippLatticeConfig()
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.array([[1.5, 0.0]]),
+            velocities=np.array([[-1.0, 0.0]]),
+            heading=0.0,
+            config=cfg,
+            pedestrian_radius=0.3,
+        )
+        arc = np.array([[0.0, 0.0], [0.1, 0.0], [0.2, 0.0]])
+        assert not fc.arc_occupied(arc, 0)  # geometrically clear right now
+        assert fc.arc_occupied(arc, 6)  # temporally occupied once the pedestrian arrives
+
+    def test_malformed_velocities_fail_closed(self) -> None:
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.array([[0.5, 0.0]]),
+            velocities=np.array([[float("inf"), 0.0]]),
+            heading=0.0,
+            config=SippLatticeConfig(),
+            pedestrian_radius=0.3,
+        )
+        assert fc.status == "failed"
+        assert not fc.usable
+
+    def test_nonfinite_positions_fail_closed(self) -> None:
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.array([[float("nan"), 0.0]]),
+            velocities=np.array([[0.0, 0.0]]),
+            heading=0.0,
+            config=SippLatticeConfig(),
+            pedestrian_radius=0.3,
+        )
+        assert fc.status == "failed"
+
+    def test_ego_velocity_rotated_to_world(self) -> None:
+        # Ego +x velocity with heading pi/2 becomes world +y.
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.array([[0.0, 0.0]]),
+            velocities=np.array([[1.0, 0.0]]),
+            heading=math.pi / 2,
+            config=SippLatticeConfig(time_slot_duration=1.0),
+            pedestrian_radius=0.3,
+        )
+        moved = fc.positions_at_slot(1)
+        assert moved[0][0] == pytest.approx(0.0, abs=1e-6)
+        assert moved[0][1] == pytest.approx(1.0, abs=1e-6)
+
+
+class TestSippLatticeSearch:
+    """Unit tests for the bounded state-time lattice search."""
+
+    def test_reaches_open_space_goal(self) -> None:
+        cfg = _fast_config()
+        search = SippLatticeSearch(cfg, cfg.to_primitive_set().build(), cfg.to_collision_model())
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.zeros((0, 2)),
+            velocities=np.zeros((0, 2)),
+            heading=0.0,
+            config=cfg,
+            pedestrian_radius=0.3,
+        )
+        result = search.search(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([0.6, 0.0]),
+            forecast=fc,
+        )
+        assert result.result_type == "native_plan"
+        assert result.bound_termination == "goal"
+        assert len(result.plan) >= 1
+
+    def test_expansion_bound_terminates_deterministically(self) -> None:
+        # A tiny expansion budget with a far goal must return a classified result.
+        cfg = _fast_config(max_expansions=1, planning_horizon_slots=3)
+        search = SippLatticeSearch(cfg, cfg.to_primitive_set().build(), cfg.to_collision_model())
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.zeros((0, 2)),
+            velocities=np.zeros((0, 2)),
+            heading=0.0,
+            config=cfg,
+            pedestrian_radius=0.3,
+        )
+        result = search.search(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            goal=np.array([50.0, 0.0]),
+            forecast=fc,
+        )
+        assert result.bound_termination in {"expansions", "time", "horizon_only", "open_exhausted"}
+        assert result.result_type in {"native_plan", "bounded_safe_wait"}
+        assert result.expansions <= 1
+
+    def test_search_is_deterministic(self) -> None:
+        cfg = _fast_config()
+        primitives = cfg.to_primitive_set().build()
+        collision = cfg.to_collision_model()
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.array([[0.5, -1.1]]),
+            velocities=np.array([[0.0, 2.0]]),
+            heading=0.0,
+            config=cfg,
+            pedestrian_radius=0.3,
+        )
+        results = [
+            SippLatticeSearch(cfg, primitives, collision).search(
+                start_pos=np.array([0.0, 0.0]),
+                start_heading=0.0,
+                start_speed=0.0,
+                goal=np.array([1.0, 0.0]),
+                forecast=fc,
+            )
+            for _ in range(3)
+        ]
+        commands = [[p.as_command() for p in r.plan] for r in results]
+        assert commands[0] == commands[1] == commands[2]
+
+
+class TestSippLatticeSearchPlannerAdapter:
+    """Unit tests for the bounded SIPP search planner with commitment."""
+
+    def test_multi_primitive_path_around_time_indexed_conflict(self) -> None:
+        # A pedestrian crosses the corridor when the robot would arrive going
+        # straight at full speed. Greedy one-step scoring (Slice 1) ignores time
+        # and drives straight into the future conflict; the state-time search
+        # commits a multi-primitive plan that modulates speed to yield.
+        cfg = _fast_config(
+            robot_radius=0.15,
+            pedestrian_radius=0.15,
+            safety_margin=0.05,
+            min_clearance=0.3,
+        )
+        obs = _search_obs(
+            goal=(1.0, 0.0),
+            pedestrian_positions=[[0.5, -1.1]],
+            pedestrian_velocities=[[0.0, 2.0]],
+            count=1,
+        )
+        search = SippLatticeSearchPlannerAdapter(config=cfg)
+        v, _w = search.plan(obs)
+        decision = search.diagnostics()["last_decision"]
+
+        assert decision["result_type"] == "native_plan"
+        assert decision["bound_termination"] == "goal"
+        assert decision["committed_length"] >= 2
+        # The search actively rejected temporally-occupied arcs.
+        assert decision["safe_interval_rejections"] > 0
+        # The committed plan modulates speed (a slowdown/wait) rather than driving
+        # straight through: at least one committed primitive is slower than the
+        # first executed command.
+        committed_speeds = [p.linear_velocity for p in search._committed]
+        assert min(committed_speeds) < v
+
+        greedy = SippLatticePlannerAdapter(config=cfg)
+        gv, gw = greedy.plan(obs)
+        # Greedy sees the pedestrian's *current* (far) position as clear and drives
+        # straight ahead at speed -- i.e. into the future conflict.
+        assert gv > v
+        assert abs(gw) < 0.2
+
+    def test_safe_interval_rejects_geometrically_clear_but_occupied(self) -> None:
+        # With a pedestrian that will occupy every forward arc in time, the
+        # bounded search returns a classified safe wait rather than a collision.
+        cfg = _fast_config(planning_horizon_slots=10, max_expansions=800)
+        obs = _search_obs(
+            goal=(1.0, 0.0),
+            pedestrian_positions=[[0.35, 0.0]],
+            pedestrian_velocities=[[0.0, 0.0]],
+            count=1,
+        )
+        planner = SippLatticeSearchPlannerAdapter(config=cfg)
+        v, w = planner.plan(obs)
+        decision = planner.diagnostics()["last_decision"]
+        assert decision["result_type"] in {"bounded_safe_wait", "native_plan"}
+        if decision["result_type"] == "bounded_safe_wait":
+            assert (v, w) == (0.0, 0.0)
+            assert decision["safe_interval_rejections"] > 0
+
+    def test_commitment_survives_one_unchanged_update(self) -> None:
+        planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
+        obs = _search_obs(goal=(1.0, 0.0))
+        planner.plan(obs)
+        first = planner.diagnostics()["last_decision"]
+        assert first["result_type"] == "native_plan"
+        planner.plan(obs)
+        second = planner.diagnostics()["last_decision"]
+        assert second["result_type"] == "committed_plan"
+        assert second["commit_index"] > first["commit_index"]
+
+    def test_commitment_invalidates_on_new_occupancy(self) -> None:
+        planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
+        clear = _search_obs(goal=(1.0, 0.0))
+        planner.plan(clear)
+        assert planner.diagnostics()["last_decision"]["result_type"] == "native_plan"
+        # Newly occupied future interval on the committed straight path.
+        blocked = _search_obs(
+            goal=(1.0, 0.0),
+            pedestrian_positions=[[0.4, 0.0]],
+            pedestrian_velocities=[[0.0, 0.0]],
+            count=1,
+        )
+        planner.plan(blocked)
+        decision = planner.diagnostics()["last_decision"]
+        assert decision["replanned"] is True
+        assert decision["result_type"] != "committed_plan"
+
+    def test_goal_change_clears_commitment(self) -> None:
+        planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
+        planner.plan(_search_obs(goal=(1.0, 0.0)))
+        planner.plan(_search_obs(goal=(0.0, 1.0)))
+        decision = planner.diagnostics()["last_decision"]
+        assert decision["replanned"] is True
+
+    def test_reset_clears_commitment_and_diagnostics(self) -> None:
+        planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
+        planner.plan(_search_obs(goal=(1.0, 0.0)))
+        assert planner._committed
+        planner.reset()
+        assert planner._committed == []
+        assert planner._commit_index == 0
+        assert planner._last_goal is None
+        assert planner._last_decision is None
+        assert planner.diagnostics() == {"last_decision": {}}
+
+    def test_failed_dynamic_input_is_classified_safe_wait(self) -> None:
+        planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
+        obs = _search_obs(
+            goal=(1.0, 0.0),
+            pedestrian_positions=[[0.5, 0.0]],
+            pedestrian_velocities=[[float("inf"), 0.0]],
+            count=1,
+        )
+        v, w = planner.plan(obs)
+        decision = planner.diagnostics()["last_decision"]
+        assert decision["result_type"] == "failed_dynamic_input"
+        assert decision["dynamic_state"] == "failed"
+        assert (v, w) == (0.0, 0.0)
+
+    def test_goal_reached_returns_zero_and_clears(self) -> None:
+        planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
+        v, w = planner.plan(_search_obs(robot=(0.95, 0.0), goal=(1.0, 0.0)))
+        decision = planner.diagnostics()["last_decision"]
+        assert decision["result_type"] == "goal_reached"
+        assert (v, w) == (0.0, 0.0)
+        assert planner._committed == []
+
+    def test_plan_bounds_obeyed(self) -> None:
+        planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
+        v, w = planner.plan(_search_obs(goal=(2.0, 1.0)))
+        assert abs(v) <= planner.config.max_linear_speed + 1e-6
+        assert abs(w) <= planner.config.max_angular_speed + 1e-6
+
+    def test_diagnostics_distinguish_result_types(self) -> None:
+        planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
+        obs = _search_obs(goal=(1.0, 0.0))
+        planner.plan(obs)
+        assert planner.diagnostics()["last_decision"]["result_type"] == "native_plan"
+        planner.plan(obs)
+        assert planner.diagnostics()["last_decision"]["result_type"] == "committed_plan"
+
+    def test_factory_builds_configured_adapter(self) -> None:
+        planner = build_sipp_lattice_search_adapter(
+            {"max_linear_speed": 1.5, "commitment_horizon": 2}
+        )
+        assert isinstance(planner, SippLatticeSearchPlannerAdapter)
+        assert planner.config.max_linear_speed == 1.5
+        assert planner.config.commitment_horizon == 2
+
+
+class TestSippLatticeConfigSlice2:
+    """Validation tests for the Slice-2 config fields."""
+
+    def test_heuristic_weight_below_one_raises(self) -> None:
+        with pytest.raises(ValueError, match="heuristic_weight"):
+            SippLatticeConfig(heuristic_weight=0.5)
+
+    def test_zero_max_expansions_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_expansions"):
+            SippLatticeConfig(max_expansions=0)
+
+    def test_negative_offtrack_tolerance_raises(self) -> None:
+        with pytest.raises(ValueError, match="offtrack_tolerance"):
+            SippLatticeConfig(offtrack_tolerance=-0.1)
+
+    def test_search_fields_flow_through_factory(self) -> None:
+        cfg = build_sipp_lattice_config(
+            {
+                "planning_horizon_slots": 12,
+                "max_planning_time_s": 0.02,
+                "commitment_horizon": 3,
+                "pedestrian_forecast_horizon_s": 2.0,
+            }
+        )
+        assert cfg.planning_horizon_slots == 12
+        assert cfg.max_planning_time_s == pytest.approx(0.02)
+        assert cfg.commitment_horizon == 3
+        assert cfg.pedestrian_forecast_horizon_s == pytest.approx(2.0)

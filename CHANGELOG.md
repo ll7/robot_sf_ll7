@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **issue #5413 bounded kinodynamic SIPP search, commitment, and experimental registration
+  (#5306 Slice 2).** Turns the Slice-1 one-step motion-primitive selector into a real bounded
+  state-time (SIPP-class) local planner in `robot_sf/planner/sipp_lattice.py`:
+  a time-indexed `PedestrianOccupancyForecast` builds pedestrian safe intervals from planner-facing
+  positions/velocities (failing closed on malformed dynamic input), a bounded weighted-A* search
+  (`SippLatticeSearch`) expands the AMV-feasible primitive set over discretized
+  `(x, y, heading, velocity, time_slot)` states with hard expansion/planning-time/horizon limits,
+  and `SippLatticeSearchPlannerAdapter` commits a short primitive sequence across control cycles,
+  replanning only when the sequence is exhausted, invalidated by new occupancy, materially
+  off-track, or the goal changes. Registered as a **testing-only/experimental** planner key
+  `sipp_lattice` (behind the `allow_testing_algorithms` opt-in guard) resolvable through the real
+  map-runner path, with the canonical config `configs/algos/sipp_lattice_slice2_smoke.yaml`.
+  Diagnostics distinguish `native_plan`, `committed_plan`, `bounded_safe_wait`, `goal_reached`,
+  and `failed_dynamic_input`. Evidence status: exploratory implementation plus a CPU smoke — this
+  slice makes no safety, liveness, or benchmark-superiority claim (Slice 3 of #5306 owns outcome
+  evaluation).
+
 ### Fixed
 
 * **issue #5340 main CI regression from unconditional `spaces.Sequence` leaf.** PRs #5335

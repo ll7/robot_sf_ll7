@@ -1379,12 +1379,11 @@ class HybridRuleLocalPlannerAdapter(OccupancyAwarePlannerMixin):
         obstacle_value = 0.0
         # Reuse the per-plan occupancy-grid context instead of re-extracting the grid
         # payload on every rollout step (identical grid/meta/channel within a plan()).
-        context = (
-            self._clearance_context
-            if self._clearance_context is not None
-            and self._clearance_context.observation_id == id(observation)
-            else self._build_clearance_context(observation)
-        )
+        if self._clearance_context is None or self._clearance_context.observation_id != id(
+            observation
+        ):
+            self._clearance_context = self._build_clearance_context(observation)
+        context = self._clearance_context
         if context is not None:
             obstacle_value = self._grid_value(
                 robot_pos, context.grid, context.meta, context.channel

@@ -1,0 +1,12 @@
+# Experimental issue #5310 arm: identical NMPC objective/constraints per topology seed.
+allow_testing_algorithms: true
+horizon_steps: 6
+rollout_dt: 0.25
+solver_ftol: 0.001
+solver_max_iterations: 32
+max_hypotheses: 3
+hypothesis_labels: [pass_left, yield_straight, pass_right]
+initialization_turn_rate: 0.8
+yield_speed_scale: 0.55
+hysteresis_ticks: 2
+max_runtime_s: 5.0

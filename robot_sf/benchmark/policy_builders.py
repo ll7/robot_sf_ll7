@@ -20,6 +20,10 @@ from robot_sf.planner.teb_commitment import (
     TEBCommitmentPlannerAdapter,
     build_teb_commitment_config,
 )
+from robot_sf.planner.topology_parallel_nmpc import (
+    TopologyParallelNMPCPlannerAdapter,
+    build_topology_parallel_nmpc_config,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -131,6 +135,25 @@ def _build_learned_prediction_mpc_policy_spec(algo_config: dict[str, Any]) -> Ad
     )
 
 
+def _build_topology_parallel_nmpc_policy_spec(
+    algo_config: dict[str, Any],
+) -> AdapterPolicySpec:
+    """Build the testing-only topology-parallel NMPC arm.
+
+    Returns:
+        AdapterPolicySpec: Map-runner adapter construction payload.
+    """
+    return AdapterPolicySpec(
+        algo_key="topology_parallel_nmpc",
+        algo_config=algo_config,
+        adapter=TopologyParallelNMPCPlannerAdapter(
+            config=build_topology_parallel_nmpc_config(algo_config)
+        ),
+        adapter_name="TopologyParallelNMPCPlannerAdapter",
+        limitations="experimental_topology_parallel_nmpc_not_benchmark_evidence",
+    )
+
+
 _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec]] = {
     "chance_constrained_mpc": _build_chance_constrained_mpc_policy_spec,
     **dict.fromkeys(LEARNED_PREDICTION_MPC_ALIASES, _build_learned_prediction_mpc_policy_spec),
@@ -141,6 +164,7 @@ _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec
     "dwa": _build_dwa_policy_spec,
     "risk_dwa": _build_risk_dwa_policy_spec,
     "teb": _build_teb_policy_spec,
+    "topology_parallel_nmpc": _build_topology_parallel_nmpc_policy_spec,
 }
 
 

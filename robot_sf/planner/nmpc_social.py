@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass, fields
+from time import perf_counter
 from typing import Any
 
 import numpy as np
@@ -97,6 +98,19 @@ class _RolloutContext:
     speed_cap: float
     pedestrian_uncertainty_envelope_enabled: bool = False
     pedestrian_uncertainty_alpha_mps: float = 0.0
+
+
+@dataclass(frozen=True)
+class NMPCSolveResult:
+    """Result of one NMPC solve from an explicit control-sequence initialization."""
+
+    feasible: bool
+    solution: np.ndarray | None
+    objective: float | None
+    solver_status: str
+    solver_iterations: int | None
+    runtime_s: float
+    rollout_states: np.ndarray
 
 
 class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -511,9 +525,14 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         """Return additional SLSQP constraints for subclasses."""
         return ()
 
-    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
-        """Return the first command of the locally optimized NMPC sequence."""
-        self._stats["calls"] = int(self._stats.get("calls", 0)) + 1
+    def _build_rollout_context(
+        self, observation: dict[str, Any]
+    ) -> tuple[_RolloutContext, float, float]:
+        """Build the shared NMPC context and goal geometry for one observation.
+
+        Returns:
+            tuple[_RolloutContext, float, float]: Rollout context, heading error, and goal distance.
+        """
         (
             robot_pos,
             heading,
@@ -526,22 +545,16 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         ) = self._extract_state(observation)
         goal_delta = goal - robot_pos
         goal_distance = float(np.linalg.norm(goal_delta))
-        if goal_distance <= float(self.config.goal_tolerance):
-            self._record_command(0.0, 0.0)
-            return 0.0, 0.0
-
         goal_heading = float(np.arctan2(goal_delta[1], goal_delta[0]))
         goal_heading_error = _wrap_angle(goal_heading - heading)
-        speed_cap = self._speed_cap(
-            robot_pos=robot_pos,
-            goal_heading_error=goal_heading_error,
-            observation=observation,
-        )
-        preferred_turn = self._preferred_avoidance_turn(
-            robot_pos=robot_pos,
-            heading=heading,
-            ped_positions=ped_positions,
-            ped_velocities=ped_velocities,
+        speed_cap = (
+            float(self.config.max_linear_speed)
+            if goal_distance <= float(self.config.goal_tolerance)
+            else self._speed_cap(
+                robot_pos=robot_pos,
+                goal_heading_error=goal_heading_error,
+                observation=observation,
+            )
         )
         context = _RolloutContext(
             robot_pos=robot_pos,
@@ -559,21 +572,37 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             observation=observation,
             speed_cap=speed_cap,
         )
-        x0 = self._initial_guess(
-            goal_heading_error=goal_heading_error,
-            current_speed=speed,
-            goal_distance=goal_distance,
-            preferred_turn=preferred_turn,
-            speed_cap=speed_cap,
-        )
+        return context, goal_heading_error, goal_distance
+
+    def _solve_context(
+        self, context: _RolloutContext, initial_guess: np.ndarray
+    ) -> NMPCSolveResult:
+        """Solve one explicit initialization with the unchanged NMPC objective and bounds.
+
+        Returns:
+            NMPCSolveResult: Solver status, objective, solution, and rollout diagnostics.
+        """
         horizon = max(int(self.config.horizon_steps), 1)
-        lower = np.empty(horizon * 2, dtype=float)
-        upper = np.empty(horizon * 2, dtype=float)
+        expected_size = horizon * 2
+        x0 = np.asarray(initial_guess, dtype=float).reshape(-1)
+        if x0.size != expected_size or not np.all(np.isfinite(x0)):
+            return NMPCSolveResult(
+                feasible=False,
+                solution=None,
+                objective=None,
+                solver_status="invalid_initialization",
+                solver_iterations=None,
+                runtime_s=0.0,
+                rollout_states=np.zeros((0, 3), dtype=float),
+            )
+
+        lower = np.empty(expected_size, dtype=float)
+        upper = np.empty(expected_size, dtype=float)
         lower[0::2] = 0.0
-        upper[0::2] = float(speed_cap)
+        upper[0::2] = float(context.speed_cap)
         lower[1::2] = -float(self.config.max_angular_speed)
         upper[1::2] = float(self.config.max_angular_speed)
-
+        started = perf_counter()
         result = minimize(
             lambda u: self._rollout_cost(u, context=context),
             x0,
@@ -586,7 +615,101 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 "disp": False,
             },
         )
-        if not bool(result.success):
+        runtime_s = perf_counter() - started
+        solution = None if result.x is None else np.asarray(result.x, dtype=float).reshape(-1)
+        solution_valid = (
+            solution is not None
+            and solution.size == expected_size
+            and np.all(np.isfinite(solution))
+        )
+        feasible = bool(result.success) and bool(solution_valid)
+        objective = self._rollout_cost(solution, context=context) if solution_valid else None
+        rollout_states = (
+            self._rollout_states(solution, context=context)
+            if solution_valid
+            else np.zeros((0, 3), dtype=float)
+        )
+        status = str(getattr(result, "message", "success" if feasible else "solver_failed"))
+        return NMPCSolveResult(
+            feasible=feasible,
+            solution=solution,
+            objective=objective,
+            solver_status=status,
+            solver_iterations=getattr(result, "nit", None),
+            runtime_s=float(runtime_s),
+            rollout_states=rollout_states,
+        )
+
+    def solve_initialization(
+        self, observation: dict[str, Any], initial_guess: np.ndarray
+    ) -> NMPCSolveResult:
+        """Solve an explicit control initialization through the native NMPC implementation.
+
+        Returns:
+            NMPCSolveResult: Solver status, objective, solution, and rollout diagnostics.
+        """
+        context, _goal_heading_error, goal_distance = self._build_rollout_context(observation)
+        if goal_distance <= float(self.config.goal_tolerance):
+            return NMPCSolveResult(
+                feasible=True,
+                solution=np.zeros(max(int(self.config.horizon_steps), 1) * 2, dtype=float),
+                objective=0.0,
+                solver_status="goal_reached",
+                solver_iterations=0,
+                runtime_s=0.0,
+                rollout_states=np.zeros((0, 3), dtype=float),
+            )
+        return self._solve_context(context, initial_guess)
+
+    def _command_from_solution(
+        self, solution: np.ndarray, *, context: _RolloutContext
+    ) -> tuple[float, float]:
+        """Convert a solved control sequence to a guarded first-step command.
+
+        Returns:
+            tuple[float, float]: Guarded linear and angular command.
+        """
+        action = np.asarray(solution, dtype=float).reshape(-1)
+        linear = float(np.clip(action[0], 0.0, float(context.speed_cap)))
+        angular = float(
+            np.clip(
+                action[1],
+                -float(self.config.max_angular_speed),
+                float(self.config.max_angular_speed),
+            )
+        )
+        return self._guarded_first_step_command(
+            linear=linear,
+            angular=angular,
+            robot_pos=context.robot_pos,
+            heading=context.heading,
+            robot_radius=context.robot_radius,
+            observation=context.observation,
+        )
+
+    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+        """Return the first command of the locally optimized NMPC sequence."""
+        self._stats["calls"] = int(self._stats.get("calls", 0)) + 1
+        context, goal_heading_error, goal_distance = self._build_rollout_context(observation)
+        if goal_distance <= float(self.config.goal_tolerance):
+            self._record_command(0.0, 0.0)
+            return 0.0, 0.0
+
+        preferred_turn = self._preferred_avoidance_turn(
+            robot_pos=context.robot_pos,
+            heading=context.heading,
+            ped_positions=context.ped_positions,
+            ped_velocities=context.ped_velocities,
+        )
+        x0 = self._initial_guess(
+            goal_heading_error=goal_heading_error,
+            current_speed=context.current_speed,
+            goal_distance=goal_distance,
+            preferred_turn=preferred_turn,
+            speed_cap=context.speed_cap,
+        )
+        solve = self._solve_context(context, x0)
+        if not solve.feasible:
             self._last_solution = None
             self._stats["solver_failures"] = int(self._stats.get("solver_failures", 0)) + 1
             if bool(self.config.fallback_to_stop):
@@ -595,35 +718,20 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 )
                 self._record_command(0.0, 0.0)
                 return 0.0, 0.0
-            if result.x is None:
+            if solve.solution is None:
                 warnings.warn(
                     "NMPC solver failed without a fallback solution; reusing the initial guess.",
                     RuntimeWarning,
                     stacklevel=2,
                 )
-            action = np.asarray(result.x if result.x is not None else x0, dtype=float)
+            action = np.asarray(solve.solution if solve.solution is not None else x0, dtype=float)
             self._last_solution = action.copy()
         else:
             self._stats["solver_successes"] = int(self._stats.get("solver_successes", 0)) + 1
-            action = np.asarray(result.x, dtype=float)
+            action = np.asarray(solve.solution, dtype=float)
             self._last_solution = action.copy()
 
-        linear = float(np.clip(action[0], 0.0, float(speed_cap)))
-        angular = float(
-            np.clip(
-                action[1],
-                -float(self.config.max_angular_speed),
-                float(self.config.max_angular_speed),
-            )
-        )
-        linear, angular = self._guarded_first_step_command(
-            linear=linear,
-            angular=angular,
-            robot_pos=robot_pos,
-            heading=heading,
-            robot_radius=robot_radius,
-            observation=observation,
-        )
+        linear, angular = self._command_from_solution(action, context=context)
         self._record_command(linear, angular)
         return (linear, angular)
 

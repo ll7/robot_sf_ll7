@@ -451,6 +451,16 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         requires_explicit_opt_in=True,
     ),
     AlgorithmReadiness(
+        canonical_name="topology_parallel_nmpc",
+        tier="experimental",
+        aliases=("topology_parallel_nmpc",),
+        note=(
+            "Testing-only topology-parallel NMPC with deterministic x-y-t maneuver seeds and "
+            "the unchanged NMPC objective."
+        ),
+        requires_explicit_opt_in=True,
+    ),
+    AlgorithmReadiness(
         canonical_name="prediction_mpc",
         tier="experimental",
         aliases=(

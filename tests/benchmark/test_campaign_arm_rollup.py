@@ -130,6 +130,29 @@ def test_arm_rollup_exception_path_uses_summary_error() -> None:
     assert "ImportError" in arm["first_error"]
 
 
+def test_arm_rollup_none_optional_values_fail_closed_to_zero() -> None:
+    """Null summary counters default safely and null errors stay absent."""
+    run_entries: list[dict[str, Any]] = [
+        {
+            "planner": {"key": "broken", "algo": "custom", "kinematics": "diff"},
+            "status": "failed",
+            "summary": {
+                "written": None,
+                "episodes_total": 4,
+                "failed_jobs": None,
+                "failures": [],
+                "error": None,
+            },
+        },
+    ]
+
+    arm = _build_arm_rollup(run_entries)[0]
+
+    assert arm["episodes_written"] == 4
+    assert arm["episodes_failed"] == 0
+    assert "first_error" not in arm
+
+
 def test_arm_rollup_not_available_arm_has_no_error() -> None:
     """Dependency-gated not_available arm has no error fields."""
     run_entries: list[dict[str, Any]] = [

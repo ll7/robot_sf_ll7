@@ -92,8 +92,12 @@ def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str
         summary = entry.get("summary") or {}
         failures = summary.get("failures") or []
         status = str(entry.get("status", "unknown"))
-        episodes_written = int(summary.get("written", summary.get("episodes_total", 0)))
-        episodes_failed = int(summary.get("failed_jobs", 0))
+        written_value = summary.get("written")
+        if written_value is None:
+            written_value = summary.get("episodes_total")
+        episodes_written = int(written_value) if written_value is not None else 0
+        failed_jobs_value = summary.get("failed_jobs")
+        episodes_failed = int(failed_jobs_value) if failed_jobs_value is not None else 0
 
         first_error: str | None = None
         distinct_error_count = 0
@@ -101,7 +105,8 @@ def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str
             error_signatures: set[str] = set()
             first_error_raw: str | None = None
             for failure in failures:
-                error_str = str(failure.get("error", ""))
+                error_value = failure.get("error")
+                error_str = str(error_value) if error_value is not None else ""
                 if error_str:
                     if first_error_raw is None:
                         first_error_raw = error_str
@@ -109,8 +114,10 @@ def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str
             if error_signatures:
                 first_error = first_error_raw[:_MAX_FIRST_ERROR_LEN] if first_error_raw else None
                 distinct_error_count = len(error_signatures)
-            elif str(summary.get("error", "")):
-                first_error = str(summary["error"])[:_MAX_FIRST_ERROR_LEN]
+            else:
+                summary_error = summary.get("error")
+                if summary_error:
+                    first_error = str(summary_error)[:_MAX_FIRST_ERROR_LEN]
 
         arm_entry: dict[str, Any] = {
             "planner_key": str(planner_info.get("key", "unknown")),

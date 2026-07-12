@@ -16,7 +16,7 @@ latest_integration_slice:
 remaining_blockers:
   - no_attributed_mean_matched_paired_campaign_episode_records
   - no_campaign_backed_realized_distribution_or_rank_reversal_conclusion
-next_empirical_action: run_the_tracked_18_row_paired_manifest_then_review_provenanced_outputs
+next_empirical_action: run_the_tracked_72_row_paired_manifest_then_review_provenanced_outputs
 forbidden_claims:
   heterogeneity_effect: false
   planner_rank_stability: false

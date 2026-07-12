@@ -906,7 +906,15 @@ def _execute_arm(
             resume=inputs.resume,
             append=inputs.resume,
         )
-    except Exception as exc:  # noqa: BLE001 - any runner failure is a visible caveat, not a crash
+    except (
+        AttributeError,
+        ImportError,
+        LookupError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:
         return ArmExecutionResult(
             arm_key=job.arm_key,
             algorithm=job.algorithm,

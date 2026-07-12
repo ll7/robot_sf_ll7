@@ -543,6 +543,38 @@ def test_episode_record_readiness_blocks_missing_or_misaligned_trace_metadata() 
     )
 
 
+@pytest.mark.parametrize("missing_field", ["clearance_m", "near_field_exposure_s"])
+def test_episode_record_readiness_blocks_trace_without_per_step_metric_field(
+    missing_field: str,
+) -> None:
+    """Readiness fails closed when the runtime trace omits a required per-step metric.
+
+    This reproduces the exact SLURM-job-13379 failure mode (issue #5421, residual test
+    contract from closed duplicate PR #5402): the ``pedestrian_control_trace`` is present
+    but a per-step ``clearance_m`` / ``near_field_exposure_s`` field is absent, so
+    integration readiness cannot correctly evaluate the ablation. The field is removed with
+    ``del`` rather than ``dict.pop(field, None)`` so that fixture/schema drift which renames
+    or drops the metric raises ``KeyError`` here and fails this test loudly, instead of
+    silently no-op'ing and leaving the missing-per-step-metric path unexercised. Both metric
+    fields are covered independently because the per-metric readiness check reports only the
+    first missing key it encounters, so one generic case would never prove the second guard.
+    """
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+    records = _episode_records_for_manifest(manifest)
+    trace = records[0]["algorithm_metadata"]["pedestrian_control_trace"]
+    del trace["pedestrians"][0]["steps"][0][missing_field]
+
+    readiness = assess_mean_matched_episode_records(manifest, records)
+
+    assert readiness["status"] == "blocked"
+    assert readiness["ready"] is False
+    assert any(
+        f"control_trace.pedestrians[0].steps[0] missing '{missing_field}'" in blocker
+        for blocker in readiness["blockers"]
+    )
+
+
 def test_episode_record_readiness_blocks_missing_rank_metric() -> None:
     """Records cannot reach rank analysis without its finite episode metric."""
 

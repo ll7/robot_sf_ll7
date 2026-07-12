@@ -153,9 +153,8 @@ def test_prediction_disabled_yields_different_command_for_moving_pedestrian() ->
     )
 
 
-def test_predictor_predict_frozen_when_prediction_disabled() -> None:
-    """The hard-constraint predictor returns zero-velocity futures when prediction is disabled
-    via the Factor A toggle in the adapter context."""
+def test_hard_constraint_freeze_uses_current_positions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The hard-constraint path freezes futures at the observed t=0 positions."""
     planner = PredictionMPCPlannerAdapter(
         PredictionMPCConfig(
             prediction_enabled=False,
@@ -163,15 +162,35 @@ def test_predictor_predict_frozen_when_prediction_disabled() -> None:
             rollout_dt=0.25,
         )
     )
-
-    # The _predict_pedestrians override in the adapter path
-    result_step_0 = planner._predict_pedestrians(
-        np.asarray([[1.0, 2.0]], dtype=float),
-        np.asarray([[0.5, 0.3]], dtype=float),
-        0,
+    current = np.asarray([[1.0, 2.0]], dtype=float)
+    obs = _obs(
+        ped_positions=current.tolist(),
+        ped_velocities=[[0.5, 0.3]],
     )
 
-    np.testing.assert_allclose(result_step_0, [[1.0, 2.0]])
+    context = SimpleNamespace(
+        observation=obs,
+        ped_positions=current,
+    )
+    captured: dict[str, np.ndarray] = {}
+
+    def capture_futures(
+        _controls: np.ndarray,
+        *,
+        context: SimpleNamespace,
+        predicted_futures,
+    ) -> np.ndarray:
+        del context
+        captured["positions"] = predicted_futures.positions_world.copy()
+        return np.ones((1,), dtype=float)
+
+    monkeypatch.setattr(planner, "_pedestrian_clearance_constraints", capture_futures)
+    constraints = planner._optimizer_constraints(context)
+    assert len(constraints) == 1
+    constraints[0].fun(np.zeros(2 * planner.config.horizon_steps, dtype=float))
+
+    expected = np.repeat(current[:, np.newaxis, :], planner.config.horizon_steps, axis=1)
+    np.testing.assert_allclose(captured["positions"], expected)
 
 
 # ---------------------------------------------------------------------------
@@ -381,7 +400,9 @@ def test_preflight_identity_same_observation_contract() -> None:
     for name, p in planners[1:]:
         base = planners[0][1]
         assert p.config.max_linear_speed == base.config.max_linear_speed, f"{name} max_linear_speed"
-        assert p.config.max_angular_speed == base.config.max_angular_speed, f"{name} max_angular_speed"
+        assert p.config.max_angular_speed == base.config.max_angular_speed, (
+            f"{name} max_angular_speed"
+        )
         assert p.config.horizon_steps == base.config.horizon_steps, f"{name} horizon_steps"
         assert p.config.rollout_dt == base.config.rollout_dt, f"{name} rollout_dt"
         assert p.config.goal_tolerance == base.config.goal_tolerance, f"{name} goal_tolerance"
@@ -403,7 +424,9 @@ def test_preflight_identity_same_observation_contract() -> None:
     assert toggles["prediction_mpc_factorial_A_off_B_off.yaml"] is False
 
     # Factor B affects hard_pedestrian_constraints_enabled AND pedestrian_clearance_weight
-    hard_flags = {name: p.prediction_config.hard_pedestrian_constraints_enabled for name, p in planners}
+    hard_flags = {
+        name: p.prediction_config.hard_pedestrian_constraints_enabled for name, p in planners
+    }
     assert hard_flags["prediction_mpc_factorial_A_on_B_on.yaml"] is True
     assert hard_flags["prediction_mpc_factorial_A_off_B_on.yaml"] is True
     assert hard_flags["prediction_mpc_factorial_A_on_B_off.yaml"] is False
@@ -580,9 +603,7 @@ def test_diagnostics_reports_factor_toggles() -> None:
 
 def test_diagnostics_default_toggles_true() -> None:
     """Default config diagnostics report both toggles as True."""
-    planner = PredictionMPCPlannerAdapter(
-        PredictionMPCConfig(horizon_steps=2)
-    )
+    planner = PredictionMPCPlannerAdapter(PredictionMPCConfig(horizon_steps=2))
     diag = planner.diagnostics()
     assert diag["factor_toggles"]["prediction_enabled"] is True
     assert diag["factor_toggles"]["hard_pedestrian_constraints_enabled"] is True

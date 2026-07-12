@@ -91,9 +91,9 @@ class TestPredictionMPCFactorialConfig:
         assert config.hard_pedestrian_constraints_enabled is True
         assert config.pedestrian_clearance_weight == 0.0
 
-    def test_soft_factor_b_requires_positive_pedestrian_clearance_weight(self):
-        with pytest.raises(ValueError, match="soft pedestrian clearance"):
-            PredictionMPCConfig(hard_pedestrian_constraints_enabled=False)
+    def test_soft_factor_b_defaults_to_shared_pedestrian_clearance_weight(self):
+        config = PredictionMPCConfig(hard_pedestrian_constraints_enabled=False)
+        assert config.pedestrian_clearance_weight == 4.5
 
 
 class TestNullPedestrianPredictor:

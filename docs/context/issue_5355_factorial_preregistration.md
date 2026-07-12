@@ -31,7 +31,7 @@ All four arms share:
 ### Factor A: prediction consumption
 
 - **ON:** `predictor_backend: constant_velocity` — the `ConstantVelocityPedestrianPredictor` computes horizon-step pedestrian futures from current positions and ego-frame velocities. These futures feed hard clearance constraints.
-- **OFF:** `predictor_backend: none` — the `NullPedestrianPredictor` returns empty futures. Hard constraints are trivially satisfied (no pedestrians to constrain against). Soft cost in the NMPC objective still uses current-state pedestrian positions.
+- **OFF:** `predictor_backend: none` — the `NullPedestrianPredictor` repeats the currently observed pedestrian positions across the horizon. It consumes no velocity or trajectory prediction, while preserving Factor B hard-clearance constraints.
 
 ### Factor B: constraint + local-minimum handling
 

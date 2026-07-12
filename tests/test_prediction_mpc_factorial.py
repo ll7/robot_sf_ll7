@@ -8,15 +8,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
 import yaml
 
+from robot_sf.planner.nmpc_social import _RolloutContext
 from robot_sf.planner.prediction_mpc import (
     NullPedestrianPredictor,
     PredictionMPCConfig,
     PredictionMPCPlannerAdapter,
     build_prediction_mpc_config,
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _minimal_observation(
@@ -93,13 +97,14 @@ class TestPredictionMPCFactorialConfig:
 class TestNullPedestrianPredictor:
     """Test the null predictor for Factor A OFF."""
 
-    def test_null_predictor_returns_empty_futures(self):
+    def test_null_predictor_holds_current_positions_without_predicting_velocity(self):
         predictor = NullPedestrianPredictor()
         obs = _minimal_observation()
         futures = predictor.predict(obs, horizon_steps=6, dt=0.25)
-        assert futures.positions_world.shape == (0, 6, 2)
-        assert futures.mask.shape == (0,)
-        assert futures.source == "none"
+        assert futures.positions_world.shape == (1, 6, 2)
+        assert np.all(futures.positions_world == [[1.0, 0.0]])
+        assert futures.mask.tolist() == [1.0]
+        assert futures.source == "current_position_hold"
 
     def test_null_predictor_zero_pedestrians(self):
         predictor = NullPedestrianPredictor()
@@ -126,16 +131,28 @@ class TestFactorAToggle:
         adapter = PredictionMPCPlannerAdapter(config=config)
         assert not isinstance(adapter._future_predictor, NullPedestrianPredictor)
 
-    def test_null_predictor_produces_no_hard_constraints(self):
+    def test_prediction_off_preserves_hard_constraints_from_factor_b(self):
         config = PredictionMPCConfig(
             predictor_backend="none",
             hard_pedestrian_constraints_enabled=True,
         )
         adapter = PredictionMPCPlannerAdapter(config=config)
         obs = _minimal_observation()
-        adapter.plan(obs)
-        diag = adapter.diagnostics()
-        assert diag["factorial_toggles"]["prediction_enabled"] is False
+        context = _RolloutContext(
+            robot_pos=np.array([0.0, 0.0]),
+            heading=0.0,
+            current_speed=0.1,
+            goal=np.array([5.0, 0.0]),
+            ped_positions=np.array([[1.0, 0.0]]),
+            ped_velocities=np.array([[0.0, 0.0]]),
+            robot_radius=0.25,
+            ped_radius=0.25,
+            pedestrian_uncertainty_envelope_enabled=False,
+            pedestrian_uncertainty_alpha_mps=0.0,
+            observation=obs,
+            speed_cap=0.9,
+        )
+        assert len(adapter._optimizer_constraints(context)) == 1
 
 
 class TestFactorBToggle:
@@ -248,9 +265,7 @@ class TestFactorialArmConfigs:
 
     @pytest.mark.parametrize("config_path", ARM_CONFIGS)
     def test_arm_config_loads_and_builds(self, config_path: str):
-        path = Path(config_path)
-        if not path.exists():
-            pytest.skip(f"config not found: {config_path}")
+        path = REPO_ROOT / config_path
         cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
         config = build_prediction_mpc_config(cfg)
         adapter = PredictionMPCPlannerAdapter(config=config)
@@ -262,9 +277,7 @@ class TestFactorialArmConfigs:
     def test_arm_configs_cover_all_four_cells(self):
         configs = {}
         for path_str in self.ARM_CONFIGS:
-            path = Path(path_str)
-            if not path.exists():
-                pytest.skip("arm configs not found")
+            path = REPO_ROOT / path_str
             cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
             config = build_prediction_mpc_config(cfg)
             arm_key = path.stem.replace("prediction_mpc_factorial_", "")
@@ -295,9 +308,7 @@ class TestPreregistrationHarness:
             validate_arm_configs,
         )
 
-        config_path = Path("configs/research/prediction_mpc_factorial_v1.yaml")
-        if not config_path.exists():
-            pytest.skip("campaign config not found")
+        config_path = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
         results = validate_arm_configs(config_path)
         assert len(results) == 4
         for arm_key, result in results.items():

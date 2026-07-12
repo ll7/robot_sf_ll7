@@ -89,8 +89,17 @@ class PedestrianFuturePredictor(Protocol):
         """Return predicted pedestrian futures in world coordinates."""
 
 
-class NullPedestrianPredictor:
-    """Null predictor that returns empty pedestrian futures (prediction OFF)."""
+class NullPedestrianPredictor(NMPCSocialPlannerAdapter):
+    """Prediction-off baseline that holds observed pedestrian positions fixed.
+
+    The baseline deliberately consumes no velocity or trajectory prediction, but
+    it retains the current observed pedestrians so that Factor B hard-clearance
+    constraints remain active when prediction is disabled.
+    """
+
+    def __init__(self) -> None:
+        """Initialize with the shared SocNav observation-field helpers."""
+        super().__init__(NMPCSocialConfig())
 
     def predict(
         self,
@@ -99,16 +108,27 @@ class NullPedestrianPredictor:
         horizon_steps: int,
         dt: float,
     ) -> PredictedPedestrianFutures:
-        """Return empty pedestrian futures.
+        """Return current pedestrian positions repeated across the horizon.
 
         Returns:
-            PredictedPedestrianFutures: Empty futures with zero pedestrians.
+            PredictedPedestrianFutures: Current-state hold futures, not a
+            velocity or trajectory prediction.
         """
+        _robot_state, _goal_state, ped_state = self._socnav_fields(observation)
+        ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
+        if ped_positions.ndim == 1 and ped_positions.size % 2 == 0:
+            ped_positions = ped_positions.reshape(-1, 2)
+        if ped_positions.ndim != 2 or ped_positions.shape[-1] != 2:
+            ped_positions = np.zeros((0, 2), dtype=float)
+        count = int(self._as_1d_float(ped_state.get("count", [ped_positions.shape[0]]), pad=1)[0])
+        count = max(0, min(count, ped_positions.shape[0]))
+        ped_positions = ped_positions[:count]
+        future = np.repeat(ped_positions[:, np.newaxis, :], max(int(horizon_steps), 1), axis=1)
         return PredictedPedestrianFutures(
-            positions_world=np.zeros((0, max(int(horizon_steps), 1), 2), dtype=float),
-            mask=np.zeros((0,), dtype=float),
+            positions_world=future,
+            mask=np.ones((count,), dtype=float),
             dt=float(dt),
-            source="none",
+            source="current_position_hold",
         )
 
 

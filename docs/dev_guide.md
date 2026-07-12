@@ -1584,6 +1584,23 @@ CI mapping to local tasks and CLI:
 
 Workflow location: `.github/workflows/ci.yml`.
 
+### Red-main merge hold
+
+When `main` CI is red, do not merge unrelated PRs onto it. A merge that lands
+while the required check is already failing hides its own new breakage under
+the existing red, so recovery cost compounds with every merge in the window
+(three such incidents on 2026-07-11/12). The deterministic green/red signal is:
+
+```bash
+uv run python scripts/dev/main_ci_is_green.py   # exit 0 green, 1 not-green
+```
+
+It decides from the most recent **completed** CI run on `main` — an in-progress
+run never counts as green or red. Only PRs that fix the breakage (title-prefixed
+`fix(ci): unbreak main` or labeled `unbreak-main`) may merge while red; they are
+the cure and must land. Reviewing a PR while main is red is fine — only the
+merge is held.
+
 ## CI Performance Monitoring
 The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 

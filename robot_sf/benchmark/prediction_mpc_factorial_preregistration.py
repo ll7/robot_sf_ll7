@@ -253,10 +253,12 @@ def dependency_blockers(dependencies: Any) -> list[str]:
     for entry in dependencies:
         if not isinstance(entry, Mapping):
             raise ValueError("each dependencies entry must be a mapping")
-        blocking_reason = str(entry.get("blocking", "")).strip()
+        blocking_value = entry.get("blocking")
+        blocking_reason = str(blocking_value).strip() if blocking_value is not None else ""
         if not blocking_reason:
             continue
-        status = str(entry.get("status", "")).strip().lower()
+        status_value = entry.get("status")
+        status = str(status_value).strip().lower() if status_value is not None else ""
         if status in RESOLVED_DEPENDENCY_STATES:
             continue
         issue = entry.get("issue", "?")
@@ -376,6 +378,8 @@ def _check_registry_pinned(config_path: Path, registry_path: str | Path | None) 
         registry = json.loads(resolved.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         return False, f"unreadable evidence registry: {exc}"
+    if not isinstance(registry, dict):
+        return False, "evidence registry must be a JSON object/dictionary"
     pinned_config = _resolve_existing_path(
         str(registry.get("config_path", "")), config_path=resolved
     )

@@ -428,6 +428,15 @@ class TestDependencyBlockers:
         # No ``blocking`` reason => informational only, never blocks submission.
         assert dependency_blockers([{"issue": 42, "status": "open"}]) == []
 
+    def test_none_dependency_fields_are_treated_as_missing(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            dependency_blockers,
+        )
+
+        assert dependency_blockers([{"issue": 42, "blocking": None, "status": None}]) == []
+        blockers = dependency_blockers([{"issue": 42, "blocking": "analysis", "status": None}])
+        assert blockers == ["dependency #42 unresolved (status=unset): analysis"]
+
     def test_malformed_dependencies_raise(self):
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
             dependency_blockers,
@@ -473,6 +482,18 @@ class TestCampaignReadinessGate:
         )
         assert report["ready"] is False
         assert report["criteria"]["evidence_registry_pinned"]["ready"] is False
+
+    def test_non_object_registry_blocks_readiness(self, tmp_path):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        registry = tmp_path / "registry.json"
+        registry.write_text("[]", encoding="utf-8")
+        report = assess_campaign_readiness(self.CONFIG_PATH, registry_path=registry)
+        assert report["ready"] is False
+        detail = report["criteria"]["evidence_registry_pinned"]["detail"]
+        assert "JSON object/dictionary" in detail
 
     def test_invalid_config_fails_closed(self, tmp_path):
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (

@@ -487,11 +487,13 @@ not promoted into durable benchmark or paper-facing claims.
 
 `gh issue view <number> --comments` can fail on some GitHub CLI versions with a
 `repository.issue.projectCards` GraphQL deprecation error. Use the targeted REST
-fallback instead (see issue #5186):
+fallback (see issues #5186 and #5188):
 
 ```bash
-# Drop-in for `gh issue view <number> --comments`: native CLI first, REST fallback
-# only for the known projectCards GraphQL error.
+# Drop-in shell wrapper (tries native CLI first, falls back to REST on projectCards):
+bash scripts/dev/gh_issue_view.sh <number> --repo ll7/robot_sf_ll7
+
+# Direct REST helper (same fallback logic, more options):
 uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7
 
 # Explicit REST read with normalized fields (stable JSON output shape):

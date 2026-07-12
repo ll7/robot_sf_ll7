@@ -1,121 +1,99 @@
 #!/usr/bin/env python3
-"""Pre-commit hook to keep release-assurance evidence hashes aligned with source files.
-
-This hook checks if any files referenced in the release-assurance evidence file
-have changed. If they have, it updates the SHA-256 hashes in the evidence file
-and adds the updated file to the commit.
-"""
+"""Keep staged release-assurance evidence hashes aligned with staged source files."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
+from typing import Any
+
+EVIDENCE_PATH = Path("docs/context/evidence/issue_4683_release_assurance_case_example.json")
 
 
-def _sha256_file(path: Path) -> str:
-    """Return sha256 digest for a file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _get_staged_files() -> list[Path]:
-    """Get list of files staged for commit."""
+def _repo_root() -> Path:
+    """Return the repository root for the active Git index."""
     result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only"],
+        ["git", "rev-parse", "--show-toplevel"],
         check=True,
         capture_output=True,
         text=True,
     )
-    return [Path(line) for line in result.stdout.splitlines() if line.strip()]
+    return Path(result.stdout.strip())
 
 
-def _add_file_to_commit(path: Path) -> None:
-    """Add a file to the current commit."""
-    subprocess.run(
-        ["git", "add", str(path)],
-        check=True,
+def _staged_bytes(repo_root: Path, relative_path: Path) -> bytes:
+    """Read a regular tracked file from the Git index, failing closed otherwise."""
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        raise ValueError(f"Evidence path must be repository-relative: {relative_path}")
+    working_path = repo_root / relative_path
+    if not working_path.is_file():
+        raise ValueError(f"Evidence path is not a regular working-tree file: {relative_path}")
+    result = subprocess.run(
+        ["git", "show", f":{relative_path.as_posix()}"],
+        cwd=repo_root,
+        check=False,
         capture_output=True,
-        text=True,
     )
+    if result.returncode != 0:
+        raise ValueError(f"Evidence path is not staged: {relative_path}")
+    return result.stdout
 
 
-def _load_evidence_payload(evidence_path: Path) -> dict | None:
-    """Load and validate the evidence payload."""
-    if not evidence_path.exists():
-        return None
-
+def _load_staged_evidence(repo_root: Path) -> dict[str, Any]:
+    """Load the staged evidence object, rejecting malformed payloads."""
     try:
-        payload = json.loads(evidence_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-
-    if not isinstance(payload, dict) or "evidence" not in payload:
-        return None
-
+        payload = json.loads(_staged_bytes(repo_root, EVIDENCE_PATH))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid staged release-assurance evidence: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Release-assurance evidence root must be an object.")
+    if not isinstance(payload.get("evidence"), list):
+        raise ValueError("Release-assurance evidence must contain an evidence list.")
     return payload
 
 
-def _update_evidence_hashes(payload: dict, staged_files: list[Path]) -> bool:
-    """Update evidence hashes for staged files. Returns True if any updates were made."""
-    evidence_entries = payload.get("evidence", [])
+def _update_evidence_hashes(repo_root: Path, payload: dict[str, Any]) -> bool:
+    """Update every evidence digest from its staged source content."""
     updated = False
-
-    for entry in evidence_entries:
+    for entry in payload["evidence"]:
         if not isinstance(entry, dict):
-            continue
-
-        evidence_path_str = entry.get("path")
-        if not evidence_path_str:
-            continue
-
-        evidence_file = Path(evidence_path_str)
-
-        # Check if this evidence file is staged
-        if evidence_file not in staged_files:
-            continue
-
-        # Check if the file exists
-        if not evidence_file.exists():
-            continue
-
-        # Calculate current hash
-        current_hash = _sha256_file(evidence_file)
-        recorded_hash = entry.get("sha256")
-
-        # Update if hash is different
-        if current_hash != recorded_hash:
-            entry["sha256"] = current_hash
+            raise ValueError("Each release-assurance evidence entry must be an object.")
+        raw_path = entry.get("path")
+        if not isinstance(raw_path, str) or not raw_path:
+            raise ValueError("Each release-assurance evidence entry requires a path.")
+        digest = hashlib.sha256(_staged_bytes(repo_root, Path(raw_path))).hexdigest()
+        if entry.get("sha256") != digest:
+            entry["sha256"] = digest
             updated = True
-
     return updated
 
 
-def main() -> int:
-    """Run the release-assurance hash check."""
-    evidence_path = Path("docs/context/evidence/issue_4683_release_assurance_case_example.json")
+def _stage_evidence(repo_root: Path) -> None:
+    """Stage the regenerated evidence document."""
+    subprocess.run(["git", "add", str(EVIDENCE_PATH)], cwd=repo_root, check=True)
 
-    payload = _load_evidence_payload(evidence_path)
-    if payload is None:
+
+def main() -> int:
+    """Synchronize release-assurance hashes and require a reviewable recommit if changed."""
+    try:
+        repo_root = _repo_root()
+        payload = _load_staged_evidence(repo_root)
+        updated = _update_evidence_hashes(repo_root, payload)
+    except (OSError, subprocess.CalledProcessError, ValueError) as exc:
+        sys.stderr.write(f"release-assurance hash hook: {exc}\n")
+        return 1
+
+    if not updated:
         return 0
 
-    staged_files = _get_staged_files()
-    updated = _update_evidence_hashes(payload, staged_files)
-
-    if updated:
-        # Write updated evidence file
-        evidence_path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        # Add updated evidence file to commit
-        _add_file_to_commit(evidence_path)
-
-    return 0
+    evidence_path = repo_root / EVIDENCE_PATH
+    evidence_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _stage_evidence(repo_root)
+    sys.stderr.write("Updated staged release-assurance hashes; review and commit again.\n")
+    return 1
 
 
 if __name__ == "__main__":

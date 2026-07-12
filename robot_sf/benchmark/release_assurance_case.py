@@ -285,6 +285,7 @@ def build_release_assurance_case(
 
     return {
         "schema_version": RELEASE_ASSURANCE_CASE_SCHEMA_VERSION,
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "generated_at_utc": generated_at_utc
         or datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "release": {

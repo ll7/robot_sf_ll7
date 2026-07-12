@@ -1051,10 +1051,14 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
 
     fairness = payload.get("fairness")
     if isinstance(fairness, dict):
-        verdict = fairness.get("ranking_claim_verdict", {})
-        fair_subset = fairness.get("fair_subset", [])
-        excluded = fairness.get("excluded_planners", [])
-        mismatches = fairness.get("mismatches", [])
+        verdict_value = fairness.get("ranking_claim_verdict")
+        verdict = verdict_value if isinstance(verdict_value, dict) else {}
+        fair_subset_value = fairness.get("fair_subset")
+        fair_subset = fair_subset_value if isinstance(fair_subset_value, list) else []
+        excluded_value = fairness.get("excluded_planners")
+        excluded = excluded_value if isinstance(excluded_value, list) else []
+        mismatches_value = fairness.get("mismatches")
+        mismatches = mismatches_value if isinstance(mismatches_value, list) else []
         lines.extend(["", "## Fairness Contract", ""])
         lines.append(
             "Matched-capability fairness annotations for cross-planner comparison. "
@@ -1068,9 +1072,11 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         if verdict.get("reason"):
             lines.append(f"- Verdict: {verdict['reason']}")
         if fair_subset:
-            lines.append(f"- Fair comparison subset: {', '.join(fair_subset)}")
+            lines.append(f"- Fair comparison subset: {', '.join(map(str, fair_subset))}")
         if excluded:
-            lines.append(f"- Excluded from ranking (hard mismatch): {', '.join(excluded)}")
+            lines.append(
+                f"- Excluded from ranking (hard mismatch): {', '.join(map(str, excluded))}"
+            )
         if rows:
             lines.extend(
                 [
@@ -1080,7 +1086,10 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
                 ],
             )
             for row in rows:
-                mismatch_flags = row.get("fairness_mismatch_flags", [])
+                mismatch_flags_value = row.get("fairness_mismatch_flags")
+                mismatch_flags = (
+                    mismatch_flags_value if isinstance(mismatch_flags_value, list) else []
+                )
                 hard_dims = sorted(
                     {
                         str(m.get("dimension", ""))
@@ -1107,6 +1116,8 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
                 ],
             )
             for mismatch in mismatches:
+                if not isinstance(mismatch, dict):
+                    continue
                 lines.append(
                     "| "
                     f"{_escape_markdown_cell(mismatch.get('dimension'))} | "

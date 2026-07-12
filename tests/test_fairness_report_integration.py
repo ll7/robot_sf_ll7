@@ -222,3 +222,39 @@ def test_mismatched_row_cannot_pass_ranking_gate() -> None:
     assert verdict.hard_mismatch_count >= 1
     assert len(verdict.fair_subset) < len(planner_configs)
     assert len(verdict.excluded) >= 1
+
+
+def test_report_tolerates_nullable_fairness_fields(tmp_path: Path) -> None:
+    """Nullable fairness payload fields do not break report rendering."""
+    row = _make_planner_row("goal")
+    row["fairness_mismatch_flags"] = None
+    payload = {
+        "campaign": {"campaign_id": "nullable_fairness"},
+        "planner_rows": [row],
+        "warnings": [],
+        "fairness": {
+            "ranking_claim_verdict": None,
+            "fair_subset": None,
+            "excluded_planners": None,
+            "mismatches": None,
+        },
+    }
+    report_path = tmp_path / "campaign_report.md"
+
+    write_campaign_report(report_path, payload)
+
+    report_text = report_path.read_text(encoding="utf-8")
+    assert "## Fairness Contract" in report_text
+    assert "Ranking claim allowed: **unknown**" in report_text
+    assert "| planner_goal | goal | N/A | 0 | none |" in report_text
+
+
+def test_emitter_canonicalizes_planner_row_algorithm_name() -> None:
+    """Campaign row spelling does not suppress fairness annotations."""
+    matrix = build_capability_matrix([{"algo": "orca"}])
+    row = _make_planner_row("ORCA")
+
+    emit_mismatch_flags(matrix, row, str(row["algo"]))
+
+    assert row["fairness_mismatch_flags"] == []
+    assert row["fairness_in_ranking_subset"] is True

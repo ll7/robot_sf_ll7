@@ -1243,7 +1243,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     fairness_verdict = ranking_claim_gate(capability_matrix)
     for row in planner_rows:
         row_algo = str(row.get("algo", ""))
-        if row_algo and row_algo in capability_matrix.entries:
+        if row_algo:
             try:
                 emit_mismatch_flags(capability_matrix, row, row_algo)
             except KeyError:

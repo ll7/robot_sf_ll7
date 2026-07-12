@@ -42,28 +42,24 @@ class PredictionMPCConfig:
     fallback_to_stop: bool = True
     predictor_backend: str = "constant_velocity"
     allow_predictor_fallback: bool = False
+    # Factor A toggle (issue #5355 factorial). When False, pedestrians are
+    # frozen at current position (zero-order hold) in BOTH prediction paths.
+    prediction_enabled: bool = True
+    # Factor B toggle (issue #5355 factorial). When False, drop the
+    # NonlinearConstraint set AND raise soft pedestrian-clearance penalty to
+    # the base NMPC default (4.5) instead of 0.0.
+    hard_pedestrian_constraints_enabled: bool = True
     # Opt-in pedestrian uncertainty envelope (issue #4141). When enabled with a
     # positive alpha, per-horizon-step clearance uses an inflated effective
     # pedestrian radius r_eff(i) = ped_radius + alpha * i * rollout_dt. Disabled
     # or alpha == 0.0 reproduces the deterministic baseline exactly.
     pedestrian_uncertainty_envelope_enabled: bool = False
     pedestrian_uncertainty_alpha_mps: float = 0.0
-    # Issue #5355 Factor B: hard-vs-soft pedestrian clearance handling.
-    # Hard arms must use no soft pedestrian term; soft arms must use a positive,
-    # shared weight so the factorial never compares avoidance against no avoidance.
-    hard_pedestrian_constraints_enabled: bool = True
-    pedestrian_clearance_weight: float = 0.0
 
     def __post_init__(self) -> None:
-        """Validate uncertainty-envelope and factorial safety contracts."""
+        """Validate the opt-in uncertainty-envelope conservatism rate."""
         if self.pedestrian_uncertainty_alpha_mps < 0.0:
             raise ValueError("pedestrian_uncertainty_alpha_mps must be >= 0")
-        if self.hard_pedestrian_constraints_enabled and self.pedestrian_clearance_weight != 0.0:
-            raise ValueError(
-                "hard_pedestrian_constraints_enabled requires pedestrian_clearance_weight=0.0"
-            )
-        if not self.hard_pedestrian_constraints_enabled and self.pedestrian_clearance_weight <= 0.0:
-            raise ValueError("soft pedestrian clearance requires pedestrian_clearance_weight > 0.0")
 
 
 @dataclass(frozen=True)
@@ -87,49 +83,6 @@ class PedestrianFuturePredictor(Protocol):
         dt: float,
     ) -> PredictedPedestrianFutures:
         """Return predicted pedestrian futures in world coordinates."""
-
-
-class NullPedestrianPredictor(NMPCSocialPlannerAdapter):
-    """Prediction-off baseline that holds observed pedestrian positions fixed.
-
-    The baseline deliberately consumes no velocity or trajectory prediction, but
-    it retains the current observed pedestrians so that Factor B hard-clearance
-    constraints remain active when prediction is disabled.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with the shared SocNav observation-field helpers."""
-        super().__init__(NMPCSocialConfig())
-
-    def predict(
-        self,
-        observation: dict[str, Any],
-        *,
-        horizon_steps: int,
-        dt: float,
-    ) -> PredictedPedestrianFutures:
-        """Return current pedestrian positions repeated across the horizon.
-
-        Returns:
-            PredictedPedestrianFutures: Current-state hold futures, not a
-            velocity or trajectory prediction.
-        """
-        _robot_state, _goal_state, ped_state = self._socnav_fields(observation)
-        ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
-        if ped_positions.ndim == 1 and ped_positions.size % 2 == 0:
-            ped_positions = ped_positions.reshape(-1, 2)
-        if ped_positions.ndim != 2 or ped_positions.shape[-1] != 2:
-            ped_positions = np.zeros((0, 2), dtype=float)
-        count = int(self._as_1d_float(ped_state.get("count", [ped_positions.shape[0]]), pad=1)[0])
-        count = max(0, min(count, ped_positions.shape[0]))
-        ped_positions = ped_positions[:count]
-        future = np.repeat(ped_positions[:, np.newaxis, :], max(int(horizon_steps), 1), axis=1)
-        return PredictedPedestrianFutures(
-            positions_world=future,
-            mask=np.ones((count,), dtype=float),
-            dt=float(dt),
-            source="current_position_hold",
-        )
 
 
 class ConstantVelocityPedestrianPredictor(NMPCSocialPlannerAdapter):
@@ -203,25 +156,21 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         """Initialize the adapter with strict constant-velocity prediction by default."""
         self.prediction_config = config or PredictionMPCConfig()
         backend = self.prediction_config.predictor_backend.strip().lower()
-        if backend in {"none", "null"}:
-            self._future_predictor = predictor or NullPedestrianPredictor()
-        elif predictor is None and backend not in {
+        if predictor is None and backend not in {
             "constant_velocity",
             "cv",
         }:
             if not self.prediction_config.allow_predictor_fallback:
                 raise ValueError(
                     "prediction_mpc currently supports predictor_backend='constant_velocity' "
-                    "or 'none' unless allow_predictor_fallback is true."
+                    "unless allow_predictor_fallback is true."
                 )
             warnings.warn(
                 "prediction_mpc falling back to constant_velocity predictor backend.",
                 RuntimeWarning,
                 stacklevel=2,
             )
-            self._future_predictor = predictor or ConstantVelocityPedestrianPredictor()
-        else:
-            self._future_predictor = predictor or ConstantVelocityPedestrianPredictor()
+        self._future_predictor = predictor or ConstantVelocityPedestrianPredictor()
         super().__init__(_to_nmpc_config(self.prediction_config))
 
     def reset(self) -> None:
@@ -233,6 +182,10 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
     def _optimizer_constraints(self, context: _RolloutContext) -> tuple[NonlinearConstraint, ...]:
         """Enforce hard time-varying pedestrian-future clearance constraints.
 
+        Factor B: returns empty tuple when hard_pedestrian_constraints_enabled is False.
+        Factor A: when prediction_enabled is False, freezes futures to current
+        positions so the hard constraint sees a static pedestrian snapshot.
+
         Returns:
             tuple[NonlinearConstraint, ...]: Extra SLSQP constraints for the optimizer.
         """
@@ -243,6 +196,17 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
             horizon_steps=max(int(self.config.horizon_steps), 1),
             dt=float(self.config.rollout_dt),
         )
+        # Factor A: zero-order hold — freeze predicted positions at t=0 snapshot
+        if not bool(self.prediction_config.prediction_enabled) and futures.positions_world.size:
+            current = futures.positions_world[:, 0, :]
+            frozen = np.repeat(current[:, np.newaxis, :], futures.positions_world.shape[1], axis=1)
+
+            futures = PredictedPedestrianFutures(
+                positions_world=frozen,
+                mask=futures.mask,
+                dt=futures.dt,
+                source=f"frozen({futures.source})",
+            )
         if futures.positions_world.size == 0 or not np.any(futures.mask > 0.5):
             return ()
         return (
@@ -258,17 +222,17 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         )
 
     def _predict_pedestrians(
-        self,
-        ped_positions: np.ndarray,
-        ped_velocities: np.ndarray,
-        step_idx: int,
+        self, ped_positions: np.ndarray, ped_velocities: np.ndarray, step_idx: int
     ) -> np.ndarray:
-        """Predict soft-cost pedestrian positions under the Factor A contract.
+        """Predict pedestrian positions for one MPC constraint timestamp.
+
+        Factor A: when prediction_enabled is False, returns frozen current positions
+        (zero-order hold) instead of velocity-propagated futures.
 
         Returns:
-            np.ndarray: Frozen current positions for A-off or constant-velocity futures for A-on.
+            np.ndarray: Predicted pedestrian positions for the requested rollout step.
         """
-        if self.prediction_config.predictor_backend.strip().lower() in {"none", "null"}:
+        if not bool(self.prediction_config.prediction_enabled):
             return np.asarray(ped_positions, dtype=float)
         return super()._predict_pedestrians(ped_positions, ped_velocities, step_idx)
 
@@ -333,6 +297,14 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
                 "predictor_backend": self.prediction_config.predictor_backend,
                 "horizon_steps": self.prediction_config.horizon_steps,
                 "rollout_dt": self.prediction_config.rollout_dt,
+                "factor_toggles": {
+                    "prediction_enabled": bool(
+                        self.prediction_config.prediction_enabled
+                    ),
+                    "hard_pedestrian_constraints_enabled": bool(
+                        self.prediction_config.hard_pedestrian_constraints_enabled
+                    ),
+                },
             }
         )
         predictor_diagnostics = getattr(self._future_predictor, "diagnostics", None)
@@ -349,25 +321,24 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
                 "envelope_activation_count": int(self._envelope_activation_count),
             }
         )
-        payload["factorial_toggles"] = {
-            "prediction_enabled": str(self.prediction_config.predictor_backend).lower()
-            not in {"none", "null"},
-            "hard_pedestrian_constraints_enabled": bool(
-                self.prediction_config.hard_pedestrian_constraints_enabled
-            ),
-            "pedestrian_clearance_weight": float(
-                self.prediction_config.pedestrian_clearance_weight
-            ),
-        }
         return payload
 
 
 def _to_nmpc_config(config: PredictionMPCConfig) -> NMPCSocialConfig:
     """Map prediction-MPC config onto the reusable NMPC optimizer core.
 
+    Factor B: when hard_pedestrian_constraints_enabled is False, the soft
+    pedestrian clearance weight reverts to NMPC default 4.5 instead of 0.0.
+
     Returns:
         NMPCSocialConfig: Shared optimizer-core configuration.
     """
+    # Factor B: B-OFF uses base NMPC default 4.5; B-ON keeps adapter-internal 0.0
+    ped_clearance_weight = (
+        0.0
+        if bool(config.hard_pedestrian_constraints_enabled)
+        else 4.5
+    )
     return NMPCSocialConfig(
         max_linear_speed=config.max_linear_speed,
         max_angular_speed=config.max_angular_speed,
@@ -381,7 +352,7 @@ def _to_nmpc_config(config: PredictionMPCConfig) -> NMPCSocialConfig:
         heading_weight=config.heading_weight,
         control_effort_weight=config.control_effort_weight,
         smoothness_weight=config.smoothness_weight,
-        pedestrian_clearance_weight=config.pedestrian_clearance_weight,
+        pedestrian_clearance_weight=ped_clearance_weight,
         obstacle_clearance_weight=config.static_obstacle_soft_weight,
         occupancy_cost_weight=config.static_obstacle_soft_weight,
         pedestrian_margin=config.pedestrian_safety_margin,
@@ -420,10 +391,10 @@ def build_prediction_mpc_config(cfg: dict[str, Any] | None) -> PredictionMPCConf
         "fallback_to_stop": _parse_bool,
         "predictor_backend": str,
         "allow_predictor_fallback": _parse_bool,
+        "prediction_enabled": _parse_bool,
+        "hard_pedestrian_constraints_enabled": _parse_bool,
         "pedestrian_uncertainty_envelope_enabled": _parse_bool,
         "pedestrian_uncertainty_alpha_mps": float,
-        "hard_pedestrian_constraints_enabled": _parse_bool,
-        "pedestrian_clearance_weight": float,
     }
     kwargs: dict[str, Any] = {}
     for field in fields(PredictionMPCConfig):

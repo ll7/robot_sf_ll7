@@ -1,0 +1,666 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "blockers": [],
+  "claim_boundary": "integration_readiness_only_no_ablation_result",
+  "expected_row_count": 72,
+  "issue": 3574,
+  "observed_row_count": 72,
+  "rank_metric_key": "mean_clearance",
+  "ready": true,
+  "row_readiness": [
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "goal",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "orca",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 101,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 102,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "heterogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    },
+    {
+      "blockers": [],
+      "planner": "social_force",
+      "population_arm": "mean_matched_homogeneous",
+      "ready": true,
+      "scenario_id": "issue_3574_classic_crossing_density_002",
+      "seed": 103,
+      "status": "ready"
+    }
+  ],
+  "schema_version": "mean_matched_episode_readiness.v1",
+  "status": "ready",
+  "trace_metric_keys": [
+    "clearance_m",
+    "near_field_exposure_s"
+  ]
+}

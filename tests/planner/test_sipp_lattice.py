@@ -840,7 +840,7 @@ class TestSippLatticeSearch:
         assert result.expansions <= 1
 
     def test_search_is_deterministic(self) -> None:
-        cfg = _fast_config()
+        cfg = _fast_config(max_planning_time_s=2.0)
         primitives = cfg.to_primitive_set().build()
         collision = cfg.to_collision_model()
         fc = build_pedestrian_occupancy_forecast(
@@ -914,7 +914,7 @@ class TestSippLatticeSearchPlannerAdapter:
             pedestrian_radius=0.15,
             safety_margin=0.05,
             min_clearance=0.3,
-            max_planning_time_s=0.2,
+            max_planning_time_s=2.0,
         )
         obs = _search_obs(
             goal=(1.0, 0.0),

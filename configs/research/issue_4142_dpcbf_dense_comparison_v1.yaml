@@ -2,14 +2,26 @@
 #
 # Claim boundary: predeclared diagnostic comparison inputs only. Running the
 # full dense dynamic-obstacle campaign, Slurm/GPU submission, and any
-# paper-facing safety-performance claim are out of scope for this PR.
-# Canonical invocation: `uv run python -m robot_sf.benchmark.cli run --config configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`.
+# paper-facing safety-performance claim are out of scope. The issue-scoped executor
+# (#5419) runs bounded LOCAL episodes only and only with the exact authorization ID.
+# Canonical invocation: `uv run python scripts/tools/run_issue_4142_dpcbf_dense_comparison.py --execute --authorization RSF-DPCBF-DENSE-20260712`.
 schema_version: robot_sf.issue_4142_dpcbf_dense_comparison.v1
 # Canonical run command, mirrored from the comment above as a structured field so the
-# readiness preflight can surface it verbatim. Executing it stays out of scope here; a
-# packet-consuming runner for this schema is a declared downstream gate (see the readiness
-# surface robot_sf/benchmark/issue_4142_dpcbf_dense_readiness.py).
-canonical_command: uv run python -m robot_sf.benchmark.cli run --config configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml
+# readiness preflight can surface it verbatim. It is the real issue-scoped executor CLI
+# (#5419): the generic `benchmark.cli run` never accepted this packet's --config form.
+# Execution is authorization-gated (see robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py).
+canonical_command: uv run python scripts/tools/run_issue_4142_dpcbf_dense_comparison.py --execute --authorization RSF-DPCBF-DENSE-20260712
+# Fixed bounded execution inputs for the local three-arm run. Deliberately small: a bounded
+# diagnostic runtime comparison, never a benchmark-grade campaign. video stays off so no large
+# artifacts are produced. Out-of-bounds overrides fail closed in build_run_plan.
+execution:
+  base_seed: 0
+  repeats: 3
+  horizon: 100
+  dt: 0.1
+  workers: 1
+  video_enabled: false
+  resume: true
 scenario_manifest: configs/scenarios/sets/issue_4142_dense_dynamic_cbf_v1.yaml
 algorithm: prediction_mpc_cv
 algorithm_configs:

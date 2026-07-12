@@ -9,12 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **issue #5419 authorization-gated DPCBF dense episode executor.** `execute_run_plan()` now
-  runs bounded local arms through `run_batch` only with the exact public authorization ID. It
-  writes an atomic, checkpointed execution manifest with effective arguments, dirty-state and
-  content-bound provenance, and explicit caveat statuses; orphan output, malformed input, and
-  mismatched resume state fail closed. Packet bounds and the real issue-scoped CLI are recorded.
-  No Slurm/GPU submission or safety-performance claim is made.
+* **issue #5419 authorization-gated DPCBF executor.** Bounded local `run_batch` arms require the
+  exact public authorization ID. Atomic checkpoints bind inputs and completed JSONL artifacts;
+  dirty, orphaned, malformed, duplicate, or mismatched state fails closed. No Slurm/GPU run or
+  safety-performance claim is included.
 
 ### Fixed
 

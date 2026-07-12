@@ -360,8 +360,10 @@ prevents merging a PR whose CI ran against a stale main:
 - **Script**: `scripts/dev/check_pr_merge_staleness.py <pr-number>`.
 - **Integration**: the `gh-pr-merger` skill runs this check as preflight step 6 before any merge.
 - **Behavior**: when the check detects that main has moved since the PR's CI ran, it returns exit
-  code 1 and the merger skips the PR with a staleness report. The author must `gh pr update-branch`
-  and re-run CI before the PR becomes mergeable again.
+  code 1 and the merger skips the PR with a staleness report. The precise path reads the completed
+  workflow run's recorded `pull_requests[].base.sha`; when that provenance is unavailable, the
+  checker falls back to the PR base-vs-main comparison. The author must `gh pr update-branch` and
+  re-run CI before the PR becomes mergeable again.
 
 **Why not GitHub merge queue?** The native merge queue is the ideal solution — it re-validates each
 PR against the up-to-date prospective main before merging automatically. We chose the gate-side rule

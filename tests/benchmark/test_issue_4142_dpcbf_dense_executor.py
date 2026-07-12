@@ -1,22 +1,8 @@
-"""Tests for the issue #5419 authorization-gated dense DPCBF episode executor.
+"""Fail-closed contract tests for the issue #5419 local DPCBF executor.
 
-This is the slice that turns ``execute_run_plan`` from an always-raise gate into a bounded,
-explicitly authorized *local* executor. The tests pin the fail-closed contract the issue asks
-for:
-
-- **No / wrong authorization ID** -> raises before any output file is created.
-- **Correct authorization ID** -> all three arms are dispatched through the canonical benchmark
-  runner in packet order, each with the shared scenario manifest and its distinct algorithm
-  config, and a machine-readable manifest is written.
-- **A failing arm** stays a visible caveat in the manifest, blocks an overall ``complete``
-  status, and does not cause later arms to be misreported as successful.
-- **A repeated invocation** safely resumes matching provenance or fails closed on mismatch.
-- One tiny **smoke** proves the real ``run_batch`` integration with a reduced horizon/repeats
-  through a test-only fixture (not the tracked result packet), making no performance claim.
-
-Claim boundary: diagnostic/contract tests only. Even the smoke runs a reduced, test-only
-fixture and asserts *that episodes were produced*, never a safety-performance or
-collision-reduction result. Failed/degraded rows are caveats, never success evidence.
+They cover authorization, ordered arm dispatch, caveat statuses, content-bound provenance,
+atomic interruption checkpoints, orphan output, and a reduced real-runner run-twice smoke.
+The smoke proves wiring only; failed/degraded rows remain caveats, never success evidence.
 """
 
 from __future__ import annotations
@@ -98,9 +84,7 @@ def _write_runnable_tree(root: pathlib.Path, packet: dict) -> pathlib.Path:
     (root / "configs/scenarios/sets").mkdir(parents=True, exist_ok=True)
     (root / "configs/research").mkdir(parents=True, exist_ok=True)
 
-    # Abstract (non-map) scenarios the canonical runner can execute quickly on CPU. Written as
-    # a multi-document YAML stream so ``load_scenario_matrix`` returns them directly instead of
-    # routing through the map-oriented manifest loader (which expects a name + map reference).
+    # A multi-document stream keeps these abstract smoke scenarios off the map loader path.
     scenarios = [
         {
             "id": "dpcbf-smoke-a",
@@ -175,9 +159,6 @@ def _config_stem(path: str) -> str:
     return pathlib.Path(path).name
 
 
-# --- Authorization gate (fail closed before any write) ---
-
-
 def test_no_authorization_raises_before_creating_output(tmp_path: pathlib.Path) -> None:
     """Without an authorization ID the executor raises and creates no output directory."""
     out_dir = tmp_path / "out"
@@ -200,7 +181,6 @@ def test_wrong_authorization_raises_before_creating_output(tmp_path: pathlib.Pat
     with pytest.raises(DenseComparisonExecutionGatedError):
         execute_run_plan(plan, authorization="not-the-id", repo_root=REPO_ROOT, run_batch_fn=fake)
     with pytest.raises(DenseComparisonExecutionGatedError):
-        # A bare boolean-ish truthy value is also insufficient.
         execute_run_plan(plan, authorization="true", repo_root=REPO_ROOT, run_batch_fn=fake)
 
     assert not out_dir.exists()
@@ -227,9 +207,6 @@ def test_unresolved_plan_cannot_execute_even_with_authorization(tmp_path: pathli
     assert not out_dir.exists()
 
 
-# --- Authorized dispatch + manifest ---
-
-
 def test_authorized_run_dispatches_all_arms_in_packet_order(tmp_path: pathlib.Path) -> None:
     """Correct ID dispatches the three arms in order, shared manifest, distinct configs."""
     out_dir = tmp_path / "out"
@@ -243,21 +220,17 @@ def test_authorized_run_dispatches_all_arms_in_packet_order(tmp_path: pathlib.Pa
         run_batch_fn=fake,
     )
 
-    # One dispatch per required arm, in packet order (identified by algorithm config).
     assert len(fake.calls) == len(REQUIRED_ARMS)
     dispatched_configs = [_config_stem(c["algo_config_path"]) for c in fake.calls]
     assert dispatched_configs == [_config_stem(job.algorithm_config) for job in plan.arms]
-    # All arms share the one scenario manifest; each arm has a distinct algo config + output.
     assert len({c["scenarios_or_path"] for c in fake.calls}) == 1
     assert len({c["algo_config_path"] for c in fake.calls}) == len(REQUIRED_ARMS)
     assert len({c["out_path"] for c in fake.calls}) == len(REQUIRED_ARMS)
-    # Bounded execution inputs are threaded through to the runner.
     for call in fake.calls:
         assert call["horizon"] == plan.execution_inputs.horizon
         assert call["repeats_override"] == plan.execution_inputs.repeats
         assert call["video_enabled"] is False
 
-    # Manifest reflects a complete run and is persisted under the output directory.
     assert manifest.status == "complete"
     assert tuple(a.arm_key for a in manifest.arms) == REQUIRED_ARMS
     assert all(a.status == "executed" for a in manifest.arms)
@@ -288,10 +261,8 @@ def test_manifest_contains_required_provenance_fields(tmp_path: pathlib.Path) ->
     assert payload["started_at"] == "2026-07-12T12:00:00+00:00"
     assert payload["ended_at"] == "2026-07-12T12:00:00+00:00"
     assert payload["status"] == "complete"
-    # Fail-closed exclusion is carried into the manifest.
     for status in ("fallback", "degraded", "failed", "ineligible"):
         assert status in payload["excluded_row_statuses"]
-    # Per-arm output paths and statuses are all present.
     assert {a["arm_key"] for a in payload["arms"]} == set(REQUIRED_ARMS)
     assert all(a["output_jsonl"] for a in payload["arms"])
 
@@ -314,14 +285,11 @@ def test_failing_arm_stays_visible_and_blocks_complete(tmp_path: pathlib.Path) -
         run_batch_fn=fake,
     )
 
-    # All arms were attempted in order; the failure did not abort the run.
     assert len(fake.calls) == len(REQUIRED_ARMS)
     by_arm = {a.arm_key: a for a in manifest.arms}
     assert by_arm["cbf_collision_cone_on"].status == "failed"
     assert by_arm["cbf_collision_cone_on"].error is not None
-    # The later arm ran and reports its real (executed) status -- not misreported off a failure.
     assert by_arm["cbf_dynamic_parabolic_v1_on"].status == "executed"
-    # A failing arm blocks an overall complete status.
     assert manifest.status == "results_incomplete"
 
 
@@ -346,29 +314,6 @@ def test_arm_writing_fewer_than_scheduled_is_not_success(tmp_path: pathlib.Path)
     assert manifest.status == "results_incomplete"
 
 
-# --- Provenance-safe resume ---
-
-
-def test_repeat_run_matching_provenance_resumes(tmp_path: pathlib.Path) -> None:
-    """A second run with identical provenance does not fail closed."""
-    out_dir = tmp_path / "out"
-    plan = build_run_plan(repo_root=REPO_ROOT, packet_path=PACKET_PATH, output_dir=out_dir)
-    execute_run_plan(
-        plan,
-        authorization=REQUIRED_AUTHORIZATION_ID,
-        repo_root=REPO_ROOT,
-        run_batch_fn=_RecordingRunBatch(),
-    )
-    # Re-run: same plan, same git provenance -> allowed (no mismatch raised).
-    manifest = execute_run_plan(
-        plan,
-        authorization=REQUIRED_AUTHORIZATION_ID,
-        repo_root=REPO_ROOT,
-        run_batch_fn=_RecordingRunBatch(),
-    )
-    assert manifest.status == "complete"
-
-
 def test_repeat_run_mismatched_provenance_fails_closed(tmp_path: pathlib.Path) -> None:
     """A pre-existing manifest with a different provenance key blocks a silent resume."""
     out_dir = tmp_path / "out"
@@ -379,7 +324,6 @@ def test_repeat_run_mismatched_provenance_fails_closed(tmp_path: pathlib.Path) -
         repo_root=REPO_ROOT,
         run_batch_fn=_RecordingRunBatch(),
     )
-    # Tamper the recorded provenance so the next run would mix incompatible artifacts.
     manifest_file = out_dir / EXECUTION_MANIFEST_FILENAME
     payload = json.loads(manifest_file.read_text(encoding="utf-8"))
     payload["provenance_key"] = "incompatible-provenance"
@@ -513,9 +457,6 @@ def test_non_boolean_resume_is_a_plan_blocker() -> None:
     assert any("video_enabled must be a boolean" in blocker for blocker in blockers)
 
 
-# --- Smoke: real run_batch integration (reduced horizon/repeats, no performance claim) ---
-
-
 def test_smoke_real_run_batch_writes_episodes(tmp_path: pathlib.Path) -> None:
     """Authorized run through the *real* ``run_batch`` writes per-arm JSONL for every arm.
 
@@ -533,7 +474,6 @@ def test_smoke_real_run_batch_writes_episodes(tmp_path: pathlib.Path) -> None:
         plan,
         authorization=REQUIRED_AUTHORIZATION_ID,
         repo_root=tmp_path,
-        # The episode schema is a real repo asset, not part of the synthetic fixture tree.
         schema_path=REPO_ROOT / EPISODE_SCHEMA_PATH,
     )
 

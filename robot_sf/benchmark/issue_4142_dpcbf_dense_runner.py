@@ -812,7 +812,11 @@ def execute_run_plan(  # noqa: C901
         ended_at: str = "",
         status: str = "in_progress",
     ) -> DenseExecutionManifest:
-        """Persist one atomic execution checkpoint and return its snapshot."""
+        """Persist one atomic execution checkpoint and return its snapshot.
+
+        Returns:
+            The checkpoint snapshot written to disk.
+        """
         manifest = _build_manifest(
             plan,
             authorization_id=REQUIRED_AUTHORIZATION_ID,

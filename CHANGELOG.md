@@ -9,19 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **issue #5419 authorization-gated DPCBF dense episode executor.** `execute_run_plan()` in
-  `robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py` is now a bounded, explicitly authorized
-  **local** episode executor instead of an always-raise gate. With the exact public
-  authorization ID (`RSF-DPCBF-DENSE-20260712`, via `--authorization`) it reuses the canonical
-  `run_batch` once per resolved arm in packet order and writes a machine-readable execution
-  manifest (`robot_sf.issue_4142_dpcbf_dense_comparison_execution.v1`) with schema versions, git
-  SHA/dirty flag, effective arguments, per-arm statuses, timestamps, and overall completeness. A
-  missing/wrong ID fails closed **before any output file is written**; a repeated run resumes
-  only on matching packet/config/git provenance and otherwise fails closed. Bounded execution
-  inputs (base seed, repeats, horizon, `dt`, worker cap, video-off, resume) live in the packet's
-  new `execution` block; the packet's canonical command now points at the real issue-scoped CLI.
-  This runs local episodes only — no Slurm/GPU submission — and makes no safety-performance or
-  collision-reduction claim.
+* **issue #5419 authorization-gated DPCBF dense episode executor.** `execute_run_plan()` now
+  runs bounded local arms through `run_batch` only with the exact public authorization ID. It
+  writes an atomic, checkpointed execution manifest with effective arguments, dirty-state and
+  content-bound provenance, and explicit caveat statuses; orphan output, malformed input, and
+  mismatched resume state fail closed. Packet bounds and the real issue-scoped CLI are recorded.
+  No Slurm/GPU submission or safety-performance claim is made.
 
 ### Fixed
 

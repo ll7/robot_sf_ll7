@@ -49,57 +49,26 @@ this slice binds the three merged modules with the one contract they were missin
 
 ## What #5419 adds: the authorization-gated local executor
 
-PR #5419 turns `execute_run_plan()` from an always-raise gate into a bounded, explicitly
-authorized **local episode executor**:
+PR #5419 turns `execute_run_plan()` into a bounded, explicitly authorized **local episode
+executor**:
 
-- **Fixed bounded execution inputs.** The packet gained an optional `execution` block (base
-  seed, repeats, horizon, `dt`, worker cap, video-off, resume policy) with fixed defaults;
-  out-of-bounds overrides fail closed in `build_run_plan`. This keeps the run a bounded
-  diagnostic comparison, never a benchmark-grade campaign.
-- **In-process executor.** With the exact public authorization ID, the executor reuses the
-  canonical `robot_sf.benchmark.runner.run_batch` once per resolved arm, in packet order, each
-  pinned to the shared scenario manifest and that arm's distinct algorithm config, writing the
-  planned per-arm JSONL.
-- **Authorization gate.** `execute_run_plan(plan, authorization=...)` fails closed with
-  `DenseComparisonExecutionGatedError` unless `authorization == "RSF-DPCBF-DENSE-20260712"`. A
-  missing/boolean/env/TTY value or a bare `--execute` flag is insufficient and **no output
-  files are created**.
-- **Execution manifest** (`robot_sf.issue_4142_dpcbf_dense_comparison_execution.v1`): packet/
-  plan schema versions, authorization ID, git SHA + dirty flag, effective arguments, per-arm
-  output paths/statuses, start/end timestamps, and overall completeness. A failing arm stays a
-  visible caveat and blocks an overall `complete` status; later arms keep their true status.
-- **Provenance-safe resume.** A repeated invocation resumes only when the on-disk manifest's
-  provenance key (packet/plan schema, algorithm, per-arm configs, execution inputs, git SHA)
-  matches; otherwise it fails closed with `DenseComparisonProvenanceMismatchError` rather than
-  mixing incompatible artifacts.
-
-The executor is local-only: it submits no Slurm/GPU job and knows nothing about `sbatch`, SSH,
-tmux, or queue tooling. The packet's canonical command now points at the real issue-scoped CLI
-(`scripts/tools/run_issue_4142_dpcbf_dense_comparison.py --execute --authorization ...`); the
-generic `benchmark.cli run` never accepted the packet's `--config` form.
+- **Bounded execution and authorization.** The packet's optional `execution` block fixes seed,
+  repeats, horizon, `dt`, workers, video-off, and resume policy. Unknown or out-of-bounds values
+  fail closed. The exact `RSF-DPCBF-DENSE-20260712` ID is required before any write; the runner
+  reuses `run_batch` once per arm in packet order with the shared manifest and arm config.
+- **Manifest and resume safety.** The manifest
+  (`robot_sf.issue_4142_dpcbf_dense_comparison_execution.v1`) records effective arguments,
+  timestamps, arm statuses, dirty state, and content-bound hashes. Atomic `in_progress`
+  checkpoints make interruption explicit; orphan output, malformed manifests, dirty Git trees,
+  and mismatched provenance fail closed. A no-work resume is complete only after artifact ID
+  validation.
 
 ## Integration status
 
-- **Delivered (new):** the authorization-gated local executor + execution manifest + provenance
-  -safe resume (#5419), proven by fail-closed contract tests and one real-`run_batch` smoke on a
-  reduced, test-only fixture (no performance claim).
-- **Remaining (intentional):** an *authorized, full-scale* local or campaign run of the tracked
-  `prediction_mpc_cv` packet is not performed here; the summarizer stays `results_incomplete`
-  until authorized per-arm JSONL exists under `output/issue_4142_dpcbf_dense/`.
-- **Blocked-on:** a maintainer decision to run the bounded local comparison (with the exact
-  authorization ID) or a benchmark-grade campaign; either remains out of scope for this PR.
+- **Delivered (new):** the authorization-gated executor, checkpointed manifest, and
+  provenance-safe resume (#5419), covered by fail-closed tests and a reduced real-runner smoke.
+- **Remaining (intentional):** the tracked `prediction_mpc_cv` packet is not run here; its
+  summarizer remains `results_incomplete` until authorized per-arm JSONL exists.
 
-## Next empirical action
-
-Run the resolved three-arm plan locally with the exact authorization ID (or under an authorized
-campaign), land the per-arm JSONL under `output/issue_4142_dpcbf_dense/`, then re-run
-`summarize_dense_comparison` to move the summary from `results_incomplete` to `complete`. Only
-then may bounded, caveated comparison evidence be reported — and still not as a paper-facing
-collision-reduction claim without a predeclared, fully reviewed benchmark campaign.
-
-## Validation
-
-```bash
-uv run pytest tests/benchmark/test_issue_4142_dpcbf_dense_pipeline_contract.py \
-  tests/benchmark/test_issue_4142_dpcbf_dense_executor.py -q
-```
+Next empirical action: run the resolved plan with the exact authorization ID and summarize its
+per-arm JSONL as bounded diagnostic evidence, never a paper-facing collision-reduction claim.

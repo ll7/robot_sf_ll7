@@ -718,6 +718,7 @@ class TestScopedScenarioParity:
         )
         params_dict = json.loads(_serialize_subprocess_arm_params(params))
         assert params_dict["scoped_scenarios_path"] == "/tmp/scoped.json"
+        assert params_dict["resume"] is False
 
         for field_name in _SUBPROCESS_ARM_PATH_FIELDS:
             if params_dict.get(field_name):
@@ -819,6 +820,7 @@ class TestScopedScenarioParity:
 
         def fake_run_batch(scenarios, **kwargs):
             captured["scenarios"] = scenarios
+            captured.update(kwargs)
             return {
                 "status": "ok",
                 "total_jobs": 1,
@@ -841,7 +843,46 @@ class TestScopedScenarioParity:
             result = _run_single_arm_subprocess(params)
 
         assert captured["scenarios"] == self.SCOPED
+        assert captured["resume"] is False
         assert result["summary"]["status"] == "ok"
+
+    def test_worker_forwards_resume_intent_to_run_batch(self, tmp_path):
+        """A resumed subprocess arm keeps the parent's completed episode rows."""
+        from unittest.mock import Mock as _Mock
+
+        from robot_sf.benchmark.camera_ready.resource_lifecycle import (
+            _run_single_arm_subprocess,
+        )
+
+        base = _make_arm_params()
+        scoped_path = tmp_path / "scoped_scenarios.json"
+        scoped_path.write_text("[]", encoding="utf-8")
+        params = _SubprocessArmParams(
+            **{
+                **base.__dict__,
+                "episodes_path": tmp_path / "episodes.jsonl",
+                "summary_path": tmp_path / "summary.json",
+                "scoped_scenarios_path": scoped_path,
+                "resume": True,
+            }
+        )
+        captured = {}
+
+        def fake_run_batch(*_args, **kwargs):
+            captured.update(kwargs)
+            return {"status": "ok", "total_jobs": 1, "written": 1, "failures": []}
+
+        with (
+            patch("robot_sf.benchmark.runner.run_batch", side_effect=fake_run_batch),
+            patch(
+                "robot_sf.benchmark.fallback_policy.summarize_benchmark_availability",
+                return_value=_Mock(availability_status="ok"),
+            ),
+            patch("robot_sf.benchmark.fallback_policy.availability_payload", return_value={}),
+        ):
+            _run_single_arm_subprocess(params)
+
+        assert captured["resume"] is True
 
 
 if __name__ == "__main__":

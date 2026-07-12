@@ -19,10 +19,14 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import platform
+import subprocess
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
+import numba
+import numpy as np
 import yaml
 
 from robot_sf.benchmark.map_runner_identity import _scenario_with_episode_seed_defaults
@@ -475,6 +479,7 @@ def verify_host_report(  # noqa: C901, PLR0912 - each rejected report state need
     environment = _require_mapping(host_report.get("environment"), "host report environment")
     for field in ("machine_id", "numpy_version", "numba_version", "python_version", "git_commit"):
         _require_text(environment.get(field), f"host environment {field}")
+    _require_sha256(environment.get("lockfile_sha256"), "host environment lockfile_sha256")
     if environment.get("cpu_only") is not True or environment.get("workers") != 1:
         raise ValueError("host report must record CPU-only single-worker execution")
     expected_commits = {target["source_git_hash"] for target in targets.values()}
@@ -626,7 +631,14 @@ def _safe_json_value(value: Any) -> Any:
     Handles numpy scalar types, non-finite floats (NaN/Inf), and nested
     mappings/sequences.  NaN values become ``null`` to keep ``allow_nan=False``
     in the canonical serializer.
+
+    Returns:
+        A JSON-compatible representation of ``value``.
     """
+    if hasattr(value, "tolist") and callable(value.tolist):
+        value = value.tolist()
+    if value is None:
+        return None
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
@@ -636,10 +648,12 @@ def _safe_json_value(value: Any) -> Any:
     if isinstance(value, str):
         return value
     if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise ValueError("trajectory-hash mappings must use string keys")
         return {key: _safe_json_value(val) for key, val in value.items()}
     if isinstance(value, (list, tuple)):
         return [_safe_json_value(item) for item in value]
-    return value
+    raise ValueError(f"trajectory-hash value is not JSON-compatible: {type(value).__name__}")
 
 
 def _compute_trajectory_hash(record: Mapping[str, Any]) -> str:
@@ -648,6 +662,9 @@ def _compute_trajectory_hash(record: Mapping[str, Any]) -> str:
     Hashes the outcome payload and the metrics dict after sanitizing non-finite
     floats and numpy types.  Two identical episodes produce the same hash; any
     trajectory-level difference is visible in at least one metric.
+
+    Returns:
+        The canonical SHA-256 digest of the episode outcome and metrics.
     """
     outcome = record.get("outcome")
     metrics = record.get("metrics")
@@ -660,12 +677,11 @@ def _compute_trajectory_hash(record: Mapping[str, Any]) -> str:
 
 
 def _get_environment_fingerprint() -> dict[str, Any]:
-    """Capture the host environment fingerprint required by the result schema."""
-    import platform
-    import subprocess
+    """Capture the host environment fingerprint required by the result schema.
 
-    import numba
-    import numpy as np
+    Returns:
+        The CPU-only runtime identity recorded in the host report.
+    """
 
     try:
         result = subprocess.run(
@@ -687,7 +703,50 @@ def _get_environment_fingerprint() -> dict[str, Any]:
         "numba_version": str(numba.__version__),
         "python_version": platform.python_version(),
         "git_commit": git_commit,
+        "lockfile_sha256": hashlib.sha256(
+            (get_repository_root() / "uv.lock").read_bytes()
+        ).hexdigest(),
     }
+
+
+def _cached_result_if_compatible(
+    cache_file: Path, env_fingerprint: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    """Return a valid cache entry only when it matches the current runtime.
+
+    Returns:
+        The cached target result, or ``None`` when the cache is absent, malformed,
+        or belongs to another NumPy/Numba runtime.
+    """
+    if not cache_file.exists():
+        return None
+    try:
+        cached = json.loads(cache_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(cached, Mapping):
+        return None
+    result = cached.get("_result")
+    if (
+        cached.get("_env_numpy_version") != env_fingerprint["numpy_version"]
+        or cached.get("_env_numba_version") != env_fingerprint["numba_version"]
+        or not isinstance(result, Mapping)
+    ):
+        return None
+    return dict(result)
+
+
+def _finite_int_or_zero(value: Any) -> int:
+    """Convert a finite numeric metric to an integer without losing NumPy scalars.
+
+    Returns:
+        The converted metric, or zero for absent, malformed, or non-finite values.
+    """
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return 0
+    return int(numeric) if math.isfinite(numeric) else 0
 
 
 def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tracks each target state explicitly.
@@ -725,20 +784,20 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
     if not expected_manifest_hash:
         raise ValueError("bundle is missing manifest_sha256")
     bundle_bundle_sha = resolved_bundle.get("bundle_sha256")
-    without_sha = {
-        key: value
-        for key, value in resolved_bundle.items()
-        if key != "bundle_sha256"
-    }
+    without_sha = {key: value for key, value in resolved_bundle.items() if key != "bundle_sha256"}
     if bundle_bundle_sha != canonical_sha256(without_sha):
         raise ValueError("bundle_sha256 does not match the bundle content")
 
     targets = resolved_bundle.get("targets")
     if not isinstance(targets, list) or not targets:
         raise ValueError("bundle contains no targets to execute")
-    scenario_defs = resolved_bundle.get("scenario_definitions", {})
-    planner_defs = resolved_bundle.get("planner_definitions", {})
-    repeats_per_target = resolved_bundle["execution_contract"]["repeats_per_target"]
+    scenario_defs = _require_mapping(
+        resolved_bundle.get("scenario_definitions"), "bundle scenario_definitions"
+    )
+    planner_defs = _require_mapping(
+        resolved_bundle.get("planner_definitions"), "bundle planner_definitions"
+    )
+    _, repeats_per_target = _check_manifest_from_bundle(resolved_bundle)
 
     if run_episode is None:
         from robot_sf.benchmark.runner import run_episode as _run_episode  # noqa: PLC0415
@@ -751,53 +810,67 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
     env_fingerprint = _get_environment_fingerprint()
 
     # Use the bundle's source revision so the host report passes verifier.
-    source_git_hashes = resolved_bundle.get("source", {}).get("source_git_hashes", [])
+    source = _require_mapping(resolved_bundle.get("source"), "bundle source")
+    source_git_hashes = source.get("source_git_hashes", [])
     if source_git_hashes:
         env_fingerprint["git_commit"] = source_git_hashes[0]
 
+    selected_definition_ids: set[str] | None = None
     if target_filter is not None:
         filter_set = set(target_filter)
-        targets = [t for t in targets if t.get("scenario_definition_id") in filter_set]
-        if not targets:
+        selected_definition_ids = {
+            _require_text(target.get("scenario_definition_id"), "target scenario_definition_id")
+            for target in targets
+            if target.get("scenario_definition_id") in filter_set
+        }
+        if not selected_definition_ids:
             raise ValueError("target_filter removed all targets from the bundle")
 
-    _, _ = _check_manifest_from_bundle(resolved_bundle)
     results: list[dict[str, Any]] = []
-    skipped = 0
-    executed = 0
 
     for target in targets:
         key = _target_key(target)
         scenario_id = key[0]
         planner = key[1]
         seed = key[2]
-        scenario_def_id = target.get("scenario_definition_id")
-        planner_def_id = target.get("planner_definition_id")
+        scenario_def_id = _require_text(
+            target.get("scenario_definition_id"), "target scenario_definition_id"
+        )
+        planner_def_id = _require_text(
+            target.get("planner_definition_id"), "target planner_definition_id"
+        )
         horizon = int(target["horizon"])
 
         cache_key = f"{scenario_id}_{planner}_{seed}"
         cache_file = cache_dir / f"{cache_key}.json"
 
-        cached_result = None
-        if cache_file.exists():
-            try:
-                cached = json.loads(cache_file.read_text(encoding="utf-8"))
-                if cached.get("_env_numpy_version") == env_fingerprint["numpy_version"] and cached.get(
-                    "_env_numba_version"
-                ) == env_fingerprint["numba_version"]:
-                    cached_result = cached.get("_result")
-            except (json.JSONDecodeError, KeyError):
-                pass
+        cached_result = _cached_result_if_compatible(cache_file, env_fingerprint)
 
         if cached_result is not None:
-            skipped += 1
             results.append(cached_result)
             continue
 
-        scenario_params = dict(scenario_defs.get(scenario_def_id))
-        if scenario_params is None:
+        if selected_definition_ids is not None and scenario_def_id not in selected_definition_ids:
+            raise ValueError(
+                "target_filter requires compatible cached results for omitted targets; "
+                f"missing {scenario_id!r}/{planner!r}/{seed}"
+            )
+
+        raw_scenario_params = scenario_defs.get(scenario_def_id)
+        if raw_scenario_params is None:
             raise ValueError(f"bundle missing scenario_definition for {scenario_def_id!r}")
-        planner_def = dict(planner_defs.get(planner_def_id, {}))
+        scenario_params = dict(
+            _require_mapping(raw_scenario_params, f"scenario_definition {scenario_def_id!r}")
+        )
+        raw_planner_def = planner_defs.get(planner_def_id)
+        if raw_planner_def is None:
+            raise ValueError(f"bundle missing planner_definition for {planner_def_id!r}")
+        planner_def = dict(
+            _require_mapping(raw_planner_def, f"planner_definition {planner_def_id!r}")
+        )
+        planner_algo = _require_text(
+            planner_def.get("algo"), f"planner_definition {planner_def_id!r} algo"
+        )
 
         # Determine DT from resolved bundle execution contract or scenario config
         sim_config = scenario_params.get("simulation_config", {})
@@ -813,9 +886,7 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
             # Fallback: try to load from campaign config referenced by source
             source_cfg_path = resolved_bundle.get("source", {}).get("campaign_config_path")
             if source_cfg_path:
-                cfg = load_campaign_config(
-                    (get_repository_root() / source_cfg_path).resolve()
-                )
+                cfg = load_campaign_config((get_repository_root() / source_cfg_path).resolve())
                 dt = cfg.dt
             if dt is None:
                 dt = 0.1
@@ -823,16 +894,14 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
         # Build algo config path
         algo_config_path = planner_def.get("planner_config_path")
         if algo_config_path is not None:
-            algo_config_path = str(
-                (get_repository_root() / algo_config_path).resolve()
-            )
+            algo_config_path = str((get_repository_root() / algo_config_path).resolve())
 
         repeats: list[dict[str, Any]] = []
         for repeat_idx in range(repeats_per_target):
             record = run_episode(
                 dict(scenario_params),
                 seed=seed,
-                algo=planner_def.get("algo", scenario_params.get("algo", "simple_policy")),
+                algo=planner_algo,
                 algo_config_path=algo_config_path,
                 horizon=horizon,
                 dt=float(dt),
@@ -842,12 +911,7 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
             outcome = record.get("outcome", {})
             outcome_binary = 1 if outcome.get("success", False) else 0
             metrics = record.get("metrics", {})
-            nm_raw = metrics.get("near_misses")
-            near_misses = (
-                int(nm_raw)
-                if isinstance(nm_raw, (int, float)) and not math.isnan(nm_raw) and not math.isinf(nm_raw)
-                else 0
-            )
+            near_misses = _finite_int_or_zero(metrics.get("near_misses"))
             repeats.append(
                 {
                     "outcome": outcome_binary,
@@ -878,7 +942,6 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
         cache_file.write_text(
             json.dumps(cache_data, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-        executed += 1
 
     # Build host result
     host_result = {
@@ -918,6 +981,8 @@ def _check_manifest_from_bundle(
         if key in indexed:
             raise ValueError(f"bundle contains duplicate target {key}")
         _require_text(target.get("source_config_hash"), "target source_config_hash")
+        _require_text(target.get("scenario_definition_id"), "target scenario_definition_id")
+        _require_text(target.get("planner_definition_id"), "target planner_definition_id")
         horizon = target.get("horizon")
         if isinstance(horizon, bool) or not isinstance(horizon, int) or horizon <= 0:
             raise ValueError("target horizon must be a positive integer")

@@ -33,6 +33,10 @@ uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py resolve-de
   --campaign-config configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml \
   --output docs/context/evidence/issue_5263_exact_repeat/resolved_definitions.json
 
+uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py execute \
+  --resolved-bundle docs/context/evidence/issue_5263_exact_repeat/resolved_definitions.json \
+  --output-dir output/issue_5263
+
 uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py verify-host \
   --manifest output/issue_5263/exact_repeat_manifest.json \
   --host-report output/issue_5263/host_result.json \
@@ -50,7 +54,7 @@ planner definitions (`goal`, `orca`, and `ppo`), and 140 target references with 
 and computed hashes. `verify-host` rejects missing targets, a Git revision or per-target
 horizon/config hash that does
 not match the manifest, non-CPU or multi-worker metadata, absent NumPy/Numba versions,
-not-exactly-three repeats, malformed trajectory hashes, and unrecorded divergences. A
+absent `uv.lock` SHA-256 hashes, not-exactly-three repeats, malformed trajectory hashes, and unrecorded divergences. A
 repeat is identical only when its binary outcome and SHA-256 trajectory hash agree. Otherwise the
 host report must state the first differing repeat and field. `compare-hosts` accepts only distinct
 machine identifiers with matching pinned NumPy and Numba versions; a version mismatch is
@@ -59,6 +63,8 @@ divergent, not a successful comparison.
 ## Evidence status and remaining action
 
 No full benchmark campaign, Slurm/GPU submission, or paper/dissertation claim update was made.
-The runnable-definition blocker is resolved. The remaining empirical actions are to run the 420
-CPU-only repeats on one host, register the verified report under this evidence directory, then run
-and compare the second-host near-miss repeat with its environment manifest.
+The runnable-definition and executor blockers are resolved. The remaining empirical actions are to
+run the 420 CPU-only repeats on one host, register the verified report under this evidence directory,
+then run and compare the second-host near-miss repeat with its environment manifest. The executor
+records the host, Python, NumPy, Numba, Git revision, and root `uv.lock` SHA-256 fingerprint so a
+verified result can be reproduced or rejected when dependencies drift.

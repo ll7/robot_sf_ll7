@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pytest
 
 from robot_sf.benchmark.exact_repeat_campaign import (
@@ -15,6 +17,7 @@ from robot_sf.benchmark.exact_repeat_campaign import (
     _compute_trajectory_hash,
     _get_environment_fingerprint,
     _safe_json_value,
+    canonical_sha256,
     execute_campaign,
     resolve_runnable_definitions,
     verify_host_report,
@@ -39,6 +42,7 @@ def _load(path: Path) -> Any:
 
 @pytest.fixture(scope="module")
 def manifest() -> dict[str, Any]:
+    """Build the retained exact-repeat manifest once for executor tests."""
     episodes = [
         json.loads(line)
         for line in (FIXTURE_DIR / "real_campaign_episodes.jsonl").read_text().splitlines()
@@ -52,6 +56,7 @@ def manifest() -> dict[str, Any]:
 
 @pytest.fixture(scope="module")
 def resolved_bundle(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the runnable definitions used by executor tests."""
     return resolve_runnable_definitions(manifest, CAMPAIGN_CONFIG)
 
 
@@ -59,6 +64,7 @@ def resolved_bundle(manifest: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_safe_json_value_passes_through_primitive_types():
+    """Primitive JSON values retain their exact representation."""
     assert _safe_json_value(True) is True
     assert _safe_json_value(False) is False
     assert _safe_json_value(42) == 42
@@ -67,20 +73,29 @@ def test_safe_json_value_passes_through_primitive_types():
 
 
 def test_safe_json_value_converts_nan_and_inf_to_null():
+    """Non-finite floats become canonical JSON null values."""
     assert _safe_json_value(float("nan")) is None
     assert _safe_json_value(float("inf")) is None
     assert _safe_json_value(float("-inf")) is None
 
 
 def test_safe_json_value_converts_nested_structures():
+    """Nested collections receive recursive finite-value cleanup."""
     value = _safe_json_value({"a": [1.0, float("nan"), True], "b": {"c": float("inf")}})
     assert value == {"a": [1.0, None, True], "b": {"c": None}}
+
+
+def test_safe_json_value_converts_numpy_scalars_and_arrays():
+    """NumPy values become JSON-safe Python values before hashing."""
+    value = _safe_json_value({"scalar": np.float32(1.5), "array": np.array([1, 2])})
+    assert value == {"scalar": 1.5, "array": [1, 2]}
 
 
 # --- _compute_trajectory_hash -----------------------------------------------
 
 
 def test_trajectory_hash_is_valid_sha256_hex():
+    """A complete record produces a conventional SHA-256 digest."""
     record = {
         "outcome": {"success": True, "collision": False, "timeout": False},
         "metrics": {"success": 1.0, "collisions": 0.0, "near_misses": 0.0},
@@ -91,6 +106,7 @@ def test_trajectory_hash_is_valid_sha256_hex():
 
 
 def test_trajectory_hash_is_deterministic_for_same_record():
+    """Equal records always produce equal trajectory hashes."""
     record = {
         "outcome": {"success": False, "collision": True, "timeout": False},
         "metrics": {"success": 0.0, "collisions": 1.0, "near_misses": 2.0},
@@ -101,6 +117,7 @@ def test_trajectory_hash_is_deterministic_for_same_record():
 
 
 def test_trajectory_hash_differs_when_outcome_changes():
+    """Changing the outcome changes the trajectory hash."""
     r1 = {
         "outcome": {"success": True, "collision": False, "timeout": False},
         "metrics": {"success": 1.0, "collisions": 0.0},
@@ -113,6 +130,7 @@ def test_trajectory_hash_differs_when_outcome_changes():
 
 
 def test_trajectory_hash_handles_nan_in_metrics():
+    """A NaN metric is canonicalized before hashing."""
     record = {
         "outcome": {"success": False, "collision": False, "timeout": True},
         "metrics": {
@@ -126,11 +144,13 @@ def test_trajectory_hash_handles_nan_in_metrics():
 
 
 def test_trajectory_hash_rejects_missing_outcome():
+    """Malformed records without outcomes fail closed."""
     with pytest.raises(ValueError, match="outcome"):
         _compute_trajectory_hash({"metrics": {}})
 
 
 def test_trajectory_hash_rejects_missing_metrics():
+    """Malformed records without metrics fail closed."""
     with pytest.raises(ValueError, match="metrics"):
         _compute_trajectory_hash({"outcome": {"success": True}})
 
@@ -139,6 +159,7 @@ def test_trajectory_hash_rejects_missing_metrics():
 
 
 def test_environment_fingerprint_has_required_fields():
+    """The generated environment fingerprint satisfies host schema fields."""
     env = _get_environment_fingerprint()
     for field in (
         "machine_id",
@@ -148,22 +169,26 @@ def test_environment_fingerprint_has_required_fields():
         "numba_version",
         "python_version",
         "git_commit",
+        "lockfile_sha256",
     ):
         assert field in env, f"missing environment field: {field}"
     assert env["cpu_only"] is True
     assert env["workers"] == 1
+    assert len(env["lockfile_sha256"]) == 64
 
 
 # --- _check_manifest_from_bundle --------------------------------------------
 
 
 def test_check_manifest_from_bundle_validates_resolved_bundle(manifest, resolved_bundle):
+    """A fresh resolved bundle supplies all exact-repeat targets."""
     indexed, repeats = _check_manifest_from_bundle(resolved_bundle)
     assert repeats == 3
     assert len(indexed) == 140
 
 
 def test_check_manifest_from_bundle_rejects_missing_execution_contract():
+    """A missing execution contract is rejected before execution."""
     bad = {
         "execution_contract": None,
         "targets": [
@@ -181,13 +206,6 @@ def test_check_manifest_from_bundle_rejects_missing_execution_contract():
 
 
 # --- execute_campaign with mocked runner ------------------------------------
-
-
-class _MockEpisodeRecord:
-    """Build a deterministic episode record for the mock runner."""
-
-    def __init__(self, *, trajectory_seed: int = 0):
-        pass
 
 
 def _build_mock_record(seed: int) -> dict[str, Any]:
@@ -235,7 +253,9 @@ def test_execute_campaign_produces_valid_host_report(tmp_path, manifest, resolve
     assert verified["summary"]["n_cells"] == 7
 
 
-def test_execute_campaign_all_repeats_identical_for_deterministic_runner(tmp_path, manifest, resolved_bundle):
+def test_execute_campaign_all_repeats_identical_for_deterministic_runner(
+    tmp_path, manifest, resolved_bundle
+):
     """A deterministic mock runner produces identical repeats."""
     output_dir = tmp_path / "host_run_identical"
     host_result = execute_campaign(
@@ -261,22 +281,20 @@ def test_execute_campaign_writes_host_result_json(tmp_path, resolved_bundle):
 def test_execute_campaign_target_filter_executes_only_requested_targets(
     tmp_path, manifest, resolved_bundle
 ):
-    """target_filter limits execution to the requested scenario_id--seed entries."""
+    """target_filter rejects incomplete reports instead of writing unverifiable evidence."""
     # Pick the first target's scenario_definition_id
     first_def_id = resolved_bundle["targets"][0]["scenario_definition_id"]
     second_def_id = resolved_bundle["targets"][1]["scenario_definition_id"]
 
     output_dir = tmp_path / "host_run_filtered"
-    host_result = execute_campaign(
-        resolved_bundle,
-        output_dir=output_dir,
-        run_episode=_deterministic_mock_runner,
-        target_filter=[first_def_id, second_def_id],
-    )
-
-    assert len(host_result["results"]) == 2
-    scenario_ids = {r["scenario_id"] for r in host_result["results"]}
-    assert len(scenario_ids) > 0
+    with pytest.raises(ValueError, match="requires compatible cached results"):
+        execute_campaign(
+            resolved_bundle,
+            output_dir=output_dir,
+            run_episode=_deterministic_mock_runner,
+            target_filter=[first_def_id, second_def_id],
+        )
+    assert not (output_dir / "host_result.json").exists()
 
 
 def test_execute_campaign_resume_skips_cached_results(tmp_path, resolved_bundle):
@@ -297,6 +315,57 @@ def test_execute_campaign_resume_skips_cached_results(tmp_path, resolved_bundle)
 
     assert second_run_count == 0, f"resume should skip all targets, but ran {second_run_count}"
     assert first_run_count > 0, "first run should have executed targets"
+
+
+def test_execute_campaign_reexecutes_a_malformed_cache_entry(tmp_path, resolved_bundle):
+    """A non-mapping cache entry is ignored instead of crashing resume execution."""
+    output_dir = tmp_path / "host_run_malformed_cache"
+    execute_campaign(resolved_bundle, output_dir=output_dir, run_episode=_deterministic_mock_runner)
+    target = resolved_bundle["targets"][0]
+    cache_file = (
+        output_dir
+        / "target_cache"
+        / (f"{target['scenario_id']}_{target['planner']}_{target['seed']}.json")
+    )
+    cache_file.write_text("null\n", encoding="utf-8")
+    calls: list[int] = []
+
+    def counting_runner(scenario_params, seed, **kwargs):
+        calls.append(seed)
+        return _deterministic_mock_runner(scenario_params, seed, **kwargs)
+
+    execute_campaign(resolved_bundle, output_dir=output_dir, run_episode=counting_runner)
+    assert len(calls) == 3
+
+
+def test_execute_campaign_preserves_numpy_near_miss_metrics(tmp_path, resolved_bundle):
+    """Finite NumPy near-miss values are recorded instead of silently becoming zero."""
+
+    def numpy_metric_runner(scenario_params, seed, **kwargs):
+        record = _deterministic_mock_runner(scenario_params, seed, **kwargs)
+        record["metrics"]["near_misses"] = np.float32(2)
+        return record
+
+    report = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "host_run_numpy_near_misses",
+        run_episode=numpy_metric_runner,
+    )
+    assert {
+        repeat["near_misses"] for result in report["results"] for repeat in result["repeats"]
+    } == {2}
+
+
+def test_execute_campaign_rejects_missing_scenario_definition(tmp_path, resolved_bundle):
+    """Missing definitions fail closed with a clear error before dictionary conversion."""
+    tampered = copy.deepcopy(resolved_bundle)
+    scenario_id = tampered["targets"][0]["scenario_definition_id"]
+    del tampered["scenario_definitions"][scenario_id]
+    tampered["bundle_sha256"] = canonical_sha256(
+        {key: value for key, value in tampered.items() if key != "bundle_sha256"}
+    )
+    with pytest.raises(ValueError, match="missing scenario_definition"):
+        execute_campaign(tampered, output_dir=tmp_path / "missing_definition")
 
 
 def test_execute_campaign_rejects_invalid_bundle_schema():

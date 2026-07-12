@@ -158,6 +158,23 @@ class TestFactorAToggle:
 class TestFactorBToggle:
     """Test constraint + local-minimum handling ON/OFF toggle."""
 
+    @pytest.mark.parametrize("predictor_backend", ["none", "constant_velocity"])
+    def test_constraints_off_arms_remain_functional(self, predictor_backend: str):
+        """B0 arms still make finite progress toward an unobstructed goal."""
+        config = PredictionMPCConfig(
+            predictor_backend=predictor_backend,
+            hard_pedestrian_constraints_enabled=False,
+            local_min_escape_enabled=False,
+        )
+        adapter = PredictionMPCPlannerAdapter(config=config)
+
+        linear, angular = adapter.plan(_minimal_observation(ped_positions=[], ped_velocities=[]))
+
+        assert np.isfinite(linear)
+        assert np.isfinite(angular)
+        assert linear > 0.0
+        assert adapter.diagnostics()["nonzero_command_count"] == 1
+
     def test_constraints_disabled_returns_empty(self):
         config = PredictionMPCConfig(
             predictor_backend="constant_velocity",

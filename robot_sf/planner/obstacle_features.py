@@ -163,10 +163,18 @@ class LocalObstacleFeatureExtractor:
             ``(num_query_points, 6)`` feature matrix.
         """
         lines = list(obstacle_lines)
-        rows = [self._nearest_feature(point, lines).as_array() for point in query_points]
-        if not rows:
+        points = [np.asarray(p, dtype=float) for p in query_points]
+        if not points:
             return np.empty((0, PREDICTIVE_OBSTACLE_FEATURE_DIM), dtype=np.float32)
-        return np.asarray(rows, dtype=np.float32)
+        if not lines:
+            return np.tile(
+                np.asarray(
+                    [self.unavailable_distance, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    dtype=np.float32,
+                ),
+                (len(points), 1),
+            )
+        return self._extract_many_vectorized(points, lines)
 
     def _nearest_feature(self, query_point: Vec2D, lines: list[Line2D]) -> LocalObstacleFeature:
         """Compute nearest-line feature with deterministic tie-breaking.
@@ -218,6 +226,102 @@ class LocalObstacleFeatureExtractor:
             tangent=(float(tangent[0]), float(tangent[1])),
             valid_mask=1.0,
         )
+
+    def _extract_many_vectorized(
+        self,
+        points: list[np.ndarray],
+        lines: list[Line2D],
+    ) -> np.ndarray:
+        """Vectorized batch extraction over all query points and lines.
+
+        Preserves deterministic tie-breaking: equal-distance lines are resolved
+        by input order (lowest index wins), matching the scalar ``_nearest_feature``.
+
+        Returns
+        -------
+        np.ndarray
+            ``(num_points, 6)`` float32 feature matrix.
+        """
+        num_points = len(points)
+        num_lines = len(lines)
+
+        # Build line arrays: starts (L, 2), segments (L, 2), length_sq (L,)
+        starts = np.empty((num_lines, 2), dtype=float)
+        ends = np.empty((num_lines, 2), dtype=float)
+        for i, line in enumerate(lines):
+            starts[i] = line[0]
+            ends[i] = line[1]
+        segments = ends - starts
+        length_sq = np.einsum("ij,ij->i", segments, segments)
+
+        # Filter degenerate lines (zero-length)
+        valid_mask = length_sq > 0.0
+        valid_indices = np.where(valid_mask)[0]
+        if len(valid_indices) == 0:
+            return np.tile(
+                np.asarray(
+                    [self.unavailable_distance, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    dtype=np.float32,
+                ),
+                (num_points, 1),
+            )
+
+        valid_starts = starts[valid_indices]
+        valid_segments = segments[valid_indices]
+        valid_length_sq = length_sq[valid_indices]
+
+        # Stack query points: (P, 2)
+        points_arr = np.stack(points, axis=0)
+
+        # rel_point: (P, L, 2)
+        rel = points_arr[:, np.newaxis, :] - valid_starts[np.newaxis, :, :]
+
+        # projection parameter: (P, L)
+        proj_raw = np.einsum("pli,li->pl", rel, valid_segments) / valid_length_sq[np.newaxis, :]
+        proj = np.clip(proj_raw, 0.0, 1.0)
+
+        # offset from closest point on segment: (P, L, 2)
+        offset = rel - proj[:, :, np.newaxis] * valid_segments[np.newaxis, :, :]
+
+        # distance: (P, L)
+        distance = np.sqrt(np.einsum("pli,pli->pl", offset, offset))
+
+        # For tie-breaking: use argmin over (distance, original_index).
+        # Since we iterate lines in order and argmin returns the first minimum,
+        # the lower-index tie-break is preserved automatically when we sort by
+        # (distance, valid_indices) with a stable sort.
+        # Build a composite key: distance * large_factor + original_index
+        # to ensure index acts as tie-breaker.
+        tie_break_scale = np.finfo(float).max / (num_lines + 1)
+        composite = distance * tie_break_scale + valid_indices[np.newaxis, :]
+
+        # argmin over lines axis: (P,)
+        best_idx = np.argmin(composite, axis=1)
+
+        # Gather results
+        best_distance = distance[np.arange(num_points), best_idx]
+        best_offset = offset[np.arange(num_points), best_idx]
+        best_segment = valid_segments[best_idx]
+
+        # Unit normals and tangents
+        offset_norm = np.linalg.norm(best_offset, axis=1, keepdims=True)
+        segment_norm = np.linalg.norm(best_segment, axis=1, keepdims=True)
+        # Use safe division to avoid RuntimeWarning on zero-norm vectors
+        safe_offset_norm = np.where(offset_norm > 0.0, offset_norm, 1.0)
+        safe_segment_norm = np.where(segment_norm > 0.0, segment_norm, 1.0)
+        normal = np.where(offset_norm > 0.0, best_offset / safe_offset_norm, 0.0)
+        tangent = np.where(segment_norm > 0.0, best_segment / safe_segment_norm, 0.0)
+
+        # Build feature matrix
+        features = np.empty((num_points, PREDICTIVE_OBSTACLE_FEATURE_DIM), dtype=np.float32)
+        features[:, 0] = best_distance.astype(np.float32)
+        features[:, 1] = normal[:, 0].astype(np.float32)
+        features[:, 2] = normal[:, 1].astype(np.float32)
+        features[:, 3] = tangent[:, 0].astype(np.float32)
+        features[:, 4] = tangent[:, 1].astype(np.float32)
+        features[:, 5] = 1.0
+
+        return features
 
 
 def _coerce_point(value: Any) -> tuple[float, float] | None:

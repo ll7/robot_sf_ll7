@@ -187,3 +187,71 @@ def test_append_obstacle_features_rejects_row_count_mismatch():
         assert "same number of rows" in str(exc)
     else:  # pragma: no cover - defensive assertion style for clearer failure
         raise AssertionError("expected ValueError")
+
+
+def test_vectorized_extract_many_matches_scalar_parity():
+    """Vectorized batch extraction must match scalar per-point results exactly."""
+    extractor = LocalObstacleFeatureExtractor()
+    lines = [
+        ((0.0, 0.0), (2.0, 0.0)),
+        ((2.0, 0.0), (2.0, 2.0)),
+        ((2.0, 2.0), (0.0, 2.0)),
+        ((0.0, 2.0), (0.0, 0.0)),
+    ]
+    query_points = [
+        (1.0, 1.0),
+        (0.5, 0.5),
+        (1.5, 1.5),
+        (3.0, 1.0),
+        (0.0, 0.0),
+    ]
+
+    # Scalar reference
+    scalar_rows = [extractor.extract(p, lines) for p in query_points]
+    scalar = np.asarray(scalar_rows, dtype=np.float32)
+
+    # Vectorized batch
+    vectorized = extractor.extract_many(query_points, lines)
+
+    np.testing.assert_array_equal(vectorized, scalar)
+
+
+def test_vectorized_extract_many_tie_breaks_by_input_order():
+    """Vectorized tie-breaking must match scalar: lowest index wins on equal distance."""
+    extractor = LocalObstacleFeatureExtractor()
+    lines = [
+        ((-1.0, 1.0), (1.0, 1.0)),
+        ((-1.0, -1.0), (1.0, -1.0)),
+    ]
+    query_points = [(0.0, 0.0)]
+
+    scalar = extractor.extract((0.0, 0.0), lines)
+    vectorized = extractor.extract_many(query_points, lines)
+
+    np.testing.assert_array_equal(vectorized[0], scalar)
+
+
+def test_vectorized_extract_many_empty_lines_returns_sentinel():
+    """Vectorized batch with no lines should return sentinel for all points."""
+    extractor = LocalObstacleFeatureExtractor()
+    query_points = [(1.0, 1.0), (2.0, 2.0)]
+
+    vectorized = extractor.extract_many(query_points, [])
+
+    assert vectorized.shape == (2, PREDICTIVE_OBSTACLE_FEATURE_DIM)
+    np.testing.assert_allclose(vectorized[:, 0], [50.0, 50.0])
+    np.testing.assert_allclose(vectorized[:, 5], [0.0, 0.0])
+
+
+def test_vectorized_extract_many_single_line_multiple_points():
+    """Vectorized batch with one line should compute correct distances for all points."""
+    extractor = LocalObstacleFeatureExtractor()
+    lines = [((0.0, 0.0), (2.0, 0.0))]
+    query_points = [(1.0, 1.0), (1.0, -1.0), (3.0, 0.0)]
+
+    vectorized = extractor.extract_many(query_points, lines)
+
+    # Distances: 1.0, 1.0, 1.0
+    np.testing.assert_allclose(vectorized[:, 0], [1.0, 1.0, 1.0], atol=1e-7)
+    # All valid
+    np.testing.assert_allclose(vectorized[:, 5], [1.0, 1.0, 1.0])

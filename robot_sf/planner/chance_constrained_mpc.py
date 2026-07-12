@@ -354,7 +354,12 @@ def build_chance_constrained_mpc_config(
     for field in fields(ChanceConstrainedMPCConfig):
         value = raw.get(field.name, getattr(defaults, field.name))
         try:
-            kwargs[field.name] = converters[field.name](value)
+            # Fields inherited from the base config without an explicit converter
+            # pass through unchanged: a hand-maintained converter table must not
+            # break when the base dataclass gains a field (main went red on
+            # 2026-07-12 when #5374 added the factorial toggle fields — every
+            # inherited field hit KeyError here).
+            kwargs[field.name] = converters.get(field.name, lambda v: v)(value)
         except (TypeError, ValueError):
             default_value = getattr(defaults, field.name)
             warnings.warn(

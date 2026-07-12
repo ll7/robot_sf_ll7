@@ -69,8 +69,9 @@ This joins the already-landed pieces without turning fixture output into evidenc
 
 ### Next Empirical Action
 
-Run the 18-row tracked manifest with its common scenario, seed, planner, and arm keys; retain the
-episode records with aligned traces for both declared metrics. Then run the report command above,
+Run the 72-row tracked manifest across its common scenario, seed, planner, response-law-fraction,
+and arm keys. Retain the episode records with aligned traces for both declared metrics. Then run
+the report command above,
 the preregistered rank-reversal command in
 [the rank-reversal note](issue_3574_rank_reversal_test.md), and the configured-versus-realized
 distribution audit on those same traces. Interpret results only after the paired records, durable

@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = REPO_ROOT / "configs/benchmarks/issue_3574_mean_matched_harness_smoke.yaml"
+STATE_PATH = REPO_ROOT / "docs/context/issue_3574_state.yaml"
+HARNESS_NOTE_PATH = REPO_ROOT / "docs/context/issue_3574_mean_matched_harness.md"
 SCRIPT_PATH = REPO_ROOT / "scripts/benchmark/build_heterogeneous_population_ablation_report.py"
 
 
@@ -170,3 +172,23 @@ def test_tracked_manifest_declares_required_response_law_sweep() -> None:
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
 
     assert config["response_law_fractions"] == [0.0, 0.1, 0.25, 0.5]
+
+
+def test_durable_notes_match_tracked_manifest_row_count() -> None:
+    """Issue #3574's execution notes name the committed matrix size."""
+
+    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    state = yaml.safe_load(STATE_PATH.read_text(encoding="utf-8"))
+    manifest = build_mean_matched_harness_manifest(config, config_path=str(CONFIG_PATH))
+
+    assert isinstance(manifest, dict), (
+        f"Expected the generated manifest to be a dictionary; got {type(manifest).__name__}"
+    )
+    documented_row_count = manifest.get("row_count")
+    assert documented_row_count == 72, (
+        f"Expected the generated manifest row count to be 72; got {documented_row_count!r}"
+    )
+    assert f"{documented_row_count}_row" in state["next_empirical_action"]
+    assert f"{documented_row_count}-row tracked manifest" in HARNESS_NOTE_PATH.read_text(
+        encoding="utf-8"
+    )

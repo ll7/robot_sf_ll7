@@ -207,6 +207,40 @@ If a fresh linked worktree fails to collect a focused test because an optional d
 classifies the direct failure as setup or optional-dependency friction for that worktree, not as a
 code regression; record both commands in the PR or handoff.
 
+### Agent-run artifact paths in linked worktrees
+
+In a linked worktree, `.git` is a file (not a directory), so writing to a literal
+`.git/codex-agent-runs/active/...` path fails.  Use the shared helpers to resolve the
+correct absolute path via `git rev-parse --git-common-dir`.
+
+**Shell** (for scripts that source `scripts/dev/common_setup.sh`):
+
+```bash
+source scripts/dev/common_setup.sh
+artifact_dir="$(resolve_agent_artifact_dir my-subdir)"
+mkdir -p "$artifact_dir"
+echo "data" > "$artifact_dir/result.json"
+```
+
+**Python** (for scripts under `scripts/dev/`):
+
+```python
+from scripts.dev.git_common import resolve_agent_artifact_dir
+
+artifact_dir = resolve_agent_artifact_dir("my-subdir")
+# artifact_dir is an absolute Path; mkdir is done automatically
+```
+
+**One-liner** (for ad-hoc shell use or agent instructions):
+
+```bash
+mkdir -p "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/my-subdir"
+```
+
+Never hard-code a literal `.git/codex-agent-runs/...` path in scripts, agent instructions, or
+task artifact wording.  Always resolve through `git rev-parse --git-common-dir` or use the
+helpers above.
+
 When validating the SNQI (Social Navigation Quality Index) contract or camera-ready exit handling,
 pass the relevant files explicitly. `-k` filters only after pytest has collected files, so starting
 from `pytest tests -k ...` can import unrelated optional stacks first. This command collects only

@@ -41,12 +41,7 @@ fi
 if [[ "${FOCUSED_TEST_FULL_OUTPUT:-0}" == "1" ]]; then
   uv run pytest "$@"
 else
-  common_git_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
-  if [[ -n "$common_git_dir" ]]; then
-    log_dir="$common_git_dir/codex-agent-runs/active/focused-tests"
-  else
-    log_dir="output/tmp/focused-tests"
-  fi
+  log_dir="$(resolve_agent_artifact_dir focused-tests)"
   mkdir -p "$log_dir"
   log_file="$log_dir/pytest-$(date -u +%Y%m%dT%H%M%SZ)-$$.log"
   set +e

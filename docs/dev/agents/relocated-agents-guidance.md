@@ -393,7 +393,9 @@ resolving lint or test failures locally before requesting review.
   `scripts/dev/snapshot_pr_queue.py --prs <number> --review-threads --json`; it emits bounded
   comment excerpts, label names, and omits raw `diff_hunk` payloads. Fetch full review-comment
   bodies or hunks only with an explicit artifact path such as
-  `--raw-review-comments-artifact "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/.../raw-review-comments.json"`.
+  `--raw-review-comments-artifact "$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/.../raw-review-comments.json"`
+  (resolve via `scripts/dev/common_setup.sh`'s `resolve_agent_artifact_dir` helper or
+  `scripts/dev/git_common.py`).
 - Before finalization, cover format/check, focused tests, changed-file coverage when practical, and a
   clean worktree check (`git status --short`) as part of the readied proof bundle.
 - For failing validation commands, prefer `uv run python scripts/dev/run_compact_validation.py -- <command>` before
@@ -471,7 +473,10 @@ below that threshold is a hard pause state for the loop. Persist the pause in th
 resolved with `git rev-parse --path-format=absolute --git-common-dir`, for example
 `$(git rev-parse --path-format=absolute --git-common-dir)/codex-agent-runs/active/`. Do not write
 to a literal worktree-relative `.git/codex-agent-runs/active/` path, because linked worktrees may
-store `.git` as a file. After recording the pause, short-circuit repeated automatic continue
+store `.git` as a file.  Use the shared helpers from `scripts/dev/common_setup.sh`
+(`resolve_agent_artifact_dir`) or `scripts/dev/git_common.py`
+(`resolve_agent_artifact_dir`) to resolve the correct path; see
+`docs/dev_guide.md` § "Agent-run artifact paths in linked worktrees". After recording the pause, short-circuit repeated automatic continue
 prompts without repo, GitHub, validation, delegation, or broad context-loading work.
 
 - Do not re-run usage checks on automatic continue prompts unless a recorded cooldown has elapsed.

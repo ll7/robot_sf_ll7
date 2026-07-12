@@ -59,6 +59,7 @@ def _host_report(manifest: dict[str, Any], machine_id: str) -> dict[str, Any]:
             "numba_version": "0.65.1",
             "python_version": "3.13.14",
             "git_commit": manifest["targets"][0]["source_git_hash"],
+            "lockfile_sha256": "b" * 64,
         },
         "results": [
             {**target, "repeats": copy.deepcopy(repeats)} for target in manifest["targets"]
@@ -165,6 +166,14 @@ def test_host_verifier_rejects_a_mismatched_commit_or_config(manifest):
     report["environment"]["git_commit"] = manifest["targets"][0]["source_git_hash"]
     report["results"][0]["source_config_hash"] = "different"
     with pytest.raises(ValueError, match="source_config_hash"):
+        verify_host_report(manifest, report)
+
+
+def test_host_verifier_requires_a_lockfile_hash(manifest):
+    """A host result without its dependency lockfile identity is rejected."""
+    report = _host_report(manifest, "host-a")
+    del report["environment"]["lockfile_sha256"]
+    with pytest.raises(ValueError, match="lockfile_sha256"):
         verify_host_report(manifest, report)
 
 

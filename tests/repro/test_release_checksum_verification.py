@@ -530,7 +530,10 @@ class TestActualExecution:
 
         assert report["schema"] == "cold-start-reproduction-report.v1"
         assert report["release_tag"] == "0.0.2"
-        assert report["overall_verdict"] == "pass"
+        assert report["overall_verdict"] == "partial"
+        assert report["steps"]["clone"]["status"] == "skip"
+        assert report["instruction_gaps"]
+        assert report["deviations"]
         assert "environment" in report
         assert "steps" in report
         assert "verify_checksums" in report["steps"]
@@ -555,7 +558,7 @@ class TestActualExecution:
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True))
         assert report_path.is_file()
         loaded = json.loads(report_path.read_text())
-        assert loaded["overall_verdict"] == "pass"
+        assert loaded["overall_verdict"] == "partial"
 
 
 class TestDocumentation:
@@ -605,9 +608,19 @@ class TestDurableEvidenceReport:
         report = _read_json(DURABLE_EVIDENCE_REPORT)
         assert report["schema"] == "cold-start-reproduction-report.v1"
 
-    def test_evidence_report_verdict_is_pass(self) -> None:
+    def test_evidence_report_pins_the_checksum_manifest(self) -> None:
         report = _read_json(DURABLE_EVIDENCE_REPORT)
-        assert report["overall_verdict"] == "pass"
+        manifest_path = ROOT / report["config_path"]
+        assert manifest_path.is_file()
+        assert report["config_sha256"] == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+        assert len(report["config_commit"]) == 40
+
+    def test_evidence_report_is_partial_when_the_clone_was_skipped(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        assert report["overall_verdict"] == "partial"
+        assert report["steps"]["clone"]["status"] == "skip"
+        assert report["deviations"]
+        assert report["instruction_gaps"]
 
     def test_evidence_report_has_environment(self) -> None:
         report = _read_json(DURABLE_EVIDENCE_REPORT)

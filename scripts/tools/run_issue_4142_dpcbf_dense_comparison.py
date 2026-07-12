@@ -1,31 +1,8 @@
 #!/usr/bin/env python3
-"""Consume the issue #4142 dense DPCBF comparison packet into a run plan (dry-run).
+"""Resolve the #4142 DPCBF packet or run its bounded authorization-gated local executor.
 
-Resolves the predeclared comparison packet
-``configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`` into a concrete, ordered
-three-arm run plan (``cbf_off``, ``cbf_collision_cone_on``, ``cbf_dynamic_parabolic_v1_on``)
-using the canonical readiness validator as the single source of truth. It runs no episodes
-and authorizes no campaign.
-
-The default mode is a dry-run: the plan is printed, nothing is written to disk, and execution
-stays authorization-gated. Passing ``--execute`` runs bounded local episodes **only** when the
-exact public authorization ID is supplied through ``--authorization``; otherwise it fails
-closed and writes nothing. This runs local episodes only -- no Slurm/GPU submission.
-
-Examples:
-    # Human-readable Markdown run plan against the current checkout.
-    uv run python scripts/tools/run_issue_4142_dpcbf_dense_comparison.py
-
-    # JSON plan, non-zero exit unless the plan is fully resolved (CI/preflight gate).
-    uv run python scripts/tools/run_issue_4142_dpcbf_dense_comparison.py \
-        --format json --fail-on-blocked
-
-    # Attempting execution without the authorization ID fails closed (no files written).
-    uv run python scripts/tools/run_issue_4142_dpcbf_dense_comparison.py --execute
-
-    # Authorized bounded local run of all three arms.
-    uv run python scripts/tools/run_issue_4142_dpcbf_dense_comparison.py \
-        --execute --authorization RSF-DPCBF-DENSE-20260712
+Dry-run is the default. ``--execute`` requires the exact public authorization ID and never
+submits Slurm/GPU work; failed or degraded arms remain caveats.
 """
 
 from __future__ import annotations

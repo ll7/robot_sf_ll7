@@ -49,26 +49,15 @@ this slice binds the three merged modules with the one contract they were missin
 
 ## What #5419 adds: the authorization-gated local executor
 
-PR #5419 turns `execute_run_plan()` into a bounded, explicitly authorized **local episode
-executor**:
-
-- **Bounded execution and authorization.** The packet's optional `execution` block fixes seed,
-  repeats, horizon, `dt`, workers, video-off, and resume policy. Unknown or out-of-bounds values
-  fail closed. The exact `RSF-DPCBF-DENSE-20260712` ID is required before any write; the runner
-  reuses `run_batch` once per arm in packet order with the shared manifest and arm config.
-- **Manifest and resume safety.** The manifest
-  (`robot_sf.issue_4142_dpcbf_dense_comparison_execution.v1`) records effective arguments,
-  timestamps, arm statuses, dirty state, and content-bound hashes. Atomic `in_progress`
-  checkpoints make interruption explicit; orphan output, malformed manifests, dirty Git trees,
-  and mismatched provenance fail closed. A no-work resume is complete only after artifact ID
-  validation.
+PR #5419 adds a bounded local executor gated by `RSF-DPCBF-DENSE-20260712`. It runs each fixed
+arm through `run_batch`, checkpoints before/after every arm, and binds effective inputs plus
+completed JSONL bytes. Dirty, orphaned, malformed, duplicate, or mismatched resume state fails
+closed.
 
 ## Integration status
 
-- **Delivered (new):** the authorization-gated executor, checkpointed manifest, and
-  provenance-safe resume (#5419), covered by fail-closed tests and a reduced real-runner smoke.
-- **Remaining (intentional):** the tracked `prediction_mpc_cv` packet is not run here; its
-  summarizer remains `results_incomplete` until authorized per-arm JSONL exists.
+- **Delivered:** authorization gate, checkpointed manifest, artifact-bound resume, and smoke.
+- **Remaining:** the tracked packet is not run here; summary stays incomplete until authorized.
 
 Next empirical action: run the resolved plan with the exact authorization ID and summarize its
 per-arm JSONL as bounded diagnostic evidence, never a paper-facing collision-reduction claim.

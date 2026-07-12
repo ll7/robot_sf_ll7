@@ -36,6 +36,14 @@ RELEASE_METADATA = (
     / "release_metadata.json"
 )
 BUNDLE_SMOKE_SCRIPT = ROOT / "scripts" / "repro" / "benchmark_bundle_smoke.sh"
+DURABLE_EVIDENCE_REPORT = (
+    ROOT
+    / "docs"
+    / "context"
+    / "evidence"
+    / "issue_5366_cold_start_reproduction_2026-07-12"
+    / "cold_start_reproduction_report.json"
+)
 
 
 def _read_text_file(path: Path) -> str:
@@ -578,3 +586,57 @@ class TestDocumentation:
 
     def test_benchmark_bundle_smoke_script_is_executable(self) -> None:
         assert BUNDLE_SMOKE_SCRIPT.stat().st_mode & 0o111
+
+
+class TestDurableEvidenceReport:
+    """Tests for the durable cold-start reproduction evidence report.
+
+    This report is the actual output of running the verification and
+    cold-start reproduction scripts, promoted as trackable evidence
+    per issue #5366 criterion 3 (durable reproduction report).
+    """
+
+    def test_evidence_report_exists(self) -> None:
+        assert DURABLE_EVIDENCE_REPORT.is_file(), (
+            f"Durable evidence report not found: {DURABLE_EVIDENCE_REPORT}"
+        )
+
+    def test_evidence_report_has_schema(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        assert report["schema"] == "cold-start-reproduction-report.v1"
+
+    def test_evidence_report_verdict_is_pass(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        assert report["overall_verdict"] == "pass"
+
+    def test_evidence_report_has_environment(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        env = report["environment"]
+        assert "platform" in env
+        assert "python_version" in env
+        assert "architecture" in env
+
+    def test_evidence_report_verify_checksums_pass(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        step = report["steps"]["verify_checksums"]
+        assert step["status"] == "pass"
+        assert step["bundle_checksum_match"] is True
+
+    def test_evidence_report_all_embedded_artifacts_match(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        artifacts = report["steps"]["verify_checksums"]["embedded_artifacts"]
+        assert len(artifacts) >= 3
+        for art in artifacts:
+            assert art["match"] is True
+            assert art["actual_sha256"] == art["expected_sha256"]
+
+    def test_evidence_report_build_pass(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        step = report["steps"]["build"]
+        assert step["status"] == "pass"
+
+    def test_evidence_report_preflight_pass(self) -> None:
+        report = _read_json(DURABLE_EVIDENCE_REPORT)
+        step = report["steps"]["run_subset"]
+        assert step["status"] == "pass"
+        assert step["preflight_status"] == "pass"

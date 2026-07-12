@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -310,6 +311,30 @@ class TestVerificationScript:
         assert report["overall_verdict"] == "fail"
         assert "Bundle checksum mismatch" in report["errors"][0]
 
+    def test_verification_fails_closed_for_non_mapping_manifest(self, tmp_path: Path) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text("- not\\n- a mapping\\n")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+        )
+
+        assert report["overall_verdict"] == "error"
+        assert report["errors"] == ["Checksum manifest root must be a mapping."]
+
+    def test_download_uses_manifest_release_tag(self, tmp_path: Path) -> None:
+        from scripts.repro.verify_release_checksums import _download_bundle
+
+        with patch("scripts.repro.verify_release_checksums.subprocess.check_call") as check_call:
+            _download_bundle("https://example.com/bundle.tar.gz", tmp_path, "1.2.3")
+
+        assert check_call.call_args.args[0][3] == "1.2.3"
+
 
 class TestReproductionReport:
     """Tests for the cold-start reproduction report generator."""
@@ -403,6 +428,25 @@ class TestReproductionReport:
             assert "platform" in env
             assert "python_version" in env
             assert "architecture" in env
+
+    def test_load_manifest_rejects_non_mapping_root(self, tmp_path: Path, monkeypatch: Any) -> None:
+        from scripts.repro.cold_start_reproduction_report import _load_manifest
+
+        manifest_path = tmp_path / "configs" / "releases" / "release_1_2_3_checksum_manifest.yaml"
+        manifest_path.parent.mkdir(parents=True)
+        manifest_path.write_text("- not\\n- a mapping\\n")
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(ValueError, match="root must be a mapping"):
+            _load_manifest("1.2.3")
+
+    def test_subset_config_path_uses_manifest_release_tag(self, tmp_path: Path) -> None:
+        from scripts.repro.cold_start_reproduction_report import _step_run_subset
+
+        result = _step_run_subset(tmp_path, {"release_tag": "1.2.3"})
+
+        assert result["status"] == "skip"
+        assert "v1_2_3_scoped.yaml" in result["reason"]
 
 
 class TestDocumentation:

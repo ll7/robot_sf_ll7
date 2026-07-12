@@ -63,12 +63,12 @@ def _env_info() -> dict[str, str]:
     }
 
 
-def _download_bundle(url: Path | str, dest: Path) -> Path:
+def _download_bundle(url: Path | str, dest: Path, tag: str) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     bundle_name = str(url).rsplit("/", 1)[-1]
     bundle_path = dest / bundle_name
     subprocess.check_call(
-        ["gh", "release", "download", "0.0.2", "--pattern", bundle_name, "--dir", str(dest)],
+        ["gh", "release", "download", tag, "--pattern", bundle_name, "--dir", str(dest)],
     )
     return bundle_path
 
@@ -138,10 +138,33 @@ def verify_release(
     with open(manifest_path) as f:
         manifest = yaml.safe_load(f)
 
+    if not isinstance(manifest, dict):
+        return {
+            "schema": "release-checksum-verification.v1",
+            "created_at_utc": _utc_now_iso(),
+            "manifest_path": str(manifest_path),
+            "environment": _env_info(),
+            "verdicts": {},
+            "errors": ["Checksum manifest root must be a mapping."],
+            "overall_verdict": "error",
+        }
+
+    release_tag = manifest.get("release_tag")
+    if not isinstance(release_tag, str) or not release_tag:
+        return {
+            "schema": "release-checksum-verification.v1",
+            "created_at_utc": _utc_now_iso(),
+            "manifest_path": str(manifest_path),
+            "environment": _env_info(),
+            "verdicts": {},
+            "errors": ["Checksum manifest must define a non-empty release_tag."],
+            "overall_verdict": "error",
+        }
+
     report: dict[str, Any] = {
         "schema": "release-checksum-verification.v1",
         "created_at_utc": _utc_now_iso(),
-        "release_tag": manifest.get("release_tag"),
+        "release_tag": release_tag,
         "release_id": manifest.get("release_id"),
         "manifest_path": str(manifest_path),
         "environment": _env_info(),
@@ -159,7 +182,7 @@ def verify_release(
             report["overall_verdict"] = "error"
             return report
         try:
-            bundle_path = _download_bundle(bundle_url, output_dir)
+            bundle_path = _download_bundle(bundle_url, output_dir, release_tag)
         except subprocess.CalledProcessError as exc:
             report["errors"].append(f"Bundle download failed: {exc}")
             report["overall_verdict"] = "error"

@@ -88,7 +88,13 @@ def _load_manifest(tag: str) -> dict[str, Any]:
     if not manifest_path.exists():
         raise FileNotFoundError(f"Checksum manifest not found: {manifest_path}")
     with open(manifest_path) as f:
-        return yaml.safe_load(f)
+        manifest = yaml.safe_load(f)
+    if not isinstance(manifest, dict):
+        raise ValueError("Checksum manifest root must be a mapping.")
+    release_tag = manifest.get("release_tag")
+    if not isinstance(release_tag, str) or not release_tag:
+        raise ValueError("Checksum manifest must define a non-empty release_tag.")
+    return manifest
 
 
 def _step_clone(tag: str, work_dir: Path) -> dict[str, Any]:
@@ -248,8 +254,11 @@ def _step_run_subset(clone_dir: Path, manifest: dict[str, Any]) -> dict[str, Any
     result["seed_policy"] = seed_policy
     result["campaign_id"] = campaign.get("campaign_id")
 
+    release_tag = manifest["release_tag"]
+    tag_slug = release_tag.replace(".", "_")
     release_config = Path(
-        "configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml"
+        "configs/benchmarks/releases/"
+        f"paper_experiment_matrix_7planners_v1_release_v{tag_slug}_scoped.yaml"
     )
     if not (clone_dir / release_config).exists():
         result["status"] = "skip"

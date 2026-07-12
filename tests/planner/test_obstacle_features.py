@@ -231,6 +231,37 @@ def test_vectorized_extract_many_tie_breaks_by_input_order():
     np.testing.assert_array_equal(vectorized[0], scalar)
 
 
+def test_vectorized_extract_many_distant_lines_do_not_overflow_tie_break():
+    """The nearest line must win even when all distances exceed float tie scales."""
+    extractor = LocalObstacleFeatureExtractor()
+    lines = [
+        ((-1.0, 20.0), (1.0, 20.0)),
+        ((-1.0, 10.0), (1.0, 10.0)),
+    ]
+    query_points = [(0.0, 0.0)]
+
+    scalar = extractor.extract(query_points[0], lines)
+    vectorized = extractor.extract_many(query_points, lines)
+
+    np.testing.assert_array_equal(vectorized[0], scalar)
+    assert vectorized[0, 0] == 10.0
+
+
+def test_vectorized_extract_many_matches_scalar_fixed_random_fixture():
+    """A fixed-seed mixed geometry fixture must preserve scalar feature bytes."""
+    rng = np.random.default_rng(5412)
+    starts = rng.uniform(-10.0, 10.0, size=(32, 2))
+    ends = starts + rng.uniform(-2.0, 2.0, size=(32, 2))
+    lines = [(tuple(start), tuple(end)) for start, end in zip(starts, ends, strict=True)]
+    query_points = [tuple(point) for point in rng.uniform(-10.0, 10.0, size=(64, 2))]
+
+    extractor = LocalObstacleFeatureExtractor()
+    scalar = np.asarray([extractor.extract(point, lines) for point in query_points])
+    vectorized = extractor.extract_many(query_points, lines)
+
+    np.testing.assert_array_equal(vectorized, scalar)
+
+
 def test_vectorized_extract_many_empty_lines_returns_sentinel():
     """Vectorized batch with no lines should return sentinel for all points."""
     extractor = LocalObstacleFeatureExtractor()

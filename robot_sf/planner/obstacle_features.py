@@ -286,17 +286,10 @@ class LocalObstacleFeatureExtractor:
         # distance: (P, L)
         distance = np.sqrt(np.einsum("pli,pli->pl", offset, offset))
 
-        # For tie-breaking: use argmin over (distance, original_index).
-        # Since we iterate lines in order and argmin returns the first minimum,
-        # the lower-index tie-break is preserved automatically when we sort by
-        # (distance, valid_indices) with a stable sort.
-        # Build a composite key: distance * large_factor + original_index
-        # to ensure index acts as tie-breaker.
-        tie_break_scale = np.finfo(float).max / (num_lines + 1)
-        composite = distance * tie_break_scale + valid_indices[np.newaxis, :]
-
-        # argmin over lines axis: (P,)
-        best_idx = np.argmin(composite, axis=1)
+        # ``valid_indices`` is strictly increasing, so argmin's first-occurrence
+        # rule preserves the scalar lower-index tie-break without a numeric
+        # composite key that could overflow for distant obstacles.
+        best_idx = np.argmin(distance, axis=1)
 
         # Gather results
         best_distance = distance[np.arange(num_points), best_idx]

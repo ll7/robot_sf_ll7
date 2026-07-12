@@ -297,48 +297,45 @@ def test_fix_stale_issues_only_removes_documented_label_set() -> None:
     assert all(label in closed_state_label_hygiene.LIVE_STATE_LABELS for _, label in removed)
 
 
-def test_confirm_issue_closed_reads_state_via_gh(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_confirm_issue_closed_reads_state_via_rest(monkeypatch: pytest.MonkeyPatch) -> None:
     """confirm_issue_closed returns True only for closed, non-PR issues."""
-    captured: dict[str, list[str]] = {}
 
-    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        captured["command"] = command
-        return subprocess.CompletedProcess(
-            args=tuple(command),
-            returncode=0,
-            stdout=(
-                '{"number": 12, "state": "CLOSED", '
-                '"url": "https://github.com/ll7/robot_sf_ll7/issues/12"}'
-            ),
-        )
+    def fake_fetch_issue(number: int, **kwargs: object) -> dict:
+        return {
+            "number": number,
+            "status": "ok",
+            "state": "CLOSED",
+            "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+        }
 
-    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run)
+    monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue)
 
     assert closed_state_label_hygiene.confirm_issue_closed(repo="ll7/robot_sf_ll7", number=12)
-    assert captured["command"][:3] == ["gh", "issue", "view"]
 
 
 def test_confirm_issue_closed_is_false_for_open_or_pr(monkeypatch: pytest.MonkeyPatch) -> None:
     """Open issues and pull requests must fail the read-then-write guard."""
 
-    def fake_run_open(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(
-            args=tuple(command),
-            returncode=0,
-            stdout='{"state": "OPEN", "url": "https://github.com/ll7/robot_sf_ll7/issues/12"}',
-        )
+    def fake_fetch_issue_open(number: int, **kwargs: object) -> dict:
+        return {
+            "number": number,
+            "status": "ok",
+            "state": "OPEN",
+            "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+        }
 
-    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run_open)
+    monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue_open)
     assert not closed_state_label_hygiene.confirm_issue_closed(repo="ll7/robot_sf_ll7", number=12)
 
-    def fake_run_pr(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(
-            args=tuple(command),
-            returncode=0,
-            stdout='{"state": "CLOSED", "url": "https://github.com/ll7/robot_sf_ll7/pull/12"}',
-        )
+    def fake_fetch_issue_pr(number: int, **kwargs: object) -> dict:
+        return {
+            "number": number,
+            "status": "ok",
+            "state": "CLOSED",
+            "url": "https://github.com/ll7/robot_sf_ll7/pull/12",
+        }
 
-    monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run_pr)
+    monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue_pr)
     assert not closed_state_label_hygiene.confirm_issue_closed(repo="ll7/robot_sf_ll7", number=12)
 
 
@@ -372,19 +369,22 @@ def test_main_fix_mode_strips_labels_and_reports(
             ]
         }
 
+    def fake_fetch_issue(number: int, **kwargs: object) -> dict:
+        return {
+            "number": number,
+            "status": "ok",
+            "state": "CLOSED",
+            "url": "https://github.com/ll7/robot_sf_ll7/issues/12",
+        }
+
     edits: list[list[str]] = []
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        if command[:3] == ["gh", "issue", "view"]:
-            return subprocess.CompletedProcess(
-                args=tuple(command),
-                returncode=0,
-                stdout='{"state": "CLOSED", "url": "https://github.com/ll7/robot_sf_ll7/issues/12"}',
-            )
         edits.append(command)
         return subprocess.CompletedProcess(args=tuple(command), returncode=0, stdout="")
 
     monkeypatch.setattr(closed_state_label_hygiene, "fetch_closed_issues_by_label", fake_fetch)
+    monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue)
     monkeypatch.setattr(closed_state_label_hygiene.subprocess, "run", fake_run)
 
     exit_code = closed_state_label_hygiene.main(["--repo", "ll7/robot_sf_ll7", "--fix"])

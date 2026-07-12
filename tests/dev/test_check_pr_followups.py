@@ -6,11 +6,9 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from scripts.dev import check_pr_followups
 from scripts.dev.check_pr_followups import (
     analyze_body,
     analyze_body_quality,
@@ -634,11 +632,10 @@ This is diagnostic-only and leaves remaining work.
 def test_analyze_body_rejects_closed_followup_issue(monkeypatch) -> None:
     """Open-state verification rejects linked issues that are not open."""
 
-    def fake_run(*args, **kwargs):
-        del args, kwargs
-        return SimpleNamespace(returncode=0, stdout="CLOSED\n", stderr="")
+    def fake_fetch_issue(number: int, **kwargs):
+        return {"number": number, "status": "ok", "state": "CLOSED", "url": "https://example.com"}
 
-    monkeypatch.setattr(check_pr_followups.subprocess, "run", fake_run)
+    monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue)
 
     report = analyze_body(
         _body(deferred="Run the broader benchmark sweep.", issues="#2966"),
@@ -650,14 +647,13 @@ def test_analyze_body_rejects_closed_followup_issue(monkeypatch) -> None:
     assert "#2966: state is CLOSED" in report.issue_state_errors[0]
 
 
-def test_analyze_body_rejects_unverifiable_issue_when_gh_is_missing(monkeypatch) -> None:
-    """Open-state verification reports a compact error when gh is unavailable."""
+def test_analyze_body_rejects_unverifiable_issue_when_rest_fails(monkeypatch) -> None:
+    """Open-state verification reports a compact error when REST read fails."""
 
-    def fake_run(*args, **kwargs):
-        del args, kwargs
-        raise FileNotFoundError("gh")
+    def fake_fetch_issue(number: int, **kwargs):
+        return {"number": number, "status": "error", "error": "network timeout"}
 
-    monkeypatch.setattr(check_pr_followups.subprocess, "run", fake_run)
+    monkeypatch.setattr("scripts.dev.gh_issue_rest.fetch_issue", fake_fetch_issue)
 
     report = analyze_body(
         _body(deferred="Run the broader benchmark sweep.", issues="#2966"),
@@ -666,7 +662,7 @@ def test_analyze_body_rejects_unverifiable_issue_when_gh_is_missing(monkeypatch)
     )
 
     assert report.status == "issue_state_error"
-    assert "#2966: unable to verify open state (gh CLI not found)" in report.issue_state_errors
+    assert "#2966: unable to verify open state (network timeout)" in report.issue_state_errors
 
 
 def test_analyze_body_collects_multiline_deferred_work() -> None:

@@ -161,16 +161,24 @@ def collect_stale_issues(
 
 
 def build_view_command(*, repo: str, number: int) -> list[str]:
-    """Build the read-only GitHub CLI command that confirms one issue's state."""
+    """Build the read-only GitHub CLI command that confirms one issue's state.
+
+    Uses the REST-backed helper to avoid the deprecated ``projectCards`` GraphQL
+    field that breaks ``gh issue view --json`` on some CLI versions (issue #5269).
+    """
     return [
-        "gh",
-        "issue",
+        "uv",
+        "run",
+        "python",
+        "scripts/dev/gh_issue_rest.py",
         "view",
         str(number),
         "--repo",
         repo,
         "--json",
-        "number,state,url",
+        "number",
+        "state",
+        "url",
     ]
 
 
@@ -204,18 +212,18 @@ def _run_gh_command(command: list[str]) -> str:
 def confirm_issue_closed(*, repo: str, number: int) -> bool:
     """Read-then-write guard: confirm an issue is CLOSED and not a pull request.
 
+    Uses the REST-backed helper to avoid the deprecated ``projectCards`` GraphQL
+    field that breaks ``gh issue view --json`` on some CLI versions (issue #5269).
+
     Returns:
         True only when GitHub reports the issue as a closed (non-PR) issue.
     """
-    stdout = _run_gh_command(build_view_command(repo=repo, number=number))
-    try:
-        payload = json.loads(stdout or "{}")
-    except json.JSONDecodeError as exc:
-        raise RuntimeError(
-            f"Failed to parse GitHub CLI JSON output for issue {number}: {exc.msg}"
-        ) from exc
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected a JSON object from gh issue view for issue {number}")
+    from scripts.dev.gh_issue_rest import fetch_issue
+
+    payload = fetch_issue(number, repo=repo)
+    if payload.get("status") != "ok":
+        error = payload.get("error", "unknown error")
+        raise RuntimeError(f"Failed to read issue {number}: {error}")
     if _is_pull_request_url(payload.get("url")):
         return False
     return str(payload.get("state", "")).lower() == "closed"

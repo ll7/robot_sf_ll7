@@ -13,7 +13,7 @@ import subprocess
 import pytest
 
 from scripts.dev import main_ci_is_green
-from scripts.dev.main_ci_is_green import decide, fetch_runs, latest_completed_run
+from scripts.dev.main_ci_is_green import classify, decide, fetch_runs, latest_completed_run
 
 
 def _run(rid: int, status: str, conclusion: str | None, created: str) -> dict:
@@ -142,3 +142,121 @@ def test_gh_oserror_becomes_a_failed_process(monkeypatch: pytest.MonkeyPatch) ->
 
     assert proc.returncode == 127
     assert "not executable" in proc.stderr
+
+
+# ---------------------------------------------------------------------------
+# classify(): distinguish a real red regression from a stale/aborted signal.
+# This is the #5424 distinction — a cancelled latest run holds the gate but is
+# "not evidence that the held PRs themselves regress main". It must never change
+# the fail-closed decision: only ``success`` is green.
+# ---------------------------------------------------------------------------
+
+
+def test_classify_success_is_green() -> None:
+    """Only ``success`` classifies as green."""
+    assert classify("success") == "green"
+
+
+def test_classify_failure_is_red() -> None:
+    """A ``failure`` conclusion is a real red regression verdict."""
+    assert classify("failure") == "red"
+
+
+@pytest.mark.parametrize(
+    "conclusion",
+    ["cancelled", "timed_out", "startup_failure", "skipped", "neutral", "action_required"],
+)
+def test_classify_aborted_conclusions_are_stale(conclusion: str) -> None:
+    """Aborted / skipped / never-ran conclusions are stale, not red."""
+    assert classify(conclusion) == "stale"
+
+
+@pytest.mark.parametrize("conclusion", [None, "some_new_github_status"])
+def test_classify_unknown_falls_through_to_stale(conclusion: str | None) -> None:
+    """Unknown/None conclusions fall through to stale, never silently to green/red."""
+    assert classify(conclusion) == "stale"
+
+
+def test_classify_cancelled_matches_the_5424_signal() -> None:
+    """The exact #5424 signal (cancelled) is stale while decide() stays not-green."""
+    runs = [_run(1, "completed", "cancelled", "2026-07-12T12:00:00Z")]
+    is_green, run = decide(runs)
+    assert is_green is False
+    assert classify(run["conclusion"]) == "stale"
+
+
+def test_classify_reason_is_independent_of_green_decision() -> None:
+    """Every non-success completed conclusion stays not-green regardless of reason."""
+    for conclusion, expected in [
+        ("success", "green"),
+        ("failure", "red"),
+        ("cancelled", "stale"),
+        ("timed_out", "stale"),
+    ]:
+        is_green, run = decide([_run(1, "completed", conclusion, "2026-07-12T12:00:00Z")])
+        assert classify(run["conclusion"]) == expected
+        assert is_green is (expected == "green")
+
+
+# ---------------------------------------------------------------------------
+# main() CLI: --json surfaces the reason machine-readably; the human line names
+# it. Exit code stays fail-closed (0 only when green).
+# ---------------------------------------------------------------------------
+
+
+def _patch_runs(monkeypatch: pytest.MonkeyPatch, runs: list[dict]) -> None:
+    monkeypatch.setattr(main_ci_is_green, "fetch_runs", lambda *_a, **_k: runs)
+
+
+def test_cli_json_reports_stale_and_holds(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A cancelled latest run: exit 1 (hold) with reason ``stale`` in JSON."""
+    import json as _json
+
+    _patch_runs(monkeypatch, [_run(1, "completed", "cancelled", "2026-07-12T12:00:00Z")])
+    rc = main_ci_is_green.main(["--json"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["is_green"] is False
+    assert payload["reason"] == "stale"
+    assert payload["conclusion"] == "cancelled"
+
+
+def test_cli_json_reports_red(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failed latest run: exit 1 with reason ``red``."""
+    import json as _json
+
+    _patch_runs(monkeypatch, [_run(2, "completed", "failure", "2026-07-12T12:00:00Z")])
+    rc = main_ci_is_green.main(["--json"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["reason"] == "red"
+
+
+def test_cli_json_reports_green(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A successful latest run: exit 0 with reason ``green``."""
+    import json as _json
+
+    _patch_runs(monkeypatch, [_run(3, "completed", "success", "2026-07-12T12:00:00Z")])
+    rc = main_ci_is_green.main(["--json"])
+    payload = _json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["is_green"] is True
+    assert payload["reason"] == "green"
+
+
+def test_cli_human_line_names_the_stale_reason(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The human line calls a cancelled hold ``stale`` and suggests a re-run."""
+    _patch_runs(monkeypatch, [_run(1, "completed", "cancelled", "2026-07-12T12:00:00Z")])
+    rc = main_ci_is_green.main([])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "NOT GREEN" in out
+    assert "stale" in out and "re-run" in out

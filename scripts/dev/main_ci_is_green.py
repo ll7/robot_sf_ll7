@@ -18,6 +18,20 @@ pure decision function filters defensively on top so the rule is unit-tested.
 Exit code: 0 == green (latest completed CI run on main concluded ``success``),
 1 == not green (red, or no completed run to judge from). Prints the run id and
 conclusion it decided from.
+
+Not-green is not one thing (issue #5424). A merge hold must fail closed on any
+non-``success`` signal, but the *reason* it holds is operationally different:
+
+- ``red``   — a completed run evaluated main's code and it FAILED. Main
+  regressed; the cure is an unbreak-main fix, and no PR may merge over it.
+- ``stale`` — the deciding run was aborted / skipped / never really ran the
+  checks (``cancelled``, ``timed_out``, ``startup_failure``, ...). It still
+  holds the gate, but it is NOT evidence that main regressed — as issue #5424
+  put it, "a baseline gate blocker, not evidence that the held PRs themselves
+  regress main". The cure is a fresh CI run, not a code fix.
+
+``classify()`` surfaces that distinction (and ``--json`` makes it machine
+readable) without changing the fail-closed exit code: only ``success`` is green.
 """
 
 from __future__ import annotations
@@ -30,6 +44,34 @@ from typing import Any
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_WORKFLOW = "CI"
+
+# A completed run's ``conclusion`` falls into exactly one bucket:
+#   green  -> the run evaluated main and it passed (the only mergeable signal).
+#   red    -> the run evaluated main and it FAILED: a real regression.
+#   stale  -> the run was aborted / skipped / never ran the checks. Not a
+#             verdict on main's code; holds the gate but calls for a re-run.
+GREEN_CONCLUSIONS = frozenset({"success"})
+RED_CONCLUSIONS = frozenset({"failure"})
+
+
+def classify(conclusion: str | None) -> str:
+    """Bucket a completed run's ``conclusion`` into ``green`` / ``red`` / ``stale``.
+
+    Only ``success`` is ``green`` and only ``failure`` is a ``red`` regression
+    verdict. Everything else a completed run can report — ``cancelled``,
+    ``timed_out``, ``startup_failure``, ``skipped``, ``neutral``,
+    ``action_required``, or an unknown/``None`` value — is ``stale``: the run
+    did not deliver a clean verdict on main's code. Falling through to ``stale``
+    (rather than ``red``) for unknown strings keeps the human framing honest —
+    an aborted run is not a code regression — while the caller still fails
+    closed, since ``stale`` is not ``green``.
+    """
+    text = str(conclusion)
+    if text in GREEN_CONCLUSIONS:
+        return "green"
+    if text in RED_CONCLUSIONS:
+        return "red"
+    return "stale"
 
 
 def _gh(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:
@@ -108,33 +150,62 @@ def fetch_runs(
     return data
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """CLI entry: exit 0 if main CI is green, 1 otherwise."""
     ap = argparse.ArgumentParser(description="Is main CI green (latest completed run)?")
     ap.add_argument("--repo", default=DEFAULT_REPO)
     ap.add_argument("--workflow", default=DEFAULT_WORKFLOW)
     ap.add_argument("--limit", type=int, default=5)
     ap.add_argument("--quiet", action="store_true", help="suppress the human line")
-    args = ap.parse_args()
+    ap.add_argument(
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="emit a machine-readable {is_green, reason, conclusion, run_id, head_sha} object",
+    )
+    args = ap.parse_args(argv)
 
     try:
         runs = fetch_runs(args.repo, args.workflow, args.limit)
     except (RuntimeError, json.JSONDecodeError) as exc:
         # Fail closed: an unreadable signal is treated as NOT green so a merge
         # hold errs toward holding, never toward merging on unknown state.
-        if not args.quiet:
+        if args.as_json:
+            print(json.dumps({"is_green": False, "reason": "unknown", "error": str(exc)}))
+        elif not args.quiet:
             print(f"main CI status UNKNOWN ({exc}) -> treated as not-green", file=sys.stderr)
         return 1
 
     is_green, run = decide(runs)
-    if not args.quiet:
+    # reason distinguishes the two ways a hold happens: a real ``red`` regression
+    # versus a ``stale`` (cancelled/aborted) signal that only needs a re-run.
+    reason = "no-run" if run is None else classify(run.get("conclusion"))
+
+    if args.as_json:
+        print(
+            json.dumps(
+                {
+                    "is_green": is_green,
+                    "reason": reason,
+                    "conclusion": None if run is None else run.get("conclusion"),
+                    "run_id": None if run is None else run.get("databaseId"),
+                    "head_sha": None if run is None else run.get("headSha"),
+                }
+            )
+        )
+    elif not args.quiet:
         if run is None:
-            print("main CI: no completed run found -> not green")
+            print("main CI: no completed run found -> not green [no-run: nothing to judge from]")
         else:
+            hint = {
+                "green": "",
+                "red": " [red: main regressed; needs an unbreak-main fix]",
+                "stale": " [stale: run aborted/skipped, not a main regression; re-run CI]",
+            }[reason]
             print(
                 f"main CI: {run.get('conclusion')} "
                 f"(run {run.get('databaseId')}, {str(run.get('headSha'))[:9]}) "
-                f"-> {'GREEN' if is_green else 'NOT GREEN'}"
+                f"-> {'GREEN' if is_green else 'NOT GREEN'}{hint}"
             )
     return 0 if is_green else 1
 

@@ -25,6 +25,8 @@ def _load_script_module():
 _mod = _load_script_module()
 
 _load_raw_config = _mod._load_raw_config
+_optional_int = _mod._optional_int
+_optional_seed_id = _mod._optional_seed_id
 _planner_roster = _mod._planner_roster
 _seed_policy_signature = _mod._seed_policy_signature
 _compare_planner_rosters = _mod._compare_planner_rosters
@@ -129,6 +131,23 @@ class TestComparePlannerRosters:
 class TestHorizonDiffers:
     """Horizon-difference checks."""
 
+    def test_optional_int_rejects_non_integer_values(self) -> None:
+        with pytest.raises(ValueError):
+            _optional_int(500.5)
+        with pytest.raises(ValueError):
+            _optional_int(True)
+
+    def test_missing_horizons_report_actionable_errors(self) -> None:
+        h_a, h_b, errors = _check_horizon_differs({}, {})
+        assert h_a is None
+        assert h_b is None
+        assert any("Config A is missing" in error for error in errors)
+        assert any("Config B is missing" in error for error in errors)
+
+    def test_invalid_horizons_report_actionable_errors(self) -> None:
+        _, _, errors = _check_horizon_differs({"horizon": "bad"}, {"horizon": 600})
+        assert any("Config A horizon is not a valid integer" in error for error in errors)
+
     def test_different_horizons_pass(self) -> None:
         a = {"horizon": 500}
         b = {"horizon": 600}
@@ -152,6 +171,15 @@ class TestHorizonDiffers:
 
 class TestSeedPolicyComparison:
     """Seed policy signature extraction and comparison."""
+
+    def test_optional_seed_id_preserves_zero_and_normalizes_numeric_strings(self) -> None:
+        assert _optional_seed_id(0) == 0
+        assert _optional_seed_id(" 7 ") == 7
+        assert _seed_policy_signature({"seed_policy": {"seeds": 0}})["seeds"] == [0]
+
+    def test_seed_policy_signature_handles_null_and_scalar_values(self) -> None:
+        assert _seed_policy_signature({"seed_policy": {"seeds": None}})["seeds"] == []
+        assert _seed_policy_signature({"seed_policy": {"seeds": "eval-1"}})["seeds"] == ["eval-1"]
 
     def test_identical_policies_match(self) -> None:
         payload = _make_base_payload()
@@ -188,6 +216,25 @@ class TestFieldParity:
         b["scenario_matrix"] = "configs/scenarios/other.yaml"
         errors = _check_field_parity(a, b)
         assert any("scenario_matrix" in e for e in errors)
+
+    def test_different_publication_overwrite_policy_detected(self) -> None:
+        a = _make_base_payload(500)
+        b = _make_base_payload(600)
+        a["overwrite_publication_bundle"] = False
+        b["overwrite_publication_bundle"] = True
+        errors = _check_field_parity(a, b)
+        assert any("overwrite_publication_bundle" in e for e in errors)
+
+    def test_non_mapping_contract_fields_fail_closed(self) -> None:
+        payload = _make_base_payload()
+        payload["snqi_contract"] = []
+        with pytest.raises(ValueError, match="snqi_contract must be a mapping"):
+            _check_field_parity(payload, _make_base_payload())
+
+        payload = _make_base_payload()
+        payload["amv_profile"] = "invalid"
+        with pytest.raises(ValueError, match="amv_profile must be a mapping"):
+            _check_field_parity(payload, _make_base_payload())
 
 
 class TestValidateHorizonAblationPair:
@@ -237,6 +284,23 @@ class TestValidateHorizonAblationPair:
         result = validate_horizon_ablation_pair(path_a, path_b)
         assert not result.is_valid
         assert any("identical" in m for m in result.mismatches)
+
+    def test_invalid_horizon_returns_invalid_result(self, tmp_path: pathlib.Path) -> None:
+        path_a = _write_yaml(tmp_path, "invalid.yaml", {"horizon": "bad"})
+        path_b = _write_yaml(tmp_path, "valid.yaml", {"horizon": 600})
+        result = validate_horizon_ablation_pair(path_a, path_b)
+        assert not result.is_valid
+        assert any("not a valid integer" in mismatch for mismatch in result.mismatches)
+
+    def test_non_mapping_contract_returns_invalid_result(self, tmp_path: pathlib.Path) -> None:
+        a = _make_base_payload(500)
+        b = _make_base_payload(600)
+        b["amv_profile"] = []
+        path_a = _write_yaml(tmp_path, "h500.yaml", a)
+        path_b = _write_yaml(tmp_path, "h600.yaml", b)
+        result = validate_horizon_ablation_pair(path_a, path_b)
+        assert not result.is_valid
+        assert any("Contract field validation error" in mismatch for mismatch in result.mismatches)
 
     def test_missing_file_returns_loading_error(self, tmp_path: pathlib.Path) -> None:
         result = validate_horizon_ablation_pair(

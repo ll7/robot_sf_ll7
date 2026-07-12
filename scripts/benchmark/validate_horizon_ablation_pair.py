@@ -46,12 +46,50 @@ _EXECUTION_RELEVANT_KEYS = frozenset(
         "kinematics_matrix",
         "export_publication_bundle",
         "include_videos_in_publication",
+        "overwrite_publication_bundle",
         "snqi_weights",
         "snqi_baseline",
         "paper_facing",
         "paper_profile_version",
     }
 )
+
+
+def _optional_int(value: Any) -> int | None:
+    """Coerce an optional strict integer without truncating floats or booleans."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"Invalid integer: {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if text:
+            try:
+                return int(text, 10)
+            except ValueError as exc:
+                raise ValueError(f"Invalid integer: {value!r}") from exc
+    raise ValueError(f"Invalid integer: {value!r}")
+
+
+def _optional_seed_id(value: Any) -> int | str | None:
+    """Normalize one optional seed identifier while preserving falsy zero."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError(f"seed identifiers must not be booleans: {value!r}")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            raise ValueError("seed identifiers must not be empty")
+        try:
+            return int(text, 10)
+        except ValueError:
+            return text
+    raise ValueError(f"unsupported seed identifier: {value!r}")
 
 
 def _load_raw_config(path: Path) -> dict[str, Any]:
@@ -86,10 +124,19 @@ def _seed_policy_signature(payload: dict[str, Any]) -> dict[str, Any]:
     raw = payload.get("seed_policy")
     if not isinstance(raw, dict):
         return {}
+    seeds_raw = raw.get("seeds")
+    if isinstance(seeds_raw, (list, tuple)):
+        seeds = [
+            normalized for seed in seeds_raw if (normalized := _optional_seed_id(seed)) is not None
+        ]
+    elif seeds_raw is None:
+        seeds = []
+    else:
+        seeds = [_optional_seed_id(seeds_raw)]
     return {
         "mode": str(raw.get("mode", "")),
         "seed_set": str(raw.get("seed_set", "")),
-        "seeds": list(raw.get("seeds") or []),
+        "seeds": seeds,
         "seed_sets_path": str(raw.get("seed_sets_path", "")),
     }
 
@@ -128,28 +175,48 @@ def _check_horizon_differs(
 ) -> tuple[int | None, int | None, list[str]]:
     """Check that horizons are fixed and differ. Return (h_a, h_b, errors)."""
     mismatches: list[str] = []
-    horizon_a = payload_a.get("horizon")
-    horizon_b = payload_b.get("horizon")
-    if horizon_a is None and payload_a.get("scenario_horizons"):
-        mismatches.append(
-            "Config A uses scenario_horizons (per-scenario), not a fixed horizon; "
-            "a clean ablation requires fixed horizons."
-        )
-    if horizon_b is None and payload_b.get("scenario_horizons"):
-        mismatches.append(
-            "Config B uses scenario_horizons (per-scenario), not a fixed horizon; "
-            "a clean ablation requires fixed horizons."
-        )
+    horizons: list[int | None] = []
+    for label, payload in (("A", payload_a), ("B", payload_b)):
+        raw_horizon = payload.get("horizon")
+        if raw_horizon is None:
+            if payload.get("scenario_horizons"):
+                mismatches.append(
+                    f"Config {label} uses scenario_horizons (per-scenario), not a fixed "
+                    "horizon; a clean ablation requires fixed horizons."
+                )
+            else:
+                mismatches.append(f"Config {label} is missing the 'horizon' field.")
+            horizons.append(None)
+            continue
+        try:
+            horizon = _optional_int(raw_horizon)
+        except ValueError as exc:
+            mismatches.append(f"Config {label} horizon is not a valid integer: {exc}")
+            horizons.append(None)
+            continue
+        if horizon is None or horizon <= 0:
+            mismatches.append(f"Config {label} horizon must be a positive integer: {raw_horizon!r}")
+            horizons.append(None)
+            continue
+        horizons.append(horizon)
+
+    horizon_a, horizon_b = horizons
     if horizon_a is not None and horizon_b is not None and horizon_a == horizon_b:
         mismatches.append(
             f"Horizons are identical ({horizon_a} == {horizon_b}); "
             "an ablation requires different horizons."
         )
-    return (
-        int(horizon_a) if horizon_a is not None else None,
-        int(horizon_b) if horizon_b is not None else None,
-        mismatches,
-    )
+    return horizon_a, horizon_b, mismatches
+
+
+def _mapping_signature(payload: dict[str, Any], field: str) -> dict[str, Any]:
+    """Return a sorted mapping field or reject a malformed contract value."""
+    raw = payload.get(field)
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"{field} must be a mapping when provided, got {type(raw).__name__}")
+    return dict(sorted(raw.items()))
 
 
 def _check_field_parity(
@@ -164,13 +231,13 @@ def _check_field_parity(
         if va != vb:
             mismatches.append(f"Field '{key}' differs: A={va!r} vs B={vb!r}")
 
-    snqi_a = dict(sorted((payload_a.get("snqi_contract") or {}).items()))
-    snqi_b = dict(sorted((payload_b.get("snqi_contract") or {}).items()))
+    snqi_a = _mapping_signature(payload_a, "snqi_contract")
+    snqi_b = _mapping_signature(payload_b, "snqi_contract")
     if snqi_a != snqi_b:
         mismatches.append(f"snqi_contract differs: A={snqi_a} vs B={snqi_b}")
 
-    amv_a = dict(sorted((payload_a.get("amv_profile") or {}).items()))
-    amv_b = dict(sorted((payload_b.get("amv_profile") or {}).items()))
+    amv_a = _mapping_signature(payload_a, "amv_profile")
+    amv_b = _mapping_signature(payload_b, "amv_profile")
     if amv_a != amv_b:
         mismatches.append(f"amv_profile differs: A={amv_a} vs B={amv_b}")
 
@@ -255,12 +322,18 @@ def validate_horizon_ablation_pair(
     except ValueError as exc:
         mismatches.append(f"Roster extraction error: {exc}")
 
-    seed_a = _seed_policy_signature(payload_a)
-    seed_b = _seed_policy_signature(payload_b)
-    if seed_a != seed_b:
-        mismatches.append(f"Seed policy differs: A={seed_a} vs B={seed_b}")
+    try:
+        seed_a = _seed_policy_signature(payload_a)
+        seed_b = _seed_policy_signature(payload_b)
+        if seed_a != seed_b:
+            mismatches.append(f"Seed policy differs: A={seed_a} vs B={seed_b}")
+    except ValueError as exc:
+        mismatches.append(f"Seed policy validation error: {exc}")
 
-    mismatches.extend(_check_field_parity(payload_a, payload_b))
+    try:
+        mismatches.extend(_check_field_parity(payload_a, payload_b))
+    except ValueError as exc:
+        mismatches.append(f"Contract field validation error: {exc}")
 
     return HorizonAblationPairResult(
         config_a=str(path_a),

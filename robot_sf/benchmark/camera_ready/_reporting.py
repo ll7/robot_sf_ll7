@@ -15,6 +15,10 @@ from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.camera_ready._artifacts import _escape_markdown_cell
 from robot_sf.benchmark.camera_ready._config_types import _AMV_DIMENSIONS, PlannerSpec
 from robot_sf.benchmark.camera_ready._summaries import _extract_amv_taxonomy
+from robot_sf.benchmark.fairness_contract import (
+    build_fairness_report,
+    emit_fairness_annotations,
+)
 from robot_sf.benchmark.fallback_policy import (
     classify_planner_row_status,
     summarize_benchmark_availability,
@@ -1013,6 +1017,43 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
             lines.append(f"- Diagnostics Markdown: `{snqi_diag_md}`")
         if isinstance(snqi_sensitivity, str):
             lines.append(f"- Sensitivity CSV: `{snqi_sensitivity}`")
+
+    lines.extend(["", "## Fairness Contract", ""])
+    fairness_report = build_fairness_report(rows)
+    emit_fairness_annotations(fairness_report, rows)
+    fairness_verdict = fairness_report.ranking_claim_allowed
+    hard_mismatches = [m for m in fairness_report.mismatches if m.severity == "hard"]
+    soft_mismatches = [m for m in fairness_report.mismatches if m.severity == "soft"]
+
+    lines.append(f"- Ranking claim allowed: `{fairness_verdict}`")
+    lines.append(f"- Fair subset size: `{len(fairness_report.fair_subset)}`")
+    lines.append(f"- Excluded planners: `{len(fairness_report.excluded_planners)}`")
+    lines.append(f"- Hard mismatches: `{len(hard_mismatches)}`")
+    lines.append(f"- Soft mismatches (caveats): `{len(soft_mismatches)}`")
+
+    if fairness_report.fair_subset:
+        lines.append("")
+        lines.append("Fair comparison subset:")
+        for name in fairness_report.fair_subset:
+            lines.append(f"- `{name}`")
+
+    if fairness_report.excluded_planners:
+        lines.append("")
+        lines.append("Excluded planners:")
+        for name in fairness_report.excluded_planners:
+            lines.append(f"- `{name}`")
+
+    if hard_mismatches:
+        lines.append("")
+        lines.append("Hard mismatches (block ranking claims):")
+        for m in hard_mismatches:
+            lines.append(f"- **{m.dimension}**: {m.planner_a} vs {m.planner_b} — {m.description}")
+
+    if soft_mismatches:
+        lines.append("")
+        lines.append("Soft mismatches (caveats):")
+        for m in soft_mismatches:
+            lines.append(f"- **{m.dimension}**: {m.planner_a} vs {m.planner_b} — {m.description}")
 
     lines.extend(["", "## Accepted Unavailable/Excluded Planners", ""])
     if accepted_unavailable_rows:

@@ -57,7 +57,10 @@ from robot_sf.benchmark.camera_ready._resume_plan import (
     verify_resume_context,
     write_resume_plan,
 )
-from robot_sf.benchmark.camera_ready._run_state import _campaign_success_counters
+from robot_sf.benchmark.camera_ready._run_state import (
+    _build_arm_rollup,
+    _campaign_success_counters,
+)
 from robot_sf.benchmark.camera_ready._summaries import (
     _SEED_VARIABILITY_METRICS,
     _build_actuation_envelope_summary,
@@ -1297,6 +1300,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     warnings = planner_run_results.warnings
     seed_variability_records = planner_run_results.seed_variability_records
     _finalize_checkpoint_provenance(manifest_payload, run_entries)
+    arm_rollup = _build_arm_rollup(run_entries)
 
     planner_rows.sort(
         key=lambda row: (row.get("snqi_mean", "nan") == "nan", row.get("planner_key"))
@@ -1896,6 +1900,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
             "snqi_positioning_claim_scope": positioning.get("claim_scope"),
         },
         "planner_rows": planner_rows,
+        "arm_rollup": arm_rollup,
         "runs": run_entries,
         "warnings": warnings,
         "soft_contract_warning": soft_contract_warning,

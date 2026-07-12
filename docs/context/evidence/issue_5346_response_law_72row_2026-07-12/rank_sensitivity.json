@@ -1,0 +1,225 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "arms": {
+    "heterogeneous/response_law_fraction_0": {
+      "observed_means": {
+        "goal": 0.9104866865904618,
+        "orca": 0.8835830913317805,
+        "social_force": 1.095256006952143
+      },
+      "pairwise_probabilities": {
+        "goal_beats_orca": 0.629,
+        "goal_beats_social_force": 0.304,
+        "orca_beats_goal": 0.371,
+        "orca_beats_social_force": 0.304,
+        "social_force_beats_goal": 0.696,
+        "social_force_beats_orca": 0.696
+      },
+      "ranking": [
+        "social_force",
+        "goal",
+        "orca"
+      ]
+    },
+    "heterogeneous/response_law_fraction_0.1": {
+      "observed_means": {
+        "goal": 0.9064873348871844,
+        "orca": 0.8832983335238923,
+        "social_force": 1.1041654280886875
+      },
+      "pairwise_probabilities": {
+        "goal_beats_orca": 0.629,
+        "goal_beats_social_force": 0.304,
+        "orca_beats_goal": 0.371,
+        "orca_beats_social_force": 0.304,
+        "social_force_beats_goal": 0.696,
+        "social_force_beats_orca": 0.696
+      },
+      "ranking": [
+        "social_force",
+        "goal",
+        "orca"
+      ]
+    },
+    "heterogeneous/response_law_fraction_0.25": {
+      "observed_means": {
+        "goal": 1.012133660394155,
+        "orca": 1.0640422084409173,
+        "social_force": 1.0351600869326518
+      },
+      "pairwise_probabilities": {
+        "goal_beats_orca": 0.299,
+        "goal_beats_social_force": 0.42,
+        "orca_beats_goal": 0.701,
+        "orca_beats_social_force": 0.64,
+        "social_force_beats_goal": 0.58,
+        "social_force_beats_orca": 0.36
+      },
+      "ranking": [
+        "orca",
+        "social_force",
+        "goal"
+      ]
+    },
+    "heterogeneous/response_law_fraction_0.5": {
+      "observed_means": {
+        "goal": 0.8947121706128369,
+        "orca": 0.9408176719655074,
+        "social_force": 1.0085266683295524
+      },
+      "pairwise_probabilities": {
+        "goal_beats_orca": 0.299,
+        "goal_beats_social_force": 0.049,
+        "orca_beats_goal": 0.701,
+        "orca_beats_social_force": 0.304,
+        "social_force_beats_goal": 0.951,
+        "social_force_beats_orca": 0.696
+      },
+      "ranking": [
+        "social_force",
+        "orca",
+        "goal"
+      ]
+    },
+    "mean_matched_homogeneous/response_law_fraction_0": {
+      "observed_means": {
+        "goal": 0.7216432244953047,
+        "orca": 0.8256514999482448,
+        "social_force": 1.1179041908631246
+      },
+      "pairwise_probabilities": {
+        "goal_beats_orca": 0.049,
+        "goal_beats_social_force": 0.049,
+        "orca_beats_goal": 0.951,
+        "orca_beats_social_force": 0.049,
+        "social_force_beats_goal": 0.951,
+        "social_force_beats_orca": 0.951
+      },
+      "ranking": [
+        "social_force",
+        "orca",
+        "goal"
+      ]
+    },
+    "mean_matched_homogeneous/response_law_fraction_0.1": {
+      "observed_means": {
+        "goal": 0.7206434636331829,
+        "orca": 0.8254995194743368,
+        "social_force": 1.1200667270664157
+      },
+      "pairwise_probabilities": {
+        "goal_beats_orca": 0.049,
+        "goal_beats_social_force": 0.049,
+        "orca_beats_goal": 0.951,
+        "orca_beats_social_force": 0.049,
+        "social_force_beats_goal": 0.951,
+        "social_force_beats_orca": 0.951
+      },
+      "ranking": [
+        "social_force",
+        "orca",
+        "goal"
+      ]
+    },
+    "mean_matched_homogeneous/response_law_fraction_0.25": {
+      "observed_means": {
+        "goal": 0.7870246351900242,
+        "orca": 0.8861483783621625,
+        "social_force": 1.0296439102757382
+      },
+      "pairwise_probabilities": {
+        "goal_beats_orca": 0.049,
+        "goal_beats_social_force": 0.049,
+        "orca_beats_goal": 0.951,
+        "orca_beats_social_force": 0.049,
+        "social_force_beats_goal": 0.951,
+        "social_force_beats_orca": 0.951
+      },
+      "ranking": [
+        "social_force",
+        "orca",
+        "goal"
+      ]
+    },
+    "mean_matched_homogeneous/response_law_fraction_0.5": {
+      "observed_means": {
+        "goal": 0.7382695240205736,
+        "orca": 0.8467851765323737,
+        "social_force": 1.0091112358148628
+      },
+      "pairwise_probabilities": {
+        "goal_beats_orca": 0.049,
+        "goal_beats_social_force": 0.049,
+        "orca_beats_goal": 0.951,
+        "orca_beats_social_force": 0.049,
+        "social_force_beats_goal": 0.951,
+        "social_force_beats_orca": 0.951
+      },
+      "ranking": [
+        "social_force",
+        "orca",
+        "goal"
+      ]
+    }
+  },
+  "common_seeds_count": 3,
+  "higher_is_safer": true,
+  "metric_key": "mean_clearance",
+  "planners": [
+    "goal",
+    "orca",
+    "social_force"
+  ],
+  "reversals": [
+    {
+      "description": "Heterogeneous ranking ['social_force', 'goal', 'orca'] differs from homogeneous ['social_force', 'orca', 'goal']",
+      "heterogeneous_arm": "heterogeneous/response_law_fraction_0",
+      "heterogeneous_ranking": [
+        "social_force",
+        "goal",
+        "orca"
+      ],
+      "mean_matched_homogeneous_arm": "mean_matched_homogeneous/response_law_fraction_0",
+      "mean_matched_homogeneous_ranking": [
+        "social_force",
+        "orca",
+        "goal"
+      ],
+      "type": "rank_order_disagreement"
+    },
+    {
+      "description": "Heterogeneous ranking ['social_force', 'goal', 'orca'] differs from homogeneous ['social_force', 'orca', 'goal']",
+      "heterogeneous_arm": "heterogeneous/response_law_fraction_0.1",
+      "heterogeneous_ranking": [
+        "social_force",
+        "goal",
+        "orca"
+      ],
+      "mean_matched_homogeneous_arm": "mean_matched_homogeneous/response_law_fraction_0.1",
+      "mean_matched_homogeneous_ranking": [
+        "social_force",
+        "orca",
+        "goal"
+      ],
+      "type": "rank_order_disagreement"
+    },
+    {
+      "description": "Heterogeneous ranking ['orca', 'social_force', 'goal'] differs from homogeneous ['social_force', 'orca', 'goal']",
+      "heterogeneous_arm": "heterogeneous/response_law_fraction_0.25",
+      "heterogeneous_ranking": [
+        "orca",
+        "social_force",
+        "goal"
+      ],
+      "mean_matched_homogeneous_arm": "mean_matched_homogeneous/response_law_fraction_0.25",
+      "mean_matched_homogeneous_ranking": [
+        "social_force",
+        "orca",
+        "goal"
+      ],
+      "type": "rank_order_disagreement"
+    }
+  ],
+  "schema_version": "heterogeneous_rank_sensitivity.v1",
+  "status": "ready"
+}

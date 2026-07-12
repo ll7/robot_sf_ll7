@@ -856,6 +856,40 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
             )
     else:
         lines.append("No planner rows were produced.")
+
+    arm_rollup = payload.get("arm_rollup") or []
+    if arm_rollup:
+        lines.extend(["", "## Arm Rollup", ""])
+        has_errors = any(arm.get("first_error") for arm in arm_rollup)
+        if has_errors:
+            lines.append(
+                "| planner | kinematics | status | written | failed | first_error | distinct_errors |"
+            )
+            lines.append("|---|---|---|---:|---:|---|---:|")
+            for arm in arm_rollup:
+                lines.append(
+                    "| "
+                    f"{_escape_markdown_cell(arm.get('planner_key'))} | "
+                    f"{_escape_markdown_cell(arm.get('kinematics'))} | "
+                    f"{_escape_markdown_cell(arm.get('status'))} | "
+                    f"{_escape_markdown_cell(arm.get('episodes_written', 0))} | "
+                    f"{_escape_markdown_cell(arm.get('episodes_failed', 0))} | "
+                    f"{_escape_markdown_cell(arm.get('first_error', ''))} | "
+                    f"{_escape_markdown_cell(arm.get('distinct_error_count', 0))} |"
+                )
+        else:
+            lines.append("| planner | kinematics | status | written | failed |")
+            lines.append("|---|---|---|---:|---:|")
+            for arm in arm_rollup:
+                lines.append(
+                    "| "
+                    f"{_escape_markdown_cell(arm.get('planner_key'))} | "
+                    f"{_escape_markdown_cell(arm.get('kinematics'))} | "
+                    f"{_escape_markdown_cell(arm.get('status'))} | "
+                    f"{_escape_markdown_cell(arm.get('episodes_written', 0))} | "
+                    f"{_escape_markdown_cell(arm.get('episodes_failed', 0))} |"
+                )
+
     if not isinstance(scorecard, dict):
         scorecard = build_campaign_credibility_scorecard(payload)
     factors = scorecard.get("factors", []) if isinstance(scorecard.get("factors"), list) else []

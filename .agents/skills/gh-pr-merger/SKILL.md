@@ -60,8 +60,14 @@ Before each merge operation, verify:
    Exit code `2` means checks were still queued or in progress after the polling budget; inspect the
    listed check URLs or run `gh run view <run-id> --json status,conclusion,jobs` for job state.
 5. No merge conflicts exist (`gh pr view <number> --json mergeable`).
-6. The PR has no unresolved review threads or pending/requested reviewers.
-7. Branch protection rules on `main` allow merges from the current actor.
+6. **Merge-staleness check**: run `python scripts/dev/check_pr_merge_staleness.py <number>`.
+   Exit code `1` means main has moved since the PR's CI ran; skip and report the
+   PR as stale — the author must update the branch and re-run CI before merge.
+   Exit code `2` means the check could not determine staleness (API error, no
+   workflow-run metadata); log a warning and continue with remaining preflight
+   checks.  See issue #5389 for context.
+7. The PR has no unresolved review threads or pending/requested reviewers.
+8. Branch protection rules on `main` allow merges from the current actor.
 
 If any preflight check fails, report the specific failure and do not merge.
 Do not retry preflight on the same PR without a state change.

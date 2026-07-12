@@ -28,6 +28,10 @@ entries:
   status: evidence
   freshness: policy
   area: evidence_policy
+- path: docs/context/evidence/issue_5346_response_law_72row_2026-07-12
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5298_dwa_decision_trace_2026-07-11
   status: evidence
   freshness: evidence

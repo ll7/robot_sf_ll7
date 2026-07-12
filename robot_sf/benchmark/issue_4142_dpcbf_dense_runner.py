@@ -9,12 +9,12 @@ packet ``configs/research/issue_4142_dpcbf_dense_comparison_v1.yaml`` but explic
 one downstream gate open: *no packet-consuming runner is wired to schema*
 ``robot_sf.issue_4142_dpcbf_dense_comparison.v1``.
 
-This module closes that first gate at the planning level. It consumes the packet schema and
-resolves it into a concrete, ordered three-arm **run plan** -- one benchmark job per arm,
-each pinned to the packet's shared algorithm, that arm's adapter config, the shared scenario
-manifest, and a per-arm output path. The plan is what a future authorized executor would
-run; building it makes the packet schema executable-in-principle and inspectable, so the
-canonical command can enumerate the exact jobs instead of failing on an unrecognized schema.
+This module closes that first gate at the planning and bounded-execution levels. It consumes the
+packet schema and resolves it into a concrete, ordered three-arm **run plan** -- one benchmark
+job per arm, each pinned to the packet's shared algorithm, that arm's adapter config, the shared
+scenario manifest, and a per-arm output path. The plan is the input to an explicitly authorized
+local executor, so the canonical command can enumerate and run the exact jobs without widening
+into a benchmark campaign.
 
 Two hard boundaries are preserved, fail-closed:
 

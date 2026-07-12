@@ -66,10 +66,9 @@ def classify(conclusion: str | None) -> str:
     an aborted run is not a code regression — while the caller still fails
     closed, since ``stale`` is not ``green``.
     """
-    text = str(conclusion)
-    if text in GREEN_CONCLUSIONS:
+    if conclusion in GREEN_CONCLUSIONS:
         return "green"
-    if text in RED_CONCLUSIONS:
+    if conclusion in RED_CONCLUSIONS:
         return "red"
     return "stale"
 

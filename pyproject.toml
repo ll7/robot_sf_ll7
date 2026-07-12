@@ -1,6 +1,11 @@
 [project]
 name = "robot_sf"
-version = "2.0.0"
+# Version is derived automatically from the git tag by hatch-vcs (see
+# [tool.hatch.version] below). Do NOT hardcode a version here: the git
+# tag/release line is the single source of truth. External evidence
+# provenance pins resolve by these tags, so the tag line must never be
+# renumbered. scripts/dev/check_version_alignment.py guards against drift.
+dynamic = ["version"]
 description = """
 This package allows implementing a "gymnasium-style" environment
 for navigating a crowd with autonomous micromobility vehicles
@@ -97,8 +102,26 @@ criticality = [
 ]
 
 [build-system]
-requires = ["hatchling", "Cython>=3.0.0"]
+requires = ["hatchling", "hatch-vcs>=0.4.0", "Cython>=3.0.0"]
 build-backend = "hatchling.build"
+
+# --- Single-source version: git tag -> package version (hatch-vcs) ---------
+# The git tag/release line is the canonical version source. Release tags are
+# plain "X.Y.Z" (e.g. 0.0.2) and release-candidate tags are "rcX.Y.Z"
+# (e.g. rc0.0.3); tag_regex maps both to the numeric X.Y.Z. For non-tag builds
+# (sdists, untagged CI checkouts) hatch-vcs derives a PEP 440 dev version and
+# falls back to fallback_version so builds never break.
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+tag_regex = "^(?:[\\w.-]*?)(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+fallback_version = "0.0.3.dev0"
+
+[tool.hatch.build.hooks.vcs]
+# Build hook writes the resolved version to an importable module so
+# `robot_sf.__version__` works from installed wheels and editable installs.
+version-file = "robot_sf/_version.py"
 
 [tool.hatchling.build.targets.wheel]
 packages = [

@@ -8,7 +8,11 @@ authors:
   - name: Lennart Luttkus
 repository-code: https://github.com/ll7/robot_sf_ll7
 license: MIT
-version: benchmark-protocol-0.1.0
+# Kept in lockstep with the latest full release tag (plain X.Y.Z) by the
+# release workflow and scripts/dev/check_version_alignment.py. The git
+# tag/release line is the single source of truth for the version; the
+# benchmark release protocol context lives in the title/abstract, not here.
+version: 0.0.2
 date-released: 2026-03-26
 abstract: >-
   Social navigation simulation and benchmark tooling with a paper-facing,

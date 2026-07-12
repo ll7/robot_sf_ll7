@@ -207,6 +207,8 @@ class RobotSimulationConfig(BaseSimulationConfig):
     predictive_foresight_near_distance: float = field(default=0.7)
     predictive_foresight_front_corridor_length: float = field(default=3.0)
     predictive_foresight_front_corridor_half_width: float = field(default=1.0)
+    # Route waypoint observation for DWA global-route probe (flag-gated, default OFF)
+    include_route_waypoints: bool = field(default=False)
 
     def __post_init__(self):
         """Validate robot-specific configuration.

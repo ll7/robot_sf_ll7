@@ -60,3 +60,15 @@ entries:
       - "No full benchmark campaign run."
       - "No Slurm/GPU submission."
       - "No paper/dissertation claim edits."
+  - recorded_at_utc: "2026-07-12T16:37:30Z"
+    status: corrective_runtime_gate_validated__slice3_evaluation_pending
+    source: {issue_url: "https://github.com/ll7/robot_sf_ll7/issues/5413", comments_reviewed: 2}
+    correction_evidence: >-
+      Matching-time forecast sampling, trusted-horizon bounds, measured angular-rate reachability,
+      curved footprint occupancy, finite-state fail-closed handling, and heading normalization.
+    validation: >-
+      101 planner tests, 17 focused benchmark/readiness tests, Ruff, and CPU smoke (6 written,
+      0 runner failures, adapter preflight ok; outcomes remain collision/failure, not benchmark evidence).
+    closure_boundary: >-
+      PR #5425 remains Slice 2 implementation evidence only; #5413 may close after merge, while
+      parent #5306 and follow-up #5416 remain open for Slice 3 evaluation.

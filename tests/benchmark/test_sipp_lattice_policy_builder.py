@@ -7,8 +7,11 @@ testing-algorithm readiness guard, and registered as testing-only in metadata.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.benchmark.algorithm_metadata import (
     _KINEMATICS_PROFILE_BY_CANONICAL,
@@ -45,7 +48,9 @@ def _observation() -> dict:
 
 def test_policy_builder_registers_sipp_lattice() -> None:
     """The registered adapter spec resolves the Slice-2 search adapter."""
-    spec = build_registered_adapter_policy_spec("sipp_lattice", {"max_linear_speed": 1.0})
+    spec = build_registered_adapter_policy_spec(
+        "sipp_lattice", {"max_linear_speed": 1.0, "allow_testing_algorithms": True}
+    )
     assert spec is not None
     assert spec.algo_key == "sipp_lattice"
     assert spec.adapter_name == "SippLatticeSearchPlannerAdapter"
@@ -55,7 +60,10 @@ def test_policy_builder_registers_sipp_lattice() -> None:
 
 def test_map_runner_resolves_sipp_lattice_policy() -> None:
     """The real map-runner policy path builds a callable SIPP-lattice policy."""
-    policy, meta = _build_policy("sipp_lattice", {"max_linear_acceleration": 5.0})
+    policy, meta = _build_policy(
+        "sipp_lattice",
+        {"max_linear_acceleration": 5.0, "allow_testing_algorithms": True},
+    )
     assert meta["algorithm"] == "sipp_lattice"
     assert meta["status"] == "ok"
     assert meta["planner_kinematics"]["execution_mode"] == "adapter"
@@ -75,6 +83,14 @@ def test_sipp_lattice_is_testing_only_gated() -> None:
     assert spec.canonical_name == "sipp_lattice"
     assert spec.tier == "experimental"
     assert spec.requires_explicit_opt_in is True
+    config_path = (
+        Path(__file__).resolve().parents[2] / "configs" / "algos" / "sipp_lattice_slice2_smoke.yaml"
+    )
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert config["allow_testing_algorithms"] is True
+    assert config["primitive_duration"] == config["time_slot_duration"]
+    forecast_slots = config["pedestrian_forecast_horizon_s"] / config["time_slot_duration"]
+    assert forecast_slots == int(forecast_slots)
 
     with pytest.raises(ValueError, match="allow_testing_algorithms"):
         require_algorithm_allowed(
@@ -90,6 +106,9 @@ def test_sipp_lattice_is_testing_only_gated() -> None:
         allow_testing_algorithms=True,
     )
     assert allowed == spec
+
+    with pytest.raises(ValueError, match="allow_testing_algorithms"):
+        build_registered_adapter_policy_spec("sipp_lattice", {})
 
 
 def test_sipp_lattice_blocked_by_baseline_safe_profile() -> None:

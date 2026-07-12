@@ -631,6 +631,7 @@ class TestSippLatticePlannerAdapter:
 from robot_sf.planner.sipp_lattice import (  # noqa: E402
     SippLatticeSearch,
     SippLatticeSearchPlannerAdapter,
+    _SearchNode,
     build_pedestrian_occupancy_forecast,
     build_sipp_lattice_search_adapter,
 )
@@ -725,6 +726,38 @@ class TestPedestrianOccupancyForecast:
         assert not fc.arc_occupied(arc, 0)  # geometrically clear right now
         assert fc.arc_occupied(arc, 6)  # temporally occupied once the pedestrian arrives
 
+    def test_mid_primitive_crossing_is_checked_at_matching_sample_time(self) -> None:
+        """A crossing pedestrian cannot evade an arc by clearing it at arrival."""
+        cfg = SippLatticeConfig(
+            time_slot_duration=0.2,
+            robot_radius=0.02,
+            pedestrian_radius=0.02,
+            safety_margin=0.0,
+            continuous_check_steps=10,
+        )
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.array([[0.1, -0.25]]),
+            velocities=np.array([[0.0, 2.5]]),
+            heading=0.0,
+            config=cfg,
+            pedestrian_radius=0.02,
+        )
+        arc = SippKinodynamicCollisionModel(continuous_check_steps=10)._unicycle_arc_positions(
+            (1.0, 0.0), 0.0, 0.2, np.zeros(2)
+        )
+
+        assert not fc.arc_occupied(arc, 1)
+        assert fc.arc_occupied(arc, 0, 0.2)
+        cfg.pedestrian_forecast_horizon_s = 0.2
+        short_fc = build_pedestrian_occupancy_forecast(
+            positions=np.array([[2.0, 0.0]]),
+            velocities=np.array([[0.0, 0.0]]),
+            heading=0.0,
+            config=cfg,
+            pedestrian_radius=0.02,
+        )
+        assert short_fc.arc_occupied(np.array([[0.0, 0.0], [0.2, 0.0]]), 0, 0.4)
+
     def test_malformed_velocities_fail_closed(self) -> None:
         fc = build_pedestrian_occupancy_forecast(
             positions=np.array([[0.5, 0.0]]),
@@ -755,7 +788,7 @@ class TestPedestrianOccupancyForecast:
             config=SippLatticeConfig(time_slot_duration=1.0),
             pedestrian_radius=0.3,
         )
-        moved = fc.positions_at_slot(1)
+        moved = fc.positions + fc.slot_duration * fc.velocities
         assert moved[0][0] == pytest.approx(0.0, abs=1e-6)
         assert moved[0][1] == pytest.approx(1.0, abs=1e-6)
 
@@ -830,6 +863,43 @@ class TestSippLatticeSearch:
         commands = [[p.as_command() for p in r.plan] for r in results]
         assert commands[0] == commands[1] == commands[2]
 
+    def test_unreachable_kinodynamic_successor_is_rejected(self) -> None:
+        """Search rejects unreachable commands and normalizes equivalent headings."""
+        cfg = _fast_config(
+            max_linear_acceleration=0.5,
+            max_steering_rate=0.5,
+            planning_horizon_slots=1,
+            max_planning_time_s=0.2,
+        )
+        primitive = MotionPrimitive(
+            linear_velocity=1.0,
+            angular_velocity=1.0,
+            duration=cfg.primitive_duration,
+            kind=PrimitiveKind.FORWARD,
+        )
+        search = SippLatticeSearch(cfg, [primitive], cfg.to_collision_model())
+        base = _SearchNode(np.zeros(2), 0.1, 0.0, 0.0, 0, 0.0, None)
+        wrapped = _SearchNode(np.zeros(2), 0.1 + 2.0 * math.pi, 0.0, 0.0, 0, 0.0, None)
+        assert search._state_key(base) == search._state_key(wrapped)
+        fc = build_pedestrian_occupancy_forecast(
+            positions=np.empty((0, 2)),
+            velocities=None,
+            heading=0.0,
+            config=cfg,
+            pedestrian_radius=0.3,
+        )
+
+        assert not search._transition_reachable(0.0, 0.0, primitive)
+        result = search.search(
+            start_pos=np.array([0.0, 0.0]),
+            start_heading=0.0,
+            start_speed=0.0,
+            start_angular_velocity=0.2,
+            goal=np.array([0.5, 0.0]),
+            forecast=fc,
+        )
+        assert result.result_type == "bounded_safe_wait"
+
 
 class TestSippLatticeSearchPlannerAdapter:
     """Unit tests for the bounded SIPP search planner with commitment."""
@@ -844,6 +914,7 @@ class TestSippLatticeSearchPlannerAdapter:
             pedestrian_radius=0.15,
             safety_margin=0.05,
             min_clearance=0.3,
+            max_planning_time_s=0.2,
         )
         obs = _search_obs(
             goal=(1.0, 0.0),
@@ -858,7 +929,6 @@ class TestSippLatticeSearchPlannerAdapter:
         assert decision["result_type"] == "native_plan"
         assert decision["bound_termination"] == "goal"
         assert decision["committed_length"] >= 2
-        # The search actively rejected temporally-occupied arcs.
         assert decision["safe_interval_rejections"] > 0
         # The committed plan modulates speed (a slowdown/wait) rather than driving
         # straight through: at least one committed primitive is slower than the
@@ -891,6 +961,35 @@ class TestSippLatticeSearchPlannerAdapter:
             assert (v, w) == (0.0, 0.0)
             assert decision["safe_interval_rejections"] > 0
 
+    def test_static_occupancy_checks_the_footprint_along_the_actual_arc(self) -> None:
+        """A curved primitive is rejected when its midpoint crosses one occupied cell."""
+        resolution = 0.01
+        grid = np.zeros((4, 400, 400), dtype=np.float32)
+        obs = _search_obs(goal=(1.0, 0.0))
+        obs.update(
+            {
+                "occupancy_grid": grid,
+                "occupancy_grid_meta_origin": np.asarray([-2.0, -2.0], dtype=float),
+                "occupancy_grid_meta_resolution": np.asarray([resolution], dtype=float),
+                "occupancy_grid_meta_size": np.asarray([4.0, 4.0], dtype=float),
+                "occupancy_grid_meta_use_ego_frame": np.asarray([0.0], dtype=float),
+                "occupancy_grid_meta_channel_indices": np.asarray([0, 1, 2, 3], dtype=float),
+            }
+        )
+        cfg = _fast_config(robot_radius=0.005, safety_margin=0.0, continuous_check_steps=10)
+        planner = SippLatticeSearchPlannerAdapter(config=cfg)
+        arc = planner._collision_model._unicycle_arc_positions(
+            (1.0, 4.0), 0.0, cfg.primitive_duration, np.zeros(2)
+        )
+        midpoint = arc[len(arc) // 2]
+        row = int((midpoint[1] + 2.0) / resolution)
+        col = int((midpoint[0] + 2.0) / resolution)
+        grid[0, row, col] = 1.0
+        static_blocked = planner._static_blocked_fn(obs)
+
+        assert static_blocked(arc)
+        assert not static_blocked(np.linspace(arc[0], arc[-1], len(arc)))
+
     def test_commitment_survives_one_unchanged_update(self) -> None:
         planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
         obs = _search_obs(goal=(1.0, 0.0))
@@ -907,7 +1006,6 @@ class TestSippLatticeSearchPlannerAdapter:
         clear = _search_obs(goal=(1.0, 0.0))
         planner.plan(clear)
         assert planner.diagnostics()["last_decision"]["result_type"] == "native_plan"
-        # Newly occupied future interval on the committed straight path.
         blocked = _search_obs(
             goal=(1.0, 0.0),
             pedestrian_positions=[[0.4, 0.0]],
@@ -950,6 +1048,31 @@ class TestSippLatticeSearchPlannerAdapter:
         assert decision["result_type"] == "failed_dynamic_input"
         assert decision["dynamic_state"] == "failed"
         assert (v, w) == (0.0, 0.0)
+
+    @pytest.mark.parametrize(
+        "mutation",
+        [
+            lambda obs: obs["pedestrians"].update(
+                positions=np.asarray([["not-a-number", 0.0]], dtype=object)
+            ),
+            lambda obs: obs["pedestrians"].update(positions=np.asarray([[0.5, 0.0, 0.1]])),
+            lambda obs: obs["pedestrians"].update(count=np.asarray([1.5], dtype=float)),
+            lambda obs: (
+                obs["robot"].update(position=np.asarray([np.nan, 0.0]))
+                or obs["goal"].update(current=np.asarray([np.inf, 0.0]))
+            ),
+        ],
+    )
+    def test_malformed_active_state_returns_failed_observation_stop(self, mutation) -> None:
+        """Malformed simulator state must never become an empty-scene plan."""
+        planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
+        obs = _search_obs(goal=(1.0, 0.0))
+        mutation(obs)
+
+        assert planner.plan(obs) == (0.0, 0.0)
+        decision = planner.diagnostics()["last_decision"]
+        assert decision["result_type"] == "failed_observation_input"
+        assert decision["dynamic_state"] == "failed"
 
     def test_goal_reached_returns_zero_and_clears(self) -> None:
         planner = SippLatticeSearchPlannerAdapter(config=_fast_config())
@@ -996,6 +1119,12 @@ class TestSippLatticeConfigSlice2:
     def test_negative_offtrack_tolerance_raises(self) -> None:
         with pytest.raises(ValueError, match="offtrack_tolerance"):
             SippLatticeConfig(offtrack_tolerance=-0.1)
+
+    def test_search_rejects_nonintegral_primitive_slot_ratio(self) -> None:
+        """State-time search must reject cumulative primitive-slot drift."""
+        cfg = SippLatticeConfig(primitive_duration=0.3, time_slot_duration=0.2)
+        with pytest.raises(ValueError, match="integer multiple"):
+            SippLatticeSearch(cfg, cfg.to_primitive_set().build(), cfg.to_collision_model())
 
     def test_search_fields_flow_through_factory(self) -> None:
         cfg = build_sipp_lattice_config(

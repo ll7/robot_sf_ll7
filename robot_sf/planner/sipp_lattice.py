@@ -910,11 +910,8 @@ def _rotate_ego_velocities_to_world(velocities: np.ndarray, heading: float) -> n
 class PedestrianOccupancyForecast:
     """Time-indexed pedestrian occupancy built from planner-facing dynamic state.
 
-    Pedestrians are propagated with a constant-velocity model across discrete
-    time slots.  A candidate robot arc is temporally occupied when any sampled
-    point lies within the combined safety radius of a forecast pedestrian
-    position *at the arc's arrival slot*.  This distinguishes a geometrically
-    clear arc that is nonetheless occupied in time from a genuinely free arc.
+    Pedestrians use constant-velocity propagation; every arc sample is checked
+    at its matching time so mid-primitive crossings cannot disappear at arrival.
 
     Attributes:
         positions: World-frame pedestrian positions as ``(N, 2)``.
@@ -943,38 +940,73 @@ class PedestrianOccupancyForecast:
         """Return the number of forecast pedestrians."""
         return int(self.positions.shape[0])
 
-    def positions_at_slot(self, slot: int) -> np.ndarray:
-        """Return forecast pedestrian positions at a discrete time slot.
-
-        Returns:
-            World-frame positions as ``(N, 2)`` (clamped to the forecast horizon).
-        """
-        if self.pedestrian_count == 0:
-            return self.positions
-        clamped = min(max(int(slot), 0), int(self.horizon_slots))
-        elapsed = float(clamped) * float(self.slot_duration)
-        return self.positions + elapsed * self.velocities
-
-    def arc_occupied(self, arc_positions: np.ndarray, arrival_slot: int) -> bool:
-        """Return whether an arc collides with the forecast at its arrival slot.
+    def arc_occupied(
+        self,
+        arc_positions: np.ndarray,
+        start_slot: int,
+        duration: float | None = None,
+    ) -> bool:
+        """Return whether an arc collides with the forecast at matching times.
 
         Args:
             arc_positions: Sampled world-frame robot positions along the arc.
-            arrival_slot: Discrete time slot at which the arc terminates.
+            start_slot: Start slot, or queried slot when ``duration`` is omitted.
+            duration: Primitive duration; samples are checked at matching times.
 
         Returns:
-            ``True`` when any sampled point is within the combined radius of a
-            forecast pedestrian position at ``arrival_slot``.
+            ``True`` for a collision or an arc beyond the trusted horizon.
         """
-        if self.pedestrian_count == 0 or arc_positions.size == 0:
+        if self.pedestrian_count == 0:
             return False
-        forecast = self.positions_at_slot(arrival_slot)
-        diffs = arc_positions[:, None, :] - forecast[None, :, :]
+        try:
+            arc = np.asarray(arc_positions, dtype=float)
+        except (TypeError, ValueError, OverflowError):
+            return True
+        if arc.size == 0:
+            return False
+        if arc.ndim != 2 or arc.shape[-1] != 2 or not np.all(np.isfinite(arc)):
+            return True
+
+        if duration is None:
+            if int(start_slot) < 0 or int(start_slot) > int(self.horizon_slots):
+                return True
+            sample_times = np.full(arc.shape[0], float(int(start_slot)) * float(self.slot_duration))
+        else:
+            if not (isfinite(float(duration)) and float(duration) > 0.0):
+                return True
+            start_time = float(int(start_slot)) * float(self.slot_duration)
+            sample_times = start_time + np.linspace(0.0, float(duration), arc.shape[0])
+            trusted_horizon = float(self.horizon_slots) * float(self.slot_duration)
+            if (
+                int(start_slot) < 0
+                or np.any(sample_times < -1e-9)
+                or float(sample_times[-1]) > trusted_horizon + 1e-9
+            ):
+                return True
+
+        forecast = (
+            self.positions[None, :, :] + sample_times[:, None, None] * self.velocities[None, :, :]
+        )
+        diffs = arc[:, None, :] - forecast
         distances_squared = np.sum(diffs * diffs, axis=2)
         return bool(np.any(distances_squared <= self.combined_radius * self.combined_radius))
 
 
-def build_pedestrian_occupancy_forecast(
+def _failed_forecast(
+    *, slot_duration: float, combined_radius: float, horizon_slots: int
+) -> PedestrianOccupancyForecast:
+    """Return the empty fail-closed forecast used for malformed active state."""
+    return PedestrianOccupancyForecast(
+        positions=np.zeros((0, 2), dtype=float),
+        velocities=np.zeros((0, 2), dtype=float),
+        slot_duration=slot_duration,
+        combined_radius=combined_radius,
+        horizon_slots=horizon_slots,
+        status="failed",
+    )
+
+
+def build_pedestrian_occupancy_forecast(  # noqa: C901
     *,
     positions: np.ndarray,
     velocities: Any,
@@ -984,9 +1016,8 @@ def build_pedestrian_occupancy_forecast(
 ) -> PedestrianOccupancyForecast:
     """Construct a time-indexed pedestrian forecast, failing closed on bad input.
 
-    Absent or empty velocities are treated as a stationary (``"static"``)
-    assumption rather than a failure.  Non-finite or shape-incompatible dynamic
-    state is classified ``"failed"`` so it never becomes silent success evidence.
+    Missing velocities mean stationary pedestrians; malformed dynamic state is
+    classified ``"failed"`` and cannot back success evidence.
 
     Returns:
         A :class:`PedestrianOccupancyForecast` with an explicit ``status`` flag.
@@ -995,10 +1026,34 @@ def build_pedestrian_occupancy_forecast(
     combined_radius = (
         float(config.robot_radius) + float(config.safety_margin) + float(pedestrian_radius)
     )
-    horizon_slots = math.ceil(float(config.pedestrian_forecast_horizon_s) / slot_duration)
-    positions = np.asarray(positions, dtype=float)
+    horizon_slots = max(
+        0,
+        math.floor(float(config.pedestrian_forecast_horizon_s) / slot_duration + 1e-9),
+    )
+    if not isfinite(float(heading)):
+        return _failed_forecast(
+            slot_duration=slot_duration,
+            combined_radius=combined_radius,
+            horizon_slots=horizon_slots,
+        )
+    try:
+        positions = np.asarray(positions, dtype=float)
+    except (TypeError, ValueError, OverflowError):
+        return _failed_forecast(
+            slot_duration=slot_duration,
+            combined_radius=combined_radius,
+            horizon_slots=horizon_slots,
+        )
+    if positions.ndim == 1 and positions.size == 0:
+        positions = positions.reshape(0, 2)
+    elif positions.ndim == 1 and positions.size % 2 == 0:
+        positions = positions.reshape(-1, 2)
     if positions.ndim != 2 or positions.shape[-1] != 2:
-        positions = np.zeros((0, 2), dtype=float)
+        return _failed_forecast(
+            slot_duration=slot_duration,
+            combined_radius=combined_radius,
+            horizon_slots=horizon_slots,
+        )
     count = positions.shape[0]
 
     if count == 0:
@@ -1012,16 +1067,20 @@ def build_pedestrian_occupancy_forecast(
         )
 
     if not np.all(np.isfinite(positions)):
-        return PedestrianOccupancyForecast(
-            positions=np.zeros((0, 2), dtype=float),
-            velocities=np.zeros((0, 2), dtype=float),
+        return _failed_forecast(
             slot_duration=slot_duration,
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
-            status="failed",
         )
 
-    raw_velocities = np.asarray(velocities if velocities is not None else [], dtype=float)
+    try:
+        raw_velocities = np.asarray(velocities if velocities is not None else [], dtype=float)
+    except (TypeError, ValueError, OverflowError):
+        return _failed_forecast(
+            slot_duration=slot_duration,
+            combined_radius=combined_radius,
+            horizon_slots=horizon_slots,
+        )
     if raw_velocities.size == 0:
         return PedestrianOccupancyForecast(
             positions=positions,
@@ -1040,13 +1099,10 @@ def build_pedestrian_occupancy_forecast(
         or raw_velocities.shape[0] < count
         or not np.all(np.isfinite(raw_velocities))
     ):
-        return PedestrianOccupancyForecast(
-            positions=np.zeros((0, 2), dtype=float),
-            velocities=np.zeros((0, 2), dtype=float),
+        return _failed_forecast(
             slot_duration=slot_duration,
             combined_radius=combined_radius,
             horizon_slots=horizon_slots,
-            status="failed",
         )
 
     world_velocities = _rotate_ego_velocities_to_world(raw_velocities[:count], float(heading))
@@ -1060,6 +1116,43 @@ def build_pedestrian_occupancy_forecast(
     )
 
 
+class _ObservationInputError(ValueError):
+    """Raised when an active planner observation cannot satisfy its state contract."""
+
+
+def _finite_array(value: Any, *, name: str) -> np.ndarray:
+    """Convert an observation value to a finite numeric array."""  # noqa: DOC201
+    try:
+        array = np.asarray(value, dtype=float)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise _ObservationInputError(f"{name} must be numeric") from exc
+    if not np.all(np.isfinite(array)):
+        raise _ObservationInputError(f"{name} must contain only finite values")
+    return array
+
+
+def _finite_observation_vector(value: Any, *, name: str, size: int) -> np.ndarray:
+    """Convert one fixed-size observation vector, rejecting malformed state."""  # noqa: DOC201
+    flattened = np.ravel(_finite_array(value, name=name))
+    if flattened.size != size:
+        raise _ObservationInputError(f"{name} must contain exactly {size} values")
+    return np.asarray(flattened, dtype=float)
+
+
+def _finite_pedestrian_positions(value: Any) -> np.ndarray:
+    """Normalize active pedestrian positions to ``(N, 2)`` or fail closed."""  # noqa: DOC201
+    if value is None:
+        return np.zeros((0, 2), dtype=float)
+    array = _finite_array(value, name="pedestrians.positions")
+    if array.size == 0:
+        return np.zeros((0, 2), dtype=float)
+    if array.ndim == 1 and array.size % 2 == 0:
+        array = array.reshape(-1, 2)
+    if array.ndim != 2 or array.shape[-1] != 2:
+        raise _ObservationInputError("pedestrians.positions must have shape (N, 2)")
+    return np.asarray(array, dtype=float)
+
+
 @dataclass
 class _SearchNode:
     """One expanded state-time lattice node for the bounded SIPP search."""
@@ -1067,6 +1160,7 @@ class _SearchNode:
     position: np.ndarray
     heading: float
     velocity: float
+    angular_velocity: float
     slot: int
     g_cost: float
     primitive: MotionPrimitive | None
@@ -1084,16 +1178,13 @@ class SippSearchResult:
     horizon_reached: int
     safe_interval_rejections: int
     chosen_cost: float | None
-    goal_distance: float
 
 
 class SippLatticeSearch:
     """Bounded weighted-A*/SIPP search over the kinodynamic state-time lattice.
 
-    Expands the AMV-feasible primitive set from a start state, rejecting arcs
-    that are temporally occupied by the pedestrian forecast or blocked by static
-    occupancy.  Hard expansion, planning-time, and horizon bounds guarantee
-    deterministic termination with a classified safe-wait fallback.
+    Expands AMV-feasible primitives while rejecting dynamic/static collisions;
+    hard bounds guarantee safe-wait termination.
     """
 
     def __init__(
@@ -1108,18 +1199,52 @@ class SippLatticeSearch:
         self._collision_model = collision_model
         forward_reach = [p.distance_traveled for p in primitives if p.linear_velocity > 0.0]
         self._max_step_distance = max(forward_reach) if forward_reach else 0.0
-        self._slots_per_primitive = max(
-            1, round(float(config.primitive_duration) / float(config.time_slot_duration))
-        )
+        slot_ratio = float(config.primitive_duration) / float(config.time_slot_duration)
+        slots_per_primitive = round(slot_ratio)
+        if slots_per_primitive < 1 or not math.isclose(
+            slot_ratio, slots_per_primitive, rel_tol=0.0, abs_tol=1e-9
+        ):
+            raise ValueError(
+                "SippLatticeConfig.primitive_duration must be an integer multiple of "
+                "time_slot_duration for state-time search"
+            )
+        self._slots_per_primitive = int(slots_per_primitive)
 
-    def _state_key(self, node: _SearchNode) -> tuple[int, int, int, int, int]:
+    def _state_key(self, node: _SearchNode) -> tuple[int, int, int, int, int, int]:
         """Return the discretized closed-set key for a node."""
         return (
             round(float(node.position[0]) / float(self.config.xy_resolution)),
             round(float(node.position[1]) / float(self.config.xy_resolution)),
-            round(float(node.heading) / float(self.config.heading_resolution)),
+            round(float(wrap_angle_pi(node.heading)) / float(self.config.heading_resolution)),
             round(float(node.velocity) / float(self.config.velocity_resolution)),
+            round(float(node.angular_velocity) / float(self.config.heading_resolution)),
             int(node.slot),
+        )
+
+    def _transition_reachable(
+        self, current_velocity: float, current_angular_velocity: float, primitive: MotionPrimitive
+    ) -> bool:
+        """Return whether a primitive target is reachable from the current command."""
+        duration = float(primitive.duration)
+        linear_delta = float(self.config.max_linear_acceleration) * duration
+        angular_delta = float(self.config.max_steering_rate) * duration
+        linear_min = -float(self.config.max_linear_speed) if self.config.allow_reverse else 0.0
+        linear_max = float(self.config.max_linear_speed)
+        target_v = float(primitive.linear_velocity)
+        target_w = float(primitive.angular_velocity)
+        if not (isfinite(current_velocity) and isfinite(current_angular_velocity)):
+            return False
+        if not (linear_min - 1e-9 <= target_v <= linear_max + 1e-9):
+            return False
+        if not (
+            -float(self.config.max_angular_speed) - 1e-9
+            <= target_w
+            <= float(self.config.max_angular_speed) + 1e-9
+        ):
+            return False
+        return bool(
+            abs(target_v - float(current_velocity)) <= linear_delta + 1e-9
+            and abs(target_w - float(current_angular_velocity)) <= angular_delta + 1e-9
         )
 
     def _heuristic(self, position: np.ndarray, goal: np.ndarray) -> float:
@@ -1163,15 +1288,16 @@ class SippLatticeSearch:
         plan.reverse()
         return plan
 
-    def search(  # noqa: C901
+    def search(  # noqa: C901, PLR0915
         self,
         *,
         start_pos: np.ndarray,
         start_heading: float,
         start_speed: float,
+        start_angular_velocity: float = 0.0,
         goal: np.ndarray,
         forecast: PedestrianOccupancyForecast,
-        static_blocked: Callable[[np.ndarray, np.ndarray], bool] | None = None,
+        static_blocked: Callable[[np.ndarray], bool] | None = None,
     ) -> SippSearchResult:
         """Run the bounded state-time search from a start state toward a goal.
 
@@ -1179,25 +1305,46 @@ class SippLatticeSearch:
             A :class:`SippSearchResult` classifying the outcome and any plan.
         """
         goal_tolerance = float(self.config.goal_tolerance)
-        horizon_slots = int(self.config.planning_horizon_slots)
+        horizon_slots = min(int(self.config.planning_horizon_slots), int(forecast.horizon_slots))
         max_expansions = int(self.config.max_expansions)
         deadline = time.perf_counter() + float(self.config.max_planning_time_s)
 
+        start_position = np.asarray(start_pos, dtype=float)
+        goal_position = np.asarray(goal, dtype=float)
+        if not forecast.usable:
+            return SippSearchResult(
+                plan=[_wait_primitive(self.config)],
+                result_type="bounded_safe_wait",
+                bound_termination="invalid_forecast",
+                expansions=0,
+                horizon_reached=0,
+                safe_interval_rejections=0,
+                chosen_cost=None,
+            )
+        if (
+            start_position.shape != (2,)
+            or goal_position.shape != (2,)
+            or not np.all(np.isfinite(start_position))
+            or not np.all(np.isfinite(goal_position))
+            or not isfinite(float(start_speed))
+            or not isfinite(float(start_angular_velocity))
+            or not isfinite(float(start_heading))
+        ):
+            raise ValueError("SippLatticeSearch state and goal must be finite (x, y) values")
+
         start = _SearchNode(
-            position=np.asarray(start_pos, dtype=float),
-            heading=float(start_heading),
+            position=start_position,
+            heading=wrap_angle_pi(float(start_heading)),
             velocity=float(start_speed),
+            angular_velocity=float(start_angular_velocity),
             slot=0,
             g_cost=0.0,
             primitive=None,
         )
         counter = 0
-        start_h = self._heuristic(start.position, goal)
+        start_h = self._heuristic(start.position, goal_position)
         open_heap: list[tuple[float, int, _SearchNode]] = [(start_h, counter, start)]
-        best_cost: dict[tuple[int, int, int, int, int], float] = {self._state_key(start): 0.0}
-        best_toward_goal = start
-        best_goal_distance = float(np.linalg.norm(goal - start.position))
-
+        best_cost: dict[tuple[int, int, int, int, int, int], float] = {self._state_key(start): 0.0}
         expansions = 0
         rejections = 0
         horizon_reached = 0
@@ -1216,7 +1363,7 @@ class SippLatticeSearch:
             if best_cost.get(node_key, math.inf) < node.g_cost:
                 continue
 
-            goal_distance = float(np.linalg.norm(goal - node.position))
+            goal_distance = float(np.linalg.norm(goal_position - node.position))
             if goal_distance <= goal_tolerance:
                 plan = self._reconstruct(node)
                 return SippSearchResult(
@@ -1227,24 +1374,29 @@ class SippLatticeSearch:
                     horizon_reached=horizon_reached,
                     safe_interval_rejections=rejections,
                     chosen_cost=float(node.g_cost),
-                    goal_distance=goal_distance,
                 )
 
             if node.slot >= horizon_slots:
+                bound_termination = "horizon"
                 continue
 
             expansions += 1
             for primitive in self._primitives:
+                arrival_slot = node.slot + self._slots_per_primitive
+                horizon_reached = max(horizon_reached, arrival_slot)
+                if arrival_slot > horizon_slots:
+                    bound_termination = "horizon"
+                    continue
+                if not self._transition_reachable(node.velocity, node.angular_velocity, primitive):
+                    continue
                 arc_positions = self._collision_model._unicycle_arc_positions(
                     primitive.as_command(), node.heading, primitive.duration, node.position
                 )
-                arrival_slot = node.slot + self._slots_per_primitive
-                horizon_reached = max(horizon_reached, arrival_slot)
                 end_pos = arc_positions[-1]
 
-                if static_blocked is not None and static_blocked(end_pos, node.position):
+                if static_blocked is not None and static_blocked(arc_positions):
                     continue
-                if forecast.arc_occupied(arc_positions, arrival_slot):
+                if forecast.arc_occupied(arc_positions, node.slot, primitive.duration):
                     rejections += 1
                     continue
 
@@ -1252,6 +1404,7 @@ class SippLatticeSearch:
                     position=end_pos,
                     heading=wrap_angle_pi(node.heading + primitive.delta_yaw),
                     velocity=float(primitive.linear_velocity),
+                    angular_velocity=float(primitive.angular_velocity),
                     slot=arrival_slot,
                     g_cost=node.g_cost + self._step_cost(primitive),
                     primitive=primitive,
@@ -1261,30 +1414,14 @@ class SippLatticeSearch:
                 if best_cost.get(child_key, math.inf) <= child.g_cost:
                     continue
                 best_cost[child_key] = child.g_cost
-                child_goal_distance = float(np.linalg.norm(goal - child.position))
-                if child_goal_distance < best_goal_distance:
-                    best_goal_distance = child_goal_distance
-                    best_toward_goal = child
                 counter += 1
                 f_cost = child.g_cost + float(self.config.heuristic_weight) * self._heuristic(
-                    child.position, goal
+                    child.position, goal_position
                 )
                 heapq.heappush(open_heap, (f_cost, counter, child))
 
-        # Bound reached without a full path to goal: commit the best partial plan
-        # toward the goal when progress was made, otherwise a classified safe wait.
-        partial_plan = self._reconstruct(best_toward_goal)
-        if partial_plan:
-            return SippSearchResult(
-                plan=partial_plan,
-                result_type="native_plan",
-                bound_termination=bound_termination,
-                expansions=expansions,
-                horizon_reached=horizon_reached,
-                safe_interval_rejections=rejections,
-                chosen_cost=float(best_toward_goal.g_cost),
-                goal_distance=best_goal_distance,
-            )
+        if bound_termination == "open_exhausted" and horizon_reached >= horizon_slots:
+            bound_termination = "horizon"
         return SippSearchResult(
             plan=[_wait_primitive(self.config)],
             result_type="bounded_safe_wait",
@@ -1293,7 +1430,6 @@ class SippLatticeSearch:
             horizon_reached=horizon_reached,
             safe_interval_rejections=rejections,
             chosen_cost=None,
-            goal_distance=best_goal_distance,
         )
 
 
@@ -1314,18 +1450,13 @@ def _wait_primitive(config: SippLatticeConfig) -> MotionPrimitive:
 class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
     """Bounded state-time SIPP planner with multi-step commitment (Slice 2).
 
-    Extends the Slice-1 primitive/collision foundation with time-indexed
-    pedestrian occupancy, a bounded weighted-A* search, and a committed
-    primitive sequence that persists across control cycles.  The planner replans
-    only when the committed sequence is exhausted, invalidated by new occupancy,
-    materially off-track, or the goal changes.
+    Extends Slice 1 with time-indexed occupancy, bounded weighted-A* search, and
+    a committed primitive sequence that replans on exhaustion or invalidation.
 
     This adapter is testing-only/experimental: it produces exploratory
     implementation evidence, not safety, liveness, or benchmark superiority
     claims (Slice 3 of #5306 owns outcome evaluation).
 
-    Attributes:
-        config: Planner configuration (shared schema with the Slice-1 adapter).
     """
 
     def __init__(self, config: SippLatticeConfig | None = None) -> None:
@@ -1342,86 +1473,136 @@ class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def _extract_state(
         self, observation: dict[str, Any]
-    ) -> tuple[np.ndarray, float, float, np.ndarray, np.ndarray, Any, float]:
-        """Extract robot state, active goal, and raw pedestrian dynamic state.
+    ) -> tuple[np.ndarray, float, float, float, np.ndarray, np.ndarray, Any]:
+        """Extract finite robot/goal state and raw pedestrian dynamic state."""  # noqa: DOC201
+        try:
+            robot, goal, pedestrians = self._socnav_fields(observation)
+        except (TypeError, ValueError, KeyError, AttributeError) as exc:
+            raise _ObservationInputError("observation must contain valid SocNav fields") from exc
+        if not all(isinstance(field, dict) for field in (robot, goal, pedestrians)):
+            raise _ObservationInputError("robot, goal, and pedestrians must be mappings")
 
-        Returns:
-            Tuple of (robot_pos, heading, speed, active_goal, ped_positions,
-            ped_velocities, ped_radius).
-        """
-        robot, goal, pedestrians = self._socnav_fields(observation)
-        robot = robot or {}
-        goal = goal or {}
-        pedestrians = pedestrians or {}
+        robot_pos = _finite_observation_vector(
+            robot.get("position", [0.0, 0.0]), name="robot.position", size=2
+        )
+        heading = float(
+            _finite_observation_vector(robot.get("heading", [0.0]), name="robot.heading", size=1)[0]
+        )
+        speed_values = np.ravel(_finite_array(robot.get("speed", [0.0]), name="robot.speed"))
+        if speed_values.size not in {1, 2}:
+            raise _ObservationInputError("robot.speed must contain one or two finite values")
+        speed = float(speed_values[0])
+        angular_source = robot.get("angular_velocity", robot.get("omega"))
+        angular_velocity = (
+            float(
+                _finite_observation_vector(angular_source, name="robot.angular_velocity", size=1)[0]
+            )
+            if angular_source is not None
+            else float(speed_values[1])
+            if speed_values.size == 2
+            else 0.0
+        )
 
-        robot_pos = self._as_1d_float(robot.get("position", [0.0, 0.0]), pad=2)[:2]
-        heading = float(self._as_1d_float(robot.get("heading", [0.0]), pad=1)[0])
-        speed = float(self._as_1d_float(robot.get("speed", [0.0]), pad=1)[0])
-
-        goal_current = self._as_1d_float(goal.get("current", [0.0, 0.0]), pad=2)[:2]
-        goal_next = self._as_1d_float(goal.get("next", [0.0, 0.0]), pad=2)[:2]
+        goal_current = _finite_observation_vector(
+            goal.get("current", [0.0, 0.0]), name="goal.current", size=2
+        )
+        goal_next = _finite_observation_vector(
+            goal.get("next", [0.0, 0.0]), name="goal.next", size=2
+        )
         active_goal = (
             goal_next
             if np.linalg.norm(goal_next - robot_pos) > float(self.config.goal_tolerance)
             else goal_current
         )
 
-        raw_positions = np.asarray(pedestrians.get("positions", []), dtype=float)
-        if raw_positions.ndim == 1 and raw_positions.size % 2 == 0:
-            raw_positions = raw_positions.reshape(-1, 2)
-        if raw_positions.ndim != 2 or raw_positions.shape[-1] != 2:
-            raw_positions = np.zeros((0, 2), dtype=float)
-        count = max(
-            int(self._as_1d_float(pedestrians.get("count", [raw_positions.shape[0]]), pad=1)[0]),
-            0,
+        raw_positions = _finite_pedestrian_positions(pedestrians.get("positions", []))
+        count_value = (
+            float(raw_positions.shape[0])
+            if pedestrians.get("count") is None
+            else _finite_observation_vector(
+                pedestrians.get("count"), name="pedestrians.count", size=1
+            )[0]
         )
+        if count_value < 0.0 or not count_value.is_integer():
+            raise _ObservationInputError("pedestrians.count must be a non-negative integer")
+        count = int(count_value)
+        if count > raw_positions.shape[0]:
+            raise _ObservationInputError(
+                "pedestrians.count cannot exceed pedestrians.positions rows"
+            )
         ped_positions = raw_positions[:count]
         ped_velocities = pedestrians.get("velocities")
-        ped_radius = float(self.config.pedestrian_radius)
-        return robot_pos, heading, speed, active_goal, ped_positions, ped_velocities, ped_radius
+        return (
+            robot_pos,
+            heading,
+            speed,
+            angular_velocity,
+            active_goal,
+            ped_positions,
+            ped_velocities,
+        )
 
-    def _static_blocked_fn(
-        self, observation: dict[str, Any]
-    ) -> Callable[[np.ndarray, np.ndarray], bool]:
-        """Build a static-occupancy rejection closure for the search.
+    def _static_blocked_fn(self, observation: dict[str, Any]) -> Callable[[np.ndarray], bool]:
+        """Build a footprint-inflated static-occupancy checker over an arc."""  # noqa: DOC201
 
-        Returns:
-            Callable mapping ``(end_pos, start_pos)`` to a blocked flag using the
-            occupancy-grid path penalty shared with the Slice-1 adapter.
-        """
+        payload = self._extract_grid_payload(observation)
+        if payload is None:
+            return lambda _arc_positions: False
+        grid, meta = payload
+        if grid.ndim < 3:
+            return lambda _arc_positions: True
+        try:
+            channel = self._grid_channel_index(meta, "obstacles")
+            if channel < 0:
+                channel = self._grid_channel_index(meta, "combined")
+            resolution = float(self._as_1d_float(meta.get("resolution", [0.0]), pad=1)[0])
+        except (TypeError, ValueError, IndexError, KeyError):
+            return lambda _arc_positions: True
+        if channel < 0 or channel >= grid.shape[0] or not isfinite(resolution) or resolution <= 0.0:
+            return lambda _arc_positions: True
 
-        def _blocked(end_pos: np.ndarray, start_pos: np.ndarray) -> bool:
-            direction = end_pos - start_pos
-            if float(np.linalg.norm(direction)) < 1e-9:
-                return False
-            grid_penalty, _ = self._path_penalty(
-                start_pos,
-                direction,
-                observation,
-                self.config.occupancy_lookahead,
-                self.config.occupancy_candidates,
-            )
-            return grid_penalty >= float(self.config.grid_obstacle_threshold)
+        inflation = float(self.config.robot_radius + self.config.safety_margin)
+        sample_radius = inflation + 0.5 * math.sqrt(2.0) * resolution
+        cell_count = math.ceil(sample_radius / resolution)
+        offsets = np.asarray(
+            [
+                [col * resolution, row * resolution]
+                for row in range(-cell_count, cell_count + 1)
+                for col in range(-cell_count, cell_count + 1)
+                if math.hypot(col * resolution, row * resolution) <= sample_radius + 1e-9
+            ],
+            dtype=float,
+        )
+
+        def _blocked(arc_positions: np.ndarray) -> bool:
+            """Reject malformed or footprint-overlapping arcs."""  # noqa: DOC201
+            try:
+                arc = np.asarray(arc_positions, dtype=float)
+                if arc.ndim != 2 or arc.shape[-1] != 2 or not np.all(np.isfinite(arc)):
+                    return True
+                footprint_samples = (arc[:, None, :] + offsets[None, :, :]).reshape(-1, 2)
+                return any(
+                    self._grid_value(point, grid, meta, channel)
+                    >= float(self.config.grid_obstacle_threshold)
+                    for point in footprint_samples
+                )
+            except (TypeError, ValueError, IndexError, KeyError, OverflowError):
+                return True
+            return False
 
         return _blocked
 
-    def _commitment_valid(
+    def _commitment_valid(  # noqa: C901
         self,
         robot_pos: np.ndarray,
         active_goal: np.ndarray,
         forecast: PedestrianOccupancyForecast,
         heading: float,
-        static_blocked: Callable[[np.ndarray, np.ndarray], bool],
+        speed: float,
+        angular_velocity: float,
+        static_blocked: Callable[[np.ndarray], bool],
     ) -> bool:
-        """Return whether the current committed sequence remains usable.
-
-        The committed remainder is invalidated by an exhausted plan, a material
-        goal change, a gross off-track deviation, or a newly occupied/blocked
-        upcoming committed arc under the fresh forecast.
-
-        Returns:
-            ``True`` when the committed remainder can still be executed.
-        """
+        """Return whether the committed remainder remains safe and reachable."""
         if self._commit_index >= len(self._committed):
             return False
         if self._last_goal is None:
@@ -1436,18 +1617,30 @@ class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
         # Re-validate the remaining committed arcs against the fresh forecast.
         cursor = np.asarray(robot_pos, dtype=float)
         cursor_heading = float(heading)
+        cursor_speed = float(speed)
+        cursor_angular_velocity = float(angular_velocity)
         slot = 0
+        trusted_horizon = min(int(self.config.planning_horizon_slots), int(forecast.horizon_slots))
         for primitive in self._committed[self._commit_index :]:
+            arrival_slot = slot + self._search._slots_per_primitive
+            if arrival_slot > trusted_horizon:
+                return False
+            if not self._search._transition_reachable(
+                cursor_speed, cursor_angular_velocity, primitive
+            ):
+                return False
             arc_positions = self._collision_model._unicycle_arc_positions(
                 primitive.as_command(), cursor_heading, primitive.duration, cursor
             )
-            slot += self._search._slots_per_primitive
-            if static_blocked(arc_positions[-1], cursor):
+            if static_blocked(arc_positions):
                 return False
-            if forecast.arc_occupied(arc_positions, slot):
+            if forecast.arc_occupied(arc_positions, slot, primitive.duration):
                 return False
             cursor = arc_positions[-1]
             cursor_heading = wrap_angle_pi(cursor_heading + primitive.delta_yaw)
+            cursor_speed = float(primitive.linear_velocity)
+            cursor_angular_velocity = float(primitive.angular_velocity)
+            slot = arrival_slot
         return True
 
     def _record(
@@ -1456,7 +1649,7 @@ class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
         result_type: str,
         primitive: MotionPrimitive | None,
         command: tuple[float, float],
-        distance_to_goal: float,
+        distance_to_goal: float | None,
         dynamic_state: str,
         replanned: bool,
         search_result: SippSearchResult | None,
@@ -1469,7 +1662,7 @@ class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
             "commit_index": self._commit_index,
             "primitive_kind": primitive.kind.value if primitive else None,
             "primitive_command": [float(command[0]), float(command[1])],
-            "distance_to_goal_m": float(distance_to_goal),
+            "distance_to_goal_m": (None if distance_to_goal is None else float(distance_to_goal)),
             "dynamic_state": dynamic_state,
             "replanned": bool(replanned),
             "expansions": search_result.expansions if search_result else 0,
@@ -1488,37 +1681,38 @@ class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
             The next committed primitive command, or ``(0.0, 0.0)`` for a
             classified safe wait, goal-reached, or failed dynamic-input state.
         """
-        (
-            robot_pos,
-            heading,
-            speed,
-            active_goal,
-            ped_positions,
-            ped_velocities,
-            ped_radius,
-        ) = self._extract_state(observation)
-
-        distance_to_goal = float(np.linalg.norm(active_goal - robot_pos))
-        if distance_to_goal <= float(self.config.goal_tolerance):
+        try:
+            (
+                robot_pos,
+                heading,
+                speed,
+                angular_velocity,
+                active_goal,
+                ped_positions,
+                ped_velocities,
+            ) = self._extract_state(observation)
+        except _ObservationInputError:
             self._clear_commitment()
-            self._last_goal = np.asarray(active_goal, dtype=float)
+            self._last_goal = None
             self._record(
-                result_type="goal_reached",
+                result_type="failed_observation_input",
                 primitive=None,
                 command=(0.0, 0.0),
-                distance_to_goal=distance_to_goal,
-                dynamic_state="ok",
+                distance_to_goal=None,
+                dynamic_state="failed",
                 replanned=False,
                 search_result=None,
             )
             return 0.0, 0.0
+
+        distance_to_goal = float(np.linalg.norm(active_goal - robot_pos))
 
         forecast = build_pedestrian_occupancy_forecast(
             positions=ped_positions,
             velocities=ped_velocities,
             heading=heading,
             config=self.config,
-            pedestrian_radius=ped_radius,
+            pedestrian_radius=float(self.config.pedestrian_radius),
         )
         if not forecast.usable:
             # Fail closed: malformed dynamic state never backs planner success.
@@ -1535,9 +1729,31 @@ class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
             )
             return 0.0, 0.0
 
+        if distance_to_goal <= float(self.config.goal_tolerance):
+            self._clear_commitment()
+            self._last_goal = np.asarray(active_goal, dtype=float)
+            self._record(
+                result_type="goal_reached",
+                primitive=None,
+                command=(0.0, 0.0),
+                distance_to_goal=distance_to_goal,
+                dynamic_state=forecast.status,
+                replanned=False,
+                search_result=None,
+            )
+            return 0.0, 0.0
+
         static_blocked = self._static_blocked_fn(observation)
 
-        if self._commitment_valid(robot_pos, active_goal, forecast, heading, static_blocked):
+        if self._commitment_valid(
+            robot_pos,
+            active_goal,
+            forecast,
+            heading,
+            speed,
+            angular_velocity,
+            static_blocked,
+        ):
             primitive = self._committed[self._commit_index]
             self._commit_index += 1
             command = primitive.as_command()
@@ -1559,6 +1775,7 @@ class SippLatticeSearchPlannerAdapter(OccupancyAwarePlannerMixin):
             start_pos=robot_pos,
             start_heading=heading,
             start_speed=speed,
+            start_angular_velocity=angular_velocity,
             goal=active_goal,
             forecast=forecast,
             static_blocked=static_blocked,

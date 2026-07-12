@@ -142,6 +142,17 @@ def _build_sipp_lattice_policy_spec(algo_config: dict[str, Any]) -> AdapterPolic
         AdapterPolicySpec: Adapter construction payload for the map runner.
     """
 
+    raw_opt_in = algo_config.get("allow_testing_algorithms", False)
+    opt_in = (
+        raw_opt_in
+        if isinstance(raw_opt_in, bool)
+        else str(raw_opt_in).strip().lower() in {"true", "1", "yes"}
+    )
+    if not opt_in:
+        raise ValueError(
+            "sipp_lattice is experimental/testing-only and requires allow_testing_algorithms: true"
+        )
+
     return AdapterPolicySpec(
         algo_key="sipp_lattice",
         algo_config=algo_config,

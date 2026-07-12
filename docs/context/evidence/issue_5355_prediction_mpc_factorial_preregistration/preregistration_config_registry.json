@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "robot_sf.issue_5355_preregistration_config_registry.v1",
   "campaign_id": "issue_5355_prediction_mpc_factorial_v1",
   "status": "preregistration_only",

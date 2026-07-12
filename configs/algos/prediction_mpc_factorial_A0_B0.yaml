@@ -21,4 +21,4 @@ solver_max_iterations: 40
 warm_start: true
 fallback_to_stop: true
 hard_pedestrian_constraints_enabled: false
-local_min_escape_enabled: false
+pedestrian_clearance_weight: 4.5

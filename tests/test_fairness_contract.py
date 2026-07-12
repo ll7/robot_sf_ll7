@@ -353,3 +353,125 @@ def test_matched_rows_pass_ranking_gate():
     # socnav_orca_nonholonomic is experimental vs baseline-ready but
     # readiness tier is not a fairness dimension; observation/adapter match
     assert verdict.hard_mismatch_count == 0
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Fairness report builder
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_build_fairness_report_all_matched():
+    """build_fairness_report returns a complete report for matched planners."""
+    from robot_sf.benchmark.fairness_contract import build_fairness_report
+
+    configs = [
+        {"algo": "social_force"},
+        {"algo": "orca"},
+    ]
+    report = build_fairness_report(configs)
+    assert report.ranking_claim_allowed is True
+    assert len(report.mismatches) >= 1  # soft adapter name mismatch expected
+    assert len(report.fair_subset) == 2
+    assert len(report.excluded_planners) == 0
+
+
+def test_build_fairness_report_mismatched():
+    """build_fairness_report blocks ranking claims for mismatched planners."""
+    from robot_sf.benchmark.fairness_contract import build_fairness_report
+
+    configs = [
+        {"algo": "goal"},
+        {"algo": "ppo"},
+    ]
+    report = build_fairness_report(configs)
+    assert report.ranking_claim_allowed is False
+    assert len(report.excluded_planners) >= 1
+
+
+def test_build_fairness_report_serialization():
+    """Fairness report serialization round-trips through to_dict."""
+    from robot_sf.benchmark.fairness_contract import build_fairness_report
+
+    configs = [
+        {"algo": "social_force"},
+        {"algo": "orca"},
+    ]
+    report = build_fairness_report(configs)
+    d = report.to_dict()
+    assert "matrix" in d
+    assert "mismatches" in d
+    assert "fair_subset" in d
+    assert "ranking_claim_allowed" in d
+    assert isinstance(d["mismatches"], list)
+
+
+def test_emit_fairness_annotations():
+    """emit_fairness_annotations mutates rows in place with fairness keys."""
+    from robot_sf.benchmark.fairness_contract import (
+        build_fairness_report,
+        emit_fairness_annotations,
+    )
+
+    configs = [
+        {"algo": "social_force"},
+        {"algo": "orca"},
+    ]
+    report = build_fairness_report(configs)
+    rows = [
+        {"planner_key": "social_force", "algo": "social_force", "success_mean": 0.8},
+        {"planner_key": "orca", "algo": "orca", "success_mean": 0.7},
+    ]
+    emit_fairness_annotations(report, rows)
+    for row in rows:
+        assert "fairness_mismatch_flags" in row
+        assert "fairness_in_ranking_subset" in row
+        assert isinstance(row["fairness_mismatch_flags"], list)
+
+
+def test_emit_fairness_annotations_excluded_planners():
+    """Excluded planners get fairness_in_ranking_subset=False."""
+    from robot_sf.benchmark.fairness_contract import (
+        build_fairness_report,
+        emit_fairness_annotations,
+    )
+
+    configs = [
+        {"algo": "goal"},
+        {"algo": "ppo"},
+    ]
+    report = build_fairness_report(configs)
+    rows = [
+        {"planner_key": "goal", "algo": "goal"},
+        {"planner_key": "ppo", "algo": "ppo"},
+    ]
+    emit_fairness_annotations(report, rows)
+    for row in rows:
+        assert row["fairness_in_ranking_subset"] is False
+
+
+def test_emit_fairness_annotations_handles_unknown_planner():
+    """emit_fairness_annotations handles rows with unknown planners gracefully."""
+    from robot_sf.benchmark.fairness_contract import (
+        build_fairness_report,
+        emit_fairness_annotations,
+    )
+
+    configs = [{"algo": "orca"}]
+    report = build_fairness_report(configs)
+    rows = [{"planner_key": "unknown_planner", "algo": "unknown"}]
+    emit_fairness_annotations(report, rows)
+    assert rows[0]["fairness_mismatch_flags"] == []
+    assert rows[0]["fairness_in_ranking_subset"] is False
+
+
+def test_emit_fairness_annotations_uses_algo_for_custom_planner_key():
+    """A custom campaign instance key retains its canonical algorithm classification."""
+    from robot_sf.benchmark.fairness_contract import (
+        build_fairness_report,
+        emit_fairness_annotations,
+    )
+
+    report = build_fairness_report([{"algo": "orca"}])
+    rows = [{"planner_key": "custom_orca", "algo": "orca"}]
+    emit_fairness_annotations(report, rows)
+    assert rows[0]["fairness_in_ranking_subset"] is True

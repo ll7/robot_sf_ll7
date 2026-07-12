@@ -3574,6 +3574,147 @@ def test_write_campaign_report_routes_non_success_rows_to_expected_sections(
     assert "accepted_row" not in unexpected_section
 
 
+def test_write_campaign_report_emits_fairness_contract(tmp_path: Path) -> None:
+    """Campaign report includes fairness contract section with mismatch details."""
+    report_path = tmp_path / "campaign_report.md"
+    payload = {
+        "campaign": {"campaign_id": "c1"},
+        "warnings": [],
+        "planner_rows": [
+            {
+                "planner_key": "social_force",
+                "algo": "social_force",
+                "planner_group": "core",
+                "kinematics": "holonomic",
+                "status": "ok",
+                "started_at_utc": "now",
+                "runtime_sec": 1.0,
+                "episodes": 1,
+                "episodes_per_second": 1.0,
+                "success_mean": "0.8",
+                "collisions_mean": "0.0",
+                "snqi_mean": "0.5",
+                "projection_rate": "0.0",
+                "infeasible_rate": "0.0",
+                "execution_mode": "adapter",
+                "execution_detail": "orca_adapter",
+                "planner_command_space": "holonomic_vxy_world",
+                "benchmark_command_space": "holonomic_vxy_world",
+                "projection_policy": "world_velocity_passthrough",
+                "readiness_status": "ok",
+                "readiness_tier": "baseline-ready",
+                "preflight_status": "ok",
+                "learned_policy_contract_status": "not_applicable",
+                "socnav_prereq_policy": "fail-fast",
+            },
+            {
+                "planner_key": "orca",
+                "algo": "orca",
+                "planner_group": "core",
+                "kinematics": "holonomic",
+                "status": "ok",
+                "started_at_utc": "now",
+                "runtime_sec": 1.0,
+                "episodes": 1,
+                "episodes_per_second": 1.0,
+                "success_mean": "0.7",
+                "collisions_mean": "0.0",
+                "snqi_mean": "0.4",
+                "projection_rate": "0.0",
+                "infeasible_rate": "0.0",
+                "execution_mode": "adapter",
+                "execution_detail": "orca_adapter",
+                "planner_command_space": "holonomic_vxy_world",
+                "benchmark_command_space": "holonomic_vxy_world",
+                "projection_policy": "world_velocity_passthrough",
+                "readiness_status": "ok",
+                "readiness_tier": "baseline-ready",
+                "preflight_status": "ok",
+                "learned_policy_contract_status": "not_applicable",
+                "socnav_prereq_policy": "fail-fast",
+            },
+        ],
+    }
+
+    write_campaign_report(report_path, payload)
+    report_text = report_path.read_text(encoding="utf-8")
+
+    assert "## Fairness Contract" in report_text
+    assert "Ranking claim allowed: `True`" in report_text
+    assert "Fair subset size: `2`" in report_text
+    assert "Excluded planners: `0`" in report_text
+
+
+def test_write_campaign_report_fairness_blocks_mismatched(tmp_path: Path) -> None:
+    """Campaign report fairness contract blocks ranking claims for mismatched planners."""
+    report_path = tmp_path / "campaign_report.md"
+    payload = {
+        "campaign": {"campaign_id": "c1"},
+        "warnings": [],
+        "planner_rows": [
+            {
+                "planner_key": "goal",
+                "algo": "goal",
+                "planner_group": "core",
+                "kinematics": "holonomic",
+                "status": "ok",
+                "started_at_utc": "now",
+                "runtime_sec": 1.0,
+                "episodes": 1,
+                "episodes_per_second": 1.0,
+                "success_mean": "0.8",
+                "collisions_mean": "0.0",
+                "snqi_mean": "0.5",
+                "projection_rate": "0.0",
+                "infeasible_rate": "0.0",
+                "execution_mode": "native",
+                "execution_detail": "direct_holonomic_world_velocity",
+                "planner_command_space": "holonomic_vxy_world",
+                "benchmark_command_space": "holonomic_vxy_world",
+                "projection_policy": "world_velocity_passthrough",
+                "readiness_status": "ok",
+                "readiness_tier": "baseline-ready",
+                "preflight_status": "ok",
+                "learned_policy_contract_status": "not_applicable",
+                "socnav_prereq_policy": "fail-fast",
+            },
+            {
+                "planner_key": "ppo",
+                "algo": "ppo",
+                "planner_group": "learning",
+                "kinematics": "holonomic",
+                "status": "ok",
+                "started_at_utc": "now",
+                "runtime_sec": 1.0,
+                "episodes": 1,
+                "episodes_per_second": 1.0,
+                "success_mean": "0.7",
+                "collisions_mean": "0.0",
+                "snqi_mean": "0.4",
+                "projection_rate": "0.0",
+                "infeasible_rate": "0.0",
+                "execution_mode": "mixed",
+                "execution_detail": "ppo_adapter",
+                "planner_command_space": "holonomic_vxy_world",
+                "benchmark_command_space": "holonomic_vxy_world",
+                "projection_policy": "world_velocity_passthrough",
+                "readiness_status": "ok",
+                "readiness_tier": "experimental",
+                "preflight_status": "ok",
+                "learned_policy_contract_status": "not_applicable",
+                "socnav_prereq_policy": "fail-fast",
+            },
+        ],
+    }
+
+    write_campaign_report(report_path, payload)
+    report_text = report_path.read_text(encoding="utf-8")
+
+    assert "## Fairness Contract" in report_text
+    assert "Ranking claim allowed: `False`" in report_text
+    assert "Excluded planners:" in report_text
+
+
 def test_planner_report_row_uses_nested_planner_kinematics_execution_mode() -> None:
     """Row builder should read execution_mode from nested planner_kinematics payload."""
     planner = PlannerSpec(key="prediction_planner", algo="prediction_planner")

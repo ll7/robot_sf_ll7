@@ -25,7 +25,7 @@ base_planner:
 
 # 2x2 factorial design.
 # Factor A: trajectory prediction consumed by the planner — OFF / ON
-# Factor B: explicit constraint + local-minimum handling — OFF / ON
+# Factor B: hard pedestrian constraints versus a shared soft-clearance cost — OFF / ON
 factorial_arms:
   - key: A0_B0
     label: "prediction_OFF_constraints_OFF"
@@ -55,9 +55,10 @@ factorial_arms:
 # Scenario matrix: all four arms share the same scenario distribution and
 # seed sets so the only difference between arms is the factorial toggles.
 scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+scenario_matrix_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
 seed_policy:
   mode: seed-set
-  seed_set: eval
+  seed_set: paper_eval_s30
   seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
 
 # Primary endpoints (typed ledger). These match the issue specification.
@@ -91,8 +92,8 @@ multiplicity_policy:
 seed_budget:
   mode: paired
   pairing_key_fields: [scenario_id, seed]
-  seed_set: eval
-  seeds_per_arm: 3
+  seed_set: paper_eval_s30
+  seeds_per_arm: 30
 
 # Stop rules.
 stop_rules:

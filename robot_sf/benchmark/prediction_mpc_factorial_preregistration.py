@@ -7,6 +7,7 @@ and emits deterministic planned rows. It does not execute benchmark episodes.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -57,6 +58,8 @@ def validate_factorial_preregistration_config(
     _reject_transient_routing_state(normalized)
     _validate_factorial_arms(normalized.get("factorial_arms"), config_path=config_path)
     _validate_seed_policy(normalized.get("seed_policy"))
+    _validate_seed_budget(normalized.get("seed_budget"))
+    _validate_scenario_provenance(normalized, config_path=config_path)
     return normalized
 
 
@@ -168,13 +171,30 @@ def validate_arm_configs(config_path: str | Path) -> dict[str, Any]:
         try:
             algo_cfg = yaml.safe_load(algo_config_path.read_text(encoding="utf-8")) or {}
             pc_config = build_prediction_mpc_config(algo_cfg)
+            expected = {
+                "A0_B0": ("none", False, 4.5),
+                "A0_B1": ("none", True, 0.0),
+                "A1_B0": ("constant_velocity", False, 4.5),
+                "A1_B1": ("constant_velocity", True, 0.0),
+            }.get(key)
+            actual = (
+                pc_config.predictor_backend,
+                pc_config.hard_pedestrian_constraints_enabled,
+                pc_config.pedestrian_clearance_weight,
+            )
+            if expected is None or actual != expected:
+                raise ValueError(
+                    f"{key} must be {expected!r} for "
+                    "(predictor_backend, hard_constraints, pedestrian_clearance_weight); "
+                    f"got {actual!r}"
+                )
             adapter = PredictionMPCPlannerAdapter(config=pc_config)
             diag = adapter.diagnostics()
             results[key] = {
                 "valid": True,
                 "predictor_backend": pc_config.predictor_backend,
                 "hard_pedestrian_constraints_enabled": pc_config.hard_pedestrian_constraints_enabled,
-                "local_min_escape_enabled": pc_config.local_min_escape_enabled,
+                "pedestrian_clearance_weight": pc_config.pedestrian_clearance_weight,
                 "factorial_toggles": diag.get("factorial_toggles", {}),
             }
         except (ValueError, TypeError, KeyError, OSError) as exc:
@@ -221,6 +241,38 @@ def _validate_factorial_arms(value: Any, *, config_path: str | Path | None) -> N
 def _validate_seed_policy(value: Any) -> None:
     if not isinstance(value, Mapping):
         raise ValueError("seed_policy must be mapping")
+    if value.get("mode") != "seed-set" or value.get("seed_set") != "paper_eval_s30":
+        raise ValueError("seed_policy must select the preregistered paper_eval_s30 seed set")
+
+
+def _validate_seed_budget(value: Any) -> None:
+    if not isinstance(value, Mapping):
+        raise ValueError("seed_budget must be mapping")
+    if value.get("mode") != "paired" or value.get("seed_set") != "paper_eval_s30":
+        raise ValueError("seed_budget must use paired paper_eval_s30")
+    if int(value.get("seeds_per_arm", 0)) != 30:
+        raise ValueError("seed_budget.seeds_per_arm must be 30")
+
+
+def _validate_scenario_provenance(
+    config: Mapping[str, Any], *, config_path: str | Path | None
+) -> None:
+    expected_digest = str(config.get("scenario_matrix_sha256", ""))
+    if len(expected_digest) != 64 or any(
+        char not in "0123456789abcdef" for char in expected_digest
+    ):
+        raise ValueError("scenario_matrix_sha256 must be a lowercase SHA-256 digest")
+    matrix_path = str(config.get("scenario_matrix", ""))
+    if not matrix_path:
+        raise ValueError("scenario_matrix must be set")
+    if config_path is None:
+        return
+    resolved = _resolve_existing_path(matrix_path, config_path=Path(config_path))
+    if not resolved.is_file():
+        raise ValueError(f"scenario_matrix path does not exist: {resolved}")
+    actual_digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+    if actual_digest != expected_digest:
+        raise ValueError("scenario_matrix_sha256 does not match scenario_matrix")
 
 
 def _normalized_arms(arms: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:

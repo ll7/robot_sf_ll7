@@ -1,0 +1,82 @@
+schema_version: release-checksum-manifest.v1
+release_id: benchmark_release_0_0_2
+release_tag: "0.0.2"
+release_url: "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.2"
+doi_url: "https://doi.org/10.5281/zenodo.19563812"
+target_commit: f7ebdcae2375d085e925213197a75a386e26a79c
+tag_commit: cbeaca610
+source_branch: release/v0.0.2-scoped-7-planners
+generated_at_utc: "2026-07-12T07:05:05Z"
+generated_by: scripts/repro/verify_release_checksums.py
+
+artifact_set:
+  bundle_archive:
+    name: paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz
+    url: "https://github.com/ll7/robot_sf_ll7/releases/download/0.0.2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz"
+    sha256: 64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90
+    size_bytes: 544734
+    description: >
+      Publication bundle containing release metadata, configuration files,
+      raw episode JSONL files, aggregate CSV/JSON reports, and manifests
+      for the frozen 47-scenario, three-seed, differential-drive campaign.
+
+embedded_artifacts:
+  publication_manifest:
+    path_in_archive: paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/publication_manifest.json
+    sha256: 29af662569e83a201a3ff8b2316a7a1f60d66f1f7cff042cb412a6c9875a56bc
+    description: Publication manifest with campaign metadata and artifact inventory.
+  checksums:
+    path_in_archive: paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/checksums.sha256
+    sha256: a7ba5f7b4405d6becd493963506563b80891a0fefa78675683a8959e22682904
+    description: SHA-256 checksums for all files inside the publication bundle.
+  snqi_diagnostics_json:
+    path_in_archive: paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload/reports/snqi_diagnostics.json
+    sha256: aba8803dccde08fb86a86fbb34962928656a20ed4e1ac9dd8df181efa3220c6f
+    description: SNQI diagnostics in JSON format.
+  snqi_diagnostics_md:
+    path_in_archive: paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle/payload/reports/snqi_diagnostics.md
+    sha256: dbb178d7240a52f79b7e4d8117b9344d728310b980c5aeefffd660376b5e0224
+    description: SNQI diagnostics in Markdown format.
+
+campaign:
+  campaign_id: paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316
+  name: paper_experiment_matrix_7planners_v1
+  scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_matrix_hash: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+  total_episodes: 987
+  successful_runs: 7
+  total_runs: 7
+  runtime_sec: 681.3386159999936
+
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  resolved_seeds: [111, 112, 113]
+  repeat_count_per_planner_seed: 47
+
+planners:
+  - goal
+  - orca
+  - ppo
+  - prediction_planner
+  - sacadrl
+  - social_force
+  - socnav_sampling
+
+reproducibility_contract:
+  exact_match_planners: [goal, ppo, sacadrl, social_force, socnav_sampling]
+  borderline_planners:
+    - name: orca
+      tolerance: "±0.0071 (1/141 episodes)"
+    - name: prediction_planner
+      tolerance: "±0.0071 (1/141 episodes)"
+  nondeterministic_metrics:
+    - metric: near_misses_mean
+      source: pysocialforce.forces @njit(fastmath=True)
+      tolerance: "±0.01–0.31 per run"
+      bounded_by: snqi_near_miss_propagation_bound
+
+reference_documentation:
+  - docs/benchmark_release_0_0_2_reproduction.md
+  - docs/benchmark_release_reproducibility.md
+  - docs/experiments/publication/20260414_benchmark_release_0_0_2/release_metadata.json

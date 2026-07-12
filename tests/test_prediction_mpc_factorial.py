@@ -58,42 +58,42 @@ class TestPredictionMPCFactorialConfig:
     def test_default_config_has_factorial_fields(self):
         config = PredictionMPCConfig()
         assert config.hard_pedestrian_constraints_enabled is True
-        assert config.local_min_escape_enabled is False
-        assert config.local_min_escape_distance == 2.0
-        assert config.local_min_escape_speed_threshold == 0.05
+        assert config.pedestrian_clearance_weight == 0.0
 
     def test_build_config_from_yaml_A0_B0(self):
         cfg = {
             "predictor_backend": "none",
             "hard_pedestrian_constraints_enabled": False,
-            "local_min_escape_enabled": False,
+            "pedestrian_clearance_weight": 4.5,
         }
         config = build_prediction_mpc_config(cfg)
         assert config.predictor_backend == "none"
         assert config.hard_pedestrian_constraints_enabled is False
-        assert config.local_min_escape_enabled is False
+        assert config.pedestrian_clearance_weight == 4.5
 
     def test_build_config_from_yaml_A1_B1(self):
         cfg = {
             "predictor_backend": "constant_velocity",
             "hard_pedestrian_constraints_enabled": True,
-            "local_min_escape_enabled": True,
-            "local_min_escape_distance": 2.0,
-            "local_min_escape_speed_threshold": 0.05,
+            "pedestrian_clearance_weight": 0.0,
         }
         config = build_prediction_mpc_config(cfg)
         assert config.predictor_backend == "constant_velocity"
         assert config.hard_pedestrian_constraints_enabled is True
-        assert config.local_min_escape_enabled is True
+        assert config.pedestrian_clearance_weight == 0.0
 
     def test_build_config_string_bool_parsing(self):
         cfg = {
             "hard_pedestrian_constraints_enabled": "true",
-            "local_min_escape_enabled": "off",
+            "pedestrian_clearance_weight": "0.0",
         }
         config = build_prediction_mpc_config(cfg)
         assert config.hard_pedestrian_constraints_enabled is True
-        assert config.local_min_escape_enabled is False
+        assert config.pedestrian_clearance_weight == 0.0
+
+    def test_soft_factor_b_requires_positive_pedestrian_clearance_weight(self):
+        with pytest.raises(ValueError, match="soft pedestrian clearance"):
+            PredictionMPCConfig(hard_pedestrian_constraints_enabled=False)
 
 
 class TestNullPedestrianPredictor:
@@ -156,9 +156,35 @@ class TestFactorAToggle:
         )
         assert len(adapter._optimizer_constraints(context)) == 1
 
+    def test_prediction_off_freezes_soft_cost_pedestrians(self):
+        frozen_adapter = PredictionMPCPlannerAdapter(
+            config=PredictionMPCConfig(
+                predictor_backend="none",
+                hard_pedestrian_constraints_enabled=False,
+                pedestrian_clearance_weight=4.5,
+            )
+        )
+        moving_adapter = PredictionMPCPlannerAdapter(
+            config=PredictionMPCConfig(
+                predictor_backend="constant_velocity",
+                hard_pedestrian_constraints_enabled=False,
+                pedestrian_clearance_weight=4.5,
+            )
+        )
+        positions = np.array([[1.0, 0.0]])
+        velocities = np.array([[0.4, 0.0]])
+
+        assert np.array_equal(
+            frozen_adapter._predict_pedestrians(positions, velocities, step_idx=2), positions
+        )
+        assert np.array_equal(
+            moving_adapter._predict_pedestrians(positions, velocities, step_idx=2),
+            np.array([[1.3, 0.0]]),
+        )
+
 
 class TestFactorBToggle:
-    """Test constraint + local-minimum handling ON/OFF toggle."""
+    """Test hard-vs-soft pedestrian-clearance handling."""
 
     @pytest.mark.parametrize("predictor_backend", ["none", "constant_velocity"])
     def test_constraints_off_arms_remain_functional(self, predictor_backend: str):
@@ -166,7 +192,7 @@ class TestFactorBToggle:
         config = PredictionMPCConfig(
             predictor_backend=predictor_backend,
             hard_pedestrian_constraints_enabled=False,
-            local_min_escape_enabled=False,
+            pedestrian_clearance_weight=4.5,
         )
         adapter = PredictionMPCPlannerAdapter(config=config)
 
@@ -181,12 +207,14 @@ class TestFactorBToggle:
         config = PredictionMPCConfig(
             predictor_backend="constant_velocity",
             hard_pedestrian_constraints_enabled=False,
+            pedestrian_clearance_weight=4.5,
         )
         adapter = PredictionMPCPlannerAdapter(config=config)
         obs = _minimal_observation()
         adapter.plan(obs)
         diag = adapter.diagnostics()
         assert diag["factorial_toggles"]["hard_pedestrian_constraints_enabled"] is False
+        assert diag["factorial_toggles"]["pedestrian_clearance_weight"] == 4.5
 
     def test_constraints_enabled_returns_nonempty(self):
         config = PredictionMPCConfig(
@@ -198,31 +226,6 @@ class TestFactorBToggle:
         adapter.plan(obs)
         diag = adapter.diagnostics()
         assert diag["factorial_toggles"]["hard_pedestrian_constraints_enabled"] is True
-
-    def test_local_min_escape_disabled(self):
-        config = PredictionMPCConfig(
-            predictor_backend="constant_velocity",
-            local_min_escape_enabled=False,
-        )
-        adapter = PredictionMPCPlannerAdapter(config=config)
-        obs = _minimal_observation()
-        adapter.plan(obs)
-        diag = adapter.diagnostics()
-        assert diag["factorial_toggles"]["local_min_escape_enabled"] is False
-        assert diag["factorial_toggles"]["local_min_escape_count"] == 0
-
-    def test_local_min_escape_enabled_but_robot_moving(self):
-        config = PredictionMPCConfig(
-            predictor_backend="constant_velocity",
-            local_min_escape_enabled=True,
-            local_min_escape_speed_threshold=0.05,
-        )
-        adapter = PredictionMPCPlannerAdapter(config=config)
-        obs = _minimal_observation(ped_positions=[], ped_velocities=[])
-        obs["robot"]["speed"] = [0.5]
-        adapter.plan(obs)
-        diag = adapter.diagnostics()
-        assert diag["factorial_toggles"]["local_min_escape_count"] == 0
 
 
 class TestFactorialDiagnostics:
@@ -238,14 +241,13 @@ class TestFactorialDiagnostics:
         toggles = diag["factorial_toggles"]
         assert "prediction_enabled" in toggles
         assert "hard_pedestrian_constraints_enabled" in toggles
-        assert "local_min_escape_enabled" in toggles
-        assert "local_min_escape_count" in toggles
+        assert "pedestrian_clearance_weight" in toggles
 
     def test_diagnostics_A0_B0_arm(self):
         config = PredictionMPCConfig(
             predictor_backend="none",
             hard_pedestrian_constraints_enabled=False,
-            local_min_escape_enabled=False,
+            pedestrian_clearance_weight=4.5,
         )
         adapter = PredictionMPCPlannerAdapter(config=config)
         obs = _minimal_observation()
@@ -254,13 +256,13 @@ class TestFactorialDiagnostics:
         toggles = diag["factorial_toggles"]
         assert toggles["prediction_enabled"] is False
         assert toggles["hard_pedestrian_constraints_enabled"] is False
-        assert toggles["local_min_escape_enabled"] is False
+        assert toggles["pedestrian_clearance_weight"] == 4.5
 
     def test_diagnostics_A1_B1_arm(self):
         config = PredictionMPCConfig(
             predictor_backend="constant_velocity",
             hard_pedestrian_constraints_enabled=True,
-            local_min_escape_enabled=True,
+            pedestrian_clearance_weight=0.0,
         )
         adapter = PredictionMPCPlannerAdapter(config=config)
         obs = _minimal_observation()
@@ -269,7 +271,7 @@ class TestFactorialDiagnostics:
         toggles = diag["factorial_toggles"]
         assert toggles["prediction_enabled"] is True
         assert toggles["hard_pedestrian_constraints_enabled"] is True
-        assert toggles["local_min_escape_enabled"] is True
+        assert toggles["pedestrian_clearance_weight"] == 0.0
 
 
 class TestFactorialArmConfigs:
@@ -304,19 +306,19 @@ class TestFactorialArmConfigs:
 
         assert configs["A0_B0"].predictor_backend == "none"
         assert configs["A0_B0"].hard_pedestrian_constraints_enabled is False
-        assert configs["A0_B0"].local_min_escape_enabled is False
+        assert configs["A0_B0"].pedestrian_clearance_weight == 4.5
 
         assert configs["A0_B1"].predictor_backend == "none"
         assert configs["A0_B1"].hard_pedestrian_constraints_enabled is True
-        assert configs["A0_B1"].local_min_escape_enabled is True
+        assert configs["A0_B1"].pedestrian_clearance_weight == 0.0
 
         assert configs["A1_B0"].predictor_backend == "constant_velocity"
         assert configs["A1_B0"].hard_pedestrian_constraints_enabled is False
-        assert configs["A1_B0"].local_min_escape_enabled is False
+        assert configs["A1_B0"].pedestrian_clearance_weight == 4.5
 
         assert configs["A1_B1"].predictor_backend == "constant_velocity"
         assert configs["A1_B1"].hard_pedestrian_constraints_enabled is True
-        assert configs["A1_B1"].local_min_escape_enabled is True
+        assert configs["A1_B1"].pedestrian_clearance_weight == 0.0
 
 
 class TestPreregistrationHarness:
@@ -332,6 +334,11 @@ class TestPreregistrationHarness:
         assert len(results) == 4
         for arm_key, result in results.items():
             assert result["valid"] is True, f"{arm_key}: {result.get('error')}"
+
+        assert results["A0_B0"]["pedestrian_clearance_weight"] == 4.5
+        assert results["A1_B0"]["pedestrian_clearance_weight"] == 4.5
+        assert results["A0_B1"]["pedestrian_clearance_weight"] == 0.0
+        assert results["A1_B1"]["pedestrian_clearance_weight"] == 0.0
 
     def test_preregistration_config_is_pinned_in_evidence_registry(self):
         registry_path = (

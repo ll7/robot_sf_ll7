@@ -21,6 +21,4 @@ solver_max_iterations: 40
 warm_start: true
 fallback_to_stop: true
 hard_pedestrian_constraints_enabled: true
-local_min_escape_enabled: true
-local_min_escape_distance: 2.0
-local_min_escape_speed_threshold: 0.05
+pedestrian_clearance_weight: 0.0

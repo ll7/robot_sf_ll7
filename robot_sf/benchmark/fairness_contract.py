@@ -596,6 +596,65 @@ def emit_mismatch_flags(
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Fairness report builder
+# ──────────────────────────────────────────────────────────────────────
+
+
+def build_fairness_report(
+    planner_configs: list[dict[str, Any]],
+) -> FairnessReport:
+    """Build a complete fairness report from campaign planner configs.
+
+    Constructs the capability matrix, detects mismatches, computes the
+    fair-comparison subset, and evaluates the ranking-claim gate.
+
+    Args:
+        planner_configs: List of planner config dicts, each with at minimum
+            ``algo`` (the algorithm key).  Optional keys: ``observation_mode``,
+            ``tuning`` (dict with ``budget_runs`` and ``source``).
+
+    Returns:
+        FairnessReport with matrix, mismatches, fair subset, and verdict.
+    """
+    matrix = build_capability_matrix(planner_configs)
+    mismatches = detect_mismatches(matrix)
+    fair, excluded = fair_comparison_subset(matrix, mismatches)
+    verdict = ranking_claim_gate(matrix)
+    return FairnessReport(
+        matrix=matrix,
+        mismatches=mismatches,
+        fair_subset=fair,
+        excluded_planners=excluded,
+        ranking_claim_allowed=verdict.allowed,
+    )
+
+
+def emit_fairness_annotations(
+    report: FairnessReport,
+    rows: list[dict[str, Any]],
+) -> None:
+    """Annotate campaign report rows with fairness mismatch flags.
+
+    Mutates each row in place, adding ``fairness_mismatch_flags`` and
+    ``fairness_in_ranking_subset`` keys.
+
+    Args:
+        report: The FairnessReport to use for annotation.
+        rows: List of campaign report row dicts.  Each must have ``planner_key``
+            or ``algo`` to identify the planner.
+    """
+    for row in rows:
+        algo = str(row.get("algo", row.get("planner_key", "")))
+        if not algo:
+            continue
+        try:
+            emit_mismatch_flags(report.matrix, row, algo)
+        except KeyError:
+            row["fairness_mismatch_flags"] = []
+            row["fairness_in_ranking_subset"] = False
+
+
+# ──────────────────────────────────────────────────────────────────────
 # Internal helpers
 # ──────────────────────────────────────────────────────────────────────
 
@@ -629,7 +688,9 @@ __all__ = [
     "RankingClaimVerdict",
     "build_capability_entry",
     "build_capability_matrix",
+    "build_fairness_report",
     "detect_mismatches",
+    "emit_fairness_annotations",
     "emit_mismatch_flags",
     "fair_comparison_subset",
     "ranking_claim_gate",

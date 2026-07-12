@@ -111,6 +111,8 @@ knowledge, not every transient iteration detail.
   [skill_consolidation_audit_2026-06-20.md](skill_consolidation_audit_2026-06-20.md)
 * Issue #3472 PR body contract workflow:
   [issue_3472_pr_body_contracts.md](issue_3472_pr_body_contracts.md)
+* Issue #5355 prediction × constraint factorial preregistration:
+  [issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md)
 
 * Issue #3385 camera-ready decomposition closure audit:
 

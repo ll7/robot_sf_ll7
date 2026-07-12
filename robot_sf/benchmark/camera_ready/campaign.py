@@ -67,6 +67,13 @@ from robot_sf.benchmark.camera_ready._util import (
     _synthetic_actuation_metadata,
     _utc_now,
 )
+from robot_sf.benchmark.fairness_contract import (
+    build_capability_matrix,
+    detect_mismatches,
+    emit_mismatch_flags,
+    fair_comparison_subset,
+    ranking_claim_gate,
+)
 from robot_sf.benchmark.fallback_policy import (
     availability_payload,
     classify_planner_row_status,
@@ -1224,6 +1231,23 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         key=lambda row: (row.get("snqi_mean", "nan") == "nan", row.get("planner_key"))
     )
 
+    planner_capability_configs = [
+        {"algo": planner.algo, "observation_mode": planner.observation_mode}
+        for planner in cfg.planners
+        if planner.enabled
+    ]
+    capability_matrix = build_capability_matrix(planner_capability_configs)
+    mismatches = detect_mismatches(capability_matrix)
+    fair_subset, excluded_planners = fair_comparison_subset(capability_matrix, mismatches)
+    fairness_verdict = ranking_claim_gate(capability_matrix)
+    for row in planner_rows:
+        row_algo = str(row.get("algo", ""))
+        if row_algo and row_algo in capability_matrix.entries:
+            try:
+                emit_mismatch_flags(capability_matrix, row, row_algo)
+            except KeyError:
+                pass
+
     summary_json_path = reports_dir / "campaign_summary.json"
     report_md_path = reports_dir / "campaign_report.md"
     credibility_scorecard_json_path = reports_dir / "campaign_credibility_scorecard.json"
@@ -1861,6 +1885,25 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
             "assurance_fragment_json": _repo_relative(reports_dir / "assurance_fragment.json"),
             "assurance_fragment_md": _repo_relative(reports_dir / "assurance_fragment.md"),
             "assurance_fragment_svg": _repo_relative(reports_dir / "assurance_fragment.svg"),
+            "fairness_json": _repo_relative(reports_dir / "fairness_contract.json"),
+        },
+        "fairness": {
+            "capability_matrix": capability_matrix.to_dict(),
+            "ranking_claim_verdict": fairness_verdict.to_dict(),
+            "fair_subset": list(fair_subset),
+            "excluded_planners": list(excluded_planners),
+            "mismatches": [
+                {
+                    "dimension": m.dimension,
+                    "planner_a": m.planner_a,
+                    "planner_b": m.planner_b,
+                    "value_a": m.value_a,
+                    "value_b": m.value_b,
+                    "severity": m.severity,
+                    "description": m.description,
+                }
+                for m in mismatches
+            ],
         },
     }
 
@@ -2047,6 +2090,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         campaign_summary
     )
     _write_json(credibility_scorecard_json_path, campaign_summary["credibility_scorecard"])
+    _write_json(reports_dir / "fairness_contract.json", campaign_summary["fairness"])
     _write_json(summary_json_path, campaign_summary)
     write_campaign_report(report_md_path, campaign_summary)
 

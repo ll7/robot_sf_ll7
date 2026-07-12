@@ -1049,6 +1049,72 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     else:
         lines.append("- No campaign-level warnings.")
 
+    fairness = payload.get("fairness")
+    if isinstance(fairness, dict):
+        verdict = fairness.get("ranking_claim_verdict", {})
+        fair_subset = fairness.get("fair_subset", [])
+        excluded = fairness.get("excluded_planners", [])
+        mismatches = fairness.get("mismatches", [])
+        lines.extend(["", "## Fairness Contract", ""])
+        lines.append(
+            "Matched-capability fairness annotations for cross-planner comparison. "
+            "Hard mismatches (adapter type, observation privilege) block algorithm-ranking "
+            "claims; mismatched rows remain case-study evidence."
+        )
+        lines.append("")
+        lines.append(f"- Ranking claim allowed: **{verdict.get('allowed', 'unknown')}**")
+        lines.append(f"- Hard mismatch count: `{verdict.get('hard_mismatch_count', 0)}`")
+        lines.append(f"- Soft mismatch count: `{verdict.get('soft_mismatch_count', 0)}`")
+        if verdict.get("reason"):
+            lines.append(f"- Verdict: {verdict['reason']}")
+        if fair_subset:
+            lines.append(f"- Fair comparison subset: {', '.join(fair_subset)}")
+        if excluded:
+            lines.append(f"- Excluded from ranking (hard mismatch): {', '.join(excluded)}")
+        if rows:
+            lines.extend(
+                [
+                    "",
+                    "| planner | algo | ranking_subset | mismatch_count | hard_dimensions |",
+                    "|---|---|---|---:|---|",
+                ],
+            )
+            for row in rows:
+                mismatch_flags = row.get("fairness_mismatch_flags", [])
+                hard_dims = sorted(
+                    {
+                        str(m.get("dimension", ""))
+                        for m in mismatch_flags
+                        if isinstance(m, dict) and m.get("severity") == "hard"
+                    }
+                )
+                lines.append(
+                    "| "
+                    f"{_escape_markdown_cell(row.get('planner_key'))} | "
+                    f"{_escape_markdown_cell(row.get('algo'))} | "
+                    f"{_escape_markdown_cell(row.get('fairness_in_ranking_subset', 'N/A'))} | "
+                    f"{len(mismatch_flags)} | "
+                    f"{_escape_markdown_cell(', '.join(hard_dims) if hard_dims else 'none')} |"
+                )
+        if mismatches:
+            lines.extend(
+                [
+                    "",
+                    "### Pairwise Mismatches",
+                    "",
+                    "| dimension | planner_a | planner_b | severity |",
+                    "|---|---|---|---|",
+                ],
+            )
+            for mismatch in mismatches:
+                lines.append(
+                    "| "
+                    f"{_escape_markdown_cell(mismatch.get('dimension'))} | "
+                    f"{_escape_markdown_cell(mismatch.get('planner_a'))} | "
+                    f"{_escape_markdown_cell(mismatch.get('planner_b'))} | "
+                    f"{_escape_markdown_cell(mismatch.get('severity'))} |"
+                )
+
     publication = payload.get("publication_bundle")
     if isinstance(publication, dict):
         lines.extend(

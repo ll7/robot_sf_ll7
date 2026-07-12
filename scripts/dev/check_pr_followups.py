@@ -13,7 +13,6 @@ import json
 import os
 import posixpath
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -425,25 +424,22 @@ def _domain_checklist_errors(section: str) -> tuple[str, ...]:
 
 
 def _verify_open_issues(issues: tuple[str, ...]) -> tuple[str, ...]:
+    from scripts.dev.gh_issue_rest import fetch_issue
+
     errors: list[str] = []
     for issue in issues:
         number = issue.removeprefix("#")
         try:
-            result = subprocess.run(
-                ["gh", "issue", "view", number, "--json", "state", "--jq", ".state"],
-                capture_output=True,
-                text=True,
-                timeout=20,
-                check=False,
-            )
-        except FileNotFoundError:
-            errors.append(f"{issue}: unable to verify open state (gh CLI not found)")
+            issue_number = int(number)
+        except ValueError:
+            errors.append(f"{issue}: unable to verify open state (invalid issue number)")
             continue
-        if result.returncode != 0:
-            detail = (result.stderr or result.stdout).strip()
+        payload = fetch_issue(issue_number)
+        if payload.get("status") != "ok":
+            detail = payload.get("error", "unknown error")
             errors.append(f"{issue}: unable to verify open state ({detail})")
             continue
-        state = result.stdout.strip().upper()
+        state = payload.get("state", "").upper()
         if state != "OPEN":
             errors.append(f"{issue}: state is {state or 'unknown'}, expected OPEN")
     return tuple(errors)
@@ -876,7 +872,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--require-open-issues",
         action="store_true",
-        help="Verify linked follow-up issues are open with gh issue view.",
+        help="Verify linked follow-up issues are open via REST helper (gh_issue_rest.py).",
     )
     parser.add_argument(
         "--changed-files-file",

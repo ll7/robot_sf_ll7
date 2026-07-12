@@ -51,6 +51,12 @@ from robot_sf.benchmark.camera_ready._reporting import (
     build_campaign_credibility_scorecard,
     write_campaign_report,
 )
+from robot_sf.benchmark.camera_ready._resume_plan import (
+    build_resume_plan,
+    emit_resume_plan_log,
+    verify_resume_context,
+    write_resume_plan,
+)
 from robot_sf.benchmark.camera_ready._run_state import _campaign_success_counters
 from robot_sf.benchmark.camera_ready._summaries import (
     _SEED_VARIABILITY_METRICS,
@@ -1142,6 +1148,64 @@ def _finalize_checkpoint_provenance(
             _summarize_checkpoint_runtime(provenance)
 
 
+def _emit_resume_plan_preflight(
+    *,
+    cfg: CampaignConfig,
+    campaign_id: str,
+    config_hash: str,
+    campaign_root: Path,
+    runs_dir: Path,
+    scenarios: list[Any],
+) -> None:
+    """Emit a resume plan before a resumed campaign executes (issue #5392).
+
+    When ``cfg.resume`` is enabled and any arm directory already exists, this
+    verifies the campaign context matches and writes ``resume_plan.json`` so the
+    operator can sanity-check projected walltime.
+
+    Raises:
+        ResumeMismatchError: If the campaign-id or config-hash on disk does not
+            match the current invocation.
+    """
+    if not cfg.resume:
+        return
+
+    has_prior_arms = any(r.is_dir() for r in runs_dir.iterdir()) if runs_dir.exists() else False
+    if not has_prior_arms:
+        return
+
+    # Fail-closed context check before any work begins.
+    verify_resume_context(
+        campaign_root,
+        campaign_id=campaign_id,
+        config_hash=config_hash,
+    )
+
+    # Build plan from existing arm directories.
+    planners = [
+        {
+            "key": planner.key,
+            "enabled": planner.enabled,
+        }
+        for planner in cfg.planners
+    ]
+    kinematics = list(cfg.kinematics_matrix) or ("differential_drive",)
+    verdicts = build_resume_plan(
+        runs_dir,
+        planners=planners,
+        kinematics_matrix=list(kinematics),
+        scenarios=scenarios,
+    )
+
+    emit_resume_plan_log(verdicts)
+    write_resume_plan(
+        campaign_root,
+        config_hash=config_hash,
+        campaign_id=campaign_id,
+        verdicts=verdicts,
+    )
+
+
 def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     cfg: CampaignConfig,
     *,
@@ -1205,6 +1269,18 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
 
     runs_dir = campaign_root / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
+
+    # Resume-plan preflight (issue #5392): when cfg.resume is enabled and the campaign
+    # root already exists with prior data, verify context and emit a plan before any
+    # arm executes, so the operator knows what runs will be skipped vs continued.
+    _emit_resume_plan_preflight(
+        cfg=cfg,
+        campaign_id=campaign_id,
+        config_hash=str(config_hash),
+        campaign_root=campaign_root,
+        runs_dir=runs_dir,
+        scenarios=scenarios,
+    )
 
     kinematics_matrix = _kinematics_matrix_or_default(cfg.kinematics_matrix)
     planner_run_results = _run_campaign_planner_matrix(

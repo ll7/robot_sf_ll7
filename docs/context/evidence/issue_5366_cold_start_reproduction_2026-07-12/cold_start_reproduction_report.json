@@ -27,6 +27,7 @@
   "overall_verdict": "partial",
   "release_id": "benchmark_release_0_0_2",
   "release_tag": "0.0.2",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema": "cold-start-reproduction-report.v1",
   "steps": {
     "build": {

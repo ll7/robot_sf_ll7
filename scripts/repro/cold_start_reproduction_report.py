@@ -331,6 +331,7 @@ def generate_reproduction_report(
 
     report: dict[str, Any] = {
         "schema": "cold-start-reproduction-report.v1",
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "created_at_utc": _utc_now_iso(),
         "release_tag": tag,
         "release_id": manifest.get("release_id"),

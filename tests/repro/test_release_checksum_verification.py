@@ -398,6 +398,7 @@ class TestReproductionReport:
                 checksums_only=True,
             )
             assert report["schema"] == "cold-start-reproduction-report.v1"
+            assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
             assert report["release_tag"] == "0.0.2"
 
     def test_report_records_environment(self, tmp_path: Path) -> None:
@@ -607,6 +608,7 @@ class TestDurableEvidenceReport:
     def test_evidence_report_has_schema(self) -> None:
         report = _read_json(DURABLE_EVIDENCE_REPORT)
         assert report["schema"] == "cold-start-reproduction-report.v1"
+        assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
 
     def test_evidence_report_pins_the_checksum_manifest(self) -> None:
         report = _read_json(DURABLE_EVIDENCE_REPORT)

@@ -57,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5372 fidelity smoke + arm-config identity checks for the #5355 factorial.** Adds two CPU-only, tiny-horizon test modules under `tests/planner/`: a toggle-effect fidelity smoke (`test_prediction_mpc_factorial_fidelity_smoke.py`) that runs all four canonical arm configs (`configs/algos/prediction_mpc_factorial_A{0,1}_B{0,1}.yaml`) on two named scenarios and asserts each factor flip changes the decision trace, the toggles are orthogonal, and the B-OFF arms complete episodes as functional soft-cost planners (prereg §6); and a static preflight identity test (`test_prediction_mpc_factorial_arm_identity.py`) asserting the four arms share the observation contract, kinematics, and runtime budget and differ only in the two factor flags plus the implied soft pedestrian weight (prereg §2, §7). Test-only; no campaign, GPU, or metric change.
+
 * **issue #4978 scenario flakiness audit applied to a real multi-planner campaign.** Ships a
   tracked, compact subset of a real benchmark campaign (4 planners × 5 scenarios × 20 seeds = 400
   episodes, with provenance) under

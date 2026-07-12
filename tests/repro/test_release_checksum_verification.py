@@ -345,6 +345,41 @@ class TestVerificationScript:
 
         assert check_call.call_args.args[0][3] == "1.2.3"
 
+    def test_missing_downloaded_bundle_returns_a_structured_error(self, tmp_path: Path) -> None:
+        """A download that produces no regular file cannot reach checksum verification."""
+        from scripts.repro.verify_release_checksums import verify_release
+
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(
+            yaml.dump(
+                {
+                    "release_tag": "test",
+                    "artifact_set": {
+                        "bundle_archive": {
+                            "url": "https://example.com/missing.tar.gz",
+                            "sha256": "0" * 64,
+                        }
+                    },
+                }
+            )
+        )
+        missing_bundle = tmp_path / "output" / "missing.tar.gz"
+        with patch(
+            "scripts.repro.verify_release_checksums._download_bundle",
+            return_value=missing_bundle,
+        ):
+            report = verify_release(
+                manifest_path=manifest_path,
+                bundle_path=None,
+                output_dir=tmp_path / "output",
+                download=True,
+            )
+
+        assert report["overall_verdict"] == "error"
+        assert report["errors"] == [
+            f"Bundle download failed: Downloaded bundle file not found: {missing_bundle}"
+        ]
+
 
 class TestReproductionReport:
     """Tests for the cold-start reproduction report generator."""

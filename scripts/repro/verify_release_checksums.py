@@ -124,7 +124,7 @@ def _list_archive_contents(bundle_path: Path) -> list[str]:
         return sorted(tar.getnames())
 
 
-def verify_release(
+def verify_release(  # noqa: C901 - each manifest/download/checksum failure needs a structured report.
     manifest_path: Path,
     bundle_path: Path | None,
     output_dir: Path,
@@ -183,7 +183,9 @@ def verify_release(
             return report
         try:
             bundle_path = _download_bundle(bundle_url, output_dir, release_tag)
-        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+            if not bundle_path.is_file():
+                raise FileNotFoundError(f"Downloaded bundle file not found: {bundle_path}")
+        except (subprocess.CalledProcessError, OSError) as exc:
             report["errors"].append(f"Bundle download failed: {exc}")
             report["overall_verdict"] = "error"
             return report

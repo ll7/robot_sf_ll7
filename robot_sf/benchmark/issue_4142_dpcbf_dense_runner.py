@@ -162,6 +162,19 @@ _EXECUTION_INPUT_BOUNDS = {
 }
 
 
+def _resolve_resume(block: dict[str, Any], blockers: list[str]) -> bool:
+    """Validate the resume flag without coercing strings into execution semantics.
+
+    Returns:
+        Valid boolean resume value, or the safe default after recording a blocker.
+    """
+    resume = block.get("resume", DEFAULT_EXECUTION_INPUTS.resume)
+    if not isinstance(resume, bool):
+        blockers.append(f"packet execution.resume must be a boolean, got {resume!r}")
+        return DEFAULT_EXECUTION_INPUTS.resume
+    return resume
+
+
 @dataclass(frozen=True, slots=True)
 class ArmJobPlan:
     """One resolved benchmark job for a single predeclared comparison arm."""
@@ -301,7 +314,7 @@ def _resolve_execution_inputs(packet: dict[str, Any]) -> tuple[DenseExecutionInp
     if bool(block.get("video_enabled", False)):
         blockers.append("packet execution.video_enabled must be false (bounded diagnostic run)")
 
-    resume = bool(block.get("resume", DEFAULT_EXECUTION_INPUTS.resume))
+    resume = _resolve_resume(block, blockers)
 
     inputs = DenseExecutionInputs(
         base_seed=int(values["base_seed"]),
@@ -485,7 +498,13 @@ def _git_provenance(repo_root: Path) -> tuple[str, bool]:
         return "unknown", True
 
 
-def _provenance_key(plan: DenseComparisonRunPlan, git_sha: str) -> str:
+def _provenance_key(
+    plan: DenseComparisonRunPlan,
+    git_sha: str,
+    *,
+    git_dirty: bool,
+    schema_path: str | Path,
+) -> str:
     """Build a stable provenance key that must match for a repeated run to safely resume.
 
     Combines the packet/plan schema lineage, the shared algorithm, every arm's config, the
@@ -499,13 +518,20 @@ def _provenance_key(plan: DenseComparisonRunPlan, git_sha: str) -> str:
     parts = [
         plan.packet_schema_version,
         plan.schema_version,
+        str(plan.packet_path),
         str(plan.algorithm),
         str(plan.scenario_manifest),
+        f"output_dir={plan.output_dir}",
         f"seed={inputs.base_seed}",
         f"repeats={inputs.repeats}",
         f"horizon={inputs.horizon}",
         f"dt={inputs.dt}",
+        f"workers={inputs.workers}",
+        f"video={inputs.video_enabled}",
+        f"resume={inputs.resume}",
+        f"schema_path={Path(schema_path).as_posix()}",
         git_sha,
+        f"git_dirty={git_dirty}",
     ]
     parts.extend(f"{job.arm_key}:{job.algorithm_config}" for job in plan.arms)
     return "|".join(parts)
@@ -593,16 +619,24 @@ def execute_run_plan(
     root = Path(repo_root)
     output_dir_abs = _abs_under_root(root, plan.output_dir)
     manifest_path = output_dir_abs / EXECUTION_MANIFEST_FILENAME
+    schema_abs = _abs_under_root(root, str(schema_path)).resolve()
 
     git_sha, git_dirty = _git_provenance(root)
-    provenance_key = _provenance_key(plan, git_sha)
+    provenance_key = _provenance_key(
+        plan,
+        git_sha,
+        git_dirty=git_dirty,
+        schema_path=schema_abs,
+    )
 
     # Gate 3: provenance-safe resume. A pre-existing manifest with a different key means the
     # on-disk artifacts came from an incompatible run; fail closed instead of mixing them.
     if manifest_path.is_file():
         try:
             prior = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
+            if not isinstance(prior, dict):
+                raise ValueError("manifest JSON is not a dictionary")
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
             raise DenseComparisonProvenanceMismatchError(
                 f"existing execution manifest {manifest_path} is unreadable: {exc}"
             ) from exc
@@ -615,7 +649,6 @@ def execute_run_plan(
             )
 
     inputs = plan.execution_inputs
-    schema_abs = _abs_under_root(root, str(schema_path))
     clock = now_fn or (lambda: datetime.now(UTC))
     run_batch = run_batch_fn or _default_run_batch()
 

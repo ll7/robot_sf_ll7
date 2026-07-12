@@ -8,7 +8,7 @@
 schema_version: robot_sf.issue_4142_dpcbf_dense_comparison.v1
 # Canonical run command, mirrored from the comment above as a structured field so the
 # readiness preflight can surface it verbatim. It is the real issue-scoped executor CLI
-# (#5419): the generic `benchmark.cli run` never accepted this packet's --config form.
+# (#5419): the generic benchmark CLI does not accept this packet invocation.
 # Execution is authorization-gated (see robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py).
 canonical_command: uv run python scripts/tools/run_issue_4142_dpcbf_dense_comparison.py --execute --authorization RSF-DPCBF-DENSE-20260712
 # Fixed bounded execution inputs for the local three-arm run. Deliberately small: a bounded

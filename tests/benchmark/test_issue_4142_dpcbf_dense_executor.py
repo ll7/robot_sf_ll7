@@ -24,6 +24,8 @@ from __future__ import annotations
 import copy
 import json
 import pathlib
+from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -40,6 +42,7 @@ from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import (
     REQUIRED_AUTHORIZATION_ID,
     DenseComparisonExecutionGatedError,
     DenseComparisonProvenanceMismatchError,
+    _resolve_execution_inputs,
     build_run_plan,
     execute_run_plan,
 )
@@ -255,11 +258,13 @@ def test_manifest_contains_required_provenance_fields(tmp_path: pathlib.Path) ->
     """The persisted manifest carries the full provenance the issue requires."""
     out_dir = tmp_path / "out"
     plan = build_run_plan(repo_root=REPO_ROOT, packet_path=PACKET_PATH, output_dir=out_dir)
+    deterministic_now = datetime(2026, 7, 12, 12, 0, 0, tzinfo=UTC)
     execute_run_plan(
         plan,
         authorization=REQUIRED_AUTHORIZATION_ID,
         repo_root=REPO_ROOT,
         run_batch_fn=_RecordingRunBatch(),
+        now_fn=lambda: deterministic_now,
     )
     payload = json.loads((out_dir / EXECUTION_MANIFEST_FILENAME).read_text(encoding="utf-8"))
 
@@ -269,7 +274,8 @@ def test_manifest_contains_required_provenance_fields(tmp_path: pathlib.Path) ->
     assert payload["authorization_id"] == REQUIRED_AUTHORIZATION_ID
     assert "git_sha" in payload and isinstance(payload["git_dirty"], bool)
     assert payload["effective_arguments"]["horizon"] == plan.execution_inputs.horizon
-    assert payload["started_at"] and payload["ended_at"]
+    assert payload["started_at"] == "2026-07-12T12:00:00+00:00"
+    assert payload["ended_at"] == "2026-07-12T12:00:00+00:00"
     assert payload["status"] == "complete"
     # Fail-closed exclusion is carried into the manifest.
     for status in ("fallback", "degraded", "failed", "ineligible"):
@@ -375,6 +381,57 @@ def test_repeat_run_mismatched_provenance_fails_closed(tmp_path: pathlib.Path) -
             repo_root=REPO_ROOT,
             run_batch_fn=_RecordingRunBatch(),
         )
+
+
+def test_non_mapping_manifest_fails_closed(tmp_path: pathlib.Path) -> None:
+    """A syntactically valid non-object manifest cannot be used for resume."""
+    out_dir = tmp_path / "out"
+    plan = build_run_plan(repo_root=REPO_ROOT, packet_path=PACKET_PATH, output_dir=out_dir)
+    execute_run_plan(
+        plan,
+        authorization=REQUIRED_AUTHORIZATION_ID,
+        repo_root=REPO_ROOT,
+        run_batch_fn=_RecordingRunBatch(),
+    )
+    (out_dir / EXECUTION_MANIFEST_FILENAME).write_text("[]", encoding="utf-8")
+
+    with pytest.raises(DenseComparisonProvenanceMismatchError, match="not a dictionary"):
+        execute_run_plan(
+            plan,
+            authorization=REQUIRED_AUTHORIZATION_ID,
+            repo_root=REPO_ROOT,
+            run_batch_fn=_RecordingRunBatch(),
+        )
+
+
+def test_changed_execution_inputs_fail_closed_on_resume(tmp_path: pathlib.Path) -> None:
+    """Changed worker/schema provenance cannot reuse an existing execution manifest."""
+    out_dir = tmp_path / "out"
+    plan = build_run_plan(repo_root=REPO_ROOT, packet_path=PACKET_PATH, output_dir=out_dir)
+    execute_run_plan(
+        plan,
+        authorization=REQUIRED_AUTHORIZATION_ID,
+        repo_root=REPO_ROOT,
+        run_batch_fn=_RecordingRunBatch(),
+    )
+    changed_inputs = replace(plan.execution_inputs, workers=2)
+    changed_plan = replace(plan, execution_inputs=changed_inputs)
+
+    with pytest.raises(DenseComparisonProvenanceMismatchError):
+        execute_run_plan(
+            changed_plan,
+            authorization=REQUIRED_AUTHORIZATION_ID,
+            repo_root=REPO_ROOT,
+            schema_path=tmp_path / "alternate-episode-schema.json",
+            run_batch_fn=_RecordingRunBatch(),
+        )
+
+
+def test_non_boolean_resume_is_a_plan_blocker() -> None:
+    """String values cannot silently change resume/append semantics."""
+    inputs, blockers = _resolve_execution_inputs({"execution": {"resume": "false"}})
+    assert inputs.resume is True
+    assert any("resume must be a boolean" in blocker for blocker in blockers)
 
 
 # --- Smoke: real run_batch integration (reduced horizon/repeats, no performance claim) ---

@@ -1567,7 +1567,11 @@ def _run_batch_sequential(  # noqa: C901, D417
                     pass
 
             # Circuit breaker logic
-            if abort_metadata is None and circuit_breaker_threshold > 0:
+            if (
+                abort_metadata is None
+                and circuit_breaker_threshold is not None
+                and circuit_breaker_threshold > 0
+            ):
                 sig = _error_signature(e)
                 if cb_tracker["signature"] is None:
                     cb_tracker["signature"] = sig

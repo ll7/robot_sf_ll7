@@ -46,9 +46,16 @@ def _gh(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:
         return subprocess.CompletedProcess(
             args=["gh", *args], returncode=124, stdout="", stderr="gh timed out"
         )
+    except OSError as exc:
+        return subprocess.CompletedProcess(
+            args=["gh", *args],
+            returncode=127,
+            stdout="",
+            stderr=f"gh not executable: {exc}",
+        )
 
 
-def latest_completed_run(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
+def latest_completed_run(runs: list[Any]) -> dict[str, Any] | None:
     """Return the newest run whose ``status`` is ``completed``.
 
     ``runs`` is the list ``gh run list --json`` returns (newest first). We
@@ -56,12 +63,14 @@ def latest_completed_run(runs: list[dict[str, Any]]) -> dict[str, Any] | None:
     then take the first ``completed`` entry. In-progress / queued runs are
     skipped: an unfinished run is not evidence of green OR red.
     """
-    completed = [r for r in runs if str(r.get("status")) == "completed"]
+    completed = [
+        run for run in runs if isinstance(run, dict) and str(run.get("status")) == "completed"
+    ]
     completed.sort(key=lambda r: str(r.get("createdAt", "")), reverse=True)
     return completed[0] if completed else None
 
 
-def decide(runs: list[dict[str, Any]]) -> tuple[bool, dict[str, Any] | None]:
+def decide(runs: list[Any]) -> tuple[bool, dict[str, Any] | None]:
     """(is_green, deciding_run). Green iff the latest completed run succeeded."""
     run = latest_completed_run(runs)
     if run is None:
@@ -93,7 +102,10 @@ def fetch_runs(
     )
     if proc.returncode != 0:
         raise RuntimeError(f"gh run list failed: {proc.stderr.strip() or proc.returncode}")
-    return json.loads(proc.stdout or "[]")
+    data = json.loads(proc.stdout or "[]")
+    if not isinstance(data, list):
+        raise RuntimeError(f"Unexpected JSON response type: {type(data).__name__}")
+    return data
 
 
 def main() -> int:

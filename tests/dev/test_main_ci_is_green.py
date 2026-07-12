@@ -8,7 +8,12 @@ so it gets an explicit test.
 
 from __future__ import annotations
 
-from scripts.dev.main_ci_is_green import decide, latest_completed_run
+import subprocess
+
+import pytest
+
+from scripts.dev import main_ci_is_green
+from scripts.dev.main_ci_is_green import decide, fetch_runs, latest_completed_run
 
 
 def _run(rid: int, status: str, conclusion: str | None, created: str) -> dict:
@@ -98,3 +103,42 @@ def test_unsorted_input_still_picks_newest_completed() -> None:
     is_green, run = decide(runs)
     assert is_green is True
     assert run["databaseId"] == 3
+
+
+def test_non_mapping_entries_are_ignored() -> None:
+    """Malformed list entries cannot prevent a conservative decision."""
+    is_green, run = decide(
+        ["not a run", None, _run(1, "completed", "success", "2026-07-12T12:00:00Z")]
+    )
+    assert is_green is True
+    assert run is not None
+    assert run["databaseId"] == 1
+
+
+@pytest.mark.parametrize("payload", ["null", '{"message": "bad credentials"}'])
+def test_fetch_runs_rejects_non_list_json(monkeypatch: pytest.MonkeyPatch, payload: str) -> None:
+    """Unexpected API JSON reaches main's clean fail-closed path."""
+    monkeypatch.setattr(
+        main_ci_is_green,
+        "_gh",
+        lambda *_args, **_kwargs: subprocess.CompletedProcess(
+            args=["gh"], returncode=0, stdout=payload, stderr=""
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="Unexpected JSON response type"):
+        fetch_runs()
+
+
+def test_gh_oserror_becomes_a_failed_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A missing GitHub CLI reports not-green without a traceback."""
+    monkeypatch.setattr(
+        main_ci_is_green.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError("missing gh")),
+    )
+
+    proc = main_ci_is_green._gh(["run", "list"])
+
+    assert proc.returncode == 127
+    assert "not executable" in proc.stderr

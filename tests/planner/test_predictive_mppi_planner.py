@@ -121,6 +121,28 @@ def test_predictive_mppi_is_deterministic_for_fixed_seed() -> None:
     assert planner_a.plan(observation) == planner_b.plan(observation)
 
 
+def test_predictive_mppi_caches_absent_grid_payload_and_accepts_full_elite_fraction(
+    monkeypatch,
+) -> None:
+    """Predictive MPPI should cache a missing grid and keep full-elite configs valid."""
+    cfg = build_predictive_mppi_config({"sample_count": 8, "elite_fraction": 1.0, "iterations": 1})
+    planner = PredictiveMPPIAdapter(cfg, allow_fallback=True)
+    planner._predictor = _StubPredictor(np.zeros((0, 4, 2), dtype=np.float32))
+    calls = 0
+
+    def _extract_grid_payload(_observation):
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(planner, "_extract_grid_payload", _extract_grid_payload)
+
+    linear, angular = planner.plan(_obs())
+
+    assert calls == 1
+    assert 0.0 <= linear <= planner.config.max_linear_speed
+    assert abs(angular) <= planner.config.max_angular_speed
+
+
 def test_predictive_mppi_stops_at_goal() -> None:
     """Planner should stop immediately when already within goal tolerance."""
     cfg = build_predictive_mppi_config({"goal_tolerance": 0.3})

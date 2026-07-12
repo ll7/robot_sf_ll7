@@ -221,6 +221,26 @@ def test_mppi_is_deterministic_for_fixed_seed() -> None:
     assert a1 == a2
 
 
+def test_mppi_caches_absent_grid_payload_and_accepts_full_elite_fraction(monkeypatch) -> None:
+    """MPPI should cache a missing grid and keep full-elite configurations valid."""
+    planner = MPPISocialPlannerAdapter(
+        MPPISocialConfig(sample_count=8, elite_fraction=1.0, iterations=1, horizon_steps=2)
+    )
+    calls = 0
+
+    def _extract_grid_payload(_observation):
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(planner, "_extract_grid_payload", _extract_grid_payload)
+
+    linear, angular = planner.plan(_obs())
+
+    assert calls == 1
+    assert 0.0 <= linear <= planner.config.max_linear_speed
+    assert abs(angular) <= planner.config.max_angular_speed
+
+
 def test_mppi_progress_escape_breaks_stall() -> None:
     """MPPI should inject progress command when first action is too conservative."""
     cfg = MPPISocialConfig(

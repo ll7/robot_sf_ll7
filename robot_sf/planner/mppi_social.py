@@ -265,7 +265,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         iterations = max(int(self.config.iterations), 1)
         elite_n = max(2, round(samples * float(self.config.elite_fraction)))
 
-        grid_payload = self._extract_grid_payload(observation)
+        grid_payload = self._cache_grid_payload(observation)
 
         mean = np.zeros((horizon, 2), dtype=float)
         mean[:, 0] = min(speed_cap, max(0.0, speed + 0.1))
@@ -310,18 +310,16 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 dtype=float,
             )
 
-            elite_idx = np.argpartition(costs, elite_n)[:elite_n]
+            elite_idx = np.argsort(costs)[:elite_n]
             elites = batch[elite_idx]
             mean = np.mean(elites, axis=0)
             std = np.std(elites, axis=0)
             std[:, 0] = np.maximum(std[:, 0], float(self.config.min_linear_std))
             std[:, 1] = np.maximum(std[:, 1], float(self.config.min_angular_std))
 
-            best_elite_cost = float(np.min(costs[elite_idx]))
-            if best_elite_cost < best_cost:
-                best_cost = best_elite_cost
-                best_elite_i = elite_idx[np.argmin(costs[elite_idx])]
-                best_sequence = batch[best_elite_i].copy()
+            if float(costs[elite_idx[0]]) < best_cost:
+                best_cost = float(costs[elite_idx[0]])
+                best_sequence = batch[elite_idx[0]].copy()
 
         action = best_sequence[0]
         if bool(self.config.progress_escape_enabled):

@@ -242,6 +242,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         robot_pos: np.ndarray,
         goal_heading_error: float,
         observation: dict[str, Any],
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> float:
         """Return a conservative per-step speed cap from heading and local clearance.
 
@@ -250,7 +251,11 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         heading_scale = 1.0 - min(abs(goal_heading_error), np.pi / 2.0) / (np.pi / 2.0)
         heading_scale = max(float(self.config.min_turn_speed_scale), heading_scale)
-        obstacle_clearance = self._min_obstacle_clearance(robot_pos, observation)
+        obstacle_clearance = self._min_obstacle_clearance(
+            robot_pos,
+            observation=observation,
+            grid_payload=grid_payload,
+        )
         obstacle_scale = min(
             1.0,
             obstacle_clearance / max(float(self.config.desired_obstacle_clearance), 1e-6),
@@ -354,6 +359,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         heading: float,
         robot_radius: float,
         observation: dict[str, Any],
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> tuple[float, float]:
         """Fail closed on first-step static obstacle clearance violations.
 
@@ -371,7 +377,14 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             ],
             dtype=float,
         )
-        next_clearance = self._min_obstacle_clearance(next_pos, observation) - robot_radius
+        next_clearance = (
+            self._min_obstacle_clearance(
+                next_pos,
+                observation=observation,
+                grid_payload=grid_payload,
+            )
+            - robot_radius
+        )
         if not np.isfinite(next_clearance) or next_clearance >= float(
             self.config.hard_obstacle_clearance
         ):
@@ -549,10 +562,12 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
 
         goal_heading = float(np.arctan2(goal_delta[1], goal_delta[0]))
         goal_heading_error = _wrap_angle(goal_heading - heading)
+        grid_payload = self._cache_grid_payload(observation)
         speed_cap = self._speed_cap(
             robot_pos=robot_pos,
             goal_heading_error=goal_heading_error,
             observation=observation,
+            grid_payload=grid_payload,
         )
         preferred_turn = self._preferred_avoidance_turn(
             robot_pos=robot_pos,
@@ -576,7 +591,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             observation=observation,
             speed_cap=speed_cap,
             preferred_turn=preferred_turn,
-            grid_payload=self._extract_grid_payload(observation),
+            grid_payload=grid_payload,
         )
         x0 = self._initial_guess(
             goal_heading_error=goal_heading_error,
@@ -642,6 +657,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             heading=heading,
             robot_radius=robot_radius,
             observation=observation,
+            grid_payload=grid_payload,
         )
         self._record_command(linear, angular)
         return (linear, angular)

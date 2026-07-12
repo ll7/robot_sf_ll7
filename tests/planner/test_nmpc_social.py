@@ -193,6 +193,36 @@ def test_nmpc_social_moves_toward_goal_in_open_space() -> None:
     assert abs(w) <= planner.config.max_angular_speed
 
 
+def test_nmpc_social_caches_absent_grid_payload_across_plan(monkeypatch) -> None:
+    """NMPC should extract a missing grid once across speed, rollout, and guard paths."""
+    planner = NMPCSocialPlannerAdapter(
+        NMPCSocialConfig(
+            hard_obstacle_guard_enabled=True,
+            horizon_steps=1,
+            solver_max_iterations=1,
+        )
+    )
+    observation = _obs(goal=(3.0, 0.0))
+    for key in tuple(observation):
+        if key.startswith("occupancy_grid"):
+            del observation[key]
+    calls = 0
+
+    def _extract_grid_payload(_observation):
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(planner, "_extract_grid_payload", _extract_grid_payload)
+    monkeypatch.setattr(
+        "robot_sf.planner.nmpc_social.minimize",
+        lambda *args, **kwargs: SimpleNamespace(success=True, x=np.asarray([0.2, 0.0])),
+    )
+
+    planner.plan(observation)
+
+    assert calls == 1
+
+
 def test_nmpc_social_prioritizes_current_waypoint_until_close() -> None:
     """The planner should steer toward the current waypoint before jumping to the next one."""
     planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(horizon_steps=4, solver_max_iterations=12))
@@ -334,7 +364,7 @@ def test_nmpc_social_hard_obstacle_guard_stops_unsafe_forward_step(monkeypatch) 
     monkeypatch.setattr(
         planner,
         "_min_obstacle_clearance",
-        lambda point, observation: 0.2 if float(point[0]) > 0.0 else 2.0,
+        lambda point, observation, **_kwargs: 0.2 if float(point[0]) > 0.0 else 2.0,
     )
 
     linear, angular = planner.plan(_obs(goal=(3.0, 0.0)))
@@ -366,7 +396,7 @@ def test_nmpc_social_hard_obstacle_guard_is_opt_in(monkeypatch) -> None:
     monkeypatch.setattr(
         planner,
         "_min_obstacle_clearance",
-        lambda point, observation: 0.2 if float(point[0]) > 0.0 else 2.0,
+        lambda point, observation, **_kwargs: 0.2 if float(point[0]) > 0.0 else 2.0,
     )
 
     linear, _angular = planner.plan(_obs(goal=(3.0, 0.0)))

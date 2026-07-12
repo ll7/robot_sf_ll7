@@ -149,14 +149,25 @@ def _success_summary(total: int = 1) -> dict[str, Any]:
 class _RecordingRunBatch:
     """A fake ``run_batch`` that records each call and returns a caller-chosen summary."""
 
-    def __init__(self, summary_for=None) -> None:
+    def __init__(self, summary_for=None, interrupt_at: int | None = None) -> None:
         self.calls: list[dict[str, Any]] = []
         self._summary_for = summary_for or (lambda idx, kwargs: _success_summary())
+        self._interrupt_at = interrupt_at
 
     def __call__(self, **kwargs: Any) -> dict[str, Any]:
         idx = len(self.calls)
         self.calls.append(kwargs)
-        return self._summary_for(idx, kwargs)
+        if idx == self._interrupt_at:
+            raise KeyboardInterrupt("simulated interruption")
+        out_path = pathlib.Path(kwargs["out_path"])
+        if kwargs.get("resume") and out_path.is_file():
+            return {"total_jobs": 0, "written": 0, "failures": []}
+        summary = self._summary_for(idx, kwargs)
+        for item in range(int(summary.get("written", 0))):
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            with out_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({"episode_id": f"fake-{idx}-{item}"}) + "\n")
+        return summary
 
 
 def _config_stem(path: str) -> str:
@@ -404,6 +415,71 @@ def test_non_mapping_manifest_fails_closed(tmp_path: pathlib.Path) -> None:
         )
 
 
+def test_orphan_output_without_manifest_fails_closed(tmp_path: pathlib.Path) -> None:
+    """Existing episode output cannot be adopted without an executor checkpoint."""
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    (out_dir / "cbf_off.jsonl").write_text('{"episode_id": "orphan"}\n', encoding="utf-8")
+    plan = build_run_plan(repo_root=REPO_ROOT, packet_path=PACKET_PATH, output_dir=out_dir)
+
+    with pytest.raises(DenseComparisonProvenanceMismatchError, match="no execution manifest"):
+        execute_run_plan(
+            plan,
+            authorization=REQUIRED_AUTHORIZATION_ID,
+            repo_root=REPO_ROOT,
+            run_batch_fn=_RecordingRunBatch(),
+        )
+
+
+def test_interrupted_execution_checkpoint_resumes(tmp_path: pathlib.Path) -> None:
+    """A checkpoint after one arm permits explicit recovery of the remaining arms."""
+    out_dir = tmp_path / "out"
+    plan = build_run_plan(repo_root=REPO_ROOT, packet_path=PACKET_PATH, output_dir=out_dir)
+    with pytest.raises(KeyboardInterrupt):
+        execute_run_plan(
+            plan,
+            authorization=REQUIRED_AUTHORIZATION_ID,
+            repo_root=REPO_ROOT,
+            run_batch_fn=_RecordingRunBatch(interrupt_at=1),
+        )
+
+    checkpoint = json.loads((out_dir / EXECUTION_MANIFEST_FILENAME).read_text(encoding="utf-8"))
+    assert checkpoint["status"] == "in_progress"
+    assert checkpoint["arms"][0]["status"] == "executed"
+    resumed = execute_run_plan(
+        plan,
+        authorization=REQUIRED_AUTHORIZATION_ID,
+        repo_root=REPO_ROOT,
+        run_batch_fn=_RecordingRunBatch(),
+    )
+    assert resumed.status == "complete"
+    assert resumed.arms[0].status == "resumed_complete"
+
+
+def test_changed_input_content_fails_closed_on_resume(tmp_path: pathlib.Path) -> None:
+    """A config-content change cannot reuse a manifest at the same git identity."""
+    packet_path = _write_runnable_tree(tmp_path, copy.deepcopy(_RUNNABLE_PACKET))
+    out_dir = tmp_path / "out"
+    plan = build_run_plan(repo_root=tmp_path, packet_path=packet_path, output_dir=out_dir)
+    execute_run_plan(
+        plan,
+        authorization=REQUIRED_AUTHORIZATION_ID,
+        repo_root=tmp_path,
+        schema_path=REPO_ROOT / EPISODE_SCHEMA_PATH,
+        run_batch_fn=_RecordingRunBatch(),
+    )
+    (tmp_path / "configs/algos/off.yaml").write_text("algorithm: changed\n", encoding="utf-8")
+
+    with pytest.raises(DenseComparisonProvenanceMismatchError, match="provenance"):
+        execute_run_plan(
+            plan,
+            authorization=REQUIRED_AUTHORIZATION_ID,
+            repo_root=tmp_path,
+            schema_path=REPO_ROOT / EPISODE_SCHEMA_PATH,
+            run_batch_fn=_RecordingRunBatch(),
+        )
+
+
 def test_changed_execution_inputs_fail_closed_on_resume(tmp_path: pathlib.Path) -> None:
     """Changed worker/schema provenance cannot reuse an existing execution manifest."""
     out_dir = tmp_path / "out"
@@ -432,6 +508,9 @@ def test_non_boolean_resume_is_a_plan_blocker() -> None:
     inputs, blockers = _resolve_execution_inputs({"execution": {"resume": "false"}})
     assert inputs.resume is True
     assert any("resume must be a boolean" in blocker for blocker in blockers)
+    _, blockers = _resolve_execution_inputs({"execution": {"unknown": 1, "video_enabled": "false"}})
+    assert any("unknown key" in blocker for blocker in blockers)
+    assert any("video_enabled must be a boolean" in blocker for blocker in blockers)
 
 
 # --- Smoke: real run_batch integration (reduced horizon/repeats, no performance claim) ---
@@ -466,3 +545,12 @@ def test_smoke_real_run_batch_writes_episodes(tmp_path: pathlib.Path) -> None:
         artifact = tmp_path / arm.output_jsonl
         assert artifact.is_file()
         assert artifact.read_text(encoding="utf-8").strip()  # at least one episode row
+
+    resumed = execute_run_plan(
+        plan,
+        authorization=REQUIRED_AUTHORIZATION_ID,
+        repo_root=tmp_path,
+        schema_path=REPO_ROOT / EPISODE_SCHEMA_PATH,
+    )
+    assert resumed.status == "complete"
+    assert all(arm.status == "resumed_complete" and arm.written == 0 for arm in resumed.arms)

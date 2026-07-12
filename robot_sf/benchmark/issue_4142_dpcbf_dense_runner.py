@@ -46,6 +46,7 @@ Status semantics:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from dataclasses import dataclass, field
@@ -160,6 +161,7 @@ _EXECUTION_INPUT_BOUNDS = {
     "horizon": (1, 2_000),
     "workers": (1, 8),
 }
+_EXECUTION_KEYS = frozenset((*_EXECUTION_INPUT_BOUNDS, "dt", "video_enabled", "resume"))
 
 
 def _resolve_resume(block: dict[str, Any], blockers: list[str]) -> bool:
@@ -263,12 +265,12 @@ def _resolve_arm_jobs(
     return tuple(jobs)
 
 
-def _resolve_execution_inputs(packet: dict[str, Any]) -> tuple[DenseExecutionInputs, list[str]]:
+def _resolve_execution_inputs(packet: dict[str, Any]) -> tuple[DenseExecutionInputs, list[str]]:  # noqa: C901
     """Merge the packet's optional ``execution`` block over the bounded defaults.
 
-    Unknown/absent keys keep their default. Any override that is the wrong type or outside
-    :data:`_EXECUTION_INPUT_BOUNDS` becomes a fail-closed blocker rather than a silent clamp,
-    so a plan can never quietly grow into a heavy run.
+    Unknown keys and overrides that are the wrong type or outside
+    :data:`_EXECUTION_INPUT_BOUNDS` become fail-closed blockers rather than silently changing
+    execution semantics, so a plan can never quietly grow into a heavy run.
 
     Returns:
         The resolved bounded execution inputs and any blockers found.
@@ -280,6 +282,8 @@ def _resolve_execution_inputs(packet: dict[str, Any]) -> tuple[DenseExecutionInp
         return DEFAULT_EXECUTION_INPUTS, ["packet 'execution' block must be a mapping"]
 
     blockers: list[str] = []
+    unknown = sorted((key for key in block if key not in _EXECUTION_KEYS), key=str)
+    blockers.extend(f"packet execution has unknown key {key!r}" for key in unknown)
     values: dict[str, Any] = {
         "base_seed": DEFAULT_EXECUTION_INPUTS.base_seed,
         "repeats": DEFAULT_EXECUTION_INPUTS.repeats,
@@ -310,9 +314,15 @@ def _resolve_execution_inputs(packet: dict[str, Any]) -> tuple[DenseExecutionInp
         else:
             dt = float(raw_dt)
 
-    # video is deliberately forced off: this is a bounded diagnostic run, not a render job.
-    if bool(block.get("video_enabled", False)):
-        blockers.append("packet execution.video_enabled must be false (bounded diagnostic run)")
+    # Video is deliberately forced off: this is a bounded diagnostic run, not a render job.
+    if "video_enabled" in block:
+        video_enabled = block["video_enabled"]
+        if not isinstance(video_enabled, bool):
+            blockers.append(
+                f"packet execution.video_enabled must be a boolean, got {video_enabled!r}"
+            )
+        elif video_enabled:
+            blockers.append("packet execution.video_enabled must be false (bounded diagnostic run)")
 
     resume = _resolve_resume(block, blockers)
 
@@ -441,8 +451,8 @@ class ArmExecutionResult:
     algorithm: str
     algorithm_config: str
     output_jsonl: str
-    #: ``executed`` (all scheduled jobs written, no failures), ``failed`` (runner raised, wrote
-    #: nothing, or reported failures). Failed/degraded rows are caveats, never success.
+    #: ``executed`` (new rows), ``resumed_complete`` (all expected rows already existed),
+    #: ``pending``, or ``failed``. Failed/degraded rows are caveats, never success.
     status: str
     total_jobs: int
     written: int
@@ -465,12 +475,14 @@ class DenseExecutionManifest:
     scenario_manifest: str
     output_dir: str
     provenance_key: str
+    input_hashes: dict[str, str]
     effective_arguments: dict[str, Any]
     arms: tuple[ArmExecutionResult, ...]
     started_at: str
     ended_at: str
-    #: ``complete`` only when every required arm executed with success rows and no failures.
-    #: Otherwise ``results_incomplete`` -- a caveat state, never a successful comparison.
+    #: ``complete`` only when every required arm executed or resumed with validated rows.
+    #: ``in_progress`` is checkpointed before/after each arm; ``results_incomplete`` is a
+    #: caveat state, never a successful comparison.
     status: str
     excluded_row_statuses: tuple[str, ...]
     claim_boundary: str = CLAIM_BOUNDARY
@@ -504,37 +516,127 @@ def _provenance_key(
     *,
     git_dirty: bool,
     schema_path: str | Path,
+    input_hashes: dict[str, str],
+    effective_arguments: dict[str, Any],
 ) -> str:
     """Build a stable provenance key that must match for a repeated run to safely resume.
 
-    Combines the packet/plan schema lineage, the shared algorithm, every arm's config, the
-    bounded execution inputs, and the git SHA. A change in any of these means the on-disk
-    artifacts came from an incompatible run and resume must fail closed.
+    Combines plan identity, every effective argument, git state, and content hashes for the
+    packet, scenario manifest, algorithm configs, and episode schema. A change in any of these
+    means the on-disk artifacts came from an incompatible run and resume must fail closed.
 
     Returns:
         A deterministic string key.
     """
-    inputs = plan.execution_inputs
-    parts = [
-        plan.packet_schema_version,
-        plan.schema_version,
-        str(plan.packet_path),
-        str(plan.algorithm),
-        str(plan.scenario_manifest),
-        f"output_dir={plan.output_dir}",
-        f"seed={inputs.base_seed}",
-        f"repeats={inputs.repeats}",
-        f"horizon={inputs.horizon}",
-        f"dt={inputs.dt}",
-        f"workers={inputs.workers}",
-        f"video={inputs.video_enabled}",
-        f"resume={inputs.resume}",
-        f"schema_path={Path(schema_path).as_posix()}",
-        git_sha,
-        f"git_dirty={git_dirty}",
-    ]
-    parts.extend(f"{job.arm_key}:{job.algorithm_config}" for job in plan.arms)
-    return "|".join(parts)
+    payload = {
+        "plan": {
+            "packet_path": str(plan.packet_path),
+            "packet_schema_version": plan.packet_schema_version,
+            "plan_schema_version": plan.schema_version,
+            "algorithm": plan.algorithm,
+            "scenario_manifest": str(plan.scenario_manifest),
+            "output_dir": plan.output_dir,
+            "schema_path": Path(schema_path).as_posix(),
+            "arms": [
+                {"arm_key": job.arm_key, "algorithm_config": job.algorithm_config}
+                for job in plan.arms
+            ],
+        },
+        "effective_arguments": effective_arguments,
+        "input_hashes": dict(sorted(input_hashes.items())),
+        "git_sha": git_sha,
+        "git_dirty": git_dirty,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _content_hash(path: Path) -> str:
+    """Hash one effective execution input, failing closed when it is unavailable.
+
+    Returns:
+        SHA-256 digest of the input bytes.
+    """
+    try:
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise DenseComparisonProvenanceMismatchError(
+            f"cannot bind execution provenance to input {path}: {exc}"
+        ) from exc
+
+
+def _effective_input_hashes(
+    root: Path,
+    plan: DenseComparisonRunPlan,
+    schema_abs: Path,
+) -> dict[str, str]:
+    """Hash the packet and every file whose contents affect the episode rows.
+
+    Returns:
+        Named SHA-256 digests for all effective input files.
+    """
+    paths = {
+        "packet": _abs_under_root(root, plan.packet_path),
+        "scenario_manifest": _abs_under_root(root, str(plan.scenario_manifest)),
+        "episode_schema": schema_abs,
+    }
+    paths.update(
+        {
+            f"algorithm_config:{job.arm_key}": _abs_under_root(root, job.algorithm_config)
+            for job in plan.arms
+        }
+    )
+    return {name: _content_hash(path.resolve()) for name, path in paths.items()}
+
+
+def _write_manifest_atomic(path: Path, manifest: DenseExecutionManifest) -> None:
+    """Publish a checkpoint atomically, leaving an orphan marker if interrupted."""
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(
+        json.dumps(manifest_to_dict(manifest), indent=2, sort_keys=True), encoding="utf-8"
+    )
+    temporary.replace(path)
+
+
+def _build_manifest(  # noqa: PLR0913
+    plan: DenseComparisonRunPlan,
+    *,
+    authorization_id: str,
+    git_sha: str,
+    git_dirty: bool,
+    provenance_key: str,
+    input_hashes: dict[str, str],
+    effective_arguments: dict[str, Any],
+    arms: tuple[ArmExecutionResult, ...],
+    started_at: str,
+    ended_at: str,
+    status: str,
+) -> DenseExecutionManifest:
+    """Build a manifest or checkpoint from one immutable execution snapshot.
+
+    Returns:
+        The serializable manifest snapshot.
+    """
+    return DenseExecutionManifest(
+        schema_version=EXECUTION_MANIFEST_SCHEMA_VERSION,
+        packet_path=plan.packet_path,
+        packet_schema_version=plan.packet_schema_version,
+        plan_schema_version=plan.schema_version,
+        authorization_id=authorization_id,
+        git_sha=git_sha,
+        git_dirty=git_dirty,
+        algorithm=str(plan.algorithm),
+        scenario_manifest=str(plan.scenario_manifest),
+        output_dir=plan.output_dir,
+        provenance_key=provenance_key,
+        input_hashes=dict(input_hashes),
+        effective_arguments=dict(effective_arguments),
+        arms=arms,
+        started_at=started_at,
+        ended_at=ended_at,
+        status=status,
+        excluded_row_statuses=plan.excluded_row_statuses,
+    )
 
 
 def _abs_under_root(repo_root: Path, rel_or_abs: str) -> Path:
@@ -558,7 +660,7 @@ def _default_run_batch() -> Callable[..., dict[str, Any]]:
     return run_batch
 
 
-def execute_run_plan(
+def execute_run_plan(  # noqa: C901
     plan: DenseComparisonRunPlan,
     *,
     authorization: str | None = None,
@@ -580,9 +682,8 @@ def execute_run_plan(
     1. The plan must be fully resolved (``plan_ready_campaign_gated``); a blocked plan raises.
     2. ``authorization`` must equal :data:`REQUIRED_AUTHORIZATION_ID` exactly. A missing/empty
        value, a boolean, or any other string raises before a single output file is created.
-    3. If an execution manifest already exists under the output directory, its provenance key
-       must match the current plan+git provenance, otherwise the run fails closed rather than
-       mixing incompatible artifacts. A matching key allows a provenance-safe resume.
+    3. A prior manifest must match content-bound provenance. Existing output without an owning
+       manifest fails closed, while an atomic ``in_progress`` manifest checkpoints each arm.
 
     Args:
         plan: A resolved run plan from :func:`build_run_plan`.
@@ -616,21 +717,41 @@ def execute_run_plan(
             "is insufficient; no output files are created."
         )
 
-    root = Path(repo_root)
-    output_dir_abs = _abs_under_root(root, plan.output_dir)
+    root = Path(repo_root).resolve()
+    output_dir_abs = _abs_under_root(root, plan.output_dir).resolve()
     manifest_path = output_dir_abs / EXECUTION_MANIFEST_FILENAME
     schema_abs = _abs_under_root(root, str(schema_path)).resolve()
 
     git_sha, git_dirty = _git_provenance(root)
+    if git_dirty and git_sha != "unknown":
+        raise DenseComparisonProvenanceMismatchError(
+            f"refusing execution from dirty git worktree {root}; commit effective inputs first"
+        )
+
+    inputs = plan.execution_inputs
+    effective_arguments = {
+        "authorization_id": REQUIRED_AUTHORIZATION_ID,
+        "repo_root": str(root),
+        "schema_path": str(schema_path),
+        "base_seed": inputs.base_seed,
+        "repeats": inputs.repeats,
+        "horizon": inputs.horizon,
+        "dt": inputs.dt,
+        "workers": inputs.workers,
+        "video_enabled": inputs.video_enabled,
+        "resume": inputs.resume,
+    }
+    input_hashes = _effective_input_hashes(root, plan, schema_abs)
     provenance_key = _provenance_key(
         plan,
         git_sha,
         git_dirty=git_dirty,
         schema_path=schema_abs,
+        input_hashes=input_hashes,
+        effective_arguments=effective_arguments,
     )
 
-    # Gate 3: provenance-safe resume. A pre-existing manifest with a different key means the
-    # on-disk artifacts came from an incompatible run; fail closed instead of mixing them.
+    prior: dict[str, Any] | None = None
     if manifest_path.is_file():
         try:
             prior = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -647,73 +768,99 @@ def execute_run_plan(
                 f"this run. existing={prior_key!r} current={provenance_key!r}. Remove "
                 f"{output_dir_abs} or run with matching packet/config/git provenance."
             )
+        if prior.get("status") not in {"in_progress", "complete", "results_incomplete"}:
+            raise DenseComparisonProvenanceMismatchError(
+                f"existing execution manifest {manifest_path} has an invalid status"
+            )
+    elif output_dir_abs.exists():
+        try:
+            orphaned = tuple(output_dir_abs.iterdir())
+        except OSError as exc:
+            raise DenseComparisonProvenanceMismatchError(
+                f"existing execution output path {output_dir_abs} is not a readable directory"
+            ) from exc
+        if orphaned:
+            names = ", ".join(path.name for path in orphaned[:3])
+            raise DenseComparisonProvenanceMismatchError(
+                f"existing output {output_dir_abs} has no execution manifest; refusing to "
+                f"claim ownership of orphaned files ({names})"
+            )
 
-    inputs = plan.execution_inputs
     clock = now_fn or (lambda: datetime.now(UTC))
     run_batch = run_batch_fn or _default_run_batch()
-
-    effective_arguments = {
-        "authorization_id": REQUIRED_AUTHORIZATION_ID,
-        "repo_root": str(root),
-        "schema_path": str(schema_path),
-        "base_seed": inputs.base_seed,
-        "repeats": inputs.repeats,
-        "horizon": inputs.horizon,
-        "dt": inputs.dt,
-        "workers": inputs.workers,
-        "video_enabled": inputs.video_enabled,
-        "resume": inputs.resume,
-    }
 
     output_dir_abs.mkdir(parents=True, exist_ok=True)
     started_at = clock().isoformat()
 
+    results = [
+        ArmExecutionResult(
+            arm_key=job.arm_key,
+            algorithm=job.algorithm,
+            algorithm_config=job.algorithm_config,
+            output_jsonl=job.output_jsonl,
+            status="pending",
+            total_jobs=0,
+            written=0,
+            failed_jobs=0,
+        )
+        for job in plan.arms
+    ]
+
+    def save_checkpoint(
+        arms: tuple[ArmExecutionResult, ...],
+        *,
+        ended_at: str = "",
+        status: str = "in_progress",
+    ) -> DenseExecutionManifest:
+        """Persist one atomic execution checkpoint and return its snapshot."""
+        manifest = _build_manifest(
+            plan,
+            authorization_id=REQUIRED_AUTHORIZATION_ID,
+            git_sha=git_sha,
+            git_dirty=git_dirty,
+            provenance_key=provenance_key,
+            input_hashes=input_hashes,
+            effective_arguments=effective_arguments,
+            started_at=started_at,
+            ended_at=ended_at,
+            status=status,
+            arms=arms,
+        )
+        _write_manifest_atomic(manifest_path, manifest)
+        return manifest
+
+    save_checkpoint(tuple(results))
+
     scenario_abs = _abs_under_root(root, str(plan.scenario_manifest))
-    results: list[ArmExecutionResult] = []
-    for job in plan.arms:
+    prior_arms = {
+        arm.get("arm_key"): arm
+        for arm in (prior or {}).get("arms", [])
+        if isinstance(arm, dict) and isinstance(arm.get("arm_key"), str)
+    }
+    for index, job in enumerate(plan.arms):
         out_abs = _abs_under_root(root, job.output_jsonl)
         algo_config_abs = _abs_under_root(root, job.algorithm_config)
-        results.append(
-            _execute_arm(
-                run_batch,
-                job=job,
-                scenario_abs=scenario_abs,
-                out_abs=out_abs,
-                schema_abs=schema_abs,
-                algo_config_abs=algo_config_abs,
-                inputs=inputs,
-            )
+        prior_total = prior_arms.get(job.arm_key, {}).get("total_jobs")
+        expected_jobs = prior_total if isinstance(prior_total, int) and prior_total > 0 else None
+        results[index] = _execute_arm(
+            run_batch,
+            job=job,
+            scenario_abs=scenario_abs,
+            out_abs=out_abs,
+            schema_abs=schema_abs,
+            algo_config_abs=algo_config_abs,
+            inputs=inputs,
+            expected_jobs=expected_jobs,
         )
+        save_checkpoint(tuple(results))
 
     ended_at = clock().isoformat()
     all_ok = len(results) == len(REQUIRED_ARMS) and all(
-        r.status == "executed" and r.written > 0 for r in results
+        r.status in {"executed", "resumed_complete"} and r.failed_jobs == 0 for r in results
     )
     status = "complete" if all_ok else "results_incomplete"
 
-    manifest = DenseExecutionManifest(
-        schema_version=EXECUTION_MANIFEST_SCHEMA_VERSION,
-        packet_path=plan.packet_path,
-        packet_schema_version=plan.packet_schema_version,
-        plan_schema_version=plan.schema_version,
-        authorization_id=REQUIRED_AUTHORIZATION_ID,
-        git_sha=git_sha,
-        git_dirty=git_dirty,
-        algorithm=str(plan.algorithm),
-        scenario_manifest=str(plan.scenario_manifest),
-        output_dir=plan.output_dir,
-        provenance_key=provenance_key,
-        effective_arguments=effective_arguments,
-        arms=tuple(results),
-        started_at=started_at,
-        ended_at=ended_at,
-        status=status,
-        excluded_row_statuses=plan.excluded_row_statuses,
-    )
-    manifest_path.write_text(
-        json.dumps(manifest_to_dict(manifest), indent=2, sort_keys=True), encoding="utf-8"
-    )
-    return manifest
+    return save_checkpoint(tuple(results), ended_at=ended_at, status=status)
 
 
 def _execute_arm(
@@ -725,16 +872,19 @@ def _execute_arm(
     schema_abs: Path,
     algo_config_abs: Path,
     inputs: DenseExecutionInputs,
+    expected_jobs: int | None = None,
 ) -> ArmExecutionResult:
     """Run one arm through the canonical runner and classify its outcome.
 
-    A runner exception or a run that writes nothing is recorded as ``failed`` and remains a
-    visible caveat in the manifest; it never blocks the remaining arms and is never counted as
-    success.
+    A runner exception or an output with missing/duplicate episode identities is recorded as
+    ``failed``. A zero-job resume is ``resumed_complete`` only when the existing JSONL contains
+    exactly the expected number of valid episode identities.
 
     Returns:
         The per-arm execution result.
     """
+    existing_ids = _episode_ids(out_abs) if inputs.resume else set()
+    baseline_count = len(existing_ids) if existing_ids is not None else 0
     try:
         summary = run_batch(
             scenarios_or_path=str(scenario_abs),
@@ -772,7 +922,31 @@ def _execute_arm(
     failed_jobs = (
         len(failures) if isinstance(failures, list) else int(summary.get("failed_jobs", 0))
     )
-    ok = total_jobs > 0 and written >= total_jobs and failed_jobs == 0
+    if total_jobs == 0 and written == 0 and failed_jobs == 0:
+        expected = expected_jobs if expected_jobs is not None else baseline_count
+        valid_resume = expected > 0 and _episode_ids(out_abs) == set(existing_ids or ())
+        return ArmExecutionResult(
+            arm_key=job.arm_key,
+            algorithm=job.algorithm,
+            algorithm_config=job.algorithm_config,
+            output_jsonl=job.output_jsonl,
+            status="resumed_complete" if valid_resume else "failed",
+            total_jobs=expected,
+            written=0,
+            failed_jobs=0,
+            error=None
+            if valid_resume
+            else "resume found no jobs but artifact identities were incomplete",
+        )
+    expected = total_jobs if not inputs.resume else baseline_count + total_jobs
+    artifact_ids = _episode_ids(out_abs)
+    ok = (
+        total_jobs > 0
+        and written >= total_jobs
+        and failed_jobs == 0
+        and artifact_ids is not None
+        and len(artifact_ids) == expected
+    )
     return ArmExecutionResult(
         arm_key=job.arm_key,
         algorithm=job.algorithm,
@@ -782,8 +956,33 @@ def _execute_arm(
         total_jobs=total_jobs,
         written=written,
         failed_jobs=failed_jobs,
-        error=None if ok else "run wrote fewer episodes than scheduled or reported failures",
+        error=None
+        if ok
+        else "run wrote fewer episodes than scheduled, reported failures, or lacked valid identities",
     )
+
+
+def _episode_ids(out_path: Path) -> set[str] | None:
+    """Read unique episode identities, returning ``None`` for malformed artifacts.
+
+    Returns:
+        Unique episode IDs, or ``None`` when the JSONL is malformed.
+    """
+    if not out_path.is_file():
+        return set()
+    ids: set[str] = set()
+    try:
+        for line in out_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            episode_id = record.get("episode_id") if isinstance(record, dict) else None
+            if not isinstance(episode_id, str) or not episode_id:
+                return None
+            ids.add(episode_id)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return ids
 
 
 def manifest_to_dict(manifest: DenseExecutionManifest) -> dict[str, Any]:
@@ -800,6 +999,7 @@ def manifest_to_dict(manifest: DenseExecutionManifest) -> dict[str, Any]:
         "scenario_manifest": manifest.scenario_manifest,
         "output_dir": manifest.output_dir,
         "provenance_key": manifest.provenance_key,
+        "input_hashes": dict(manifest.input_hashes),
         "effective_arguments": dict(manifest.effective_arguments),
         "status": manifest.status,
         "claim_boundary": manifest.claim_boundary,

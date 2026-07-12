@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **issue #5340 main CI regression from unconditional `spaces.Sequence` leaf.** PRs #5335
   and #5337 unconditionally added `spaces.Sequence` leaves to the SocNav structured observation
   space, breaking `asymmetric_critic` (`Box` leaves) and `FlattenDictObservationWrapper`. Reverted
-  in PR #5339 to restore `Box`-only observation consumers. Reverted PRs may be relanded with a
+  in PR #5339 to restore `Box`-only observation spaces for consumers. Reverted PRs may be relanded with a
   guarded registration path later.
 
 * **issue #5217 restore typical pedestrian desired-speed propagation.** `SimulationSettings`

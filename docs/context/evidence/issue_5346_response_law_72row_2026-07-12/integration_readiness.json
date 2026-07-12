@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "blockers": [],
   "claim_boundary": "integration_readiness_only_no_ablation_result",
   "expected_row_count": 72,

@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "blockers": [
     "issue_3574_classic_crossing_density_002/heterogeneous: algorithm_metadata.pedestrian_control_trace missing",
     "issue_3574_classic_crossing_density_002/heterogeneous: algorithm_metadata.pedestrian_control_trace.pedestrians[].steps[].clearance_m missing",

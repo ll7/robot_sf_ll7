@@ -1,3 +1,5 @@
+# AI-GENERATED NEEDS-REVIEW
+# distance_convention: center_center
 scenario_id,seed,planner,arm,response_law_fraction,mean_clearance_m,cvar_clearance_m
 issue_3574_classic_crossing_density_002,101,goal,heterogeneous,0.0,17.4056,4.6504
 issue_3574_classic_crossing_density_002,101,goal,mean_matched_homogeneous,0.0,16.5518,4.1272

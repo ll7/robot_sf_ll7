@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#5378, 2026-07-12) - NEEDS-REVIEW -->
 # Issue #3574 Heterogeneous Population Ablation Report
 
 This report compiles supplied paired episode records into the issue #3574 integration schema.

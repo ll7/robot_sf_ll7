@@ -1,5 +1,5 @@
 <!-- AI-GENERATED (robot_sf#5378, 2026-07-12) - NEEDS-REVIEW -->
-# Issue #5346 — response-law 72-row mean-matched harness campaign (job 13379)
+# Issue #5346 — Response-Law 72-Row Mean-Matched Harness Campaign (Job 13379)
 
 Date: 2026-07-12
 

@@ -906,15 +906,7 @@ def _execute_arm(
             resume=inputs.resume,
             append=inputs.resume,
         )
-    except (
-        AttributeError,
-        ImportError,
-        LookupError,
-        OSError,
-        RuntimeError,
-        TypeError,
-        ValueError,
-    ) as exc:
+    except (AttributeError, ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
         return ArmExecutionResult(
             arm_key=job.arm_key,
             algorithm=job.algorithm,

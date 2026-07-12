@@ -457,6 +457,7 @@ class ArmExecutionResult:
     total_jobs: int
     written: int
     failed_jobs: int
+    artifact_sha256: str | None = None
     error: str | None = None
 
 
@@ -660,7 +661,7 @@ def _default_run_batch() -> Callable[..., dict[str, Any]]:
     return run_batch
 
 
-def execute_run_plan(  # noqa: C901
+def execute_run_plan(  # noqa: C901, PLR0912, PLR0915
     plan: DenseComparisonRunPlan,
     *,
     authorization: str | None = None,
@@ -792,6 +793,27 @@ def execute_run_plan(  # noqa: C901
     output_dir_abs.mkdir(parents=True, exist_ok=True)
     started_at = clock().isoformat()
 
+    prior_arms = {
+        arm.get("arm_key"): arm
+        for arm in (prior or {}).get("arms", [])
+        if isinstance(arm, dict) and isinstance(arm.get("arm_key"), str)
+    }
+    for job in plan.arms:
+        arm = prior_arms.get(job.arm_key, {})
+        expected_hash = arm.get("artifact_sha256")
+        if arm.get("status") in {"executed", "resumed_complete"} and not isinstance(
+            expected_hash, str
+        ):
+            raise DenseComparisonProvenanceMismatchError(
+                f"completed arm {job.arm_key} lacks a checkpointed artifact hash"
+            )
+        if isinstance(expected_hash, str):
+            out_abs = _abs_under_root(root, job.output_jsonl)
+            if _content_hash(out_abs) != expected_hash:
+                raise DenseComparisonProvenanceMismatchError(
+                    f"completed arm {job.arm_key} artifact no longer matches its checkpoint"
+                )
+
     results = [
         ArmExecutionResult(
             arm_key=job.arm_key,
@@ -802,6 +824,7 @@ def execute_run_plan(  # noqa: C901
             total_jobs=0,
             written=0,
             failed_jobs=0,
+            artifact_sha256=prior_arms.get(job.arm_key, {}).get("artifact_sha256"),
         )
         for job in plan.arms
     ]
@@ -836,11 +859,6 @@ def execute_run_plan(  # noqa: C901
     save_checkpoint(tuple(results))
 
     scenario_abs = _abs_under_root(root, str(plan.scenario_manifest))
-    prior_arms = {
-        arm.get("arm_key"): arm
-        for arm in (prior or {}).get("arms", [])
-        if isinstance(arm, dict) and isinstance(arm.get("arm_key"), str)
-    }
     for index, job in enumerate(plan.arms):
         out_abs = _abs_under_root(root, job.output_jsonl)
         algo_config_abs = _abs_under_root(root, job.algorithm_config)
@@ -888,6 +906,30 @@ def _execute_arm(
         The per-arm execution result.
     """
     existing_ids = _episode_ids(out_abs) if inputs.resume else set()
+    if existing_ids is None:
+        return ArmExecutionResult(
+            arm_key=job.arm_key,
+            algorithm=job.algorithm,
+            algorithm_config=job.algorithm_config,
+            output_jsonl=job.output_jsonl,
+            status="failed",
+            total_jobs=0,
+            written=0,
+            failed_jobs=0,
+            error="resume artifact is malformed or has duplicate episode identities",
+        )
+    if existing_ids and expected_jobs is None:
+        return ArmExecutionResult(
+            arm_key=job.arm_key,
+            algorithm=job.algorithm,
+            algorithm_config=job.algorithm_config,
+            output_jsonl=job.output_jsonl,
+            status="failed",
+            total_jobs=0,
+            written=0,
+            failed_jobs=0,
+            error="resume artifact has no checkpointed expected episode count",
+        )
     baseline_count = len(existing_ids) if existing_ids is not None else 0
     try:
         summary = run_batch(
@@ -938,6 +980,7 @@ def _execute_arm(
             total_jobs=expected,
             written=0,
             failed_jobs=0,
+            artifact_sha256=_content_hash(out_abs) if valid_resume else None,
             error=None
             if valid_resume
             else "resume found no jobs but artifact identities were incomplete",
@@ -960,6 +1003,7 @@ def _execute_arm(
         total_jobs=total_jobs,
         written=written,
         failed_jobs=failed_jobs,
+        artifact_sha256=_content_hash(out_abs) if ok else None,
         error=None
         if ok
         else "run wrote fewer episodes than scheduled, reported failures, or lacked valid identities",
@@ -982,6 +1026,8 @@ def _episode_ids(out_path: Path) -> set[str] | None:
             record = json.loads(line)
             episode_id = record.get("episode_id") if isinstance(record, dict) else None
             if not isinstance(episode_id, str) or not episode_id:
+                return None
+            if episode_id in ids:
                 return None
             ids.add(episode_id)
     except (OSError, json.JSONDecodeError):
@@ -1018,6 +1064,7 @@ def manifest_to_dict(manifest: DenseExecutionManifest) -> dict[str, Any]:
                 "total_jobs": arm.total_jobs,
                 "written": arm.written,
                 "failed_jobs": arm.failed_jobs,
+                "artifact_sha256": arm.artifact_sha256,
                 "error": arm.error,
             }
             for arm in manifest.arms

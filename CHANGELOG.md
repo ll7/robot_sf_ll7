@@ -16,12 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   testing-only and requires `allow_testing_algorithms`; evidence is an exploratory CPU smoke, not
   a safety, liveness, or superiority claim. Slice 3 owns outcome evaluation.
 
-* **issue #5419 authorization-gated DPCBF dense episode executor.** `execute_run_plan()` now
-  runs bounded local arms through `run_batch` only with the exact public authorization ID. It
-  writes an atomic, checkpointed execution manifest with effective arguments, dirty-state and
-  content-bound provenance, and explicit caveat statuses; orphan output, malformed input, and
-  mismatched resume state fail closed. Packet bounds and the real issue-scoped CLI are recorded.
-  No Slurm/GPU submission or safety-performance claim is made.
+* **issue #5419 authorization-gated DPCBF executor.** Bounded local `run_batch` arms require the
+  exact public authorization ID. Atomic checkpoints bind inputs and completed JSONL artifacts;
+  dirty, orphaned, malformed, duplicate, or mismatched state fails closed. No Slurm/GPU run or
+  safety-performance claim is included.
 
 ### Fixed
 

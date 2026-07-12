@@ -97,6 +97,8 @@ class _RolloutContext:
     speed_cap: float
     pedestrian_uncertainty_envelope_enabled: bool = False
     pedestrian_uncertainty_alpha_mps: float = 0.0
+    preferred_turn: float = 0.0
+    grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None
 
 
 class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
@@ -240,6 +242,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         robot_pos: np.ndarray,
         goal_heading_error: float,
         observation: dict[str, Any],
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> float:
         """Return a conservative per-step speed cap from heading and local clearance.
 
@@ -248,7 +251,11 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         heading_scale = 1.0 - min(abs(goal_heading_error), np.pi / 2.0) / (np.pi / 2.0)
         heading_scale = max(float(self.config.min_turn_speed_scale), heading_scale)
-        obstacle_clearance = self._min_obstacle_clearance(robot_pos, observation)
+        obstacle_clearance = self._min_obstacle_clearance(
+            robot_pos,
+            observation=observation,
+            grid_payload=grid_payload,
+        )
         obstacle_scale = min(
             1.0,
             obstacle_clearance / max(float(self.config.desired_obstacle_clearance), 1e-6),
@@ -269,12 +276,20 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         t = float(step_idx + 1) * float(self.config.rollout_dt)
         return ped_positions + ped_velocities * t
 
-    def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:
+    def _min_obstacle_clearance(
+        self,
+        point: np.ndarray,
+        observation: dict[str, Any] | None = None,
+        *,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
+    ) -> float:
         """Return the nearest obstacle clearance around a point in meters."""
-        payload = self._extract_grid_payload(observation)
-        if payload is None:
+        if grid_payload is None:
+            assert observation is not None
+            grid_payload = self._extract_grid_payload(observation)
+        if grid_payload is None:
             return float("inf")
-        grid, meta = payload
+        grid, meta = grid_payload
         channel = self._preferred_channel(meta)
         if channel < 0 or channel >= grid.shape[0]:
             return float("inf")
@@ -301,14 +316,23 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         dr = obs_idx[:, 0] + r0 - row
         dc = obs_idx[:, 1] + c0 - col
         resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
-        return float(np.min(np.sqrt(dr.astype(float) ** 2 + dc.astype(float) ** 2)) * resolution)
+        cell_dist_sq = dr.astype(float) ** 2 + dc.astype(float) ** 2
+        return float(np.sqrt(np.min(cell_dist_sq)) * resolution)
 
-    def _occupancy_cost(self, point: np.ndarray, observation: dict[str, Any]) -> float:
+    def _occupancy_cost(
+        self,
+        point: np.ndarray,
+        observation: dict[str, Any] | None = None,
+        *,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
+    ) -> float:
         """Return raw occupancy at a point for soft obstacle shaping."""
-        payload = self._extract_grid_payload(observation)
-        if payload is None:
+        if grid_payload is None:
+            assert observation is not None
+            grid_payload = self._extract_grid_payload(observation)
+        if grid_payload is None:
             return 0.0
-        grid, meta = payload
+        grid, meta = grid_payload
         channel = self._preferred_channel(meta)
         if channel < 0:
             return 0.0
@@ -335,6 +359,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         heading: float,
         robot_radius: float,
         observation: dict[str, Any],
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> tuple[float, float]:
         """Fail closed on first-step static obstacle clearance violations.
 
@@ -352,7 +377,14 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             ],
             dtype=float,
         )
-        next_clearance = self._min_obstacle_clearance(next_pos, observation) - robot_radius
+        next_clearance = (
+            self._min_obstacle_clearance(
+                next_pos,
+                observation=observation,
+                grid_payload=grid_payload,
+            )
+            - robot_radius
+        )
         if not np.isfinite(next_clearance) or next_clearance >= float(
             self.config.hard_obstacle_clearance
         ):
@@ -418,12 +450,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
 
         prev_v = float(context.current_speed)
         prev_w = 0.0
-        preferred_turn = self._preferred_avoidance_turn(
-            robot_pos=context.robot_pos,
-            heading=context.heading,
-            ped_positions=context.ped_positions,
-            ped_velocities=context.ped_velocities,
-        )
+        preferred_turn = context.preferred_turn
         for step_idx, (v_raw, w_raw) in enumerate(controls):
             v = float(np.clip(v_raw, 0.0, float(context.speed_cap)))
             w = float(
@@ -469,14 +496,17 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 )
 
             obstacle_clearance = (
-                self._min_obstacle_clearance(x, context.observation) - context.robot_radius
+                self._min_obstacle_clearance(
+                    x, observation=context.observation, grid_payload=context.grid_payload
+                )
+                - context.robot_radius
             )
             cost += float(self.config.obstacle_clearance_weight) * self._soft_collision_cost(
                 obstacle_clearance,
                 float(self.config.obstacle_margin),
             )
             cost += float(self.config.occupancy_cost_weight) * self._occupancy_cost(
-                x, context.observation
+                x, observation=context.observation, grid_payload=context.grid_payload
             )
 
         end_dist = float(np.linalg.norm(context.goal - x))
@@ -532,10 +562,12 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
 
         goal_heading = float(np.arctan2(goal_delta[1], goal_delta[0]))
         goal_heading_error = _wrap_angle(goal_heading - heading)
+        grid_payload = self._cache_grid_payload(observation)
         speed_cap = self._speed_cap(
             robot_pos=robot_pos,
             goal_heading_error=goal_heading_error,
             observation=observation,
+            grid_payload=grid_payload,
         )
         preferred_turn = self._preferred_avoidance_turn(
             robot_pos=robot_pos,
@@ -558,6 +590,8 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             pedestrian_uncertainty_alpha_mps=float(self.config.pedestrian_uncertainty_alpha_mps),
             observation=observation,
             speed_cap=speed_cap,
+            preferred_turn=preferred_turn,
+            grid_payload=grid_payload,
         )
         x0 = self._initial_guess(
             goal_heading_error=goal_heading_error,
@@ -623,6 +657,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             heading=heading,
             robot_radius=robot_radius,
             observation=observation,
+            grid_payload=grid_payload,
         )
         self._record_command(linear, angular)
         return (linear, angular)

@@ -1,9 +1,4 @@
-"""Fail-closed contract tests for the issue #5419 local DPCBF executor.
-
-They cover authorization, ordered arm dispatch, caveat statuses, content-bound provenance,
-atomic interruption checkpoints, orphan output, and a reduced real-runner run-twice smoke.
-The smoke proves wiring only; failed/degraded rows remain caveats, never success evidence.
-"""
+"""Fail-closed contract tests for the issue #5419 local DPCBF executor."""
 
 from __future__ import annotations
 
@@ -28,6 +23,7 @@ from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import (
     REQUIRED_AUTHORIZATION_ID,
     DenseComparisonExecutionGatedError,
     DenseComparisonProvenanceMismatchError,
+    _episode_ids,
     _resolve_execution_inputs,
     build_run_plan,
     execute_run_plan,
@@ -35,8 +31,6 @@ from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import (
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
-# A well-formed synthetic packet whose arm configs pass readiness. ``algorithm`` is
-# ``simple_policy`` so the smoke can run real episodes on CPU without MPC dependencies.
 _RUNNABLE_PACKET = {
     "schema_version": "robot_sf.issue_4142_dpcbf_dense_comparison.v1",
     "canonical_command": "uv run python scripts/tools/run_issue_4142_dpcbf_dense_comparison.py",
@@ -69,11 +63,7 @@ _RUNNABLE_PACKET = {
         "evidence_tier": "bounded_runtime_comparison",
         "fallback_rows_are_success_evidence": False,
         "excluded_row_statuses": ["fallback", "degraded", "failed", "ineligible"],
-        "required_arms": [
-            "cbf_off",
-            "cbf_collision_cone_on",
-            "cbf_dynamic_parabolic_v1_on",
-        ],
+        "required_arms": list(REQUIRED_ARMS),
     },
 }
 
@@ -84,31 +74,17 @@ def _write_runnable_tree(root: pathlib.Path, packet: dict) -> pathlib.Path:
     (root / "configs/scenarios/sets").mkdir(parents=True, exist_ok=True)
     (root / "configs/research").mkdir(parents=True, exist_ok=True)
 
-    # A multi-document stream keeps these abstract smoke scenarios off the map loader path.
-    scenarios = [
-        {
-            "id": "dpcbf-smoke-a",
-            "density": "low",
-            "flow": "uni",
-            "obstacle": "open",
-            "groups": 0.0,
-            "speed_var": "low",
-            "goal_topology": "point",
-            "robot_context": "embedded",
-            "repeats": 1,
-        },
-        {
-            "id": "dpcbf-smoke-b",
-            "density": "low",
-            "flow": "uni",
-            "obstacle": "open",
-            "groups": 0.0,
-            "speed_var": "low",
-            "goal_topology": "point",
-            "robot_context": "embedded",
-            "repeats": 1,
-        },
-    ]
+    base = {
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 1,
+    }
+    scenarios = [dict(base, id=f"dpcbf-smoke-{suffix}") for suffix in ("a", "b")]
     (root / "configs/scenarios/sets/dense.yaml").write_text(
         yaml.safe_dump_all(scenarios, sort_keys=False), encoding="utf-8"
     )
@@ -152,11 +128,6 @@ class _RecordingRunBatch:
             with out_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps({"episode_id": f"fake-{idx}-{item}"}) + "\n")
         return summary
-
-
-def _config_stem(path: str) -> str:
-    """Return the arm config filename for order/identity assertions."""
-    return pathlib.Path(path).name
 
 
 def test_no_authorization_raises_before_creating_output(tmp_path: pathlib.Path) -> None:
@@ -221,8 +192,8 @@ def test_authorized_run_dispatches_all_arms_in_packet_order(tmp_path: pathlib.Pa
     )
 
     assert len(fake.calls) == len(REQUIRED_ARMS)
-    dispatched_configs = [_config_stem(c["algo_config_path"]) for c in fake.calls]
-    assert dispatched_configs == [_config_stem(job.algorithm_config) for job in plan.arms]
+    dispatched_configs = [pathlib.Path(c["algo_config_path"]).name for c in fake.calls]
+    assert dispatched_configs == [pathlib.Path(job.algorithm_config).name for job in plan.arms]
     assert len({c["scenarios_or_path"] for c in fake.calls}) == 1
     assert len({c["algo_config_path"] for c in fake.calls}) == len(REQUIRED_ARMS)
     assert len({c["out_path"] for c in fake.calls}) == len(REQUIRED_ARMS)
@@ -265,6 +236,7 @@ def test_manifest_contains_required_provenance_fields(tmp_path: pathlib.Path) ->
         assert status in payload["excluded_row_statuses"]
     assert {a["arm_key"] for a in payload["arms"]} == set(REQUIRED_ARMS)
     assert all(a["output_jsonl"] for a in payload["arms"])
+    assert all(a["artifact_sha256"] for a in payload["arms"])
 
 
 def test_failing_arm_stays_visible_and_blocks_complete(tmp_path: pathlib.Path) -> None:
@@ -445,6 +417,73 @@ def test_changed_execution_inputs_fail_closed_on_resume(tmp_path: pathlib.Path) 
             schema_path=tmp_path / "alternate-episode-schema.json",
             run_batch_fn=_RecordingRunBatch(),
         )
+
+
+@pytest.mark.parametrize("tamper", ("replace_ids", "duplicate_row"))
+def test_completed_artifact_tampering_fails_closed(tmp_path: pathlib.Path, tamper: str) -> None:
+    """Completed artifacts stay bound to their checkpointed bytes."""
+    out_dir = tmp_path / "out"
+    plan = build_run_plan(repo_root=REPO_ROOT, packet_path=PACKET_PATH, output_dir=out_dir)
+    execute_run_plan(
+        plan,
+        authorization=REQUIRED_AUTHORIZATION_ID,
+        repo_root=REPO_ROOT,
+        run_batch_fn=_RecordingRunBatch(),
+    )
+    artifact = REPO_ROOT / plan.arms[0].output_jsonl
+    lines = artifact.read_text(encoding="utf-8").splitlines()
+    if tamper == "replace_ids":
+        row = json.loads(lines[0])
+        row["episode_id"] = "same-count-replacement"
+        lines[0] = json.dumps(row)
+    else:
+        lines.append(lines[0])
+    artifact.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(DenseComparisonProvenanceMismatchError, match="artifact"):
+        execute_run_plan(
+            plan,
+            authorization=REQUIRED_AUTHORIZATION_ID,
+            repo_root=REPO_ROOT,
+            run_batch_fn=_RecordingRunBatch(),
+        )
+
+
+def test_duplicate_episode_ids_are_malformed(tmp_path: pathlib.Path) -> None:
+    """Duplicate identities cannot be collapsed into apparent completeness."""
+    artifact = tmp_path / "episodes.jsonl"
+    artifact.write_text('{"episode_id":"duplicate"}\n' * 2, encoding="utf-8")
+    assert _episode_ids(artifact) is None
+
+
+def test_uncheckpointed_crash_artifact_cannot_self_certify(tmp_path: pathlib.Path) -> None:
+    """A crash after writing rows cannot resume from the artifact's own count."""
+    out_dir = tmp_path / "out"
+    plan = build_run_plan(repo_root=REPO_ROOT, packet_path=PACKET_PATH, output_dir=out_dir)
+
+    def crash_after_write(**kwargs):
+        _RecordingRunBatch()(**kwargs)
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        execute_run_plan(
+            plan,
+            authorization=REQUIRED_AUTHORIZATION_ID,
+            repo_root=REPO_ROOT,
+            run_batch_fn=crash_after_write,
+        )
+
+    resumed = _RecordingRunBatch()
+    manifest = execute_run_plan(
+        plan,
+        authorization=REQUIRED_AUTHORIZATION_ID,
+        repo_root=REPO_ROOT,
+        run_batch_fn=resumed,
+    )
+    assert manifest.status == "results_incomplete"
+    assert manifest.arms[0].status == "failed"
+    assert "no checkpointed expected episode count" in (manifest.arms[0].error or "")
+    assert len(resumed.calls) == len(REQUIRED_ARMS) - 1
 
 
 def test_non_boolean_resume_is_a_plan_blocker() -> None:

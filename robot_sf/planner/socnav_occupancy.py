@@ -66,6 +66,20 @@ class OccupancyAwarePlannerMixin:
             return None
         return grid_arr, meta
 
+    def _cache_grid_payload(self, observation: dict) -> tuple[np.ndarray, dict[str, Any]]:
+        """Return one per-step grid payload, including a no-grid sentinel.
+
+        The empty payload distinguishes a cached "no grid" result from an omitted cache
+        argument, so downstream rollout helpers do not repeat extraction on every candidate.
+
+        Returns:
+            tuple[np.ndarray, dict[str, Any]]: Grid payload or an empty no-grid sentinel.
+        """
+        payload = self._extract_grid_payload(observation)
+        if payload is not None:
+            return payload
+        return np.empty((0, 0, 0), dtype=float), {}
+
     def _socnav_fields(self, observation: dict) -> tuple[dict, dict, dict]:
         """Normalize SocNav observation (nested or flattened) into standard dicts.
 

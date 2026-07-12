@@ -1,4 +1,4 @@
-# Issue #5355 — Prediction × Constraint 2×2 Factorial Pre-Registration (option-1 base)
+# Issue #5355 — Prediction × Constraint 2×2 Factorial Pre-Registration (Option-1 Base)
 
 - **Claim boundary**: protocol evidence only. This note fixes the comparison surface,
   arms, endpoints, contrasts, multiplicity policy, seed budget, stop rules, and fidelity
@@ -135,7 +135,7 @@ All four arms consume the **SocNav structured observation** via
 current + next goal, pedestrian positions/velocities/count/radius, and the occupancy-grid
 payload). Because all arms are the same adapter, the observation mode is identical **by
 construction** — no per-arm adapter, no per-arm observation access. This is the parity the
-#5353 capability matrix must confirm, and here it is a tautology rather than a claim.
+Issue #5353 capability matrix must confirm, and here it is a tautology rather than a claim.
 
 ### 2.2 Action space / kinematics
 Identical across arms: differential-drive unicycle `(v, w)`, `v in [0, speed_cap]`,
@@ -360,7 +360,7 @@ help). #5355 **fixes one base planner** and varies **two internal mechanisms** (
 constraint-handling), matched-by-construction. #4830 varies the planner and holds the
 mechanism family fixed; #5355 holds the planner fixed and varies the mechanisms. **No shared
 arms, no shared config, no shared rows.** #5355 does not measure the safety-wrapper leg, and
-#4830 does not absorb the prediction×constraint factorial. The two pre-registrations are
+Issue #4830 does not absorb the prediction×constraint factorial. The two pre-registrations are
 coordinated (same pairing/analysis conventions) but scope-disjoint.
 
 ---

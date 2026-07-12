@@ -401,10 +401,30 @@ class _PlannerStepProcess:
 
 
 def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
-    """Load a scenario matrix from YAML (stream, list, or dict with scenarios).
+    """Load a scenario matrix from YAML (stream, list, or mapping manifest).
+
+    Routing (see issue #5429):
+      - A **multi-document** YAML stream is an abstract scenario matrix; each
+        document is returned directly without include expansion.
+      - A **single document that is a list** is likewise an abstract scenario
+        matrix (the natural ``yaml.safe_dump([s1, s2])`` form) and is returned
+        directly. It is *not* sent through the map-oriented manifest loader,
+        which would emit misleading ``missing name``/``no map_file`` warnings
+        for abstract benchmark scenarios that legitimately carry neither.
+      - A **single document that is a mapping** is treated as a manifest and
+        deferred to the include-aware :func:`load_scenarios` (supports
+        ``includes``, ``scenarios:``, ``select_scenarios``, overrides, and
+        per-scenario ``map_file``/``map_id`` references).
+
+    Args:
+        path: Scenario matrix YAML path or a ``bundle:`` task-bundle reference.
 
     Returns:
         List of scenario dictionaries.
+
+    Raises:
+        ValueError: If the file is empty or a single-document list yields no
+            scenarios (fail closed instead of a silent ``written=0`` run).
     """
     if is_task_bundle_reference(path):
         return [dict(s) for s in load_scenarios(path)]
@@ -417,7 +437,15 @@ def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
     # Preserve legacy YAML stream behavior (multiple docs) without include expansion.
     if len(docs) > 1:
         return [dict(s) for s in docs]
-    # Single-document path: defer to include-aware loader for manifests.
+    # A single-document top-level list is an abstract scenario matrix, symmetric
+    # with the multi-document stream above; return it directly rather than routing
+    # abstract scenarios through the map-oriented manifest validator.
+    single_doc = docs[0]
+    if isinstance(single_doc, list):
+        if not single_doc:
+            raise ValueError(f"Scenario matrix '{scenario_path}' contains an empty scenario list.")
+        return [dict(s) for s in single_doc]
+    # Single-document mapping: defer to include-aware loader for manifests.
     scenarios = load_scenarios(scenario_path, base_dir=scenario_path)
     return [dict(s) for s in scenarios]
 

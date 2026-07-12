@@ -224,6 +224,7 @@ def build_mean_matched_harness_manifest(
     scenario_rows: list[dict[str, Any]] = []
     manifest_rows: list[dict[str, Any]] = []
     blockers: list[str] = []
+    has_pending_capture = False
 
     for scenario_index, scenario in enumerate(scenarios):
         if not isinstance(scenario, Mapping):
@@ -239,8 +240,19 @@ def build_mean_matched_harness_manifest(
         scenario_rows.append(scenario_row)
         manifest_rows.extend(scenario_manifest_rows)
         blockers.extend(scenario_blockers)
+        for arm_readiness in scenario_row.get("trace_readiness_by_arm", {}).values():
+            if (
+                isinstance(arm_readiness, Mapping)
+                and arm_readiness.get("status") == "pending_runtime_capture"
+            ):
+                has_pending_capture = True
 
-    status = "ready" if not blockers else "blocked_pending_control_trace"
+    if not blockers and not has_pending_capture:
+        status = "ready"
+    elif blockers:
+        status = "blocked_pending_control_trace"
+    else:
+        status = "pending_runtime_capture"
     return {
         "schema_version": MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA,
         "issue": 3574,
@@ -314,6 +326,13 @@ def assess_mean_matched_episode_records(
 
     for key in sorted(set(observed_by_key) - set(expected_by_key)):
         blockers.append(f"unexpected episode record for {_format_campaign_key(key)}")
+
+    manifest_status = str(manifest.get("status", "")).strip()
+    if manifest_status == "blocked_pending_control_trace" and not blockers:
+        blockers.append(
+            "manifest status is blocked_pending_control_trace but episode records "
+            "appear complete; the manifest contract was not satisfied"
+        )
 
     return {
         "schema_version": MEAN_MATCHED_EPISODE_READINESS_SCHEMA,
@@ -536,10 +555,11 @@ def _manifest_scenario_rows(
             "mean_matched_parameters": pair["mean_matched_parameters"],
         }
     )
-    trace_readiness_by_arm, blockers = _trace_readiness_by_arm(
+    trace_readiness_by_arm, blockers, _has_pending = _trace_readiness_by_arm(
         scenario,
         scenario_id=scenario_id,
         metric_keys=metric_keys,
+        arm_populations=pair["arms"],
     )
 
     scenario_row = {
@@ -615,11 +635,26 @@ def _manifest_scenario_rows(
     return scenario_row, manifest_rows, blockers
 
 
+def _arm_has_control_trace_labels(
+    arm_populations: Mapping[str, Mapping[str, Any]] | None,
+    arm: str,
+) -> bool:
+    """Return True when an arm's population carries trace labels for runtime capture."""
+    if arm_populations is None:
+        return False
+    population = arm_populations.get(arm)
+    if not isinstance(population, Mapping):
+        return False
+    labels = population.get(PEDESTRIAN_CONTROL_TRACE_LABELS_KEY)
+    return isinstance(labels, Sequence) and not isinstance(labels, str) and len(labels) > 0
+
+
 def _trace_readiness_by_arm(
     scenario: Mapping[str, Any],
     *,
     scenario_id: str,
     metric_keys: Sequence[str],
+    arm_populations: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     traces = scenario.get("control_traces")
     if traces is not None and not isinstance(traces, Mapping):
@@ -627,23 +662,39 @@ def _trace_readiness_by_arm(
 
     readiness_by_arm: dict[str, Any] = {}
     blockers: list[str] = []
+    has_pending = False
     for arm in ("heterogeneous", "mean_matched_homogeneous"):
         trace = traces.get(arm) if isinstance(traces, Mapping) else None
         if trace is None:
-            readiness = {
-                "schema_version": HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
-                "source": "pedestrian_control_trace",
-                "status": "blocked",
-                "ready": False,
-                "metric_keys": list(metric_keys),
-                "blockers": [
-                    f"{EPISODE_CONTROL_TRACE_PATH} missing",
-                    *[
-                        f"{EPISODE_CONTROL_TRACE_PATH}.pedestrians[].steps[].{metric_key} missing"
-                        for metric_key in metric_keys
+            has_labels = _arm_has_control_trace_labels(arm_populations, arm)
+            if has_labels:
+                has_pending = True
+                readiness = {
+                    "schema_version": HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
+                    "source": "pedestrian_control_trace",
+                    "status": "pending_runtime_capture",
+                    "ready": False,
+                    "metric_keys": list(metric_keys),
+                    "blockers": [
+                        f"{EPISODE_CONTROL_TRACE_PATH} pending runtime capture "
+                        "(pedestrian_control_trace_labels present in arm population)",
                     ],
-                ],
-            }
+                }
+            else:
+                readiness = {
+                    "schema_version": HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
+                    "source": "pedestrian_control_trace",
+                    "status": "blocked",
+                    "ready": False,
+                    "metric_keys": list(metric_keys),
+                    "blockers": [
+                        f"{EPISODE_CONTROL_TRACE_PATH} missing",
+                        *[
+                            f"{EPISODE_CONTROL_TRACE_PATH}.pedestrians[].steps[].{metric_key} missing"
+                            for metric_key in metric_keys
+                        ],
+                    ],
+                }
         else:
             readiness = {
                 "schema_version": HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
@@ -668,10 +719,10 @@ def _trace_readiness_by_arm(
                 readiness["blockers"] = metric_blockers
 
         readiness_by_arm[arm] = readiness
-        if not readiness["ready"]:
+        if not readiness["ready"] and readiness["status"] == "blocked":
             blockers.extend(f"{scenario_id}/{arm}: {blocker}" for blocker in readiness["blockers"])
 
-    return readiness_by_arm, blockers
+    return readiness_by_arm, blockers, has_pending
 
 
 def _trace_metric_metadata_blockers(

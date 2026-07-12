@@ -16,7 +16,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   testing-only and requires `allow_testing_algorithms`; evidence is an exploratory CPU smoke, not
   a safety, liveness, or superiority claim. Slice 3 owns outcome evaluation.
 
+* **issue #5419 authorization-gated DPCBF dense episode executor.** `execute_run_plan()` now
+  runs bounded local arms through `run_batch` only with the exact public authorization ID. It
+  writes an atomic, checkpointed execution manifest with effective arguments, dirty-state and
+  content-bound provenance, and explicit caveat statuses; orphan output, malformed input, and
+  mismatched resume state fail closed. Packet bounds and the real issue-scoped CLI are recorded.
+  No Slurm/GPU submission or safety-performance claim is made.
+
 ### Fixed
+
+* **issue #5429 `load_scenario_matrix` no longer misroutes single-document abstract scenario
+  files.** A single-document YAML file whose top-level content is a *list* of abstract benchmark
+  scenarios (the `density`/`flow`/`obstacle` form, e.g. `yaml.safe_dump([s1, s2])`) is now returned
+  directly — symmetric with the existing multi-document stream behavior — instead of being sent
+  through the map-oriented `robot_sf/training/scenario_loader.py::load_scenarios`. Previously such
+  files were validated as map manifests and emitted misleading
+  `Scenario entry N is missing a name or scenario_id` / `has no map_file or map_id` warnings even
+  though abstract scenarios legitimately carry neither. Single-document *mappings* still route to the
+  include-aware manifest loader (unchanged), and an empty single-document list now fails closed with
+  a clear `ValueError` rather than a silent zero-job run.
 
 * **issue #5340 main CI regression from unconditional `spaces.Sequence` leaf.** PRs #5335
   and #5337 unconditionally added `spaces.Sequence` leaves to the SocNav structured observation

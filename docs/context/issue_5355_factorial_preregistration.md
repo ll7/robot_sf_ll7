@@ -75,6 +75,12 @@ Holm-Bonferroni over the three preregistered contrasts, family-wise alpha = 0.05
 
 `configs/research/prediction_mpc_factorial_v1.yaml`
 
+## Configuration provenance
+
+The durable registry pins the preregistration config path, SHA-256, and producing commit in
+[`preregistration_config_registry.json`](evidence/issue_5355_prediction_mpc_factorial_preregistration/preregistration_config_registry.json).
+It records a design contract only, not a completed campaign or benchmark evidence.
+
 ## Reproduction (CPU smoke only)
 
 ```bash

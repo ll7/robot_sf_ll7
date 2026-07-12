@@ -6,6 +6,8 @@ for the prediction on/off x constraint-handling on/off factorial.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 import numpy as np
@@ -330,6 +332,19 @@ class TestPreregistrationHarness:
         assert len(results) == 4
         for arm_key, result in results.items():
             assert result["valid"] is True, f"{arm_key}: {result.get('error')}"
+
+    def test_preregistration_config_is_pinned_in_evidence_registry(self):
+        registry_path = (
+            REPO_ROOT
+            / "docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration"
+            / "preregistration_config_registry.json"
+        )
+        registry = json.loads(registry_path.read_text(encoding="utf-8"))
+
+        assert registry["campaign_id"] == "issue_5355_prediction_mpc_factorial_v1"
+        config_path = REPO_ROOT / registry["config_path"]
+        assert config_path.is_file()
+        assert registry["config_sha256"] == hashlib.sha256(config_path.read_bytes()).hexdigest()
 
     def test_check_planned_rows_complete(self):
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (

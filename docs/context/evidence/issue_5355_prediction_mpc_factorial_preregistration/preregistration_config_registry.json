@@ -1,0 +1,10 @@
+{
+  "schema_version": "robot_sf.issue_5355_preregistration_config_registry.v1",
+  "campaign_id": "issue_5355_prediction_mpc_factorial_v1",
+  "status": "preregistration_only",
+  "evidence_status": "not_benchmark_evidence",
+  "claim_boundary": "Pinned factorial-design configuration only; no campaign has run and no mechanism-effectiveness claim is supported.",
+  "config_path": "configs/research/prediction_mpc_factorial_v1.yaml",
+  "config_sha256": "44bceb53d90093a097e2c4db8e70bef524db097222a2c1dd255358474ae560c3",
+  "commit": "a8dbed9116c794a6b4adca1da92fde663eebf318"
+}

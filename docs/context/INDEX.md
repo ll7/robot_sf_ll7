@@ -1,5 +1,9 @@
 # Context Retrieval Index
 
+Collision causality, action-conditioned online risk, and statistically defensible Chapter 7
+scenario discovery research program:
+[collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md).
+
 Issue #5355 prediction-MPC 2x2 factorial preregistration (prediction on/off x constraint-handling on/off):
 [issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md).
 

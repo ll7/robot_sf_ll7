@@ -49,6 +49,12 @@ _TRUTH_TABLE: dict[str, dict[str, Any]] = {
 }
 
 
+def _values_differ(values: list[Any]) -> bool:
+    """Return whether values differ by either type or equality."""
+    first = values[0]
+    return any(type(value) is not type(first) or value != first for value in values[1:])
+
+
 def _raw_arm(arm_id: str) -> dict[str, Any]:
     """Parse a canonical arm YAML into a raw mapping."""
     path = _ALGO_DIR / f"prediction_mpc_factorial_{arm_id}.yaml"
@@ -91,10 +97,10 @@ def test_arm_configs_differ_only_in_factor_fields(raw_arms: dict[str, dict[str, 
     pass: nothing outside the two factor flags and implied soft weight may vary.
     """
     shared_keys = set(raw_arms["A0_B0"]) - _FACTOR_FIELDS
-    differing: dict[str, set[Any]] = {}
+    differing: dict[str, list[Any]] = {}
     for key in shared_keys:
-        values = {str(raw_arms[arm_id][key]) for arm_id in _ARM_IDS}
-        if len(values) > 1:
+        values = [raw_arms[arm_id][key] for arm_id in _ARM_IDS]
+        if _values_differ(values):
             differing[key] = values
     assert not differing, f"non-factor fields must be identical across arms: {differing}"
 
@@ -102,7 +108,7 @@ def test_arm_configs_differ_only_in_factor_fields(raw_arms: dict[str, dict[str, 
     actually_differ = {
         key
         for key in raw_arms["A0_B0"]
-        if len({str(raw_arms[arm_id][key]) for arm_id in _ARM_IDS}) > 1
+        if _values_differ([raw_arms[arm_id][key] for arm_id in _ARM_IDS])
     }
     assert actually_differ == set(_FACTOR_FIELDS), (
         f"arms must differ in exactly the factor fields, got {actually_differ}"
@@ -156,10 +162,10 @@ def test_built_configs_differ_only_in_factor_fields(
 
     Ties the YAML-level parity check to the object the planner actually consumes.
     """
-    differing: dict[str, set[Any]] = {}
+    differing: dict[str, list[Any]] = {}
     for field in fields(PredictionMPCConfig):
-        values = {getattr(built_arms[arm_id], field.name) for arm_id in _ARM_IDS}
-        if len(values) > 1:
+        values = [getattr(built_arms[arm_id], field.name) for arm_id in _ARM_IDS]
+        if _values_differ(values):
             differing[field.name] = values
     assert set(differing) <= _FACTOR_FIELDS, (
         f"built configs may differ only in factor fields, got {set(differing)}"

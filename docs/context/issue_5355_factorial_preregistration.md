@@ -9,10 +9,10 @@
 - **Base-planner decision**: **option 1** (maintainer, 2026-07-12) — the existing
   prediction-MPC framework hosts the factorial. Its native prediction consumption is
   Factor A's ON state; its explicit collision-constraint set is the toggleable Factor B.
-- **Uncertainty on the design being executable as written**: moderate. Two config
-  toggles named below **do not exist yet** and are recorded as binding implementation
-  preconditions (§8). The intervention-fidelity requirement for Factor B (§1.3, §6) is the
-  load-bearing risk the maintainer flagged and is addressed explicitly.
+- **Implementation status**: the arm configs, `predictor_backend`,
+  `hard_pedestrian_constraints_enabled`, and the fail-closed soft-clearance-weight contract
+  now exist. CPU configuration and intervention-fidelity tests cover them (§6, §8), but no
+  campaign row has run; GPU submission remains blocked on #5351.
 
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/5355>
 
@@ -37,14 +37,13 @@ disentangles the two factors precisely:
   forward at constant velocity. Prediction consumption = *using a forward-projected
   pedestrian future*; the OFF state = *freezing pedestrians at their current position*
   (zero-order hold / static-obstacle assumption).
-- **Factor B — explicit constraint handling.** `PredictionMPCPlannerAdapter._optimizer_constraints`
+- **Factor B — hard-versus-soft pedestrian handling.** `PredictionMPCPlannerAdapter._optimizer_constraints`
   builds a `scipy.optimize.NonlinearConstraint` requiring squared robot-pedestrian
   distance >= `(robot_radius + ped_radius + margin)^2` at every horizon step
   (`_pedestrian_clearance_constraints`). The shipping prediction-MPC adapter also sets the
-  base soft pedestrian term `pedestrian_clearance_weight = 0.0` in `_to_nmpc_config`
-  (line ~299), i.e. its *only* pedestrian avoidance is the hard constraint set. Constraint
-  handling = *hard time-varying pedestrian constraints*; the OFF state = *no hard
-  constraints, pedestrian avoidance falls back to a soft clearance penalty*.
+  base soft pedestrian term is configured explicitly. Constraint handling = *hard
+  time-varying pedestrian constraints with zero soft pedestrian weight*; the OFF state =
+  *no hard constraints and a positive shared soft-clearance penalty*.
 
 The shipping `configs/algos/prediction_mpc_cv_uncertainty_envelope.yaml` corresponds to the
 **A-on / B-on** cell (with the issue-#4141 uncertainty envelope additionally enabled). The
@@ -85,11 +84,10 @@ explicitly out of scope for this 2x2.
 
 ### 1.2 The two toggles
 
-- **Factor A** — `prediction_enabled` (proposed field): `true` => pedestrians advanced at
-  constant velocity across the horizon (native behavior); `false` => pedestrians frozen at
-  their current position (velocity treated as zero) in **both** the soft-cost predictor and
-  the hard-constraint predictor.
-- **Factor B** — `hard_pedestrian_constraints_enabled` (proposed field): `true` =>
+- **Factor A** — `predictor_backend`: `constant_velocity` => pedestrians advance at constant
+  velocity across the horizon; `none` => pedestrians are frozen at their current position in
+  the hard-constraint predictor without consuming a trajectory prediction.
+- **Factor B** — `hard_pedestrian_constraints_enabled`: `true` =>
   `_optimizer_constraints` returns the hard time-varying pedestrian constraint and the soft
   pedestrian weight is `0.0`; `false` => `_optimizer_constraints` returns `()` and a
   **positive** soft pedestrian clearance weight `W_soft` is passed through to the cost.
@@ -101,7 +99,7 @@ outcome (§2.4, §6.2).
 
 ### 1.3 Arm table (exact deltas)
 
-| Arm ID | Factor A | Factor B | `prediction_enabled` | `hard_pedestrian_constraints_enabled` | soft `pedestrian_clearance_weight` | Pedestrian futures fed to planner |
+| Arm ID | Factor A | Factor B | `predictor_backend` | `hard_pedestrian_constraints_enabled` | soft `pedestrian_clearance_weight` | Pedestrian futures fed to planner |
 | --- | --- | --- | --- | --- | --- | --- |
 | **A00** | off | off | `false` | `false` | `4.5` (W_soft) | frozen @ current position, soft penalty |
 | **A10** | on | off | `true` | `false` | `4.5` (W_soft) | constant-velocity forward, soft penalty |
@@ -311,8 +309,9 @@ shared value (re-preregistered before results are seen).
 ## 7. Config landing and evidence registry
 
 The 2x2 campaign config (four arm keys + the shared base config + the pinned scenario matrix
-and `paper_eval_s30` seed set) lands with its **sha256 in the evidence registry**, plus a
-static preflight/identity test that asserts: config loads through `load_campaign_config`;
+and `paper_eval_s30` seed set) is pinned by its **sha256 in the evidence registry**, plus a
+static preflight/identity test that asserts: config loads through
+`load_factorial_preregistration_config`;
 scenario-matrix hash matches the preregistered value; `paper_eval_s30` resolves exactly the
 30 seeds `111..140`; the four arm configs differ **only** in `prediction_enabled`,
 `hard_pedestrian_constraints_enabled`, and the implied soft pedestrian weight; and the
@@ -321,28 +320,23 @@ or row archiving occurs under this pre-registration.
 
 ---
 
-## 8. Open implementation preconditions (binding; design/impl may start now, compute is gated)
+## 8. Implemented contract and remaining execution gate
 
-1. **Factor A toggle does not exist.** Add `prediction_enabled` (or
-   `pedestrian_prediction_mode: {constant_velocity | frozen}`) that, when off, zeroes the
-   pedestrian velocity used by **both** `NMPCSocialPlannerAdapter._predict_pedestrians` (soft
-   path) and `ConstantVelocityPedestrianPredictor.predict` (hard path). Minimal change; no
-   optimizer change.
-2. **Factor B toggle does not exist.** The shipping adapter always adds the hard constraint
-   and hardcodes `pedestrian_clearance_weight = 0.0` in `_to_nmpc_config`. Add
-   `hard_pedestrian_constraints_enabled` that, when off, returns `()` from
-   `_optimizer_constraints` **and** passes the positive shared `W_soft` through to the cost.
-   Expose `pedestrian_clearance_weight` in `build_prediction_mpc_config` converters.
-3. **Single unified adapter/config for all four arms.** Preferred: extend
-   `PredictionMPCConfig` with the two booleans + the `W_soft` passthrough so all four arms are
-   one adapter with matched weights (capability parity by construction). This keeps §2.1
-   parity a tautology.
-4. **Arm YAMLs + preflight identity test** under `configs/` per §7, registered with sha256.
-5. **Fidelity smoke module** (CPU) implementing §6 on the two named scenarios.
-6. **Dependency coupling:** confirmatory analysis consumes **#5351** (hierarchical paired
-   inference); parity is cross-checked against the **#5353** capability matrix. Both are open;
-   design and arm implementation can proceed now, compute goes through the ops queue and
-   respects the #4826-class per-arm GPU lifecycle gate.
+1. **Factor A is implemented** as `predictor_backend: constant_velocity | none`; the OFF
+   path freezes current pedestrian positions while retaining them for B-on constraints.
+2. **Factor B is implemented** as `hard_pedestrian_constraints_enabled` plus an explicit
+   `pedestrian_clearance_weight`: B-on requires zero soft weight, B-off requires a positive
+   shared `W_soft = 4.5`. Invalid combinations fail configuration validation.
+3. **One adapter and four tracked arm YAMLs** provide matched observation, optimizer, action,
+   and tuning contracts. Existing local-minimum handling remains shared rather than becoming a
+   third intervention.
+4. **CPU semantic checks** validate the arm truth table, pinned scenario digest, S30 seed set,
+   registry checksum, current-position hold, active B-on constraint, B-off soft weight, and
+   functional forward progress.
+5. **Remaining execution gate:** confirmatory analysis consumes **#5351**; capability parity is
+   cross-checked against the #5353 contract already landed by #5370. No campaign submission or
+   evidence claim is authorized until the exact-config fidelity smoke and these dependencies are
+   satisfied.
 
 ---
 

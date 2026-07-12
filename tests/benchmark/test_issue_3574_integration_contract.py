@@ -181,8 +181,13 @@ def test_durable_notes_match_tracked_manifest_row_count() -> None:
     state = yaml.safe_load(STATE_PATH.read_text(encoding="utf-8"))
     manifest = build_mean_matched_harness_manifest(config, config_path=str(CONFIG_PATH))
 
-    assert manifest["row_count"] == 72
-    documented_row_count = manifest["row_count"]
+    assert isinstance(manifest, dict), (
+        f"Expected the generated manifest to be a dictionary; got {type(manifest).__name__}"
+    )
+    documented_row_count = manifest.get("row_count")
+    assert documented_row_count == 72, (
+        f"Expected the generated manifest row count to be 72; got {documented_row_count!r}"
+    )
     assert f"{documented_row_count}_row" in state["next_empirical_action"]
     assert f"{documented_row_count}-row tracked manifest" in HARNESS_NOTE_PATH.read_text(
         encoding="utf-8"

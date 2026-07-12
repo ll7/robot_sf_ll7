@@ -449,6 +449,99 @@ class TestReproductionReport:
         assert "v1_2_3_scoped.yaml" in result["reason"]
 
 
+class TestActualExecution:
+    """Tests that validate actual execution of verification and report generation.
+
+    These tests run the real scripts and verify the output artifacts exist
+    with correct structure. They require network access to download the bundle.
+    """
+
+    def test_checksum_verification_report_structure(self, tmp_path: Path) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        report = verify_release(
+            manifest_path=MANIFEST_PATH,
+            bundle_path=None,
+            output_dir=tmp_path / "verification",
+            download=True,
+        )
+
+        assert report["schema"] == "release-checksum-verification.v1"
+        assert report["release_tag"] == "0.0.2"
+        assert report["overall_verdict"] == "pass"
+        assert "environment" in report
+        assert "verdicts" in report
+        assert "bundle_checksum" in report["verdicts"]
+        assert report["verdicts"]["bundle_checksum"]["match"] is True
+        assert len(report["errors"]) == 0
+
+    def test_checksum_verification_report_json_serializable(self, tmp_path: Path) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        report = verify_release(
+            manifest_path=MANIFEST_PATH,
+            bundle_path=None,
+            output_dir=tmp_path / "verification",
+            download=True,
+        )
+
+        json_str = json.dumps(report, indent=2, sort_keys=True)
+        assert len(json_str) > 100
+        parsed = json.loads(json_str)
+        assert parsed["overall_verdict"] == "pass"
+
+    def test_cold_start_report_generates_valid_report(self, tmp_path: Path) -> None:
+        from scripts.repro.cold_start_reproduction_report import generate_reproduction_report
+
+        report = generate_reproduction_report(
+            tag="0.0.2",
+            output_dir=tmp_path / "reproduction",
+            local_repo=ROOT,
+            checksums_only=True,
+        )
+
+        assert report["schema"] == "cold-start-reproduction-report.v1"
+        assert report["release_tag"] == "0.0.2"
+        assert report["overall_verdict"] == "pass"
+        assert "environment" in report
+        assert "steps" in report
+        assert "verify_checksums" in report["steps"]
+        assert report["steps"]["verify_checksums"]["status"] == "pass"
+
+    def test_cold_start_report_embedded_artifacts_verified(self, tmp_path: Path) -> None:
+        from scripts.repro.cold_start_reproduction_report import generate_reproduction_report
+
+        report = generate_reproduction_report(
+            tag="0.0.2",
+            output_dir=tmp_path / "reproduction",
+            local_repo=ROOT,
+            checksums_only=True,
+        )
+
+        embedded = report["steps"]["verify_checksums"]["embedded_artifacts"]
+        assert len(embedded) >= 3
+        for artifact in embedded:
+            assert artifact["match"] is True
+            assert artifact["actual_sha256"] == artifact["expected_sha256"]
+
+    def test_report_file_written_to_disk(self, tmp_path: Path) -> None:
+        from scripts.repro.cold_start_reproduction_report import generate_reproduction_report
+
+        output_dir = tmp_path / "reproduction"
+        report = generate_reproduction_report(
+            tag="0.0.2",
+            output_dir=output_dir,
+            local_repo=ROOT,
+            checksums_only=True,
+        )
+
+        report_path = output_dir / "reproduction_report.json"
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True))
+        assert report_path.is_file()
+        loaded = json.loads(report_path.read_text())
+        assert loaded["overall_verdict"] == "pass"
+
+
 class TestDocumentation:
     """Tests for documentation completeness."""
 

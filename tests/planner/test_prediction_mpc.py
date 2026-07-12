@@ -14,6 +14,7 @@ from robot_sf.planner.prediction_mpc import (
     PredictedPedestrianFutures,
     PredictionMPCConfig,
     PredictionMPCPlannerAdapter,
+    _to_nmpc_config,
     build_prediction_mpc_config,
 )
 
@@ -408,3 +409,399 @@ def test_uncertainty_envelope_example_config_activates_envelope() -> None:
     assert envelope["enabled"] is True
     assert envelope["policy"] == "linear"
     assert envelope["alpha_mps"] == pytest.approx(0.1)
+
+
+# ---------------------------------------------------------------------------
+# Factor toggles — issue #5372
+# ---------------------------------------------------------------------------
+
+# Shared base fields that must be identical across all 4 factorial arms.
+_FACTORIAL_BASE_FIELDS = {
+    "max_linear_speed",
+    "max_angular_speed",
+    "horizon_steps",
+    "rollout_dt",
+    "goal_tolerance",
+    "waypoint_switch_distance",
+    "path_goal_weight",
+    "terminal_goal_weight",
+    "heading_weight",
+    "control_effort_weight",
+    "smoothness_weight",
+    "pedestrian_safety_margin",
+    "static_obstacle_soft_weight",
+    "solver_ftol",
+    "solver_max_iterations",
+    "warm_start",
+    "fallback_to_stop",
+    "predictor_backend",
+    "allow_predictor_fallback",
+    "pedestrian_uncertainty_envelope_enabled",
+    "pedestrian_uncertainty_alpha_mps",
+}
+
+# The two factor toggles that MUST differ.
+_FACTOR_TOGGLE_FIELDS = {"prediction_enabled", "hard_pedestrian_constraints_enabled"}
+
+# Factorial arm configs from YAML files.
+_FACTORIAL_YAML_STEMS = [
+    "factorial_pred_on_const_on",
+    "factorial_pred_off_const_on",
+    "factorial_pred_on_const_off",
+    "factorial_pred_off_const_off",
+]
+
+
+def _build_factorial_planner(config: PredictionMPCConfig) -> PredictionMPCPlannerAdapter:
+    """Build a planner with deterministic settings for factorial tests."""
+    return PredictionMPCPlannerAdapter(
+        PredictionMPCConfig(
+            horizon_steps=3,
+            rollout_dt=0.25,
+            solver_max_iterations=16,
+            prediction_enabled=config.prediction_enabled,
+            hard_pedestrian_constraints_enabled=config.hard_pedestrian_constraints_enabled,
+        )
+    )
+
+
+# -- Factor A: prediction_enabled --
+
+
+def test_factor_a_default_enabled() -> None:
+    """prediction_enabled defaults to True so baseline is unchanged."""
+    cfg = PredictionMPCConfig()
+    assert cfg.prediction_enabled is True
+
+
+def test_factor_a_prediction_disabled_freezes_pedestrians_in_soft_path() -> None:
+    """Factor A off: _predict_pedestrians must return t=0 positions regardless of step."""
+    ped_pos = np.asarray([[1.0, 2.0]], dtype=float)
+    ped_vel = np.asarray([[0.5, 0.3]], dtype=float)
+
+    planner_on = _build_factorial_planner(
+        PredictionMPCConfig(prediction_enabled=True, hard_pedestrian_constraints_enabled=False)
+    )
+    planner_off = _build_factorial_planner(
+        PredictionMPCConfig(prediction_enabled=False, hard_pedestrian_constraints_enabled=False)
+    )
+
+    # A-ON: positions should move with velocity
+    on_pos = planner_on._predict_pedestrians(ped_pos, ped_vel, step_idx=2)
+    assert not np.allclose(on_pos, ped_pos)
+
+    # A-OFF: positions stay frozen at current
+    off_pos = planner_off._predict_pedestrians(ped_pos, ped_vel, step_idx=2)
+    np.testing.assert_allclose(off_pos, ped_pos)
+
+    # Zero-order hold should work for all step indices
+    for step in range(5):
+        off_step = planner_off._predict_pedestrians(ped_pos, ped_vel, step_idx=step)
+        np.testing.assert_allclose(off_step, ped_pos)
+
+
+def test_factor_a_prediction_disabled_freezes_hard_constraint_futures() -> None:
+    """Factor A off: _freeze_pedestrian_futures should zero all motion."""
+    planner = _build_factorial_planner(
+        PredictionMPCConfig(prediction_enabled=False, hard_pedestrian_constraints_enabled=True)
+    )
+    futures = PredictedPedestrianFutures(
+        positions_world=np.arange(12, dtype=float).reshape((2, 3, 2)),
+        mask=np.ones((2,), dtype=float),
+        dt=0.25,
+        source="test",
+    )
+    frozen = planner._freeze_pedestrian_futures(futures)
+
+    # All steps should equal the t=0 position for each pedestrian
+    for ped_idx in range(2):
+        ref = futures.positions_world[ped_idx, 0, :]
+        for step_idx in range(3):
+            np.testing.assert_allclose(
+                frozen.positions_world[ped_idx, step_idx],
+                ref,
+            )
+
+    assert "_zeroorder" in frozen.source
+
+
+def test_factor_a_toggle_affects_optimizer_constraints() -> None:
+    """Factor A off: _optimizer_constraints should freeze pedestrian futures."""
+    from scipy.optimize import NonlinearConstraint
+
+    obs = _obs(ped_positions=[(0.8, 0.0)], ped_velocities=[(0.5, 0.0)])
+    planner_on = _build_factorial_planner(
+        PredictionMPCConfig(prediction_enabled=True, hard_pedestrian_constraints_enabled=True)
+    )
+    planner_off = _build_factorial_planner(
+        PredictionMPCConfig(prediction_enabled=False, hard_pedestrian_constraints_enabled=True)
+    )
+    *_, robot_radius, ped_radius = planner_on._extract_state(obs)
+    context = SimpleNamespace(
+        robot_pos=np.asarray([0.0, 0.0], dtype=float),
+        heading=0.0,
+        current_speed=0.0,
+        goal=np.asarray([2.0, 0.0], dtype=float),
+        ped_positions=np.asarray([[0.8, 0.0]], dtype=float),
+        ped_velocities=np.asarray([[0.5, 0.0]], dtype=float),
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+        observation=obs,
+        speed_cap=0.9,
+    )
+
+    constraints_on = planner_on._optimizer_constraints(context)
+    constraints_off = planner_off._optimizer_constraints(context)
+
+    # Both should return one NonlinearConstraint (B is ON for both)
+    assert len(constraints_on) == 1
+    assert len(constraints_off) == 1
+    assert isinstance(constraints_on[0], NonlinearConstraint)
+    assert isinstance(constraints_off[0], NonlinearConstraint)
+
+
+# -- Factor B: hard_pedestrian_constraints_enabled --
+
+
+def test_factor_b_default_enabled() -> None:
+    """hard_pedestrian_constraints_enabled defaults to True."""
+    cfg = PredictionMPCConfig()
+    assert cfg.hard_pedestrian_constraints_enabled is True
+
+
+def test_factor_b_disabled_drops_optimizer_constraints() -> None:
+    """Factor B off: _optimizer_constraints must return empty tuple."""
+    obs = _obs(ped_positions=[(0.5, 0.0)], ped_velocities=[(0.3, 0.0)])
+    planner_off = _build_factorial_planner(
+        PredictionMPCConfig(prediction_enabled=True, hard_pedestrian_constraints_enabled=False)
+    )
+    *_, robot_radius, ped_radius = planner_off._extract_state(obs)
+    context = SimpleNamespace(
+        robot_pos=np.asarray([0.0, 0.0], dtype=float),
+        heading=0.0,
+        current_speed=0.0,
+        goal=np.asarray([2.0, 0.0], dtype=float),
+        ped_positions=np.asarray([[0.5, 0.0]], dtype=float),
+        ped_velocities=np.asarray([[0.3, 0.0]], dtype=float),
+        robot_radius=robot_radius,
+        ped_radius=ped_radius,
+        observation=obs,
+        speed_cap=0.9,
+    )
+
+    constraints = planner_off._optimizer_constraints(context)
+    assert constraints == ()
+
+
+def test_factor_b_disabled_restores_soft_pedestrian_weight() -> None:
+    """Factor B off: pedestrian_clearance_weight = 4.5 in NMPC config."""
+    cfg_on = PredictionMPCConfig(hard_pedestrian_constraints_enabled=True)
+    cfg_off = PredictionMPCConfig(hard_pedestrian_constraints_enabled=False)
+
+    nmpc_on = _to_nmpc_config(cfg_on)
+    nmpc_off = _to_nmpc_config(cfg_off)
+
+    assert nmpc_on.pedestrian_clearance_weight == 0.0
+    assert nmpc_off.pedestrian_clearance_weight == pytest.approx(4.5)
+
+
+def test_factor_b_disabled_still_functional_planner() -> None:
+    """Factor B off: planner should still emit goal-directed commands."""
+    planner = _build_factorial_planner(
+        PredictionMPCConfig(prediction_enabled=True, hard_pedestrian_constraints_enabled=False)
+    )
+    linear, angular = planner.plan(_obs(goal=(3.0, 0.0)))
+    assert linear > 0.0
+    assert abs(angular) <= planner.config.max_angular_speed
+
+
+def test_factor_b_disabled_diagnostics_report_flag() -> None:
+    """Diagnostics should reflect hard_pedestrian_constraints_enabled."""
+    planner = _build_factorial_planner(
+        PredictionMPCConfig(prediction_enabled=True, hard_pedestrian_constraints_enabled=False)
+    )
+    diag = planner.diagnostics()
+    assert diag["hard_pedestrian_constraints_enabled"] is False
+    assert diag["prediction_enabled"] is True
+
+
+def test_build_prediction_mpc_config_parses_factor_toggles() -> None:
+    """YAML-style factor toggle keys are parsed onto the config."""
+    cfg = build_prediction_mpc_config(
+        {
+            "prediction_enabled": "false",
+            "hard_pedestrian_constraints_enabled": "no",
+        }
+    )
+    assert cfg.prediction_enabled is False
+    assert cfg.hard_pedestrian_constraints_enabled is False
+
+    cfg2 = build_prediction_mpc_config(
+        {
+            "prediction_enabled": "true",
+            "hard_pedestrian_constraints_enabled": "yes",
+        }
+    )
+    assert cfg2.prediction_enabled is True
+    assert cfg2.hard_pedestrian_constraints_enabled is True
+
+
+# -- Preflight identity test --
+
+
+def test_factorial_preflight_identity() -> None:
+    """All 4 factorial arms share observation contract, kinematics, runtime budget,
+    and differ ONLY in the two factor toggle flags."""
+    from dataclasses import fields as dc_fields
+
+    import yaml
+
+    configs_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"
+    parsed: dict[str, PredictionMPCConfig] = {}
+    for stem in _FACTORIAL_YAML_STEMS:
+        raw = yaml.safe_load((configs_dir / f"{stem}.yaml").read_text())
+        parsed[stem] = build_prediction_mpc_config(raw)
+
+    # Check exactly 4 arms exist
+    assert len(parsed) == 4
+
+    # Expected toggle matrix: (A=prediction_enabled, B=hard_constrained)
+    expected_toggles = {
+        "factorial_pred_on_const_on": (True, True),
+        "factorial_pred_off_const_on": (False, True),
+        "factorial_pred_on_const_off": (True, False),
+        "factorial_pred_off_const_off": (False, False),
+    }
+    for stem in _FACTORIAL_YAML_STEMS:
+        a_exp, b_exp = expected_toggles[stem]
+        cfg = parsed[stem]
+        assert cfg.prediction_enabled is a_exp, f"{stem} prediction_enabled"
+        assert cfg.hard_pedestrian_constraints_enabled is b_exp, f"{stem} hard_constrained"
+
+    # Base fields identical across all 4 arms
+    field_names = {f.name for f in dc_fields(PredictionMPCConfig)}
+    base_fields = field_names - _FACTOR_TOGGLE_FIELDS
+    for field_name in base_fields:
+        values = {stem: getattr(cfg, field_name) for stem, cfg in parsed.items()}
+        unique = set(values.values())
+        assert len(unique) == 1, f"Base field {field_name} differs across arms: {values}"
+
+    # Verify toggle fields actually differ across arms
+    for field_name in _FACTOR_TOGGLE_FIELDS:
+        values = {stem: getattr(cfg, field_name) for stem, cfg in parsed.items()}
+        unique = set(values.values())
+        assert len(unique) == 2, f"Factor field {field_name} does not vary across arms: {values}"
+
+
+# -- Fidelity smoke --
+
+
+def test_factorial_fidelity_smoke_decision_traces_differ_per_factor() -> None:
+    """Run all 4 arms on 2 tiny scenarios; assert commands differ across each
+    factor flip (A-on vs A-off; B-on vs B-off)."""
+
+    # Scenario fixtures: open field and single pedestrian.
+    scenarios = [
+        _obs(goal=(2.0, 0.0)),  # open space
+        _obs(
+            goal=(2.0, 0.0),
+            ped_positions=[(1.0, 0.0)],
+            ped_velocities=[(0.4, 0.0)],
+        ),  # moving pedestrian
+    ]
+
+    arm_configs = [
+        PredictionMPCConfig(
+            horizon_steps=2,
+            rollout_dt=0.25,
+            solver_max_iterations=12,
+            prediction_enabled=True,
+            hard_pedestrian_constraints_enabled=True,
+        ),
+        PredictionMPCConfig(
+            horizon_steps=2,
+            rollout_dt=0.25,
+            solver_max_iterations=12,
+            prediction_enabled=False,
+            hard_pedestrian_constraints_enabled=True,
+        ),
+        PredictionMPCConfig(
+            horizon_steps=2,
+            rollout_dt=0.25,
+            solver_max_iterations=12,
+            prediction_enabled=True,
+            hard_pedestrian_constraints_enabled=False,
+        ),
+        PredictionMPCConfig(
+            horizon_steps=2,
+            rollout_dt=0.25,
+            solver_max_iterations=12,
+            prediction_enabled=False,
+            hard_pedestrian_constraints_enabled=False,
+        ),
+    ]
+    planners = [PredictionMPCPlannerAdapter(cfg) for cfg in arm_configs]
+    arm_names = ["A_ON_B_ON", "A_OFF_B_ON", "A_ON_B_OFF", "A_OFF_B_OFF"]
+
+    decisions: dict[int, dict[str, tuple[float, float]]] = {i: {} for i in range(len(scenarios))}
+    for scenario_idx, obs in enumerate(scenarios):
+        for arm_idx, planner in enumerate(planners):
+            planner.reset()
+            linear, angular = planner.plan(obs)
+            decisions[scenario_idx][arm_names[arm_idx]] = (linear, angular)
+
+    # Check each factor flip differs across at least one scenario with pedestrians.
+    # In open space (no pedestrians), Factor A and B have no effect, so the
+    # assertions apply only to scenarios where pedestrians exist.
+    factor_a_flips = [
+        ("A_ON_B_ON", "A_OFF_B_ON"),  # B fixed, flip A
+        ("A_ON_B_OFF", "A_OFF_B_OFF"),  # B fixed, flip A
+    ]
+    factor_b_flips = [
+        ("A_ON_B_ON", "A_ON_B_OFF"),  # A fixed, flip B
+        ("A_OFF_B_ON", "A_OFF_B_OFF"),  # A fixed, flip B
+    ]
+
+    has_pedestrians = [obs["pedestrians"]["count"][0] > 0 for obs in scenarios]
+
+    for scenario_idx in range(len(scenarios)):
+        d = decisions[scenario_idx]
+        if not has_pedestrians[scenario_idx]:
+            continue
+        a_differs = False
+        b_differs = False
+        for name_on, name_off in factor_a_flips:
+            if d[name_on] != d[name_off]:
+                a_differs = True
+        for name_on, name_off in factor_b_flips:
+            if d[name_on] != d[name_off]:
+                b_differs = True
+        assert a_differs, (
+            f"Scenario {scenario_idx}: Factor A (prediction_enabled) "
+            f"did not change any decisions across flips: {d}"
+        )
+        assert b_differs, (
+            f"Scenario {scenario_idx}: Factor B (hard_constraints) "
+            f"did not change any decisions across flips: {d}"
+        )
+
+
+def test_factorial_fidelity_smoke_b_off_completes_episodes() -> None:
+    """Factor B off: planner should run multiple steps without crashing
+    and emit bounded commands (functionality check)."""
+    planner = PredictionMPCPlannerAdapter(
+        PredictionMPCConfig(
+            horizon_steps=2,
+            rollout_dt=0.25,
+            solver_max_iterations=12,
+            prediction_enabled=True,
+            hard_pedestrian_constraints_enabled=False,
+        )
+    )
+
+    for _ in range(5):
+        linear, angular = planner.plan(
+            _obs(goal=(2.0, 0.0), ped_positions=[(1.0, 0.0)], ped_velocities=[(0.3, 0.0)])
+        )
+        assert 0.0 <= linear <= planner.config.max_linear_speed
+        assert abs(angular) <= planner.config.max_angular_speed

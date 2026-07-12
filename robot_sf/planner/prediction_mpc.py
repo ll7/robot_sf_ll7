@@ -48,6 +48,14 @@ class PredictionMPCConfig:
     # or alpha == 0.0 reproduces the deterministic baseline exactly.
     pedestrian_uncertainty_envelope_enabled: bool = False
     pedestrian_uncertainty_alpha_mps: float = 0.0
+    # Factor A: trajectory prediction consumed by the planner (issue #5372).
+    # When False, pedestrians are frozen at current position (zero-order hold)
+    # in both the soft-cost predictor and the hard-constraint predictor.
+    prediction_enabled: bool = True
+    # Factor B: explicit hard pedestrian constraints (issue #5372).
+    # When False, drops the NonlinearConstraint set and restores the base
+    # NMPC soft pedestrian-clearance weight to its default 4.5.
+    hard_pedestrian_constraints_enabled: bool = True
 
     def __post_init__(self) -> None:
         """Validate the opt-in uncertainty-envelope conservatism rate."""
@@ -172,12 +180,33 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         self._envelope_activation_count = 0
         self._effective_radius_used_by_planner = False
 
+    def _predict_pedestrians(
+        self, ped_positions: np.ndarray, ped_velocities: np.ndarray, step_idx: int
+    ) -> np.ndarray:
+        """Predict pedestrian positions with Factor A support.
+
+        When prediction_enabled is False, pedestrians are frozen at current
+        position (zero-order hold) regardless of input velocities.
+
+        Returns:
+            np.ndarray: Predicted pedestrian positions for the requested step.
+        """
+        if not bool(self.prediction_config.prediction_enabled):
+            return ped_positions.copy()
+        return super()._predict_pedestrians(ped_positions, ped_velocities, step_idx)
+
     def _optimizer_constraints(self, context: _RolloutContext) -> tuple[NonlinearConstraint, ...]:
         """Enforce hard time-varying pedestrian-future clearance constraints.
+
+        Factor B: when hard_pedestrian_constraints_enabled is False, returns no
+        constraints. Factor A: when prediction_enabled is False, pedestrians are
+        frozen at their current position (zero-order hold).
 
         Returns:
             tuple[NonlinearConstraint, ...]: Extra SLSQP constraints for the optimizer.
         """
+        if not bool(self.prediction_config.hard_pedestrian_constraints_enabled):
+            return ()
         futures = self._future_predictor.predict(
             context.observation,
             horizon_steps=max(int(self.config.horizon_steps), 1),
@@ -185,6 +214,8 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         )
         if futures.positions_world.size == 0 or not np.any(futures.mask > 0.5):
             return ()
+        if not bool(self.prediction_config.prediction_enabled):
+            futures = self._freeze_pedestrian_futures(futures)
         return (
             NonlinearConstraint(
                 lambda controls: self._pedestrian_clearance_constraints(
@@ -195,6 +226,27 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
                 0.0,
                 np.inf,
             ),
+        )
+
+    def _freeze_pedestrian_futures(
+        self, futures: PredictedPedestrianFutures
+    ) -> PredictedPedestrianFutures:
+        """Replace predicted trajectories with zero-order hold (frozen at current position).
+
+        Returns:
+            PredictedPedestrianFutures: Futures where every horizon step equals t=0 position.
+        """
+        count = futures.positions_world.shape[0]
+        horizon = futures.positions_world.shape[1]
+        frozen = np.zeros((count, horizon, 2), dtype=float)
+        for ped_idx in range(count):
+            current = futures.positions_world[ped_idx, 0, :]
+            frozen[ped_idx, :, :] = current
+        return PredictedPedestrianFutures(
+            positions_world=frozen,
+            mask=futures.mask,
+            dt=futures.dt,
+            source=futures.source + "_zeroorder",
         )
 
     def _pedestrian_clearance_constraints(
@@ -258,6 +310,10 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
                 "predictor_backend": self.prediction_config.predictor_backend,
                 "horizon_steps": self.prediction_config.horizon_steps,
                 "rollout_dt": self.prediction_config.rollout_dt,
+                "prediction_enabled": bool(self.prediction_config.prediction_enabled),
+                "hard_pedestrian_constraints_enabled": bool(
+                    self.prediction_config.hard_pedestrian_constraints_enabled
+                ),
             }
         )
         predictor_diagnostics = getattr(self._future_predictor, "diagnostics", None)
@@ -280,9 +336,16 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
 def _to_nmpc_config(config: PredictionMPCConfig) -> NMPCSocialConfig:
     """Map prediction-MPC config onto the reusable NMPC optimizer core.
 
+    Factor B: when hard_pedestrian_constraints_enabled is False, uses the base
+    NMPC default soft pedestrian-clearance weight 4.5 instead of 0.0.
+
     Returns:
         NMPCSocialConfig: Shared optimizer-core configuration.
     """
+    if bool(config.hard_pedestrian_constraints_enabled):
+        ped_clearance_weight = 0.0
+    else:
+        ped_clearance_weight = 4.5
     return NMPCSocialConfig(
         max_linear_speed=config.max_linear_speed,
         max_angular_speed=config.max_angular_speed,
@@ -296,7 +359,7 @@ def _to_nmpc_config(config: PredictionMPCConfig) -> NMPCSocialConfig:
         heading_weight=config.heading_weight,
         control_effort_weight=config.control_effort_weight,
         smoothness_weight=config.smoothness_weight,
-        pedestrian_clearance_weight=0.0,
+        pedestrian_clearance_weight=ped_clearance_weight,
         obstacle_clearance_weight=config.static_obstacle_soft_weight,
         occupancy_cost_weight=config.static_obstacle_soft_weight,
         pedestrian_margin=config.pedestrian_safety_margin,
@@ -337,6 +400,8 @@ def build_prediction_mpc_config(cfg: dict[str, Any] | None) -> PredictionMPCConf
         "allow_predictor_fallback": _parse_bool,
         "pedestrian_uncertainty_envelope_enabled": _parse_bool,
         "pedestrian_uncertainty_alpha_mps": float,
+        "prediction_enabled": _parse_bool,
+        "hard_pedestrian_constraints_enabled": _parse_bool,
     }
     kwargs: dict[str, Any] = {}
     for field in fields(PredictionMPCConfig):

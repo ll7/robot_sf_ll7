@@ -1,0 +1,24 @@
+# Factorial arm A-OFF B-ON (frozen pedestrians + hard constraints)
+# Only prediction_enabled and hard_pedestrian_constraints_enabled differ across arms.
+allow_testing_algorithms: true
+predictor_backend: constant_velocity
+allow_predictor_fallback: false
+max_linear_speed: 0.9
+max_angular_speed: 1.1
+horizon_steps: 6
+rollout_dt: 0.25
+goal_tolerance: 0.25
+waypoint_switch_distance: 0.75
+path_goal_weight: 1.5
+terminal_goal_weight: 5.0
+heading_weight: 0.5
+control_effort_weight: 0.05
+smoothness_weight: 0.2
+pedestrian_safety_margin: 0.35
+static_obstacle_soft_weight: 1.0
+solver_ftol: 0.001
+solver_max_iterations: 40
+warm_start: true
+fallback_to_stop: true
+prediction_enabled: false
+hard_pedestrian_constraints_enabled: true

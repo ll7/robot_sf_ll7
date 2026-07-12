@@ -183,7 +183,7 @@ def verify_release(
             return report
         try:
             bundle_path = _download_bundle(bundle_url, output_dir, release_tag)
-        except subprocess.CalledProcessError as exc:
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
             report["errors"].append(f"Bundle download failed: {exc}")
             report["overall_verdict"] = "error"
             return report

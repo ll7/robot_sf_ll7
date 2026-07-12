@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import tarfile
 from io import BytesIO
@@ -492,6 +493,10 @@ def actual_execution_results(tmp_path_factory: pytest.TempPathFactory) -> dict[s
 @pytest.mark.skipif(
     not shutil.which("gh"),
     reason="GitHub CLI 'gh' is required for actual execution tests",
+)
+@pytest.mark.skipif(
+    os.environ.get("GITHUB_ACTIONS") == "true",
+    reason="CI runner cannot authenticate to download release bundles",
 )
 class TestActualExecution:
     """Tests that validate actual execution of verification and report generation.

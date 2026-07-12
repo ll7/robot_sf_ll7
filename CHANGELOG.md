@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #5340 main CI regression from unconditional `spaces.Sequence` leaf.** PRs #5335
+  and #5337 unconditionally added `spaces.Sequence` leaves to the SocNav structured observation
+  space, breaking `asymmetric_critic` (`Box` leaves) and `FlattenDictObservationWrapper`. Reverted
+  in PR #5339 to restore `Box`-only observation consumers. Reverted PRs may be relanded with a
+  guarded registration path later.
+
 * **issue #5217 restore typical pedestrian desired-speed propagation.** `SimulationSettings`
   with `ped_speed_tier="typical"` (or explicit `desired_speed_mean`) now correctly sets
   `pysf_sim.peds.max_speeds` to the decoupled desired-speed distribution (~1.3 m/s for the

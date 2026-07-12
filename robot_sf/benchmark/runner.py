@@ -444,7 +444,10 @@ def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
     single_doc = docs[0]
     if isinstance(single_doc, list):
         if not single_doc:
-            raise ValueError(f"Scenario matrix '{scenario_path}' contains an empty scenario list.")
+            raise ValueError(
+                f"Scenario matrix '{scenario_path}' contains an empty scenario list; "
+                "scenario config has no runnable scenarios."
+            )
         if any(not isinstance(scenario, Mapping) for scenario in single_doc):
             raise ValueError(f"Scenario matrix '{scenario_path}' list entries must be mappings.")
         # Preserve the legacy manifest path for named or map-referenced entries.  Those entries

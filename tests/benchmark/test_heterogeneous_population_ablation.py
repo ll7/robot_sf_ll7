@@ -548,6 +548,39 @@ def test_episode_record_readiness_blocks_missing_or_misaligned_trace_metadata() 
     )
 
 
+def test_episode_record_readiness_blocks_trace_without_per_step_metric_fields() -> None:
+    """Readiness must fail when the trace exists but per-step clearance/exposure are absent.
+
+    This is the exact failure mode from SLURM job 13379 (issue #5397): the harness
+    produced schema-valid paired records but the simulation step trace did not carry
+    ``clearance_m`` or ``near_field_exposure_s``, so the control trace was present
+    in ``algorithm_metadata`` but unusable for ablation.
+    """
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+    records = _episode_records_for_manifest(manifest)
+
+    # Strip per-step metric fields from the trace while keeping the structure valid
+    for record in records:
+        trace = record["algorithm_metadata"]["pedestrian_control_trace"]
+        for pedestrian in trace["pedestrians"]:
+            for step in pedestrian.get("steps", []):
+                step.pop("clearance_m", None)
+                step.pop("near_field_exposure_s", None)
+
+    readiness = assess_mean_matched_episode_records(manifest, records)
+
+    assert readiness["status"] == "blocked"
+    assert readiness["ready"] is False
+    # Must block on the specific missing per-step metric keys
+    assert any(
+        "clearance_m" in blocker for blocker in readiness["blockers"]
+    )
+    assert any(
+        "near_field_exposure_s" in blocker for blocker in readiness["blockers"]
+    )
+
+
 def test_episode_record_readiness_blocks_missing_rank_metric() -> None:
     """Records cannot reach rank analysis without its finite episode metric."""
 

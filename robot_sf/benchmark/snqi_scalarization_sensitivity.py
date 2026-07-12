@@ -1143,24 +1143,24 @@ def _build_short_aliases(planner_names: Sequence[str], *, threshold: int = 18) -
     _FILLER = frozenset({"rule", "v1", "v2", "v3", "v4", "fast", "progress", "static"})
     aliases: dict[str, str] = {}
     used: set[str] = set()
+    reserved_short_names = {name for name in planner_names if len(name) <= threshold}
     for name in planner_names:
         if name in aliases:
             continue
         if len(name) <= threshold:
-            base_short = name
+            short = name
         else:
             tokens = [t for t in name.split("_") if t not in _FILLER]
             if len(tokens) >= 2:
                 base_short = "_".join(tokens[:3])
             else:
                 base_short = name[:threshold]
-
-        short = base_short
-        suffix_index = 1
-        while short in used:
-            suffix = f"_{suffix_index}"
-            short = f"{base_short[: max(1, threshold - len(suffix))]}{suffix}"
-            suffix_index += 1
+            short = base_short
+            suffix_index = 1
+            while short in used or short in reserved_short_names:
+                suffix = f"_{suffix_index}"
+                short = f"{base_short[: max(1, threshold - len(suffix))]}{suffix}"
+                suffix_index += 1
         aliases[name] = short
         used.add(short)
     return aliases

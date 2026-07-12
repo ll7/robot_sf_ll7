@@ -54,6 +54,12 @@ class TestBuildShortAliases:
         assert len(set(result.values())) == len(names)
         assert result[names[0]] != result[names[1]]
 
+    def test_short_name_is_reserved_from_generated_alias_collision(self) -> None:
+        names = ["long_rule_v3_suffix_extra", "long_suffix_extra"]
+        result = _build_short_aliases(names)
+        assert result[names[1]] == names[1]
+        assert result[names[0]] != result[names[1]]
+
     def test_threshold_respected(self) -> None:
         names = ["exactly_18_chars!!"]  # 18 chars = default threshold
         result = _build_short_aliases(names, threshold=18)

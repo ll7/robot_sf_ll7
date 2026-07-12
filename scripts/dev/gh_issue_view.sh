@@ -40,5 +40,9 @@ done
 
 [[ -n "$NUMBER" ]] || usage
 
-exec uv run python "${SCRIPT_DIR}/gh_issue_rest.py" thread "$NUMBER" \
-  ${REPO:+--repo "$REPO"}
+ARGS=()
+if [[ -n "$REPO" ]]; then
+  ARGS+=("--repo" "$REPO")
+fi
+
+exec uv run python "${SCRIPT_DIR}/gh_issue_rest.py" thread "$NUMBER" "${ARGS[@]}"

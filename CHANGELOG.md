@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #5429 `load_scenario_matrix` no longer misroutes single-document abstract scenario
+  files.** A single-document YAML file whose top-level content is a *list* of abstract benchmark
+  scenarios (the `density`/`flow`/`obstacle` form, e.g. `yaml.safe_dump([s1, s2])`) is now returned
+  directly — symmetric with the existing multi-document stream behavior — instead of being sent
+  through the map-oriented `robot_sf/training/scenario_loader.py::load_scenarios`. Previously such
+  files were validated as map manifests and emitted misleading
+  `Scenario entry N is missing a name or scenario_id` / `has no map_file or map_id` warnings even
+  though abstract scenarios legitimately carry neither. Single-document *mappings* still route to the
+  include-aware manifest loader (unchanged), and an empty single-document list now fails closed with
+  a clear `ValueError` rather than a silent zero-job run.
+
 * **issue #5340 main CI regression from unconditional `spaces.Sequence` leaf.** PRs #5335
   and #5337 unconditionally added `spaces.Sequence` leaves to the SocNav structured observation
   space, breaking `asymmetric_critic` (`Box` leaves) and `FlattenDictObservationWrapper`. Reverted

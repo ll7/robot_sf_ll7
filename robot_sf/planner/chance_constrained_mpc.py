@@ -343,6 +343,8 @@ def build_chance_constrained_mpc_config(
         "fallback_to_stop": _parse_bool,
         "predictor_backend": str,
         "allow_predictor_fallback": _parse_bool,
+        "prediction_enabled": _parse_bool,
+        "hard_pedestrian_constraints_enabled": _parse_bool,
         "pedestrian_uncertainty_envelope_enabled": _parse_bool,
         "pedestrian_uncertainty_alpha_mps": float,
         "chance_constraint_formulation": str,

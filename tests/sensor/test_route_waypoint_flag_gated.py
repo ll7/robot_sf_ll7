@@ -213,7 +213,9 @@ class TestRouteWaypointsBoxLeaf:
         env_config_default = FakeEnvConfig()
         map_def = FakeMapDef()
         obs_space_off = socnav_observation_space(map_def, env_config_off, max_pedestrians=16)
-        obs_space_default = socnav_observation_space(map_def, env_config_default, max_pedestrians=16)
+        obs_space_default = socnav_observation_space(
+            map_def, env_config_default, max_pedestrians=16
+        )
         assert obs_space_off.spaces.keys() == obs_space_default.spaces.keys()
         for key in obs_space_off.spaces:
             assert isinstance(obs_space_off.spaces[key], type(obs_space_default.spaces[key]))
@@ -263,7 +265,9 @@ class TestRouteWaypointsConsumerCompat:
                 elif isinstance(child, spaces.Box):
                     paths.append(path)
                 else:
-                    raise TypeError(f"asymmetric_critic requires Box leaves; got {type(child).__name__}")
+                    raise TypeError(
+                        f"asymmetric_critic requires Box leaves; got {type(child).__name__}"
+                    )
             return paths
 
         # This should not raise TypeError about Sequence leaves

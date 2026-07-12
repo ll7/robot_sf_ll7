@@ -272,9 +272,7 @@ def socnav_observation_space(
                 {
                     "route_waypoints": spaces.Box(
                         low=np.zeros((MAX_ROUTE_WAYPOINTS, 2), dtype=np.float32),
-                        high=np.broadcast_to(pos_high, (MAX_ROUTE_WAYPOINTS, 2)).astype(
-                            np.float32
-                        ),
+                        high=np.broadcast_to(pos_high, (MAX_ROUTE_WAYPOINTS, 2)).astype(np.float32),
                         dtype=np.float32,
                     ),
                 }
@@ -751,9 +749,7 @@ class SocNavObservationFusion:
         self._attach_optional_observations(obs, position_cap)
         return obs
 
-    def _attach_optional_observations(
-        self, obs: dict[str, Any], position_cap: np.ndarray
-    ) -> None:
+    def _attach_optional_observations(self, obs: dict[str, Any], position_cap: np.ndarray) -> None:
         """Attach optional observation fields (route_waypoints, predictive) to obs dict."""
         if getattr(self.env_config, "include_route_waypoints", False):
             route_waypoints = self._build_route_waypoints(position_cap)

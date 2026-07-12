@@ -1129,8 +1129,113 @@ def format_markdown(report: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _build_short_aliases(planner_names: Sequence[str], *, threshold: int = 18) -> dict[str, str]:
+    """Return a display-name mapping that shortens long planner names.
+
+    Names at or below *threshold* characters are kept as-is.  Longer names
+    receive a deterministic short alias built from significant tokens (skipping
+    common filler words like ``rule``, ``v3``, ``fast``, ``progress``).
+
+    Returns:
+        Mapping from original planner name to display label.
+    """
+
+    _FILLER = frozenset({"rule", "v1", "v2", "v3", "v4", "fast", "progress", "static"})
+    aliases: dict[str, str] = {}
+    for name in planner_names:
+        if len(name) <= threshold:
+            aliases[name] = name
+            continue
+        tokens = [t for t in name.split("_") if t not in _FILLER]
+        if len(tokens) >= 2:
+            short = "_".join(tokens[:3])
+        else:
+            short = name[:threshold]
+        aliases[name] = short
+    return aliases
+
+
+def _estimate_label_width(text: str, *, font_size: int = 12) -> float:
+    """Estimate rendered text width in SVG user units.
+
+    Uses a per-character width heuristic appropriate for sans-serif at
+    the given *font_size*.  The estimate is intentionally approximate;
+    it only needs to be good enough for bounding-box overlap detection.
+
+    Returns:
+        Estimated width in SVG user units.
+    """
+
+    char_width = font_size * 0.62
+    return len(text) * char_width + 8.0
+
+
+def _deoverlap_labels(
+    labels: Sequence[Mapping[str, float]],
+    *,
+    max_iterations: int = 40,
+    padding: float = 3.0,
+    damping: float = 0.5,
+) -> list[dict[str, float]]:
+    """Resolve overlapping label bounding boxes via iterative repulsion.
+
+    Each element of *labels* must contain ``anchor_x``, ``anchor_y``,
+    ``label_x``, ``label_y``, ``w``, and ``h``.  Returns new label dicts
+    with adjusted ``label_x`` / ``label_y`` positions.
+
+    The algorithm nudges pairs of overlapping bounding boxes apart along
+    their shortest separating axis, scaled by *damping*, until no pair
+    overlaps or *max_iterations* is exhausted.
+
+    Returns:
+        New label dicts with adjusted positions.
+    """
+
+    result = [dict(lbl) for lbl in labels]
+    for _ in range(max_iterations):
+        moved = False
+        for i in range(len(result)):
+            for j in range(i + 1, len(result)):
+                a = result[i]
+                b = result[j]
+                overlap_x = (
+                    min(a["label_x"] + a["w"], b["label_x"] + b["w"])
+                    - max(a["label_x"], b["label_x"])
+                    - padding
+                )
+                overlap_y = (
+                    min(a["label_y"], b["label_y"])
+                    - max(a["label_y"] - a["h"], b["label_y"] - b["h"])
+                    - padding
+                )
+                if overlap_x <= 0.0 or overlap_y <= 0.0:
+                    continue
+                moved = True
+                dx = (a["anchor_x"] + a["w"] / 2) - (b["anchor_x"] + b["w"] / 2)
+                dy = (a["anchor_y"] - a["h"] / 2) - (b["anchor_y"] - b["h"] / 2)
+                if abs(dx) < 1.0 and abs(dy) < 1.0:
+                    dx, dy = 0.5, -0.5
+                if abs(dx) > abs(dy):
+                    shift = overlap_x * damping
+                    sign = 1.0 if dx >= 0 else -1.0
+                    a["label_x"] += sign * shift
+                    b["label_x"] -= sign * shift
+                else:
+                    shift = overlap_y * damping
+                    sign = 1.0 if dy >= 0 else -1.0
+                    a["label_y"] += sign * shift
+                    b["label_y"] -= sign * shift
+        if not moved:
+            break
+    return result
+
+
 def format_pareto_svg(report: Mapping[str, Any], *, width: int = 900, height: int = 560) -> str:
     """Render a dependency-free SVG Pareto figure.
+
+    Labels are placed with iterative repulsion to avoid overlaps, use short
+    aliases for long planner names, and include a legend mapping aliases back
+    to full names.  Leader lines connect displaced labels to their data points.
 
     Returns:
         SVG figure text.
@@ -1164,30 +1269,102 @@ def format_pareto_svg(report: Mapping[str, Any], *, width: int = 900, height: in
         f"{y_pos(float(row.get('snqi_mean', 0.0))):.1f}"
         for row in front
     )
+
+    # --- short aliases for long planner names ---
+    all_names = [str(row.get("planner", "unknown")) for row in rows]
+    aliases = _build_short_aliases(all_names)
+    needs_legend = {name: alias for name, alias in aliases.items() if name != alias}
+
+    # --- initial label positions (fixed offset from data point) ---
+    label_font_size = 12
+    label_inputs: list[dict[str, float]] = []
+    for row in rows:
+        cx = x_pos(float(row.get("constraints_first_score", 0.0)))
+        cy = y_pos(float(row.get("snqi_mean", 0.0)))
+        name = str(row.get("planner", "unknown"))
+        display = aliases.get(name, name)
+        w = _estimate_label_width(display, font_size=label_font_size)
+        label_inputs.append(
+            {
+                "anchor_x": cx,
+                "anchor_y": cy,
+                "label_x": cx + 8.0,
+                "label_y": cy - 8.0,
+                "w": w,
+                "h": float(label_font_size),
+            }
+        )
+
+    # --- de-overlap ---
+    resolved = _deoverlap_labels(label_inputs)
+
+    # --- build SVG ---
     parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"'
+        f' viewBox="0 0 {width} {height}" role="img">',
         "<title>SNQI scalarization sensitivity Pareto diagnostic</title>",
         '<rect width="100%" height="100%" fill="#ffffff"/>',
-        f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#333"/>',
-        f'<line x1="{margin_left}" y1="{margin_top}" x2="{margin_left}" y2="{height - margin_bottom}" stroke="#333"/>',
-        f'<text x="{width / 2:.1f}" y="{height - 24}" text-anchor="middle" font-family="sans-serif" font-size="15">Constraints-first score (higher is better)</text>',
-        f'<text x="24" y="{height / 2:.1f}" text-anchor="middle" transform="rotate(-90 24 {height / 2:.1f})" font-family="sans-serif" font-size="15">SNQI mean (higher is better)</text>',
+        f'<line x1="{margin_left}" y1="{height - margin_bottom}"'
+        f' x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#333"/>',
+        f'<line x1="{margin_left}" y1="{margin_top}"'
+        f' x2="{margin_left}" y2="{height - margin_bottom}" stroke="#333"/>',
+        f'<text x="{width / 2:.1f}" y="{height - 24}" text-anchor="middle"'
+        f' font-family="sans-serif" font-size="15">'
+        "Constraints-first score (higher is better)</text>",
+        f'<text x="24" y="{height / 2:.1f}" text-anchor="middle"'
+        f' transform="rotate(-90 24 {height / 2:.1f})" font-family="sans-serif"'
+        f' font-size="15">SNQI mean (higher is better)</text>',
     ]
+
     if polyline:
         parts.append(
             f'<polyline points="{polyline}" fill="none" stroke="#1f77b4" stroke-width="2.5"/>'
         )
-    for row in rows:
-        cx = x_pos(float(row.get("constraints_first_score", 0.0)))
-        cy = y_pos(float(row.get("snqi_mean", 0.0)))
-        color = "#1f77b4" if bool(row.get("pareto_front")) else "#777777"
-        planner = html.escape(str(row.get("planner", "unknown")))
-        parts.extend(
-            [
-                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="{color}"/>',
-                f'<text x="{cx + 8:.1f}" y="{cy - 8:.1f}" font-family="sans-serif" font-size="12">{planner}</text>',
-            ]
+
+    # --- data points, leader lines, and labels ---
+    for row, lbl in zip(rows, resolved, strict=False):
+        cx = lbl["anchor_x"]
+        cy = lbl["anchor_y"]
+        lx = lbl["label_x"]
+        ly = lbl["label_y"]
+        is_front = bool(row.get("pareto_front"))
+        color = "#1f77b4" if is_front else "#777777"
+        name = str(row.get("planner", "unknown"))
+        display = html.escape(aliases.get(name, name))
+
+        # marker halo for readability
+        parts.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="7" fill="white"/>')
+        parts.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="{color}"/>')
+
+        # leader line from point to displaced label
+        dist = math.hypot(lx - cx, ly - cy)
+        if dist > 14.0:
+            parts.append(
+                f'<line x1="{cx:.1f}" y1="{cy:.1f}" x2="{lx:.1f}" y2="{ly:.1f}"'
+                f' stroke="{color}" stroke-width="0.6" opacity="0.5"/>'
+            )
+
+        parts.append(
+            f'<text x="{lx:.1f}" y="{ly:.1f}" font-family="sans-serif"'
+            f' font-size="{label_font_size}">{display}</text>'
         )
+
+    # --- legend for shortened names ---
+    if needs_legend:
+        legend_x = margin_left + 12
+        legend_y = margin_top + 14
+        parts.append(
+            f'<text x="{legend_x}" y="{legend_y}" font-family="sans-serif"'
+            f' font-size="10" fill="#555">Legend (short aliases):</text>'
+        )
+        for idx, (full_name, alias) in enumerate(sorted(needs_legend.items()), start=1):
+            ly = legend_y + idx * 14
+            parts.append(
+                f'<text x="{legend_x + 8}" y="{ly}" font-family="sans-serif"'
+                f' font-size="10" fill="#555">'
+                f"{html.escape(alias)} = {html.escape(full_name)}</text>"
+            )
+
     parts.append("</svg>")
     return "\n".join(parts) + "\n"
 

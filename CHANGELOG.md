@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+* **Single-source package version from the git tag (kills version drift).** `pyproject.toml` no longer hardcodes a version; the package version is derived automatically from the git tag/release line via `hatch-vcs` (release tags `X.Y.Z`, release-candidate tags `rcX.Y.Z`, PEP 440 dev fallback `0.0.3.dev0` for untagged builds). `robot_sf.__version__` now resolves from the build-time `_version.py` (or installed metadata). `CITATION.cff` is aligned to the latest full release tag (`0.0.2`). A new `scripts/dev/check_version_alignment.py` guards the three version axes; it runs gating on tag pushes (`release-functional-badge` workflow) and advisory on every CI run (`ci_driver.sh` lint phase). Previously the three axes had drifted: tag `rc0.0.3`, `pyproject` `2.0.0`, `CITATION` `benchmark-protocol-0.1.0`.
+
 * **issue #5228 xdist memory-diagnostic robustness.** Three residual gaps from the
   PR #4952 review are closed: (1) `_tree_rss_gb` no longer calls `is_running()` before
   `memory_info()` — the latter already supplies the handled `NoSuchProcess` signal,

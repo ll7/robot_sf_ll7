@@ -16,6 +16,30 @@ if [ -f "$REPO_ROOT/.venv/bin/activate" ]; then
   source "$REPO_ROOT/.venv/bin/activate"
 fi
 
+# Resolve the absolute path to a codex-agent-runs artifact subdirectory under
+# the shared Git common directory.  In a linked worktree `.git` is a file, so
+# writing to a literal `.git/codex-agent-runs/...` path fails.  This function
+# resolves the correct absolute path via `git rev-parse --git-common-dir` and
+# prints it.  Callers must `mkdir -p` the result before writing.
+#
+# Usage:
+#   artifact_dir="$(resolve_agent_artifact_dir my-subdir)"
+#   mkdir -p "$artifact_dir"
+#   echo "data" > "$artifact_dir/result.json"
+#
+# Returns 0 on success, prints the resolved path.  Falls back to
+# output/tmp/<subdir> when git is unavailable.
+resolve_agent_artifact_dir() {
+  local subdir="${1:?resolve_agent_artifact_dir requires a subdirectory name}"
+  local common_dir
+  common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [[ -n "$common_dir" ]]; then
+    printf '%s\n' "$common_dir/codex-agent-runs/active/$subdir"
+  else
+    printf '%s\n' "$REPO_ROOT/output/tmp/$subdir"
+  fi
+}
+
 # Cheap shell preflight: verify that test-collection dependencies (duckdb,
 # pyarrow) are importable before expensive pytest collection runs.  Exit 2
 # with a concise message on failure so agents see the blocker immediately.

@@ -240,6 +240,11 @@ run_phase() {
       # Ratchet: fail if broad (Exception/BaseException/bare) catches increase on
       # benchmark/script surfaces beyond the approved baseline (issue #3478).
       uv run python scripts/validation/check_broad_exceptions.py
+      # Advisory (non-gating) version-drift guard: the git tag/release line is the
+      # single source of truth for the package and CITATION.cff versions. Surfaced
+      # here on every CI run; enforced (gating) on tag pushes by
+      # .github/workflows/release-functional-badge.yml.
+      uv run python scripts/dev/check_version_alignment.py --advisory
       ;;
     typecheck)
       echo "Running ty in advisory mode (--exit-zero); findings are reported but do not fail this phase."

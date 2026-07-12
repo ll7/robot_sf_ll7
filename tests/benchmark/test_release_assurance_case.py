@@ -29,6 +29,7 @@ def test_release_assurance_case_exports_gate_claims_and_manifest_evidence() -> N
     validate_release_assurance_case_schema(payload)
     assert validate_release_assurance_case_references(payload) == []
     assert payload["schema_version"] == "benchmark_release_assurance_case.v1"
+    assert payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
     assert payload["release"]["release_id"] == "paper_experiment_matrix_v1_smoke_v0_1_0"
     assert "C_gate_collision_rate_zero" in {claim["id"] for claim in payload["claims"]}
     assert "E_release_gate_spec" in {leaf["id"] for leaf in payload["evidence"]}

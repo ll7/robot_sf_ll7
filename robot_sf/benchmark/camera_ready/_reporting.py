@@ -15,6 +15,7 @@ from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.camera_ready._artifacts import _escape_markdown_cell
 from robot_sf.benchmark.camera_ready._config_types import _AMV_DIMENSIONS, PlannerSpec
 from robot_sf.benchmark.camera_ready._summaries import _extract_amv_taxonomy
+from robot_sf.benchmark.fairness_contract import build_fairness_report
 from robot_sf.benchmark.fallback_policy import (
     classify_planner_row_status,
     summarize_benchmark_availability,
@@ -1013,6 +1014,77 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
             lines.append(f"- Diagnostics Markdown: `{snqi_diag_md}`")
         if isinstance(snqi_sensitivity, str):
             lines.append(f"- Sensitivity CSV: `{snqi_sensitivity}`")
+
+    lines.extend(["", "## Fairness Contract", ""])
+    fairness_payload = payload.get("fairness_contract")
+    fairness_report = (
+        build_fairness_report(rows) if not isinstance(fairness_payload, dict) else None
+    )
+    fairness_verdict = (
+        bool(fairness_payload.get("ranking_claim_allowed"))
+        if isinstance(fairness_payload, dict)
+        else fairness_report.ranking_claim_allowed
+    )
+    fair_subset = (
+        list(fairness_payload.get("fair_subset", []))
+        if isinstance(fairness_payload, dict)
+        else list(fairness_report.fair_subset)
+    )
+    excluded_planners = (
+        list(fairness_payload.get("excluded_planners", []))
+        if isinstance(fairness_payload, dict)
+        else list(fairness_report.excluded_planners)
+    )
+    mismatches = (
+        list(fairness_payload.get("mismatches", []))
+        if isinstance(fairness_payload, dict)
+        else [
+            {
+                "dimension": mismatch.dimension,
+                "planner_a": mismatch.planner_a,
+                "planner_b": mismatch.planner_b,
+                "severity": mismatch.severity,
+                "description": mismatch.description,
+            }
+            for mismatch in fairness_report.mismatches
+        ]
+    )
+    hard_mismatches = [m for m in mismatches if m.get("severity") == "hard"]
+    soft_mismatches = [m for m in mismatches if m.get("severity") == "soft"]
+
+    lines.append(f"- Ranking claim allowed: `{fairness_verdict}`")
+    lines.append(f"- Fair subset size: `{len(fair_subset)}`")
+    lines.append(f"- Excluded planners: `{len(excluded_planners)}`")
+    lines.append(f"- Hard mismatches: `{len(hard_mismatches)}`")
+    lines.append(f"- Soft mismatches (caveats): `{len(soft_mismatches)}`")
+
+    if fair_subset:
+        lines.append("")
+        lines.append("Fair comparison subset:")
+        for name in fair_subset:
+            lines.append(f"- `{name}`")
+
+    if excluded_planners:
+        lines.append("")
+        lines.append("Excluded planners:")
+        for name in excluded_planners:
+            lines.append(f"- `{name}`")
+
+    if hard_mismatches:
+        lines.append("")
+        lines.append("Hard mismatches (block ranking claims):")
+        for m in hard_mismatches:
+            lines.append(
+                f"- **{m['dimension']}**: {m['planner_a']} vs {m['planner_b']} — {m['description']}"
+            )
+
+    if soft_mismatches:
+        lines.append("")
+        lines.append("Soft mismatches (caveats):")
+        for m in soft_mismatches:
+            lines.append(
+                f"- **{m['dimension']}**: {m['planner_a']} vs {m['planner_b']} — {m['description']}"
+            )
 
     lines.extend(["", "## Accepted Unavailable/Excluded Planners", ""])
     if accepted_unavailable_rows:

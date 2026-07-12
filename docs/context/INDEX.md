@@ -1,5 +1,8 @@
 # Context Retrieval Index
 
+Issue #5355 prediction-MPC 2x2 factorial preregistration (prediction on/off x constraint-handling on/off):
+[issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md).
+
 Issue #5311 BRNE (Bayesian Recursive Nash Equilibrium) external interaction-planning comparator: source-side smoke + contract mapping, runtime-vs-neighbor-count measurement, and conditional go/no-go (GPL-3.0, local-only staging, no vendoring):
 [issue_5311_brne_source_smoke.md](issue_5311_brne_source_smoke.md).
 

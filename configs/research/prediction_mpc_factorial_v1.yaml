@@ -1,0 +1,112 @@
+# Issue #5355 2x2 factorial campaign: prediction on/off x constraint-handling on/off
+# on the prediction-MPC framework (option 1, maintainer-confirmed 2026-07-12).
+#
+# This is a DESIGN/PREREGISTRATION contract only. It enumerates the four
+# factorial arms and paired seeds required before any causal-effect comparison
+# can be run. It is not benchmark evidence, not a result, and not paper-facing
+# evidence until the campaign is run and promoted through a compact evidence bundle.
+schema_version: prediction-mpc-factorial.v1
+issue: 5355
+study_id: issue_5355_prediction_mpc_factorial_v1
+status: preregistration
+
+claim_boundary: >
+  Factorial-design and provenance contract only. This config enumerates the fixed
+  prediction on/off x constraint-handling on/off ablation cells and paired seeds
+  required before any causal mechanism comparison can be run. It is not benchmark
+  evidence, not a mechanism-effectiveness result, and not paper-facing evidence
+  until the factorial campaign is run and promoted through a compact evidence bundle.
+
+# Base planner framework: prediction-MPC with constant-velocity predictor.
+# All four arms share this base; only the factorial toggles differ.
+base_planner:
+  algo: prediction_mpc
+  algo_base_config: configs/algos/prediction_mpc_cv.yaml
+
+# 2x2 factorial design.
+# Factor A: trajectory prediction consumed by the planner — OFF / ON
+# Factor B: explicit constraint + local-minimum handling — OFF / ON
+factorial_arms:
+  - key: A0_B0
+    label: "prediction_OFF_constraints_OFF"
+    baseline: true
+    factor_a_prediction: false
+    factor_b_constraints: false
+    algo_config: configs/algos/prediction_mpc_factorial_A0_B0.yaml
+  - key: A0_B1
+    label: "prediction_OFF_constraints_ON"
+    baseline: false
+    factor_a_prediction: false
+    factor_b_constraints: true
+    algo_config: configs/algos/prediction_mpc_factorial_A0_B1.yaml
+  - key: A1_B0
+    label: "prediction_ON_constraints_OFF"
+    baseline: false
+    factor_a_prediction: true
+    factor_b_constraints: false
+    algo_config: configs/algos/prediction_mpc_factorial_A1_B0.yaml
+  - key: A1_B1
+    label: "prediction_ON_constraints_ON"
+    baseline: false
+    factor_a_prediction: true
+    factor_b_constraints: true
+    algo_config: configs/algos/prediction_mpc_factorial_A1_B1.yaml
+
+# Scenario matrix: all four arms share the same scenario distribution and
+# seed sets so the only difference between arms is the factorial toggles.
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+# Primary endpoints (typed ledger). These match the issue specification.
+primary_endpoints:
+  - collision_free_completion
+  - near_miss_exposure_normalized
+  - censored_time_to_goal
+
+# Preregistered contrasts (multiplicity-adjusted).
+preregistered_contrasts:
+  - name: A_main_effect
+    description: "Main effect of trajectory prediction (A1 vs A0, averaged over B)"
+    arms: [A0_B0, A0_B1, A1_B0, A1_B1]
+    test: hierarchical_paired
+  - name: B_main_effect
+    description: "Main effect of constraint handling (B1 vs B0, averaged over A)"
+    arms: [A0_B0, A0_B1, A1_B0, A1_B1]
+    test: hierarchical_paired
+  - name: AB_interaction
+    description: "Interaction between prediction and constraint handling"
+    arms: [A0_B0, A0_B1, A1_B0, A1_B1]
+    test: hierarchical_paired
+
+# Multiplicity policy: Holm-Bonferroni over the three preregistered contrasts.
+multiplicity_policy:
+  method: holm_bonferroni
+  family_wise_alpha: 0.05
+  contrast_count: 3
+
+# Seed budget and pairing.
+seed_budget:
+  mode: paired
+  pairing_key_fields: [scenario_id, seed]
+  seed_set: eval
+  seeds_per_arm: 3
+
+# Stop rules.
+stop_rules:
+  continue_if: "all arms have complete paired episodes for all scenarios and seeds"
+  negative_if: "any arm fails to produce collision-free episodes in >50% of scenarios"
+  blocked_if: "missing paired episodes, provenance mismatch, or unresolvable fallback execution"
+
+# Dependencies (all must be resolved before GPU submission).
+dependencies:
+  - issue: 5351
+    description: "Hierarchical paired analysis with multiplicity"
+    status: open
+    blocking: "analysis machinery for preregistered contrasts"
+  - issue: 5353
+    description: "Matched-capability fairness contract"
+    status: open
+    blocking: "capability-matrix gating for cross-arm fairness"

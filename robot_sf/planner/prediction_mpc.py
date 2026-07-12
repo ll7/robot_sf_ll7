@@ -17,6 +17,7 @@ from robot_sf.planner.nmpc_social import (
     _parse_bool,
     _RolloutContext,
 )
+from robot_sf.planner.risk_dwa import _wrap_angle
 
 
 @dataclass
@@ -48,6 +49,16 @@ class PredictionMPCConfig:
     # or alpha == 0.0 reproduces the deterministic baseline exactly.
     pedestrian_uncertainty_envelope_enabled: bool = False
     pedestrian_uncertainty_alpha_mps: float = 0.0
+    # Issue #5355 Factor B: hard pedestrian clearance constraints toggle.
+    # When False, _optimizer_constraints returns no hard constraints and the
+    # planner relies solely on soft cost in the NMPC objective.
+    hard_pedestrian_constraints_enabled: bool = True
+    # Issue #5355 Factor B: local-minimum escape toggle.
+    # When True and the robot is stuck (low speed, far from goal), forces a
+    # progress-seeking action toward the goal heading.
+    local_min_escape_enabled: bool = False
+    local_min_escape_distance: float = 2.0
+    local_min_escape_speed_threshold: float = 0.05
 
     def __post_init__(self) -> None:
         """Validate the opt-in uncertainty-envelope conservatism rate."""
@@ -76,6 +87,29 @@ class PedestrianFuturePredictor(Protocol):
         dt: float,
     ) -> PredictedPedestrianFutures:
         """Return predicted pedestrian futures in world coordinates."""
+
+
+class NullPedestrianPredictor:
+    """Null predictor that returns empty pedestrian futures (prediction OFF)."""
+
+    def predict(
+        self,
+        observation: dict[str, Any],
+        *,
+        horizon_steps: int,
+        dt: float,
+    ) -> PredictedPedestrianFutures:
+        """Return empty pedestrian futures.
+
+        Returns:
+            PredictedPedestrianFutures: Empty futures with zero pedestrians.
+        """
+        return PredictedPedestrianFutures(
+            positions_world=np.zeros((0, max(int(horizon_steps), 1), 2), dtype=float),
+            mask=np.zeros((0,), dtype=float),
+            dt=float(dt),
+            source="none",
+        )
 
 
 class ConstantVelocityPedestrianPredictor(NMPCSocialPlannerAdapter):
@@ -149,21 +183,25 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         """Initialize the adapter with strict constant-velocity prediction by default."""
         self.prediction_config = config or PredictionMPCConfig()
         backend = self.prediction_config.predictor_backend.strip().lower()
-        if predictor is None and backend not in {
+        if backend in {"none", "null"}:
+            self._future_predictor = predictor or NullPedestrianPredictor()
+        elif predictor is None and backend not in {
             "constant_velocity",
             "cv",
         }:
             if not self.prediction_config.allow_predictor_fallback:
                 raise ValueError(
                     "prediction_mpc currently supports predictor_backend='constant_velocity' "
-                    "unless allow_predictor_fallback is true."
+                    "or 'none' unless allow_predictor_fallback is true."
                 )
             warnings.warn(
                 "prediction_mpc falling back to constant_velocity predictor backend.",
                 RuntimeWarning,
                 stacklevel=2,
             )
-        self._future_predictor = predictor or ConstantVelocityPedestrianPredictor()
+            self._future_predictor = predictor or ConstantVelocityPedestrianPredictor()
+        else:
+            self._future_predictor = predictor or ConstantVelocityPedestrianPredictor()
         super().__init__(_to_nmpc_config(self.prediction_config))
 
     def reset(self) -> None:
@@ -171,6 +209,51 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         super().reset()
         self._envelope_activation_count = 0
         self._effective_radius_used_by_planner = False
+        self._local_min_escape_count = 0
+
+    def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+        """Return the first command, applying local-minimum escape if enabled.
+
+        Returns:
+            tuple[float, float]: (linear, angular) command.
+        """
+        linear, angular = super().plan(observation)
+        if not bool(self.prediction_config.local_min_escape_enabled):
+            return linear, angular
+        return self._maybe_escape_local_min(linear, angular, observation)
+
+    def _maybe_escape_local_min(
+        self,
+        linear: float,
+        angular: float,
+        observation: dict[str, Any],
+    ) -> tuple[float, float]:
+        """Force progress toward goal when the robot is stuck far from it.
+
+        Returns:
+            tuple[float, float]: Possibly overridden (linear, angular) command.
+        """
+        if linear > float(self.prediction_config.local_min_escape_speed_threshold):
+            return linear, angular
+        robot_state, goal_state, _ped_state = self._socnav_fields(observation)
+        robot_pos = self._as_1d_float(robot_state.get("position", [0.0, 0.0]), pad=2)[:2]
+        heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
+        goal = self._as_1d_float(goal_state.get("current", [0.0, 0.0]), pad=2)[:2]
+        goal_dist = float(np.linalg.norm(goal - robot_pos))
+        if goal_dist <= float(self.prediction_config.local_min_escape_distance):
+            return linear, angular
+        goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
+        heading_error = _wrap_angle(goal_heading - heading)
+        escape_linear = float(self.prediction_config.local_min_escape_speed_threshold) * 2.0
+        escape_angular = float(
+            np.clip(
+                heading_error / max(float(self.prediction_config.rollout_dt), 1e-3),
+                -float(self.prediction_config.max_angular_speed),
+                float(self.prediction_config.max_angular_speed),
+            )
+        )
+        self._local_min_escape_count = int(self._local_min_escape_count) + 1
+        return escape_linear, escape_angular
 
     def _optimizer_constraints(self, context: _RolloutContext) -> tuple[NonlinearConstraint, ...]:
         """Enforce hard time-varying pedestrian-future clearance constraints.
@@ -178,6 +261,8 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         Returns:
             tuple[NonlinearConstraint, ...]: Extra SLSQP constraints for the optimizer.
         """
+        if not bool(self.prediction_config.hard_pedestrian_constraints_enabled):
+            return ()
         futures = self._future_predictor.predict(
             context.observation,
             horizon_steps=max(int(self.config.horizon_steps), 1),
@@ -274,6 +359,15 @@ class PredictionMPCPlannerAdapter(NMPCSocialPlannerAdapter):
                 "envelope_activation_count": int(self._envelope_activation_count),
             }
         )
+        payload["factorial_toggles"] = {
+            "prediction_enabled": str(self.prediction_config.predictor_backend).lower()
+            not in {"none", "null"},
+            "hard_pedestrian_constraints_enabled": bool(
+                self.prediction_config.hard_pedestrian_constraints_enabled
+            ),
+            "local_min_escape_enabled": bool(self.prediction_config.local_min_escape_enabled),
+            "local_min_escape_count": int(self._local_min_escape_count),
+        }
         return payload
 
 
@@ -337,6 +431,10 @@ def build_prediction_mpc_config(cfg: dict[str, Any] | None) -> PredictionMPCConf
         "allow_predictor_fallback": _parse_bool,
         "pedestrian_uncertainty_envelope_enabled": _parse_bool,
         "pedestrian_uncertainty_alpha_mps": float,
+        "hard_pedestrian_constraints_enabled": _parse_bool,
+        "local_min_escape_enabled": _parse_bool,
+        "local_min_escape_distance": float,
+        "local_min_escape_speed_threshold": float,
     }
     kwargs: dict[str, Any] = {}
     for field in fields(PredictionMPCConfig):

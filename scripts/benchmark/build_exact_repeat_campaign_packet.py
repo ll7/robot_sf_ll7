@@ -11,6 +11,7 @@ from typing import Any
 from robot_sf.benchmark.exact_repeat_campaign import (
     build_manifest,
     compare_verified_hosts,
+    execute_campaign,
     resolve_runnable_definitions,
     verify_host_report,
 )
@@ -53,6 +54,17 @@ def _parser() -> argparse.ArgumentParser:
     compare.add_argument("--first", type=Path, required=True)
     compare.add_argument("--second", type=Path, required=True)
     compare.add_argument("--output", type=Path, required=True)
+    execute = subcommands.add_parser(
+        "execute", help="execute repeat cells and emit host_result.json"
+    )
+    execute.add_argument("--resolved-bundle", type=Path, required=True)
+    execute.add_argument("--output-dir", type=Path, required=True)
+    execute.add_argument(
+        "--targets",
+        nargs="*",
+        default=None,
+        help="subset of scenario_id--seed to execute",
+    )
     return parser
 
 
@@ -63,15 +75,24 @@ def main() -> int:
         payload = build_manifest(
             _read_json(args.baseline_report), _read_jsonl(args.source_episodes)
         )
+        _write_json(args.output, payload)
     elif args.command == "resolve-definitions":
         payload = resolve_runnable_definitions(_read_json(args.manifest), args.campaign_config)
+        _write_json(args.output, payload)
     elif args.command == "verify-host":
         payload = verify_host_report(_read_json(args.manifest), _read_json(args.host_report))
+        _write_json(args.output, payload)
+    elif args.command == "execute":
+        payload = execute_campaign(
+            _read_json(args.resolved_bundle),
+            output_dir=args.output_dir,
+            target_filter=args.targets,
+        )
     else:
         payload = compare_verified_hosts(
             _read_json(args.manifest), _read_json(args.first), _read_json(args.second)
         )
-    _write_json(args.output, payload)
+        _write_json(args.output, payload)
     return 0
 
 

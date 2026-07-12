@@ -222,8 +222,16 @@ def load_citation_version(path: Path) -> str:
     Raises:
         KeyError: If the file has no ``version`` field.
     """
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return str(data["version"])
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path} is not valid YAML") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a YAML mapping")
+    version = data.get("version")
+    if version is None:
+        raise KeyError(f"{path} is missing a non-null 'version' field")
+    return str(version)
 
 
 def main(argv: list[str] | None = None) -> int:

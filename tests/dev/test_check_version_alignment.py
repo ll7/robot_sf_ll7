@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from scripts.dev.check_version_alignment import (
@@ -12,6 +14,9 @@ from scripts.dev.check_version_alignment import (
     load_citation_version,
     numeric_version_from_tag,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.mark.parametrize(
@@ -139,6 +144,27 @@ def test_evaluate_flags_missing_release_tag() -> None:
     assert any("no full release tag" in problem for problem in problems)
 
 
+@pytest.mark.parametrize("contents", ["", "[]", "version: null"])
+def test_load_citation_version_rejects_missing_or_non_mapping_version(
+    tmp_path: Path, contents: str
+) -> None:
+    """Citation inputs must be mappings with an explicit non-null version."""
+    citation = tmp_path / "CITATION.cff"
+    citation.write_text(contents, encoding="utf-8")
+
+    with pytest.raises((KeyError, ValueError)):
+        load_citation_version(citation)
+
+
+def test_load_citation_version_rejects_invalid_yaml(tmp_path: Path) -> None:
+    """Malformed YAML must fail closed with a concise error type."""
+    citation = tmp_path / "CITATION.cff"
+    citation.write_text("version: [", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not valid YAML"):
+        load_citation_version(citation)
+
+
 def test_repo_citation_matches_latest_release_tag() -> None:
     """The committed CITATION.cff must match the repo's latest release tag.
 
@@ -150,7 +176,8 @@ def test_repo_citation_matches_latest_release_tag() -> None:
 
     all_tags = git_all_tags()
     latest = latest_release_tag(all_tags)
-    assert latest is not None, "expected at least one full release tag in the repo"
+    if latest is None:
+        pytest.skip("no full release tags available in this checkout")
 
     citation_version = load_citation_version(DEFAULT_CITATION)
     # head_tags=[] scopes this guard to CITATION alignment only, independent of

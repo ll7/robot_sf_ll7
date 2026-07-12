@@ -3,6 +3,7 @@ name: Release Functional Badge Verification
 on:
   push:
     tags:
+      - '[0-9]*'
       - 'v*'
       - 'rc*'
   workflow_dispatch:

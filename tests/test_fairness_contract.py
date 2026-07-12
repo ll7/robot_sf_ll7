@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from robot_sf.benchmark.fairness_contract import (
     FairnessReport,
     build_capability_entry,
@@ -84,6 +86,13 @@ def test_build_capability_matrix_deduplicates():
     configs = [{"algo": "orca"}, {"algo": "orca"}]
     matrix = build_capability_matrix(configs)
     assert len(matrix.entries) == 1
+
+
+def test_build_capability_matrix_tolerates_malformed_tuning() -> None:
+    """Non-mapping tuning metadata fails safely to unknown provenance."""
+    matrix = build_capability_matrix([{"algo": "orca", "tuning": "invalid"}])
+    assert matrix.entries["orca"].tuning_budget_runs is None
+    assert matrix.entries["orca"].tuning_source == "unknown"
 
 
 def test_capability_entry_to_dict():
@@ -278,6 +287,14 @@ def test_emit_mismatch_flags_marks_excluded():
     row: dict[str, object] = {}
     augmented = emit_mismatch_flags(matrix, row, "goal")
     assert augmented["fairness_in_ranking_subset"] is False
+
+
+def test_emit_mismatch_flags_normalizes_and_validates_planner_name() -> None:
+    """Report rows use canonical planner identity and reject unknown planners."""
+    matrix = build_capability_matrix([{"algo": "orca"}])
+    assert emit_mismatch_flags(matrix, {}, "ORCA")["fairness_in_ranking_subset"] is True
+    with pytest.raises(KeyError, match="not in the capability matrix"):
+        emit_mismatch_flags(matrix, {}, "unknown_planner")
 
 
 def test_fairness_report_serialization():

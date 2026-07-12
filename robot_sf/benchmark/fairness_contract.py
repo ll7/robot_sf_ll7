@@ -179,7 +179,7 @@ def build_capability_entry(
         prototype_only=bool(kin.get("prototype_only", False)),
         tuning_budget_runs=tuning_budget_runs,
         tuning_source=tuning_source,
-        compute_budget_class=_classify_compute_budget(canonical_name, kin),
+        compute_budget_class=_classify_compute_budget(canonical_name),
     )
 
 
@@ -235,7 +235,9 @@ def build_capability_matrix(
         if canonical in entries:
             continue
         obs_mode = cfg.get("observation_mode")
-        tuning = cfg.get("tuning") or {}
+        tuning = cfg.get("tuning")
+        if not isinstance(tuning, dict):
+            tuning = {}
         budget_runs = tuning.get("budget_runs")
         source = str(tuning.get("source", "unknown"))
         entries[canonical] = build_capability_entry(
@@ -570,20 +572,26 @@ def emit_mismatch_flags(
     Returns:
         The augmented report row (mutated in place and returned).
     """
+    canonical = canonical_algorithm_name(canonical_name)
+    if canonical not in matrix.entries:
+        raise KeyError(
+            f"Planner '{canonical_name}' (canonical: '{canonical}') is not in the capability matrix."
+        )
+
     mismatches = detect_mismatches(matrix)
     fair, _ = fair_comparison_subset(matrix, mismatches)
     planner_mismatches = [
         {
             "dimension": m.dimension,
-            "peer": m.planner_b if m.planner_a == canonical_name else m.planner_a,
+            "peer": m.planner_b if m.planner_a == canonical else m.planner_a,
             "severity": m.severity,
             "description": m.description,
         }
         for m in mismatches
-        if canonical_name in (m.planner_a, m.planner_b)
+        if canonical in (m.planner_a, m.planner_b)
     ]
     report_row["fairness_mismatch_flags"] = planner_mismatches
-    report_row["fairness_in_ranking_subset"] = canonical_name in fair
+    report_row["fairness_in_ranking_subset"] = canonical in fair
     return report_row
 
 
@@ -592,7 +600,7 @@ def emit_mismatch_flags(
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _classify_compute_budget(canonical_name: str, kin: dict[str, Any]) -> str:
+def _classify_compute_budget(canonical_name: str) -> str:
     """Classify the compute budget class for a planner.
 
     Returns:

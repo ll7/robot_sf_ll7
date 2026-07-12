@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import tarfile
 from io import BytesIO
 from pathlib import Path
@@ -447,6 +448,106 @@ class TestReproductionReport:
 
         assert result["status"] == "skip"
         assert "v1_2_3_scoped.yaml" in result["reason"]
+
+
+@pytest.fixture(scope="class")
+def actual_execution_results(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    """Run each real release-verification flow once for the execution-test class."""
+    from scripts.repro.verify_release_checksums import verify_release
+
+    execution_dir = tmp_path_factory.mktemp("actual_execution")
+    verify_report = verify_release(
+        manifest_path=MANIFEST_PATH,
+        bundle_path=None,
+        output_dir=execution_dir / "verification",
+        download=True,
+    )
+
+    from scripts.repro.cold_start_reproduction_report import generate_reproduction_report
+
+    reproduction_dir = execution_dir / "reproduction"
+    reproduction_report = generate_reproduction_report(
+        tag="0.0.2",
+        output_dir=reproduction_dir,
+        local_repo=ROOT,
+        checksums_only=True,
+    )
+
+    return {
+        "verification_report": verify_report,
+        "reproduction_report": reproduction_report,
+        "reproduction_dir": reproduction_dir,
+    }
+
+
+@pytest.mark.skipif(
+    not shutil.which("gh"),
+    reason="GitHub CLI 'gh' is required for actual execution tests",
+)
+class TestActualExecution:
+    """Tests that validate actual execution of verification and report generation.
+
+    These tests run the real scripts and verify the output artifacts exist
+    with correct structure. They require network access to download the bundle.
+    """
+
+    def test_checksum_verification_report_structure(
+        self, actual_execution_results: dict[str, Any]
+    ) -> None:
+        report = actual_execution_results["verification_report"]
+
+        assert report["schema"] == "release-checksum-verification.v1"
+        assert report["release_tag"] == "0.0.2"
+        assert report["overall_verdict"] == "pass"
+        assert "environment" in report
+        assert "verdicts" in report
+        assert "bundle_checksum" in report["verdicts"]
+        assert report["verdicts"]["bundle_checksum"]["match"] is True
+        assert len(report["errors"]) == 0
+
+    def test_checksum_verification_report_json_serializable(
+        self, actual_execution_results: dict[str, Any]
+    ) -> None:
+        report = actual_execution_results["verification_report"]
+
+        json_str = json.dumps(report, indent=2, sort_keys=True)
+        assert len(json_str) > 100
+        parsed = json.loads(json_str)
+        assert parsed["overall_verdict"] == "pass"
+
+    def test_cold_start_report_generates_valid_report(
+        self, actual_execution_results: dict[str, Any]
+    ) -> None:
+        report = actual_execution_results["reproduction_report"]
+
+        assert report["schema"] == "cold-start-reproduction-report.v1"
+        assert report["release_tag"] == "0.0.2"
+        assert report["overall_verdict"] == "pass"
+        assert "environment" in report
+        assert "steps" in report
+        assert "verify_checksums" in report["steps"]
+        assert report["steps"]["verify_checksums"]["status"] == "pass"
+
+    def test_cold_start_report_embedded_artifacts_verified(
+        self, actual_execution_results: dict[str, Any]
+    ) -> None:
+        report = actual_execution_results["reproduction_report"]
+
+        embedded = report["steps"]["verify_checksums"]["embedded_artifacts"]
+        assert len(embedded) >= 3
+        for artifact in embedded:
+            assert artifact["match"] is True
+            assert artifact["actual_sha256"] == artifact["expected_sha256"]
+
+    def test_report_file_written_to_disk(self, actual_execution_results: dict[str, Any]) -> None:
+        report = actual_execution_results["reproduction_report"]
+        output_dir = actual_execution_results["reproduction_dir"]
+
+        report_path = output_dir / "reproduction_report.json"
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True))
+        assert report_path.is_file()
+        loaded = json.loads(report_path.read_text())
+        assert loaded["overall_verdict"] == "pass"
 
 
 class TestDocumentation:

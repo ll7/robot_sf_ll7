@@ -73,6 +73,67 @@ def _campaign_success_counters(
     }
 
 
+_MAX_FIRST_ERROR_LEN = 200
+
+
+def _build_arm_rollup(run_entries: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Build per-arm rollup for the top-level campaign summary.
+
+    One entry per arm with planner key, kinematics, status, episode counts,
+    and for failed/partial arms the first error string (truncated) plus the
+    count of distinct error signatures from per-job failures.
+
+    Returns:
+        List of arm rollup dicts, one per run entry.
+    """
+    rollup: list[dict[str, Any]] = []
+    for entry in run_entries:
+        planner_info = entry.get("planner") or {}
+        summary = entry.get("summary") or {}
+        failures = summary.get("failures") or []
+        status = str(entry.get("status", "unknown"))
+        written_value = summary.get("written")
+        if written_value is None:
+            written_value = summary.get("episodes_total")
+        episodes_written = int(written_value) if written_value is not None else 0
+        failed_jobs_value = summary.get("failed_jobs")
+        episodes_failed = int(failed_jobs_value) if failed_jobs_value is not None else 0
+
+        first_error: str | None = None
+        distinct_error_count = 0
+        if status not in {"ok", "not_available"}:
+            error_signatures: set[str] = set()
+            first_error_raw: str | None = None
+            for failure in failures:
+                error_value = failure.get("error")
+                error_str = str(error_value) if error_value is not None else ""
+                if error_str:
+                    if first_error_raw is None:
+                        first_error_raw = error_str
+                    error_signatures.add(error_str)
+            if error_signatures:
+                first_error = first_error_raw[:_MAX_FIRST_ERROR_LEN] if first_error_raw else None
+                distinct_error_count = len(error_signatures)
+            else:
+                summary_error = summary.get("error")
+                if summary_error:
+                    first_error = str(summary_error)[:_MAX_FIRST_ERROR_LEN]
+
+        arm_entry: dict[str, Any] = {
+            "planner_key": str(planner_info.get("key", "unknown")),
+            "algo": str(planner_info.get("algo", "unknown")),
+            "kinematics": str(planner_info.get("kinematics", "unknown")),
+            "status": status,
+            "episodes_written": episodes_written,
+            "episodes_failed": episodes_failed,
+        }
+        if first_error is not None:
+            arm_entry["first_error"] = first_error
+            arm_entry["distinct_error_count"] = distinct_error_count
+        rollup.append(arm_entry)
+    return rollup
+
+
 def _resolve_execution_mode(algorithm_metadata_contract: Any) -> str:
     """Resolve execution mode from algorithm metadata payload with legacy fallbacks.
 

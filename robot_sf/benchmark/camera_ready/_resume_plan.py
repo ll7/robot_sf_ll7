@@ -23,7 +23,6 @@ from loguru import logger
 if TYPE_CHECKING:
     from pathlib import Path
 
-from robot_sf.benchmark.aggregate import read_jsonl
 from robot_sf.benchmark.camera_ready._config import _sanitize_name
 from robot_sf.benchmark.camera_ready._util import _utc_now
 from robot_sf.benchmark.utils import load_optional_json
@@ -50,10 +49,21 @@ class ResumeMismatchError(ValueError):
 
 def _count_jsonl_episodes(episodes_path: Path) -> int:
     """Return the number of episode records in a JSONL file."""
-    try:
-        return len(read_jsonl(str(episodes_path)))
-    except (OSError, ValueError, json.JSONDecodeError):
+    if not episodes_path.is_file():
         return 0
+    count = 0
+    with episodes_path.open("r", encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Malformed JSON on line {line_number} in {episodes_path}: {exc}"
+                ) from exc
+            count += 1
+    return count
 
 
 def _expected_jobs(scenarios: list[dict[str, Any]]) -> int:
@@ -65,7 +75,10 @@ def _expected_jobs(scenarios: list[dict[str, Any]]) -> int:
     """
     total = 0
     for sc in scenarios:
-        total += int(sc.get("repeats", 1))
+        repeats = sc.get("repeats", 1)
+        if isinstance(repeats, bool) or not isinstance(repeats, int) or repeats < 0:
+            raise ValueError(f"scenario repeats must be a non-negative integer, got {repeats!r}")
+        total += repeats
     return total
 
 
@@ -75,14 +88,11 @@ def _prior_config_hash(campaign_root: Path) -> str | None:
     Returns:
         The config hash string if present on disk, otherwise None.
     """
-    manifest_path = campaign_root / "campaign_manifest.json"
-    try:
-        manifest = load_optional_json(str(manifest_path))
-    except FileNotFoundError:
-        return None
-    if isinstance(manifest, dict):
-        return str(manifest.get("config_hash", "")).strip() or None
-    return None
+    manifest = _load_resume_manifest(campaign_root)
+    value = str(manifest.get("config_hash", "")).strip()
+    if not value:
+        raise ValueError("campaign manifest is missing a non-empty config_hash")
+    return value
 
 
 def _prior_campaign_id(campaign_root: Path) -> str | None:
@@ -91,14 +101,26 @@ def _prior_campaign_id(campaign_root: Path) -> str | None:
     Returns:
         The campaign id string if present on disk, otherwise None.
     """
+    manifest = _load_resume_manifest(campaign_root)
+    value = str(manifest.get("campaign_id", "")).strip()
+    if not value:
+        raise ValueError("campaign manifest is missing a non-empty campaign_id")
+    return value
+
+
+def _load_resume_manifest(campaign_root: Path) -> dict[str, Any]:
+    """Load the required campaign manifest or fail closed.
+
+    Returns:
+        Parsed campaign manifest mapping.
+    """
     manifest_path = campaign_root / "campaign_manifest.json"
-    try:
-        manifest = load_optional_json(str(manifest_path))
-    except FileNotFoundError:
-        return None
-    if isinstance(manifest, dict):
-        return str(manifest.get("campaign_id", "")).strip() or None
-    return None
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"Campaign manifest missing at {manifest_path}")
+    manifest = load_optional_json(str(manifest_path))
+    if not isinstance(manifest, dict):
+        raise ValueError(f"Campaign manifest must be a JSON object: {manifest_path}")
+    return manifest
 
 
 def verify_resume_context(
@@ -167,6 +189,8 @@ def build_resume_plan(
     """
     if expected_jobs is None:
         expected_jobs = _expected_jobs(scenarios)
+    elif isinstance(expected_jobs, bool) or not isinstance(expected_jobs, int) or expected_jobs < 0:
+        raise ValueError(f"expected_jobs must be a non-negative integer, got {expected_jobs!r}")
 
     enabled_planners = [p for p in planners if isinstance(p, dict) and p.get("enabled", True)]
 
@@ -176,6 +200,8 @@ def build_resume_plan(
         for kinematics in kinematics_matrix:
             arm_name = f"{_sanitize_name(planner_key)}__{_sanitize_name(kinematics)}"
             arm_dir = runs_dir / arm_name
+            if arm_dir.exists() and not arm_dir.is_dir():
+                raise NotADirectoryError(f"Resume arm path is not a directory: {arm_dir}")
             episodes_path = arm_dir / "episodes.jsonl" if arm_dir.exists() else None
 
             episodes_found = 0

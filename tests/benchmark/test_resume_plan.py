@@ -97,7 +97,8 @@ class TestCountJsonlEpisodes:
     def test_returns_zero_for_corrupt(self, tmp_path: Path) -> None:
         p = tmp_path / "corrupt.jsonl"
         p.write_text("not json\n", encoding="utf-8")
-        assert _count_jsonl_episodes(p) == 0
+        with pytest.raises(ValueError, match="line 1"):
+            _count_jsonl_episodes(p)
 
 
 # --- _expected_jobs ---
@@ -116,6 +117,14 @@ class TestExpectedJobs:
 
     def test_empty_scenarios(self) -> None:
         assert _expected_jobs([]) == 0
+
+    def test_rejects_negative_repeats(self) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            _expected_jobs([{"name": "s1", "repeats": -1}])
+
+    def test_rejects_non_integer_repeats(self) -> None:
+        with pytest.raises(ValueError, match="non-negative"):
+            _expected_jobs([{"name": "s1", "repeats": "3"}])
 
 
 # --- _build_verdict_str ---
@@ -152,11 +161,25 @@ class TestVerifyResumeContext:
         # Should not raise
         verify_resume_context(root, campaign_id="my-run", config_hash="h1")
 
-    def test_no_error_when_no_manifest(self, tmp_path: Path) -> None:
+    def test_raises_when_no_manifest(self, tmp_path: Path) -> None:
         root = tmp_path / "campaign"
         root.mkdir()
-        # No manifest on disk = no mismatch to detect
-        verify_resume_context(root, campaign_id="any", config_hash="any")
+        with pytest.raises(FileNotFoundError, match="Campaign manifest missing"):
+            verify_resume_context(root, campaign_id="any", config_hash="any")
+
+    def test_raises_when_manifest_is_directory(self, tmp_path: Path) -> None:
+        root = tmp_path / "campaign"
+        root.mkdir()
+        (root / "campaign_manifest.json").mkdir()
+        with pytest.raises(FileNotFoundError, match="Campaign manifest missing"):
+            verify_resume_context(root, campaign_id="any", config_hash="any")
+
+    def test_raises_when_manifest_fields_are_missing(self, tmp_path: Path) -> None:
+        root = tmp_path / "campaign"
+        root.mkdir()
+        (root / "campaign_manifest.json").write_text("{}", encoding="utf-8")
+        with pytest.raises(ValueError, match="campaign_id"):
+            verify_resume_context(root, campaign_id="any", config_hash="any")
 
     def test_raises_on_campaign_id_mismatch(self, tmp_path: Path) -> None:
         root = tmp_path / "campaign"
@@ -292,6 +315,18 @@ class TestBuildResumePlan:
         )
         v = verdicts[0]
         assert v.expected_total == 5
+
+    def test_rejects_file_at_arm_directory_path(self, tmp_path: Path) -> None:
+        runs_dir = tmp_path / "runs"
+        runs_dir.mkdir()
+        (runs_dir / "sf__differential_drive").write_text("not a directory", encoding="utf-8")
+        with pytest.raises(NotADirectoryError, match="not a directory"):
+            build_resume_plan(
+                runs_dir,
+                planners=[{"key": "sf", "enabled": True}],
+                kinematics_matrix=["differential_drive"],
+                scenarios=[{"name": "s1"}],
+            )
 
 
 # --- resume_plan_summary ---

@@ -454,7 +454,11 @@ class TestCampaignReadinessGate:
     CONFIG_PATH = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
 
     def test_real_config_is_blocked_only_on_open_dependencies(self):
-        """The landed packet is campaign-ready except for #5351/#5353 (closure audit)."""
+        """After #5483 reconciliation the packet is campaign-ready except for #5351.
+
+        #5353 (capability-matrix contract) is resolved; #5351 (hierarchical
+        paired analysis) remains the sole open dependency blocker.
+        """
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
             assess_campaign_readiness,
         )
@@ -466,11 +470,11 @@ class TestCampaignReadinessGate:
         assert criteria["preregistration_config_valid"]["ready"] is True
         assert criteria["arm_configs_valid"]["ready"] is True
         assert criteria["evidence_registry_pinned"]["ready"] is True
-        # ...and the sole remaining gate is the two declared open dependencies.
+        # ...and the sole remaining gate is the single declared open dependency (#5351).
         assert criteria["dependencies_resolved"]["ready"] is False
         joined = " ".join(report["blockers"])
         assert "#5351" in joined
-        assert "#5353" in joined
+        assert "#5353" not in joined
 
     def test_missing_registry_blocks_readiness(self, tmp_path):
         from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (

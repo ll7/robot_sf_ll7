@@ -567,6 +567,11 @@ def test_record_is_degraded_accepts_native_record():
     )
 
 
+def test_record_is_degraded_rejects_non_mapping_record():
+    """Malformed runner output does not raise while checking degraded metadata."""
+    assert _record_is_degraded(None) is False
+
+
 # --- execute_campaign degraded disposition (issue #5498) ------------------
 
 
@@ -618,3 +623,31 @@ def test_execute_campaign_dispositions_degraded_fallback_targets(
     assert verified["summary"]["all_cells_bitwise_identical"] is False
     for target in verified["targets"]:
         assert target["unrunnable"] is True
+
+
+def test_execute_campaign_dispositions_mixed_degraded_repeats(tmp_path, manifest, resolved_bundle):
+    """A single degraded repeat prevents a mixed target from becoming evidence."""
+    calls = 0
+
+    def mixed_runner(scenario_params, seed, **kwargs):
+        nonlocal calls
+        record = _build_mock_record(seed)
+        if calls % 3 == 0:
+            record["algorithm_metadata"] = {"status": "policy_step_error_fallback"}
+            record["outcome"] = {"timeout_event": True}
+        calls += 1
+        return record
+
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "mixed_degraded_disposition",
+        run_episode=mixed_runner,
+    )
+
+    assert calls == 140 * 3
+    assert all(result["degraded"] is True for result in host_result["results"])
+    assert all(result["repeats"] == [] for result in host_result["results"])
+    verified = verify_host_report(manifest, host_result)
+    assert verified["summary"]["n_runnable_cells"] == 0
+    assert verified["summary"]["n_unrunnable_cells"] == 7
+    assert verified["summary"]["all_cells_bitwise_identical"] is False

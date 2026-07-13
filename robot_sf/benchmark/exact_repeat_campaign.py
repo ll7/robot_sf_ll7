@@ -52,7 +52,7 @@ SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
 UNRUNNABLE_DISPOSITION = "unrunnable_on_current_main"
 MIXED_DISPOSITION = "mixed_runnability"
 
-# A target that executes through ``run_episode`` but whose repeats fall back to a
+# A target that executes through ``run_episode`` but has any repeat fall back to a
 # degraded/no-op policy (for example a forked planner-step worker that crashes or
 # times out, leaving the robot motionless) must not be promoted to a determinism
 # verdict. It is recorded with the same ``unrunnable`` disposition so the verifier
@@ -62,7 +62,7 @@ DEGRADED_DISPOSITION = "degraded_fallback"
 _DEGRADED_STATUS_PREFIXES = ("policy_step_timeout_fallback", "policy_step_error_fallback")
 
 
-def _record_is_degraded(record: Mapping[str, Any]) -> bool:
+def _record_is_degraded(record: Any) -> bool:
     """Return True when an episode record is a degraded fallback rather than native output.
 
     A target is degraded when the planner step fell back to a zero-velocity action
@@ -71,6 +71,8 @@ def _record_is_degraded(record: Mapping[str, Any]) -> bool:
     runner sets when every step fell back. Either one is sufficient evidence that the
     repeats do not represent native planner behavior.
     """
+    if not isinstance(record, Mapping):
+        return False
     metadata = record.get("algorithm_metadata")
     if isinstance(metadata, Mapping):
         status = metadata.get("status")
@@ -1115,12 +1117,12 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
                 }
             )
 
-        # Issue #5498: a planner that constructs but degrades every repeat to a
+        # Issue #5498: a planner that constructs but degrades any repeat to a
         # no-op fallback (for example a forked planner-step worker that times out
         # or crashes, leaving the robot motionless) must not be promoted to a
         # determinism verdict. Record it as an explicit unrunnable disposition so
         # the verifier excludes it, with a degraded flag and reason.
-        if all(_record_is_degraded(record) for record in records):
+        if records and any(_record_is_degraded(record) for record in records):
             result_entry = {
                 "scenario_id": scenario_id,
                 "planner": planner,
@@ -1131,7 +1133,7 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
                 "degraded": True,
                 "disposition": UNRUNNABLE_DISPOSITION,
                 "disposition_reason": (
-                    f"planner {planner_algo!r} ran but every repeat degraded to a "
+                    f"planner {planner_algo!r} had one or more repeats degrade to a "
                     "fallback policy (planner-step worker crashed/timed out); not native "
                     "execution and not valid exact-repeat evidence"
                 ),

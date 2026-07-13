@@ -1,9 +1,10 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "artifact": "issue #5498 single-host exact-repeat campaign result",
   "claim_boundary": "exact-repeat determinism verified only for native orca+goal cells; ppo cells recorded as degraded/unrunnable and excluded from determinism claim; no second-host comparison performed",
-  "command": "uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py execute --resolved-bundle docs/context/evidence/issue_5263_exact_repeat/resolved_definitions.json --output-dir output/issue_5498 && verify-host --manifest docs/context/evidence/issue_5263_exact_repeat/exact_repeat_manifest.json --host-report output/issue_5498/host_result.json --output output/issue_5498/verified_host_result.json",
+  "command": "RUN_DIR=$(mktemp -d) && uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py execute --resolved-bundle docs/context/evidence/issue_5263_exact_repeat/resolved_definitions.json --output-dir \"$RUN_DIR\" && uv run python scripts/benchmark/build_exact_repeat_campaign_packet.py verify-host --manifest docs/context/evidence/issue_5263_exact_repeat/exact_repeat_manifest.json --host-report \"$RUN_DIR/host_result.json\" --output \"$RUN_DIR/verified_host_result.json\"",
   "evidence_grade": "observed single-host diagnostic; NOT benchmark or paper-facing evidence",
-  "host_result_sha256": "addc29ec2b1696a6a292d5ae96831ecf35287142cd21d99e90193ef91e3856ab",
+  "host_result_sha256": "033548cbf6103a478b807865b951c3ad5afd1d4579fe153d981b9f498c75e408",
   "manifest_sha256": "a7ddefd00c903e417f03809723096279be722c4871264e4495c18a0548b37ff2",
   "n_runnable_targets": 80,
   "n_targets": 140,
@@ -20,5 +21,5 @@
     "#5495",
     "#5496"
   ],
-  "verified_host_result_sha256": "6a4a355910d5a855d73d44f900fed90004af97233af08ace0a6f0978c17a7732"
+  "verified_host_result_sha256": "74e00a84c98c67df904795a7448cf045034b7e0b3bd874492ff05787dad6ec85"
 }

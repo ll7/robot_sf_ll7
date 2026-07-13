@@ -65,7 +65,7 @@ divergent, not a successful comparison.
 No full benchmark campaign, Slurm/GPU submission, or paper/dissertation claim update was made.
 The runnable-definition and executor blockers are resolved.
 
-### Issue #5498 single-host exact-repeat result (registered 2026-07-13)
+### Issue #5498 Single-Host Exact-Repeat Result (Registered 2026-07-13)
 
 The predeclared 420 CPU-only repeats (140 targets, 3 repeats each, single worker) were executed on
 one host and the verified report is registered under this directory:
@@ -87,7 +87,7 @@ Evidence grade: observed single-host diagnostic. NOT benchmark or paper-facing e
 degradation is a host/runner isolation defect, not a determinism verdict; it is recorded, not
 promoted.
 
-### Remaining action after #5498
+### Remaining Action After #5498
 
 The predeclared **second-host near-miss comparison** is not yet run. It requires a second
 distinct host with matching pinned NumPy/Numba versions; register `cross_host_matrix.json` via

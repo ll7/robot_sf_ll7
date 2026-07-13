@@ -76,6 +76,18 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5263_exact_repeat/issue_5498_host_result.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5263_exact_repeat/issue_5498_provenance.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5263_exact_repeat/issue_5498_verified_host_result.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5006_residual_review_thread_ledger.md
   status: evidence
   freshness: evidence

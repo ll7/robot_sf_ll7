@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import TYPE_CHECKING
+import sys
+import types
+from pathlib import Path
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from scripts.tools.generate_socnavbench_traversible import (
     EXIT_BLOCKED,
@@ -23,6 +22,8 @@ from scripts.tools.generate_socnavbench_traversible import (
     STATUS_BLOCKED_MISSING_MESH,
     STATUS_READY,
     TraversibleGenerationError,
+    TraversiblePaths,
+    _build_socnav_traversible,
     build_traversible,
     main,
     output_tree_checksum,
@@ -264,3 +265,73 @@ def test_build_traversible_idempotent_when_output_present(tmp_path: Path) -> Non
     assert report["built"] is False
     assert report["output_sha256"] == sha256_file(out)
     assert report["output_tree_sha256"] == _expected_single_file_tree_hash(out, root=out.parent)
+
+
+def test_build_uses_repo_root_safe_config_and_physical_params(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The build bridge resolves cwd-relative config and passes the nested robot fields."""
+    captured: dict[str, object] = {}
+
+    class DotMap:
+        """Minimal fake for the params object assembled by the wrapper."""
+
+    class FakeRenderer:
+        @classmethod
+        def get_renderer(cls, params: object) -> FakeRenderer:
+            captured["params"] = params
+            return cls()
+
+        def get_config(self) -> None:
+            captured["config_called"] = True
+
+    physical_params = types.SimpleNamespace(base=0.1, height=0.4, radius=0.2)
+    central = types.ModuleType("params.central_params")
+    central.create_building_params = lambda: types.SimpleNamespace(dataset_name="sbpd")
+    central.create_camera_params = lambda: types.SimpleNamespace(
+        modalities=["rgb"], width=64, height=32
+    )
+    central.create_robot_params = lambda: types.SimpleNamespace(physical_params=physical_params)
+
+    params_package = types.ModuleType("params")
+    params_package.__path__ = []
+    params_package.central_params = central
+    sbpd_package = types.ModuleType("sbpd")
+    sbpd_package.__path__ = []
+    renderer_module = types.ModuleType("sbpd.sbpd_renderer")
+    renderer_module.SBPDRenderer = FakeRenderer
+    sbpd_package.sbpd_renderer = renderer_module
+
+    monkeypatch.setitem(sys.modules, "pyassimp", types.ModuleType("pyassimp"))
+    monkeypatch.setitem(sys.modules, "dotmap", types.SimpleNamespace(DotMap=DotMap))
+    monkeypatch.setitem(sys.modules, "params", params_package)
+    monkeypatch.setitem(sys.modules, "params.central_params", central)
+    monkeypatch.setitem(sys.modules, "sbpd", sbpd_package)
+    monkeypatch.setitem(sys.modules, "sbpd.sbpd_renderer", renderer_module)
+    monkeypatch.setattr(
+        "scripts.tools.generate_socnavbench_traversible.find_library",
+        lambda _name: "libassimp.so",
+    )
+
+    original_cwd = tmp_path.cwd()
+    external_root = tmp_path / "external"
+    paths = TraversiblePaths(
+        map_name="ETH",
+        socnav_root=external_root / SOCNAV_SUBPATH,
+        mesh_dir=external_root / SOCNAV_SUBPATH / "mesh" / "ETH",
+        traversible_dir=external_root / SOCNAV_SUBPATH / "traversibles" / "ETH",
+        output_pkl=external_root / SOCNAV_SUBPATH / "traversibles" / "ETH" / "data.pkl",
+    )
+
+    _build_socnav_traversible(paths)
+
+    params = captured["params"]
+    assert captured["config_called"] is True
+    assert params.robot_params is physical_params
+    assert params.sbpd_data_dir == str(external_root / SOCNAV_SUBPATH / DATASET_SUBPATH)
+    assert params.traversible_dir == str(
+        external_root / SOCNAV_SUBPATH / DATASET_SUBPATH / "traversibles"
+    )
+    assert params.camera_params.modalities == ["occupancy_grid"]
+    assert params.camera_params.height == params.camera_params.width
+    assert Path.cwd() == original_cwd

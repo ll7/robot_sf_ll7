@@ -204,3 +204,158 @@ def test_build_predictive_mppi_config_preserves_root_and_predictive_fields() -> 
     assert abs(cfg.socnav.predictive_goal_weight - 9.1) < 1e-9
     assert cfg.socnav.predictive_model_id == "predictive_proxy_selected_v2"
     assert abs(cfg.hard_ped_clearance - 0.62) < 1e-9
+
+
+def test_predictive_mppi_batch_cost_parity_against_scalar() -> None:
+    """Batched sequence rollout must match scalar costs within float tolerance."""
+    from robot_sf.planner.predictive_mppi import PredictiveMPPIAdapter
+
+    cfg = build_predictive_mppi_config(
+        {"random_seed": 42, "sample_count": 16, "iterations": 1, "horizon_steps": 6}
+    )
+    planner = PredictiveMPPIAdapter(cfg, allow_fallback=True)
+    future = np.zeros((3, 8, 2), dtype=np.float32)
+    future[0, :, :] = np.array([1.0, 0.3], dtype=np.float32)
+    future[1, :, :] = np.array([1.3, -0.1], dtype=np.float32)
+    planner._predictor = _StubPredictor(future, anchor=(0.3, 0.0))
+
+    obs = _obs(
+        robot=(0.0, 0.0),
+        heading=0.0,
+        goal=(3.0, 1.0),
+        ped_positions=[(1.0, 0.3), (1.3, -0.1), (2.5, 0.5)],
+        ped_velocities=[(0.2, 0.0), (-0.1, 0.1), (0.0, 0.2)],
+    )
+
+    rng = np.random.default_rng(5412)
+    horizon = max(1, int(cfg.horizon_steps))
+    batch = rng.normal(0.3, 0.2, size=(8, horizon, 2))
+    batch[:, :, 0] = np.clip(batch[:, :, 0], 0.0, cfg.max_linear_speed)
+    batch[:, :, 1] = np.clip(batch[:, :, 1], -cfg.max_angular_speed, cfg.max_angular_speed)
+
+    robot_pos, heading, _speed, goal = planner._extract_state(obs)
+    future_full, mask, _steps = planner._predict_future(obs)
+    grid_payload = planner._cache_grid_payload(obs)
+
+    scalar_costs = np.array(
+        [
+            planner._sequence_rollout(
+                batch[i],
+                robot_pos=robot_pos,
+                heading=heading,
+                goal=goal,
+                future=future_full,
+                mask=mask,
+                observation=obs,
+                anchor_action=(0.3, 0.0),
+                grid_payload=grid_payload,
+            )
+            for i in range(8)
+        ]
+    )
+    batch_costs = planner._batch_sequence_rollout(
+        batch,
+        robot_pos=robot_pos,
+        heading=heading,
+        goal=goal,
+        future=future_full,
+        mask=mask,
+        observation=obs,
+        anchor_action=(0.3, 0.0),
+        grid_payload=grid_payload,
+    )
+
+    np.testing.assert_allclose(scalar_costs, batch_costs, atol=1e-9, rtol=0)
+
+
+def test_mppi_social_batch_cost_parity_against_scalar() -> None:
+    """Batched MPPI social sequences must match scalar costs within float tolerance."""
+    from robot_sf.planner.mppi_social import MPPISocialConfig, MPPISocialPlannerAdapter
+
+    cfg = MPPISocialConfig(
+        random_seed=42,
+        sample_count=16,
+        iterations=1,
+        horizon_steps=6,
+    )
+    planner = MPPISocialPlannerAdapter(cfg)
+
+    obs = _obs(
+        robot=(0.0, 0.0),
+        heading=0.0,
+        goal=(3.0, 1.0),
+        ped_positions=[(1.0, 0.3), (1.3, -0.1), (2.5, 0.5)],
+        ped_velocities=[(0.2, 0.0), (-0.1, 0.1), (0.0, 0.2)],
+    )
+
+    rng = np.random.default_rng(5412)
+    horizon = max(1, int(cfg.horizon_steps))
+    batch = rng.normal(0.3, 0.2, size=(8, horizon, 2))
+    batch[:, :, 0] = np.clip(batch[:, :, 0], 0.0, cfg.max_linear_speed)
+    batch[:, :, 1] = np.clip(batch[:, :, 1], -cfg.max_angular_speed, cfg.max_angular_speed)
+
+    robot_pos, heading, speed, goal, ped_pos, ped_vel = planner._extract_state(obs)
+    grid_payload = planner._cache_grid_payload(obs)
+
+    scalar_costs = np.array(
+        [
+            planner._sequence_cost(
+                sequence=batch[i],
+                robot_pos=robot_pos,
+                heading=heading,
+                current_speed=speed,
+                goal=goal,
+                ped_pos=ped_pos,
+                ped_vel=ped_vel,
+                observation=obs,
+                grid_payload=grid_payload,
+            )
+            for i in range(8)
+        ]
+    )
+    batch_costs = planner._batch_sequence_cost(
+        batch=batch,
+        robot_pos=robot_pos,
+        heading=heading,
+        current_speed=speed,
+        goal=goal,
+        ped_pos=ped_pos,
+        ped_vel=ped_vel,
+        observation=obs,
+        grid_payload=grid_payload,
+    )
+
+    np.testing.assert_allclose(scalar_costs, batch_costs, atol=1e-9, rtol=0)
+
+
+def test_mppi_social_batch_empty_pedestrians() -> None:
+    """Batched cost should handle zero pedestrians without error."""
+    from robot_sf.planner.mppi_social import MPPISocialConfig, MPPISocialPlannerAdapter
+
+    cfg = MPPISocialConfig(random_seed=42, sample_count=8, iterations=1, horizon_steps=4)
+    planner = MPPISocialPlannerAdapter(cfg)
+
+    obs = _obs(robot=(0.0, 0.0), heading=0.0, goal=(2.0, 0.0))
+
+    rng = np.random.default_rng(42)
+    batch = rng.normal(0.3, 0.15, size=(4, 4, 2))
+    batch[:, :, 0] = np.clip(batch[:, :, 0], 0.0, cfg.max_linear_speed)
+    batch[:, :, 1] = np.clip(batch[:, :, 1], -cfg.max_angular_speed, cfg.max_angular_speed)
+
+    robot_pos, heading, speed, goal, ped_pos, ped_vel = planner._extract_state(obs)
+    grid_payload = planner._cache_grid_payload(obs)
+
+    costs = planner._batch_sequence_cost(
+        batch=batch,
+        robot_pos=robot_pos,
+        heading=heading,
+        current_speed=speed,
+        goal=goal,
+        ped_pos=ped_pos,
+        ped_vel=ped_vel,
+        observation=obs,
+        grid_payload=grid_payload,
+    )
+
+    assert costs.shape == (4,)
+    assert np.all(np.isfinite(costs))

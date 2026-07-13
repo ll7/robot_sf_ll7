@@ -1,0 +1,141 @@
+{
+  "schema_version": "issue_4882.rank_stability.v1",
+  "method": "S20-prefix (seeds 111-130) vs S30 (111-140) on the same clean slice, exploiting S10\u2282S20\u2282S30 prefix nesting",
+  "ranks": {
+    "success": {
+      "s20_prefix_mean": {
+        "hybrid_rule_v3_fast_progress_static_escape": 0.771875,
+        "hybrid_rule_v3_fast_progress_static_escape_continuous": 0.7854166666666667,
+        "orca": 0.68125,
+        "scenario_adaptive_hybrid_orca_v1": 0.7666666666666667,
+        "scenario_adaptive_hybrid_orca_v2_collision_guard": 0.7666666666666667,
+        "ppo": 0.715625
+      },
+      "s30_mean": {
+        "hybrid_rule_v3_fast_progress_static_escape": 0.7597222222222222,
+        "hybrid_rule_v3_fast_progress_static_escape_continuous": 0.7715277777777778,
+        "orca": 0.6805555555555556,
+        "scenario_adaptive_hybrid_orca_v1": 0.7534722222222222,
+        "scenario_adaptive_hybrid_orca_v2_collision_guard": 0.7534722222222222,
+        "ppo": 0.7173611111111111
+      },
+      "s20_order": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "scenario_adaptive_hybrid_orca_v1",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "ppo",
+        "orca"
+      ],
+      "s30_order": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "scenario_adaptive_hybrid_orca_v1",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "ppo",
+        "orca"
+      ],
+      "kendall_tau": 1.0,
+      "top_rank_changed": false,
+      "rank_deltas": {
+        "hybrid_rule_v3_fast_progress_static_escape": 0,
+        "hybrid_rule_v3_fast_progress_static_escape_continuous": 0,
+        "orca": 0,
+        "scenario_adaptive_hybrid_orca_v1": 0,
+        "scenario_adaptive_hybrid_orca_v2_collision_guard": 0,
+        "ppo": 0
+      },
+      "boundary_sensitive": false
+    },
+    "collision": {
+      "s20_prefix_mean": {
+        "hybrid_rule_v3_fast_progress_static_escape": 0.196875,
+        "hybrid_rule_v3_fast_progress_static_escape_continuous": 0.14583333333333334,
+        "orca": 0.2833333333333333,
+        "scenario_adaptive_hybrid_orca_v1": 0.20729166666666668,
+        "scenario_adaptive_hybrid_orca_v2_collision_guard": 0.203125,
+        "ppo": 0.2625
+      },
+      "s30_mean": {
+        "hybrid_rule_v3_fast_progress_static_escape": 0.20555555555555555,
+        "hybrid_rule_v3_fast_progress_static_escape_continuous": 0.1486111111111111,
+        "orca": 0.2833333333333333,
+        "scenario_adaptive_hybrid_orca_v1": 0.2152777777777778,
+        "scenario_adaptive_hybrid_orca_v2_collision_guard": 0.2111111111111111,
+        "ppo": 0.26458333333333334
+      },
+      "s20_order": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "scenario_adaptive_hybrid_orca_v1",
+        "ppo",
+        "orca"
+      ],
+      "s30_order": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "scenario_adaptive_hybrid_orca_v1",
+        "ppo",
+        "orca"
+      ],
+      "kendall_tau": 1.0,
+      "top_rank_changed": false,
+      "rank_deltas": {
+        "hybrid_rule_v3_fast_progress_static_escape": 0,
+        "hybrid_rule_v3_fast_progress_static_escape_continuous": 0,
+        "orca": 0,
+        "scenario_adaptive_hybrid_orca_v1": 0,
+        "scenario_adaptive_hybrid_orca_v2_collision_guard": 0,
+        "ppo": 0
+      },
+      "boundary_sensitive": false
+    },
+    "time_to_goal_norm": {
+      "s20_prefix_mean": {
+        "hybrid_rule_v3_fast_progress_static_escape": 0.4459826388888889,
+        "hybrid_rule_v3_fast_progress_static_escape_continuous": 0.44761631944444447,
+        "orca": 0.5183802083333334,
+        "scenario_adaptive_hybrid_orca_v1": 0.44844270833333333,
+        "scenario_adaptive_hybrid_orca_v2_collision_guard": 0.4484722222222222,
+        "ppo": 0.456796875
+      },
+      "s30_mean": {
+        "hybrid_rule_v3_fast_progress_static_escape": 0.45365972222222223,
+        "hybrid_rule_v3_fast_progress_static_escape_continuous": 0.4599131944444445,
+        "orca": 0.5199976851851852,
+        "scenario_adaptive_hybrid_orca_v1": 0.45782407407407405,
+        "scenario_adaptive_hybrid_orca_v2_collision_guard": 0.45784375000000005,
+        "ppo": 0.45602893518518517
+      },
+      "s20_order": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "scenario_adaptive_hybrid_orca_v1",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "ppo",
+        "orca"
+      ],
+      "s30_order": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "ppo",
+        "scenario_adaptive_hybrid_orca_v1",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "kendall_tau": 0.3333333333333333,
+      "top_rank_changed": false,
+      "rank_deltas": {
+        "hybrid_rule_v3_fast_progress_static_escape": 0,
+        "hybrid_rule_v3_fast_progress_static_escape_continuous": 3,
+        "orca": 0,
+        "scenario_adaptive_hybrid_orca_v1": 0,
+        "scenario_adaptive_hybrid_orca_v2_collision_guard": 0,
+        "ppo": -3
+      },
+      "boundary_sensitive": true
+    }
+  }
+}

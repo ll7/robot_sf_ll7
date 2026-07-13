@@ -1,0 +1,16 @@
+{
+  "schema_version": "issue_4882.campaign_crosscheck.v1",
+  "arms_expected": 6,
+  "arms_present": 6,
+  "rows_per_arm_after_filter": {
+    "hybrid_rule_v3_fast_progress_static_escape": 1440,
+    "hybrid_rule_v3_fast_progress_static_escape_continuous": 1440,
+    "orca": 1440,
+    "scenario_adaptive_hybrid_orca_v1": 1440,
+    "scenario_adaptive_hybrid_orca_v2_collision_guard": 1440,
+    "ppo": 1440
+  },
+  "all_arms_1440": true,
+  "fallback_or_degraded_rows_counted_as_success": false,
+  "grid_realized": "48 scenarios x 30 seeds per arm, verified"
+}

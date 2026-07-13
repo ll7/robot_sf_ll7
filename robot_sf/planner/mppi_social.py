@@ -15,6 +15,15 @@ from robot_sf.planner.risk_dwa import _wrap_angle
 from robot_sf.planner.socnav import OccupancyAwarePlannerMixin
 
 
+def _wrap_angle_batch(angle: np.ndarray) -> np.ndarray:
+    """Batched angle wrapping to ``[-pi, pi)`` (numpy equivalent of ``_wrap_angle``).
+
+    Returns:
+        np.ndarray: Wrapped angles in ``[-pi, pi)``.
+    """
+    return ((angle + np.pi) % (2.0 * np.pi)) - np.pi
+
+
 @dataclass
 class MPPISocialConfig:
     """Configuration for :class:`MPPISocialPlannerAdapter`."""
@@ -250,6 +259,113 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         return -reward
 
+    def _batch_sequence_cost(  # noqa: PLR0913
+        self,
+        *,
+        batch: np.ndarray,
+        robot_pos: np.ndarray,
+        heading: float,
+        current_speed: float,
+        goal: np.ndarray,
+        ped_pos: np.ndarray,
+        ped_vel: np.ndarray,
+        observation: dict[str, Any],
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
+    ) -> np.ndarray:
+        """Vectorized cost evaluation for a batch of control sequences.
+
+        Integrates all samples through the unicycle model and evaluates pedestrian
+        clearance, TTC, smoothness, and grid obstacles. Per-step pose integration
+        is bit-stable with the scalar loop. Pedestrian clearance is broadcast as a
+        ``(samples, steps, peds)`` tensor with a single ``min`` reduction. Obstacle
+        clearance still iterates per-step (grid lookup) but covers all samples at once.
+
+        Returns:
+            np.ndarray: Shape ``(samples,)`` of sequence costs (lower is better).
+        """
+        dt = float(self.config.rollout_dt)
+        horizon = int(batch.shape[1])
+        samples = int(batch.shape[0])
+        start_dist = float(np.linalg.norm(goal - robot_pos))
+
+        # Per-sample accumulators
+        pos = np.full((samples, 2), float(robot_pos[0]), dtype=float)
+        pos[:, 1] = float(robot_pos[1])
+        theta = np.full(samples, float(heading), dtype=float)
+        min_clear = np.full(samples, float("inf"), dtype=float)
+        min_obs = np.full(samples, float("inf"), dtype=float)
+        min_ttc = np.full(samples, float("inf"), dtype=float)
+        smooth_pen = np.zeros(samples, dtype=float)
+        prev_v = np.full(samples, float(current_speed), dtype=float)
+
+        for step in range(horizon):
+            v = batch[:, step, 0]  # (samples,)
+            w = batch[:, step, 1]  # (samples,)
+
+            pos = pos + np.column_stack([v * np.cos(theta) * dt, v * np.sin(theta) * dt])
+            theta = _wrap_angle_batch(theta + w * dt)
+            t = (step + 1) * dt
+
+            if ped_pos.size > 0:
+                ped_t = self._predict_ped_positions(ped_pos, ped_vel, t)  # (peds, 2)
+                # (samples, 1, 2) - (1, peds, 2) -> (samples, peds)
+                dists = np.linalg.norm(pos[:, None, :] - ped_t[None, :, :], axis=2)
+                sample_min = np.min(dists, axis=1)
+                min_clear = np.minimum(min_clear, sample_min)
+
+                # TTC computation
+                robot_vel = np.column_stack([v * np.cos(theta), v * np.sin(theta)])  # (samples, 2)
+                rel_pos = ped_t[None, :, :] - pos[:, None, :]  # (samples, peds, 2)
+                rel_vel = ped_vel[None, :, :] - robot_vel[:, None, :]  # (samples, peds, 2)
+                rel_speed_sq = np.sum(rel_vel * rel_vel, axis=2)  # (samples, peds)
+                rel_dot = -np.sum(rel_pos * rel_vel, axis=2)  # (samples, peds)
+                valid = rel_speed_sq > 1e-6
+                # Where valid, compute ttc; else 0
+                ttc_vals = np.where(
+                    valid, np.where(rel_dot > 0, rel_dot / rel_speed_sq, -1.0), -1.0
+                )
+                # Take min positive TTC per sample
+                pos_ttc = np.where((ttc_vals > 0), ttc_vals, float("inf"))
+                sample_min_ttc = np.min(pos_ttc, axis=1)
+                min_ttc = np.minimum(min_ttc, sample_min_ttc)
+
+            # Obstacle clearance per sample at this step
+            for s in range(samples):
+                obs_clear = self._min_obstacle_clearance(
+                    pos[s], observation=observation, grid_payload=grid_payload
+                )
+                min_obs[s] = min(min_obs[s], obs_clear)
+
+            smooth_pen += np.abs(v - prev_v) + 0.2 * np.abs(w)
+            prev_v = v
+
+        end_dist = np.linalg.norm(goal - pos, axis=1)
+        progress = start_dist - end_dist
+
+        goal_headings = np.arctan2(goal[1] - pos[:, 1], goal[0] - pos[:, 0])
+        heading_score = np.cos(_wrap_angle_batch(goal_headings - theta))
+
+        near_pen = np.maximum(0.0, float(self.config.near_distance) - min_clear)
+        obs_pen = np.maximum(0.0, float(self.config.near_distance) - min_obs)
+
+        ttc_term = np.where(
+            np.isfinite(min_ttc),
+            1.0 / np.maximum(min_ttc, 1e-3),
+            0.0,
+        )
+
+        reward = (
+            float(self.config.goal_progress_weight) * progress
+            + float(self.config.heading_weight) * heading_score
+            + float(self.config.clearance_weight) * np.minimum(min_clear, 2.0)
+            + float(self.config.obstacle_weight) * np.minimum(min_obs, 2.0)
+            - 2.0 * near_pen
+            - 1.5 * obs_pen
+            - float(self.config.ttc_weight) * ttc_term
+            - float(self.config.smoothness_weight) * smooth_pen
+        )
+        return -reward
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return MPPI/CEM optimized `(v, omega)` command."""
         robot_pos, heading, speed, goal, ped_pos, ped_vel = self._extract_state(observation)
@@ -292,22 +408,16 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 float(self.config.max_angular_speed),
             )
 
-            costs = np.asarray(
-                [
-                    self._sequence_cost(
-                        sequence=batch[i],
-                        robot_pos=robot_pos,
-                        heading=heading,
-                        current_speed=speed,
-                        goal=goal,
-                        ped_pos=ped_pos,
-                        ped_vel=ped_vel,
-                        observation=observation,
-                        grid_payload=grid_payload,
-                    )
-                    for i in range(samples)
-                ],
-                dtype=float,
+            costs = self._batch_sequence_cost(
+                batch=batch,
+                robot_pos=robot_pos,
+                heading=heading,
+                current_speed=speed,
+                goal=goal,
+                ped_pos=ped_pos,
+                ped_vel=ped_vel,
+                observation=observation,
+                grid_payload=grid_payload,
             )
 
             elite_idx = np.argsort(costs)[:elite_n]

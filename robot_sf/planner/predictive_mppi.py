@@ -19,6 +19,15 @@ from robot_sf.planner.socnav import (
 )
 
 
+def _wrap_angle_batch(angle: np.ndarray) -> np.ndarray:
+    """Batched angle wrapping to ``[-pi, pi)`` (numpy equivalent of ``_wrap_angle``).
+
+    Returns:
+        np.ndarray: Wrapped angles in ``[-pi, pi)``.
+    """
+    return ((angle + np.pi) % (2.0 * np.pi)) - np.pi
+
+
 @dataclass
 class PredictiveMPPIConfig:
     """Configuration for :class:`PredictiveMPPIAdapter`."""
@@ -289,6 +298,153 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         )
         return -reward
 
+    def _batch_sequence_rollout(  # noqa: PLR0913, C901, PLR0915
+        self,
+        batch: np.ndarray,
+        *,
+        robot_pos: np.ndarray,
+        heading: float,
+        goal: np.ndarray,
+        future: np.ndarray,
+        mask: np.ndarray,
+        observation: dict[str, object],
+        anchor_action: tuple[float, float],
+        grid_payload: tuple[np.ndarray, dict[str, object]] | None = None,
+    ) -> np.ndarray:
+        """Vectorized rollout evaluation for a batch of control sequences.
+
+        Integrates all samples through the unicycle model in local coordinates,
+        evaluates pedestrian clearance, TTC, obstacle clearance, and hard constraints.
+        Per-step pose integration is bit-stable with the scalar loop.
+
+        Returns:
+            np.ndarray: Shape ``(samples,)`` of sequence costs (lower is better).
+        """
+        dt = float(self.config.rollout_dt)
+        horizon = int(batch.shape[1])
+        samples = int(batch.shape[0])
+        start_dist = float(np.linalg.norm(goal - robot_pos))
+        future_steps = int(future.shape[1])
+        valid_idx = np.where(mask > 0.5)[0]
+
+        cos_h = float(np.cos(heading))
+        sin_h = float(np.sin(heading))
+        anchor = np.asarray(anchor_action, dtype=float)
+
+        # Per-sample accumulators (local frame)
+        local_pos = np.zeros((samples, 2), dtype=float)
+        local_heading = np.zeros(samples, dtype=float)
+        min_clear = np.full(samples, float("inf"), dtype=float)
+        min_obs = np.full(samples, float("inf"), dtype=float)
+        first_clear = np.full(samples, float("inf"), dtype=float)
+        first_obs = np.full(samples, float("inf"), dtype=float)
+        ttc_pen = np.zeros(samples, dtype=float)
+        smooth_pen = np.zeros(samples, dtype=float)
+        anchor_pen = np.zeros(samples, dtype=float)
+        prev_action = np.zeros((samples, 2), dtype=float)
+
+        for step in range(horizon):
+            v = batch[:, step, 0]  # (samples,)
+            w = batch[:, step, 1]  # (samples,)
+
+            local_pos = local_pos + np.column_stack(
+                [v * np.cos(local_heading) * dt, v * np.sin(local_heading) * dt]
+            )
+            local_heading = _wrap_angle_batch(local_heading + w * dt)
+
+            ped_idx = min(step, future_steps - 1)
+            ped_t = future[:, ped_idx, :]  # (peds, 2)
+            if ped_t.size > 0 and valid_idx.size > 0:
+                dists = np.linalg.norm(ped_t - local_pos[:, None, :], axis=2)  # (samples, peds)
+                valid_dist = dists[:, valid_idx]  # (samples, valid_peds)
+                if valid_dist.size > 0:
+                    sample_min = np.min(valid_dist, axis=1)  # (samples,)
+                    min_clear = np.minimum(min_clear, sample_min)
+                    if step == 0:
+                        first_clear = np.minimum(first_clear, sample_min)
+                    threshold = float(self.config.near_distance)
+                    shortfall = np.maximum(0.0, threshold - valid_dist)
+                    time_weight = 1.0 / ((step + 1) * dt + 1e-6)
+                    ttc_pen += np.sum(shortfall * time_weight, axis=1)
+
+            # World coordinates for obstacle check
+            world_pos_x = robot_pos[0] + cos_h * local_pos[:, 0] - sin_h * local_pos[:, 1]
+            world_pos_y = robot_pos[1] + sin_h * local_pos[:, 0] + cos_h * local_pos[:, 1]
+
+            # Obstacle clearance per sample
+            for s in range(samples):
+                obs_clear = self._min_obstacle_clearance(
+                    np.array([world_pos_x[s], world_pos_y[s]], dtype=float),
+                    observation=observation,
+                    grid_payload=grid_payload,
+                )
+                min_obs[s] = min(min_obs[s], obs_clear)
+                if step == 0:
+                    first_obs[s] = min(first_obs[s], obs_clear)
+
+            action_col = batch[:, step, :]  # (samples, 2)
+            smooth_pen += np.linalg.norm(action_col - prev_action, axis=1)
+            anchor_pen += np.linalg.norm(action_col - anchor, axis=1)
+            prev_action = action_col
+
+        # Hard constraint rejection per sample
+        costs = np.full(samples, float(self.config.invalid_sequence_cost), dtype=float)
+        alive = np.ones(samples, dtype=bool)
+        for s in range(samples):
+            hc = self._hard_constraint_cost(
+                min_clear=float(min_clear[s]),
+                min_obs=float(min_obs[s]),
+                first_clear=float(first_clear[s]),
+                first_obs=float(first_obs[s]),
+            )
+            if hc is not None:
+                alive[s] = False
+                costs[s] = hc
+
+        if not np.any(alive):
+            return costs
+
+        # Final scoring for surviving samples
+        final_local = local_pos[alive]
+        final_world_x = robot_pos[0] + cos_h * final_local[:, 0] - sin_h * final_local[:, 1]
+        final_world_y = robot_pos[1] + sin_h * final_local[:, 0] + cos_h * final_local[:, 1]
+        final_world = np.column_stack([final_world_x, final_world_y])
+
+        end_dist = np.linalg.norm(goal - final_world, axis=1)
+        progress = start_dist - end_dist
+        goal_headings = np.arctan2(goal[1] - final_world_y, goal[0] - final_world_x)
+        heading_score = np.cos(_wrap_angle_batch(goal_headings - (heading + local_heading[alive])))
+
+        mean_occ = np.zeros(np.sum(alive), dtype=float)
+        alive_local_norms = np.linalg.norm(final_local, axis=1)
+        occ_needed = alive_local_norms > 1e-6
+        if np.any(occ_needed):
+            # Process each sample needing occupancy separately (predictor call)
+            for i in range(np.sum(alive)):
+                if occ_needed[i]:
+                    direction = final_world[i] - robot_pos
+                    obstacle_pen, ped_pen = self._predictor._path_penalty(
+                        robot_pos=robot_pos,
+                        direction=direction,
+                        observation=observation,
+                        base_distance=float(np.linalg.norm(final_world[i] - robot_pos)),
+                        num_samples=max(2, int(horizon)),
+                    )
+                    mean_occ[i] = float(obstacle_pen + 0.5 * ped_pen)
+
+        reward = (
+            float(self.config.goal_progress_weight) * progress
+            + float(self.config.heading_weight) * heading_score
+            + float(self.config.clearance_weight) * np.minimum(min_clear[alive], 2.0)
+            + float(self.config.obstacle_weight) * np.minimum(min_obs[alive], 2.0)
+            - float(self.config.ttc_weight) * ttc_pen[alive]
+            - float(self.config.smoothness_weight) * smooth_pen[alive]
+            - float(self.config.occupancy_weight) * mean_occ
+            - float(self.config.anchor_bias_weight) * anchor_pen[alive]
+        )
+        costs[alive] = -reward
+        return costs
+
     def _constant_sequence(self, action: tuple[float, float], horizon: int) -> np.ndarray:
         """Build a fixed-action control sequence for arbitration candidates.
 
@@ -387,22 +543,16 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
             )
             batch[0] = mean
 
-            costs = np.asarray(
-                [
-                    self._sequence_rollout(
-                        batch[i],
-                        robot_pos=robot_pos,
-                        heading=heading,
-                        goal=goal,
-                        future=future,
-                        mask=mask,
-                        observation=observation,
-                        anchor_action=anchor_action,
-                        grid_payload=grid_payload,
-                    )
-                    for i in range(samples)
-                ],
-                dtype=float,
+            costs = self._batch_sequence_rollout(
+                batch,
+                robot_pos=robot_pos,
+                heading=heading,
+                goal=goal,
+                future=future,
+                mask=mask,
+                observation=observation,
+                anchor_action=anchor_action,
+                grid_payload=grid_payload,
             )
             elite_idx = np.argsort(costs)[:elite_n]
             elites = batch[elite_idx]

@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "collision_causal_report.v1.json",
+  "title": "Collision Causal Report (v1)",
+  "description": "Model-scoped, fail-closed contract that reconstructs a single collision, records the implemented causal dataflow, marks unsupported evidence as unavailable rather than inferred, and separates observed facts, proximate mechanism, and intervention-supported causal contribution. It never assigns legal or moral fault (normative_fault is always not_assessed). Enum vocabularies for mechanism_label and confidence.level are the single source of truth in robot_sf/benchmark/failure_mechanism_taxonomy.py; cross-field fail-closed rules live in robot_sf/benchmark/collision_causal_report.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_id",
+    "case_id",
+    "normative_fault",
+    "data_source",
+    "abstained",
+    "observed_reconstruction",
+    "proximate_mechanism",
+    "causal_contribution",
+    "confidence",
+    "assumptions",
+    "missing_fields",
+    "competing_explanations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "collision_causal_report.v1"
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "case_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "normative_fault": {
+      "description": "Always not_assessed. Robot SF artifacts do not derive legal or moral fault from simulator geometry.",
+      "const": "not_assessed"
+    },
+    "abstained": {
+      "description": "True when the analyser declines to assert a proximate mechanism or actual cause (insufficient evidence, nondeterministic replay, or observationally equivalent explanations).",
+      "type": "boolean"
+    },
+    "abstention_reason": {
+      "type": "string"
+    },
+    "data_source": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["source_kind", "replay_determinism"],
+      "properties": {
+        "source_kind": {
+          "description": "Where the reconstruction came from.",
+          "type": "string",
+          "enum": ["synthetic_fixture", "replayed_episode", "live_episode", "unknown"]
+        },
+        "provenance_uri": {
+          "type": ["string", "null"]
+        },
+        "software_commit": {
+          "type": ["string", "null"]
+        },
+        "replay_determinism": {
+          "type": "string",
+          "enum": ["deterministic", "nondeterministic", "unknown"]
+        }
+      }
+    },
+    "observed_reconstruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["critical_timestamps", "elements"],
+      "properties": {
+        "critical_timestamps": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["t_danger", "t_uca", "t_inevitable", "t_contact"],
+          "properties": {
+            "t_danger": {"$ref": "#/$defs/critical_timestamp"},
+            "t_uca": {"$ref": "#/$defs/critical_timestamp"},
+            "t_inevitable": {"$ref": "#/$defs/critical_timestamp"},
+            "t_contact": {"$ref": "#/$defs/critical_timestamp"}
+          }
+        },
+        "elements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "observations",
+            "predictions",
+            "generated_candidates",
+            "selected_candidate",
+            "guard_arbitration_result",
+            "feasible_command",
+            "applied_command",
+            "actor_states",
+            "geometry"
+          ],
+          "properties": {
+            "observations": {"$ref": "#/$defs/reconstruction_element"},
+            "predictions": {"$ref": "#/$defs/reconstruction_element"},
+            "generated_candidates": {"$ref": "#/$defs/reconstruction_element"},
+            "selected_candidate": {"$ref": "#/$defs/reconstruction_element"},
+            "guard_arbitration_result": {"$ref": "#/$defs/reconstruction_element"},
+            "feasible_command": {"$ref": "#/$defs/reconstruction_element"},
+            "applied_command": {"$ref": "#/$defs/reconstruction_element"},
+            "actor_states": {"$ref": "#/$defs/reconstruction_element"},
+            "geometry": {"$ref": "#/$defs/reconstruction_element"}
+          }
+        }
+      }
+    },
+    "proximate_mechanism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mechanism_label",
+        "cause_location",
+        "unsafe_control_action_class",
+        "rationale"
+      ],
+      "properties": {
+        "mechanism_label": {
+          "description": "Reused verbatim from failure_mechanism_taxonomy.MECHANISM_LABELS; not a competing aggregate taxonomy.",
+          "type": "string"
+        },
+        "cause_location": {
+          "description": "Node in the implemented temporal causal graph (dataflow stage). Orthogonal axis to mechanism_label.",
+          "type": "string",
+          "enum": [
+            "scenario_initialisation",
+            "observation_perception",
+            "prediction",
+            "candidate_generation",
+            "candidate_scoring_selection",
+            "safety_guard_arbitration",
+            "command_conversion_actuation",
+            "robot_dynamics",
+            "pedestrian_response",
+            "collision_metrics",
+            "scenario_infeasibility_or_unavoidable",
+            "simulator_logging_or_metric_artifact",
+            "unknown_or_interacting"
+          ]
+        },
+        "unsafe_control_action_class": {
+          "description": "Systems-theoretic (STPA) form of the first unsafe control action.",
+          "type": "string",
+          "enum": [
+            "action_not_provided",
+            "unsafe_action_provided",
+            "unsafe_timing_or_order",
+            "unsafe_duration",
+            "not_applicable",
+            "unknown"
+          ]
+        },
+        "rationale": {
+          "type": "string"
+        }
+      }
+    },
+    "causal_contribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verdict",
+        "intervention_model",
+        "pedestrian_response_assumption",
+        "supported_actual_cause",
+        "interventions"
+      ],
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["avoidable", "unavoidable", "unknown"]
+        },
+        "intervention_model": {
+          "description": "Named intervention/model under which the causal contribution is asserted (empty string when none).",
+          "type": "string"
+        },
+        "pedestrian_response_assumption": {
+          "description": "Pedestrians react to the robot; a single frozen trajectory is insufficient, so the assumption must be named.",
+          "type": "string",
+          "enum": ["replayed", "closed_loop", "unknown"]
+        },
+        "supported_actual_cause": {
+          "description": "True only when a named intervention actually prevented contact (intervention-supported actual cause), distinct from localization or suspicion.",
+          "type": "boolean"
+        },
+        "interventions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/intervention"}
+        }
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "rationale"],
+      "properties": {
+        "level": {
+          "description": "Reused verbatim from failure_mechanism_taxonomy.MECHANISM_CONFIDENCES.",
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      }
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "missing_fields": {
+      "description": "Every reconstruction element or timestamp marked unavailable must be listed here so unsupported evidence is explicit, never inferred.",
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "competing_explanations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/competing_explanation"}
+    }
+  },
+  "$defs": {
+    "critical_timestamp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "step", "time_s", "source"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "step": {"type": ["integer", "null"]},
+        "time_s": {"type": ["number", "null"]},
+        "source": {"type": ["string", "null"]}
+      }
+    },
+    "reconstruction_element": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "source", "detail"],
+      "properties": {
+        "available": {"type": "boolean"},
+        "source": {"type": ["string", "null"]},
+        "detail": {"type": ["object", "array", "string", "number", "boolean", "null"]}
+      }
+    },
+    "intervention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "admissible", "prevented_contact", "assumptions"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "admissible": {"type": "boolean"},
+        "prevented_contact": {
+          "description": "True/False when an intervention branch was actually run; null when not evaluated.",
+          "type": ["boolean", "null"]
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "competing_explanation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["explanation", "ruled_out", "note"],
+      "properties": {
+        "explanation": {"type": "string", "minLength": 1},
+        "ruled_out": {"type": "boolean"},
+        "note": {"type": "string"}
+      }
+    }
+  }
+}

@@ -6,9 +6,10 @@
 #   - roster: core 7 + 4 hybrid-rule arms (h600 hybrid-roster winners) + guarded_ppo,
 #     predictive_mppi, risk_dwa (h600 launch-packet candidates). socnav_bench stays excluded
 #     (licensed dataset assets, see benchmark_release_0_0_2_scoped_rationale.md).
-#   - workers: 1 -> 8  (~19.7k episodes at h600 are infeasible single-worker locally;
-#     per-episode seeding keeps rows deterministic, bootstrap seed fixed at 123;
-#     parallel-worker precedent: paper_experiment_matrix_v1_h600_hybrid_roster.yaml)
+#   - workers: 1 -> 32  (~19.7k episodes at h600 are infeasible single-worker; sized
+#     for one 128-core/1TB EPYC node -- per-episode seeding keeps rows deterministic,
+#     bootstrap seed fixed at 123; parallel-worker precedent:
+#     paper_experiment_matrix_v1_h600_hybrid_roster.yaml)
 #   - snqi_contract enforcement: enforce -> warn  (h600 precedent: component-dominance
 #     profile shifts at long horizon; a contract violation is a reportable finding,
 #     not a reason to abort a release run. Diagnostics are exported either way.)
@@ -48,7 +49,7 @@ snqi_contract:
   calibration_seed: 123
   calibration_trials: 6000
 
-workers: 8
+workers: 32
 horizon: 600
 dt: 0.1
 record_forces: true

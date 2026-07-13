@@ -53,6 +53,14 @@ except ImportError as exc:  # pragma: no cover - optional baseline dependency
 else:
     _BASELINE_IMPORT_ERROR = None
 
+# Aliases resolved to the built-in naive goal-seeking policy. Imported from the
+# lightweight ``robot_sf.baselines`` package (no heavy optional deps) so both the
+# runner and the exact-repeat executor agree on what ``run_episode`` can execute.
+try:
+    from robot_sf.baselines import SIMPLE_POLICY_ALIASES
+except ImportError:  # pragma: no cover - defensive fallback
+    SIMPLE_POLICY_ALIASES = frozenset({"simple_policy", "goal", "simple", "goal_policy"})
+
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.circuit_breaker import (  # noqa: F401 - compatibility export.
     _CIRCUIT_BREAKER_MSG_PREFIX_LEN,
@@ -658,7 +666,7 @@ def _create_robot_policy(  # noqa: C901, PLR0915
             "status": "ok",
         }
 
-    if algo == "simple_policy":
+    if algo in SIMPLE_POLICY_ALIASES:
         policy_fn, metadata = _simple_policy_adapter()
         return (
             policy_fn,

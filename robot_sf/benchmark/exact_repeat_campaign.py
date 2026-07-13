@@ -45,6 +45,13 @@ RESOLVED_DEFINITIONS_SCHEMA_VERSION = "scenario_exact_repeat_resolved_definition
 DEFAULT_REPEATS = 3
 SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
 
+# Explicit per-cell disposition for planners the exact-repeat ``execute`` path
+# cannot construct on current main (e.g. ``orca``, which historically ran only in
+# the map-runner holonomic world-velocity pipeline backed by upstream RVO2, not in
+# the ``run_episode`` baseline registry). Such cells are recorded, not crashed,
+# and are excluded from the bitwise-identical repeat claim.
+UNRUNNABLE_DISPOSITION = "unrunnable_on_current_main"
+
 
 def canonical_sha256(value: Any) -> str:
     """Return a stable SHA-256 digest for a JSON-compatible value."""
@@ -460,7 +467,7 @@ def _first_divergence(repeats: Sequence[Mapping[str, Any]]) -> dict[str, Any] | 
     return None
 
 
-def verify_host_report(  # noqa: C901, PLR0912 - each rejected report state needs a specific error.
+def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report state needs a specific error.
     manifest: Mapping[str, Any], host_report: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Verify one host's exact-repeat results against the immutable manifest.
@@ -510,6 +517,24 @@ def verify_host_report(  # noqa: C901, PLR0912 - each rejected report state need
     by_cell: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for key in sorted(targets):
         result = indexed_results[key]
+        disposition = result.get("disposition")
+        if disposition is not None:
+            if disposition != UNRUNNABLE_DISPOSITION:
+                raise ValueError(f"target {key} has an unsupported disposition {disposition!r}")
+            verified = {
+                "scenario_id": key[0],
+                "planner": key[1],
+                "seed": key[2],
+                "unrunnable": True,
+                "disposition": disposition,
+                "disposition_reason": result.get("disposition_reason"),
+                "bitwise_identical": None,
+                "first_divergence": None,
+                "repeat_fingerprints": [],
+            }
+            verified_targets.append(verified)
+            by_cell[key[:2]].append(verified)
+            continue
         repeats = result.get("repeats")
         if not isinstance(repeats, list) or len(repeats) != repeats_per_target:
             raise ValueError(f"target {key} must contain exactly {repeats_per_target} repeats")
@@ -524,6 +549,7 @@ def verify_host_report(  # noqa: C901, PLR0912 - each rejected report state need
             "scenario_id": key[0],
             "planner": key[1],
             "seed": key[2],
+            "unrunnable": False,
             "bitwise_identical": divergence is None,
             "first_divergence": divergence,
             "repeat_fingerprints": [_repeat_fingerprint(item) for item in repeat_maps],
@@ -533,18 +559,35 @@ def verify_host_report(  # noqa: C901, PLR0912 - each rejected report state need
 
     cells = []
     for (scenario_id, planner), target_results in sorted(by_cell.items()):
+        runnable = [item for item in target_results if not item.get("unrunnable")]
+        if not runnable:
+            cells.append(
+                {
+                    "scenario_id": scenario_id,
+                    "planner": planner,
+                    "unrunnable": True,
+                    "disposition": UNRUNNABLE_DISPOSITION,
+                    "exact_repeat_determinism": None,
+                    "first_divergence": None,
+                    "n_targets": len(target_results),
+                }
+            )
+            continue
         first = next(
-            (item["first_divergence"] for item in target_results if item["first_divergence"]), None
+            (item["first_divergence"] for item in runnable if item["first_divergence"]), None
         )
         cells.append(
             {
                 "scenario_id": scenario_id,
                 "planner": planner,
+                "unrunnable": False,
                 "exact_repeat_determinism": first is None,
                 "first_divergence": first,
-                "n_targets": len(target_results),
+                "n_targets": len(runnable),
             }
         )
+    runnable_cells = [cell for cell in cells if not cell.get("unrunnable")]
+    unrunnable_cells = [cell for cell in cells if cell.get("unrunnable")]
     verified = {
         "schema_version": VERIFIED_HOST_REPORT_SCHEMA_VERSION,
         "manifest_sha256": manifest["manifest_sha256"],
@@ -553,14 +596,22 @@ def verify_host_report(  # noqa: C901, PLR0912 - each rejected report state need
         "cells": cells,
         "summary": {
             "n_targets": len(verified_targets),
+            "n_runnable_targets": sum(1 for t in verified_targets if not t.get("unrunnable")),
+            "n_unrunnable_targets": sum(1 for t in verified_targets if t.get("unrunnable")),
             "n_cells": len(cells),
-            "all_cells_bitwise_identical": all(cell["exact_repeat_determinism"] for cell in cells),
+            "n_runnable_cells": len(runnable_cells),
+            "n_unrunnable_cells": len(unrunnable_cells),
+            # The bitwise-identical claim scopes to runnable cells; unrunnable
+            # (dispositioned) cells make no determinism claim.
+            "all_cells_bitwise_identical": all(
+                cell["exact_repeat_determinism"] for cell in runnable_cells
+            ),
         },
     }
     return verified
 
 
-def compare_verified_hosts(
+def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs a specific branch.
     manifest: Mapping[str, Any], first: Mapping[str, Any], second: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Build the fail-closed two-host exact-repeat comparison matrix.
@@ -595,22 +646,39 @@ def compare_verified_hosts(
     if set(first_targets) != set(targets) or set(second_targets) != set(targets):
         raise ValueError("verified host reports do not cover the manifest target set")
     cells: dict[tuple[str, str], list[bool]] = defaultdict(list)
+    unrunnable_cells: set[tuple[str, str]] = set()
     for key in sorted(targets):
+        if first_targets[key].get("unrunnable") or second_targets[key].get("unrunnable"):
+            unrunnable_cells.add(key[:2])
+            continue
         identical = first_targets[key].get("repeat_fingerprints") == second_targets[key].get(
             "repeat_fingerprints"
         )
         cells[key[:2]].append(bool(identical))
-    matrix = [
-        {
-            "scenario_id": scenario_id,
-            "planner": planner,
-            "bitwise_identical": version_match and all(target_matches),
-            "comparison_status": "identical"
-            if version_match and all(target_matches)
-            else "divergent",
-        }
-        for (scenario_id, planner), target_matches in sorted(cells.items())
-    ]
+    matrix = []
+    for cell_key in sorted(set(cells) | unrunnable_cells):
+        scenario_id, planner = cell_key
+        if cell_key in unrunnable_cells:
+            matrix.append(
+                {
+                    "scenario_id": scenario_id,
+                    "planner": planner,
+                    "bitwise_identical": None,
+                    "comparison_status": "unrunnable",
+                }
+            )
+            continue
+        target_matches = cells[cell_key]
+        identical = version_match and all(target_matches)
+        matrix.append(
+            {
+                "scenario_id": scenario_id,
+                "planner": planner,
+                "bitwise_identical": identical,
+                "comparison_status": "identical" if identical else "divergent",
+            }
+        )
+    runnable_rows = [row for row in matrix if row["comparison_status"] != "unrunnable"]
     return {
         "schema_version": CROSS_HOST_SCHEMA_VERSION,
         "manifest_sha256": manifest["manifest_sha256"],
@@ -619,8 +687,11 @@ def compare_verified_hosts(
         "matrix": matrix,
         "summary": {
             "n_cells": len(matrix),
+            "n_runnable_cells": len(runnable_rows),
+            "n_unrunnable_cells": len(unrunnable_cells),
             "all_cells_bitwise_identical": version_match
-            and all(row["bitwise_identical"] for row in matrix),
+            and bool(runnable_rows)
+            and all(row["bitwise_identical"] for row in runnable_rows),
         },
     }
 
@@ -799,6 +870,12 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
     )
     _, repeats_per_target = _check_manifest_from_bundle(resolved_bundle)
 
+    # The runnability predicate reflects current main's ``run_episode`` registry
+    # and is applied even when a runner is injected, so the disposition records a
+    # property of the codebase rather than of the test harness. Imported from the
+    # lightweight baselines package to avoid pulling heavy optional deps.
+    from robot_sf.baselines import is_runnable_algo  # noqa: PLC0415
+
     if run_episode is None:
         from robot_sf.benchmark.runner import run_episode as _run_episode  # noqa: PLC0415
 
@@ -871,6 +948,33 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
         planner_algo = _require_text(
             planner_def.get("algo"), f"planner_definition {planner_def_id!r} algo"
         )
+
+        # Fail closed on planners the run_episode path cannot construct (e.g. orca),
+        # recording an explicit disposition instead of crashing the whole campaign.
+        if not is_runnable_algo(planner_algo):
+            result_entry = {
+                "scenario_id": scenario_id,
+                "planner": planner,
+                "seed": seed,
+                "horizon": horizon,
+                "source_config_hash": target["source_config_hash"],
+                "repeats": [],
+                "disposition": UNRUNNABLE_DISPOSITION,
+                "disposition_reason": (
+                    f"planner {planner_algo!r} has no executor in the exact-repeat "
+                    "run_episode baseline registry on current main"
+                ),
+            }
+            results.append(result_entry)
+            cache_data = {
+                "_env_numpy_version": env_fingerprint["numpy_version"],
+                "_env_numba_version": env_fingerprint["numba_version"],
+                "_result": result_entry,
+            }
+            cache_file.write_text(
+                json.dumps(cache_data, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            continue
 
         # Determine DT from resolved bundle execution contract or scenario config
         sim_config = scenario_params.get("simulation_config", {})

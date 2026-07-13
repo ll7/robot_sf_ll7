@@ -133,7 +133,11 @@ def test_host_verifier_requires_all_targets_and_reports_cell_verdicts(manifest):
     verified = verify_host_report(manifest, _host_report(manifest, "host-a"))
     assert verified["summary"] == {
         "n_targets": 140,
+        "n_runnable_targets": 140,
+        "n_unrunnable_targets": 0,
         "n_cells": 7,
+        "n_runnable_cells": 7,
+        "n_unrunnable_cells": 0,
         "all_cells_bitwise_identical": True,
     }
     assert all(cell["exact_repeat_determinism"] is True for cell in verified["cells"])

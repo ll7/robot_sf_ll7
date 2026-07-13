@@ -18,6 +18,7 @@ from robot_sf.benchmark.trace_scene_figure import (
     EpisodeTrace,
     _choose_scale_bar_corner,
     _compute_scene_extent,
+    _contiguous_segments,
     _draw_robot_time_markers,
     _effective_marker_interval,
     _focal_pedestrian_id,
@@ -240,3 +241,18 @@ def test_real_scene_and_comparison_have_no_hard_qa_defects(tmp_path: Path) -> No
     finally:
         plt.close(scene_figure)
         plt.close(comparison_figure)
+
+
+def test_contiguous_segments_breaks_on_teleport() -> None:
+    """A respawn teleport splits the polyline; a smooth track stays one segment."""
+    # smooth walk (small steps) -> one segment
+    xs = [0.0, 0.2, 0.4, 0.6]
+    ys = [0.0, 0.1, 0.2, 0.3]
+    assert len(_contiguous_segments(xs, ys, max_step=3.0)) == 1
+    # a ~25 m jump in one step (respawn) -> two segments, no connecting line
+    xs = [0.0, 0.2, 25.0, 25.2]
+    ys = [0.0, 0.1, 30.0, 30.1]
+    segments = _contiguous_segments(xs, ys, max_step=3.0)
+    assert len(segments) == 2
+    assert segments[0] == ([0.0, 0.2], [0.0, 0.1])
+    assert segments[1] == ([25.0, 25.2], [30.0, 30.1])

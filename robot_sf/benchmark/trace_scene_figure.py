@@ -52,11 +52,14 @@ _ZONE_LABEL_SUPPRESSION_RADIUS_M = 2.0
 _LABEL_AXES_MARGIN_PX = 4.0
 _LABEL_COLLISION_PADDING_PX = 1.5
 _LABEL_LEADER_THRESHOLD_PX = 18.0
+_TELEPORT_STEP_M = (
+    3.0  # a walking ped moves <0.3 m/0.1s step; respawns jump ~25 m -> break the line
+)
 _RC_PARAMS = {
     "font.family": "sans-serif",
-    "font.size": 9,
-    "axes.titlesize": 11,
-    "axes.labelsize": 9,
+    "font.size": 12,
+    "axes.titlesize": 15,
+    "axes.labelsize": 13,
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
 }
@@ -747,7 +750,7 @@ def _draw_robot_time_markers(
             (x, y),
             xytext=offset,
             textcoords="offset points",
-            fontsize=8,
+            fontsize=12,
             color=GRAY,
             ha=horizontal_alignment,
             va=vertical_alignment,
@@ -878,7 +881,7 @@ def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tu
                         center_y,
                         label,
                         color=GRAY,
-                        fontsize=7,
+                        fontsize=11,
                         ha="center",
                         va="center",
                     )
@@ -923,45 +926,6 @@ def _choose_scale_bar_corner(
     return corners[min(range(len(corners)), key=counts.__getitem__)]
 
 
-def _draw_scale_bar(
-    ax: Axes,
-    limits: AxisLimits,
-    trajectory_points: Sequence[tuple[float, float]],
-    zone_label_centers: Sequence[tuple[float, float]],
-) -> str:
-    width = limits[0][1] - limits[0][0]
-    height = limits[1][1] - limits[1][0]
-    length = 5.0 if width >= 12.0 else 2.0
-    corner = _choose_scale_bar_corner(limits, length, trajectory_points, zone_label_centers)
-    start_x, y = _scale_bar_geometry(limits, length, corner)
-    ax.plot([start_x, start_x + length], [y, y], color=INK, linewidth=2.0, zorder=8)
-    ax.plot(
-        [start_x, start_x],
-        [y - 0.012 * height, y + 0.012 * height],
-        color=INK,
-        linewidth=1.0,
-        zorder=8,
-    )
-    ax.plot(
-        [start_x + length, start_x + length],
-        [y - 0.012 * height, y + 0.012 * height],
-        color=INK,
-        linewidth=1.0,
-        zorder=8,
-    )
-    label_offset = 0.025 * height
-    label_y = y - label_offset if corner.startswith("top") else y + label_offset
-    ax.text(
-        start_x + length / 2,
-        label_y,
-        f"{length:g} m",
-        ha="center",
-        va="top" if corner.startswith("top") else "bottom",
-        fontsize=8,
-    )
-    return corner
-
-
 def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
     start_x, start_y = episode.robot_xy[0]
     ax.scatter(
@@ -972,7 +936,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
         (start_x, start_y),
         xytext=(5, -10),
         textcoords="offset points",
-        fontsize=8,
+        fontsize=12,
         color=GREEN,
     )
 
@@ -1005,7 +969,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
             ((robot_x + ped_x) / 2, (robot_y + ped_y) / 2),
             xytext=(0, 10),
             textcoords="offset points",
-            fontsize=8,
+            fontsize=12,
             color=RED,
             ha="center",
         )
@@ -1043,13 +1007,39 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
         (terminal_x, terminal_y),
         xytext=terminal_offset,
         textcoords="offset points",
-        fontsize=8,
+        fontsize=12,
         color=terminal_color,
         va="bottom" if status.lower() in _SUCCESS_STATUSES else "top",
     )
 
 
-def _draw_scene_panel(
+def _contiguous_segments(
+    xs: Sequence[float], ys: Sequence[float], max_step: float = _TELEPORT_STEP_M
+) -> list[tuple[list[float], list[float]]]:
+    """Split a polyline into runs, breaking wherever a single step exceeds *max_step*.
+
+    Pedestrians respawn under the same id when they reach their goal, teleporting ~25 m in one
+    step; plotting each contiguous run separately keeps that jump from drawing a spurious line.
+
+    Returns:
+        A list of ``(xs, ys)`` segments; consecutive points within one segment are always
+        within *max_step* of each other.
+    """
+    if not xs:
+        return []
+    segments: list[tuple[list[float], list[float]]] = []
+    seg_x, seg_y = [xs[0]], [ys[0]]
+    for i in range(1, len(xs)):
+        if math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1]) > max_step:
+            segments.append((seg_x, seg_y))
+            seg_x, seg_y = [], []
+        seg_x.append(xs[i])
+        seg_y.append(ys[i])
+    segments.append((seg_x, seg_y))
+    return segments
+
+
+def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element branching
     ax: Axes,
     episode: EpisodeTrace,
     map_definition: Any,
@@ -1064,11 +1054,12 @@ def _draw_scene_panel(
     marker_indices = _snap_marker_indices(episode.time_s, marker_interval_s)
     marker_times = [episode.time_s[index] for index in marker_indices]
     _draw_obstacles(ax, map_definition, limits)
-    zone_label_centers = _draw_zones(ax, map_definition, episode)
+    _draw_zones(ax, map_definition, episode)
 
     robot_x = [point[0] for point in episode.robot_xy]
     robot_y = [point[1] for point in episode.robot_xy]
-    ax.plot(robot_x, robot_y, color=INK, linewidth=1.8, zorder=5)
+    for seg_x, seg_y in _contiguous_segments(robot_x, robot_y):
+        ax.plot(seg_x, seg_y, color=INK, linewidth=1.8, zorder=5)
     marker_points = [episode.robot_xy[index] for index in marker_indices]
     marker_label_specs = _draw_robot_time_markers(ax, episode, marker_indices, marker_interval_s)
     labeled_robot_points = [
@@ -1078,14 +1069,17 @@ def _draw_scene_panel(
     pedestrian_styles = _pedestrian_styles(episode, focused_tracks, highlight_focal=highlight_focal)
     for ped_index, (ped_id, track) in enumerate(focused_tracks.items()):
         style = pedestrian_styles[ped_id]
-        ax.plot(
-            [sample[1] for sample in track],
-            [sample[2] for sample in track],
-            color=style.color,
-            linewidth=style.linewidth,
-            alpha=style.alpha,
-            zorder=4,
-        )
+        track_x = [sample[1] for sample in track]
+        track_y = [sample[2] for sample in track]
+        for seg_x, seg_y in _contiguous_segments(track_x, track_y):
+            ax.plot(
+                seg_x,
+                seg_y,
+                color=style.color,
+                linewidth=style.linewidth,
+                alpha=style.alpha,
+                zorder=4,
+            )
         if style.draw_markers:
             for marker_time in marker_times:
                 x, y = _position_at_time(track, marker_time)
@@ -1120,28 +1114,23 @@ def _draw_scene_panel(
             label_anchor,
             xytext=(offset_x, offset_y),
             textcoords="offset points",
-            fontsize=7,
+            fontsize=11,
             color=style.color,
             ha="left" if offset_x >= 0 else "right",
             va="bottom" if offset_y >= 0 else "top",
         )
 
-    trajectory_points = [*episode.robot_xy]
-    trajectory_points.extend(
-        (sample[1], sample[2]) for track in focused_tracks.values() for sample in track
-    )
-    scale_bar_corner = _draw_scale_bar(ax, limits, trajectory_points, zone_label_centers)
+    # No scale bar: the axes are labelled in metres with numeric ticks, so it is redundant.
     if pedestrian_selection.filtered_count:
-        annotation_y = 0.98 if scale_bar_corner.startswith("bottom") else 0.02
         ax.text(
-            0.98,
-            annotation_y,
+            0.02,
+            0.02,
             f"{pedestrian_selection.filtered_count} distant pedestrians not drawn "
             f"(>{pedestrian_selection.radius_m:g} m)",
             transform=ax.transAxes,
-            ha="right",
-            va="top" if annotation_y > 0.5 else "bottom",
-            fontsize=7,
+            ha="left",
+            va="bottom",
+            fontsize=11,
             color=GRAY,
         )
     _draw_key_frames(ax, episode)
@@ -1152,7 +1141,7 @@ def _draw_scene_panel(
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
     ax.set_title(title, pad=8)
-    ax.tick_params(colors=GRAY, width=0.6, labelsize=8)
+    ax.tick_params(colors=GRAY, width=0.6, labelsize=11)
     for spine in ax.spines.values():
         spine.set_color(GRAY)
         spine.set_linewidth(0.6)
@@ -1186,7 +1175,7 @@ def _draw_timeline(
     upper_data = max(distance_values)
     span = max(upper_data - lower_data, 1.0)
     padding = max(0.5, 0.08 * span)
-    ax.set_ylim(max(0.0, lower_data - padding), upper_data + padding)
+    ax.set_ylim(0.0, upper_data + padding)  # start the distance axis at 0
     ax.annotate(
         f"collision envelope ({collision_envelope_m:g} m)",
         (0.99, collision_envelope_m),
@@ -1195,7 +1184,7 @@ def _draw_timeline(
         textcoords="offset points",
         color=RED,
         alpha=0.7,
-        fontsize=7,
+        fontsize=11,
         ha="right",
         va="bottom",
     )
@@ -1215,21 +1204,33 @@ def _draw_timeline(
         )
         ax.annotate(
             "personal space",
-            (0.62, comfort_distance_m),
+            (0.01, comfort_distance_m),
             xycoords=ax.get_yaxis_transform(),
             xytext=(0, 3),
             textcoords="offset points",
             color=GRAY,
             alpha=0.7,
-            fontsize=7,
-            ha="right",
+            fontsize=11,
+            ha="left",
             va="bottom",
         )
     ax.set_xlabel("time (s)")
     ax.set_ylabel("min robot-ped distance (m)", color=INK, labelpad=7)
-    ax.tick_params(axis="both", labelsize=8, width=0.6, pad=2)
+    ax.tick_params(axis="both", labelsize=11, width=0.6, pad=2)
     for marker_index in marker_indices:
         ax.axvline(time[marker_index], color=GRAY, linestyle="--", linewidth=0.6, alpha=0.7)
+    # Start at t=0 (no negative-time margin) and put ticks at the same interval as the scene
+    # panel's synchronized markers (0, interval, 2*interval, ...) so the two axes line up.
+    ax.set_xlim(0.0, time[-1])
+    interval = (
+        time[marker_indices[1]] - time[marker_indices[0]] if len(marker_indices) >= 2 else 4.0
+    )
+    ticks: list[float] = []
+    tick = 0.0
+    while tick <= time[-1] + 1e-6:
+        ticks.append(round(tick, 6))
+        tick += interval
+    ax.set_xticks(ticks)
     min_index = _global_min_index(episode)
     ax.axvline(time[min_index], color=RED, linewidth=0.9, alpha=0.8)
     ax.plot(
@@ -1241,8 +1242,9 @@ def _draw_timeline(
     )
     speed_ax = ax.twinx()
     speed_ax.plot(time, episode.executed_speed_m_s, color=BLUE, linewidth=1.1)
+    speed_ax.set_ylim(bottom=0.0)  # start the speed axis at 0
     speed_ax.set_ylabel("speed (m/s)", color=BLUE)
-    speed_ax.tick_params(axis="y", colors=BLUE, labelsize=8, width=0.6)
+    speed_ax.tick_params(axis="y", colors=BLUE, labelsize=11, width=0.6)
     for spine in ax.spines.values():
         spine.set_color(GRAY)
         spine.set_linewidth(0.6)
@@ -1446,7 +1448,7 @@ def render_comparison(  # noqa: PLR0913 - mirrors the single-scene rendering con
             handles=[legend_handle],
             loc="outside lower center",
             frameon=False,
-            fontsize=8,
+            fontsize=12,
         )
         figure.canvas.draw()
         for scene_ax in scene_axes:

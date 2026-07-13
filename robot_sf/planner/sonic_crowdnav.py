@@ -474,7 +474,7 @@ class SonicCrowdNavAdapter:
             )  # (1, predict_steps+1, 1)
             future = rel[:, None, :] + vel[:, None, :] * steps
             # Interleave (x,y) pairs into flat sequences: (used, 2*(predict_steps+1))
-            seq = np.stack([future[:, :, 0], future[:, :, 1]], axis=-1).reshape(used, -1)
+            seq = future.reshape(used, -1)
             spatial_edges[:used] = seq.astype(np.float32)
             visible_masks[:used] = 1.0
 

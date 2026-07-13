@@ -754,11 +754,21 @@ class CrowdNavHeightAdapter:
             delta = seg_starts - origin  # (S, 2)
             # t = (delta x seg) / denom, u = (delta x dir) / denom
             t_num = delta[:, 0] * seg_vec[:, 1] - delta[:, 1] * seg_vec[:, 0]  # (S,)
-            u_num = delta[:, 0] * directions[:, 1] - delta[:, 1] * directions[:, 0]  # (R,)
+            u_num = (
+                directions[:, 1, None] * delta[None, :, 0]
+                - directions[:, 0, None] * delta[None, :, 1]
+            )  # (R, S)
             with np.errstate(divide="ignore", invalid="ignore"):
                 t = t_num[None, :] / denom  # (R, S)
-                u = u_num[:, None] / denom  # (R, S)
-            valid = (t > 0) & (u >= 0) & (u <= 1) & (np.abs(denom) > 1e-9) & np.isfinite(t)
+                u = u_num / denom  # (R, S)
+            valid = (
+                (t >= 0)
+                & (u >= 0)
+                & (u <= 1)
+                & (np.abs(denom) > 1e-9)
+                & np.isfinite(t)
+                & np.isfinite(u)
+            )
             t[~valid] = np.inf
             obstacle_hits = t.min(axis=1)
 
@@ -782,8 +792,8 @@ class CrowdNavHeightAdapter:
                 sqrt_disc = np.sqrt(np.maximum(disc, 0.0))
                 t1 = (-b - sqrt_disc) / (2.0 * a[:, None])
                 t2 = (-b + sqrt_disc) / (2.0 * a[:, None])
-            valid_t = (disc >= 0) & ((t1 > 0) | (t2 > 0)) & np.isfinite(t1) & np.isfinite(t2)
-            pos_t = np.where(t1 > 0, t1, t2)
+            valid_t = (disc >= 0) & ((t1 >= 0) | (t2 >= 0)) & np.isfinite(t1) & np.isfinite(t2)
+            pos_t = np.where(t1 >= 0, t1, t2)
             pos_t[~valid_t] = np.inf
             ped_hits = pos_t.min(axis=1)
 

@@ -421,6 +421,41 @@ def test_raycast_obstacles_matches_old_method_reference(tmp_path: Path) -> None:
     assert np.allclose(result, distances_ref)
 
 
+def test_raycast_obstacles_broadcasts_multiple_segments_and_keeps_zero_hits(
+    tmp_path: Path,
+) -> None:
+    """Vectorized ray/segment intersections preserve all-segment and t=0 semantics."""
+    repo_root = tmp_path / "repo"
+    model_dir = tmp_path / "model"
+    _write_fake_upstream_repo(repo_root)
+    _write_fake_checkpoint_dir(model_dir, action_index=0)
+    adapter = CrowdNavHeightAdapter(
+        build_crowdnav_height_config(
+            {
+                "repo_root": str(repo_root),
+                "model_dir": str(model_dir),
+                "checkpoint_name": "fake.pt",
+            }
+        )
+    )
+    # Two segments exercise the (rays, segments) broadcast. The first starts at
+    # the ray origin, which the scalar helper treats as a valid t=0 hit.
+    adapter.bind_obstacle_segments([[0.0, 0.0, 0.0, 2.0], [3.0, -2.0, 3.0, 2.0]])
+
+    result = adapter._raycast_obstacles(np.array([0.0, 0.0]), heading=0.0)
+
+    assert float(result[0]) == pytest.approx(0.0, abs=1e-6)
+
+    # A tangent disc at the origin has both quadratic roots at t=0; retain the
+    # shared range-sensor helper's inclusive boundary behavior.
+    adapter.bind_obstacle_segments([[3.0, -2.0, 3.0, 2.0], [4.0, -2.0, 4.0, 2.0]])
+    tangent = adapter._raycast_obstacles(
+        np.array([0.0, 0.0]), heading=0.0, ped_positions=[[0.0, 0.3]], ped_radius=0.3
+    )
+
+    assert float(tangent[0]) == pytest.approx(0.0, abs=1e-6)
+
+
 def test_raycast_obstacles_includes_dynamic_pedestrians(tmp_path: Path) -> None:
     """A pedestrian inside lidar range must shorten the ray pointing at it (issue #3629).
 

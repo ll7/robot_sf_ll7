@@ -352,6 +352,38 @@ def test_analyze_campaign_detects_adapter_status_mismatch(tmp_path: Path) -> Non
     assert "runtime_hotspots" in analysis
 
 
+def test_analyze_campaign_surfaces_frozen_integrity_blocker(tmp_path: Path) -> None:
+    """Frozen analysis carries the final blocker without rerunning any episode."""
+    campaign_root = tmp_path / "campaign"
+    _write_json(
+        campaign_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "frozen"},
+            "runs": [],
+            "planner_rows": [],
+            "campaign_integrity": {
+                "status": "invalid",
+                "claim_boundary": "A derived clean slice is diagnostic-only.",
+                "blockers": [
+                    {
+                        "arm": "goal (differential_drive)",
+                        "invariant": "duplicate_logical_coverage",
+                        "details": {"identities": [["smoke", 111]]},
+                    }
+                ],
+            },
+        },
+    )
+
+    analysis = analyze_campaign(campaign_root)
+
+    assert analysis["campaign_integrity"]["status"] == "invalid"
+    assert any("duplicate_logical_coverage" in finding for finding in analysis["findings"])
+    report = _build_markdown_report(analysis)
+    assert "## Aggregate Integrity" in report
+    assert "duplicate_logical_coverage" in report
+
+
 def test_analyze_campaign_no_findings_on_consistent_payload(tmp_path: Path) -> None:
     """Analyzer emits no findings when summary and episodes are consistent."""
     campaign_root = tmp_path / "campaign"

@@ -75,6 +75,7 @@ from robot_sf.benchmark.synthetic_actuation import (
     validate_synthetic_actuation_profile,
     validate_synthetic_actuation_variability_distribution,
 )
+from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.artifact_paths import get_repository_root
 
 
@@ -185,6 +186,189 @@ def test_campaign_success_counters_core_success_ignores_experimental_failure() -
     assert counters["successful_runs"] == 1
     assert counters["core_total_runs"] == 1
     assert counters["core_successful_runs"] == 1
+
+
+def test_campaign_integrity_accepts_exact_unique_coverage(tmp_path: Path) -> None:
+    """A complete arm with compatible row provenance remains benchmark-eligible."""
+    episodes_path = tmp_path / "runs" / "goal" / "episodes.jsonl"
+    episodes_path.parent.mkdir(parents=True)
+    rows = [
+        {
+            "scenario_id": "smoke",
+            "seed": 111,
+            "config_hash": "scenario-config-smoke",
+            "git_hash": "commit-a",
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": 111,
+                "config_hash": "scenario-config-smoke",
+                "repo_commit": "commit-a",
+            },
+        },
+        {
+            "scenario_id": "corner",
+            "seed": 222,
+            "config_hash": "scenario-config-corner",
+            "git_hash": "commit-a",
+            "result_provenance": {
+                "scenario_id": "corner",
+                "seed": 222,
+                "config_hash": "scenario-config-corner",
+                "repo_commit": "commit-a",
+            },
+        },
+    ]
+    episodes_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    verdict = camera_ready_run_state_module.validate_campaign_integrity(
+        [
+            {
+                "status": "ok",
+                "planner": {"key": "goal", "kinematics": "differential_drive"},
+                "episodes_path": str(episodes_path),
+                "summary": {"episodes_total": 2},
+            }
+        ],
+        scenarios=[{"id": "smoke", "seeds": [111]}, {"id": "corner", "seeds": [222]}],
+        resolved_seeds=[111, 222],
+        campaign_root=tmp_path,
+        campaign_manifest={"git": {"commit": "commit-a"}},
+    )
+    assert verdict["status"] == "valid"
+    assert verdict["blockers"] == []
+
+
+def test_campaign_integrity_separates_contamination_invariants(tmp_path: Path) -> None:
+    """Appended duplicate rows expose count, coverage, and provenance blockers separately."""
+    episodes_path = tmp_path / "runs" / "goal" / "episodes.jsonl"
+    episodes_path.parent.mkdir(parents=True)
+    rows = [
+        {
+            "scenario_id": "smoke",
+            "seed": 111,
+            "config_hash": "scenario-config-v1",
+            "git_hash": "commit-a",
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": 111,
+                "config_hash": "scenario-config-v1",
+                "repo_commit": "commit-a",
+            },
+        },
+        {
+            "scenario_id": "smoke",
+            "seed": 111,
+            "config_hash": "scenario-config-v2",
+            "git_hash": "commit-b",
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": 111,
+                "config_hash": "scenario-config-v2",
+                "repo_commit": "commit-b",
+            },
+        },
+        {
+            "scenario_id": "corner",
+            "seed": 222,
+            "config_hash": "scenario-config-corner",
+            "git_hash": "commit-a",
+            "result_provenance": {
+                "scenario_id": "corner",
+                "seed": 222,
+                "config_hash": "scenario-config-corner",
+                "repo_commit": "commit-a",
+            },
+        },
+    ]
+    episodes_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    verdict = camera_ready_run_state_module.validate_campaign_integrity(
+        [
+            {
+                "status": "ok",
+                "planner": {"key": "goal", "kinematics": "differential_drive"},
+                "episodes_path": str(episodes_path),
+                "summary": {"episodes_total": 3},
+            }
+        ],
+        scenarios=[{"id": "smoke", "seeds": [111]}, {"id": "corner", "seeds": [222]}],
+        resolved_seeds=[111, 222],
+        campaign_root=tmp_path,
+        campaign_manifest={"git": {"commit": "commit-a"}},
+    )
+    invariants = {blocker["invariant"] for blocker in verdict["blockers"]}
+    assert verdict["status"] == "invalid"
+    assert {
+        "count_mismatch",
+        "duplicate_logical_coverage",
+        "mixed_commit_provenance",
+        "mixed_config_provenance",
+    } <= invariants
+
+
+def test_campaign_integrity_handles_heterogeneous_seed_values(tmp_path: Path) -> None:
+    """Malformed optional seeds produce blockers instead of a sorting TypeError."""
+    episodes_path = tmp_path / "runs" / "goal" / "episodes.jsonl"
+    episodes_path.parent.mkdir(parents=True)
+    rows = [
+        {
+            "scenario_id": "smoke",
+            "seed": None,
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": None,
+                "config_hash": "scenario-config",
+                "repo_commit": "commit-a",
+            },
+        },
+        {
+            "scenario_id": "smoke",
+            "seed": "",
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": "",
+                "config_hash": "scenario-config",
+                "repo_commit": "commit-a",
+            },
+        },
+        {
+            "scenario_id": "smoke",
+            "seed": "non-numeric",
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": "non-numeric",
+                "config_hash": "scenario-config",
+                "repo_commit": "commit-a",
+            },
+        },
+        {
+            "scenario_id": "smoke",
+            "seed": 0,
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": 0,
+                "config_hash": "scenario-config",
+                "repo_commit": "commit-a",
+            },
+        },
+    ]
+    episodes_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    verdict = camera_ready_run_state_module.validate_campaign_integrity(
+        [
+            {
+                "status": "ok",
+                "planner": {"key": "goal", "kinematics": "differential_drive"},
+                "episodes_path": str(episodes_path),
+                "summary": {"episodes_total": 4},
+            }
+        ],
+        scenarios=[{"id": "smoke", "seeds": [0, 1]}],
+        resolved_seeds=[0, 1],
+        campaign_root=tmp_path,
+        campaign_manifest={"git": {"commit": "commit-a"}},
+    )
+
+    assert verdict["status"] == "invalid"
+    assert any(blocker["invariant"] == "count_mismatch" for blocker in verdict["blockers"])
 
 
 def test_scenario_with_kinematics_patches_copy_without_mutating_input() -> None:
@@ -4702,9 +4886,17 @@ def test_run_campaign_enforces_snqi_contract_error_mode(tmp_path: Path, monkeypa
             json.dumps(
                 {
                     "episode_id": "e-goal-0",
-                    "scenario_id": "mock",
+                    "scenario_id": "smoke",
                     "seed": 111,
+                    "config_hash": "scenario-config-smoke",
+                    "git_hash": _git_hash_fallback(),
                     "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
+                    "result_provenance": {
+                        "scenario_id": "smoke",
+                        "seed": 111,
+                        "config_hash": "scenario-config-smoke",
+                        "repo_commit": _git_hash_fallback(),
+                    },
                     "metrics": {
                         "success": 0.0,
                         "collisions": 1.0,
@@ -4799,9 +4991,17 @@ def test_run_campaign_surfaces_snqi_contract_warn_mode(tmp_path: Path, monkeypat
             json.dumps(
                 {
                     "episode_id": "e-goal-0",
-                    "scenario_id": "mock",
+                    "scenario_id": "smoke",
                     "seed": 111,
+                    "config_hash": "scenario-config-smoke",
+                    "git_hash": _git_hash_fallback(),
                     "scenario_params": {"algo": "goal", "metadata": {"archetype": "crossing"}},
+                    "result_provenance": {
+                        "scenario_id": "smoke",
+                        "seed": 111,
+                        "config_hash": "scenario-config-smoke",
+                        "repo_commit": _git_hash_fallback(),
+                    },
                     "metrics": {
                         "success": 0.0,
                         "collisions": 1.0,

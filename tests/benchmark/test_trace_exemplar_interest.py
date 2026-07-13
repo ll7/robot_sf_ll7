@@ -16,7 +16,10 @@ from robot_sf.benchmark.trace_exemplar_interest import (
     write_report_markdown,
 )
 
-REAL_4891_BUNDLE = Path("docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+REAL_4891_BUNDLE = (
+    _REPO_ROOT / "docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07"
+)
 
 
 def test_discovery_finds_nested_and_bare_episode_dirs(tmp_path: Path) -> None:

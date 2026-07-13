@@ -136,19 +136,56 @@ def _expected_episode_identities(
     return expected
 
 
-def _resolve_integrity_artifact_path(campaign_root: Path, raw_path: str) -> Path:
+def _resolve_integrity_artifact_path(campaign_root: Path, raw_path: str) -> Path:  # noqa: C901
     """Resolve a campaign-relative or repository-relative artifact path.
 
     Returns:
         Resolved artifact path.
     """
     path = Path(raw_path)
+    if ".." in path.parts:
+        raise ValueError("Path traversal sequences are not allowed")
+
+    campaign_root = campaign_root.resolve()
+    repo_root = get_repository_root().resolve()
+    trusted_roots = (campaign_root, repo_root)
+
+    def _existing_file(candidate: Path, trusted_root: Path) -> Path | None:
+        """Return an existing file only when it remains under its trusted root."""
+        if candidate.is_symlink():
+            raise ValueError("Symlinked integrity artifacts are not allowed")
+        resolved = candidate.resolve(strict=False)
+        if not resolved.is_relative_to(trusted_root) or not resolved.is_file():
+            return None
+        return resolved
+
     if path.is_absolute():
-        return path
-    repo_candidate = (get_repository_root() / path).resolve()
-    if repo_candidate.exists():
-        return repo_candidate
-    return (campaign_root / path).resolve()
+        if path.is_symlink():
+            raise ValueError("Symlinked integrity artifacts are not allowed")
+        resolved = path.resolve(strict=False)
+        for trusted_root in trusted_roots:
+            if resolved.is_relative_to(trusted_root) and resolved.is_file():
+                return resolved
+    else:
+        for trusted_root in trusted_roots:
+            candidate = _existing_file(trusted_root / path, trusted_root)
+            if candidate is not None:
+                return candidate
+
+    # Relocation fallback: retain only the stable campaign-relative ``runs`` suffix.
+    if "runs" in path.parts:
+        runs_index = path.parts.index("runs")
+        runs_relative_path = Path(*path.parts[runs_index:])
+        candidate = _existing_file(campaign_root / runs_relative_path, campaign_root)
+        if candidate is not None:
+            return candidate
+
+    if path.is_absolute():
+        raise ValueError(f"Integrity artifact is outside trusted roots: {raw_path}")
+    fallback = (campaign_root / path).resolve(strict=False)
+    if fallback.is_relative_to(campaign_root):
+        return fallback
+    raise ValueError(f"Integrity artifact is outside trusted roots: {raw_path}")
 
 
 def _integrity_blocker(arm: str, invariant: str, **details: Any) -> dict[str, Any]:
@@ -195,8 +232,8 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
         if not raw_path:
             blockers.append(_integrity_blocker(arm, "missing_episode_artifact"))
             continue
-        episodes_path = _resolve_integrity_artifact_path(campaign_root, raw_path)
         try:
+            episodes_path = _resolve_integrity_artifact_path(campaign_root, raw_path)
             records: list[dict[str, Any]] = []
             with episodes_path.open("r", encoding="utf-8") as handle:
                 for line_number, line in enumerate(handle, start=1):

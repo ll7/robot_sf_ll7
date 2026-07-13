@@ -1,0 +1,81 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "issue_4882.input_audit.v1",
+  "canonical_identity": "(scenario_id, seed, horizon=600); 48 scenarios x 30 seeds (paper_eval_s30, seeds 111-140) = 1440",
+  "contamination_and_filter": {
+    "five_non_ppo_arms_source": "job 13376/13378 lineage, contaminated resume-append (8640 rows/arm = 6 complete append-blocks)",
+    "filter_rule": "Each arm's episodes.jsonl contains 6 complete append-blocks keyed by git_hash, each with all 1440 canonical identities. Verified metric-invariance: 0 cross-block disagreements on success/collision/SNQI across all 1440 identities in every arm, so block selection is provably immaterial. Canonical representative = frozen public commit a596a33b27acc835a6c1b399bd36cd2699792437 (last-timestamped attempt / preregistered frozen S30 SHA).",
+    "ppo_arm_source": "clean rerun job 13388 (issue4365_h600_ppo_only_s30_rerun_20260713), single commit, resume:false",
+    "rows_before_after": {
+      "hybrid_rule_v3_fast_progress_static_escape": {
+        "contaminated_rows": 8640,
+        "unique_identities": 1440,
+        "rows_after_filter": 1440,
+        "cross_block_disagreements": 0,
+        "n_append_blocks": 6
+      },
+      "hybrid_rule_v3_fast_progress_static_escape_continuous": {
+        "contaminated_rows": 8640,
+        "unique_identities": 1440,
+        "rows_after_filter": 1440,
+        "cross_block_disagreements": 0,
+        "n_append_blocks": 6
+      },
+      "orca": {
+        "contaminated_rows": 8640,
+        "unique_identities": 1440,
+        "rows_after_filter": 1440,
+        "cross_block_disagreements": 0,
+        "n_append_blocks": 6
+      },
+      "scenario_adaptive_hybrid_orca_v1": {
+        "contaminated_rows": 8640,
+        "unique_identities": 1440,
+        "rows_after_filter": 1440,
+        "cross_block_disagreements": 0,
+        "n_append_blocks": 6
+      },
+      "scenario_adaptive_hybrid_orca_v2_collision_guard": {
+        "contaminated_rows": 8640,
+        "unique_identities": 1440,
+        "rows_after_filter": 1440,
+        "cross_block_disagreements": 0,
+        "n_append_blocks": 6
+      },
+      "ppo": {
+        "contaminated_rows": 1440,
+        "unique_identities": 1440,
+        "rows_after_filter": 1440,
+        "cross_block_disagreements": 0,
+        "n_append_blocks": 1
+      }
+    }
+  },
+  "source_sha256": {
+    "hybrid_rule_v3_fast_progress_static_escape": "287b71cd8c209ba48ee4ac19e35f5e98dde0cf9cec53e7c6c0d5bcdad9a66e89",
+    "hybrid_rule_v3_fast_progress_static_escape_continuous": "419797ee570ab48293b8c50ea6cfb0df83d0bdb4dc616b6ecaf499ed8ae4a1b6",
+    "orca": "0470ddc60247bc51716faa6f16d73ada96d0c0fb98541c9e4df4926ee1d9eac8",
+    "scenario_adaptive_hybrid_orca_v1": "6fea2899baa7f738d233e42717aae0e0f938ed3e61a182f50efc0ba530dc51cd",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard": "16f65366a085d18c51d6f9b60ee29def2b38b956ed34f3fe4a1837b0b494431a",
+    "ppo": "2043415150420b520a2b86ce3074851b2927e0f7841afddb0509d4fb66a5c0e7"
+  },
+  "source_files": {
+    "hybrid_rule_v3_fast_progress_static_escape": "output/benchmarks/camera_ready/issue4365_h600_hybrid_vs_orca_s30_run_20260704/runs/hybrid_rule_v3_fast_progress_static_escape__differential_drive/episodes.jsonl",
+    "hybrid_rule_v3_fast_progress_static_escape_continuous": "output/benchmarks/camera_ready/issue4365_h600_hybrid_vs_orca_s30_run_20260704/runs/hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive/episodes.jsonl",
+    "orca": "output/benchmarks/camera_ready/issue4365_h600_hybrid_vs_orca_s30_run_20260704/runs/orca__differential_drive/episodes.jsonl",
+    "scenario_adaptive_hybrid_orca_v1": "output/benchmarks/camera_ready/issue4365_h600_hybrid_vs_orca_s30_run_20260704/runs/scenario_adaptive_hybrid_orca_v1__differential_drive/episodes.jsonl",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard": "output/benchmarks/camera_ready/issue4365_h600_hybrid_vs_orca_s30_run_20260704/runs/scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive/episodes.jsonl",
+    "ppo": "output/benchmarks/camera_ready/issue4365_h600_ppo_only_s30_rerun_20260713/runs/ppo__differential_drive/episodes.jsonl"
+  },
+  "scenario_matrix_hash": "152eba3969a9 (expanded scenario+seed; source matrix c10df617a87c)",
+  "horizon": 600,
+  "seed_set": "paper_eval_s30 (111-140)",
+  "limitations": [
+    "PPO arm ran at public commit 502564935 (main + config-only) vs the five clean arms at a596a33b; delta is configuration-only, scenario-matrix hash/seed set/horizon match (matrix-compatible), carried as a stated limitation.",
+    "SNQI carries a documented contract-failure caveat (see #5512); reported as companion only, not promoted.",
+    "Leading hybrid (v3 continuous) mean episode wall time is ~13.6x ORCA (18.25s vs 1.34s) -- efficiency caveat.",
+    "Simulator-only evidence; no independent clean-machine or real-world validation; AMV coverage incomplete.",
+    "Provenance narratives across comments cite job 13376 (block cef4b78) and job 13378 (block a596a33b); both blocks are metric-identical to all others, so the analytic result is invariant to that provenance debate."
+  ],
+  "source_path_note": "Paths are repo-relative to their respective camera-ready worktree roots (retained on the private hub); raw JSONL is not committed."
+}

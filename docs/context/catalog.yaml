@@ -295,6 +295,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
   legacy_dirty_evidence: true
+- path: docs/context/evidence/issue_4882_s30_interpretation_2026-07-13
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4216_licca_full_suite_env_failures
   status: evidence
   freshness: evidence

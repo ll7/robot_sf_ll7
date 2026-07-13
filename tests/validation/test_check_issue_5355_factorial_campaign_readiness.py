@@ -66,6 +66,7 @@ class TestReadinessCLI:
         assert report["ready"] is False
         assert report["criteria"]["preregistration_config_valid"]["ready"] is True
         assert report["criteria"]["dependencies_resolved"]["ready"] is False
+        assert any("#5351" in blocker for blocker in report["blockers"])
 
     def test_out_writes_report_artifact(self, tmp_path, capsys):
         out_path = tmp_path / "nested" / "readiness.json"

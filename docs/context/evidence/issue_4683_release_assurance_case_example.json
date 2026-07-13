@@ -211,7 +211,7 @@
       "kind": "file",
       "manifest_field": "citation_path",
       "path": "CITATION.cff",
-      "sha256": "152bcd378403de5c59138447a42ad9f126bfe4d2d96a03915330adc87d5473a2"
+      "sha256": "890d732ed20cffe33e6cd500120a21758612bf8db641fbae021ccde8f7a44c26"
     },
     {
       "description": "Social Navigation Quality Index weights referenced by the manifest.",

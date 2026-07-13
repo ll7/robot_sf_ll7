@@ -2,12 +2,21 @@
 
 from __future__ import annotations
 
+import time
+from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock
+
+import numpy as np
 import pytest
 
 from robot_sf.benchmark.latency_stress import (
+    LatencyMeasurementHarness,
     LatencyStressProfile,
+    classify_feasibility,
     load_latency_stress_profile,
     not_available_latency_metrics,
+    validate_provenance_completeness,
 )
 
 
@@ -99,3 +108,242 @@ def test_not_available_latency_metrics_names_expected_placeholders() -> None:
     assert metrics["observation_age_ms"] == "not_available"
     assert metrics["held_action_ratio"] == "not_available"
     assert metrics["inference_timeout_count"] == "not_available"
+
+
+def test_component_sum_consistency_and_mock_harness() -> None:
+    """Harness must guarantee component-sum consistency and measure latencies correctly."""
+    harness = LatencyMeasurementHarness(deadline_ms=50.0)
+
+    # Simulate a few cycles with mock durations
+    with harness:
+        # Cycle 0 (Cold start)
+        harness.start_cycle()
+        harness.add_time("observation_construction", 5.0)
+        harness.add_time("prediction", 10.0)
+        harness.add_time("collision_risk_safety_filter", 2.0)
+        harness.add_time("action_conversion", 1.0)
+        # Sleep a little to simulate planner computation
+        time.sleep(0.01)
+        harness.end_cycle()
+
+        # Cycle 1 (Steady state 1)
+        harness.start_cycle()
+        harness.add_time("observation_construction", 1.0)
+        harness.add_time("prediction", 2.0)
+        harness.add_time("collision_risk_safety_filter", 0.5)
+        harness.add_time("action_conversion", 0.5)
+        time.sleep(0.005)
+        harness.end_cycle()
+
+        # Cycle 2 (Steady state 2 - misses budget)
+        harness.start_cycle()
+        harness.add_time("observation_construction", 10.0)
+        harness.add_time("prediction", 20.0)
+        harness.add_time("collision_risk_safety_filter", 5.0)
+        harness.add_time("action_conversion", 2.0)
+        time.sleep(0.06)
+        harness.end_cycle()
+
+    # Get metrics
+    metrics = harness.get_metrics()
+    assert metrics["cold_start_latency_ms"] > 0.0
+
+    # Check component sum consistency
+    for cycle in metrics["cycles"]:
+        components_sum = (
+            cycle["observation_construction_ms"]
+            + cycle["prediction_ms"]
+            + cycle["planner_computation_ms"]
+            + cycle["collision_risk_safety_filter_ms"]
+            + cycle["action_conversion_ms"]
+        )
+        assert abs(components_sum - cycle["total_ms"]) < 1e-3
+
+    # Check classifications and stats
+    assert len(metrics["cycles"]) == 3
+    assert metrics["deadline_miss_rate"] == 0.5  # 1 out of 2 steady cycles missed 50ms
+    assert metrics["classification"] == "misses_budget_on_measured_host"
+
+
+def test_classification_boundaries() -> None:
+    """Test feasibility classifications across various targets and latencies."""
+    # 1. Meets budget on measured host
+    res = classify_feasibility(
+        steady_state_latencies=[10.0, 20.0, 30.0],
+        deadline_ms=50.0,
+        target_hardware=None,
+    )
+    assert res == "meets_budget_on_measured_host"
+
+    # 2. Misses budget on measured host
+    res = classify_feasibility(
+        steady_state_latencies=[10.0, 60.0, 30.0],
+        deadline_ms=50.0,
+        target_hardware=None,
+    )
+    assert res == "misses_budget_on_measured_host"
+
+    # 3. Target hardware unmeasured (desktop measured, but target is embedded)
+    res = classify_feasibility(
+        steady_state_latencies=[10.0, 20.0, 30.0],
+        deadline_ms=50.0,
+        target_hardware="Jetson Orin Nano",
+        measured_host_is_embedded=False,
+    )
+    assert res == "target_hardware_unmeasured"
+
+    # 4. Target hardware matches / measured is embedded
+    res = classify_feasibility(
+        steady_state_latencies=[10.0, 20.0, 30.0],
+        deadline_ms=50.0,
+        target_hardware="Jetson Orin Nano",
+        measured_host_is_embedded=True,
+    )
+    assert res == "meets_budget_on_measured_host"
+
+
+def test_provenance_completeness_fail_closed() -> None:
+    """Provenance validation must fail closed when required fields are missing or empty."""
+    # Complete/valid provenance
+    valid_prov = {
+        "cpu_model": "Intel Core i7",
+        "cpu_affinity": [0, 1, 2, 3],
+        "dependency_versions": {"python": "3.10.0", "numpy": "1.22.0"},
+        "git_commit": "abcdef123456",
+    }
+    # Should not raise any exception
+    validate_provenance_completeness(valid_prov)
+
+    # Missing cpu_model
+    bad_prov = dict(valid_prov)
+    bad_prov["cpu_model"] = "unknown"
+    with pytest.raises(ValueError, match="cpu_model cannot be 'unknown'"):
+        validate_provenance_completeness(bad_prov)
+
+    # Missing git_commit
+    bad_prov = dict(valid_prov)
+    bad_prov["git_commit"] = "unknown"
+    with pytest.raises(ValueError, match="git_commit cannot be 'unknown'"):
+        validate_provenance_completeness(bad_prov)
+
+    # Missing numpy dependency
+    bad_prov = dict(valid_prov)
+    bad_prov["dependency_versions"] = {"python": "3.10"}
+    with pytest.raises(ValueError, match="must include python and numpy"):
+        validate_provenance_completeness(bad_prov)
+
+
+def test_harness_with_actual_planners(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Harness must produce a full latency record on a fixture scenario for >= 2 planners."""
+    from robot_sf.benchmark.map_runner import _run_map_episode
+    from robot_sf.nav.map_config import MapDefinition
+
+    # 1. Setup minimal map definition and stubs
+    class _DummySim:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.robot_pos = [np.array([0.0, 0.0], dtype=float)]
+            self.ped_pos = np.zeros((0, 2), dtype=float)
+            self.goal_pos = [np.array([1.0, 1.0], dtype=float)]
+            self.map_def = map_def
+            self.last_ped_forces = np.zeros((0, 2), dtype=float)
+
+    class _DummyEnv:
+        def __init__(self, map_def: MapDefinition) -> None:
+            self.simulator = _DummySim(map_def)
+
+        def reset(self, seed: int | None = None):
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0], "speed": [0.0]},
+                "goal": {"current": [1.0, 1.0], "next": [1.0, 1.0]},
+                "pedestrians": {"positions": [], "velocities": []},
+            }
+            return obs, {}
+
+        def step(self, action: Any):
+            obs = {
+                "robot": {"position": [0.0, 0.0], "heading": [0.0], "speed": [0.0]},
+                "goal": {"current": [1.0, 1.0], "next": [1.0, 1.0]},
+                "pedestrians": {"positions": [], "velocities": []},
+            }
+            return obs, 0.0, True, False, {"success": True}
+
+        def close(self) -> None:
+            return None
+
+    map_def = MagicMock()
+    dummy_config = type("Cfg", (), {"sim_config": type("SC", (), {"time_per_step_in_secs": 0.1})()})
+
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner._build_env_config",
+        lambda scenario, scenario_path: dummy_config,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.make_robot_env",
+        lambda config, seed, debug: _DummyEnv(map_def),
+    )
+    monkeypatch.setattr("robot_sf.benchmark.map_runner.sample_obstacle_points", lambda *args: None)
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_shortest_path_length",
+        lambda *args: 1.0,
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.compute_all_metrics",
+        lambda *args, **kwargs: {"success": 0.0, "collisions": 0.0},
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.map_runner.post_process_metrics",
+        lambda metrics, **kwargs: metrics,
+    )
+
+    scenario = {"name": "s1", "simulation_config": {"max_episode_steps": 2}}
+
+    # 2. Run under harness for "goal" planner
+    harness_goal = LatencyMeasurementHarness(deadline_ms=100.0)
+    with harness_goal:
+        _run_map_episode(
+            scenario,
+            seed=1,
+            horizon=None,
+            dt=0.1,
+            record_forces=True,
+            snqi_weights=None,
+            snqi_baseline=None,
+            algo="goal",
+            algo_config_path=None,
+            scenario_path=Path("."),
+        )
+    metrics_goal = harness_goal.get_metrics()
+    assert "steady_state_averages" in metrics_goal
+    assert metrics_goal["classification"] in {
+        "meets_budget_on_measured_host",
+        "misses_budget_on_measured_host",
+    }
+
+    # 3. Run under harness for "mppi_social" planner
+    harness_mppi = LatencyMeasurementHarness(deadline_ms=100.0)
+    with harness_mppi:
+        _run_map_episode(
+            scenario,
+            seed=1,
+            horizon=None,
+            dt=0.1,
+            record_forces=True,
+            snqi_weights=None,
+            snqi_baseline=None,
+            algo="mppi_social",
+            algo_config_path=None,
+            scenario_path=Path("."),
+            algo_config={
+                "goal_tolerance": 0.2,
+                "horizon_steps": 5,
+                "sample_count": 8,
+                "iterations": 1,
+                "elite_fraction": 0.25,
+            },
+        )
+    metrics_mppi = harness_mppi.get_metrics()
+    assert "steady_state_averages" in metrics_mppi
+    assert metrics_mppi["classification"] in {
+        "meets_budget_on_measured_host",
+        "misses_budget_on_measured_host",
+    }

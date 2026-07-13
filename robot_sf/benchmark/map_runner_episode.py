@@ -36,7 +36,10 @@ from robot_sf.benchmark.interaction_exposure import (
     compute_interaction_exposure_fields,
     not_derivable_interaction_exposure,
 )
-from robot_sf.benchmark.latency_stress import not_available_latency_metrics
+from robot_sf.benchmark.latency_stress import (
+    LatencyMeasurementHarness,
+    not_available_latency_metrics,
+)
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
 from robot_sf.benchmark.map_runner_actions import (
     policy_command_to_env_action as _policy_command_to_env_action,
@@ -1728,6 +1731,10 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     visibility_evidence_reasons: list[str | None] = []
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     try:
+        active_harness = LatencyMeasurementHarness.get_current()
+        if active_harness is not None:
+            policy_fn = active_harness.wrap_policy(policy_fn)
+
         obs, _ = env.reset(seed=int(seed))
         if callable(planner_bind_env):
             planner_bind_env(env)
@@ -1772,6 +1779,8 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
         ammv_command_actions: list[dict[str, Any]] = []
         view_integrity: dict[str, Any] | None = None
         for step_idx in range(horizon_val):
+            if active_harness is not None:
+                active_harness.start_cycle()
             policy_obs, step_noise_stats = apply_observation_noise(
                 obs,
                 noise_spec,
@@ -1902,6 +1911,8 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     config=config,
                     command=policy_command,
                 )
+            if active_harness is not None:
+                active_harness.end_cycle()
             obs, reward, terminated, truncated, info = env.step(action)
 
             # Snapshot mutable simulator buffers; do not keep view aliases across steps.

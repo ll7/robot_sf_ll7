@@ -2,8 +2,16 @@
 
 from __future__ import annotations
 
+import os
+import platform
+import sys
+import threading
+import time
+from collections.abc import Callable  # noqa: TC003
 from dataclasses import dataclass, field
 from typing import Any
+
+import numpy as np
 
 _PLANNER_UPDATE_MODES = {"every-step", "hold-last"}
 _DEFAULT_NON_SUCCESS_STATUSES = (
@@ -257,3 +265,486 @@ def not_available_latency_metrics() -> dict[str, str]:
         "inference_fallback_count": "not_available",
         "synthetic_actuation_delay_steps": "not_available",
     }
+
+
+class LatencyContext:
+    """Context manager to manage the thread-local active LatencyMeasurementHarness."""
+
+    _local = threading.local()
+
+    @classmethod
+    def get_current(cls) -> LatencyMeasurementHarness | None:
+        """Get the active latency measurement harness from the thread-local context.
+
+        Returns:
+            LatencyMeasurementHarness | None: The active harness if set, else None.
+        """
+        return getattr(cls._local, "current", None)
+
+    def __init__(self, harness: LatencyMeasurementHarness):
+        """Initialize the context with a harness instance."""
+        self.harness = harness
+
+    def __enter__(self) -> LatencyContext:
+        """Enter the context and set the active harness thread-locally.
+
+        Returns:
+            LatencyContext: The context manager instance.
+        """
+        self._old = getattr(self._local, "current", None)
+        self._local.current = self.harness
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Exit the context and restore the previous active harness."""
+        self._local.current = self._old
+
+
+class LatencyMeasurementHarness:
+    """Harness to measure planning step latencies and sub-component breakdowns."""
+
+    @classmethod
+    def get_current(cls) -> LatencyMeasurementHarness | None:
+        """Get the active latency measurement harness from the thread-local context.
+
+        Returns:
+            LatencyMeasurementHarness | None: The active harness if set, else None.
+        """
+        return LatencyContext.get_current()
+
+    def __init__(
+        self,
+        deadline_ms: float = 100.0,
+        target_hardware: str | None = None,
+        measured_host_is_embedded: bool = False,
+    ):
+        """Initialize the latency measurement harness with a budget and target hardware."""
+        self.deadline_ms = deadline_ms
+        self.target_hardware = target_hardware
+        self.measured_host_is_embedded = measured_host_is_embedded
+        self.cycles: list[dict[str, float]] = []
+        self.current_accumulator: dict[str, float] | None = None
+        self.step_start_time: float | None = None
+
+    def __enter__(self) -> LatencyMeasurementHarness:
+        """Enter the latency measurement context and apply instrumentation.
+
+        Returns:
+            LatencyMeasurementHarness: The harness instance.
+        """
+        apply_latency_instrumentation()
+        self._context = LatencyContext(self)
+        self._context.__enter__()
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Exit the latency measurement context."""
+        self._context.__exit__(exc_type, exc_val, exc_tb)
+
+    def wrap_policy(
+        self, policy_fn: Callable[[dict[str, Any]], Any]
+    ) -> Callable[[dict[str, Any]], Any]:
+        """Wrap policy_fn and instrument any underlying adapter and filters.
+
+        Returns:
+            Callable[[dict[str, Any]], Any]: The wrapped policy callable.
+        """
+        adapter = getattr(policy_fn, "_planner_adapter", None)
+        cbf_filter = getattr(policy_fn, "_cbf_filter", None)
+
+        if adapter:
+            instrument_adapter_for_latency(adapter, self)
+
+        if cbf_filter and not hasattr(cbf_filter.filter_command, "_instrumented"):
+            orig_filter = cbf_filter.filter_command
+
+            def wrapped_filter(*args: Any, **kwargs: Any) -> Any:
+                t0 = time.perf_counter()
+                res = orig_filter(*args, **kwargs)
+                self.add_time("collision_risk_safety_filter", (time.perf_counter() - t0) * 1000.0)
+                return res
+
+            wrapped_filter._instrumented = True  # type: ignore[attr-defined]
+            cbf_filter.filter_command = wrapped_filter
+
+        def wrapped_policy(obs: dict[str, Any]) -> Any:
+            if self.current_accumulator is not None:
+                t0 = time.perf_counter()
+                res = policy_fn(obs)
+                total_policy_time = (time.perf_counter() - t0) * 1000.0
+                used_components = (
+                    self.current_accumulator["observation_construction"]
+                    + self.current_accumulator["prediction"]
+                    + self.current_accumulator["action_conversion"]
+                    + self.current_accumulator["collision_risk_safety_filter"]
+                )
+                self.current_accumulator["planner_computation"] += max(
+                    0.0, total_policy_time - used_components
+                )
+                return res
+            return policy_fn(obs)
+
+        # Preserve any planner reset/close attributes
+        for attr in [
+            "_planner_reset",
+            "_planner_close",
+            "_planner_bind_env",
+            "_planner_stats",
+            "_planner_native_env_action",
+        ]:
+            if hasattr(policy_fn, attr):
+                setattr(wrapped_policy, attr, getattr(policy_fn, attr))
+
+        return wrapped_policy
+
+    def start_cycle(self) -> None:
+        """Start a new measurement cycle for the planning step."""
+        self.current_accumulator = {
+            "observation_construction": 0.0,
+            "prediction": 0.0,
+            "planner_computation": 0.0,
+            "collision_risk_safety_filter": 0.0,
+            "action_conversion": 0.0,
+        }
+        self.step_start_time = time.perf_counter()
+
+    def add_time(self, component: str, duration_ms: float) -> None:
+        """Accumulate execution duration for a specific planning component."""
+        if self.current_accumulator is not None:
+            self.current_accumulator[component] += duration_ms
+
+    def end_cycle(self) -> None:
+        """End the current measurement cycle and record total and component latencies."""
+        if self.step_start_time is not None and self.current_accumulator is not None:
+            total_time = (time.perf_counter() - self.step_start_time) * 1000.0
+            sum_other = (
+                self.current_accumulator["observation_construction"]
+                + self.current_accumulator["prediction"]
+                + self.current_accumulator["collision_risk_safety_filter"]
+                + self.current_accumulator["action_conversion"]
+            )
+            # Ensure planner_computation is non-negative
+            self.current_accumulator["planner_computation"] = max(
+                self.current_accumulator["planner_computation"], 0.0
+            )
+
+            # Ensure total_time is at least the sum of components
+            total_time = max(
+                total_time, sum_other + self.current_accumulator["planner_computation"]
+            )
+
+            # Guarantee component-sum consistency by adjusting planner_computation
+            self.current_accumulator["planner_computation"] = total_time - sum_other
+
+            self.cycles.append(
+                {
+                    "observation_construction_ms": self.current_accumulator[
+                        "observation_construction"
+                    ],
+                    "prediction_ms": self.current_accumulator["prediction"],
+                    "planner_computation_ms": self.current_accumulator["planner_computation"],
+                    "collision_risk_safety_filter_ms": self.current_accumulator[
+                        "collision_risk_safety_filter"
+                    ],
+                    "action_conversion_ms": self.current_accumulator["action_conversion"],
+                    "total_ms": total_time,
+                }
+            )
+        self.step_start_time = None
+        self.current_accumulator = None
+
+    def get_metrics(self) -> dict[str, Any]:
+        """Compute and retrieve summary latency statistics and provenance.
+
+        Returns:
+            dict[str, Any]: Dictionary containing latency metrics and environment info.
+        """
+        if not self.cycles:
+            return {}
+
+        cold_start = self.cycles[0]["total_ms"]
+        steady_cycles = self.cycles[1:] if len(self.cycles) > 1 else self.cycles
+        steady_totals = [c["total_ms"] for c in steady_cycles]
+
+        p50 = float(np.percentile(steady_totals, 50))
+        p95 = float(np.percentile(steady_totals, 95))
+        p99 = float(np.percentile(steady_totals, 99))
+        max_val = float(np.max(steady_totals))
+
+        misses = sum(1 for t in steady_totals if t > self.deadline_ms)
+        miss_rate = float(misses / len(steady_totals))
+
+        classification = classify_feasibility(
+            steady_state_latencies=steady_totals,
+            deadline_ms=self.deadline_ms,
+            target_hardware=self.target_hardware,
+            measured_host_is_embedded=self.measured_host_is_embedded,
+        )
+
+        avg_obs = float(np.mean([c["observation_construction_ms"] for c in steady_cycles]))
+        avg_pred = float(np.mean([c["prediction_ms"] for c in steady_cycles]))
+        avg_plan = float(np.mean([c["planner_computation_ms"] for c in steady_cycles]))
+        avg_safety = float(np.mean([c["collision_risk_safety_filter_ms"] for c in steady_cycles]))
+        avg_action = float(np.mean([c["action_conversion_ms"] for c in steady_cycles]))
+
+        prov = collect_environment_provenance()
+        validate_provenance_completeness(prov)
+
+        return {
+            "cold_start_latency_ms": cold_start,
+            "steady_state_latency_p50_ms": p50,
+            "steady_state_latency_p95_ms": p95,
+            "steady_state_latency_p99_ms": p99,
+            "steady_state_latency_max_ms": max_val,
+            "deadline_miss_rate": miss_rate,
+            "classification": classification,
+            "steady_state_averages": {
+                "observation_construction_ms": avg_obs,
+                "prediction_ms": avg_pred,
+                "planner_computation_ms": avg_plan,
+                "collision_risk_safety_filter_ms": avg_safety,
+                "action_conversion_ms": avg_action,
+            },
+            "cycles": self.cycles,
+            "provenance": prov,
+        }
+
+
+def classify_feasibility(
+    *,
+    steady_state_latencies: list[float],
+    deadline_ms: float,
+    target_hardware: str | None = None,
+    measured_host_is_embedded: bool = False,
+) -> str:
+    """Classify the compute feasibility cell based on hardware and deadlines.
+
+    Returns:
+        str: The budget classification label.
+    """
+    if target_hardware is not None:
+        target_lower = target_hardware.lower().strip()
+        is_target_embedded = any(
+            x in target_lower for x in ["jetson", "pi", "embedded", "orin", "nano", "tx2"]
+        )
+        if is_target_embedded and not measured_host_is_embedded:
+            return "target_hardware_unmeasured"
+
+    if not steady_state_latencies:
+        return "target_hardware_unmeasured"
+    if any(lat > deadline_ms for lat in steady_state_latencies):
+        return "misses_budget_on_measured_host"
+    return "meets_budget_on_measured_host"
+
+
+def collect_environment_provenance() -> dict[str, Any]:  # noqa: C901
+    """Collect hardware and software details for run provenance.
+
+    Returns:
+        dict[str, Any]: Environmental provenance dictionary containing CPU model,
+        affinity, BLAS/thread settings, package versions, and repo commit.
+    """
+    cpu_model = "unknown"
+    try:
+        if platform.system() == "Linux":
+            with open("/proc/cpuinfo") as f:
+                for line in f:
+                    if "model name" in line:
+                        cpu_model = line.split(":", 1)[1].strip()
+                        break
+        else:
+            cpu_model = platform.processor() or "unknown"
+    except OSError:
+        pass
+
+    cpu_affinity = []
+    try:
+        if hasattr(os, "sched_getaffinity"):
+            cpu_affinity = sorted(os.sched_getaffinity(0))
+    except OSError:
+        pass
+
+    thread_settings = {}
+    for var in [
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ]:
+        if var in os.environ:
+            thread_settings[var] = os.environ[var]
+
+    dependency_versions = {
+        "python": sys.version.split()[0],
+    }
+    for pkg in ["numpy", "numba", "torch", "stable_baselines3", "scipy"]:
+        try:
+            import importlib  # noqa: PLC0415
+
+            mod = importlib.import_module(pkg)
+            dependency_versions[pkg] = getattr(mod, "__version__", "unknown")
+        except ImportError:
+            pass
+
+    repo_commit = "unknown"
+    try:
+        from robot_sf.benchmark.utils import _git_hash_fallback  # noqa: PLC0415
+
+        repo_commit = _git_hash_fallback()
+    except (OSError, ValueError, AttributeError):
+        pass
+
+    return {
+        "cpu_model": cpu_model,
+        "cpu_affinity": cpu_affinity,
+        "thread_settings": thread_settings,
+        "dependency_versions": dependency_versions,
+        "git_commit": repo_commit,
+    }
+
+
+def validate_provenance_completeness(prov: dict[str, Any]) -> None:
+    """Ensure all required environment details are present and non-empty."""
+    required_keys = ["cpu_model", "cpu_affinity", "dependency_versions", "git_commit"]
+    for key in required_keys:
+        if key not in prov or not prov[key]:
+            raise ValueError(f"Latency provenance missing required field: {key}")
+
+    if prov["cpu_model"] == "unknown":
+        raise ValueError("Latency provenance cpu_model cannot be 'unknown'")
+
+    if not prov["git_commit"] or prov["git_commit"] == "unknown":
+        raise ValueError("Latency provenance git_commit cannot be 'unknown' or empty")
+
+    deps = prov["dependency_versions"]
+    if "python" not in deps or "numpy" not in deps:
+        raise ValueError("Latency provenance dependency_versions must include python and numpy")
+
+
+def instrument_adapter_for_latency(adapter: Any, harness: LatencyMeasurementHarness) -> None:
+    """Wraps adapter methods to measure component durations dynamically."""
+    # 1. Wrap state extraction / grid caching
+    for name in ["_extract_state", "_cache_grid_payload"]:
+        original = getattr(adapter, name, None)
+        if original and not hasattr(original, "_instrumented"):
+
+            def make_wrapped(orig_func: Callable[..., Any]) -> Callable[..., Any]:
+                def wrapped(*args: Any, **kwargs: Any) -> Any:
+                    t0 = time.perf_counter()
+                    res = orig_func(*args, **kwargs)
+                    harness.add_time(
+                        "observation_construction", (time.perf_counter() - t0) * 1000.0
+                    )
+                    return res
+
+                wrapped._instrumented = True  # type: ignore[attr-defined]
+                return wrapped
+
+            setattr(adapter, name, make_wrapped(original))
+
+    # 2. Wrap prediction methods
+    for name in ["_predict_ped_positions", "_predict_future"]:
+        original = getattr(adapter, name, None)
+        if original and not hasattr(original, "_instrumented"):
+
+            def make_wrapped(orig_func: Callable[..., Any]) -> Callable[..., Any]:
+                def wrapped(*args: Any, **kwargs: Any) -> Any:
+                    t0 = time.perf_counter()
+                    res = orig_func(*args, **kwargs)
+                    harness.add_time("prediction", (time.perf_counter() - t0) * 1000.0)
+                    return res
+
+                wrapped._instrumented = True  # type: ignore[attr-defined]
+                return wrapped
+
+            setattr(adapter, name, make_wrapped(original))
+
+
+_instrumentation_applied = False
+
+
+def apply_latency_instrumentation() -> None:  # noqa: C901
+    """Dynamically patches map-runner and policy common helper functions to record planning sub-components."""
+    global _instrumentation_applied
+    if _instrumentation_applied:
+        return
+
+    try:
+        from robot_sf.benchmark import map_runner_episode, map_runner_policy_common  # noqa: PLC0415
+
+        # 1. Patch project_with_feasibility
+        original_project = map_runner_policy_common._project_with_feasibility
+
+        def wrapped_project(*args: Any, **kwargs: Any) -> Any:
+            harness = LatencyMeasurementHarness.get_current()
+            if harness is not None:
+                t0 = time.perf_counter()
+                res = original_project(*args, **kwargs)
+                harness.add_time("action_conversion", (time.perf_counter() - t0) * 1000.0)
+                return res
+            return original_project(*args, **kwargs)
+
+        map_runner_policy_common._project_with_feasibility = wrapped_project
+
+        # 2. Patch safety wrappers outside policy
+        original_safety_wrapper = map_runner_episode._apply_safety_wrapper_step
+
+        def wrapped_safety_wrapper(*args: Any, **kwargs: Any) -> Any:
+            harness = LatencyMeasurementHarness.get_current()
+            if harness is not None:
+                t0 = time.perf_counter()
+                res = original_safety_wrapper(*args, **kwargs)
+                harness.add_time(
+                    "collision_risk_safety_filter", (time.perf_counter() - t0) * 1000.0
+                )
+                return res
+            return original_safety_wrapper(*args, **kwargs)
+
+        map_runner_episode._apply_safety_wrapper_step = wrapped_safety_wrapper
+
+        original_cbf_safety = map_runner_episode._apply_cbf_safety_filter_step
+
+        def wrapped_cbf_safety(*args: Any, **kwargs: Any) -> Any:
+            harness = LatencyMeasurementHarness.get_current()
+            if harness is not None:
+                t0 = time.perf_counter()
+                res = original_cbf_safety(*args, **kwargs)
+                harness.add_time(
+                    "collision_risk_safety_filter", (time.perf_counter() - t0) * 1000.0
+                )
+                return res
+            return original_cbf_safety(*args, **kwargs)
+
+        map_runner_episode._apply_cbf_safety_filter_step = wrapped_cbf_safety
+
+        # 3. Patch observation processing outside policy
+        original_noise = map_runner_episode.apply_observation_noise
+
+        def wrapped_noise(*args: Any, **kwargs: Any) -> Any:
+            harness = LatencyMeasurementHarness.get_current()
+            if harness is not None:
+                t0 = time.perf_counter()
+                res = original_noise(*args, **kwargs)
+                harness.add_time("observation_construction", (time.perf_counter() - t0) * 1000.0)
+                return res
+            return original_noise(*args, **kwargs)
+
+        map_runner_episode.apply_observation_noise = wrapped_noise
+
+        original_tracking = map_runner_episode._apply_tracking_precision_to_observation
+
+        def wrapped_tracking(*args: Any, **kwargs: Any) -> Any:
+            harness = LatencyMeasurementHarness.get_current()
+            if harness is not None:
+                t0 = time.perf_counter()
+                res = original_tracking(*args, **kwargs)
+                harness.add_time("observation_construction", (time.perf_counter() - t0) * 1000.0)
+                return res
+            return original_tracking(*args, **kwargs)
+
+        map_runner_episode._apply_tracking_precision_to_observation = wrapped_tracking
+    except (ImportError, AttributeError):
+        pass
+
+    _instrumentation_applied = True

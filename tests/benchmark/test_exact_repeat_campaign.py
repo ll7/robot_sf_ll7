@@ -11,6 +11,8 @@ import pytest
 
 from robot_sf.benchmark.exact_repeat_campaign import (
     HOST_REPORT_SCHEMA_VERSION,
+    MIXED_DISPOSITION,
+    UNRUNNABLE_DISPOSITION,
     build_manifest,
     canonical_sha256,
     compare_verified_hosts,
@@ -138,9 +140,87 @@ def test_host_verifier_requires_all_targets_and_reports_cell_verdicts(manifest):
         "n_cells": 7,
         "n_runnable_cells": 7,
         "n_unrunnable_cells": 0,
+        "n_mixed_cells": 0,
         "all_cells_bitwise_identical": True,
     }
     assert all(cell["exact_repeat_determinism"] is True for cell in verified["cells"])
+
+
+def test_host_verifier_rejects_repeats_on_unrunnable_target(manifest):
+    """An unrunnable disposition cannot hide fabricated repeat evidence."""
+    report = _host_report(manifest, "host-a")
+    result = report["results"][0]
+    result["disposition"] = UNRUNNABLE_DISPOSITION
+    result["disposition_reason"] = "fixture disposition"
+    with pytest.raises(ValueError, match="also reports repeats"):
+        verify_host_report(manifest, report)
+
+
+def test_host_verifier_marks_all_unrunnable_reports_non_identical(manifest):
+    """No runnable target must not produce a vacuous determinism claim."""
+    reports = []
+    for machine_id in ("host-a", "host-b"):
+        report = _host_report(manifest, machine_id)
+        for result in report["results"]:
+            result.pop("repeats")
+            result["disposition"] = UNRUNNABLE_DISPOSITION
+            result["disposition_reason"] = "fixture disposition"
+        reports.append(verify_host_report(manifest, report))
+
+    for verified in reports:
+        assert verified["summary"] == {
+            "n_targets": 140,
+            "n_runnable_targets": 0,
+            "n_unrunnable_targets": 140,
+            "n_cells": 7,
+            "n_runnable_cells": 0,
+            "n_unrunnable_cells": 7,
+            "n_mixed_cells": 0,
+            "all_cells_bitwise_identical": False,
+        }
+
+    comparison = compare_verified_hosts(manifest, *reports)
+    assert comparison["summary"] == {
+        "n_cells": 7,
+        "n_runnable_cells": 0,
+        "n_unrunnable_cells": 7,
+        "n_mixed_cells": 0,
+        "all_cells_bitwise_identical": False,
+    }
+
+
+def test_host_verifier_preserves_mixed_cell_target_counts(manifest):
+    """Mixed runnable/unrunnable targets retain the full cell denominator."""
+    report = _host_report(manifest, "host-a")
+    result = report["results"][0]
+    result.pop("repeats")
+    result["disposition"] = UNRUNNABLE_DISPOSITION
+    result["disposition_reason"] = "fixture disposition"
+
+    verified = verify_host_report(manifest, report)
+    cell = next(
+        cell
+        for cell in verified["cells"]
+        if cell["scenario_id"] == result["scenario_id"] and cell["planner"] == result["planner"]
+    )
+    assert cell["disposition"] == MIXED_DISPOSITION
+    assert cell["n_targets"] == 20
+    assert cell["n_runnable_targets"] == 19
+    assert cell["n_unrunnable_targets"] == 1
+    assert cell["exact_repeat_determinism"] is None
+    assert verified["summary"]["n_mixed_cells"] == 1
+
+    second = verify_host_report(manifest, _host_report(manifest, "host-b"))
+    comparison = compare_verified_hosts(manifest, verified, second)
+    comparison_cell = next(
+        row
+        for row in comparison["matrix"]
+        if row["scenario_id"] == result["scenario_id"] and row["planner"] == result["planner"]
+    )
+    assert comparison_cell["comparison_status"] == "mixed"
+    assert comparison_cell["disposition"] == MIXED_DISPOSITION
+    assert comparison_cell["n_targets"] == 20
+    assert comparison["summary"]["n_mixed_cells"] == 1
 
 
 def test_host_verifier_requires_the_first_trajectory_divergence(manifest):

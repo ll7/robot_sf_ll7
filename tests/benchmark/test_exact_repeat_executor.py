@@ -437,6 +437,20 @@ def test_execute_campaign_rejects_missing_scenario_definition(tmp_path, resolved
         execute_campaign(tampered, output_dir=tmp_path / "missing_definition")
 
 
+def test_execute_campaign_rejects_planner_definition_mismatch(tmp_path, resolved_bundle):
+    """A target cannot execute under a planner different from its manifest identity."""
+    tampered = copy.deepcopy(resolved_bundle)
+    target = tampered["targets"][0]
+    planner_definition = tampered["planner_definitions"][target["planner_definition_id"]]
+    planner_definition["algo"] = "orca" if target["planner"] != "orca" else "goal"
+    tampered["bundle_sha256"] = canonical_sha256(
+        {key: value for key, value in tampered.items() if key != "bundle_sha256"}
+    )
+
+    with pytest.raises(ValueError, match="does not match.*planner_definition"):
+        execute_campaign(tampered, output_dir=tmp_path / "planner_mismatch")
+
+
 def test_execute_campaign_rejects_invalid_bundle_schema():
     """Bundle with wrong schema_version raises."""
     bad_bundle = {"schema_version": "wrong_version"}

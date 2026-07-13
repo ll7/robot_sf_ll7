@@ -539,7 +539,7 @@ def test_analyze_campaign_fails_closed_for_non_mapping_integrity_json(tmp_path: 
         {"campaign": {"campaign_id": "legacy"}, "runs": []},
     )
     integrity_path = campaign_root / "reports" / "campaign_integrity.json"
-    integrity_path.write_text("[\"invalid-root\"]\n", encoding="utf-8")
+    integrity_path.write_text('["invalid-root"]\n', encoding="utf-8")
 
     analysis = analyze_campaign(campaign_root)
 

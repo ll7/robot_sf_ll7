@@ -43,23 +43,16 @@ except ImportError:  # pragma: no cover - optional dependency
     ImageSequenceClip = None  # type: ignore[assignment]
 
 try:
-    from robot_sf.baselines import get_baseline, list_baselines
+    from robot_sf.baselines import SIMPLE_POLICY_ALIASES, get_baseline, list_baselines
     from robot_sf.baselines.social_force import Observation
 except ImportError as exc:  # pragma: no cover - optional baseline dependency
     get_baseline = None  # type: ignore[assignment]
     list_baselines = None  # type: ignore[assignment]
     Observation = None  # type: ignore[assignment]
+    SIMPLE_POLICY_ALIASES = frozenset({"simple_policy", "goal", "simple", "goal_policy"})
     _BASELINE_IMPORT_ERROR = exc
 else:
     _BASELINE_IMPORT_ERROR = None
-
-# Aliases resolved to the built-in naive goal-seeking policy. Imported from the
-# lightweight ``robot_sf.baselines`` package (no heavy optional deps) so both the
-# runner and the exact-repeat executor agree on what ``run_episode`` can execute.
-try:
-    from robot_sf.baselines import SIMPLE_POLICY_ALIASES
-except ImportError:  # pragma: no cover - defensive fallback
-    SIMPLE_POLICY_ALIASES = frozenset({"simple_policy", "goal", "simple", "goal_policy"})
 
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
 from robot_sf.benchmark.circuit_breaker import (  # noqa: F401 - compatibility export.

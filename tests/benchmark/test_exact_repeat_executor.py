@@ -10,9 +10,11 @@ from typing import Any
 import numpy as np
 import pytest
 
+from robot_sf.baselines import is_runnable_algo
 from robot_sf.benchmark.exact_repeat_campaign import (
     HOST_REPORT_SCHEMA_VERSION,
     RESOLVED_DEFINITIONS_SCHEMA_VERSION,
+    UNRUNNABLE_DISPOSITION,
     _check_manifest_from_bundle,
     _compute_trajectory_hash,
     _get_environment_fingerprint,
@@ -235,6 +237,11 @@ def _deterministic_mock_runner(
     return _build_mock_record(seed)
 
 
+def _force_orca_unrunnable(monkeypatch):
+    """Make the disposition fixture independent of the installed ORCA adapter."""
+    monkeypatch.setattr("robot_sf.baselines.is_runnable_algo", lambda name: name != "orca")
+
+
 def test_execute_campaign_produces_valid_host_report(tmp_path, manifest, resolved_bundle):
     """Execute with mock runner produces a host_result.json that passes verify_host_report."""
     output_dir = tmp_path / "host_run"
@@ -251,6 +258,120 @@ def test_execute_campaign_produces_valid_host_report(tmp_path, manifest, resolve
     verified = verify_host_report(manifest, host_result)
     assert verified["summary"]["n_targets"] == 140
     assert verified["summary"]["n_cells"] == 7
+
+
+def test_execute_campaign_dispositions_unrunnable_planner_cells(
+    tmp_path, resolved_bundle, monkeypatch
+):
+    """Unsupported planner cells are recorded as an explicit disposition.
+
+    The fixture temporarily marks ORCA as unavailable to the ``run_episode``
+    registry. Rather than raising ``ValueError: Unknown algorithm``, execute must
+    emit a schema-compatible per-cell disposition and continue other cells.
+    """
+    _force_orca_unrunnable(monkeypatch)
+
+    def guarded_runner(scenario_params, seed, *, algo="goal", **kwargs):
+        # The runner must never be invoked for an unrunnable planner.
+        assert is_runnable_algo(algo), f"runner invoked for unrunnable algo {algo!r}"
+        return _build_mock_record(seed)
+
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "unsupported_disposition",
+        run_episode=guarded_runner,
+    )
+
+    by_planner = {}
+    for result in host_result["results"]:
+        by_planner.setdefault(result["planner"], []).append(result)
+
+    orca_results = by_planner["orca"]
+    assert orca_results, "expected orca targets in the bundle"
+    for result in orca_results:
+        assert result["disposition"] == UNRUNNABLE_DISPOSITION
+        assert result["repeats"] == []
+        assert "planner 'orca'" in result["disposition_reason"]
+
+    # Runnable planners still execute their repeats normally.
+    for planner in ("ppo", "goal"):
+        for result in by_planner[planner]:
+            assert "disposition" not in result
+            assert len(result["repeats"]) == 3
+
+
+def test_verify_host_report_scopes_repeat_claim_to_runnable_cells(
+    tmp_path, manifest, resolved_bundle, monkeypatch
+):
+    """verify-host scopes repeat claims to runnable cells."""
+    _force_orca_unrunnable(monkeypatch)
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "unsupported_verify",
+        run_episode=_deterministic_mock_runner,
+    )
+    verified = verify_host_report(manifest, host_result)
+    summary = verified["summary"]
+
+    assert summary["n_targets"] == 140
+    assert summary["n_cells"] == 7
+    # The probe planner contributes 3 unrunnable cells (60 targets); ppo(3) + goal(1) remain.
+    assert summary["n_unrunnable_cells"] == 3
+    assert summary["n_runnable_cells"] == 4
+    assert summary["n_unrunnable_targets"] == 60
+    assert summary["n_runnable_targets"] == 80
+    # The deterministic mock runner keeps the runnable-cell claim green.
+    assert summary["all_cells_bitwise_identical"] is True
+
+    unrunnable_cells = [cell for cell in verified["cells"] if cell.get("unrunnable")]
+    assert {cell["planner"] for cell in unrunnable_cells} == {"orca"}
+    for cell in unrunnable_cells:
+        assert cell["disposition"] == UNRUNNABLE_DISPOSITION
+        assert cell["exact_repeat_determinism"] is None
+
+
+def test_verify_host_report_rejects_disposition_with_repeats(
+    tmp_path, manifest, resolved_bundle, monkeypatch
+):
+    """A disposition cannot hide fabricated repeat evidence."""
+    _force_orca_unrunnable(monkeypatch)
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "malformed_disposition",
+        run_episode=_deterministic_mock_runner,
+    )
+    result = next(result for result in host_result["results"] if "disposition" in result)
+    result["repeats"] = [{"outcome": 1}]
+    with pytest.raises(ValueError, match="also reports repeats"):
+        verify_host_report(manifest, host_result)
+
+
+def test_verify_host_report_preserves_mixed_cell_target_counts(
+    tmp_path, manifest, resolved_bundle, monkeypatch
+):
+    """Mixed cells retain both runnable and dispositioned target counts."""
+    _force_orca_unrunnable(monkeypatch)
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "mixed_cell",
+        run_episode=_deterministic_mock_runner,
+    )
+    runnable_repeats = next(
+        result["repeats"]
+        for result in host_result["results"]
+        if isinstance(result.get("repeats"), list) and len(result["repeats"]) == 3
+    )
+    dispositioned = next(result for result in host_result["results"] if "disposition" in result)
+    dispositioned.pop("disposition")
+    dispositioned.pop("disposition_reason")
+    dispositioned["repeats"] = copy.deepcopy(runnable_repeats)
+
+    verified = verify_host_report(manifest, host_result)
+    mixed_cell = next(cell for cell in verified["cells"] if cell["planner"] == "orca")
+    assert mixed_cell["unrunnable"] is False
+    assert mixed_cell["n_targets"] == 20
+    assert mixed_cell["n_runnable_targets"] == 1
+    assert mixed_cell["n_unrunnable_targets"] == 19
 
 
 def test_execute_campaign_all_repeats_identical_for_deterministic_runner(
@@ -321,7 +442,9 @@ def test_execute_campaign_reexecutes_a_malformed_cache_entry(tmp_path, resolved_
     """A non-mapping cache entry is ignored instead of crashing resume execution."""
     output_dir = tmp_path / "host_run_malformed_cache"
     execute_campaign(resolved_bundle, output_dir=output_dir, run_episode=_deterministic_mock_runner)
-    target = resolved_bundle["targets"][0]
+    # Pick a runnable target; unsupported planners are dispositioned without
+    # invoking the runner, so they never re-execute on a corrupt cache.
+    target = next(t for t in resolved_bundle["targets"] if is_runnable_algo(t["planner"]))
     cache_file = (
         output_dir
         / "target_cache"
@@ -366,6 +489,20 @@ def test_execute_campaign_rejects_missing_scenario_definition(tmp_path, resolved
     )
     with pytest.raises(ValueError, match="missing scenario_definition"):
         execute_campaign(tampered, output_dir=tmp_path / "missing_definition")
+
+
+def test_execute_campaign_rejects_planner_definition_mismatch(tmp_path, resolved_bundle):
+    """A target cannot execute under a planner different from its manifest identity."""
+    tampered = copy.deepcopy(resolved_bundle)
+    target = tampered["targets"][0]
+    planner_definition = tampered["planner_definitions"][target["planner_definition_id"]]
+    planner_definition["algo"] = "orca" if target["planner"] != "orca" else "goal"
+    tampered["bundle_sha256"] = canonical_sha256(
+        {key: value for key, value in tampered.items() if key != "bundle_sha256"}
+    )
+
+    with pytest.raises(ValueError, match="does not match.*planner_definition"):
+        execute_campaign(tampered, output_dir=tmp_path / "planner_mismatch")
 
 
 def test_execute_campaign_rejects_invalid_bundle_schema():

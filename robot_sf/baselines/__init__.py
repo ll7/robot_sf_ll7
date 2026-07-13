@@ -85,6 +85,23 @@ def _get_brne_planner():
     return module.BRNEPlanner
 
 
+def _get_orca_planner():
+    """Lazy import for the ORCA baseline adapter.
+
+    Returns:
+        The OrcaPlanner class.
+
+    Note:
+        Restores the historical ``orca`` algorithm in the baseline registry
+        (issue #5491) so ``runner.run_episode(algo="orca")`` and the
+        exact-repeat ``execute_campaign`` path no longer crash with an
+        ``Unknown algorithm 'orca'`` error. Uses the benchmark-ready
+        ``ORCAPlannerAdapter`` (rvo2 solver when available).
+    """
+    module = importlib.import_module("robot_sf.baselines.orca")
+    return module.OrcaPlanner
+
+
 # Registry of available baseline algorithms
 BASELINES: dict[str, type] = {
     "social_force": _get_social_force_planner,
@@ -96,6 +113,7 @@ BASELINES: dict[str, type] = {
     "dr_mpc": _get_drm_mp_planner,
     "drl_vo": _get_drl_vo_planner,
     "brne": _get_brne_planner,
+    "orca": _get_orca_planner,
 }
 
 
@@ -131,4 +149,33 @@ def list_baselines() -> list[str]:
     return list(BASELINES.keys())
 
 
-__all__ = ["BASELINES", "get_baseline", "list_baselines"]
+# Aliases for the built-in naive goal-seeking policy that the benchmark runner
+# constructs directly (see ``robot_sf.benchmark.runner._create_robot_policy``),
+# outside the baseline registry above. Kept aligned with the ``goal`` canonical
+# planner declared in ``robot_sf.benchmark.algorithm_readiness``.
+SIMPLE_POLICY_ALIASES: frozenset[str] = frozenset(
+    {"simple_policy", "goal", "simple", "goal_policy"}
+)
+
+
+def is_runnable_algo(name: str) -> bool:
+    """Return whether ``robot_sf.benchmark.runner.run_episode`` can execute ``name``.
+
+    The benchmark episode runner resolves a planner either as the built-in
+    goal-seeking policy (``SIMPLE_POLICY_ALIASES``) or through the baseline
+    registry (``BASELINES``). Planners that live only in other execution
+    pipelines and have no episode-runner adapter are not reachable here.
+
+    Returns:
+        True when the algorithm can be constructed by ``run_episode``.
+    """
+    return name in SIMPLE_POLICY_ALIASES or name in BASELINES
+
+
+__all__ = [
+    "BASELINES",
+    "SIMPLE_POLICY_ALIASES",
+    "get_baseline",
+    "is_runnable_algo",
+    "list_baselines",
+]

@@ -127,4 +127,4 @@ evidence_artifacts:
   - path: snqi_scalarization_sensitivity.md
     sha256: 77e426f8dc121131c5cf6d940789ba8591a7755445516c19c7a64f604e5cb0d1
   - path: snqi_scalarization_sensitivity_pareto.svg
-    sha256: 5c4f4036eec0c09692c321b8e2bb5fb1b659a39a800bc3c65aa545381773c2ad
+    sha256: e41e475637a9c2c76916400f79995a8b26123a2fd2ab323ebb588e2fa8cf3181

@@ -4,9 +4,7 @@ import sys
 
 import numpy as np
 from mp_env import map_utils as mu
-from mp_env.render import swiftshader_renderer as sr
 from sbpd import sbpd
-from utils import depth_utils as du
 from utils import utils
 
 
@@ -29,6 +27,8 @@ class SBPDRenderer:
         # Instantiating a camera/ shader object is only needed
         # for rgb and depth images
         if 'rgb' in self.p.camera_params.modalities or 'depth' in self.p.camera_params.modalities:
+            from mp_env.render import swiftshader_renderer as sr
+
             r_obj = sr.get_r_obj(self.p.camera_params)
             self.building.set_r_obj(r_obj)
             self.building.load_building_into_scene()
@@ -126,6 +126,8 @@ class SBPDRenderer:
         Render analytically projected depth images at the locations in
         starts, thetas. Bin data inside bins in a resolution of xy_resolution along x and y axis and
         z_bins in the z direction. Z Direction is the vertical z = 0 is floor. """
+        from utils import depth_utils as du
+
         r_obj = self.building.r_obj
         robot = self.building.robot
         z_bins = [-10, robot.base, robot.base + robot.height]

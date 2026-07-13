@@ -40,7 +40,10 @@ closure_audit:
       evidence: "docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/preregistration_config_registry.json"
     - criterion: "Pre-submission readiness gate enforces §6 before GPU submission"
       status: met
-      evidence: "assess_campaign_readiness() in robot_sf/benchmark/prediction_mpc_factorial_preregistration.py; this PR"
+      evidence: "assess_campaign_readiness() in robot_sf/benchmark/prediction_mpc_factorial_preregistration.py; PR #5415"
+    - criterion: "Executable CLI gate for ops at the submission boundary (exit-code + report artifact)"
+      status: met
+      evidence: "scripts/validation/check_issue_5355_factorial_campaign_readiness.py; tests/validation/test_check_issue_5355_factorial_campaign_readiness.py"
     - criterion: "Hierarchical paired analysis machinery available"
       status: blocked
       evidence: "tracked separately in #5351 (still open)"
@@ -62,5 +65,7 @@ remaining_gate:
   next_empirical_action: >
     Once #5351 and #5353 land, flip their status in
     configs/research/prediction_mpc_factorial_v1.yaml dependencies to resolved,
-    confirm assess_campaign_readiness() returns ready: true on the exact
-    submitted config, then submit the factorial campaign through the ops queue.
+    run the CLI gate
+    (uv run python scripts/validation/check_issue_5355_factorial_campaign_readiness.py)
+    and confirm it exits 0 (ready) on the exact submitted config, then submit the
+    factorial campaign through the ops queue.

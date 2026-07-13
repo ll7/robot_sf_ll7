@@ -102,18 +102,16 @@ stop_rules:
   blocked_if: "missing paired episodes, provenance mismatch, or unresolvable fallback execution"
 
 # Dependencies (all must be resolved before GPU submission).
-# Reconciled 2026-07-13 (#5483): #5351 (hierarchical paired analysis) and #5353
-# (matched-capability fairness contract) both closed, so their dependency states
-# are updated to `closed`. The remaining gate is the authorized campaign RUN
-# (compute, ops queue) — this config change alone does NOT authorize submission.
+# #5353 (matched-capability fairness contract) is RESOLVED as of issue #5483:
+# the capability-matrix gating logic is merged and the dependency status is
+# reconciled with the closed tracker state. #5351 (hierarchical paired analysis)
+# remains OPEN and is the single remaining dependency blocker for the campaign.
 dependencies:
   - issue: 5351
     description: "Hierarchical paired analysis with multiplicity"
-    status: closed
-    resolution_ref: "#5366"
+    status: open
     blocking: "analysis machinery for preregistered contrasts"
   - issue: 5353
     description: "Matched-capability fairness contract"
-    status: closed
-    resolution_ref: "#5370"
+    status: resolved
     blocking: "capability-matrix gating for cross-arm fairness"

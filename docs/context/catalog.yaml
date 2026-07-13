@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-12
+updated_at: 2026-07-13
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -43,6 +43,14 @@ entries:
 - path: docs/context/evidence/issue_5346_response_law_72row_2026-07-12
   status: evidence
   freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4365_job_13378_closeout
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/issue_4365_h600_hybrid_vs_orca_s30_preregistration.md
+  status: historical
+  freshness: dated
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5298_dwa_decision_trace_2026-07-11
   status: evidence
@@ -4268,3 +4276,7 @@ entries:
   status: evidence
   freshness: evidence
   area: reproducibility
+- path: docs/context/evidence/issue_5447_ch7_case_capsules/README.md
+  status: proposal
+  freshness: dated
+  area: benchmark_evidence

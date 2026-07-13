@@ -160,6 +160,37 @@ axes:
           sim_config:
             action_latency_steps: 3
 
+# Collision-envelope / physical-footprint clearance-semantics diagnostic
+# (maintainer scope addition 2026-07-12). This is a DISTINCT surface from the
+# `clearance_radius` axis above: that axis only perturbs the pedestrian proxy
+# radius, whereas this block formalizes the separate clearance quantities and
+# sweeps the ROBOT PROXY FOOTPRINT so cross-planner conclusions can be checked for
+# sensitivity to proxy-footprint choices. Consumed by
+# robot_sf.benchmark.clearance_semantics; diagnostic only, no metric-semantics
+# change to the frozen release, and no sweep execution.
+footprint_semantics:
+  schema_version: footprint-clearance-semantics.v1
+  rationale: >
+    Reported traces conflate center-to-center distance, proxy-envelope surface clearance
+    (planning radii), and geometric-body clearance (physical radii). A 1.00 m robot proxy
+    plus a 0.40 m pedestrian radius at a 1.37 m terminal center distance yields ~-0.03 m of
+    envelope overlap while the physical bodies remain well clear. This block enumerates a
+    bounded robot-proxy / pedestrian-radius sweep and a collision/near-miss threshold-
+    sensitivity table to convert that ambiguity into a methodological result.
+  nominal_geometry:
+    robot_proxy_radius_m: 1.00
+    pedestrian_radius_m: 0.40
+    robot_body_radius_m: 0.35
+    pedestrian_body_radius_m: 0.25
+  thresholds:
+    contact_threshold_m: 0.0
+    near_miss_threshold_m: 0.20
+    conservative_buffer_m: 0.30
+  sweep:
+    robot_proxy_radius_m: [0.60, 1.00, 1.40]
+    pedestrian_radius_m: [0.30, 0.40, 0.50]
+    encounter_center_distances_m: [1.10, 1.37, 1.80]
+
 result_contract:
   required_outputs:
     - axis

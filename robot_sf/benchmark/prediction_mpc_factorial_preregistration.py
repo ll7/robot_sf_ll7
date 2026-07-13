@@ -261,20 +261,40 @@ def dependency_blockers(dependencies: Any) -> list[str]:
         status = str(status_value).strip().lower() if status_value is not None else ""
         if status in RESOLVED_DEPENDENCY_STATES:
             continue
-        issue = entry.get("issue", "?")
+        issue = _coerce_optional_issue_id(entry.get("issue"))
+        issue_label = issue if issue is not None else "?"
         blockers.append(
-            f"dependency #{issue} unresolved (status={status or 'unset'!s}): {blocking_reason}"
+            f"dependency #{issue_label} unresolved (status={status or 'unset'!s}): {blocking_reason}"
         )
     return blockers
 
 
 # Canonical issue-state truth for the #5355 factorial dependencies. This is the
-# reconciliation source of truth from #5483: both #5351 (hierarchical paired
-# analysis, delivered by #5366) and #5353 (matched-capability fairness contract,
-# delivered by #5370) are CLOSED. Any dependency entry declaring one of these
-# issue numbers with a non-resolved status is drifted and must be reconciled in
-# the pinned config + evidence registry rather than silently gating the campaign.
-RECONCILED_CLOSED_DEPENDENCY_ISSUES = frozenset({5351, 5353})
+# reconciliation source of truth from #5483: #5353 (matched-capability fairness
+# contract, delivered by #5370) is resolved. #5351 remains an open blocker until
+# the required hierarchical analysis input exists. Any dependency entry declaring
+# #5353 with a non-resolved status is drifted and must fail the gate.
+RECONCILED_CLOSED_DEPENDENCY_ISSUES = frozenset({5353})
+
+
+def _coerce_optional_issue_id(value: Any) -> int | None:
+    """Normalize an optional dependency issue identifier or fail closed.
+
+    Returns:
+        Positive integer issue ID, or ``None`` when the optional value is absent.
+    """
+
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ValueError("dependency issue must be a positive integer")
+    try:
+        issue = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("dependency issue must be a positive integer") from exc
+    if issue < 1:
+        raise ValueError("dependency issue must be a positive integer")
+    return issue
 
 
 def check_dependency_state_consistency(dependencies: Any) -> dict[str, Any]:
@@ -300,17 +320,31 @@ def check_dependency_state_consistency(dependencies: Any) -> dict[str, Any]:
     for entry in dependencies:
         if not isinstance(entry, Mapping):
             raise ValueError("each dependencies entry must be a mapping")
-        issue = entry.get("issue")
-        if int(issue) not in RECONCILED_CLOSED_DEPENDENCY_ISSUES:
+        issue = _coerce_optional_issue_id(entry.get("issue"))
+        if issue is None or issue not in RECONCILED_CLOSED_DEPENDENCY_ISSUES:
             continue
         status_value = entry.get("status")
         status = str(status_value).strip().lower() if status_value is not None else ""
         if status not in RESOLVED_DEPENDENCY_STATES:
             report["consistent"] = False
             report["inconsistent"].append(
-                f"#{issue} reconciled-closed but declared status={status or 'unset'!s}"
+                f"#{issue} reconciled-resolved but declared status={status or 'unset'!s}"
             )
     return report
+
+
+def _readiness_dependency_blockers(dependencies: Any) -> list[str]:
+    """Combine declared dependency blockers with reconciled-state drift checks.
+
+    Returns:
+        Ordered blocker messages, including any reconciled-state drift.
+    """
+
+    blockers = dependency_blockers(dependencies)
+    consistency = check_dependency_state_consistency(dependencies)
+    if not consistency["consistent"]:
+        blockers.extend(f"dependency state drift: {item}" for item in consistency["inconsistent"])
+    return blockers
 
 
 def assess_campaign_readiness(
@@ -329,9 +363,9 @@ def assess_campaign_readiness(
     Every criterion is treated as ``blocked`` unless it can be positively
     verified, so an unreadable config, a stale registry digest, an invalid arm
     config, or an unresolved declared dependency each keep ``ready`` False. This
-    encodes prereg §6 in code: the ``dependencies`` block (#5351 analysis,
-    #5353 capability matrix) is dead data today: nothing enforced that GPU
-    submission wait on it.
+    encodes prereg §6 in code: declared blocking dependencies are checked, and
+    the reconciled #5353 state is also checked for metadata drift before a ready
+    verdict can be returned.
 
     Args:
         config_path: Path to the tracked factorial preregistration config.
@@ -378,10 +412,11 @@ def assess_campaign_readiness(
     # Criterion 3: the exact config is pinned by sha256 in the evidence registry.
     _record("evidence_registry_pinned", *_check_registry_pinned(config_path, registry_path))
 
-    # Criterion 4: every declared blocking dependency (#5351, #5353) is resolved.
+    # Criterion 4: every declared blocking dependency is resolved and the
+    # reconciled #5353 state has not drifted.
     if config is not None:
         try:
-            dep_blockers = dependency_blockers(config.get("dependencies"))
+            dep_blockers = _readiness_dependency_blockers(config.get("dependencies"))
             if dep_blockers:
                 _record("dependencies_resolved", False, "; ".join(dep_blockers))
             else:

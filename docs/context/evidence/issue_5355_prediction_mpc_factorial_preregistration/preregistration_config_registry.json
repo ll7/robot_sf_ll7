@@ -6,6 +6,6 @@
   "evidence_status": "not_benchmark_evidence",
   "claim_boundary": "Pinned factorial-design configuration only; no campaign has run and no mechanism-effectiveness claim is supported.",
   "config_path": "configs/research/prediction_mpc_factorial_v1.yaml",
-  "config_sha256": "b23440ce57ec500f01b29b31509e58db528bad6bb636d3182fe2026f1b85cbbb",
-  "commit": "5a29faabaada5e99824ac9829d4d5adfea45f6a5"
+  "config_sha256": "d4e17b3581fda0fd78456f4dbe984332534b86b85bab2c2fdd8c41697c81cdb0",
+  "commit": "d4e17b3581fda0fd78456f4dbe984332534b86b85bab2c2fdd8c41697c81cdb0-reconciled-5483"
 }

@@ -9,6 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #3207 collision-envelope / physical-footprint clearance-semantics diagnostic.** New
+  `robot_sf/benchmark/clearance_semantics.py` (`footprint-clearance-semantics.v1`) formalizes the
+  distinct clearance quantities that reported traces conflate — center-to-center distance,
+  proxy-envelope surface clearance (planning radii), geometric-body clearance (physical radii),
+  pedestrian/obstacle contact, and conservative-buffer breach — and enumerates a bounded
+  robot-proxy / pedestrian-radius sweep plus a collision/near-miss threshold-sensitivity table that
+  flags whether an encounter classification depends on the proxy-footprint choice rather than on
+  physical contact. Driven by a new `footprint_semantics` block in
+  `configs/research/fidelity_sensitivity_v1.yaml` (distinct from the existing `clearance_radius`
+  axis, which only perturbs the pedestrian radius); the loader fails closed on missing/malformed
+  sweep metadata. CLI: `scripts/benchmark/build_footprint_clearance_manifest.py`. Diagnostic only:
+  it runs no benchmark episodes, changes no frozen-release collision/near-miss metric semantics,
+  and is not benchmark, sim-to-real, or paper-facing evidence. Implements the maintainer 2026-07-12
+  scope addition on #3207.
+
+* **issue #5348 S30 attempt-6 PPO-resume launch packet + fail-closed checker.** New
+  `configs/benchmarks/issue_5348_s30_attempt6_resume_launch_packet.yaml`
+  (`s30-attempt6-resume-launch-packet.v1`) is the machine-checkable contract a GPU operator
+  executes to resume the PPO arm of job 13376 (preserve the five clean arms @ 1440 episodes and the
+  562 completed PPO rows, resume PPO after episode 562 to reach 1440, aggregate all six arms through
+  the unchanged report-builder, then publish under `docs/context/evidence/`). New
+  `scripts/validation/check_issue_5348_s30_resume_launch_packet.py` validates the packet fail-closed
+  (episode arithmetic `562 + 878 = 1440`, resume-after-562 never restart-from-zero, five clean arms
+  skipped not re-run, #5347/#5360 gate satisfied, report-builder contract unchanged, no
+  self-authorized compute submission) with `ready`/`blocked`/`malformed` exit codes. This packages
+  the frozen-metric execution decision; it does not resume the PPO arm, submit SLURM/GPU, aggregate
+  results, or establish any benchmark claim.
+
+* **issue #5447 Chapter 7 case-capsule manifest builder (scaffold).** New
+  `robot_sf/benchmark/case_capsules.py` (`ch7_case_capsule_manifest.v1`) assembles the Chapter 7
+  causal-trajectory worked-example set from a *validated* `seed_flip_inversion_candidates.v1`
+  candidate manifest (issue #5446) plus optional causal / online-risk reports (#5441–#5445). It is
+  honest-selection tooling, not a benchmark metric or figure renderer: it fails closed on
+  empty/wrong-schema input, labels archetypes with a missing source candidate or required report
+  `unavailable` (never substituted), grades capsules `descriptive-only` unless a validated causal
+  report is supplied, honours the four-capsule honest floor (`insufficient_evidence` below it), and
+  leaves subjective narrative/figure fields as an `AUTHOR_REQUIRED` sentinel the structural
+  validator reports as `author_pending`. Ships a thin CLI
+  (`scripts/analysis/build_ch7_case_capsules_issue_5447.py`), a frozen selection contract
+  (`configs/analysis/issue_5447_ch7_case_capsules.yaml`), and contract tests. The capsule *set*
+  itself remains blocked on the #5446 candidate manifest, which does not yet exist; see
+  `docs/context/evidence/issue_5447_ch7_case_capsules/README.md`.
+
 * **issue #5355 factorial campaign-readiness CLI gate.** New executable
   `scripts/validation/check_issue_5355_factorial_campaign_readiness.py` wraps the existing library
   gate `assess_campaign_readiness()` so ops can enforce the prediction-MPC 2x2 factorial

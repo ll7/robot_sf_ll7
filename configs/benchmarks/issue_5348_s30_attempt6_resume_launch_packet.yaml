@@ -1,0 +1,141 @@
+schema_version: s30-attempt6-resume-launch-packet.v1
+campaign_id: issue_5348_s30_attempt6_six_arm_resume
+parent_issue: 5348
+generating_commit: "{generating_commit}"
+
+# This packet is a RESUME specification authored in the CPU-only cheap implementation lane.
+# It does NOT resume the PPO arm, run any benchmark, submit SLURM/GPU, aggregate results, or
+# promote evidence. The heavy PPO resume is a SLURM GPU job owned by the ops queue; this packet
+# is the fail-closed, machine-checkable contract a GPU operator executes against (steps 1-4 of
+# the issue #5348 decision).
+evidence_status: resume-launch-packet-only
+no_benchmark_result_claim: true
+claim_boundary: >
+  Resume-readiness packet only. No full benchmark campaign run, no SLURM/GPU submission, no
+  evidence promotion, and no paper/dissertation claim is established by authoring this packet.
+  The six-arm S30 attempt-6 result does not exist until the PPO resume completes on the cluster
+  and the unchanged report-builder aggregates all six arms. Fallback/degraded execution never
+  counts as success evidence.
+
+# --- Step-1 gate: #5347 (per-arm policy cache + resume=True passthrough) must have merged first.
+gating:
+  blocking_issue: 5347
+  blocking_pr: 5360
+  gate_status: satisfied
+  gate_merged_at: "2026-07-12T07:06:10Z"
+  gate_evidence: >
+    PR #5360 merged and issue #5347 CLOSED on 2026-07-12. The resume=True passthrough is present
+    on origin/main: config default at robot_sf/benchmark/camera_ready/_config_types.py:152
+    (resume: bool = True), loaded at robot_sf/benchmark/camera_ready/_config.py:1022, and passed
+    into both the in-process and subprocess arm runners at
+    robot_sf/benchmark/camera_ready/campaign.py:396 and :765 (resume=cfg.resume).
+
+# --- Campaign identity (job 13376, attempt 6).
+campaign:
+  job_id: "13376"
+  attempt: 6
+  config: configs/benchmarks/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30.yaml
+  config_sha256: 82eee7a1dca241df9bec65e18072f2dd3c46c86489b3b55816d2504af88896b6
+  seed_set: paper_eval_s30
+  horizon: 600
+  arm_isolation: subprocess
+  episodes_per_arm: 1440
+  arm_count: 6
+
+# --- Step-1 preservation: keep the 5 clean arms and the 562 completed PPO rows. Do NOT rerun the
+# 5 clean arms (no contrary evidence). Do NOT restart PPO from zero.
+preservation:
+  # 5 clean arms x 1440 episodes = 7200 already-complete episodes; preserve as-is.
+  clean_arms:
+    - key: scenario_adaptive_hybrid_orca_v1
+      episodes_complete: 1440
+    - key: scenario_adaptive_hybrid_orca_v2_collision_guard
+      episodes_complete: 1440
+    - key: hybrid_rule_v3_fast_progress_static_escape
+      episodes_complete: 1440
+    - key: hybrid_rule_v3_fast_progress_static_escape_continuous
+      episodes_complete: 1440
+    - key: orca
+      episodes_complete: 1440
+  resume_arm:
+    key: ppo
+    episodes_preserved: 562
+    episodes_remaining: 878
+    episodes_total_target: 1440
+    resume_after_episode: 562
+    restart_from_zero: false
+    prior_failure: >
+      Attempt 6 wrote 562/1440 PPO episodes then hit deterministic CUDA OOM from the per-episode
+      policy reload leak fixed by #5347/#5360. Data harvested to the hub before this packet.
+  total_preserved_episodes: 7762
+
+# --- Step-2 resume: resume the PPO arm ONLY, resume=True, continuing after episode 562.
+resume_execution:
+  resume: true
+  arms_to_run:
+    - ppo
+  arms_to_skip:
+    - scenario_adaptive_hybrid_orca_v1
+    - scenario_adaptive_hybrid_orca_v2_collision_guard
+    - hybrid_rule_v3_fast_progress_static_escape
+    - hybrid_rule_v3_fast_progress_static_escape_continuous
+    - orca
+  entry_point: scripts/tools/run_camera_ready_benchmark.py
+  resume_command_shape: >
+    uv run python scripts/tools/run_camera_ready_benchmark.py
+    --config configs/benchmarks/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30.yaml
+    --campaign-id <job-13376-attempt-6-campaign-directory-id>
+    # resume:true in the config continues the PPO arm after its 562 completed episodes; the 5
+    # complete arms are detected complete and skipped. Never pass a fresh campaign-id (that would
+    # restart PPO from zero and re-run the 5 clean arms).
+  operator_supplied:
+    # Fail-closed: these are NOT known in the cheap lane and must come from the ops ledger /
+    # harvested hub before the operator submits. The packet stays ready-not-run until then.
+    - campaign_id
+  submit_slurm_from_this_issue: false
+  compute_submit_authorized: false
+
+# --- Step-3 aggregation: run all six arms through the UNCHANGED report-builder contract.
+aggregation:
+  report_suite: camera-ready report suite (issue #5273 aggregation path)
+  aggregator: robot_sf/benchmark/aggregate.py::compute_aggregates_with_ci
+  campaign_table_writer: robot_sf/benchmark/camera_ready/_artifacts.py::_write_table_artifacts
+  report_builder_contract_changed: false
+  expected_output: reports/campaign_table.csv
+  expected_rows: 6
+  expected_episodes_per_row: 1440
+
+# --- Step-4 publication: register the six-arm result as a durable evidence artifact.
+publication:
+  evidence_dir: docs/context/evidence/issue_5348_s30_attempt6_six_arm_<run-date>/
+  required_files:
+    - reports/campaign_table.csv
+    - campaign_manifest.json
+    - run_meta.json
+  provenance:
+    - campaign_id
+    - generating_commit
+    - sha256_manifest
+  raw_episode_jsonl_in_git: false
+  checkpoints_in_git: false
+
+# --- Fail-closed row policy (issue #691). These never count as benchmark-success evidence.
+fail_closed_policy:
+  valid_row_statuses: [native, adapter]
+  fail_closed_statuses: [fallback, degraded, unavailable, failed, partial, not_available,
+                         diagnostic_only]
+
+# --- Acceptance mapping for issue #5348 (each verified post-run, not in this lane).
+acceptance:
+  six_arm_table_1440_per_arm: reports/campaign_table.csv has 6 rows x 1440 episodes (ppo = 562 preserved + 878 resumed)
+  resume_after_562_not_zero: preservation.resume_arm.resume_after_episode == 562 and restart_from_zero == false
+  unchanged_report_builder: aggregation.report_builder_contract_changed == false
+  evidence_registered_with_hashes: publication.provenance includes sha256_manifest
+
+validation_command: >
+  uv run python scripts/validation/check_issue_5348_s30_resume_launch_packet.py --json
+
+execution_boundary:
+  full_campaign_in_this_issue: false
+  submit_slurm_from_this_issue: false
+  status_until_run: ready_for_resume_submission

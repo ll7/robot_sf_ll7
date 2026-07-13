@@ -80,6 +80,47 @@ def test_resume_identity_is_algorithm_aware(
     assert second["written"] == 1
 
 
+def test_resume_identity_applies_episode_seed_defaults_before_filtering(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A resumed row must use the same seed-defaulted identity as episode execution."""
+    runs: list[tuple[dict, int, dict]] = []
+
+    monkeypatch.setattr(map_runner, "validate_scenario_list", lambda _scenarios: [])
+    monkeypatch.setattr(map_runner, "load_schema", lambda _path: {})
+    monkeypatch.setattr(map_runner, "index_existing", lambda _path: {"seeded-1"})
+    monkeypatch.setattr(
+        map_runner,
+        "_compute_map_episode_id",
+        lambda payload, seed: (
+            f"seeded-{seed}"
+            if payload.get("simulation_config", {}).get("route_spawn_seed") == seed
+            else f"raw-{seed}"
+        ),
+    )
+    monkeypatch.setattr(
+        map_runner,
+        "_run_map_job_worker",
+        lambda job: runs.append(job) or {"episode_id": "unexpected"},
+    )
+    monkeypatch.setattr(map_runner, "_write_validated_to_handle", lambda *_args: None)
+
+    out_path = tmp_path / "episodes.jsonl"
+    out_path.write_text("", encoding="utf-8")
+
+    result = map_runner.run_map_batch(
+        [_minimal_map_scenario()],
+        out_path,
+        schema_path=SCHEMA_PATH,
+        algo="goal",
+        resume=True,
+    )
+
+    assert result["written"] == 0
+    assert runs == []
+
+
 def test_resume_identity_distinguishes_uncertainty_envelope_alpha() -> None:
     """Scenario-level uncertainty-envelope alpha changes the episode identity."""
     scenario_alpha_zero = _minimal_map_scenario()

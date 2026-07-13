@@ -6,19 +6,25 @@ issue: 5355
 title: "research: 2x2 factorial campaign - prediction on/off x constraint-handling on/off"
 schema: robot_sf.issue_state.v1
 
-# --- Closure audit (2026-07-12) ------------------------------------------------
+# --- Closure audit (2026-07-12), reconciled 2026-07-13 by #5483 ---------------
 # The issue's own CPU-implementable acceptance criteria are all met; the campaign
 # result (the issue's raison d'etre) does not exist yet, so the issue stays OPEN.
 # Verdict is machine-checkable via
 # robot_sf.benchmark.prediction_mpc_factorial_preregistration.assess_campaign_readiness().
+# Reconciliation (#5483): #5353 is closed in the tracker and its dependency status
+# is now marked resolved in the factorial config + evidence registry, leaving #5351
+# as the single remaining open dependency blocker (the campaign-execution gate).
 closure_audit:
   date: 2026-07-12
+  reconciled: 2026-07-13
   decision: keep_open
   reason: >
     Design, preregistration, arm implementation, intervention-fidelity, and
-    provenance criteria are complete and landed. Campaign execution remains
-    (GPU/ops queue) and two declared dependencies (#5351 analysis, #5353
-    capability matrix) are still open. Not closeable until the campaign runs.
+    provenance criteria are complete and landed. The #5353 capability-matrix
+    dependency is resolved (tracker closed; config + registry reconciled via
+    #5483). Campaign execution remains (GPU/ops queue) and the #5351 hierarchical
+    paired-analysis dependency is still open. Not closeable until analysis and
+    the campaign run complete.
   criteria:
     - criterion: "2x2 factorial design on one matched base planner (option 1, prediction-MPC)"
       status: met
@@ -48,22 +54,23 @@ closure_audit:
       status: blocked
       evidence: "tracked separately in #5351 (still open)"
     - criterion: "Capability-matrix fairness gating available"
-      status: blocked
-      evidence: "tracked separately in #5353 (still open)"
+      status: met
+      evidence: "resolved via #5483; #5353 closed in tracker; config + registry reconciled"
     - criterion: "Factorial campaign executed and results promoted"
       status: not_started
       evidence: "compute; ops queue; out of scope for CPU implementation lanes"
 
 remaining_gate:
   blockers_remaining:
-    - "#5351 hierarchical paired analysis (open)"
-    - "#5353 capability-matrix fairness contract (open)"
+    - "#5351 hierarchical paired analysis (open) — sole remaining dependency blocker"
     - "campaign execution on the ops/GPU queue (not authorized in CPU lanes)"
+  blockers_resolved:
+    - "#5353 capability-matrix fairness contract (resolved via #5483)"
   blockers_new: []
   blockers_intentional:
     - "campaign RUN deferred to compute queue by design (issue sequencing)"
   next_empirical_action: >
-    Once #5351 and #5353 land, flip their status in
+    Once #5351 lands, flip its status in
     configs/research/prediction_mpc_factorial_v1.yaml dependencies to resolved,
     run the CLI gate
     (uv run python scripts/validation/check_issue_5355_factorial_campaign_readiness.py)

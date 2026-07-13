@@ -1249,6 +1249,7 @@ def format_pareto_svg(report: Mapping[str, Any], *, width: int = 900, height: in
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"'
         f' viewBox="0 0 {width} {height}" role="img">',
+        "<!-- AI-GENERATED figure export (robot_sf format_pareto_svg); NEEDS-REVIEW -->",
         "<title>SNQI scalarization sensitivity Pareto diagnostic</title>",
         '<rect width="100%" height="100%" fill="#ffffff"/>',
     ]

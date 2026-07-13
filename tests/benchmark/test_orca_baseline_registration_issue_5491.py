@@ -12,6 +12,7 @@ executes (or fail-closes with an explicit error, never a silent
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -19,6 +20,8 @@ import numpy as np
 from robot_sf.baselines import get_baseline, list_baselines
 from robot_sf.baselines.interface import Observation
 from robot_sf.baselines.orca import OrcaPlanner
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_orca_is_registered_in_baseline_registry():
@@ -74,6 +77,55 @@ def test_orca_planner_metadata_reports_orca():
     assert "config_hash" in meta
 
 
+def test_orca_planner_configure_updates_adapter():
+    """Runtime configuration updates reach both planner and adapter state."""
+    planner = OrcaPlanner({"max_linear_speed": 1.0}, seed=3)
+    planner.configure({"max_linear_speed": 0.25})
+    assert planner._config.max_linear_speed == 0.25
+    assert planner._adapter.config.max_linear_speed == 0.25
+
+
+def test_orca_planner_adapts_canonical_mapping_and_empty_scalars():
+    """Canonical mappings and malformed optional scalars remain executable."""
+    planner = OrcaPlanner({}, seed=3)
+    adapted = planner._to_adapter_observation(
+        {
+            "sim": {"timestep": np.array([])},
+            "robot": {
+                "position": [0.0, 0.0],
+                "velocity": [0.0, 0.0],
+                "heading": None,
+                "radius": np.array([]),
+                "goal": [9.7, 3.0],
+            },
+            "agents": [
+                {
+                    "position": [1.0, 0.0],
+                    "velocity": [0.0, 0.0],
+                    "radius": None,
+                }
+            ],
+        }
+    )
+    assert adapted["sim"]["timestep"] == [0.1]
+    assert adapted["robot"]["heading"]
+    assert adapted["robot"]["radius"] == [0.3]
+    assert adapted["pedestrians"]["radius"] == [0.3]
+    action = planner.step(
+        {
+            "dt": 0.1,
+            "robot": {
+                "position": [0.0, 0.0],
+                "velocity": [0.0, 0.0],
+                "goal": [9.7, 3.0],
+                "radius": 0.3,
+            },
+            "agents": [],
+        }
+    )
+    assert set(action) == {"vx", "vy"}
+
+
 def test_orca_planner_reset_is_seeded_and_deterministic():
     """Resetting with a seed reproduces the initial action."""
     planner = OrcaPlanner({}, seed=5)
@@ -110,7 +162,7 @@ def test_run_episode_with_orca_algo_does_not_crash():
     from robot_sf.benchmark.runner import run_episode
 
     scenario_params: dict[str, Any] = {
-        "map": "maps/svg_maps/empty.svg",
+        "map_file": str(REPO_ROOT / "maps/svg_maps/atomic_empty_frame_test.svg"),
         "num_peds": 2,
         "robot_radius": 0.3,
         "ped_radius": 0.35,
@@ -128,3 +180,5 @@ def test_run_episode_with_orca_algo_does_not_crash():
     assert "metrics" in record
     planner_meta = record.get("algorithm_metadata", {})
     assert planner_meta.get("algorithm") == "orca"
+    assert planner_meta.get("status") == "ok"
+    assert planner_meta.get("policy_step_timeout", {}).get("fallback_actions") == 0

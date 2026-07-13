@@ -31,6 +31,30 @@ from robot_sf.planner.socnav import (
 _SOCNAV_CONFIG_FIELDS = tuple(SocNavPlannerConfig.__dataclass_fields__.keys())
 
 
+def _coerce_scalar(value: Any, default: float) -> float:
+    """Return the first finite scalar in ``value`` or a safe default."""
+    if value is None:
+        return default
+    try:
+        values = np.asarray(value, dtype=float).reshape(-1)
+    except (TypeError, ValueError):
+        return default
+    if values.size == 0 or not np.isfinite(values[0]):
+        return default
+    return float(values[0])
+
+
+def _coerce_vector2(value: Any, default: tuple[float, float] = (0.0, 0.0)) -> np.ndarray:
+    """Return a two-dimensional float vector, padding incomplete values."""
+    try:
+        values = np.asarray(value, dtype=float).reshape(-1)
+    except (TypeError, ValueError):
+        values = np.empty(0, dtype=float)
+    if values.size < 2:
+        values = np.pad(values, (0, 2 - values.size), constant_values=default[0])
+    return values[:2]
+
+
 def _build_socnav_config(config: dict[str, Any]) -> SocNavPlannerConfig:
     """Return a SocNavPlannerConfig filtered from a loose mapping.
 
@@ -65,11 +89,13 @@ class OrcaPlanner:
         """
         self._seed = seed
         self._config = self._parse_config(config)
-        if isinstance(config, dict):
-            allow_fallback = bool(config.get("allow_fallback", False))
-        else:
-            allow_fallback = False
-        self._adapter = ORCAPlannerAdapter(config=self._config, allow_fallback=allow_fallback)
+        self._allow_fallback = (
+            bool(config.get("allow_fallback", False)) if isinstance(config, dict) else False
+        )
+        self._adapter = ORCAPlannerAdapter(
+            config=self._config,
+            allow_fallback=self._allow_fallback,
+        )
 
     @staticmethod
     def _parse_config(config: dict[str, Any] | SocNavPlannerConfig) -> SocNavPlannerConfig:
@@ -92,6 +118,16 @@ class OrcaPlanner:
             self._seed = seed
         self._adapter.reset()
 
+    def configure(self, config: dict[str, Any] | SocNavPlannerConfig) -> None:
+        """Replace planner configuration and propagate it to the ORCA adapter."""
+        if isinstance(config, dict) and "allow_fallback" in config:
+            self._allow_fallback = bool(config["allow_fallback"])
+        self._config = self._parse_config(config)
+        self._adapter = ORCAPlannerAdapter(
+            config=self._config,
+            allow_fallback=self._allow_fallback,
+        )
+
     def _to_adapter_observation(self, obs: Observation | dict[str, Any]) -> dict[str, Any]:
         """Adapt a benchmark Observation into the SocNav structured observation.
 
@@ -102,27 +138,23 @@ class OrcaPlanner:
         if isinstance(obs, Observation):
             robot = dict(obs.robot)
             agents = list(obs.agents)
-            dt = float(getattr(obs, "dt", 0.1) or 0.1)
+            dt = _coerce_scalar(getattr(obs, "dt", 0.1), 0.1)
         else:
-            robot = dict(obs.get("robot", {}))
-            agents = list(obs.get("agents", []))
+            robot = dict(obs.get("robot") or {})
+            agents = list(obs.get("agents") or [])
             sim = obs.get("sim", {}) or {}
-            dt_value = sim.get("timestep", [0.1])
-            dt = float(np.asarray(dt_value, dtype=float).reshape(-1)[0]) if dt_value else 0.1
+            dt_value = sim.get("timestep", [0.1]) if isinstance(sim, dict) else [0.1]
+            dt = _coerce_scalar(dt_value, 0.1)
 
         # The SocNav-family ORCA adapter expects a richer robot state than the
         # canonical baseline Observation: heading, speed, and radius are required
         # by the rvo2 solver path. Default them from velocity/radius so a
         # minimal benchmark Observation still drives the planner.
-        robot_position = np.asarray(robot.get("position", [0.0, 0.0]), dtype=float).reshape(-1)[:2]
-        robot_velocity = np.asarray(robot.get("velocity", [0.0, 0.0]), dtype=float).reshape(-1)[:2]
-        robot_radius = float(np.asarray(robot.get("radius", 0.3), dtype=float).reshape(-1)[0])
-        heading_value = float(
-            np.asarray(
-                robot.get("heading", np.arctan2(robot_velocity[1], robot_velocity[0] + 1e-9)),
-                dtype=float,
-            ).reshape(-1)[0]
-        )
+        robot_position = _coerce_vector2(robot.get("position", [0.0, 0.0]))
+        robot_velocity = _coerce_vector2(robot.get("velocity", [0.0, 0.0]))
+        robot_radius = _coerce_scalar(robot.get("radius", 0.3), 0.3)
+        default_heading = float(np.arctan2(robot_velocity[1], robot_velocity[0] + 1e-9))
+        heading_value = _coerce_scalar(robot.get("heading"), default_heading)
         # The SocNav-family adapter indexes heading/radius as length-1 arrays, so
         # adapt them into that shape.
         heading = [heading_value]
@@ -135,26 +167,14 @@ class OrcaPlanner:
             "radius": [robot_radius],
         }
 
-        goal = robot.get("goal")
         goal_state = {
-            "current": list(np.asarray(goal, dtype=float).reshape(-1)[:2])
-            if goal is not None
-            else [0.0, 0.0]
+            "current": list(_coerce_vector2(robot.get("goal"))),
         }
-        positions = [
-            list(np.asarray(a.get("position", [0.0, 0.0]), dtype=float).reshape(-1)[:2])
-            for a in agents
-        ]
-        velocities = [
-            list(np.asarray(a.get("velocity", [0.0, 0.0]), dtype=float).reshape(-1)[:2])
-            for a in agents
-        ]
+        positions = [list(_coerce_vector2(a.get("position", [0.0, 0.0]))) for a in agents]
+        velocities = [list(_coerce_vector2(a.get("velocity", [0.0, 0.0]))) for a in agents]
         count = len(agents)
-        radius = (
-            float(np.asarray(agents[0].get("radius", 0.3), dtype=float).reshape(-1)[0])
-            if count > 0
-            else 0.3
-        )
+        first_agent = agents[0] if count > 0 and isinstance(agents[0], dict) else {}
+        radius = _coerce_scalar(first_agent.get("radius", 0.3), 0.3)
         ped_state = {
             "positions": positions,
             "velocities": velocities,
@@ -174,7 +194,11 @@ class OrcaPlanner:
         Returns:
             Action dict ``{"vx", "vy"}`` in the world frame.
         """
-        if isinstance(obs, dict):
+        if isinstance(obs, dict) and (
+            "pedestrians" in obs
+            or "pedestrians_positions" in obs
+            or ("goal" in obs and "agents" not in obs)
+        ):
             adapter_obs: dict[str, Any] = obs
         else:
             adapter_obs = self._to_adapter_observation(obs)

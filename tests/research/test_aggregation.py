@@ -398,11 +398,13 @@ def test_extract_seed_metrics_missing_metrics_fails(tmp_path: Path):
     bad.write_text(json.dumps({"seed": 3, "policy_type": "baseline"}), encoding="utf-8")
 
     records, failures = extract_seed_metrics([str(bad)])
-    assert records == []
-    assert len(failures) == 1
-    assert failures[0]["path"] == str(bad)
-    assert failures[0]["seed"] == 3
-    assert "metrics not found" in failures[0]["reason"]
+    assert not records, f"Expected no records to be extracted, but got: {records}"
+    assert len(failures) == 1, f"Expected exactly one failure, but got: {failures}"
+    failure = failures[0]
+    assert failure["path"] == str(bad), f"Unexpected failure path: {failure}"
+    assert failure["seed"] == 3, f"Unexpected failure seed: {failure}"
+    assert failure["policy_type"] == "baseline", f"Unexpected policy type: {failure}"
+    assert "metrics not found" in failure["reason"], f"Unexpected failure reason: {failure}"
 
 
 def test_extract_seed_metrics_no_numeric_metrics_fails(tmp_path: Path):
@@ -414,8 +416,13 @@ def test_extract_seed_metrics_no_numeric_metrics_fails(tmp_path: Path):
     )
 
     records, failures = extract_seed_metrics([str(bad)])
-    assert records == []
-    assert failures[0]["reason"] == "no numeric metrics found"
+    assert not records, f"Expected no records to be extracted, but got: {records}"
+    assert len(failures) == 1, f"Expected exactly one failure, but got: {failures}"
+    failure = failures[0]
+    assert failure["path"] == str(bad), f"Unexpected failure path: {failure}"
+    assert failure["seed"] == 5, f"Unexpected failure seed: {failure}"
+    assert failure["policy_type"] == "baseline", f"Unexpected policy type: {failure}"
+    assert failure["reason"] == "no numeric metrics found", f"Unexpected failure: {failure}"
 
 
 def test_extract_seed_metrics_unparseable_jsonl_fails(tmp_path: Path):
@@ -424,16 +431,25 @@ def test_extract_seed_metrics_unparseable_jsonl_fails(tmp_path: Path):
     bad.write_text("{not valid json}", encoding="utf-8")
 
     records, failures = extract_seed_metrics([str(bad)])
-    assert records == []
-    assert len(failures) == 1
-    assert failures[0]["seed"] is None
-    assert "Expecting" in failures[0]["reason"]
+    assert not records, f"Expected no records to be extracted, but got: {records}"
+    assert len(failures) == 1, f"Expected exactly one failure, but got: {failures}"
+    failure = failures[0]
+    assert failure["path"] == str(bad), f"Unexpected failure path: {failure}"
+    assert failure["seed"] is None, f"Unexpected failure seed: {failure}"
+    assert failure["policy_type"] is None, f"Unexpected policy type: {failure}"
+    assert "Expecting" in failure["reason"], f"Unexpected failure reason: {failure}"
 
 
 def test_extract_seed_metrics_missing_file_fails(tmp_path: Path):
     """A missing manifest path is captured as a failure, not a crash."""
     missing = tmp_path / "does_not_exist.json"
     records, failures = extract_seed_metrics([str(missing)])
-    assert records == []
-    assert len(failures) == 1
-    assert failures[0]["reason"]
+    assert not records, f"Expected no records to be extracted, but got: {records}"
+    assert len(failures) == 1, f"Expected exactly one failure, but got: {failures}"
+    failure = failures[0]
+    assert failure["path"] == str(missing), f"Unexpected failure path: {failure}"
+    assert failure["seed"] is None, f"Unexpected failure seed: {failure}"
+    assert failure["policy_type"] is None, f"Unexpected policy type: {failure}"
+    assert "no such file or directory" in failure["reason"].lower(), (
+        f"Unexpected missing-file reason: {failure}"
+    )

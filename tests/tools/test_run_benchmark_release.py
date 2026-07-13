@@ -71,7 +71,7 @@ def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_
         canonical_campaign_config_path=Path("configs/benchmarks/paper_experiment_matrix_v1.yaml")
     )
     sentinel_cfg = object()
-    called = {"orca_preflight": False}
+    called = {"orca_preflight": False, "campaign_id": None}
 
     def _fake_orca_preflight(cfg) -> None:
         """Record that release preflight applies the ORCA runtime guard."""
@@ -95,10 +95,11 @@ def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_
         "build_resolved_release_manifest",
         lambda manifest, campaign_config=None: {"release_id": "rid"},
     )
-    monkeypatch.setattr(
-        run_benchmark_release,
-        "prepare_campaign_preflight",
-        lambda cfg, **kwargs: {
+
+    def _fake_prepare_campaign_preflight(cfg, **kwargs):
+        assert cfg is sentinel_cfg
+        called["campaign_id"] = kwargs["campaign_id"]
+        return {
             "campaign_id": "cid",
             "campaign_root": tmp_path / "out" / "cid",
             "validate_config_path": tmp_path / "out" / "cid" / "preflight" / "validate_config.json",
@@ -113,15 +114,28 @@ def test_release_preflight_uses_camera_ready_preflight(monkeypatch, capsys, tmp_
             / "reports"
             / "matrix_summary.json",
             "matrix_summary_csv_path": tmp_path / "out" / "cid" / "reports" / "matrix_summary.csv",
-        },
+        }
+
+    monkeypatch.setattr(
+        run_benchmark_release,
+        "prepare_campaign_preflight",
+        _fake_prepare_campaign_preflight,
     )
 
     exit_code = run_benchmark_release.main(
-        ["--manifest", "manifest.yaml", "--mode", "preflight"],
+        [
+            "--manifest",
+            "manifest.yaml",
+            "--mode",
+            "preflight",
+            "--campaign-id",
+            "fixed-preflight",
+        ],
     )
 
     assert exit_code == 0
     assert called["orca_preflight"] is True
+    assert called["campaign_id"] == "fixed-preflight"
     payload = json.loads(capsys.readouterr().out)
     assert payload["manifest_validation"]["status"] == "valid"
     assert payload["campaign_id"] == "cid"

@@ -1,0 +1,2597 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "environment": {
+    "cpu_only": true,
+    "git_commit": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+    "lockfile_sha256": "63b6039cbe36d1844a4d8c57fa5e5eebb530b2c6f3946fd878595c2a742d6d41",
+    "machine_id": "redacted",
+    "numba_version": "0.65.1",
+    "numpy_version": "2.3.5",
+    "python_version": "3.13.14",
+    "workers": 1
+  },
+  "manifest_sha256": "a7ddefd00c903e417f03809723096279be722c4871264e4495c18a0548b37ff2",
+  "results": [
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 272,
+          "outcome": 0,
+          "trajectory_sha256": "d1340e4bc6f0b72361cabca5ec65a7097e3018453537b36809400c429cfe4b95"
+        },
+        {
+          "near_misses": 272,
+          "outcome": 0,
+          "trajectory_sha256": "d1340e4bc6f0b72361cabca5ec65a7097e3018453537b36809400c429cfe4b95"
+        },
+        {
+          "near_misses": 272,
+          "outcome": 0,
+          "trajectory_sha256": "d1340e4bc6f0b72361cabca5ec65a7097e3018453537b36809400c429cfe4b95"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 111,
+      "source_config_hash": "b25a1074a394ea79"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 112,
+      "source_config_hash": "61d5656f863ea0a6"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "843aa9eb97904bd41539defe2e9741d309403a780201fd9218bfa37ac6884521"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "843aa9eb97904bd41539defe2e9741d309403a780201fd9218bfa37ac6884521"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "843aa9eb97904bd41539defe2e9741d309403a780201fd9218bfa37ac6884521"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 113,
+      "source_config_hash": "5ac98fcd650669ce"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 245,
+          "outcome": 0,
+          "trajectory_sha256": "35a677f7f763b6b010812d1e193b6cae9e65ba8503468a47e392f2ac994cd9cd"
+        },
+        {
+          "near_misses": 245,
+          "outcome": 0,
+          "trajectory_sha256": "35a677f7f763b6b010812d1e193b6cae9e65ba8503468a47e392f2ac994cd9cd"
+        },
+        {
+          "near_misses": 245,
+          "outcome": 0,
+          "trajectory_sha256": "35a677f7f763b6b010812d1e193b6cae9e65ba8503468a47e392f2ac994cd9cd"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 114,
+      "source_config_hash": "ca405d168280c993"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 42,
+          "outcome": 0,
+          "trajectory_sha256": "7957dde3c2a3a88bdcc2cbe757da0c3b2af8ab70216ac096019cc72f5938cba5"
+        },
+        {
+          "near_misses": 42,
+          "outcome": 0,
+          "trajectory_sha256": "7957dde3c2a3a88bdcc2cbe757da0c3b2af8ab70216ac096019cc72f5938cba5"
+        },
+        {
+          "near_misses": 42,
+          "outcome": 0,
+          "trajectory_sha256": "7957dde3c2a3a88bdcc2cbe757da0c3b2af8ab70216ac096019cc72f5938cba5"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 115,
+      "source_config_hash": "d90872cbf79aa218"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "4bf845f0c4e617b6ce41e2dfc0f690ab1fc0d064ea3f3ee17035576c65efcc86"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "4bf845f0c4e617b6ce41e2dfc0f690ab1fc0d064ea3f3ee17035576c65efcc86"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "4bf845f0c4e617b6ce41e2dfc0f690ab1fc0d064ea3f3ee17035576c65efcc86"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 116,
+      "source_config_hash": "4b00cd1e75c193d6"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 248,
+          "outcome": 0,
+          "trajectory_sha256": "30af9bdeca3bf7a6a5b06d42b9890794c5f591e1f2a2976fd68ff93b6cbc1607"
+        },
+        {
+          "near_misses": 248,
+          "outcome": 0,
+          "trajectory_sha256": "30af9bdeca3bf7a6a5b06d42b9890794c5f591e1f2a2976fd68ff93b6cbc1607"
+        },
+        {
+          "near_misses": 248,
+          "outcome": 0,
+          "trajectory_sha256": "30af9bdeca3bf7a6a5b06d42b9890794c5f591e1f2a2976fd68ff93b6cbc1607"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 117,
+      "source_config_hash": "40613c799d5c3c6c"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "24a0b7c7547afc4ad2564a415c39243b8d03eb722691ed842f8c1860275b1d7d"
+        },
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "24a0b7c7547afc4ad2564a415c39243b8d03eb722691ed842f8c1860275b1d7d"
+        },
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "24a0b7c7547afc4ad2564a415c39243b8d03eb722691ed842f8c1860275b1d7d"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 118,
+      "source_config_hash": "f7c902f22e9fca15"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 279,
+          "outcome": 0,
+          "trajectory_sha256": "c42d79f2da40e665a2b0a1dd2a5005aeea3bbb4bb0e90a11eb92fa133e400a93"
+        },
+        {
+          "near_misses": 279,
+          "outcome": 0,
+          "trajectory_sha256": "c42d79f2da40e665a2b0a1dd2a5005aeea3bbb4bb0e90a11eb92fa133e400a93"
+        },
+        {
+          "near_misses": 279,
+          "outcome": 0,
+          "trajectory_sha256": "c42d79f2da40e665a2b0a1dd2a5005aeea3bbb4bb0e90a11eb92fa133e400a93"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 119,
+      "source_config_hash": "8e2332d70aa63320"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "f4fccb6f7394d3d37cbfe99f329ad7c8274742abfac44bacbb152aa6601355f4"
+        },
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "f4fccb6f7394d3d37cbfe99f329ad7c8274742abfac44bacbb152aa6601355f4"
+        },
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "f4fccb6f7394d3d37cbfe99f329ad7c8274742abfac44bacbb152aa6601355f4"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 120,
+      "source_config_hash": "dab90ac862897b14"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 202,
+          "outcome": 0,
+          "trajectory_sha256": "1ece88d3d5303148276fd7f0e6db0a4ded2ccd1f23f720e97af1c4dbdbbbb7f0"
+        },
+        {
+          "near_misses": 202,
+          "outcome": 0,
+          "trajectory_sha256": "1ece88d3d5303148276fd7f0e6db0a4ded2ccd1f23f720e97af1c4dbdbbbb7f0"
+        },
+        {
+          "near_misses": 202,
+          "outcome": 0,
+          "trajectory_sha256": "1ece88d3d5303148276fd7f0e6db0a4ded2ccd1f23f720e97af1c4dbdbbbb7f0"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 121,
+      "source_config_hash": "7c2a96aa7ab3a6ee"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 116,
+          "outcome": 0,
+          "trajectory_sha256": "c6d971eff892642b8d56ed460025f619940447aa94e749c9194ea59c8688536a"
+        },
+        {
+          "near_misses": 116,
+          "outcome": 0,
+          "trajectory_sha256": "c6d971eff892642b8d56ed460025f619940447aa94e749c9194ea59c8688536a"
+        },
+        {
+          "near_misses": 116,
+          "outcome": 0,
+          "trajectory_sha256": "c6d971eff892642b8d56ed460025f619940447aa94e749c9194ea59c8688536a"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 122,
+      "source_config_hash": "7298d55448970727"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "08b02dc9fc00f2eb2ca495ff999774f279291b091fcc5abd0cb2b61a7d2ff896"
+        },
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "08b02dc9fc00f2eb2ca495ff999774f279291b091fcc5abd0cb2b61a7d2ff896"
+        },
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "08b02dc9fc00f2eb2ca495ff999774f279291b091fcc5abd0cb2b61a7d2ff896"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 123,
+      "source_config_hash": "269f547f953df683"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "1d0076bc8ef0c86a2c3ce0c5bbbcfb82afdf6c9be4e3a9d10bc53400fccbc238"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "1d0076bc8ef0c86a2c3ce0c5bbbcfb82afdf6c9be4e3a9d10bc53400fccbc238"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "1d0076bc8ef0c86a2c3ce0c5bbbcfb82afdf6c9be4e3a9d10bc53400fccbc238"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 124,
+      "source_config_hash": "b627af0ebbbe3cbd"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 114,
+          "outcome": 0,
+          "trajectory_sha256": "ff96c7c6c60ba762d9694d17f007b198766043aa63ae6ac1d047031906f93756"
+        },
+        {
+          "near_misses": 114,
+          "outcome": 0,
+          "trajectory_sha256": "ff96c7c6c60ba762d9694d17f007b198766043aa63ae6ac1d047031906f93756"
+        },
+        {
+          "near_misses": 114,
+          "outcome": 0,
+          "trajectory_sha256": "ff96c7c6c60ba762d9694d17f007b198766043aa63ae6ac1d047031906f93756"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 125,
+      "source_config_hash": "47fab67b63af5511"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 262,
+          "outcome": 0,
+          "trajectory_sha256": "a66a35da939e1a407ad831e444a41a994bef6ae4a5e8ea5dc6ce84f5a9fb81ce"
+        },
+        {
+          "near_misses": 262,
+          "outcome": 0,
+          "trajectory_sha256": "a66a35da939e1a407ad831e444a41a994bef6ae4a5e8ea5dc6ce84f5a9fb81ce"
+        },
+        {
+          "near_misses": 262,
+          "outcome": 0,
+          "trajectory_sha256": "a66a35da939e1a407ad831e444a41a994bef6ae4a5e8ea5dc6ce84f5a9fb81ce"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 126,
+      "source_config_hash": "5a253b7356bdb275"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 279,
+          "outcome": 0,
+          "trajectory_sha256": "426fcc30bac6edc695a4180ef94c6872f23e9d0e96e68534357a2b3604390e5d"
+        },
+        {
+          "near_misses": 279,
+          "outcome": 0,
+          "trajectory_sha256": "426fcc30bac6edc695a4180ef94c6872f23e9d0e96e68534357a2b3604390e5d"
+        },
+        {
+          "near_misses": 279,
+          "outcome": 0,
+          "trajectory_sha256": "426fcc30bac6edc695a4180ef94c6872f23e9d0e96e68534357a2b3604390e5d"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 127,
+      "source_config_hash": "a9500a847d6463de"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "1593657c18cb570e78899a205b8e947ec13537e3820024bfd3cd9d170359a106"
+        },
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "1593657c18cb570e78899a205b8e947ec13537e3820024bfd3cd9d170359a106"
+        },
+        {
+          "near_misses": 281,
+          "outcome": 0,
+          "trajectory_sha256": "1593657c18cb570e78899a205b8e947ec13537e3820024bfd3cd9d170359a106"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 128,
+      "source_config_hash": "407296f5888883c2"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 102,
+          "outcome": 0,
+          "trajectory_sha256": "6c97e001c38cebe63922b4d27449adfaf149e36bc365f4a430a200d48a31085c"
+        },
+        {
+          "near_misses": 102,
+          "outcome": 0,
+          "trajectory_sha256": "6c97e001c38cebe63922b4d27449adfaf149e36bc365f4a430a200d48a31085c"
+        },
+        {
+          "near_misses": 102,
+          "outcome": 0,
+          "trajectory_sha256": "6c97e001c38cebe63922b4d27449adfaf149e36bc365f4a430a200d48a31085c"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 129,
+      "source_config_hash": "e3bd0894fb9cffe8"
+    },
+    {
+      "horizon": 280,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 215,
+          "outcome": 0,
+          "trajectory_sha256": "544d442d9772fe8ed7a9b468a33601f1a5a7d1a5f959f96de72ab794e8756408"
+        },
+        {
+          "near_misses": 215,
+          "outcome": 0,
+          "trajectory_sha256": "544d442d9772fe8ed7a9b468a33601f1a5a7d1a5f959f96de72ab794e8756408"
+        },
+        {
+          "near_misses": 215,
+          "outcome": 0,
+          "trajectory_sha256": "544d442d9772fe8ed7a9b468a33601f1a5a7d1a5f959f96de72ab794e8756408"
+        }
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 130,
+      "source_config_hash": "2ebae5f001de9d43"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 490,
+          "outcome": 0,
+          "trajectory_sha256": "cc57ba3ca6d2a77f76f55d1d89660b506f21f152b6d20629baa069fe0379c50a"
+        },
+        {
+          "near_misses": 490,
+          "outcome": 0,
+          "trajectory_sha256": "cc57ba3ca6d2a77f76f55d1d89660b506f21f152b6d20629baa069fe0379c50a"
+        },
+        {
+          "near_misses": 490,
+          "outcome": 0,
+          "trajectory_sha256": "cc57ba3ca6d2a77f76f55d1d89660b506f21f152b6d20629baa069fe0379c50a"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 111,
+      "source_config_hash": "04a9705164404c6e"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 112,
+      "source_config_hash": "6103cec07bef8fcb"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "7150c5a5e7577a503636d3a4d37fac42d5eea6a7fac080daf168b5dc11962789"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "7150c5a5e7577a503636d3a4d37fac42d5eea6a7fac080daf168b5dc11962789"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "7150c5a5e7577a503636d3a4d37fac42d5eea6a7fac080daf168b5dc11962789"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 113,
+      "source_config_hash": "bc0ecc2d986c9556"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 463,
+          "outcome": 0,
+          "trajectory_sha256": "f51840b05da610be235d444aa634730c8cc6551646afc526f3b0f4bc518f466a"
+        },
+        {
+          "near_misses": 463,
+          "outcome": 0,
+          "trajectory_sha256": "f51840b05da610be235d444aa634730c8cc6551646afc526f3b0f4bc518f466a"
+        },
+        {
+          "near_misses": 463,
+          "outcome": 0,
+          "trajectory_sha256": "f51840b05da610be235d444aa634730c8cc6551646afc526f3b0f4bc518f466a"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 114,
+      "source_config_hash": "22017c654745dd19"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 42,
+          "outcome": 0,
+          "trajectory_sha256": "bcaaf961b49c351ec161843e48c31d3023c4901d1ea95987519e7d42ac5486c0"
+        },
+        {
+          "near_misses": 42,
+          "outcome": 0,
+          "trajectory_sha256": "bcaaf961b49c351ec161843e48c31d3023c4901d1ea95987519e7d42ac5486c0"
+        },
+        {
+          "near_misses": 42,
+          "outcome": 0,
+          "trajectory_sha256": "bcaaf961b49c351ec161843e48c31d3023c4901d1ea95987519e7d42ac5486c0"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 115,
+      "source_config_hash": "1a75c797a6e4ad38"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "5c55918ad0338d0a3c4dd33763d52d08833476c02e29b317758775987808b798"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "5c55918ad0338d0a3c4dd33763d52d08833476c02e29b317758775987808b798"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "5c55918ad0338d0a3c4dd33763d52d08833476c02e29b317758775987808b798"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 116,
+      "source_config_hash": "8c4e2cf4ab32545b"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 248,
+          "outcome": 0,
+          "trajectory_sha256": "2e70a9e652b30c59f324b3e0849d0cd06a5222b1afd31ba1d08c175ffaa0cc99"
+        },
+        {
+          "near_misses": 248,
+          "outcome": 0,
+          "trajectory_sha256": "2e70a9e652b30c59f324b3e0849d0cd06a5222b1afd31ba1d08c175ffaa0cc99"
+        },
+        {
+          "near_misses": 248,
+          "outcome": 0,
+          "trajectory_sha256": "2e70a9e652b30c59f324b3e0849d0cd06a5222b1afd31ba1d08c175ffaa0cc99"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 117,
+      "source_config_hash": "4a4c7ed473ca28a4"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "cddb53cf69526439afd9512aa24bfa024cf7996f8fe88bde63d28bc402553497"
+        },
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "cddb53cf69526439afd9512aa24bfa024cf7996f8fe88bde63d28bc402553497"
+        },
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "cddb53cf69526439afd9512aa24bfa024cf7996f8fe88bde63d28bc402553497"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 118,
+      "source_config_hash": "3c0a3e614ed1396c"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 497,
+          "outcome": 0,
+          "trajectory_sha256": "da38767fe47baa1c15894d923552477a0cd450dac4f004d6be802c98ec008d75"
+        },
+        {
+          "near_misses": 497,
+          "outcome": 0,
+          "trajectory_sha256": "da38767fe47baa1c15894d923552477a0cd450dac4f004d6be802c98ec008d75"
+        },
+        {
+          "near_misses": 497,
+          "outcome": 0,
+          "trajectory_sha256": "da38767fe47baa1c15894d923552477a0cd450dac4f004d6be802c98ec008d75"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 119,
+      "source_config_hash": "619b44d327b8368f"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "5bb75b52502a1c64de711cce5869ef7df903950622b870bc6ab98f4d7f0a9707"
+        },
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "5bb75b52502a1c64de711cce5869ef7df903950622b870bc6ab98f4d7f0a9707"
+        },
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "5bb75b52502a1c64de711cce5869ef7df903950622b870bc6ab98f4d7f0a9707"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 120,
+      "source_config_hash": "b7eaf0b39bd33500"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 420,
+          "outcome": 0,
+          "trajectory_sha256": "8e1587406904f15c188e46f14e899f856e46fa117846112e42cda3314e160b9b"
+        },
+        {
+          "near_misses": 420,
+          "outcome": 0,
+          "trajectory_sha256": "8e1587406904f15c188e46f14e899f856e46fa117846112e42cda3314e160b9b"
+        },
+        {
+          "near_misses": 420,
+          "outcome": 0,
+          "trajectory_sha256": "8e1587406904f15c188e46f14e899f856e46fa117846112e42cda3314e160b9b"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 121,
+      "source_config_hash": "9d1b15f1d68aadf8"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 116,
+          "outcome": 0,
+          "trajectory_sha256": "d53d0208c1eb66788696584737202a1b66a250108acb1a9f3f534680e553f8e4"
+        },
+        {
+          "near_misses": 116,
+          "outcome": 0,
+          "trajectory_sha256": "d53d0208c1eb66788696584737202a1b66a250108acb1a9f3f534680e553f8e4"
+        },
+        {
+          "near_misses": 116,
+          "outcome": 0,
+          "trajectory_sha256": "d53d0208c1eb66788696584737202a1b66a250108acb1a9f3f534680e553f8e4"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 122,
+      "source_config_hash": "f9cf19413a15d931"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "55dda5bdb6426298f72ff78d65266fb1fbfe1643f6bc9043d190ffbde6dd1606"
+        },
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "55dda5bdb6426298f72ff78d65266fb1fbfe1643f6bc9043d190ffbde6dd1606"
+        },
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "55dda5bdb6426298f72ff78d65266fb1fbfe1643f6bc9043d190ffbde6dd1606"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 123,
+      "source_config_hash": "d83d3b5b8606e8b7"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "3c664ccd5ec303fdad2245493a04ec5ddf3c1d9c0b3fc2f84eadfaf9887978a9"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "3c664ccd5ec303fdad2245493a04ec5ddf3c1d9c0b3fc2f84eadfaf9887978a9"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "3c664ccd5ec303fdad2245493a04ec5ddf3c1d9c0b3fc2f84eadfaf9887978a9"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 124,
+      "source_config_hash": "dd0b43535f3570e5"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 114,
+          "outcome": 0,
+          "trajectory_sha256": "0e9edf4014a46a9fae537d06a01fa3c79acdf2a50bd6a531c43ccec15cd2f04d"
+        },
+        {
+          "near_misses": 114,
+          "outcome": 0,
+          "trajectory_sha256": "0e9edf4014a46a9fae537d06a01fa3c79acdf2a50bd6a531c43ccec15cd2f04d"
+        },
+        {
+          "near_misses": 114,
+          "outcome": 0,
+          "trajectory_sha256": "0e9edf4014a46a9fae537d06a01fa3c79acdf2a50bd6a531c43ccec15cd2f04d"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 125,
+      "source_config_hash": "441dde6cfc8af0be"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 477,
+          "outcome": 0,
+          "trajectory_sha256": "70bd37e3453b6e03e53fc05ecafe989085d90da2a5ce79d86578c021cc6ade3f"
+        },
+        {
+          "near_misses": 477,
+          "outcome": 0,
+          "trajectory_sha256": "70bd37e3453b6e03e53fc05ecafe989085d90da2a5ce79d86578c021cc6ade3f"
+        },
+        {
+          "near_misses": 477,
+          "outcome": 0,
+          "trajectory_sha256": "70bd37e3453b6e03e53fc05ecafe989085d90da2a5ce79d86578c021cc6ade3f"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 126,
+      "source_config_hash": "6729b7bec12ffaa7"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 497,
+          "outcome": 0,
+          "trajectory_sha256": "1297f6b9e02e8754cfcca39278ad06fcb97ce1f9845a7dadbc1f679aaf077d46"
+        },
+        {
+          "near_misses": 497,
+          "outcome": 0,
+          "trajectory_sha256": "1297f6b9e02e8754cfcca39278ad06fcb97ce1f9845a7dadbc1f679aaf077d46"
+        },
+        {
+          "near_misses": 497,
+          "outcome": 0,
+          "trajectory_sha256": "1297f6b9e02e8754cfcca39278ad06fcb97ce1f9845a7dadbc1f679aaf077d46"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 127,
+      "source_config_hash": "f925a312f91c4693"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "97e104bc55ace2efce8575740c1c957bbef5b87f6f713230c052db8627abcf99"
+        },
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "97e104bc55ace2efce8575740c1c957bbef5b87f6f713230c052db8627abcf99"
+        },
+        {
+          "near_misses": 499,
+          "outcome": 0,
+          "trajectory_sha256": "97e104bc55ace2efce8575740c1c957bbef5b87f6f713230c052db8627abcf99"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 128,
+      "source_config_hash": "52af4f41226528a2"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 102,
+          "outcome": 0,
+          "trajectory_sha256": "b4e35faee0cdb8bd480419d5327c38ed3dfadc73a3f96f35eafa3db0ff557896"
+        },
+        {
+          "near_misses": 102,
+          "outcome": 0,
+          "trajectory_sha256": "b4e35faee0cdb8bd480419d5327c38ed3dfadc73a3f96f35eafa3db0ff557896"
+        },
+        {
+          "near_misses": 102,
+          "outcome": 0,
+          "trajectory_sha256": "b4e35faee0cdb8bd480419d5327c38ed3dfadc73a3f96f35eafa3db0ff557896"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 129,
+      "source_config_hash": "29fa8a465661f724"
+    },
+    {
+      "horizon": 498,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 433,
+          "outcome": 0,
+          "trajectory_sha256": "54f4fa0e9b72f73df0d0bab2af5abbd823d68b718fb3c394dcb47d0d18ad9f10"
+        },
+        {
+          "near_misses": 433,
+          "outcome": 0,
+          "trajectory_sha256": "54f4fa0e9b72f73df0d0bab2af5abbd823d68b718fb3c394dcb47d0d18ad9f10"
+        },
+        {
+          "near_misses": 433,
+          "outcome": 0,
+          "trajectory_sha256": "54f4fa0e9b72f73df0d0bab2af5abbd823d68b718fb3c394dcb47d0d18ad9f10"
+        }
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 130,
+      "source_config_hash": "178f8121410ac6e0"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 111,
+      "source_config_hash": "9a151c3539af092a"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 112,
+      "source_config_hash": "79ca616b974d1f9d"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 113,
+      "source_config_hash": "6367102baefcc897"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 114,
+      "source_config_hash": "e62cc89a4ed4321a"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 115,
+      "source_config_hash": "712e6c1abc485b1e"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 116,
+      "source_config_hash": "0bce9d972f2aa598"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 117,
+      "source_config_hash": "8e3e8b483a8a569c"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 118,
+      "source_config_hash": "3f58d9e2256fd98b"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 119,
+      "source_config_hash": "4e3f20aa7d869628"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 120,
+      "source_config_hash": "d051e8b23ed93a97"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 121,
+      "source_config_hash": "b5889974c32b9747"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 122,
+      "source_config_hash": "3d1ea69c6deb43cb"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 123,
+      "source_config_hash": "ea7f71d23755d3c3"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 124,
+      "source_config_hash": "f7f8c1e29aeb3670"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 125,
+      "source_config_hash": "f463e658e1c35f1e"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 126,
+      "source_config_hash": "ba1b7ae653d8933c"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 127,
+      "source_config_hash": "7b0c4f1cea2c7125"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 128,
+      "source_config_hash": "9de81ddd61de57c3"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 129,
+      "source_config_hash": "a80ad336d1cd4bf7"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 498,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 130,
+      "source_config_hash": "71e51dbf3f10b72f"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 38,
+          "outcome": 0,
+          "trajectory_sha256": "2452d4f1c7a9fb794ed10ac01beef546e8abdbc601e42f52091611f60c77f9a7"
+        },
+        {
+          "near_misses": 38,
+          "outcome": 0,
+          "trajectory_sha256": "2452d4f1c7a9fb794ed10ac01beef546e8abdbc601e42f52091611f60c77f9a7"
+        },
+        {
+          "near_misses": 38,
+          "outcome": 0,
+          "trajectory_sha256": "2452d4f1c7a9fb794ed10ac01beef546e8abdbc601e42f52091611f60c77f9a7"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 111,
+      "source_config_hash": "600f6f5647600470"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 39,
+          "outcome": 0,
+          "trajectory_sha256": "eca7992d60204896587db0e2543ae6dfa6fade14b1bacdbc61a59ea24a755849"
+        },
+        {
+          "near_misses": 39,
+          "outcome": 0,
+          "trajectory_sha256": "eca7992d60204896587db0e2543ae6dfa6fade14b1bacdbc61a59ea24a755849"
+        },
+        {
+          "near_misses": 39,
+          "outcome": 0,
+          "trajectory_sha256": "eca7992d60204896587db0e2543ae6dfa6fade14b1bacdbc61a59ea24a755849"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 112,
+      "source_config_hash": "7633cbd1b58e0be6"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 44,
+          "outcome": 0,
+          "trajectory_sha256": "3f31eefeb68ed90db1f85e710fd8cf0e1063b3878a7ee2c147a71484a0b49288"
+        },
+        {
+          "near_misses": 44,
+          "outcome": 0,
+          "trajectory_sha256": "3f31eefeb68ed90db1f85e710fd8cf0e1063b3878a7ee2c147a71484a0b49288"
+        },
+        {
+          "near_misses": 44,
+          "outcome": 0,
+          "trajectory_sha256": "3f31eefeb68ed90db1f85e710fd8cf0e1063b3878a7ee2c147a71484a0b49288"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 113,
+      "source_config_hash": "c021fb87738a7357"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 40,
+          "outcome": 0,
+          "trajectory_sha256": "996c94f0bd64c15f28a7e7ea54c7bebc5c03a5d83195bbc7ee053e5d777ad069"
+        },
+        {
+          "near_misses": 40,
+          "outcome": 0,
+          "trajectory_sha256": "996c94f0bd64c15f28a7e7ea54c7bebc5c03a5d83195bbc7ee053e5d777ad069"
+        },
+        {
+          "near_misses": 40,
+          "outcome": 0,
+          "trajectory_sha256": "996c94f0bd64c15f28a7e7ea54c7bebc5c03a5d83195bbc7ee053e5d777ad069"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 114,
+      "source_config_hash": "7e1e0bb0f634327f"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 54,
+          "outcome": 0,
+          "trajectory_sha256": "67fe3aaf6a663fe6065956e209d233ee3b4c9ec89ea92037a1d776770ecf83df"
+        },
+        {
+          "near_misses": 54,
+          "outcome": 0,
+          "trajectory_sha256": "67fe3aaf6a663fe6065956e209d233ee3b4c9ec89ea92037a1d776770ecf83df"
+        },
+        {
+          "near_misses": 54,
+          "outcome": 0,
+          "trajectory_sha256": "67fe3aaf6a663fe6065956e209d233ee3b4c9ec89ea92037a1d776770ecf83df"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 115,
+      "source_config_hash": "a24768f62bba300e"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 41,
+          "outcome": 0,
+          "trajectory_sha256": "63d4f3467a72e363075e35b88b17b362b29256984668d50dee11eb9ab64d556f"
+        },
+        {
+          "near_misses": 41,
+          "outcome": 0,
+          "trajectory_sha256": "63d4f3467a72e363075e35b88b17b362b29256984668d50dee11eb9ab64d556f"
+        },
+        {
+          "near_misses": 41,
+          "outcome": 0,
+          "trajectory_sha256": "63d4f3467a72e363075e35b88b17b362b29256984668d50dee11eb9ab64d556f"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 116,
+      "source_config_hash": "01e9094dcabe8985"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 50,
+          "outcome": 0,
+          "trajectory_sha256": "5aef81c1f40f2ea6bca989e1875290aa97c0c3f81fbd4767b67c3de99912d4bf"
+        },
+        {
+          "near_misses": 50,
+          "outcome": 0,
+          "trajectory_sha256": "5aef81c1f40f2ea6bca989e1875290aa97c0c3f81fbd4767b67c3de99912d4bf"
+        },
+        {
+          "near_misses": 50,
+          "outcome": 0,
+          "trajectory_sha256": "5aef81c1f40f2ea6bca989e1875290aa97c0c3f81fbd4767b67c3de99912d4bf"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 117,
+      "source_config_hash": "ce254a72ecba1d54"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 36,
+          "outcome": 0,
+          "trajectory_sha256": "e36b9b709d2c7b0787d874a390d0489f60ca30f3a6d32450a7d917aae69a5304"
+        },
+        {
+          "near_misses": 36,
+          "outcome": 0,
+          "trajectory_sha256": "e36b9b709d2c7b0787d874a390d0489f60ca30f3a6d32450a7d917aae69a5304"
+        },
+        {
+          "near_misses": 36,
+          "outcome": 0,
+          "trajectory_sha256": "e36b9b709d2c7b0787d874a390d0489f60ca30f3a6d32450a7d917aae69a5304"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 118,
+      "source_config_hash": "9311ece946960f68"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 28,
+          "outcome": 0,
+          "trajectory_sha256": "0b5a5f3492e132537b325813d35768d682939a27af318d385558634669447e7d"
+        },
+        {
+          "near_misses": 28,
+          "outcome": 0,
+          "trajectory_sha256": "0b5a5f3492e132537b325813d35768d682939a27af318d385558634669447e7d"
+        },
+        {
+          "near_misses": 28,
+          "outcome": 0,
+          "trajectory_sha256": "0b5a5f3492e132537b325813d35768d682939a27af318d385558634669447e7d"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 119,
+      "source_config_hash": "ca4f0eaa0359f19e"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 55,
+          "outcome": 0,
+          "trajectory_sha256": "1cbcf8e436e022f93bad6c1802ae1f8a5d1c7e54720eaf3c629ff131e0b6b63a"
+        },
+        {
+          "near_misses": 55,
+          "outcome": 0,
+          "trajectory_sha256": "1cbcf8e436e022f93bad6c1802ae1f8a5d1c7e54720eaf3c629ff131e0b6b63a"
+        },
+        {
+          "near_misses": 55,
+          "outcome": 0,
+          "trajectory_sha256": "1cbcf8e436e022f93bad6c1802ae1f8a5d1c7e54720eaf3c629ff131e0b6b63a"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 120,
+      "source_config_hash": "f5eba6c76affa66b"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 31,
+          "outcome": 0,
+          "trajectory_sha256": "14cb324af324e6af1a2536fbe3686f33ce2c753be9f2b56673f0e498ef24cd8d"
+        },
+        {
+          "near_misses": 31,
+          "outcome": 0,
+          "trajectory_sha256": "14cb324af324e6af1a2536fbe3686f33ce2c753be9f2b56673f0e498ef24cd8d"
+        },
+        {
+          "near_misses": 31,
+          "outcome": 0,
+          "trajectory_sha256": "14cb324af324e6af1a2536fbe3686f33ce2c753be9f2b56673f0e498ef24cd8d"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 121,
+      "source_config_hash": "dbbbb834c5f56eaf"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 46,
+          "outcome": 0,
+          "trajectory_sha256": "f3b42454c3019044d9f2c2f6139a106fdfeb5cfb45487f573a04d956d0b6a1ed"
+        },
+        {
+          "near_misses": 46,
+          "outcome": 0,
+          "trajectory_sha256": "f3b42454c3019044d9f2c2f6139a106fdfeb5cfb45487f573a04d956d0b6a1ed"
+        },
+        {
+          "near_misses": 46,
+          "outcome": 0,
+          "trajectory_sha256": "f3b42454c3019044d9f2c2f6139a106fdfeb5cfb45487f573a04d956d0b6a1ed"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 122,
+      "source_config_hash": "0d826e33cbef8ea7"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 21,
+          "outcome": 0,
+          "trajectory_sha256": "dd62acdb26ef9a13b85636e0e6fb7144a2683d6de616342619044a1920a0fae6"
+        },
+        {
+          "near_misses": 21,
+          "outcome": 0,
+          "trajectory_sha256": "dd62acdb26ef9a13b85636e0e6fb7144a2683d6de616342619044a1920a0fae6"
+        },
+        {
+          "near_misses": 21,
+          "outcome": 0,
+          "trajectory_sha256": "dd62acdb26ef9a13b85636e0e6fb7144a2683d6de616342619044a1920a0fae6"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 123,
+      "source_config_hash": "16e6ef21edd5218d"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 67,
+          "outcome": 0,
+          "trajectory_sha256": "d1ab73d11fe12604b4a2cf24a1e6120662ea1253800de0aa0721180aae5d2ef1"
+        },
+        {
+          "near_misses": 67,
+          "outcome": 0,
+          "trajectory_sha256": "d1ab73d11fe12604b4a2cf24a1e6120662ea1253800de0aa0721180aae5d2ef1"
+        },
+        {
+          "near_misses": 67,
+          "outcome": 0,
+          "trajectory_sha256": "d1ab73d11fe12604b4a2cf24a1e6120662ea1253800de0aa0721180aae5d2ef1"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 124,
+      "source_config_hash": "82ea6b4f26dd1c5c"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 48,
+          "outcome": 0,
+          "trajectory_sha256": "5761d81b42439de64ed6b17949b9cd6aa48d4420c2dbd7a2250c90f6ea3eacc0"
+        },
+        {
+          "near_misses": 48,
+          "outcome": 0,
+          "trajectory_sha256": "5761d81b42439de64ed6b17949b9cd6aa48d4420c2dbd7a2250c90f6ea3eacc0"
+        },
+        {
+          "near_misses": 48,
+          "outcome": 0,
+          "trajectory_sha256": "5761d81b42439de64ed6b17949b9cd6aa48d4420c2dbd7a2250c90f6ea3eacc0"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 125,
+      "source_config_hash": "220ee96f500bfc90"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 40,
+          "outcome": 0,
+          "trajectory_sha256": "a79dfee399163dbb997be35efbfe6e27488d60cedea69862356908c770516fe9"
+        },
+        {
+          "near_misses": 40,
+          "outcome": 0,
+          "trajectory_sha256": "a79dfee399163dbb997be35efbfe6e27488d60cedea69862356908c770516fe9"
+        },
+        {
+          "near_misses": 40,
+          "outcome": 0,
+          "trajectory_sha256": "a79dfee399163dbb997be35efbfe6e27488d60cedea69862356908c770516fe9"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 126,
+      "source_config_hash": "01de5847a0fafc1b"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 29,
+          "outcome": 0,
+          "trajectory_sha256": "4052aabdd9ba6518eec10ad2a01e07a2c123e892c31703f308391d78d08d30f8"
+        },
+        {
+          "near_misses": 29,
+          "outcome": 0,
+          "trajectory_sha256": "4052aabdd9ba6518eec10ad2a01e07a2c123e892c31703f308391d78d08d30f8"
+        },
+        {
+          "near_misses": 29,
+          "outcome": 0,
+          "trajectory_sha256": "4052aabdd9ba6518eec10ad2a01e07a2c123e892c31703f308391d78d08d30f8"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 127,
+      "source_config_hash": "c5170b0375610299"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 50,
+          "outcome": 0,
+          "trajectory_sha256": "ec3f4a97fc2c732ee293a1a36464345d38df7396020a7c01d62ea86c83dfd497"
+        },
+        {
+          "near_misses": 50,
+          "outcome": 0,
+          "trajectory_sha256": "ec3f4a97fc2c732ee293a1a36464345d38df7396020a7c01d62ea86c83dfd497"
+        },
+        {
+          "near_misses": 50,
+          "outcome": 0,
+          "trajectory_sha256": "ec3f4a97fc2c732ee293a1a36464345d38df7396020a7c01d62ea86c83dfd497"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 128,
+      "source_config_hash": "d2c11b9d9d008cb1"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 22,
+          "outcome": 0,
+          "trajectory_sha256": "b0be1863d1dadbb0fb51b12b7d9fc4463f647ae04675f84e8bb395f6435d199f"
+        },
+        {
+          "near_misses": 22,
+          "outcome": 0,
+          "trajectory_sha256": "b0be1863d1dadbb0fb51b12b7d9fc4463f647ae04675f84e8bb395f6435d199f"
+        },
+        {
+          "near_misses": 22,
+          "outcome": 0,
+          "trajectory_sha256": "b0be1863d1dadbb0fb51b12b7d9fc4463f647ae04675f84e8bb395f6435d199f"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 129,
+      "source_config_hash": "df44b048b7aebc00"
+    },
+    {
+      "horizon": 413,
+      "planner": "goal",
+      "repeats": [
+        {
+          "near_misses": 30,
+          "outcome": 0,
+          "trajectory_sha256": "d495a293efe83c323f9c7359243a27380df3fe6ce721a96b019e16ff5b257eb1"
+        },
+        {
+          "near_misses": 30,
+          "outcome": 0,
+          "trajectory_sha256": "d495a293efe83c323f9c7359243a27380df3fe6ce721a96b019e16ff5b257eb1"
+        },
+        {
+          "near_misses": 30,
+          "outcome": 0,
+          "trajectory_sha256": "d495a293efe83c323f9c7359243a27380df3fe6ce721a96b019e16ff5b257eb1"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 130,
+      "source_config_hash": "3bac85032b553203"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 405,
+          "outcome": 0,
+          "trajectory_sha256": "52a1ebac2e710f2e80350f8dd63c3694f2b8bb4662ebe244e353669c68abcf90"
+        },
+        {
+          "near_misses": 405,
+          "outcome": 0,
+          "trajectory_sha256": "52a1ebac2e710f2e80350f8dd63c3694f2b8bb4662ebe244e353669c68abcf90"
+        },
+        {
+          "near_misses": 405,
+          "outcome": 0,
+          "trajectory_sha256": "52a1ebac2e710f2e80350f8dd63c3694f2b8bb4662ebe244e353669c68abcf90"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 111,
+      "source_config_hash": "351ea7d49b50c058"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 112,
+      "source_config_hash": "1ddb44aa2bde193e"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "ced125cae2b9ece723d1641a9cbe37202fd302cc4b2b43b0d1e33841f136815a"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "ced125cae2b9ece723d1641a9cbe37202fd302cc4b2b43b0d1e33841f136815a"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "ced125cae2b9ece723d1641a9cbe37202fd302cc4b2b43b0d1e33841f136815a"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 113,
+      "source_config_hash": "ef3e8e57fd83b2d4"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 378,
+          "outcome": 0,
+          "trajectory_sha256": "40d5f65b2c61dee5a85ac069df3c37539bda07b6dba92b73f05c94e67ef3bc41"
+        },
+        {
+          "near_misses": 378,
+          "outcome": 0,
+          "trajectory_sha256": "40d5f65b2c61dee5a85ac069df3c37539bda07b6dba92b73f05c94e67ef3bc41"
+        },
+        {
+          "near_misses": 378,
+          "outcome": 0,
+          "trajectory_sha256": "40d5f65b2c61dee5a85ac069df3c37539bda07b6dba92b73f05c94e67ef3bc41"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 114,
+      "source_config_hash": "e689e9e6aba63dae"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 42,
+          "outcome": 0,
+          "trajectory_sha256": "8f5a15c260ace4b115012ee265919f69b2133df44bc01825b18de652e2189a3a"
+        },
+        {
+          "near_misses": 42,
+          "outcome": 0,
+          "trajectory_sha256": "8f5a15c260ace4b115012ee265919f69b2133df44bc01825b18de652e2189a3a"
+        },
+        {
+          "near_misses": 42,
+          "outcome": 0,
+          "trajectory_sha256": "8f5a15c260ace4b115012ee265919f69b2133df44bc01825b18de652e2189a3a"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 115,
+      "source_config_hash": "7708b1f4a42562e9"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "e87e83762a6ffb09807b17a24a5f453231f99ef84fdaff82d1f8434a915887b0"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "e87e83762a6ffb09807b17a24a5f453231f99ef84fdaff82d1f8434a915887b0"
+        },
+        {
+          "near_misses": 60,
+          "outcome": 0,
+          "trajectory_sha256": "e87e83762a6ffb09807b17a24a5f453231f99ef84fdaff82d1f8434a915887b0"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 116,
+      "source_config_hash": "b6612ebf808efb46"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 248,
+          "outcome": 0,
+          "trajectory_sha256": "76310b0015cf8ae950ea96a469fa87e6a46e0aaa818177f54f2e72e8669d6339"
+        },
+        {
+          "near_misses": 248,
+          "outcome": 0,
+          "trajectory_sha256": "76310b0015cf8ae950ea96a469fa87e6a46e0aaa818177f54f2e72e8669d6339"
+        },
+        {
+          "near_misses": 248,
+          "outcome": 0,
+          "trajectory_sha256": "76310b0015cf8ae950ea96a469fa87e6a46e0aaa818177f54f2e72e8669d6339"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 117,
+      "source_config_hash": "7484c87aa4fd8a68"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "fee2adf9007b75a95d1cdbba1de231ee244543d101ab71d2a4e39d0f5fa47595"
+        },
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "fee2adf9007b75a95d1cdbba1de231ee244543d101ab71d2a4e39d0f5fa47595"
+        },
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "fee2adf9007b75a95d1cdbba1de231ee244543d101ab71d2a4e39d0f5fa47595"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 118,
+      "source_config_hash": "fe7b7b85cf8cd18e"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 412,
+          "outcome": 0,
+          "trajectory_sha256": "eab77945c7686c785107dd5e6a33e38f2998e0c70cc9fc6bad65cec58669df99"
+        },
+        {
+          "near_misses": 412,
+          "outcome": 0,
+          "trajectory_sha256": "eab77945c7686c785107dd5e6a33e38f2998e0c70cc9fc6bad65cec58669df99"
+        },
+        {
+          "near_misses": 412,
+          "outcome": 0,
+          "trajectory_sha256": "eab77945c7686c785107dd5e6a33e38f2998e0c70cc9fc6bad65cec58669df99"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 119,
+      "source_config_hash": "03cd4b1753005bde"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "78269e07c8b21e8dfceeeaec523d3d55ad9ec9af90ce54affec1c74ec3033457"
+        },
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "78269e07c8b21e8dfceeeaec523d3d55ad9ec9af90ce54affec1c74ec3033457"
+        },
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "78269e07c8b21e8dfceeeaec523d3d55ad9ec9af90ce54affec1c74ec3033457"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 120,
+      "source_config_hash": "c661ba63f019116a"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 335,
+          "outcome": 0,
+          "trajectory_sha256": "14536855bc44a7102b6753bb38748f57b9dc1b7ad21fead7b383b1175e2ed063"
+        },
+        {
+          "near_misses": 335,
+          "outcome": 0,
+          "trajectory_sha256": "14536855bc44a7102b6753bb38748f57b9dc1b7ad21fead7b383b1175e2ed063"
+        },
+        {
+          "near_misses": 335,
+          "outcome": 0,
+          "trajectory_sha256": "14536855bc44a7102b6753bb38748f57b9dc1b7ad21fead7b383b1175e2ed063"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 121,
+      "source_config_hash": "0a1ff8d72fb78ede"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 116,
+          "outcome": 0,
+          "trajectory_sha256": "5ba3c05b7d5338084baa51d2f9a928f52e4b64cea69254d87bfd65d1281136dc"
+        },
+        {
+          "near_misses": 116,
+          "outcome": 0,
+          "trajectory_sha256": "5ba3c05b7d5338084baa51d2f9a928f52e4b64cea69254d87bfd65d1281136dc"
+        },
+        {
+          "near_misses": 116,
+          "outcome": 0,
+          "trajectory_sha256": "5ba3c05b7d5338084baa51d2f9a928f52e4b64cea69254d87bfd65d1281136dc"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 122,
+      "source_config_hash": "4b232898e6cb8236"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "bacb6bcc555152e41432900772a9c000cb653fb10555bad818fb62b823257caf"
+        },
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "bacb6bcc555152e41432900772a9c000cb653fb10555bad818fb62b823257caf"
+        },
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "bacb6bcc555152e41432900772a9c000cb653fb10555bad818fb62b823257caf"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 123,
+      "source_config_hash": "bebcf8fcf559fdc3"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "bf5df19db64bbd68746cc1e50750a692f96ae096173f529508abaa6fa627cd4c"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "bf5df19db64bbd68746cc1e50750a692f96ae096173f529508abaa6fa627cd4c"
+        },
+        {
+          "near_misses": 156,
+          "outcome": 0,
+          "trajectory_sha256": "bf5df19db64bbd68746cc1e50750a692f96ae096173f529508abaa6fa627cd4c"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 124,
+      "source_config_hash": "299aa4ea218b9a00"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 114,
+          "outcome": 0,
+          "trajectory_sha256": "b6e8b4f60bc2ff456840c4218b22b1bd4c984609ebfae4edf5547f70e0fc46ca"
+        },
+        {
+          "near_misses": 114,
+          "outcome": 0,
+          "trajectory_sha256": "b6e8b4f60bc2ff456840c4218b22b1bd4c984609ebfae4edf5547f70e0fc46ca"
+        },
+        {
+          "near_misses": 114,
+          "outcome": 0,
+          "trajectory_sha256": "b6e8b4f60bc2ff456840c4218b22b1bd4c984609ebfae4edf5547f70e0fc46ca"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 125,
+      "source_config_hash": "0382e4259409f5a2"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 392,
+          "outcome": 0,
+          "trajectory_sha256": "a8b99ff535e1106b91430ba0089a809b12ef5b7f7295000b49d9cd2be33278ba"
+        },
+        {
+          "near_misses": 392,
+          "outcome": 0,
+          "trajectory_sha256": "a8b99ff535e1106b91430ba0089a809b12ef5b7f7295000b49d9cd2be33278ba"
+        },
+        {
+          "near_misses": 392,
+          "outcome": 0,
+          "trajectory_sha256": "a8b99ff535e1106b91430ba0089a809b12ef5b7f7295000b49d9cd2be33278ba"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 126,
+      "source_config_hash": "b60854520472812b"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 412,
+          "outcome": 0,
+          "trajectory_sha256": "84868b55c5bd63235c85c50720637d6479b9b828777be2a18d0b95a996de36c5"
+        },
+        {
+          "near_misses": 412,
+          "outcome": 0,
+          "trajectory_sha256": "84868b55c5bd63235c85c50720637d6479b9b828777be2a18d0b95a996de36c5"
+        },
+        {
+          "near_misses": 412,
+          "outcome": 0,
+          "trajectory_sha256": "84868b55c5bd63235c85c50720637d6479b9b828777be2a18d0b95a996de36c5"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 127,
+      "source_config_hash": "9249c701c3a16fe9"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "3a3d4900bbae5136870f1dd251fe011c0a10833816d7fdf6e2281a0ec0abf8ec"
+        },
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "3a3d4900bbae5136870f1dd251fe011c0a10833816d7fdf6e2281a0ec0abf8ec"
+        },
+        {
+          "near_misses": 414,
+          "outcome": 0,
+          "trajectory_sha256": "3a3d4900bbae5136870f1dd251fe011c0a10833816d7fdf6e2281a0ec0abf8ec"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 128,
+      "source_config_hash": "e6295a17fe26389c"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 102,
+          "outcome": 0,
+          "trajectory_sha256": "14c138d360aba11fae3fded2a27d39a53484eaa49200f1d0ed3257b66410fa51"
+        },
+        {
+          "near_misses": 102,
+          "outcome": 0,
+          "trajectory_sha256": "14c138d360aba11fae3fded2a27d39a53484eaa49200f1d0ed3257b66410fa51"
+        },
+        {
+          "near_misses": 102,
+          "outcome": 0,
+          "trajectory_sha256": "14c138d360aba11fae3fded2a27d39a53484eaa49200f1d0ed3257b66410fa51"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 129,
+      "source_config_hash": "92ec6ef38f7b2016"
+    },
+    {
+      "horizon": 413,
+      "planner": "orca",
+      "repeats": [
+        {
+          "near_misses": 348,
+          "outcome": 0,
+          "trajectory_sha256": "a5c1f85ca7fa1b6125c56413a1f8b56406dc265d7ae2b9a8a8ec234b5b20dab4"
+        },
+        {
+          "near_misses": 348,
+          "outcome": 0,
+          "trajectory_sha256": "a5c1f85ca7fa1b6125c56413a1f8b56406dc265d7ae2b9a8a8ec234b5b20dab4"
+        },
+        {
+          "near_misses": 348,
+          "outcome": 0,
+          "trajectory_sha256": "a5c1f85ca7fa1b6125c56413a1f8b56406dc265d7ae2b9a8a8ec234b5b20dab4"
+        }
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 130,
+      "source_config_hash": "f1e84573a913292a"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 111,
+      "source_config_hash": "3b5ce9a3db891c0f"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 112,
+      "source_config_hash": "b2875a7062465279"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 113,
+      "source_config_hash": "76724a74a27e78aa"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 114,
+      "source_config_hash": "5c9bc351188bd30c"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 115,
+      "source_config_hash": "846e7fe20995e574"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 116,
+      "source_config_hash": "80dc559bbe455665"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 117,
+      "source_config_hash": "64f28f3bfb8fff49"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 118,
+      "source_config_hash": "c9e9963a841031ff"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 119,
+      "source_config_hash": "255944a309d927e0"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 120,
+      "source_config_hash": "f133fe56528c2448"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 121,
+      "source_config_hash": "d338075663f6e1ab"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 122,
+      "source_config_hash": "465abeccec0b6e56"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 123,
+      "source_config_hash": "14bd6e3b13046002"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 124,
+      "source_config_hash": "5d536c1b797fad42"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 125,
+      "source_config_hash": "27e349bcce131518"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 126,
+      "source_config_hash": "ae6f4a5540f036d0"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 127,
+      "source_config_hash": "928cad8ceee64e5b"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 128,
+      "source_config_hash": "e31293f08021ebce"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 129,
+      "source_config_hash": "307eb1212d39367d"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 413,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 130,
+      "source_config_hash": "864816e95bdba9da"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 111,
+      "source_config_hash": "6db5616b50a2089a"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 112,
+      "source_config_hash": "82b8c82e7477e393"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 113,
+      "source_config_hash": "bb45c0e897bd490f"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 114,
+      "source_config_hash": "c759106c6b4762cb"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 115,
+      "source_config_hash": "640661c79caeb7ac"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 116,
+      "source_config_hash": "3d54b9ba9fc39dd2"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 117,
+      "source_config_hash": "e7bcb6eec5d0af71"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 118,
+      "source_config_hash": "96b4910e6453ad2d"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 119,
+      "source_config_hash": "0c3e41746cfdf6c3"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 120,
+      "source_config_hash": "b4ef23303990a4f4"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 121,
+      "source_config_hash": "800562ac056bfd2e"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 122,
+      "source_config_hash": "4b46be18736207e5"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 123,
+      "source_config_hash": "d18511f5a58911bf"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 124,
+      "source_config_hash": "426d80c25d857fd6"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 125,
+      "source_config_hash": "a8ddd84b3086e286"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 126,
+      "source_config_hash": "f1d695a0643a40c8"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 127,
+      "source_config_hash": "53412bc6f8c3152a"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 128,
+      "source_config_hash": "8a8ca241fb6a931d"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 129,
+      "source_config_hash": "3e59f7abd27a1611"
+    },
+    {
+      "degraded": true,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "horizon": 180,
+      "planner": "ppo",
+      "repeats": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 130,
+      "source_config_hash": "32dc08106ef39feb"
+    }
+  ],
+  "schema_version": "scenario_exact_repeat_host_result.v1"
+}

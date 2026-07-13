@@ -1,0 +1,2766 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "cells": [
+    {
+      "exact_repeat_determinism": true,
+      "first_divergence": null,
+      "mixed": false,
+      "n_runnable_targets": 20,
+      "n_targets": 20,
+      "n_unrunnable_targets": 0,
+      "planner": "orca",
+      "scenario_id": "classic_bottleneck_high",
+      "unrunnable": false
+    },
+    {
+      "exact_repeat_determinism": true,
+      "first_divergence": null,
+      "mixed": false,
+      "n_runnable_targets": 20,
+      "n_targets": 20,
+      "n_unrunnable_targets": 0,
+      "planner": "orca",
+      "scenario_id": "classic_cross_trap_high",
+      "unrunnable": false
+    },
+    {
+      "disposition": "unrunnable_on_current_main",
+      "exact_repeat_determinism": null,
+      "first_divergence": null,
+      "n_runnable_targets": 0,
+      "n_targets": 20,
+      "n_unrunnable_targets": 20,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "unrunnable": true
+    },
+    {
+      "exact_repeat_determinism": true,
+      "first_divergence": null,
+      "mixed": false,
+      "n_runnable_targets": 20,
+      "n_targets": 20,
+      "n_unrunnable_targets": 0,
+      "planner": "goal",
+      "scenario_id": "classic_doorway_low",
+      "unrunnable": false
+    },
+    {
+      "exact_repeat_determinism": true,
+      "first_divergence": null,
+      "mixed": false,
+      "n_runnable_targets": 20,
+      "n_targets": 20,
+      "n_unrunnable_targets": 0,
+      "planner": "orca",
+      "scenario_id": "classic_doorway_low",
+      "unrunnable": false
+    },
+    {
+      "disposition": "unrunnable_on_current_main",
+      "exact_repeat_determinism": null,
+      "first_divergence": null,
+      "n_runnable_targets": 0,
+      "n_targets": 20,
+      "n_unrunnable_targets": 20,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "unrunnable": true
+    },
+    {
+      "disposition": "unrunnable_on_current_main",
+      "exact_repeat_determinism": null,
+      "first_divergence": null,
+      "n_runnable_targets": 0,
+      "n_targets": 20,
+      "n_unrunnable_targets": 20,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "unrunnable": true
+    }
+  ],
+  "environment": {
+    "cpu_only": true,
+    "git_commit": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+    "lockfile_sha256": "63b6039cbe36d1844a4d8c57fa5e5eebb530b2c6f3946fd878595c2a742d6d41",
+    "machine_id": "redacted",
+    "numba_version": "0.65.1",
+    "numpy_version": "2.3.5",
+    "python_version": "3.13.14",
+    "workers": 1
+  },
+  "manifest_sha256": "a7ddefd00c903e417f03809723096279be722c4871264e4495c18a0548b37ff2",
+  "schema_version": "scenario_exact_repeat_verified_host_result.v1",
+  "summary": {
+    "all_cells_bitwise_identical": true,
+    "n_cells": 7,
+    "n_mixed_cells": 0,
+    "n_runnable_cells": 4,
+    "n_runnable_targets": 80,
+    "n_targets": 140,
+    "n_unrunnable_cells": 3,
+    "n_unrunnable_targets": 60
+  },
+  "targets": [
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "d1340e4bc6f0b72361cabca5ec65a7097e3018453537b36809400c429cfe4b95",
+          272
+        ],
+        [
+          0,
+          "d1340e4bc6f0b72361cabca5ec65a7097e3018453537b36809400c429cfe4b95",
+          272
+        ],
+        [
+          0,
+          "d1340e4bc6f0b72361cabca5ec65a7097e3018453537b36809400c429cfe4b95",
+          272
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 111,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e",
+          156
+        ],
+        [
+          0,
+          "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e",
+          156
+        ],
+        [
+          0,
+          "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e",
+          156
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 112,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "843aa9eb97904bd41539defe2e9741d309403a780201fd9218bfa37ac6884521",
+          60
+        ],
+        [
+          0,
+          "843aa9eb97904bd41539defe2e9741d309403a780201fd9218bfa37ac6884521",
+          60
+        ],
+        [
+          0,
+          "843aa9eb97904bd41539defe2e9741d309403a780201fd9218bfa37ac6884521",
+          60
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 113,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "35a677f7f763b6b010812d1e193b6cae9e65ba8503468a47e392f2ac994cd9cd",
+          245
+        ],
+        [
+          0,
+          "35a677f7f763b6b010812d1e193b6cae9e65ba8503468a47e392f2ac994cd9cd",
+          245
+        ],
+        [
+          0,
+          "35a677f7f763b6b010812d1e193b6cae9e65ba8503468a47e392f2ac994cd9cd",
+          245
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 114,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "7957dde3c2a3a88bdcc2cbe757da0c3b2af8ab70216ac096019cc72f5938cba5",
+          42
+        ],
+        [
+          0,
+          "7957dde3c2a3a88bdcc2cbe757da0c3b2af8ab70216ac096019cc72f5938cba5",
+          42
+        ],
+        [
+          0,
+          "7957dde3c2a3a88bdcc2cbe757da0c3b2af8ab70216ac096019cc72f5938cba5",
+          42
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 115,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "4bf845f0c4e617b6ce41e2dfc0f690ab1fc0d064ea3f3ee17035576c65efcc86",
+          60
+        ],
+        [
+          0,
+          "4bf845f0c4e617b6ce41e2dfc0f690ab1fc0d064ea3f3ee17035576c65efcc86",
+          60
+        ],
+        [
+          0,
+          "4bf845f0c4e617b6ce41e2dfc0f690ab1fc0d064ea3f3ee17035576c65efcc86",
+          60
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 116,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "30af9bdeca3bf7a6a5b06d42b9890794c5f591e1f2a2976fd68ff93b6cbc1607",
+          248
+        ],
+        [
+          0,
+          "30af9bdeca3bf7a6a5b06d42b9890794c5f591e1f2a2976fd68ff93b6cbc1607",
+          248
+        ],
+        [
+          0,
+          "30af9bdeca3bf7a6a5b06d42b9890794c5f591e1f2a2976fd68ff93b6cbc1607",
+          248
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 117,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "24a0b7c7547afc4ad2564a415c39243b8d03eb722691ed842f8c1860275b1d7d",
+          281
+        ],
+        [
+          0,
+          "24a0b7c7547afc4ad2564a415c39243b8d03eb722691ed842f8c1860275b1d7d",
+          281
+        ],
+        [
+          0,
+          "24a0b7c7547afc4ad2564a415c39243b8d03eb722691ed842f8c1860275b1d7d",
+          281
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 118,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "c42d79f2da40e665a2b0a1dd2a5005aeea3bbb4bb0e90a11eb92fa133e400a93",
+          279
+        ],
+        [
+          0,
+          "c42d79f2da40e665a2b0a1dd2a5005aeea3bbb4bb0e90a11eb92fa133e400a93",
+          279
+        ],
+        [
+          0,
+          "c42d79f2da40e665a2b0a1dd2a5005aeea3bbb4bb0e90a11eb92fa133e400a93",
+          279
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 119,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "f4fccb6f7394d3d37cbfe99f329ad7c8274742abfac44bacbb152aa6601355f4",
+          281
+        ],
+        [
+          0,
+          "f4fccb6f7394d3d37cbfe99f329ad7c8274742abfac44bacbb152aa6601355f4",
+          281
+        ],
+        [
+          0,
+          "f4fccb6f7394d3d37cbfe99f329ad7c8274742abfac44bacbb152aa6601355f4",
+          281
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 120,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "1ece88d3d5303148276fd7f0e6db0a4ded2ccd1f23f720e97af1c4dbdbbbb7f0",
+          202
+        ],
+        [
+          0,
+          "1ece88d3d5303148276fd7f0e6db0a4ded2ccd1f23f720e97af1c4dbdbbbb7f0",
+          202
+        ],
+        [
+          0,
+          "1ece88d3d5303148276fd7f0e6db0a4ded2ccd1f23f720e97af1c4dbdbbbb7f0",
+          202
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 121,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "c6d971eff892642b8d56ed460025f619940447aa94e749c9194ea59c8688536a",
+          116
+        ],
+        [
+          0,
+          "c6d971eff892642b8d56ed460025f619940447aa94e749c9194ea59c8688536a",
+          116
+        ],
+        [
+          0,
+          "c6d971eff892642b8d56ed460025f619940447aa94e749c9194ea59c8688536a",
+          116
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 122,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "08b02dc9fc00f2eb2ca495ff999774f279291b091fcc5abd0cb2b61a7d2ff896",
+          281
+        ],
+        [
+          0,
+          "08b02dc9fc00f2eb2ca495ff999774f279291b091fcc5abd0cb2b61a7d2ff896",
+          281
+        ],
+        [
+          0,
+          "08b02dc9fc00f2eb2ca495ff999774f279291b091fcc5abd0cb2b61a7d2ff896",
+          281
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 123,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "1d0076bc8ef0c86a2c3ce0c5bbbcfb82afdf6c9be4e3a9d10bc53400fccbc238",
+          156
+        ],
+        [
+          0,
+          "1d0076bc8ef0c86a2c3ce0c5bbbcfb82afdf6c9be4e3a9d10bc53400fccbc238",
+          156
+        ],
+        [
+          0,
+          "1d0076bc8ef0c86a2c3ce0c5bbbcfb82afdf6c9be4e3a9d10bc53400fccbc238",
+          156
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 124,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "ff96c7c6c60ba762d9694d17f007b198766043aa63ae6ac1d047031906f93756",
+          114
+        ],
+        [
+          0,
+          "ff96c7c6c60ba762d9694d17f007b198766043aa63ae6ac1d047031906f93756",
+          114
+        ],
+        [
+          0,
+          "ff96c7c6c60ba762d9694d17f007b198766043aa63ae6ac1d047031906f93756",
+          114
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 125,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "a66a35da939e1a407ad831e444a41a994bef6ae4a5e8ea5dc6ce84f5a9fb81ce",
+          262
+        ],
+        [
+          0,
+          "a66a35da939e1a407ad831e444a41a994bef6ae4a5e8ea5dc6ce84f5a9fb81ce",
+          262
+        ],
+        [
+          0,
+          "a66a35da939e1a407ad831e444a41a994bef6ae4a5e8ea5dc6ce84f5a9fb81ce",
+          262
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 126,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "426fcc30bac6edc695a4180ef94c6872f23e9d0e96e68534357a2b3604390e5d",
+          279
+        ],
+        [
+          0,
+          "426fcc30bac6edc695a4180ef94c6872f23e9d0e96e68534357a2b3604390e5d",
+          279
+        ],
+        [
+          0,
+          "426fcc30bac6edc695a4180ef94c6872f23e9d0e96e68534357a2b3604390e5d",
+          279
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 127,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "1593657c18cb570e78899a205b8e947ec13537e3820024bfd3cd9d170359a106",
+          281
+        ],
+        [
+          0,
+          "1593657c18cb570e78899a205b8e947ec13537e3820024bfd3cd9d170359a106",
+          281
+        ],
+        [
+          0,
+          "1593657c18cb570e78899a205b8e947ec13537e3820024bfd3cd9d170359a106",
+          281
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 128,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "6c97e001c38cebe63922b4d27449adfaf149e36bc365f4a430a200d48a31085c",
+          102
+        ],
+        [
+          0,
+          "6c97e001c38cebe63922b4d27449adfaf149e36bc365f4a430a200d48a31085c",
+          102
+        ],
+        [
+          0,
+          "6c97e001c38cebe63922b4d27449adfaf149e36bc365f4a430a200d48a31085c",
+          102
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 129,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "544d442d9772fe8ed7a9b468a33601f1a5a7d1a5f959f96de72ab794e8756408",
+          215
+        ],
+        [
+          0,
+          "544d442d9772fe8ed7a9b468a33601f1a5a7d1a5f959f96de72ab794e8756408",
+          215
+        ],
+        [
+          0,
+          "544d442d9772fe8ed7a9b468a33601f1a5a7d1a5f959f96de72ab794e8756408",
+          215
+        ]
+      ],
+      "scenario_id": "classic_bottleneck_high",
+      "seed": 130,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "cc57ba3ca6d2a77f76f55d1d89660b506f21f152b6d20629baa069fe0379c50a",
+          490
+        ],
+        [
+          0,
+          "cc57ba3ca6d2a77f76f55d1d89660b506f21f152b6d20629baa069fe0379c50a",
+          490
+        ],
+        [
+          0,
+          "cc57ba3ca6d2a77f76f55d1d89660b506f21f152b6d20629baa069fe0379c50a",
+          490
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 111,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e",
+          156
+        ],
+        [
+          0,
+          "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e",
+          156
+        ],
+        [
+          0,
+          "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e",
+          156
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 112,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "7150c5a5e7577a503636d3a4d37fac42d5eea6a7fac080daf168b5dc11962789",
+          60
+        ],
+        [
+          0,
+          "7150c5a5e7577a503636d3a4d37fac42d5eea6a7fac080daf168b5dc11962789",
+          60
+        ],
+        [
+          0,
+          "7150c5a5e7577a503636d3a4d37fac42d5eea6a7fac080daf168b5dc11962789",
+          60
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 113,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "f51840b05da610be235d444aa634730c8cc6551646afc526f3b0f4bc518f466a",
+          463
+        ],
+        [
+          0,
+          "f51840b05da610be235d444aa634730c8cc6551646afc526f3b0f4bc518f466a",
+          463
+        ],
+        [
+          0,
+          "f51840b05da610be235d444aa634730c8cc6551646afc526f3b0f4bc518f466a",
+          463
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 114,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "bcaaf961b49c351ec161843e48c31d3023c4901d1ea95987519e7d42ac5486c0",
+          42
+        ],
+        [
+          0,
+          "bcaaf961b49c351ec161843e48c31d3023c4901d1ea95987519e7d42ac5486c0",
+          42
+        ],
+        [
+          0,
+          "bcaaf961b49c351ec161843e48c31d3023c4901d1ea95987519e7d42ac5486c0",
+          42
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 115,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "5c55918ad0338d0a3c4dd33763d52d08833476c02e29b317758775987808b798",
+          60
+        ],
+        [
+          0,
+          "5c55918ad0338d0a3c4dd33763d52d08833476c02e29b317758775987808b798",
+          60
+        ],
+        [
+          0,
+          "5c55918ad0338d0a3c4dd33763d52d08833476c02e29b317758775987808b798",
+          60
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 116,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "2e70a9e652b30c59f324b3e0849d0cd06a5222b1afd31ba1d08c175ffaa0cc99",
+          248
+        ],
+        [
+          0,
+          "2e70a9e652b30c59f324b3e0849d0cd06a5222b1afd31ba1d08c175ffaa0cc99",
+          248
+        ],
+        [
+          0,
+          "2e70a9e652b30c59f324b3e0849d0cd06a5222b1afd31ba1d08c175ffaa0cc99",
+          248
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 117,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "cddb53cf69526439afd9512aa24bfa024cf7996f8fe88bde63d28bc402553497",
+          499
+        ],
+        [
+          0,
+          "cddb53cf69526439afd9512aa24bfa024cf7996f8fe88bde63d28bc402553497",
+          499
+        ],
+        [
+          0,
+          "cddb53cf69526439afd9512aa24bfa024cf7996f8fe88bde63d28bc402553497",
+          499
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 118,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "da38767fe47baa1c15894d923552477a0cd450dac4f004d6be802c98ec008d75",
+          497
+        ],
+        [
+          0,
+          "da38767fe47baa1c15894d923552477a0cd450dac4f004d6be802c98ec008d75",
+          497
+        ],
+        [
+          0,
+          "da38767fe47baa1c15894d923552477a0cd450dac4f004d6be802c98ec008d75",
+          497
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 119,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "5bb75b52502a1c64de711cce5869ef7df903950622b870bc6ab98f4d7f0a9707",
+          499
+        ],
+        [
+          0,
+          "5bb75b52502a1c64de711cce5869ef7df903950622b870bc6ab98f4d7f0a9707",
+          499
+        ],
+        [
+          0,
+          "5bb75b52502a1c64de711cce5869ef7df903950622b870bc6ab98f4d7f0a9707",
+          499
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 120,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "8e1587406904f15c188e46f14e899f856e46fa117846112e42cda3314e160b9b",
+          420
+        ],
+        [
+          0,
+          "8e1587406904f15c188e46f14e899f856e46fa117846112e42cda3314e160b9b",
+          420
+        ],
+        [
+          0,
+          "8e1587406904f15c188e46f14e899f856e46fa117846112e42cda3314e160b9b",
+          420
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 121,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "d53d0208c1eb66788696584737202a1b66a250108acb1a9f3f534680e553f8e4",
+          116
+        ],
+        [
+          0,
+          "d53d0208c1eb66788696584737202a1b66a250108acb1a9f3f534680e553f8e4",
+          116
+        ],
+        [
+          0,
+          "d53d0208c1eb66788696584737202a1b66a250108acb1a9f3f534680e553f8e4",
+          116
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 122,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "55dda5bdb6426298f72ff78d65266fb1fbfe1643f6bc9043d190ffbde6dd1606",
+          499
+        ],
+        [
+          0,
+          "55dda5bdb6426298f72ff78d65266fb1fbfe1643f6bc9043d190ffbde6dd1606",
+          499
+        ],
+        [
+          0,
+          "55dda5bdb6426298f72ff78d65266fb1fbfe1643f6bc9043d190ffbde6dd1606",
+          499
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 123,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "3c664ccd5ec303fdad2245493a04ec5ddf3c1d9c0b3fc2f84eadfaf9887978a9",
+          156
+        ],
+        [
+          0,
+          "3c664ccd5ec303fdad2245493a04ec5ddf3c1d9c0b3fc2f84eadfaf9887978a9",
+          156
+        ],
+        [
+          0,
+          "3c664ccd5ec303fdad2245493a04ec5ddf3c1d9c0b3fc2f84eadfaf9887978a9",
+          156
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 124,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "0e9edf4014a46a9fae537d06a01fa3c79acdf2a50bd6a531c43ccec15cd2f04d",
+          114
+        ],
+        [
+          0,
+          "0e9edf4014a46a9fae537d06a01fa3c79acdf2a50bd6a531c43ccec15cd2f04d",
+          114
+        ],
+        [
+          0,
+          "0e9edf4014a46a9fae537d06a01fa3c79acdf2a50bd6a531c43ccec15cd2f04d",
+          114
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 125,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "70bd37e3453b6e03e53fc05ecafe989085d90da2a5ce79d86578c021cc6ade3f",
+          477
+        ],
+        [
+          0,
+          "70bd37e3453b6e03e53fc05ecafe989085d90da2a5ce79d86578c021cc6ade3f",
+          477
+        ],
+        [
+          0,
+          "70bd37e3453b6e03e53fc05ecafe989085d90da2a5ce79d86578c021cc6ade3f",
+          477
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 126,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "1297f6b9e02e8754cfcca39278ad06fcb97ce1f9845a7dadbc1f679aaf077d46",
+          497
+        ],
+        [
+          0,
+          "1297f6b9e02e8754cfcca39278ad06fcb97ce1f9845a7dadbc1f679aaf077d46",
+          497
+        ],
+        [
+          0,
+          "1297f6b9e02e8754cfcca39278ad06fcb97ce1f9845a7dadbc1f679aaf077d46",
+          497
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 127,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "97e104bc55ace2efce8575740c1c957bbef5b87f6f713230c052db8627abcf99",
+          499
+        ],
+        [
+          0,
+          "97e104bc55ace2efce8575740c1c957bbef5b87f6f713230c052db8627abcf99",
+          499
+        ],
+        [
+          0,
+          "97e104bc55ace2efce8575740c1c957bbef5b87f6f713230c052db8627abcf99",
+          499
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 128,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "b4e35faee0cdb8bd480419d5327c38ed3dfadc73a3f96f35eafa3db0ff557896",
+          102
+        ],
+        [
+          0,
+          "b4e35faee0cdb8bd480419d5327c38ed3dfadc73a3f96f35eafa3db0ff557896",
+          102
+        ],
+        [
+          0,
+          "b4e35faee0cdb8bd480419d5327c38ed3dfadc73a3f96f35eafa3db0ff557896",
+          102
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 129,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "54f4fa0e9b72f73df0d0bab2af5abbd823d68b718fb3c394dcb47d0d18ad9f10",
+          433
+        ],
+        [
+          0,
+          "54f4fa0e9b72f73df0d0bab2af5abbd823d68b718fb3c394dcb47d0d18ad9f10",
+          433
+        ],
+        [
+          0,
+          "54f4fa0e9b72f73df0d0bab2af5abbd823d68b718fb3c394dcb47d0d18ad9f10",
+          433
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 130,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 111,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 112,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 113,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 114,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 115,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 116,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 117,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 118,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 119,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 120,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 121,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 122,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 123,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 124,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 125,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 126,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 127,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 128,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 129,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 130,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "2452d4f1c7a9fb794ed10ac01beef546e8abdbc601e42f52091611f60c77f9a7",
+          38
+        ],
+        [
+          0,
+          "2452d4f1c7a9fb794ed10ac01beef546e8abdbc601e42f52091611f60c77f9a7",
+          38
+        ],
+        [
+          0,
+          "2452d4f1c7a9fb794ed10ac01beef546e8abdbc601e42f52091611f60c77f9a7",
+          38
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 111,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "eca7992d60204896587db0e2543ae6dfa6fade14b1bacdbc61a59ea24a755849",
+          39
+        ],
+        [
+          0,
+          "eca7992d60204896587db0e2543ae6dfa6fade14b1bacdbc61a59ea24a755849",
+          39
+        ],
+        [
+          0,
+          "eca7992d60204896587db0e2543ae6dfa6fade14b1bacdbc61a59ea24a755849",
+          39
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 112,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "3f31eefeb68ed90db1f85e710fd8cf0e1063b3878a7ee2c147a71484a0b49288",
+          44
+        ],
+        [
+          0,
+          "3f31eefeb68ed90db1f85e710fd8cf0e1063b3878a7ee2c147a71484a0b49288",
+          44
+        ],
+        [
+          0,
+          "3f31eefeb68ed90db1f85e710fd8cf0e1063b3878a7ee2c147a71484a0b49288",
+          44
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 113,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "996c94f0bd64c15f28a7e7ea54c7bebc5c03a5d83195bbc7ee053e5d777ad069",
+          40
+        ],
+        [
+          0,
+          "996c94f0bd64c15f28a7e7ea54c7bebc5c03a5d83195bbc7ee053e5d777ad069",
+          40
+        ],
+        [
+          0,
+          "996c94f0bd64c15f28a7e7ea54c7bebc5c03a5d83195bbc7ee053e5d777ad069",
+          40
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 114,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "67fe3aaf6a663fe6065956e209d233ee3b4c9ec89ea92037a1d776770ecf83df",
+          54
+        ],
+        [
+          0,
+          "67fe3aaf6a663fe6065956e209d233ee3b4c9ec89ea92037a1d776770ecf83df",
+          54
+        ],
+        [
+          0,
+          "67fe3aaf6a663fe6065956e209d233ee3b4c9ec89ea92037a1d776770ecf83df",
+          54
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 115,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "63d4f3467a72e363075e35b88b17b362b29256984668d50dee11eb9ab64d556f",
+          41
+        ],
+        [
+          0,
+          "63d4f3467a72e363075e35b88b17b362b29256984668d50dee11eb9ab64d556f",
+          41
+        ],
+        [
+          0,
+          "63d4f3467a72e363075e35b88b17b362b29256984668d50dee11eb9ab64d556f",
+          41
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 116,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "5aef81c1f40f2ea6bca989e1875290aa97c0c3f81fbd4767b67c3de99912d4bf",
+          50
+        ],
+        [
+          0,
+          "5aef81c1f40f2ea6bca989e1875290aa97c0c3f81fbd4767b67c3de99912d4bf",
+          50
+        ],
+        [
+          0,
+          "5aef81c1f40f2ea6bca989e1875290aa97c0c3f81fbd4767b67c3de99912d4bf",
+          50
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 117,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "e36b9b709d2c7b0787d874a390d0489f60ca30f3a6d32450a7d917aae69a5304",
+          36
+        ],
+        [
+          0,
+          "e36b9b709d2c7b0787d874a390d0489f60ca30f3a6d32450a7d917aae69a5304",
+          36
+        ],
+        [
+          0,
+          "e36b9b709d2c7b0787d874a390d0489f60ca30f3a6d32450a7d917aae69a5304",
+          36
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 118,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "0b5a5f3492e132537b325813d35768d682939a27af318d385558634669447e7d",
+          28
+        ],
+        [
+          0,
+          "0b5a5f3492e132537b325813d35768d682939a27af318d385558634669447e7d",
+          28
+        ],
+        [
+          0,
+          "0b5a5f3492e132537b325813d35768d682939a27af318d385558634669447e7d",
+          28
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 119,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "1cbcf8e436e022f93bad6c1802ae1f8a5d1c7e54720eaf3c629ff131e0b6b63a",
+          55
+        ],
+        [
+          0,
+          "1cbcf8e436e022f93bad6c1802ae1f8a5d1c7e54720eaf3c629ff131e0b6b63a",
+          55
+        ],
+        [
+          0,
+          "1cbcf8e436e022f93bad6c1802ae1f8a5d1c7e54720eaf3c629ff131e0b6b63a",
+          55
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 120,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "14cb324af324e6af1a2536fbe3686f33ce2c753be9f2b56673f0e498ef24cd8d",
+          31
+        ],
+        [
+          0,
+          "14cb324af324e6af1a2536fbe3686f33ce2c753be9f2b56673f0e498ef24cd8d",
+          31
+        ],
+        [
+          0,
+          "14cb324af324e6af1a2536fbe3686f33ce2c753be9f2b56673f0e498ef24cd8d",
+          31
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 121,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "f3b42454c3019044d9f2c2f6139a106fdfeb5cfb45487f573a04d956d0b6a1ed",
+          46
+        ],
+        [
+          0,
+          "f3b42454c3019044d9f2c2f6139a106fdfeb5cfb45487f573a04d956d0b6a1ed",
+          46
+        ],
+        [
+          0,
+          "f3b42454c3019044d9f2c2f6139a106fdfeb5cfb45487f573a04d956d0b6a1ed",
+          46
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 122,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "dd62acdb26ef9a13b85636e0e6fb7144a2683d6de616342619044a1920a0fae6",
+          21
+        ],
+        [
+          0,
+          "dd62acdb26ef9a13b85636e0e6fb7144a2683d6de616342619044a1920a0fae6",
+          21
+        ],
+        [
+          0,
+          "dd62acdb26ef9a13b85636e0e6fb7144a2683d6de616342619044a1920a0fae6",
+          21
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 123,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "d1ab73d11fe12604b4a2cf24a1e6120662ea1253800de0aa0721180aae5d2ef1",
+          67
+        ],
+        [
+          0,
+          "d1ab73d11fe12604b4a2cf24a1e6120662ea1253800de0aa0721180aae5d2ef1",
+          67
+        ],
+        [
+          0,
+          "d1ab73d11fe12604b4a2cf24a1e6120662ea1253800de0aa0721180aae5d2ef1",
+          67
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 124,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "5761d81b42439de64ed6b17949b9cd6aa48d4420c2dbd7a2250c90f6ea3eacc0",
+          48
+        ],
+        [
+          0,
+          "5761d81b42439de64ed6b17949b9cd6aa48d4420c2dbd7a2250c90f6ea3eacc0",
+          48
+        ],
+        [
+          0,
+          "5761d81b42439de64ed6b17949b9cd6aa48d4420c2dbd7a2250c90f6ea3eacc0",
+          48
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 125,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "a79dfee399163dbb997be35efbfe6e27488d60cedea69862356908c770516fe9",
+          40
+        ],
+        [
+          0,
+          "a79dfee399163dbb997be35efbfe6e27488d60cedea69862356908c770516fe9",
+          40
+        ],
+        [
+          0,
+          "a79dfee399163dbb997be35efbfe6e27488d60cedea69862356908c770516fe9",
+          40
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 126,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "4052aabdd9ba6518eec10ad2a01e07a2c123e892c31703f308391d78d08d30f8",
+          29
+        ],
+        [
+          0,
+          "4052aabdd9ba6518eec10ad2a01e07a2c123e892c31703f308391d78d08d30f8",
+          29
+        ],
+        [
+          0,
+          "4052aabdd9ba6518eec10ad2a01e07a2c123e892c31703f308391d78d08d30f8",
+          29
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 127,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "ec3f4a97fc2c732ee293a1a36464345d38df7396020a7c01d62ea86c83dfd497",
+          50
+        ],
+        [
+          0,
+          "ec3f4a97fc2c732ee293a1a36464345d38df7396020a7c01d62ea86c83dfd497",
+          50
+        ],
+        [
+          0,
+          "ec3f4a97fc2c732ee293a1a36464345d38df7396020a7c01d62ea86c83dfd497",
+          50
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 128,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "b0be1863d1dadbb0fb51b12b7d9fc4463f647ae04675f84e8bb395f6435d199f",
+          22
+        ],
+        [
+          0,
+          "b0be1863d1dadbb0fb51b12b7d9fc4463f647ae04675f84e8bb395f6435d199f",
+          22
+        ],
+        [
+          0,
+          "b0be1863d1dadbb0fb51b12b7d9fc4463f647ae04675f84e8bb395f6435d199f",
+          22
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 129,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "goal",
+      "repeat_fingerprints": [
+        [
+          0,
+          "d495a293efe83c323f9c7359243a27380df3fe6ce721a96b019e16ff5b257eb1",
+          30
+        ],
+        [
+          0,
+          "d495a293efe83c323f9c7359243a27380df3fe6ce721a96b019e16ff5b257eb1",
+          30
+        ],
+        [
+          0,
+          "d495a293efe83c323f9c7359243a27380df3fe6ce721a96b019e16ff5b257eb1",
+          30
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 130,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "52a1ebac2e710f2e80350f8dd63c3694f2b8bb4662ebe244e353669c68abcf90",
+          405
+        ],
+        [
+          0,
+          "52a1ebac2e710f2e80350f8dd63c3694f2b8bb4662ebe244e353669c68abcf90",
+          405
+        ],
+        [
+          0,
+          "52a1ebac2e710f2e80350f8dd63c3694f2b8bb4662ebe244e353669c68abcf90",
+          405
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 111,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e",
+          156
+        ],
+        [
+          0,
+          "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e",
+          156
+        ],
+        [
+          0,
+          "d4acb7f58bcc2f5bdd8b6a221cc98d62f71ff9898873f8c16df4fbe5f9ed9b6e",
+          156
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 112,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "ced125cae2b9ece723d1641a9cbe37202fd302cc4b2b43b0d1e33841f136815a",
+          60
+        ],
+        [
+          0,
+          "ced125cae2b9ece723d1641a9cbe37202fd302cc4b2b43b0d1e33841f136815a",
+          60
+        ],
+        [
+          0,
+          "ced125cae2b9ece723d1641a9cbe37202fd302cc4b2b43b0d1e33841f136815a",
+          60
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 113,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "40d5f65b2c61dee5a85ac069df3c37539bda07b6dba92b73f05c94e67ef3bc41",
+          378
+        ],
+        [
+          0,
+          "40d5f65b2c61dee5a85ac069df3c37539bda07b6dba92b73f05c94e67ef3bc41",
+          378
+        ],
+        [
+          0,
+          "40d5f65b2c61dee5a85ac069df3c37539bda07b6dba92b73f05c94e67ef3bc41",
+          378
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 114,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "8f5a15c260ace4b115012ee265919f69b2133df44bc01825b18de652e2189a3a",
+          42
+        ],
+        [
+          0,
+          "8f5a15c260ace4b115012ee265919f69b2133df44bc01825b18de652e2189a3a",
+          42
+        ],
+        [
+          0,
+          "8f5a15c260ace4b115012ee265919f69b2133df44bc01825b18de652e2189a3a",
+          42
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 115,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "e87e83762a6ffb09807b17a24a5f453231f99ef84fdaff82d1f8434a915887b0",
+          60
+        ],
+        [
+          0,
+          "e87e83762a6ffb09807b17a24a5f453231f99ef84fdaff82d1f8434a915887b0",
+          60
+        ],
+        [
+          0,
+          "e87e83762a6ffb09807b17a24a5f453231f99ef84fdaff82d1f8434a915887b0",
+          60
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 116,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "76310b0015cf8ae950ea96a469fa87e6a46e0aaa818177f54f2e72e8669d6339",
+          248
+        ],
+        [
+          0,
+          "76310b0015cf8ae950ea96a469fa87e6a46e0aaa818177f54f2e72e8669d6339",
+          248
+        ],
+        [
+          0,
+          "76310b0015cf8ae950ea96a469fa87e6a46e0aaa818177f54f2e72e8669d6339",
+          248
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 117,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "fee2adf9007b75a95d1cdbba1de231ee244543d101ab71d2a4e39d0f5fa47595",
+          414
+        ],
+        [
+          0,
+          "fee2adf9007b75a95d1cdbba1de231ee244543d101ab71d2a4e39d0f5fa47595",
+          414
+        ],
+        [
+          0,
+          "fee2adf9007b75a95d1cdbba1de231ee244543d101ab71d2a4e39d0f5fa47595",
+          414
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 118,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "eab77945c7686c785107dd5e6a33e38f2998e0c70cc9fc6bad65cec58669df99",
+          412
+        ],
+        [
+          0,
+          "eab77945c7686c785107dd5e6a33e38f2998e0c70cc9fc6bad65cec58669df99",
+          412
+        ],
+        [
+          0,
+          "eab77945c7686c785107dd5e6a33e38f2998e0c70cc9fc6bad65cec58669df99",
+          412
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 119,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "78269e07c8b21e8dfceeeaec523d3d55ad9ec9af90ce54affec1c74ec3033457",
+          414
+        ],
+        [
+          0,
+          "78269e07c8b21e8dfceeeaec523d3d55ad9ec9af90ce54affec1c74ec3033457",
+          414
+        ],
+        [
+          0,
+          "78269e07c8b21e8dfceeeaec523d3d55ad9ec9af90ce54affec1c74ec3033457",
+          414
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 120,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "14536855bc44a7102b6753bb38748f57b9dc1b7ad21fead7b383b1175e2ed063",
+          335
+        ],
+        [
+          0,
+          "14536855bc44a7102b6753bb38748f57b9dc1b7ad21fead7b383b1175e2ed063",
+          335
+        ],
+        [
+          0,
+          "14536855bc44a7102b6753bb38748f57b9dc1b7ad21fead7b383b1175e2ed063",
+          335
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 121,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "5ba3c05b7d5338084baa51d2f9a928f52e4b64cea69254d87bfd65d1281136dc",
+          116
+        ],
+        [
+          0,
+          "5ba3c05b7d5338084baa51d2f9a928f52e4b64cea69254d87bfd65d1281136dc",
+          116
+        ],
+        [
+          0,
+          "5ba3c05b7d5338084baa51d2f9a928f52e4b64cea69254d87bfd65d1281136dc",
+          116
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 122,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "bacb6bcc555152e41432900772a9c000cb653fb10555bad818fb62b823257caf",
+          414
+        ],
+        [
+          0,
+          "bacb6bcc555152e41432900772a9c000cb653fb10555bad818fb62b823257caf",
+          414
+        ],
+        [
+          0,
+          "bacb6bcc555152e41432900772a9c000cb653fb10555bad818fb62b823257caf",
+          414
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 123,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "bf5df19db64bbd68746cc1e50750a692f96ae096173f529508abaa6fa627cd4c",
+          156
+        ],
+        [
+          0,
+          "bf5df19db64bbd68746cc1e50750a692f96ae096173f529508abaa6fa627cd4c",
+          156
+        ],
+        [
+          0,
+          "bf5df19db64bbd68746cc1e50750a692f96ae096173f529508abaa6fa627cd4c",
+          156
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 124,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "b6e8b4f60bc2ff456840c4218b22b1bd4c984609ebfae4edf5547f70e0fc46ca",
+          114
+        ],
+        [
+          0,
+          "b6e8b4f60bc2ff456840c4218b22b1bd4c984609ebfae4edf5547f70e0fc46ca",
+          114
+        ],
+        [
+          0,
+          "b6e8b4f60bc2ff456840c4218b22b1bd4c984609ebfae4edf5547f70e0fc46ca",
+          114
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 125,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "a8b99ff535e1106b91430ba0089a809b12ef5b7f7295000b49d9cd2be33278ba",
+          392
+        ],
+        [
+          0,
+          "a8b99ff535e1106b91430ba0089a809b12ef5b7f7295000b49d9cd2be33278ba",
+          392
+        ],
+        [
+          0,
+          "a8b99ff535e1106b91430ba0089a809b12ef5b7f7295000b49d9cd2be33278ba",
+          392
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 126,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "84868b55c5bd63235c85c50720637d6479b9b828777be2a18d0b95a996de36c5",
+          412
+        ],
+        [
+          0,
+          "84868b55c5bd63235c85c50720637d6479b9b828777be2a18d0b95a996de36c5",
+          412
+        ],
+        [
+          0,
+          "84868b55c5bd63235c85c50720637d6479b9b828777be2a18d0b95a996de36c5",
+          412
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 127,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "3a3d4900bbae5136870f1dd251fe011c0a10833816d7fdf6e2281a0ec0abf8ec",
+          414
+        ],
+        [
+          0,
+          "3a3d4900bbae5136870f1dd251fe011c0a10833816d7fdf6e2281a0ec0abf8ec",
+          414
+        ],
+        [
+          0,
+          "3a3d4900bbae5136870f1dd251fe011c0a10833816d7fdf6e2281a0ec0abf8ec",
+          414
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 128,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "14c138d360aba11fae3fded2a27d39a53484eaa49200f1d0ed3257b66410fa51",
+          102
+        ],
+        [
+          0,
+          "14c138d360aba11fae3fded2a27d39a53484eaa49200f1d0ed3257b66410fa51",
+          102
+        ],
+        [
+          0,
+          "14c138d360aba11fae3fded2a27d39a53484eaa49200f1d0ed3257b66410fa51",
+          102
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 129,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "orca",
+      "repeat_fingerprints": [
+        [
+          0,
+          "a5c1f85ca7fa1b6125c56413a1f8b56406dc265d7ae2b9a8a8ec234b5b20dab4",
+          348
+        ],
+        [
+          0,
+          "a5c1f85ca7fa1b6125c56413a1f8b56406dc265d7ae2b9a8a8ec234b5b20dab4",
+          348
+        ],
+        [
+          0,
+          "a5c1f85ca7fa1b6125c56413a1f8b56406dc265d7ae2b9a8a8ec234b5b20dab4",
+          348
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 130,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 111,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 112,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 113,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 114,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 115,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 116,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 117,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 118,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 119,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 120,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 121,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 122,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 123,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 124,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 125,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 126,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 127,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 128,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 129,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_low",
+      "seed": 130,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 111,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 112,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 113,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 114,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 115,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 116,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 117,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 118,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 119,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 120,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 121,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 122,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 123,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 124,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 125,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 126,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 127,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 128,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 129,
+      "unrunnable": true
+    },
+    {
+      "bitwise_identical": null,
+      "disposition": "unrunnable_on_current_main",
+      "disposition_reason": "planner 'ppo' ran but every repeat degraded to a fallback policy (planner-step worker crashed/timed out); not native execution and not valid exact-repeat evidence",
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 130,
+      "unrunnable": true
+    }
+  ]
+}

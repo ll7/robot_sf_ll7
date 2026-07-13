@@ -52,6 +52,37 @@ SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
 UNRUNNABLE_DISPOSITION = "unrunnable_on_current_main"
 MIXED_DISPOSITION = "mixed_runnability"
 
+# A target that executes through ``run_episode`` but has any repeat fall back to a
+# degraded/no-op policy (for example a forked planner-step worker that crashes or
+# times out, leaving the robot motionless) must not be promoted to a determinism
+# verdict. It is recorded with the same ``unrunnable`` disposition so the verifier
+# excludes it from the bitwise-identical claim, with a distinct ``degraded`` flag
+# and reason to distinguish a degraded run from a clean registry-unavailable planner.
+DEGRADED_DISPOSITION = "degraded_fallback"
+_DEGRADED_STATUS_PREFIXES = ("policy_step_timeout_fallback", "policy_step_error_fallback")
+
+
+def _record_is_degraded(record: Any) -> bool:
+    """Return True when an episode record is a degraded fallback rather than native output.
+
+    A target is degraded when the planner step fell back to a zero-velocity action
+    inside the isolation worker. Two signals are checked: the planner
+    ``algorithm_metadata.status`` prefix and the outcome ``timeout_event`` that the
+    runner sets when every step fell back. Either one is sufficient evidence that the
+    repeats do not represent native planner behavior.
+    """
+    if not isinstance(record, Mapping):
+        return False
+    metadata = record.get("algorithm_metadata")
+    if isinstance(metadata, Mapping):
+        status = metadata.get("status")
+        if isinstance(status, str) and status.startswith(_DEGRADED_STATUS_PREFIXES):
+            return True
+    outcome = record.get("outcome")
+    if isinstance(outcome, Mapping) and outcome.get("timeout_event") is True:
+        return True
+    return False
+
 
 def canonical_sha256(value: Any) -> str:
     """Return a stable SHA-256 digest for a JSON-compatible value."""
@@ -1060,6 +1091,7 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
         if algo_config_path is not None:
             algo_config_path = str((get_repository_root() / algo_config_path).resolve())
 
+        records: list[dict[str, Any]] = []
         repeats: list[dict[str, Any]] = []
         for repeat_idx in range(repeats_per_target):
             record = run_episode(
@@ -1071,6 +1103,7 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
                 dt=float(dt),
                 record_forces=scenario_params.get("record_forces", False),
             )
+            records.append(record)
             trajectory_sha = _compute_trajectory_hash(record)
             outcome = record.get("outcome", {})
             outcome_binary = 1 if outcome.get("success", False) else 0
@@ -1084,17 +1117,39 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
                 }
             )
 
-        divergence = _first_divergence(repeats)
-        result_entry = {
-            "scenario_id": scenario_id,
-            "planner": planner,
-            "seed": seed,
-            "horizon": horizon,
-            "source_config_hash": target["source_config_hash"],
-            "repeats": repeats,
-        }
-        if divergence is not None:
-            result_entry["first_divergence"] = divergence
+        # Issue #5498: a planner that constructs but degrades any repeat to a
+        # no-op fallback (for example a forked planner-step worker that times out
+        # or crashes, leaving the robot motionless) must not be promoted to a
+        # determinism verdict. Record it as an explicit unrunnable disposition so
+        # the verifier excludes it, with a degraded flag and reason.
+        if records and any(_record_is_degraded(record) for record in records):
+            result_entry = {
+                "scenario_id": scenario_id,
+                "planner": planner,
+                "seed": seed,
+                "horizon": horizon,
+                "source_config_hash": target["source_config_hash"],
+                "repeats": [],
+                "degraded": True,
+                "disposition": UNRUNNABLE_DISPOSITION,
+                "disposition_reason": (
+                    f"planner {planner_algo!r} had one or more repeats degrade to a "
+                    "fallback policy (planner-step worker crashed/timed out); not native "
+                    "execution and not valid exact-repeat evidence"
+                ),
+            }
+        else:
+            divergence = _first_divergence(repeats)
+            result_entry = {
+                "scenario_id": scenario_id,
+                "planner": planner,
+                "seed": seed,
+                "horizon": horizon,
+                "source_config_hash": target["source_config_hash"],
+                "repeats": repeats,
+            }
+            if divergence is not None:
+                result_entry["first_divergence"] = divergence
         results.append(result_entry)
 
         # Cache the result for resume

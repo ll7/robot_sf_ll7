@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5348 S30 attempt-6 PPO-resume launch packet + fail-closed checker.** New
+  `configs/benchmarks/issue_5348_s30_attempt6_resume_launch_packet.yaml`
+  (`s30-attempt6-resume-launch-packet.v1`) is the machine-checkable contract a GPU operator
+  executes to resume the PPO arm of job 13376 (preserve the five clean arms @ 1440 episodes and the
+  562 completed PPO rows, resume PPO after episode 562 to reach 1440, aggregate all six arms through
+  the unchanged report-builder, then publish under `docs/context/evidence/`). New
+  `scripts/validation/check_issue_5348_s30_resume_launch_packet.py` validates the packet fail-closed
+  (episode arithmetic `562 + 878 = 1440`, resume-after-562 never restart-from-zero, five clean arms
+  skipped not re-run, #5347/#5360 gate satisfied, report-builder contract unchanged, no
+  self-authorized compute submission) with `ready`/`blocked`/`malformed` exit codes. This packages
+  the frozen-metric execution decision; it does not resume the PPO arm, submit SLURM/GPU, aggregate
+  results, or establish any benchmark claim.
+
 * **issue #5446 seed-flip / held-out planner-inversion candidate miner.** New
   `robot_sf/benchmark/seed_flip_mining.py` (`seed_flip_inversion_candidates.v1`) mines *case
   candidates* — reproducible seed-dependent outcome flips and genuine held-out planner upsets —

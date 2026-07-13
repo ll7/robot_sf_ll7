@@ -1587,6 +1587,9 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
         observation_mode=active_observation_mode,
         observation_level=resolved_observation_level,
     )
+    # Latency instrumentation resolves the planner configuration hash from the callable so
+    # cached policies remain provenance-bound when a new harness is activated per episode.
+    policy_fn._meta = algo_meta
     algo_meta["learned_checkpoint_observation_contract"] = learned_observation_contract
     active_observation_level = str(algo_meta["observation_level"]["key"])
     attach_track_metadata(
@@ -1901,6 +1904,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 cbf_filter_trace.append(cbf_record)
             selected_action_payload = _command_action_payload(policy_command)
             ammv_command_actions.append(selected_action_payload)
+            action_conversion_start = time.perf_counter() if active_harness is not None else None
             if step_is_native:
                 # Policy already outputs native env actions (e.g. delta velocities);
                 # skip the absolute→delta conversion done by _policy_command_to_env_action.
@@ -1910,6 +1914,10 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     env=env,
                     config=config,
                     command=policy_command,
+                )
+            if active_harness is not None and action_conversion_start is not None:
+                active_harness.add_time(
+                    "action_conversion", (time.perf_counter() - action_conversion_start) * 1000.0
                 )
             if active_harness is not None:
                 active_harness.end_cycle()

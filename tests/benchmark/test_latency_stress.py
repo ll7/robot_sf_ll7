@@ -112,7 +112,7 @@ def test_not_available_latency_metrics_names_expected_placeholders() -> None:
 
 def test_component_sum_consistency_and_mock_harness() -> None:
     """Harness must guarantee component-sum consistency and measure latencies correctly."""
-    harness = LatencyMeasurementHarness(deadline_ms=50.0)
+    harness = LatencyMeasurementHarness(deadline_ms=50.0, config_hash="fixture-config")
 
     # Simulate a few cycles with mock durations
     with harness:
@@ -179,28 +179,33 @@ def test_harness_with_cached_policy_reuse() -> None:
     adapter = DummyAdapter()
 
     def policy_fn(obs: dict[str, Any]) -> tuple[float, float]:
+        policy_fn._last_step_native = True  # type: ignore[attr-defined]
         return adapter.plan(obs)
 
     policy_fn._planner_adapter = adapter  # type: ignore[attr-defined]
 
-    harness1 = LatencyMeasurementHarness(deadline_ms=50.0)
+    harness1 = LatencyMeasurementHarness(deadline_ms=50.0, config_hash="fixture-config")
     with harness1:
         wrapped_policy1 = harness1.wrap_policy(policy_fn)
-        harness1.start_cycle()
-        adapter._extract_state({})
-        wrapped_policy1({})
-        harness1.end_cycle()
+        for _ in range(2):
+            harness1.start_cycle()
+            adapter._extract_state({})
+            wrapped_policy1({})
+            harness1.end_cycle()
 
-    harness2 = LatencyMeasurementHarness(deadline_ms=50.0)
+    harness2 = LatencyMeasurementHarness(deadline_ms=50.0, config_hash="fixture-config")
     with harness2:
         wrapped_policy2 = harness2.wrap_policy(policy_fn)
-        harness2.start_cycle()
-        adapter._extract_state({})
-        wrapped_policy2({})
-        harness2.end_cycle()
+        for _ in range(2):
+            harness2.start_cycle()
+            adapter._extract_state({})
+            wrapped_policy2({})
+            harness2.end_cycle()
 
     assert harness1.get_metrics()["cycles"][0]["observation_construction_ms"] > 0.0
     assert harness2.get_metrics()["cycles"][0]["observation_construction_ms"] > 0.0
+    assert getattr(wrapped_policy1, "_last_step_native", False) is True
+    assert getattr(wrapped_policy2, "_last_step_native", False) is True
 
 
 def test_classification_boundaries() -> None:
@@ -226,18 +231,29 @@ def test_classification_boundaries() -> None:
         steady_state_latencies=[10.0, 20.0, 30.0],
         deadline_ms=50.0,
         target_hardware="Jetson Orin Nano",
-        measured_host_is_embedded=False,
+        measured_host_identity=None,
     )
     assert res == "target_hardware_unmeasured"
 
-    # 4. Target hardware matches / measured is embedded
+    # 4. Target hardware matches only when the measured identity is explicit.
     res = classify_feasibility(
         steady_state_latencies=[10.0, 20.0, 30.0],
         deadline_ms=50.0,
         target_hardware="Jetson Orin Nano",
         measured_host_is_embedded=True,
+        measured_host_identity="Jetson-Orin_Nano",
     )
     assert res == "meets_budget_on_measured_host"
+
+    # 5. An embedded host with a different model is still unmeasured.
+    res = classify_feasibility(
+        steady_state_latencies=[10.0, 20.0, 30.0],
+        deadline_ms=50.0,
+        target_hardware="Jetson Orin Nano",
+        measured_host_is_embedded=True,
+        measured_host_identity="Jetson Xavier NX",
+    )
+    assert res == "target_hardware_unmeasured"
 
 
 def test_provenance_completeness_fail_closed() -> None:
@@ -246,8 +262,14 @@ def test_provenance_completeness_fail_closed() -> None:
     valid_prov = {
         "cpu_model": "Intel Core i7",
         "cpu_affinity": [0, 1, 2, 3],
+        "thread_settings": {
+            "environment": {"OMP_NUM_THREADS": "1"},
+            "threadpools": [],
+        },
         "dependency_versions": {"python": "3.10.0", "numpy": "1.22.0"},
         "git_commit": "abcdef123456",
+        "config_hash": "fixture-config",
+        "measured_host_identity": "Intel Core i7",
     }
     # Should not raise any exception
     validate_provenance_completeness(valid_prov)
@@ -271,6 +293,17 @@ def test_provenance_completeness_fail_closed() -> None:
         validate_provenance_completeness(bad_prov)
 
 
+def test_harness_rejects_cold_only_evidence() -> None:
+    """A single cold-start cycle cannot be classified as steady-state evidence."""
+    harness = LatencyMeasurementHarness(deadline_ms=50.0, config_hash="fixture-config")
+    with harness:
+        harness.start_cycle()
+        harness.end_cycle()
+
+    with pytest.raises(ValueError, match="at least two cycles"):
+        harness.get_metrics()
+
+
 def test_harness_with_actual_planners(monkeypatch: pytest.MonkeyPatch) -> None:
     """Harness must produce a full latency record on a fixture scenario for >= 2 planners."""
     from robot_sf.benchmark.map_runner import _run_map_episode
@@ -288,6 +321,7 @@ def test_harness_with_actual_planners(monkeypatch: pytest.MonkeyPatch) -> None:
     class _DummyEnv:
         def __init__(self, map_def: MapDefinition) -> None:
             self.simulator = _DummySim(map_def)
+            self.step_count = 0
 
         def reset(self, seed: int | None = None):
             obs = {
@@ -298,12 +332,13 @@ def test_harness_with_actual_planners(monkeypatch: pytest.MonkeyPatch) -> None:
             return obs, {}
 
         def step(self, action: Any):
+            self.step_count += 1
             obs = {
                 "robot": {"position": [0.0, 0.0], "heading": [0.0], "speed": [0.0]},
                 "goal": {"current": [1.0, 1.0], "next": [1.0, 1.0]},
                 "pedestrians": {"positions": [], "velocities": []},
             }
-            return obs, 0.0, True, False, {"success": True}
+            return obs, 0.0, self.step_count >= 2, False, {"success": True}
 
         def close(self) -> None:
             return None
@@ -352,6 +387,8 @@ def test_harness_with_actual_planners(monkeypatch: pytest.MonkeyPatch) -> None:
         )
     metrics_goal = harness_goal.get_metrics()
     assert "steady_state_averages" in metrics_goal
+    assert len(metrics_goal["cycles"]) >= 2
+    assert any(cycle["action_conversion_ms"] > 0.0 for cycle in metrics_goal["cycles"])
     assert metrics_goal["classification"] in {
         "meets_budget_on_measured_host",
         "misses_budget_on_measured_host",
@@ -381,6 +418,8 @@ def test_harness_with_actual_planners(monkeypatch: pytest.MonkeyPatch) -> None:
         )
     metrics_mppi = harness_mppi.get_metrics()
     assert "steady_state_averages" in metrics_mppi
+    assert len(metrics_mppi["cycles"]) >= 2
+    assert any(cycle["action_conversion_ms"] > 0.0 for cycle in metrics_mppi["cycles"])
     assert metrics_mppi["classification"] in {
         "meets_budget_on_measured_host",
         "misses_budget_on_measured_host",

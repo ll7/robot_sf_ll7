@@ -15,24 +15,28 @@ def test_aggregate_metrics_basic():
         {
             "seed": 42,
             "policy_type": "baseline",
+            "variant_id": 1,
             "success_rate": 0.7,
             "timesteps_to_convergence": 500000,
         },
         {
             "seed": 123,
             "policy_type": "baseline",
+            "variant_id": 2,
             "success_rate": 0.75,
             "timesteps_to_convergence": 480000,
         },
         {
             "seed": 42,
             "policy_type": "pretrained",
+            "variant_id": 3,
             "success_rate": 0.85,
             "timesteps_to_convergence": 280000,
         },
         {
             "seed": 123,
             "policy_type": "pretrained",
+            "variant_id": 4,
             "success_rate": 0.88,
             "timesteps_to_convergence": 270000,
         },
@@ -66,6 +70,8 @@ def test_aggregate_metrics_basic():
     assert baseline_success["sample_size"] == 2
     assert baseline_success["ci_low"] == pytest.approx(0.7, abs=1e-6)
     assert baseline_success["ci_high"] == pytest.approx(0.75, abs=1e-6)
+    assert baseline_success["ci_confidence"] == 0.95
+    assert baseline_success["effect_size"] is None
 
 
 def test_aggregate_metrics_single_value():
@@ -115,8 +121,18 @@ def test_aggregate_metrics_empty():
 def test_aggregate_metrics_missing_values():
     """Test aggregation with missing/None values."""
     metric_records = [
-        {"seed": 42, "policy_type": "baseline", "success_rate": 0.7, "collision_rate": None},
-        {"seed": 123, "policy_type": "baseline", "success_rate": 0.75, "collision_rate": 0.1},
+        {
+            "seed": 42,
+            "policy_type": "baseline",
+            "collision_rate": None,
+            "success_rate": 0.7,
+        },
+        {
+            "seed": 123,
+            "policy_type": "baseline",
+            "collision_rate": 0.1,
+            "success_rate": 0.75,
+        },
     ]
 
     result = aggregate_metrics(metric_records, group_by="policy_type")
@@ -178,13 +194,28 @@ def test_aggregate_metrics_seed_reproducibility():
 def test_aggregate_metrics_entirely_none_metric():
     """Verify that a metric column that is entirely None is skipped, without breaking the loop."""
     metric_records = [
-        {"seed": 1, "policy_type": "baseline", "success_rate": 0.7, "collision_rate": None},
-        {"seed": 2, "policy_type": "baseline", "success_rate": 0.8, "collision_rate": None},
+        {
+            "seed": 1,
+            "policy_type": "baseline",
+            "collision_rate": None,
+            "success_rate": 0.7,
+        },
+        {
+            "seed": 2,
+            "policy_type": "baseline",
+            "collision_rate": None,
+            "success_rate": 0.8,
+        },
+        {
+            "seed": 3,
+            "policy_type": "pretrained",
+            "collision_rate": 0.1,
+            "success_rate": 0.9,
+        },
     ]
     result = aggregate_metrics(metric_records)
-    metrics = {r["metric_name"] for r in result}
-    assert "success_rate" in metrics
-    assert "collision_rate" not in metrics
+    baseline_metrics = {r["metric_name"] for r in result if r["condition"] == "baseline"}
+    assert baseline_metrics == {"success_rate"}
 
 
 def test_bootstrap_ci_exactly_two_values():
@@ -196,13 +227,19 @@ def test_bootstrap_ci_exactly_two_values():
     assert ci_low <= ci_high
 
 
+def test_bootstrap_ci_uses_lower_percentile_boundary():
+    """Verify the lower confidence bound uses the declared percentile boundary."""
+    values = [0.01, 0.11, 0.29, 0.73, 0.97]
+    ci_low, _ = bootstrap_ci(values, ci_samples=200, seed=42)
+    assert ci_low == pytest.approx(0.0856, abs=1e-6)
+
+
 def test_bootstrap_ci_defaults():
     """Verify bootstrap_ci works correctly with default arguments (no confidence or samples specified)."""
-    values = [1.0, 2.0, 3.0, 4.0, 5.0]
+    values = [0.03, 0.17, 0.31, 0.58, 0.91]
     ci_low, ci_high = bootstrap_ci(values, seed=42)
-    assert ci_low is not None
-    assert ci_high is not None
-    assert ci_low < ci_high
+    assert ci_low == pytest.approx(0.142, abs=1e-6)
+    assert ci_high == pytest.approx(0.66805, abs=1e-6)
 
 
 def test_completeness_score_empty_expected():
@@ -215,14 +252,13 @@ def test_completeness_score_empty_expected():
 def test_completeness_score_sorting():
     """Verify completeness score correctly sorts missing and failed seeds."""
     completeness = compute_completeness_score(
-        expected_seeds=[10, 2, "abc", 1, "1a"],
+        expected_seeds=[10, 2, "abc", 1, "1a", 11, 3],
         completed_seeds=[1],
         failed_seeds=[10, 2, "abc", "1a"],
     )
-    # missing: empty list as all others are in failed or completed
-    assert completeness["missing_seeds"] == []
-    # failed seeds should sort numeric first: 10, 2, 1a, abc
-    assert completeness["failed_seeds"] == ["10", "2", "1a", "abc"]
+    assert completeness["missing_seeds"] == ["3", "11"]
+    # failed seeds should sort numeric first: 2, 10, 1a, abc
+    assert completeness["failed_seeds"] == ["2", "10", "1a", "abc"]
 
 
 def test_completeness_score_fail():

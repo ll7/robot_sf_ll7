@@ -275,7 +275,7 @@ def compute_completeness_score(
         Dict with score (0-100), completed/missing counts, and seed lists.
     """
 
-    def _seed_sort_key(value: str) -> tuple[int, str]:
+    def _seed_sort_key(value: str) -> tuple[int, int | str]:
         """Sort key for seed strings, treating numeric seeds first.
 
         Args:
@@ -285,7 +285,7 @@ def compute_completeness_score(
             Tuple (0, int_value) for numeric seeds, (1, str_value) for non-numeric.
         """
         try:
-            return (0, str(int(value)))
+            return (0, int(value))
         except ValueError:
             return (1, value)
 

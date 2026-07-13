@@ -13,7 +13,12 @@ import subprocess
 import pytest
 
 from scripts.dev import main_ci_is_green
-from scripts.dev.main_ci_is_green import decide, fetch_runs, latest_completed_run
+from scripts.dev.main_ci_is_green import (
+    classify,
+    decide,
+    fetch_runs,
+    latest_completed_run,
+)
 
 
 def _run(rid: int, status: str, conclusion: str | None, created: str) -> dict:
@@ -74,12 +79,48 @@ def test_in_progress_newest_does_not_mask_a_red_completed() -> None:
     assert run["databaseId"] == 2
 
 
-def test_cancelled_and_timed_out_are_not_green() -> None:
-    """Non-success completed conclusions are not green."""
-    for bad in ("cancelled", "timed_out", "startup_failure", None):
-        is_green, run = decide([_run(1, "completed", bad, "2026-07-12T12:00:00Z")])
-        assert is_green is False, bad
-        assert run is not None
+def test_stale_only_window_is_not_green_and_has_no_deciding_run() -> None:
+    """A window of only stale completed runs yields no decisive verdict (fail closed)."""
+    for stale in ("cancelled", "timed_out", "startup_failure", "skipped", "neutral", None):
+        is_green, run = decide([_run(1, "completed", stale, "2026-07-12T12:00:00Z")])
+        assert is_green is False, stale
+        assert run is None, stale  # stale is skipped -> no deciding run
+
+
+def test_cancelled_newest_is_skipped_and_older_green_decides() -> None:
+    """A cancelled (superseded) newest run must not block; the older green decides.
+
+    This is the exact freeze that stranded ~8 gate-vetted PRs on 2026-07-13:
+    rapid merges superseded each other into cancelled runs, and cancelled was
+    mis-read as red. Cancelled carries no verdict -> skip to the latest decisive.
+    """
+    runs = [
+        _run(3, "completed", "cancelled", "2026-07-13T03:00:00Z"),
+        _run(2, "completed", "success", "2026-07-13T02:00:00Z"),
+    ]
+    is_green, run = decide(runs)
+    assert is_green is True
+    assert run["databaseId"] == 2
+
+
+def test_cancelled_newest_does_not_hide_an_older_red() -> None:
+    """Skipping cancelled must not skip past a real failure to an even older green."""
+    runs = [
+        _run(3, "completed", "cancelled", "2026-07-13T03:00:00Z"),
+        _run(2, "completed", "failure", "2026-07-13T02:00:00Z"),
+        _run(1, "completed", "success", "2026-07-13T01:00:00Z"),
+    ]
+    is_green, run = decide(runs)
+    assert is_green is False
+    assert run["databaseId"] == 2  # the failure is the latest decisive verdict
+
+
+def test_classify_buckets() -> None:
+    """success->green, failure->red, everything else->stale."""
+    assert classify("success") == "green"
+    assert classify("failure") == "red"
+    for stale in ("cancelled", "timed_out", "skipped", "neutral", "startup_failure", None):
+        assert classify(stale) == "stale", stale
 
 
 def test_no_completed_runs_is_not_green() -> None:

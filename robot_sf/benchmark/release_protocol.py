@@ -675,6 +675,18 @@ def parse_release_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="run",
         help="Preflight-only validation or full release execution.",
     )
+    parser.add_argument(
+        "--campaign-id",
+        type=str,
+        default=None,
+        help=(
+            "Optional exact campaign directory id (forwarded to the campaign runner). "
+            "Passing a fixed id makes the release run idempotent: a restart after a "
+            "walltime kill, node failure, or scheduler requeue resumes the existing "
+            "campaign directory through the campaign resume plan instead of starting "
+            "a fresh timestamped one."
+        ),
+    )
     return parser.parse_args(argv)
 
 

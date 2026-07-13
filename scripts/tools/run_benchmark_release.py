@@ -183,6 +183,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             cfg,
             output_root=args.output_root,
             label=args.label,
+            campaign_id=args.campaign_id,
             invoked_command=invoked_command,
         )
         preflight_payload = {
@@ -222,6 +223,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         cfg,
         output_root=args.output_root,
         label=args.label,
+        campaign_id=args.campaign_id,
         skip_publication_bundle=True,
         invoked_command=invoked_command,
     )

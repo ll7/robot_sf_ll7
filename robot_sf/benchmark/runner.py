@@ -54,6 +54,13 @@ else:
     _BASELINE_IMPORT_ERROR = None
 
 from robot_sf.benchmark.algorithm_metadata import enrich_algorithm_metadata
+from robot_sf.benchmark.circuit_breaker import (  # noqa: F401 - compatibility export.
+    _CIRCUIT_BREAKER_MSG_PREFIX_LEN,
+    DEFAULT_CIRCUIT_BREAKER_THRESHOLD,
+    build_abort_metadata,
+    error_signature,
+    normalize_circuit_breaker_threshold,
+)
 from robot_sf.benchmark.constants import EPISODE_SCHEMA_VERSION
 from robot_sf.benchmark.event_ledger import validate_record_event_ledger
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_artifacts
@@ -1499,6 +1506,7 @@ def validate_and_write(
 
 
 __all__ = [
+    "DEFAULT_CIRCUIT_BREAKER_THRESHOLD",
     "load_scenario_matrix",
     "run_batch",
     "run_episode",
@@ -1565,7 +1573,10 @@ def _write_validated_record(out_path: Path, schema: dict[str, Any], rec: dict[st
         f.write(json.dumps(rec, sort_keys=True) + "\n")
 
 
-def _run_batch_sequential(
+_error_signature = error_signature
+
+
+def _run_batch_sequential(  # noqa: C901, D417
     jobs: list[tuple[dict[str, Any], int]],
     *,
     out_path: Path,
@@ -1573,20 +1584,42 @@ def _run_batch_sequential(
     fixed_params: dict[str, Any],
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
-) -> tuple[int, list[dict[str, Any]]]:
-    """Run batch jobs sequentially and return write count + failures.
+    circuit_breaker_threshold: int | None = None,
+) -> tuple[int, list[dict[str, Any]], dict[str, Any] | None]:
+    """Run batch jobs sequentially and return write count + failures + abort metadata.
+
+    Circuit breaker: when ``circuit_breaker_threshold`` consecutive episode failures
+    share the same error signature (exception type + normalised message prefix), the
+    loop aborts early with status ``aborted_systematic_failure``.  A success or a
+    failure with a different signature resets the counter.
+
+    Args:
+        circuit_breaker_threshold: Consecutive identical failures before abort.
 
     Returns:
-        Tuple of (written_count, failure_records).
+        Tuple of (written_count, failure_records, abort_metadata_or_None).
     """
+    circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     wrote = 0
     failures: list[dict[str, Any]] = []
     total = len(jobs)
+    abort_metadata: dict[str, Any] | None = None
+
+    cb_tracker: dict[str, Any] = {
+        "signature": None,
+        "consecutive": 0,
+        "first_fail_idx": None,
+    }
+
     for idx, (sc, seed) in enumerate(jobs, start=1):
         try:
             rec = _run_job_worker((sc, seed, fixed_params))
             _write_validated_record(out_path, schema, rec)
             wrote += 1
+            # Reset circuit breaker on success
+            cb_tracker["signature"] = None
+            cb_tracker["consecutive"] = 0
+            cb_tracker["first_fail_idx"] = None
             if progress_cb is not None:
                 try:
                     progress_cb(idx, total, sc, seed, True, None)
@@ -1610,9 +1643,51 @@ def _run_batch_sequential(
                     progress_cb(idx, total, sc, seed, False, repr(e))
                 except Exception:  # pragma: no cover
                     pass
+
+            # Circuit breaker logic
+            if (
+                abort_metadata is None
+                and circuit_breaker_threshold is not None
+                and circuit_breaker_threshold > 0
+            ):
+                sig = _error_signature(e)
+                if cb_tracker["signature"] is None:
+                    cb_tracker["signature"] = sig
+                    cb_tracker["consecutive"] = 1
+                    cb_tracker["first_fail_idx"] = idx
+                elif sig == cb_tracker["signature"]:
+                    cb_tracker["consecutive"] += 1
+                else:
+                    # Different signature resets the streak
+                    cb_tracker["signature"] = sig
+                    cb_tracker["consecutive"] = 1
+                    cb_tracker["first_fail_idx"] = idx
+
+                if cb_tracker["consecutive"] >= circuit_breaker_threshold:
+                    projected_remaining = total - idx
+                    abort_metadata = build_abort_metadata(
+                        signature=sig,
+                        consecutive_failures=cb_tracker["consecutive"],
+                        first_fail_index=cb_tracker["first_fail_idx"],
+                        episodes_completed_before_onset=wrote,
+                        total_jobs=total,
+                    )
+                    logger.warning(
+                        "Circuit breaker tripped: %d consecutive identical failures "
+                        "(%s). Aborting arm after %d/%d jobs. Projected episodes saved: %d.",
+                        cb_tracker["consecutive"],
+                        sig[0],
+                        idx,
+                        total,
+                        projected_remaining,
+                    )
+                    # Stop processing further jobs
+                    break
+
             if fail_fast:
                 raise
-    return wrote, failures
+
+    return wrote, failures, abort_metadata
 
 
 def _run_batch_parallel(  # noqa: C901
@@ -1624,11 +1699,14 @@ def _run_batch_parallel(  # noqa: C901
     workers: int,
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
-) -> tuple[int, list[dict[str, Any]]]:
-    """Run batch jobs in parallel and return write count + failures.
+) -> tuple[int, list[dict[str, Any]], dict[str, Any] | None]:
+    """Run batch jobs in parallel and return write count + failures + abort metadata.
+
+    Circuit breaker is not available for parallel execution because jobs complete
+    concurrently.  ``abort_metadata`` is always None.
 
     Returns:
-        Tuple of (written_count, failure_records).
+        Tuple of (written_count, failure_records, abort_metadata_or_None).
     """
     wrote = 0
     failures: list[dict[str, Any]] = []
@@ -1696,7 +1774,7 @@ def _run_batch_parallel(  # noqa: C901
             )
             if fail_fast:
                 raise
-    return wrote, failures
+    return wrote, failures, None
 
 
 def _prepare_batch_setup(
@@ -1807,11 +1885,12 @@ def _run_jobs(
     workers: int,
     progress_cb: Callable[[int, int, dict[str, Any], int, bool, str | None], None] | None,
     fail_fast: bool,
-) -> tuple[int, list[dict[str, Any]]]:
+    circuit_breaker_threshold: int | None,
+) -> tuple[int, list[dict[str, Any]], dict[str, Any] | None]:
     """Execute jobs using sequential or parallel processing.
 
     Returns:
-        Tuple of (number of records written, list of failed jobs).
+        Tuple of (written_count, failure_records, abort_metadata_or_None).
     """
     if workers <= 1:
         return _run_batch_sequential(
@@ -1821,6 +1900,7 @@ def _run_jobs(
             fixed_params=fixed_params,
             progress_cb=progress_cb,
             fail_fast=fail_fast,
+            circuit_breaker_threshold=circuit_breaker_threshold,
         )
     else:
         return _run_batch_parallel(
@@ -1943,6 +2023,7 @@ def run_batch(  # noqa: PLR0913
     record_simulation_step_trace: bool = False,
     workers: int = 1,
     resume: bool = True,
+    circuit_breaker_threshold: int | None = None,
 ) -> dict[str, Any]:
     """Run a batch of episodes and write JSONL records.
 
@@ -1952,6 +2033,8 @@ def run_batch(  # noqa: PLR0913
     Returns:
         Summary dictionary with episode counts, failures, and execution metadata.
     """
+    circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
+
     # Prepare batch setup
     scenarios, out_path, schema = _prepare_batch_setup(
         scenarios_or_path,
@@ -1998,6 +2081,7 @@ def run_batch(  # noqa: PLR0913
             observation_noise=observation_noise,
             synthetic_actuation_profile=synthetic_actuation_profile,
             latency_stress_profile=latency_stress_profile,
+            circuit_breaker_threshold=circuit_breaker_threshold,
             record_planner_decision_trace=record_planner_decision_trace,
             record_simulation_step_trace=record_simulation_step_trace,
             workers=workers,
@@ -2048,7 +2132,7 @@ def run_batch(  # noqa: PLR0913
     jobs = _filter_resume_jobs(jobs, out_path, resume)
 
     # Run jobs
-    wrote, failures = _run_jobs(
+    wrote, failures, abort_metadata = _run_jobs(
         jobs,
         out_path,
         schema,
@@ -2056,6 +2140,7 @@ def run_batch(  # noqa: PLR0913
         workers,
         progress_cb,
         fail_fast,
+        circuit_breaker_threshold,
     )
 
     # Finalize and return summary
@@ -2070,6 +2155,8 @@ def run_batch(  # noqa: PLR0913
     )
     summary["total_jobs"] = len(jobs)
     summary["failures"] = failures
+    if abort_metadata is not None:
+        summary["abort"] = abort_metadata
     if benchmark_track is not None:
         summary["benchmark_track"] = benchmark_track
     if track_schema_version is not None:

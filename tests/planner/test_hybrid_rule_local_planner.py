@@ -1213,6 +1213,44 @@ def test_hybrid_rule_corridor_subgoal_rejects_occupied_rollout(monkeypatch) -> N
     assert evaluation["candidate"] == candidate
 
 
+def test_static_collision_rejection_caches_direct_call_context(monkeypatch) -> None:
+    """Direct rollout checks reuse a context built for the same observation."""
+    planner = HybridRuleLocalPlannerAdapter(HybridRuleLocalPlannerConfig())
+    observation = _obs()
+    candidate = HybridRuleCandidate(0.2, 0.0, "test")
+    grid = np.zeros((1, 3, 3), dtype=float)
+    monkeypatch.setattr(
+        planner,
+        "_obstacle_grid_payload",
+        lambda observation: (grid, {}, 0, 0.2),
+    )
+    monkeypatch.setattr(planner, "_grid_value", lambda point, grid, meta, channel: 0.0)
+    build_calls = 0
+    build_context = planner._build_clearance_context
+
+    def counted_build_context(current_observation):
+        nonlocal build_calls
+        build_calls += 1
+        return build_context(current_observation)
+
+    monkeypatch.setattr(planner, "_build_clearance_context", counted_build_context)
+
+    for _ in range(2):
+        assert (
+            planner._static_collision_rejection(
+                candidate=candidate,
+                observation=observation,
+                robot_pos=np.zeros(2),
+                hard_static_clearance=0.0,
+                use_continuous_static_check=False,
+                t=0.0,
+            )
+            is None
+        )
+
+    assert build_calls == 1
+
+
 def test_hybrid_rule_corridor_subgoal_rejects_static_clearance_band(monkeypatch) -> None:
     """Subgoal recovery must not reuse static-clearance escape exceptions."""
     cfg = HybridRuleLocalPlannerConfig(

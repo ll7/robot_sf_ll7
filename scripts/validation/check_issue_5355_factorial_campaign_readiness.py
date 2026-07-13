@@ -20,7 +20,8 @@ from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
     assess_campaign_readiness,
 )
 
-DEFAULT_CONFIG = Path("configs/research/prediction_mpc_factorial_v1.yaml")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CONFIG = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:

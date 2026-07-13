@@ -42,6 +42,15 @@ def _resolved_config_and_registry(tmp_path: Path) -> tuple[Path, Path]:
 class TestReadinessCLI:
     """Exit-code and output contract for the fail-closed gate."""
 
+    def test_default_config_is_resolved_from_script_location(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        code = main([])
+        assert code == 1
+        out = capsys.readouterr().out
+        assert "NOT READY" in out
+        assert "#5351" in out
+        assert "#5353" in out
+
     def test_real_config_exits_nonzero_on_open_dependencies(self, capsys):
         """The landed packet is blocked only on #5351/#5353 -> exit 1."""
         code = main(["--config", str(CONFIG_PATH)])

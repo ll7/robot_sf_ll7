@@ -107,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
             defects = lint_figure(figure)
             if defects:
                 for defect in defects:
-                    print(f"{defect.severity.upper()} {defect.kind}: {defect.message}")
+                    print(f"{defect.severity.upper()} {defect.defect_type}: {defect.message}")
             else:
                 print("QA clean: no defects")
             if png_out is not None:

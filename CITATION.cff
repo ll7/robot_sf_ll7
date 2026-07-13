@@ -12,7 +12,7 @@ license: MIT
 # release workflow and scripts/dev/check_version_alignment.py. The git
 # tag/release line is the single source of truth for the version; the
 # benchmark release protocol context lives in the title/abstract, not here.
-version: 0.0.2
+version: 0.0.3
 date-released: 2026-03-26
 abstract: >-
   Social navigation simulation and benchmark tooling with a paper-facing,

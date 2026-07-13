@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "last_avoidable_replay.v1.json",
+  "title": "Last Avoidable Replay v1",
+  "description": "Offline, controlled-fixture result of frozen-state counterfactual replay (issue #5442). Records whether a collision was avoidable, the earliest avoidable unsafe control action (t_uca) and the point of no return (t_inevitable), the versioned analysis config, the baseline determinism check, and every per-decision-point branch result. This is controlled-fixture diagnostic evidence only; it assigns no legal or moral fault and is not a real-episode root-cause claim. Field naming is forward-compatible with the collision_causal_report.v1 contract proposed in issue #5441.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "verdict",
+    "normative_fault",
+    "claim_boundary",
+    "t_danger",
+    "t_uca",
+    "t_inevitable",
+    "t_contact",
+    "feasible_coverage",
+    "abstained",
+    "abstain_reason",
+    "config",
+    "determinism",
+    "branches",
+    "minimal_sufficient_interventions",
+    "runtime_s",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "last_avoidable_replay.v1"
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["avoidable", "already_unavoidable", "unknown"]
+    },
+    "normative_fault": {
+      "const": "not_assessed"
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "t_danger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "t_uca": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "t_inevitable": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "t_contact": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "feasible_coverage": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "abstained": {
+      "type": "boolean"
+    },
+    "abstain_reason": {
+      "type": ["string", "null"]
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "t_danger",
+        "t_contact",
+        "horizon",
+        "substitution_mode",
+        "determinism_replays",
+        "action_set_id",
+        "feasibility_filter",
+        "collision_predicate",
+        "pedestrian_response"
+      ],
+      "properties": {
+        "t_danger": {"type": "integer", "minimum": 0},
+        "t_contact": {"type": "integer", "minimum": 1},
+        "horizon": {"type": "integer", "minimum": 1},
+        "substitution_mode": {"type": "string", "enum": ["single_step", "hold"]},
+        "determinism_replays": {"type": "integer", "minimum": 1},
+        "action_set_id": {"type": "string", "minLength": 1},
+        "feasibility_filter": {"type": "string", "minLength": 1},
+        "collision_predicate": {"type": "string", "minLength": 1},
+        "pedestrian_response": {"type": "string", "minLength": 1}
+      }
+    },
+    "determinism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replays",
+        "collision_stable",
+        "contact_step_stable",
+        "deterministic",
+        "observed_contact_steps"
+      ],
+      "properties": {
+        "replays": {"type": "integer", "minimum": 1},
+        "collision_stable": {"type": "boolean"},
+        "contact_step_stable": {"type": "boolean"},
+        "deterministic": {"type": "boolean"},
+        "observed_contact_steps": {
+          "type": "array",
+          "items": {"type": ["integer", "null"], "minimum": 0}
+        }
+      }
+    },
+    "branches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "feasible_count", "any_prevented", "preventing_action_labels"],
+        "properties": {
+          "step": {"type": "integer", "minimum": 0},
+          "feasible_count": {"type": "integer", "minimum": 0},
+          "any_prevented": {"type": "boolean"},
+          "preventing_action_labels": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    },
+    "minimal_sufficient_interventions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["step", "action_label", "substitution_mode", "horizon"],
+        "properties": {
+          "step": {"type": "integer", "minimum": 0},
+          "action_label": {"type": "string", "minLength": 1},
+          "substitution_mode": {"type": "string", "enum": ["single_step", "hold"]},
+          "horizon": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "runtime_s": {
+      "type": ["number", "null"],
+      "minimum": 0.0
+    },
+    "notes": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "issue_4882.summary.v1",
+  "issue": 4882,
+  "evidence_tier": "diagnostic-only",
+  "result_classification": "branch_b_boundary",
+  "status": "evidence",
+  "claim_boundary": "diagnostic-only; feeds maintainer branch decision; promotes no paper/dissertation/leaderboard claim",
+  "benchmark_promotion": false,
+  "paper_facing": false,
+  "diagnostic_only": true,
+  "branch_headline_conservative": "branch_b_boundary",
+  "branch_under_seed_block_fixed_suite": "branch_a_separation",
+  "verdict_is_method_dependent": true
+}

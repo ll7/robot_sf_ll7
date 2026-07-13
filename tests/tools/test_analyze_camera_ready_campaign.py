@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import sys
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 import pytest
@@ -13,6 +14,7 @@ from robot_sf.benchmark.scenario_difficulty import build_scenario_difficulty_ana
 from scripts.tools.analyze_camera_ready_campaign import (
     _build_markdown_report,
     _build_scenario_difficulty_markdown,
+    _recompute_legacy_campaign_integrity,
     analyze_campaign,
     main,
 )
@@ -527,6 +529,52 @@ def test_analyze_campaign_fails_closed_when_legacy_provenance_is_missing(tmp_pat
     assert analysis["campaign_integrity"]["blockers"][0]["invariant"] == (
         "missing_integrity_provenance"
     )
+
+
+def test_analyze_campaign_fails_closed_for_non_mapping_integrity_json(tmp_path: Path) -> None:
+    """A malformed integrity root remains a structured non-success result."""
+    campaign_root = tmp_path / "campaign"
+    _write_json(
+        campaign_root / "reports" / "campaign_summary.json",
+        {"campaign": {"campaign_id": "legacy"}, "runs": []},
+    )
+    integrity_path = campaign_root / "reports" / "campaign_integrity.json"
+    integrity_path.write_text("[\"invalid-root\"]\n", encoding="utf-8")
+
+    analysis = analyze_campaign(campaign_root)
+
+    assert analysis["campaign_integrity"]["status"] == "not_evaluable"
+    assert analysis["campaign_integrity"]["blockers"][0]["invariant"] == (
+        "unreadable_integrity_provenance"
+    )
+
+
+def test_legacy_recomputation_does_not_mutate_nested_run_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Path normalization must isolate nested summary data from validator mutations."""
+    campaign_root = tmp_path / "campaign"
+    _write_legacy_integrity_campaign(
+        campaign_root,
+        [_legacy_integrity_row("smoke", 111, "config-smoke", "commit-a")],
+    )
+    summary_payload = json.loads(
+        (campaign_root / "reports" / "campaign_summary.json").read_text(encoding="utf-8")
+    )
+    original_runs = deepcopy(summary_payload["runs"])
+
+    def mutate_entries(run_entries: list[dict], **_: object) -> dict:
+        run_entries[0]["planner"]["key"] = "mutated"
+        return {"status": "valid", "blockers": []}
+
+    monkeypatch.setattr(
+        "scripts.tools.analyze_camera_ready_campaign.validate_campaign_integrity",
+        mutate_entries,
+    )
+
+    _recompute_legacy_campaign_integrity(campaign_root, summary_payload)
+
+    assert summary_payload["runs"] == original_runs
 
 
 def test_analyze_campaign_cli_returns_nonzero_for_invalid_legacy_bundle(

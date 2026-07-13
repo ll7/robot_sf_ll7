@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 import math
@@ -426,7 +427,7 @@ def _recompute_legacy_campaign_integrity(  # noqa: C901
         for entry in run_entries:
             if not isinstance(entry, dict):
                 continue
-            normalized_entry = dict(entry)
+            normalized_entry = copy.deepcopy(entry)
             raw_episodes_path = normalized_entry.get("episodes_path")
             if isinstance(raw_episodes_path, str) and raw_episodes_path.strip():
                 normalized_entry["episodes_path"] = str(
@@ -1104,9 +1105,19 @@ def analyze_campaign(  # noqa: C901
             else campaign_root / "reports" / "campaign_integrity.json"
         )
         try:
-            campaign_integrity = _read_json(integrity_path)
+            loaded_integrity = _read_json(integrity_path)
         except (OSError, ValueError):
             campaign_integrity = {}
+        else:
+            campaign_integrity = (
+                loaded_integrity
+                if isinstance(loaded_integrity, dict)
+                else _not_evaluable_integrity(
+                    "unreadable_integrity_provenance",
+                    artifact=str(integrity_path),
+                    reason="integrity JSON root must be an object",
+                )
+            )
     if not isinstance(campaign_integrity, dict) or campaign_integrity.get("status") in {
         None,
         "not_evaluated",
@@ -1114,6 +1125,12 @@ def analyze_campaign(  # noqa: C901
         recomputed = _recompute_legacy_campaign_integrity(campaign_root, summary_payload)
         if recomputed is not None:
             campaign_integrity = recomputed
+        elif not isinstance(campaign_integrity, dict):
+            campaign_integrity = _not_evaluable_integrity(
+                "unreadable_integrity_provenance",
+                artifact="campaign_integrity",
+                reason="integrity JSON root must be an object",
+            )
 
     diagnostics: list[PlannerDiagnostics] = []
     findings: list[str] = []

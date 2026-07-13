@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 103,
+  "total_guards": 106,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 2,
@@ -91,9 +91,9 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 71,
-      "has_as_count": 14,
-      "pragma_no_cover_count": 24,
+      "count_ceiling": 74,
+      "has_as_count": 15,
+      "pragma_no_cover_count": 25,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
@@ -108,12 +108,15 @@
         "robot_sf/baselines/sicnav.py:420",
         "robot_sf/baselines/sicnav.py:298",
         "robot_sf/benchmark/cli.py:198",
+        "robot_sf/benchmark/collision_causal_report.py:47",
         "robot_sf/benchmark/distributions.py:131",
         "robot_sf/benchmark/episode_replay_figure.py:37",
         "robot_sf/benchmark/episode_replay_figure.py:50",
         "robot_sf/benchmark/episode_replay_figure.py:57",
         "robot_sf/benchmark/episode_replay_figure.py:852",
         "robot_sf/benchmark/episode_replay_figure.py:890",
+        "robot_sf/benchmark/figure_qa.py:502",
+        "robot_sf/benchmark/figure_qa.py:570",
         "robot_sf/benchmark/figures/export.py:155",
         "robot_sf/benchmark/full_classic/encode.py:36",
         "robot_sf/benchmark/full_classic/encode.py:86",

@@ -1,0 +1,111 @@
+# Frozen, preregistered matched-calibration comparison packet (issue #5445).
+#
+# Status: API + fixture evidence. This packet drives the calibration comparison
+# in scripts/analysis/collision_risk_calibration_report.py. Realized collision
+# labels are drawn from an EXPLICIT constant-velocity forecast model (optionally
+# misspecified per family), NOT from full simulator rollouts. It validates the
+# calibration machinery and demonstrates self-consistency + miscalibration
+# detection. It is NOT calibrated benchmark risk for the simulator distribution
+# and changes no benchmark metric semantics. A real-distribution run needs
+# eligible simulator traces and is out of scope until an approved compute packet
+# exists (see stop_rule below).
+description: >-
+  Matched calibration comparison of online collision-risk estimators for issue
+  #5445. All estimators receive identical scenario histories, candidate actions,
+  footprints, and horizons and are graded against the same realized outcome.
+
+# Estimator configuration shared by every scored row (matched inputs).
+estimator:
+  horizon_steps: 20          # H (2.0 s at dt = 0.1 s)
+  dt_s: 0.1
+  n_samples: 512             # Monte Carlo samples for the probabilistic estimator
+  velocity_std_m_s: 0.3      # ASSUMED forecast noise; ground truth may differ per family
+  cross_actor_correlation: 0.3
+  robot_radius_m: 0.3
+  pedestrian_radius_m: 0.3
+  seed: 20260713             # fixed dataset + bootstrap seed for reproducibility
+  deadline_ms: 100.0         # control deadline for online / offline_only latency
+  max_pedestrian_speed_m_s: 2.5
+  ci95_abstain_halfwidth: 0.05
+  min_samples_for_estimate: 64
+
+# Preregistration record. These items are fixed BEFORE scoring; the report copies
+# them into its provenance block so the comparison cannot be tuned post hoc.
+provenance:
+  target_distribution: >-
+    Declared constant-velocity Gaussian pedestrian forecast model at the
+    estimator's assumed noise scale; the target is the estimator's own model
+    distribution for the in-model families and a deliberately misspecified model
+    for the misspecified families.
+  collision_predicate: >-
+    Robot/actor disc footprints touch (segment-minimum centre distance <= summed
+    radii) at any horizon step, using the identical geometry as the estimator.
+  horizon_steps: 20
+  dt_s: 0.1
+  planner_rows:
+    - constant_velocity_drive   # single planner-agnostic drive-through action family
+  discovery_calibration_split: >-
+    No discovery/calibration split is used: labels are drawn i.i.d. from the
+    declared model, so all samples are calibration samples with unit weight (no
+    case-control enrichment). Enriched-trace weighting hooks exist in the harness
+    but are unused for this fixture packet.
+  prevalence_note: >-
+    Base rate is the natural rate produced by the scenario generator; unit
+    weights, so no prevalence correction is applied. Enriched real traces would
+    require target/proposal weights (harness supports per-sample weights).
+  compute_cap: >-
+    CPU-only fixture generation and scoring; no benchmark campaign, no Slurm/GPU.
+    Bounded by n_samples below and the per-estimator Monte Carlo cost.
+  stop_rule: >-
+    Stop before any real-distribution run until eligible simulator traces,
+    target-distribution provenance, and action-conditioned labels exist. Stop
+    promotion of an estimator if its calibration CI includes the simple baseline
+    and its runtime is worse.
+
+# Scenario families. In-model families should be well-calibrated (self-consistency);
+# misspecified families should show a larger calibration error, proving the
+# harness detects miscalibration.
+families:
+  - name: in_model_low_density
+    n_scenarios: 220
+    gt_velocity_std_m_s: 0.3         # matches estimator -> calibrated by construction
+    n_pedestrians: 3
+    robot_speed_range: [0.6, 1.2]
+    ped_spawn_radius_m: 3.5
+    strata: {density: low, prediction_model: constant_velocity}
+  - name: in_model_high_density
+    n_scenarios: 220
+    gt_velocity_std_m_s: 0.3
+    n_pedestrians: 6
+    robot_speed_range: [0.8, 1.4]
+    ped_spawn_radius_m: 3.0
+    strata: {density: high, prediction_model: constant_velocity}
+  - name: misspecified_underconfident
+    n_scenarios: 220
+    gt_velocity_std_m_s: 0.7         # ground truth noisier than assumed -> miscalibrated
+    n_pedestrians: 4
+    robot_speed_range: [0.6, 1.4]
+    ped_spawn_radius_m: 3.0
+    strata: {density: mixed, prediction_model: constant_velocity_misspecified}
+  - name: misspecified_biased
+    n_scenarios: 220
+    gt_velocity_std_m_s: 0.3
+    gt_velocity_bias_m_s: [-0.8, 0.3]  # ground truth drifts toward the robot lane -> miscalibrated
+    n_pedestrians: 4
+    robot_speed_range: [0.6, 1.4]
+    ped_spawn_radius_m: 3.0
+    strata: {density: mixed, prediction_model: constant_velocity_misspecified}
+
+evaluation:
+  min_eligible_samples: 200     # fail closed below this (stop rule)
+  n_reliability_bins: 10
+  fnr_thresholds: [0.1, 0.25, 0.5]
+  n_bootstrap: 200
+  verdict_thresholds:
+    ece_use_online_max: 0.05
+    ece_revise_max: 0.15
+    min_ap_over_prevalence: 1.5
+  # Action-sensitivity pairs are left empty for the fixture packet; the harness
+  # supports (higher_risk_scenario_id, lower_risk_scenario_id) pairs when a packet
+  # supplies matched-state action variants.
+  action_pairs: []

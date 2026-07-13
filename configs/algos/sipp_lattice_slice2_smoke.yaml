@@ -1,0 +1,49 @@
+# Experimental/testing-only SIPP Slice 2 config; Slice 3 owns outcome evidence.
+# Resolve with --algo sipp_lattice and this file; explicit opt-in is mandatory.
+allow_testing_algorithms: true
+
+# Kinodynamic primitive limits (shared schema with the Slice-1 foundation).
+max_linear_speed: 1.0
+max_angular_speed: 1.2
+max_linear_acceleration: 0.8
+max_steering_rate: 2.0
+primitive_duration: 0.2
+linear_resolution: 0.2
+angular_resolution: 0.25
+allow_reverse: true
+deceleration_steps: 4
+recenter_angular_max: 0.4
+
+# Footprint / clearance.
+robot_radius: 0.25
+pedestrian_radius: 0.30
+safety_margin: 0.10
+min_clearance: 0.55
+grid_obstacle_threshold: 0.5
+continuous_check_steps: 5
+goal_tolerance: 0.25
+
+occupancy_candidates: 5
+occupancy_lookahead: 1.0
+occupancy_weight: 1.2
+occupancy_angle_weight: 0.3
+
+# Hard-bounded state-time search.
+time_slot_duration: 0.2
+planning_horizon_slots: 40
+max_expansions: 2000
+max_planning_time_s: 0.05
+heuristic_weight: 1.5
+
+# Commitment and replan triggers.
+commitment_horizon: 4
+offtrack_tolerance: 0.5
+xy_resolution: 0.1
+heading_resolution: 0.2618
+velocity_resolution: 0.1
+
+# Forecast and cost shaping.
+pedestrian_forecast_horizon_s: 3.0
+turn_cost_weight: 0.1
+reverse_cost_weight: 0.5
+wait_cost_weight: 1.0

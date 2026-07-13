@@ -29,6 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Not calibrated benchmark risk for the simulator distribution and never a real-world risk claim; no
   benchmark campaign or Slurm/GPU run is included. See
   `docs/context/evidence/issue_5445_calibration_preregistration_2026-07-13.md`.
+* **issue #5413 bounded kinodynamic SIPP search (#5306 Slice 2).** Adds trusted-horizon,
+  time-aligned pedestrian occupancy; weighted state-time search; reachable command transitions;
+  curved-footprint static checks; and multi-cycle commitment. Bounded failure uses a reachable,
+  collision-checked deceleration or an explicit emergency-stop target. The `sipp_lattice` key is
+  testing-only and requires `allow_testing_algorithms`; evidence is an exploratory CPU smoke, not
+  a safety, liveness, or superiority claim. Slice 3 owns outcome evaluation.
 * **issue #5444 action-conditioned online collision-risk API and baselines.** New
   `robot_sf/research/collision_risk/` package exposes a planner-agnostic, versioned
   (`action_conditioned_collision_risk.v1`) estimate of `P(contact in (t, t+H] | action u)`.
@@ -75,6 +81,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #5464 PR Contract Check no longer flags modified evidence files as new.** The
+  `pr-contract-check.yml` workflow used `actions/checkout` on `pull_request` without fetching the
+  base branch, so `origin/main` was absent in the runner. `pr_contract_check.py`'s `is_file_new`
+  then treated the failed `git show origin/main:path` as "file is new" for *every* changed evidence
+  file, raising false-positive `AI-GENERATED`/`NEEDS-REVIEW` marker blockers on `docs/context/evidence/**`
+  files that already exist marker-less on `main` (observed on PR #5463). Fixed on two fronts: the
+  workflow now fetches the base ref (so `origin/<base>` resolves) and passes an authoritative
+  `--added-files-file` derived from the GitHub `pulls/{n}/files` API (`status == "added"`); and the
+  script now treats an unresolvable base ref as "unknown, not new" and prefers the authoritative
+  added-files signal over the git heuristic when available. CI-tooling correctness fix
+  (`diagnostic-only`); no benchmark, metric, or evidence-content change.
 * **issue #5429 `load_scenario_matrix` no longer misroutes single-document abstract scenario
   files.** A single-document YAML file whose top-level content is a *list* of abstract benchmark
   scenarios (the `density`/`flow`/`obstacle` form, e.g. `yaml.safe_dump([s1, s2])`) is now returned

@@ -101,6 +101,47 @@ def get_issue_labels(issue: str, repo: str) -> list[str]:
     return []
 
 
+def base_ref_is_resolvable(base_ref: str) -> bool:
+    """Return True if ``base_ref`` resolves to a commit in the local repository.
+
+    On ``pull_request`` events the default ``actions/checkout`` produces a shallow
+    merge-ref with no ``origin/main`` ref present. Git commands that reference an
+    unresolvable base (``git diff origin/main``, ``git show origin/main:path``) then
+    error, and callers that treat that error as "file is new" mis-flag every modified
+    evidence file as brand new (issue #5464). Callers use this guard to distinguish
+    "base unavailable" from a genuine "file is new" answer.
+    """
+    try:
+        res = subprocess.run(
+            ["git", "rev-parse", "--verify", "--quiet", f"{base_ref}^{{commit}}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return res.returncode == 0
+    except _BEST_EFFORT_ERRORS:
+        return False
+
+
+def get_added_files(added_files_file: Path | str | None) -> set[str] | None:
+    """Load the authoritative set of *added* files from a newline-delimited file.
+
+    The PR Contract Check workflow collects this list from the GitHub
+    ``pulls/{n}/files`` API (``status == "added"``), which is authoritative and does
+    not depend on ``origin/main`` being fetched in the runner. When present, this set
+    is the source of truth for "which changed files are new" and supersedes the
+    git-diff heuristic (issue #5464). Returns ``None`` when no file is supplied so
+    callers fall back to the git heuristic for local runs.
+    """
+    if not added_files_file or not os.path.exists(added_files_file):
+        return None
+    try:
+        with open(added_files_file, encoding="utf-8") as handle:
+            return {line.strip().replace("\\", "/") for line in handle if line.strip()}
+    except _BEST_EFFORT_ERRORS:
+        return None
+
+
 def get_new_files(base_ref: str) -> set[str]:
     """Get the set of files added (created) in this branch relative to base_ref."""
     new_files = set()
@@ -124,8 +165,18 @@ def get_new_files(base_ref: str) -> set[str]:
 
 
 def is_file_new(path: str, base_ref: str = "origin/main") -> bool:
-    """Check if the file is new (does not exist on base_ref)."""
+    """Check if the file is new (does not exist on base_ref).
+
+    If ``base_ref`` cannot be resolved locally (e.g. ``origin/main`` was never fetched
+    in a shallow CI checkout), this returns ``False`` rather than assuming the file is
+    new: a missing base is "unknown", not "added". Treating unknown as new produced the
+    false-positive evidence-hygiene blockers in issue #5464. The authoritative
+    added-files signal from the GitHub API (see ``get_added_files``) is preferred over
+    this heuristic when available.
+    """
     if not os.path.exists(path):
+        return False
+    if not base_ref_is_resolvable(base_ref):
         return False
     res = subprocess.run(["git", "show", f"{base_ref}:{path}"], capture_output=True, check=False)
     return res.returncode != 0
@@ -189,10 +240,21 @@ def check_state_refresh_only(changed_files: list[str], title: str, body: str) ->
     return []
 
 
-def check_evidence_tree_hygiene(changed_files: list[str], base_ref: str) -> list[str]:  # noqa: C901, PLR0912
-    """Rule 4: Evidence tree marker and provenance checks."""
+def check_evidence_tree_hygiene(  # noqa: C901, PLR0912
+    changed_files: list[str], base_ref: str, added_files: set[str] | None = None
+) -> list[str]:
+    """Rule 4: Evidence tree marker and provenance checks.
+
+    ``added_files`` is the authoritative set of newly-added paths (typically from the
+    GitHub ``pulls/{n}/files`` API, ``status == "added"``). When provided it is the
+    sole source of truth for deciding whether an evidence file is new, so the marker
+    and distance-convention lints only fire on genuinely added files and never on
+    modified pre-existing ones (issue #5464). When ``None`` the function falls back to
+    the git-diff heuristic for local runs.
+    """
     blockers = []
-    new_files = get_new_files(base_ref)
+    # Only consult the git heuristic when no authoritative added-files signal exists.
+    new_files = set() if added_files is not None else get_new_files(base_ref)
 
     for f in changed_files:
         f_norm = f.replace("\\", "/").strip()
@@ -218,7 +280,12 @@ def check_evidence_tree_hygiene(changed_files: list[str], base_ref: str) -> list
             continue
 
         # 1. Marker check for new evidence files
-        is_new = (f in new_files) or is_file_new(f, base_ref)
+        if added_files is not None:
+            # Authoritative GitHub-API signal: a file is new iff it was "added". This
+            # does not depend on origin/main being fetched in the runner (issue #5464).
+            is_new = f_norm in added_files
+        else:
+            is_new = (f in new_files) or is_file_new(f, base_ref)
         if is_new:
             if "AI-GENERATED" not in content or "NEEDS-REVIEW" not in content:
                 blockers.append(
@@ -461,6 +528,7 @@ def run_all_checks(
     repo: str,
     base_ref: str,
     pr_number: str | None,
+    added_files: set[str] | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
     """Run all 6 contract checks."""
     blockers = []
@@ -480,7 +548,7 @@ def run_all_checks(
     blockers.extend(state_blockers)
 
     # 4. Evidence tree hygiene
-    evidence_blockers = check_evidence_tree_hygiene(changed_files, base_ref)
+    evidence_blockers = check_evidence_tree_hygiene(changed_files, base_ref, added_files)
     blockers.extend(evidence_blockers)
 
     # 5. Successor discipline
@@ -590,6 +658,16 @@ def main() -> int:  # noqa: C901
     parser = argparse.ArgumentParser(description="PR contract check.")
     parser.add_argument("--github-event-path", type=Path, help="Path to github event path JSON.")
     parser.add_argument("--changed-files-file", type=Path, help="Path to changed files list file.")
+    parser.add_argument(
+        "--added-files-file",
+        type=Path,
+        help=(
+            "Path to a newline-delimited list of authoritatively ADDED files "
+            "(GitHub pulls/{n}/files, status == 'added'). When provided this is the "
+            "source of truth for evidence-hygiene 'is new' decisions and avoids the "
+            "origin/main-fetch dependency (issue #5464)."
+        ),
+    )
     parser.add_argument("--pr-body-file", type=Path, help="PR body file for local run/test.")
     parser.add_argument("--pr-title", type=str, help="PR title for local run/test.")
     parser.add_argument("--pr-number", type=str, help="PR number for local run/test.")
@@ -628,10 +706,11 @@ def main() -> int:  # noqa: C901
         pr_title = args.pr_title
 
     changed_files = get_changed_files(args.changed_files_file, args.base_ref)
+    added_files = get_added_files(args.added_files_file)
 
     # Run checks
     blockers, warnings, infos = run_all_checks(
-        pr_title, pr_body, changed_files, repo, args.base_ref, pr_number
+        pr_title, pr_body, changed_files, repo, args.base_ref, pr_number, added_files
     )
 
     # Build status

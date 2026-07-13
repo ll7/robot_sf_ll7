@@ -480,6 +480,17 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         ),
         requires_explicit_opt_in=True,
     ),
+    AlgorithmReadiness(
+        canonical_name="sipp_lattice",
+        tier="experimental",
+        aliases=("sipp_lattice", "sipp_kinodynamic", "kinodynamic_sipp"),
+        note=(
+            "Bounded kinodynamic state-time (SIPP-class) local search with time-indexed "
+            "pedestrian safe intervals and multi-step commitment (#5306 Slice 2); exploratory "
+            "implementation evidence only, not benchmark superiority evidence."
+        ),
+        requires_explicit_opt_in=True,
+    ),
 )
 
 _ALIAS_INDEX: dict[str, AlgorithmReadiness] = {

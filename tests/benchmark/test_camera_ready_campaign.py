@@ -289,9 +289,7 @@ def test_campaign_integrity_resolves_relocated_episode_paths(tmp_path: Path) -> 
         "/etc/passwd",
     ],
 )
-def test_campaign_integrity_rejects_untrusted_episode_paths(
-    tmp_path: Path, raw_path: str
-) -> None:
+def test_campaign_integrity_rejects_untrusted_episode_paths(tmp_path: Path, raw_path: str) -> None:
     """Traversal and external absolute paths become structured blockers."""
     verdict = camera_ready_run_state_module.validate_campaign_integrity(
         [

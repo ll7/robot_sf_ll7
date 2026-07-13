@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.camera_ready._run_state import validate_campaign_integrity
 from robot_sf.benchmark.identity.hash_utils import read_jsonl as _read_jsonl
 from robot_sf.benchmark.scenario_difficulty import build_scenario_difficulty_analysis
 from robot_sf.benchmark.utils import (
@@ -309,6 +310,141 @@ def _load_optional_csv_artifact(
     if not path.exists():
         return []
     return _read_csv(path)
+
+
+def _artifact_reference(payload: dict[str, Any], name: str) -> str | None:
+    """Return a repository-relative artifact reference from a campaign payload."""
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return None
+    raw_path = artifacts.get(name)
+    return raw_path if isinstance(raw_path, str) and raw_path.strip() else None
+
+
+def _load_campaign_manifest(
+    campaign_root: Path,
+    summary_payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Load the frozen campaign manifest when the bundle carries one."""
+    candidates = [campaign_root / "campaign_manifest.json"]
+    summary_reference = _artifact_reference(summary_payload, "campaign_manifest")
+    if summary_reference:
+        candidates.append(_resolve_safe_artifact_path(campaign_root, summary_reference))
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        payload = _read_json(candidate)
+        return payload if isinstance(payload, dict) else None
+    return None
+
+
+def _not_evaluable_integrity(blocker: str, **details: Any) -> dict[str, Any]:
+    """Build a fail-closed verdict when a frozen integrity denominator is unavailable."""
+    return {
+        "schema_version": "benchmark-camera-ready-integrity.v1",
+        "status": "not_evaluable",
+        "benchmark_success_allowed": False,
+        "expected_identity_count": None,
+        "checked_arm_count": 0,
+        "blockers": [{"arm": "campaign", "invariant": blocker, "details": details}],
+        "claim_boundary": (
+            "A derived clean slice is diagnostic-only unless it was predeclared and "
+            "provenance-complete."
+        ),
+    }
+
+
+def _recompute_legacy_campaign_integrity(  # noqa: C901
+    campaign_root: Path,
+    summary_payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Recompute integrity for a frozen bundle that predates persisted verdicts.
+
+    Minimal unit-test fixtures without a campaign manifest are not frozen bundles and retain their
+    historical analyzer behavior. A real frozen bundle must provide the manifest and complete
+    preflight scenario inventory; otherwise the recomputation fails closed.
+    """
+    try:
+        manifest = _load_campaign_manifest(campaign_root, summary_payload)
+    except (OSError, ValueError) as exc:
+        return _not_evaluable_integrity(
+            "unreadable_integrity_provenance",
+            artifact="campaign_manifest.json",
+            error=str(exc),
+        )
+    if manifest is None:
+        return None
+
+    manifest_artifact = _artifact_reference(manifest, "preflight_preview_scenarios")
+    try:
+        preview_path = (
+            _resolve_safe_artifact_path(campaign_root, manifest_artifact)
+            if manifest_artifact
+            else campaign_root / "preflight" / "preview_scenarios.json"
+        )
+    except ValueError as exc:
+        return _not_evaluable_integrity(
+            "unreadable_integrity_provenance",
+            artifact="preflight_preview_scenarios",
+            error=str(exc),
+        )
+    if not preview_path.exists():
+        return _not_evaluable_integrity(
+            "missing_integrity_provenance",
+            missing=["complete preflight scenario inventory"],
+        )
+    try:
+        preview = _read_json(preview_path)
+    except (OSError, ValueError) as exc:
+        return _not_evaluable_integrity(
+            "unreadable_integrity_provenance",
+            artifact=str(preview_path),
+            error=str(exc),
+        )
+    scenarios = preview.get("scenarios") if isinstance(preview, dict) else None
+    if not isinstance(scenarios, list) or preview.get("truncated") is True:
+        return _not_evaluable_integrity(
+            "missing_integrity_provenance",
+            missing=["complete preflight scenario inventory"],
+        )
+
+    seed_policy = manifest.get("seed_policy")
+    resolved_seeds = seed_policy.get("resolved_seeds") if isinstance(seed_policy, dict) else None
+    run_entries = summary_payload.get("runs")
+    if not isinstance(resolved_seeds, list) or not resolved_seeds:
+        return _not_evaluable_integrity(
+            "missing_integrity_provenance",
+            missing=["seed_policy.resolved_seeds"],
+        )
+    if not isinstance(run_entries, list):
+        return _not_evaluable_integrity(
+            "missing_integrity_provenance",
+            missing=["campaign_summary.runs"],
+        )
+    try:
+        normalized_run_entries: list[dict[str, Any]] = []
+        for entry in run_entries:
+            if not isinstance(entry, dict):
+                continue
+            normalized_entry = dict(entry)
+            raw_episodes_path = normalized_entry.get("episodes_path")
+            if isinstance(raw_episodes_path, str) and raw_episodes_path.strip():
+                normalized_entry["episodes_path"] = str(
+                    _resolve_safe_episodes_path(campaign_root, raw_episodes_path)
+                )
+            normalized_run_entries.append(normalized_entry)
+        return validate_campaign_integrity(
+            normalized_run_entries,
+            scenarios=[scenario for scenario in scenarios if isinstance(scenario, dict)],
+            resolved_seeds=resolved_seeds,
+            campaign_root=campaign_root,
+            campaign_manifest=manifest,
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        return _not_evaluable_integrity(
+            "unreadable_integrity_provenance",
+            error=str(exc),
+        )
 
 
 def _default_verified_simple_manifest_path() -> Path | None:
@@ -948,7 +1084,7 @@ def _build_markdown_report(payload: dict[str, Any]) -> str:  # noqa: C901
     return "\n".join(lines) + "\n"
 
 
-def analyze_campaign(
+def analyze_campaign(  # noqa: C901
     campaign_root: Path,
     *,
     tolerance: float = 1e-3,
@@ -960,12 +1096,24 @@ def analyze_campaign(
     run_entries = summary_payload.get("runs", [])
     row_map = _planner_row_index(summary_payload)
     campaign_integrity = summary_payload.get("campaign_integrity")
-    if not isinstance(campaign_integrity, dict):
-        integrity_path = campaign_root / "reports" / "campaign_integrity.json"
+    if not isinstance(campaign_integrity, dict) or not campaign_integrity.get("status"):
+        integrity_reference = _artifact_reference(summary_payload, "campaign_integrity_json")
+        integrity_path = (
+            _resolve_safe_artifact_path(campaign_root, integrity_reference)
+            if integrity_reference
+            else campaign_root / "reports" / "campaign_integrity.json"
+        )
         try:
             campaign_integrity = _read_json(integrity_path)
         except (OSError, ValueError):
             campaign_integrity = {}
+    if not isinstance(campaign_integrity, dict) or campaign_integrity.get("status") in {
+        None,
+        "not_evaluated",
+    }:
+        recomputed = _recompute_legacy_campaign_integrity(campaign_root, summary_payload)
+        if recomputed is not None:
+            campaign_integrity = recomputed
 
     diagnostics: list[PlannerDiagnostics] = []
     findings: list[str] = []
@@ -1103,7 +1251,15 @@ def main() -> int:
             indent=2,
         )
     )
-    return 0
+    return (
+        1
+        if analysis.get("campaign_integrity", {}).get("status")
+        in {
+            "invalid",
+            "not_evaluable",
+        }
+        else 0
+    )
 
 
 if __name__ == "__main__":

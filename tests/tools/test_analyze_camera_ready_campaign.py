@@ -36,6 +36,78 @@ def _write_jsonl(path: Path, rows: list[dict]) -> None:
     )
 
 
+def _write_legacy_integrity_campaign(campaign_root: Path, rows: list[dict]) -> None:
+    """Create a frozen pre-integrity campaign bundle with complete provenance inputs."""
+    episodes_path = campaign_root / "runs" / "goal" / "episodes.jsonl"
+    _write_jsonl(episodes_path, rows)
+    _write_json(
+        campaign_root / "preflight" / "preview_scenarios.json",
+        {
+            "truncated": False,
+            "scenarios": [
+                {"id": "smoke", "seeds": [111]},
+                {"id": "corner", "seeds": [222]},
+            ],
+        },
+    )
+    _write_json(
+        campaign_root / "campaign_manifest.json",
+        {
+            "seed_policy": {"resolved_seeds": [111, 222]},
+            "git": {"commit": "commit-a"},
+            "artifacts": {"preflight_preview_scenarios": "preflight/preview_scenarios.json"},
+        },
+    )
+    _write_json(
+        campaign_root / "reports" / "campaign_summary.json",
+        {
+            "campaign": {"campaign_id": "legacy"},
+            "planner_rows": [
+                {
+                    "planner_key": "goal",
+                    "algo": "goal",
+                    "status": "ok",
+                    "success_mean": "0.5000",
+                    "collision_mean": "0.0000",
+                    "snqi_mean": "0.0000",
+                }
+            ],
+            "runs": [
+                {
+                    "status": "ok",
+                    "planner": {"key": "goal", "algo": "goal"},
+                    "episodes_path": "runs/goal/episodes.jsonl",
+                    "summary": {
+                        "written": len(rows),
+                        "episodes_total": len(rows),
+                        "episodes_per_second": 2.0,
+                        "preflight": {"status": "ok"},
+                        "algorithm_metadata_contract": {"adapter_impact": {"status": "disabled"}},
+                    },
+                }
+            ],
+        },
+    )
+
+
+def _legacy_integrity_row(scenario_id: str, seed: int, config_hash: str, commit: str) -> dict:
+    """Build one episode row with the provenance fields required by the shared checker."""
+    return {
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "status": "success",
+        "metrics": {"success": True, "collisions": 0, "snqi": 0.0},
+        "config_hash": config_hash,
+        "git_hash": commit,
+        "result_provenance": {
+            "scenario_id": scenario_id,
+            "seed": seed,
+            "config_hash": config_hash,
+            "repo_commit": commit,
+        },
+    }
+
+
 def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
     """Write CSV rows using the keys from the first fixture row."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -382,6 +454,106 @@ def test_analyze_campaign_surfaces_frozen_integrity_blocker(tmp_path: Path) -> N
     report = _build_markdown_report(analysis)
     assert "## Aggregate Integrity" in report
     assert "duplicate_logical_coverage" in report
+
+
+def test_analyze_campaign_recomputes_legacy_contamination_blockers(tmp_path: Path) -> None:
+    """Legacy frozen bundles recompute every shared aggregate-integrity blocker."""
+    campaign_root = tmp_path / "campaign"
+    _write_legacy_integrity_campaign(
+        campaign_root,
+        [
+            _legacy_integrity_row("smoke", 111, "config-v1", "commit-a"),
+            _legacy_integrity_row("smoke", 111, "config-v2", "commit-b"),
+            _legacy_integrity_row("corner", 222, "config-corner", "commit-a"),
+        ],
+    )
+
+    analysis = analyze_campaign(campaign_root)
+
+    assert analysis["campaign_integrity"]["status"] == "invalid"
+    assert {blocker["invariant"] for blocker in analysis["campaign_integrity"]["blockers"]} == {
+        "count_mismatch",
+        "duplicate_logical_coverage",
+        "mixed_commit_provenance",
+        "mixed_config_provenance",
+    }
+    aggregate_findings = [
+        finding for finding in analysis["findings"] if finding.startswith("aggregate_integrity:")
+    ]
+    expected_invariants = {
+        "count_mismatch",
+        "duplicate_logical_coverage",
+        "mixed_commit_provenance",
+        "mixed_config_provenance",
+    }
+    assert all(
+        any(invariant in finding for finding in aggregate_findings)
+        for invariant in expected_invariants
+    )
+
+
+def test_analyze_campaign_recomputes_legacy_clean_bundle(tmp_path: Path) -> None:
+    """Legacy clean bundles remain valid without a persisted integrity report."""
+    campaign_root = tmp_path / "campaign"
+    _write_legacy_integrity_campaign(
+        campaign_root,
+        [
+            _legacy_integrity_row("smoke", 111, "config-smoke", "commit-a"),
+            _legacy_integrity_row("corner", 222, "config-corner", "commit-a"),
+        ],
+    )
+
+    analysis = analyze_campaign(campaign_root)
+
+    assert analysis["campaign_integrity"]["status"] == "valid"
+    assert not any(finding.startswith("aggregate_integrity:") for finding in analysis["findings"])
+
+
+def test_analyze_campaign_fails_closed_when_legacy_provenance_is_missing(tmp_path: Path) -> None:
+    """Legacy bundles without a complete scenario inventory are not silently unevaluated."""
+    campaign_root = tmp_path / "campaign"
+    _write_json(
+        campaign_root / "campaign_manifest.json",
+        {"seed_policy": {"resolved_seeds": [111]}, "git": {"commit": "commit-a"}},
+    )
+    _write_json(
+        campaign_root / "reports" / "campaign_summary.json",
+        {"campaign": {"campaign_id": "legacy"}, "runs": []},
+    )
+
+    analysis = analyze_campaign(campaign_root)
+
+    assert analysis["campaign_integrity"]["status"] == "not_evaluable"
+    assert analysis["campaign_integrity"]["blockers"][0]["invariant"] == (
+        "missing_integrity_provenance"
+    )
+
+
+def test_analyze_campaign_cli_returns_nonzero_for_invalid_legacy_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """CLI status distinguishes an invalid frozen aggregate from a successful analysis."""
+    campaign_root = tmp_path / "campaign"
+    _write_legacy_integrity_campaign(
+        campaign_root,
+        [
+            _legacy_integrity_row("smoke", 111, "config-v1", "commit-a"),
+            _legacy_integrity_row("smoke", 111, "config-v2", "commit-b"),
+            _legacy_integrity_row("corner", 222, "config-corner", "commit-a"),
+        ],
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["analyze_camera_ready_campaign.py", "--campaign-root", str(campaign_root)],
+    )
+
+    assert main() == 1
+    assert json.loads(capsys.readouterr().out)["analysis_json"].endswith(
+        "reports/campaign_analysis.json"
+    )
 
 
 def test_analyze_campaign_no_findings_on_consistent_payload(tmp_path: Path) -> None:

@@ -83,6 +83,18 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def _rewrite_manifest_status(manifest_path: Path, manifest: dict[str, Any]) -> None:
+    """Persist the captured-runtime manifest status or raise an actionable I/O error."""
+    manifest["status"] = "ready"
+    manifest["claim_boundary"] = "captured_runtime_ready"
+    try:
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    except OSError as exc:
+        raise OSError(f"Failed to rewrite manifest at {manifest_path}") from exc
+
+
 def main() -> int:  # noqa: C901,PLR0912,PLR0915
     """Run report compilation pipeline."""
     args = parse_args()
@@ -116,16 +128,29 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
         )
         return 2
 
-    # Rewrite manifest status and claim_boundary to reflect captured runtime + readiness
-    manifest["status"] = "ready"
-    manifest["claim_boundary"] = "captured_runtime_ready"
     try:
-        manifest_path.write_text(
-            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        print(f"Updated manifest status and claim_boundary at {manifest_path}")
-    except OSError as e:
-        print(f"Warning: Failed to rewrite manifest at {manifest_path}: {e}")
+        _rewrite_manifest_status(manifest_path, manifest)
+    except OSError as exc:
+        failure_path = output_dir / "manifest_rewrite_failure.json"
+        failure_payload = {
+            "status": "blocked",
+            "reason": "manifest_rewrite_failed",
+            "manifest_path": str(manifest_path),
+            "error": str(exc),
+        }
+        try:
+            failure_path.write_text(
+                json.dumps(failure_payload, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        except OSError as payload_exc:
+            print(
+                f"Blocked: {exc}; could not write blocker payload at {failure_path}: {payload_exc}"
+            )
+        else:
+            print(f"Blocked: {exc}; see {failure_path}")
+        return 2
+    print(f"Updated manifest status and claim_boundary at {manifest_path}")
 
     # Find planners and seeds
     planners = sorted({rec["planner"] for rec in records})

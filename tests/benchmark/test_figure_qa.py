@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 import yaml
 from PIL import Image
@@ -17,8 +22,10 @@ from robot_sf.benchmark.artifact_catalog import (
 )
 from robot_sf.benchmark.figure_qa import (
     FigureQA,
+    assert_clean,
     check_figure_entry,
     check_figure_file,
+    lint_figure,
     main,
     validate_figures_in_catalog,
 )
@@ -432,3 +439,171 @@ def _make_minimal_catalog(figure_path: Path, base_dir: Path) -> ArtifactCatalog:
             )
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# matplotlib figure artist-level linting
+# ---------------------------------------------------------------------------
+
+
+def _make_figure_with_texts(
+    labels: list[str], *, positions: list[tuple[float, float]] | None = None
+) -> plt.Figure:
+    """Build a figure with one text label per supplied string."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    if positions is None:
+        positions = [(5.0, 5.0) for _ in labels]
+    for label, (x, y) in zip(labels, positions, strict=False):
+        ax.text(x, y, label, fontsize=14)
+    return fig
+
+
+def test_text_text_overlap_detected() -> None:
+    """Two overlapping text labels should be reported as an error."""
+    fig = _make_figure_with_texts(["alpha", "beta"], positions=[(5.0, 5.0), (5.05, 5.0)])
+    defects = lint_figure(fig)
+    types = {d.defect_type for d in defects}
+    assert "text_text_overlap" in types
+    assert any(d.severity == "error" for d in defects if d.defect_type == "text_text_overlap")
+    plt.close(fig)
+
+
+def test_text_text_overlap_far_apart_clean() -> None:
+    """Well-separated text labels should not overlap."""
+    fig = _make_figure_with_texts(["alpha", "beta"], positions=[(2.0, 5.0), (8.0, 5.0)])
+    defects = lint_figure(fig)
+    assert not any(d.defect_type == "text_text_overlap" for d in defects)
+    plt.close(fig)
+
+
+def test_text_line_overlap_detected() -> None:
+    """Text sitting on top of a line should be reported as an error."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.plot([1.0, 9.0], [5.0, 5.0], "b-")
+    ax.text(5.0, 5.0, "on line", fontsize=14)
+    defects = lint_figure(fig)
+    assert any(d.defect_type == "text_line_overlap" for d in defects)
+    plt.close(fig)
+
+
+def test_text_marker_overlap_detected() -> None:
+    """Text on top of a scatter marker should be reported as an error."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.scatter([5.0], [5.0], s=200, c="red")
+    ax.text(5.0, 5.0, "X", fontsize=14)
+    defects = lint_figure(fig)
+    assert any(d.defect_type == "text_marker_overlap" for d in defects)
+    plt.close(fig)
+
+
+def test_text_out_of_axes_detected() -> None:
+    """Text placed outside the axes area should be reported as a warning."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.text(11.0, 5.0, "outside", fontsize=12)
+    defects = lint_figure(fig)
+    assert any(d.defect_type == "text_out_of_axes" for d in defects)
+    plt.close(fig)
+
+
+def test_marker_crowding_detected() -> None:
+    """Markers closer than the threshold should be reported as a warning."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    pts = np.array([[5.0, 5.0], [5.02, 5.02], [9.0, 9.0]])
+    ax.scatter(pts[:, 0], pts[:, 1], s=80)
+    defects = lint_figure(fig, marker_min_separation_px=5.0)
+    assert any(d.defect_type == "marker_crowding" for d in defects)
+    plt.close(fig)
+
+
+def test_marker_crowding_clean_when_separated() -> None:
+    """Well-separated markers should not be reported as crowding."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    pts = np.array([[10.0, 10.0], [50.0, 50.0], [90.0, 90.0]])
+    ax.scatter(pts[:, 0], pts[:, 1], s=80)
+    defects = lint_figure(fig, marker_min_separation_px=3.0)
+    assert not any(d.defect_type == "marker_crowding" for d in defects)
+    plt.close(fig)
+
+
+def test_saturated_color_count_advisory() -> None:
+    """Many highly saturated colours should raise an advisory warning."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    for i, color in enumerate(["red", "lime", "blue", "magenta", "yellow", "cyan", "orange"]):
+        ax.plot([0, 10], [i, i], color=color, linewidth=2)
+    defects = lint_figure(fig, saturated_color_count_threshold=6)
+    assert any(d.defect_type == "saturated_color_count" for d in defects)
+    plt.close(fig)
+
+
+def test_clean_figure_no_error_defects() -> None:
+    """A deliberately clean figure should produce no error-severity defects."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.plot([1.0, 9.0], [1.0, 9.0], "b-", label="traj")
+    ax.scatter([5.0], [5.0], s=80, c="steelblue")
+    ax.text(2.0, 8.0, "label", fontsize=10)
+    ax.legend()
+    defects = lint_figure(fig)
+    assert not any(d.severity == "error" for d in defects)
+    plt.close(fig)
+
+
+def test_assert_clean_passes_clean_figure() -> None:
+    """assert_clean should not raise for a clean figure at error severity."""
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.plot([1.0, 9.0], [1.0, 9.0], "b-")
+    ax.text(2.0, 8.0, "label", fontsize=10)
+    assert_clean(fig, max_severity="error")
+    plt.close(fig)
+
+
+def test_assert_clean_raises_on_overlap() -> None:
+    """assert_clean should raise when an error-severity defect is seeded."""
+    fig = _make_figure_with_texts(["a", "b"], positions=[(5.0, 5.0), (5.03, 5.0)])
+    with pytest.raises(AssertionError):
+        assert_clean(fig, max_severity="error")
+    plt.close(fig)
+
+
+def test_lint_figure_rejects_non_figure() -> None:
+    """lint_figure should return [] for non-Figure inputs."""
+    assert lint_figure(object()) == []
+
+
+def test_real_rendered_scene_passes_at_warn() -> None:
+    """The render CLI's scene figure should pass at warn tolerance.
+
+    Reuses the renderer used by ``scripts/tools/render_trace_scene_figure.py``
+    so the lint gate tracks the actual shipped figure.
+    """
+    from scripts.tools.render_trace_scene_figure import (
+        EpisodeStep,
+        render_scene_figure,
+    )
+
+    rng = np.random.default_rng(7)
+    steps = [
+        EpisodeStep(t=i * 0.1, x=1.0 + i * 0.15, y=3.0 + rng.normal(0, 0.05)) for i in range(40)
+    ]
+    fig = render_scene_figure(steps, title="exemplar scene")
+    defects = lint_figure(fig)
+    error_defects = [d for d in defects if d.severity == "error"]
+    assert not error_defects, f"error-severity defects: {error_defects}"
+    plt.close(fig)

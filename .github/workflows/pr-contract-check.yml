@@ -21,6 +21,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      - name: Fetch base ref
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          # On pull_request the default checkout is a shallow merge-ref with no
+          # origin/<base> ref, so `git diff origin/main` / `git show origin/main:path`
+          # error and the contract check mis-flags modified evidence files as new
+          # (issue #5464). Fetch the base branch so origin/<base> resolves locally.
+          git fetch --no-tags --depth=1 origin \
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
 
@@ -31,10 +43,19 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          # Fetch the full status table once, then derive both the changed-file list
+          # and the authoritative ADDED-file list (status == "added"). The added list
+          # is the source of truth for evidence-hygiene "is new" decisions and does
+          # not depend on origin/main being present (issue #5464).
           gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files?per_page=100" \
-            --jq '.[].filename' > "$RUNNER_TEMP/pr_changed_files.txt"
+            --jq '.[] | [.status, .filename] | @tsv' > "$RUNNER_TEMP/pr_files_status.tsv"
+          cut -f2 "$RUNNER_TEMP/pr_files_status.tsv" > "$RUNNER_TEMP/pr_changed_files.txt"
+          awk -F'\t' '$1 == "added" { print $2 }' "$RUNNER_TEMP/pr_files_status.tsv" \
+            > "$RUNNER_TEMP/pr_added_files.txt"
           echo "Changed files for PR #$PR_NUMBER:"
           sed -n '1,120p' "$RUNNER_TEMP/pr_changed_files.txt"
+          echo "Added files for PR #$PR_NUMBER:"
+          sed -n '1,120p' "$RUNNER_TEMP/pr_added_files.txt"
 
       - name: Run PR Contract Check
         env:
@@ -44,4 +65,6 @@ jobs:
           uv run python scripts/ci/pr_contract_check.py \
             --github-event-path "$GITHUB_EVENT_PATH" \
             --changed-files-file "$RUNNER_TEMP/pr_changed_files.txt" \
+            --added-files-file "$RUNNER_TEMP/pr_added_files.txt" \
+            --base-ref "origin/${{ github.base_ref }}" \
             --post-comment

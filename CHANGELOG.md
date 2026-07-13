@@ -61,6 +61,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+* **issue #5464 PR Contract Check no longer flags modified evidence files as new.** The
+  `pr-contract-check.yml` workflow used `actions/checkout` on `pull_request` without fetching the
+  base branch, so `origin/main` was absent in the runner. `pr_contract_check.py`'s `is_file_new`
+  then treated the failed `git show origin/main:path` as "file is new" for *every* changed evidence
+  file, raising false-positive `AI-GENERATED`/`NEEDS-REVIEW` marker blockers on `docs/context/evidence/**`
+  files that already exist marker-less on `main` (observed on PR #5463). Fixed on two fronts: the
+  workflow now fetches the base ref (so `origin/<base>` resolves) and passes an authoritative
+  `--added-files-file` derived from the GitHub `pulls/{n}/files` API (`status == "added"`); and the
+  script now treats an unresolvable base ref as "unknown, not new" and prefers the authoritative
+  added-files signal over the git heuristic when available. CI-tooling correctness fix
+  (`diagnostic-only`); no benchmark, metric, or evidence-content change.
 * **issue #5429 `load_scenario_matrix` no longer misroutes single-document abstract scenario
   files.** A single-document YAML file whose top-level content is a *list* of abstract benchmark
   scenarios (the `density`/`flow`/`obstacle` form, e.g. `yaml.safe_dump([s1, s2])`) is now returned

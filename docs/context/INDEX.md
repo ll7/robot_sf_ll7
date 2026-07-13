@@ -4,6 +4,10 @@ Collision causality, action-conditioned online risk, and statistically defensibl
 scenario discovery research program:
 [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md).
 
+Issue #5441 `collision_causal_report.v1` field-producer map, temporal causal-graph nodes, and
+fail-closed contract decision record (model-scoped, `normative_fault: not_assessed`):
+[collision_causal_report_field_map_2026-07-13.md](collision_causal_report_field_map_2026-07-13.md).
+
 Issue #5355 prediction-MPC 2x2 factorial preregistration (prediction on/off x constraint-handling on/off):
 [issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md).
 

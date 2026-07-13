@@ -346,15 +346,29 @@ def _inevitability_violations(record: Mapping[str, Any]) -> list[str]:
     inevitable = timestamps.get("t_inevitable", {})
     if not (uca.get("available") and inevitable.get("available")):
         return []
-    uca_step = uca.get("step")
-    inevitable_step = inevitable.get("step")
-    if uca_step is None or inevitable_step is None:
+    # The ordering guard only bites when the report claims a planner action as the cause.
+    if not record.get("causal_contribution", {}).get("supported_actual_cause"):
         return []
-    if inevitable_step <= uca_step and record.get("causal_contribution", {}).get(
-        "supported_actual_cause"
-    ):
-        return [
-            "t_inevitable <= t_uca: contact was already unavoidable, so a planner action "
-            "cannot be reported as the supported actual cause"
-        ]
-    return []
+    # Compare in a single shared unit so a schema-legal representation cannot evade the
+    # guard: prefer integer control steps when both timestamps carry one, else fall back to
+    # ``time_s``. ``step`` and ``time_s`` are both nullable in the schema, so a caller could
+    # otherwise mark both timestamps ``available`` with ``step: null`` and slip an
+    # inevitable-before-uca contact past the guard.
+    for key in ("step", "time_s"):
+        uca_value = uca.get(key)
+        inevitable_value = inevitable.get(key)
+        if uca_value is not None and inevitable_value is not None:
+            if inevitable_value <= uca_value:
+                return [
+                    "t_inevitable <= t_uca: contact was already unavoidable, so a planner "
+                    "action cannot be reported as the supported actual cause"
+                ]
+            return []
+    # Available and a supported cause is claimed, but the two timestamps share no comparable
+    # step or time_s: the inevitability ordering is undecidable, so fail closed rather than
+    # letting the unverifiable claim stand.
+    return [
+        "t_uca and t_inevitable are marked available but share no comparable step or time_s: "
+        "the inevitability ordering is undecidable, so a planner action cannot be reported as "
+        "the supported actual cause"
+    ]

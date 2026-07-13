@@ -249,6 +249,36 @@ def test_inevitable_before_uca_forbids_planner_cause():
     assert any("already unavoidable" in v for v in violations)
 
 
+def test_inevitable_before_uca_via_time_s_only_forbids_planner_cause():
+    """The ordering guard cannot be evaded by dropping steps and using time_s only."""
+    report = _complete_report()
+    timestamps = report["observed_reconstruction"]["critical_timestamps"]
+    # Both timestamps stay available but carry no step (schema-legal), only seconds.
+    timestamps["t_uca"]["step"] = None
+    timestamps["t_inevitable"]["step"] = None
+    timestamps["t_uca"]["time_s"] = 4.2
+    timestamps["t_inevitable"]["time_s"] = 4.2  # inevitable <= uca in seconds
+    violations = reconcile_collision_causal_report(report)
+    assert any("already unavoidable" in v for v in violations)
+
+
+def test_inevitability_ordering_undecidable_fails_closed():
+    """Timestamps quantified in different units share no comparable ordering, so fail closed.
+
+    Each timestamp individually satisfies ``_timestamp_violations`` (it carries at least one
+    of step/time_s), but t_uca has only a step and t_inevitable only a time_s, so the guard
+    cannot decide the ordering and must not let the planner actual-cause claim stand.
+    """
+    report = _complete_report()
+    timestamps = report["observed_reconstruction"]["critical_timestamps"]
+    timestamps["t_uca"]["step"] = 42
+    timestamps["t_uca"]["time_s"] = None
+    timestamps["t_inevitable"]["step"] = None
+    timestamps["t_inevitable"]["time_s"] = 4.2
+    violations = reconcile_collision_causal_report(report)
+    assert any("undecidable" in v for v in violations)
+
+
 def test_unavailable_element_must_be_declared_missing():
     """An unavailable element must appear in missing_fields; declaring it repairs the report."""
     report = _complete_report()

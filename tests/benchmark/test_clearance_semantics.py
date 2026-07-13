@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
@@ -25,14 +25,13 @@ from robot_sf.benchmark.clearance_semantics import (
 )
 from robot_sf.benchmark.fidelity_sensitivity import load_fidelity_sensitivity_config
 
-_CONFIG_PATH = "configs/research/fidelity_sensitivity_v1.yaml"
-
-if TYPE_CHECKING:
-    from pathlib import Path
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_PATH = REPO_ROOT / "configs/research/fidelity_sensitivity_v1.yaml"
+CONFIG_RELATIVE_PATH = str(CONFIG_PATH.relative_to(REPO_ROOT))
 
 
 def _repo_config() -> dict[str, object]:
-    return load_fidelity_sensitivity_config(_CONFIG_PATH)
+    return load_fidelity_sensitivity_config(CONFIG_PATH)
 
 
 def _nominal_geometry() -> ClearanceGeometry:
@@ -157,6 +156,25 @@ def test_geometry_rejects_body_larger_than_proxy() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("contact", "near_miss", "buffer", "message"),
+    [
+        (0.20, 0.10, 0.30, "contact_threshold_m must not exceed"),
+        (0.00, 0.30, 0.20, "near_miss_threshold_m must not exceed"),
+    ],
+)
+def test_thresholds_reject_non_monotonic_bands(
+    contact: float, near_miss: float, buffer: float, message: str
+) -> None:
+    """Threshold bands must escalate from contact through conservative buffer."""
+    with pytest.raises(ValueError, match=message):
+        ClearanceThresholds(
+            contact_threshold_m=contact,
+            near_miss_threshold_m=near_miss,
+            conservative_buffer_m=buffer,
+        )
+
+
 def test_load_footprint_sweep_spec_from_repo_config() -> None:
     """The tracked config yields the expected footprint sweep grid."""
     spec = load_footprint_sweep_spec(_repo_config())
@@ -228,7 +246,7 @@ def test_threshold_sensitivity_flags_proxy_radius_dependence() -> None:
 def test_build_manifest_boundary_and_contract() -> None:
     """The manifest carries the diagnostic boundary and required-output contract."""
     manifest = build_footprint_clearance_manifest(
-        _repo_config(), config_path=_CONFIG_PATH, git_head="abc1234"
+        _repo_config(), config_path=CONFIG_RELATIVE_PATH, git_head="abc1234"
     )
 
     assert manifest["schema_version"] == FOOTPRINT_CLEARANCE_SCHEMA
@@ -246,7 +264,7 @@ def test_build_manifest_boundary_and_contract() -> None:
 def test_write_manifest_is_deterministic_json(tmp_path: Path) -> None:
     """The manifest is written as reloadable deterministic JSON."""
     manifest = build_footprint_clearance_manifest(
-        _repo_config(), config_path=_CONFIG_PATH, git_head="abc1234"
+        _repo_config(), config_path=CONFIG_RELATIVE_PATH, git_head="abc1234"
     )
 
     path = write_footprint_clearance_manifest(manifest, tmp_path)

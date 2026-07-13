@@ -131,6 +131,10 @@ class ClearanceThresholds:
         """Validate thresholds are finite and non-negative."""
         for name in ("contact_threshold_m", "near_miss_threshold_m", "conservative_buffer_m"):
             _require_finite_non_negative(getattr(self, name), key=name)
+        if self.contact_threshold_m > self.near_miss_threshold_m:
+            raise ValueError("contact_threshold_m must not exceed near_miss_threshold_m")
+        if self.near_miss_threshold_m > self.conservative_buffer_m:
+            raise ValueError("near_miss_threshold_m must not exceed conservative_buffer_m")
 
 
 def evaluate_clearance(

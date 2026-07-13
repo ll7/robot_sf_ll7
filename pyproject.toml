@@ -637,6 +637,7 @@ dev = [
     "pytest-split>=0.9.0",
     "jupyter>=1.0.0",
     "mypy>=1.0.0",
+    "mutmut",
 ]
 docs = [
     "myst-parser>=4.0.0",

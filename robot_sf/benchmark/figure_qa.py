@@ -897,22 +897,6 @@ def _check_saturated_color_count(
         )
 
 
-def _is_saturated(
-    color: str,
-    threshold: float,
-    mcolors: object,
-) -> bool:
-    """Return ``True`` when a named/hex colour exceeds the saturation threshold."""
-    try:
-        rgba = mcolors.to_rgba(color)
-    except (ValueError, TypeError):
-        return False
-    import colorsys  # noqa: PLC0415
-
-    _, s, _ = colorsys.rgb_to_hsv(rgba[0], rgba[1], rgba[2])
-    return s > threshold
-
-
 def _iter_artist_colors(ax: object) -> list[object]:
     """Yield all RGBA colour tuples used by lines and scatter collections.
 

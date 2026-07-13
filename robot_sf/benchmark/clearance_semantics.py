@@ -41,10 +41,11 @@ FOOTPRINT_CLEARANCE_CONFIG_KEY = "footprint_semantics"
 CLAIM_BOUNDARY = (
     "footprint_clearance_diagnostic_not_benchmark_evidence: formalizes distinct clearance "
     "quantities and enumerates a bounded robot-proxy / pedestrian-radius sweep and a "
-    "collision/near-miss threshold-sensitivity table. It is diagnostic only, does not change "
-    "frozen-release collision/near-miss metric semantics, does not run benchmark episodes, and "
-    "does not establish a planner ranking, simulator realism, sim-to-real validity, or "
-    "paper-facing benchmark evidence."
+    "collision/near-miss threshold-sensitivity table. It also enumerates a threshold-value "
+    "sweep that distinguishes threshold-induced class changes from footprint-induced class "
+    "changes. It is diagnostic only, does not change frozen-release collision/near-miss "
+    "metric semantics, does not run benchmark episodes, and does not establish a planner "
+    "ranking, simulator realism, sim-to-real validity, or paper-facing benchmark evidence."
 )
 
 # The six formally distinct quantities the maintainer scope addition (2026-07-12) asks to
@@ -219,6 +220,13 @@ class FootprintSweepSpec:
     pedestrian_radii_m: tuple[float, ...]
     encounter_center_distances_m: tuple[float, ...]
     rationale: str
+    # Threshold sweep — optional bounded grid for threshold-sensitivity analysis.
+    # When present, the manifest records how class labels change across threshold
+    # combinations at each fixed geometry cell.
+    contact_thresholds_m: tuple[float, ...] | None = None
+    near_miss_thresholds_m: tuple[float, ...] | None = None
+    conservative_buffers_m: tuple[float, ...] | None = None
+    threshold_rationale: str = ""
 
 
 def load_footprint_sweep_spec(config: Mapping[str, Any]) -> FootprintSweepSpec:
@@ -259,6 +267,26 @@ def load_footprint_sweep_spec(config: Mapping[str, Any]) -> FootprintSweepSpec:
         conservative_buffer_m=_require_number(thresholds_block, "conservative_buffer_m"),
     )
     sweep = _require_mapping(block, "sweep")
+    threshold_sweep = block.get("threshold_sweep")
+    if isinstance(threshold_sweep, Mapping):
+        if not threshold_sweep:
+            raise ValueError(
+                "threshold_sweep block is present but empty: provide threshold lists or omit the block"
+            )
+        contact = _require_optional_number_list(threshold_sweep, "contact_threshold_m")
+        near_miss = _require_optional_number_list(threshold_sweep, "near_miss_threshold_m")
+        conservative = _require_optional_number_list(threshold_sweep, "conservative_buffer_m")
+        if contact is not None:
+            _validate_thresholds_not_empty(contact, near_miss, conservative)
+        threshold_rationale = str(threshold_sweep.get("rationale", ""))
+        # Validate monotonic ordering: every contact <= every near_miss <= every conservative
+        if contact is not None:
+            _validate_threshold_monotonic(contact, near_miss, conservative, thresholds)
+    else:
+        contact = None
+        near_miss = None
+        conservative = None
+        threshold_rationale = ""
     return FootprintSweepSpec(
         nominal_geometry=geometry,
         thresholds=thresholds,
@@ -266,6 +294,10 @@ def load_footprint_sweep_spec(config: Mapping[str, Any]) -> FootprintSweepSpec:
         pedestrian_radii_m=_require_number_list(sweep, "pedestrian_radius_m"),
         encounter_center_distances_m=_require_number_list(sweep, "encounter_center_distances_m"),
         rationale=str(block.get("rationale", "")),
+        contact_thresholds_m=contact,
+        near_miss_thresholds_m=near_miss,
+        conservative_buffers_m=conservative,
+        threshold_rationale=threshold_rationale,
     )
 
 
@@ -376,6 +408,7 @@ def build_footprint_clearance_manifest(
     cells = enumerate_footprint_sweep(spec)
     table = build_collision_threshold_sensitivity_table(spec)
     sensitive_rows = [row for row in table if row["proxy_radius_sensitive"]]
+    threshold_rows = enumerate_threshold_sensitivity(spec)
     return {
         "schema_version": FOOTPRINT_CLEARANCE_SCHEMA,
         "issue": int(config.get("issue", 3207)),
@@ -409,6 +442,12 @@ def build_footprint_clearance_manifest(
         "cells": cells,
         "threshold_sensitivity_table": table,
         "proxy_radius_sensitive_row_count": len(sensitive_rows),
+        "threshold_sweep_rows": threshold_rows,
+        "threshold_sensitive_row_count": (
+            sum(1 for r in threshold_rows if r["threshold_sensitive"])
+            if threshold_rows is not None
+            else None
+        ),
         "required_outputs": [
             "robot_proxy_radius_m",
             "pedestrian_radius_m",
@@ -417,6 +456,7 @@ def build_footprint_clearance_manifest(
             GEOMETRIC_BODY_CLEARANCE,
             "encounter_class",
             "proxy_radius_sensitive",
+            "threshold_sensitive",
         ],
     }
 
@@ -437,6 +477,128 @@ def write_footprint_clearance_manifest(manifest: Mapping[str, Any], output_dir: 
     return manifest_path
 
 
+def enumerate_threshold_sensitivity(spec: FootprintSweepSpec) -> list[dict[str, Any]] | None:
+    """Enumerate threshold-sensitivity rows for every (contact x near-miss x buffer) combination.
+
+    For each fixed geometry cell from the footprint sweep, tests how the encounter classification
+    changes across threshold combinations. A row is marked ``threshold_sensitive`` when at least
+    two threshold sets produce different classes at the same geometry. This isolates the question:
+    does a collision/near-miss conclusion depend on the *threshold boundary choice* rather than
+    the physical geometry?
+
+    Returns:
+        Deterministic list of threshold-sensitivity rows, or ``None`` when the spec carries no
+        threshold sweep.
+    """
+    if spec.contact_thresholds_m is None:
+        return None
+    rows: list[dict[str, Any]] = []
+    for robot_proxy in spec.robot_proxy_radii_m:
+        for pedestrian_radius in spec.pedestrian_radii_m:
+            for distance in spec.encounter_center_distances_m:
+                geometry = ClearanceGeometry(
+                    robot_proxy_radius_m=robot_proxy,
+                    pedestrian_radius_m=pedestrian_radius,
+                    robot_body_radius_m=spec.nominal_geometry.robot_body_radius_m,
+                    pedestrian_body_radius_m=spec.nominal_geometry.pedestrian_body_radius_m,
+                )
+                body_clearance = distance - (
+                    geometry.robot_body_radius_m + geometry.pedestrian_body_radius_m
+                )
+                by_threshold: list[dict[str, Any]] = []
+                for contact_t in spec.contact_thresholds_m:
+                    for near_miss_t in spec.near_miss_thresholds_m:
+                        for buffer_t in spec.conservative_buffers_m:
+                            # Skip threshold combos that violate monotonic ordering.
+                            # The sweep defines independent axes for each threshold,
+                            # but only valid (contact <= near_miss <= buffer) combos
+                            # count for the sensitivity analysis.
+                            if contact_t > near_miss_t or near_miss_t > buffer_t:
+                                continue
+                            tr = ClearanceThresholds(
+                                contact_threshold_m=contact_t,
+                                near_miss_threshold_m=near_miss_t,
+                                conservative_buffer_m=buffer_t,
+                            )
+                            evaluation = evaluate_clearance(
+                                geometry, tr, center_to_center_distance_m=distance
+                            )
+                            by_threshold.append(
+                                {
+                                    "contact_threshold_m": contact_t,
+                                    "near_miss_threshold_m": near_miss_t,
+                                    "conservative_buffer_m": buffer_t,
+                                    "encounter_class": evaluation["encounter_class"],
+                                    "proxy_envelope_surface_clearance_m": evaluation[
+                                        PROXY_ENVELOPE_SURFACE_CLEARANCE
+                                    ],
+                                    "geometric_body_clearance_m": evaluation[
+                                        GEOMETRIC_BODY_CLEARANCE
+                                    ],
+                                }
+                            )
+                classes = {entry["encounter_class"] for entry in by_threshold}
+                rows.append(
+                    {
+                        "robot_proxy_radius_m": robot_proxy,
+                        "pedestrian_radius_m": pedestrian_radius,
+                        "center_to_center_distance_m": distance,
+                        "geometric_body_clearance_m": body_clearance,
+                        "classes_by_threshold": by_threshold,
+                        "distinct_class_count": len(classes),
+                        "threshold_sensitive": len(classes) > 1,
+                    }
+                )
+    return rows
+
+
+def _validate_thresholds_not_empty(
+    contact: tuple[float, ...],
+    near_miss: tuple[float, ...],
+    conservative: tuple[float, ...],
+) -> None:
+    """All three threshold lists must be present when any is defined."""
+    if near_miss is None or conservative is None:
+        missing = []
+        if near_miss is None:
+            missing.append("near_miss_threshold_m")
+        if conservative is None:
+            missing.append("conservative_buffer_m")
+        raise ValueError(f"threshold_sweep requires all three lists; missing: {', '.join(missing)}")
+
+
+def _validate_threshold_monotonic(
+    contact: tuple[float, ...],
+    near_miss: tuple[float, ...] | None,
+    conservative: tuple[float, ...] | None,
+    nominal: ClearanceThresholds,
+) -> None:
+    """Threshold sweep grids must preserve monotonic ordering: max(contact) <= min(near_miss)
+    <= min(conservative). Fails closed on violation."""
+    if (
+        not contact
+        or (near_miss is not None and not near_miss)
+        or (conservative is not None and not conservative)
+    ):
+        raise ValueError("threshold_sweep lists must be non-empty")
+    max_contact = max(contact)
+    if near_miss is not None:
+        min_near = min(near_miss)
+        if max_contact > min_near:
+            raise ValueError(
+                f"threshold_sweep ordering violated: max(contact_threshold_m)={max_contact} "
+                f"> min(near_miss_threshold_m)={min_near}"
+            )
+    if conservative is not None:
+        min_cons = min(conservative)
+        ref_min = min(near_miss) if near_miss is not None else nominal.near_miss_threshold_m
+        if ref_min > min_cons:
+            raise ValueError(
+                f"threshold_sweep ordering violated: min(near_miss_threshold_m)={ref_min} "
+                f"> min(conservative_buffer_m)={min_cons}"
+            )
+
+
 def _require_finite_non_negative(value: Any, *, key: str) -> float:
     try:
         numeric = float(value)
@@ -454,6 +616,18 @@ def _require_mapping(block: Mapping[str, Any], key: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError(f"{FOOTPRINT_CLEARANCE_CONFIG_KEY}.{key} must be a mapping")
     return value
+
+
+def _require_optional_number_list(block: Mapping[str, Any], key: str) -> tuple[float, ...] | None:
+    """Return threshold list if key is present and valid, else None."""
+    value = block.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or not value:
+        raise ValueError(
+            f"threshold_sweep.{key} must be a non-empty list of finite non-negative numbers"
+        )
+    return tuple(_require_finite_non_negative(item, key=f"{key}[]") for item in value)
 
 
 def _require_number(block: Mapping[str, Any], key: str) -> float:
@@ -488,6 +662,7 @@ __all__ = [
     "build_footprint_clearance_manifest",
     "classify_encounter",
     "enumerate_footprint_sweep",
+    "enumerate_threshold_sensitivity",
     "evaluate_clearance",
     "load_footprint_sweep_spec",
     "write_footprint_clearance_manifest",

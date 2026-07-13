@@ -353,7 +353,7 @@ class LatencyMeasurementHarness:
         cbf_filter = getattr(policy_fn, "_cbf_filter", None)
 
         if adapter:
-            instrument_adapter_for_latency(adapter, self)
+            instrument_adapter_for_latency(adapter)
 
         if cbf_filter and not hasattr(cbf_filter.filter_command, "_instrumented"):
             orig_filter = cbf_filter.filter_command
@@ -361,24 +361,29 @@ class LatencyMeasurementHarness:
             def wrapped_filter(*args: Any, **kwargs: Any) -> Any:
                 t0 = time.perf_counter()
                 res = orig_filter(*args, **kwargs)
-                self.add_time("collision_risk_safety_filter", (time.perf_counter() - t0) * 1000.0)
+                active_harness = LatencyMeasurementHarness.get_current()
+                if active_harness is not None:
+                    active_harness.add_time(
+                        "collision_risk_safety_filter", (time.perf_counter() - t0) * 1000.0
+                    )
                 return res
 
             wrapped_filter._instrumented = True  # type: ignore[attr-defined]
             cbf_filter.filter_command = wrapped_filter
 
         def wrapped_policy(obs: dict[str, Any]) -> Any:
-            if self.current_accumulator is not None:
+            active_harness = LatencyMeasurementHarness.get_current()
+            if active_harness is not None and active_harness.current_accumulator is not None:
                 t0 = time.perf_counter()
                 res = policy_fn(obs)
                 total_policy_time = (time.perf_counter() - t0) * 1000.0
                 used_components = (
-                    self.current_accumulator["observation_construction"]
-                    + self.current_accumulator["prediction"]
-                    + self.current_accumulator["action_conversion"]
-                    + self.current_accumulator["collision_risk_safety_filter"]
+                    active_harness.current_accumulator["observation_construction"]
+                    + active_harness.current_accumulator["prediction"]
+                    + active_harness.current_accumulator["action_conversion"]
+                    + active_harness.current_accumulator["collision_risk_safety_filter"]
                 )
-                self.current_accumulator["planner_computation"] += max(
+                active_harness.current_accumulator["planner_computation"] += max(
                     0.0, total_policy_time - used_components
                 )
                 return res
@@ -622,7 +627,7 @@ def validate_provenance_completeness(prov: dict[str, Any]) -> None:
         raise ValueError("Latency provenance dependency_versions must include python and numpy")
 
 
-def instrument_adapter_for_latency(adapter: Any, harness: LatencyMeasurementHarness) -> None:
+def instrument_adapter_for_latency(adapter: Any) -> None:  # noqa: C901
     """Wraps adapter methods to measure component durations dynamically."""
     # 1. Wrap state extraction / grid caching
     for name in ["_extract_state", "_cache_grid_payload"]:
@@ -633,9 +638,11 @@ def instrument_adapter_for_latency(adapter: Any, harness: LatencyMeasurementHarn
                 def wrapped(*args: Any, **kwargs: Any) -> Any:
                     t0 = time.perf_counter()
                     res = orig_func(*args, **kwargs)
-                    harness.add_time(
-                        "observation_construction", (time.perf_counter() - t0) * 1000.0
-                    )
+                    active_harness = LatencyMeasurementHarness.get_current()
+                    if active_harness is not None:
+                        active_harness.add_time(
+                            "observation_construction", (time.perf_counter() - t0) * 1000.0
+                        )
                     return res
 
                 wrapped._instrumented = True  # type: ignore[attr-defined]
@@ -652,7 +659,9 @@ def instrument_adapter_for_latency(adapter: Any, harness: LatencyMeasurementHarn
                 def wrapped(*args: Any, **kwargs: Any) -> Any:
                     t0 = time.perf_counter()
                     res = orig_func(*args, **kwargs)
-                    harness.add_time("prediction", (time.perf_counter() - t0) * 1000.0)
+                    active_harness = LatencyMeasurementHarness.get_current()
+                    if active_harness is not None:
+                        active_harness.add_time("prediction", (time.perf_counter() - t0) * 1000.0)
                     return res
 
                 wrapped._instrumented = True  # type: ignore[attr-defined]

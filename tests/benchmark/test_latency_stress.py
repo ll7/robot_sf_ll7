@@ -165,6 +165,44 @@ def test_component_sum_consistency_and_mock_harness() -> None:
     assert metrics["classification"] == "misses_budget_on_measured_host"
 
 
+def test_harness_with_cached_policy_reuse() -> None:
+    """Cached policies must measure components against the currently active harness."""
+
+    class DummyAdapter:
+        def _extract_state(self, obs: Any) -> Any:
+            time.sleep(0.002)
+            return obs
+
+        def plan(self, obs: Any) -> tuple[float, float]:
+            return 0.0, 0.0
+
+    adapter = DummyAdapter()
+
+    def policy_fn(obs: dict[str, Any]) -> tuple[float, float]:
+        return adapter.plan(obs)
+
+    policy_fn._planner_adapter = adapter  # type: ignore[attr-defined]
+
+    harness1 = LatencyMeasurementHarness(deadline_ms=50.0)
+    with harness1:
+        wrapped_policy1 = harness1.wrap_policy(policy_fn)
+        harness1.start_cycle()
+        adapter._extract_state({})
+        wrapped_policy1({})
+        harness1.end_cycle()
+
+    harness2 = LatencyMeasurementHarness(deadline_ms=50.0)
+    with harness2:
+        wrapped_policy2 = harness2.wrap_policy(policy_fn)
+        harness2.start_cycle()
+        adapter._extract_state({})
+        wrapped_policy2({})
+        harness2.end_cycle()
+
+    assert harness1.get_metrics()["cycles"][0]["observation_construction_ms"] > 0.0
+    assert harness2.get_metrics()["cycles"][0]["observation_construction_ms"] > 0.0
+
+
 def test_classification_boundaries() -> None:
     """Test feasibility classifications across various targets and latencies."""
     # 1. Meets budget on measured host

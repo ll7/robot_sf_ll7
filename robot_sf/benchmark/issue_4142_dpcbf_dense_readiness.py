@@ -30,9 +30,10 @@ Status semantics (fail-closed on any structural gap):
   failure; the campaign must not be authorized.
 - ``inputs_ready_campaign_gated`` -- every packet input is present, valid, mutually
   consistent, and fail-closed. The only remaining blockers are the declared downstream
-  gates in :data:`CAMPAIGN_GATES` (no packet-consuming runner is wired to this schema yet,
-  and running requires explicit human/Slurm authorization). This is the expected healthy
-  state; it confirms the inputs are reviewable, *not* that the comparison may run.
+  gates in :data:`CAMPAIGN_GATES` (the local executor is wired but remains explicitly
+  authorization-gated, and running requires explicit human/Slurm authorization). This is the
+  expected healthy state; it confirms the inputs are reviewable, *not* that the comparison
+  may run.
 
 There is intentionally no ``authorized`` / ``ready-to-run`` state: running the dense
 comparison is out of scope for this surface and stays gated behind the declared blockers.
@@ -97,9 +98,8 @@ _VARIANT_FAMILY = {
 #: every packet input is valid. Surfaced verbatim so an operator (or routing pass) never
 #: mistakes ``inputs_ready_campaign_gated`` for a go-ahead to run.
 CAMPAIGN_GATES: tuple[str, ...] = (
-    "no packet-consuming runner is wired to schema "
-    f"'{PACKET_SCHEMA_VERSION}'; the canonical command cannot yet execute the "
-    "three-arm comparison",
+    "the local executor and canonical command are wired for schema "
+    f"'{PACKET_SCHEMA_VERSION}' but execution remains explicitly authorization-gated",
     "running the dense comparison requires explicit human/Slurm authorization and is "
     "out of scope for this read-only readiness surface",
 )

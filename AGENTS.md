@@ -226,6 +226,22 @@ when choosing among them. Common delivery skills include `goal-issue-implementat
 `gh-issue-autopilot`, `implementation-verification`, `pr-ready-check`, `gh-pr-opener`,
 `goal-pr-review`, and `gh-pr-merger`.
 
+## Friction And Automation
+
+Standing policy (2026-07-13): any friction observed during work — a flaky command, a
+misleading readout, a manual step that should be automatic, or a repeated failure class — is
+either fixed inline when the change is small, or tracked durably as an issue before moving on.
+Never just navigate around it: un-tracked friction gets re-paid on every future encounter, and
+self-improvement is part of this system. Track friction with the existing convention: an issue
+titled with a `friction:` prefix and the `technical-debt` label (or `documentation` for a docs
+gap), naming the file/command and the concrete suggested change (see #5468, #5475). Do not
+invent new labels or priorities.
+
+Standing policy (2026-07-13): anything that can be improved or automated without an LLM must
+become a reusable script or automation — never a repeated manual step or an LLM prompt. If a
+deterministic sequence runs twice, promote it to a checked-in helper under `scripts/dev/`
+rather than re-typing or re-prompting it.
+
 ## Donts
 
 - Never change code in `.venv`; manage dependencies through `pyproject.toml` and `uv sync`.

@@ -320,6 +320,48 @@ def test_verify_host_report_scopes_repeat_claim_to_runnable_cells(
         assert cell["exact_repeat_determinism"] is None
 
 
+def test_verify_host_report_rejects_disposition_with_repeats(
+    tmp_path, manifest, resolved_bundle
+):
+    """A disposition cannot hide fabricated repeat evidence."""
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "malformed_disposition",
+        run_episode=_deterministic_mock_runner,
+    )
+    result = next(result for result in host_result["results"] if "disposition" in result)
+    result["repeats"] = [{"outcome": 1}]
+    with pytest.raises(ValueError, match="also reports repeats"):
+        verify_host_report(manifest, host_result)
+
+
+def test_verify_host_report_preserves_mixed_cell_target_counts(
+    tmp_path, manifest, resolved_bundle
+):
+    """Mixed cells retain both runnable and dispositioned target counts."""
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "mixed_cell",
+        run_episode=_deterministic_mock_runner,
+    )
+    runnable_repeats = next(
+        result["repeats"]
+        for result in host_result["results"]
+        if isinstance(result.get("repeats"), list) and len(result["repeats"]) == 3
+    )
+    dispositioned = next(result for result in host_result["results"] if "disposition" in result)
+    dispositioned.pop("disposition")
+    dispositioned.pop("disposition_reason")
+    dispositioned["repeats"] = copy.deepcopy(runnable_repeats)
+
+    verified = verify_host_report(manifest, host_result)
+    mixed_cell = next(cell for cell in verified["cells"] if cell["planner"] == "orca")
+    assert mixed_cell["unrunnable"] is False
+    assert mixed_cell["n_targets"] == 20
+    assert mixed_cell["n_runnable_targets"] == 1
+    assert mixed_cell["n_unrunnable_targets"] == 19
+
+
 def test_execute_campaign_all_repeats_identical_for_deterministic_runner(
     tmp_path, manifest, resolved_bundle
 ):

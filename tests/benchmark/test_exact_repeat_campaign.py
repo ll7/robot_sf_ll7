@@ -143,6 +143,22 @@ def test_host_verifier_requires_all_targets_and_reports_cell_verdicts(manifest):
     assert all(cell["exact_repeat_determinism"] is True for cell in verified["cells"])
 
 
+def test_all_unrunnable_host_reports_never_claim_determinism(manifest):
+    """Empty runnable evidence is fail-closed in verification and comparison."""
+    first_report = _host_report(manifest, "host-a")
+    for result in first_report["results"]:
+        result["disposition"] = "unrunnable_on_current_main"
+        result["disposition_reason"] = "fixture disposition"
+        result["repeats"] = []
+    first_verified = verify_host_report(manifest, first_report)
+    assert first_verified["summary"]["all_cells_bitwise_identical"] is False
+
+    second_verified = copy.deepcopy(first_verified)
+    second_verified["environment"]["machine_id"] = "host-b"
+    comparison = compare_verified_hosts(manifest, first_verified, second_verified)
+    assert comparison["summary"]["all_cells_bitwise_identical"] is False
+
+
 def test_host_verifier_requires_the_first_trajectory_divergence(manifest):
     """A divergent digest is accepted only with its computed first difference."""
     report = _host_report(manifest, "host-a")

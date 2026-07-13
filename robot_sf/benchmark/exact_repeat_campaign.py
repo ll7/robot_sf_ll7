@@ -521,6 +521,10 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
         if disposition is not None:
             if disposition != UNRUNNABLE_DISPOSITION:
                 raise ValueError(f"target {key} has an unsupported disposition {disposition!r}")
+            if "repeats" in result and result["repeats"] != []:
+                raise ValueError(
+                    f"target {key} has disposition {disposition!r} but also reports repeats"
+                )
             verified = {
                 "scenario_id": key[0],
                 "planner": key[1],
@@ -570,6 +574,8 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
                     "exact_repeat_determinism": None,
                     "first_divergence": None,
                     "n_targets": len(target_results),
+                    "n_runnable_targets": 0,
+                    "n_unrunnable_targets": len(target_results),
                 }
             )
             continue
@@ -583,7 +589,9 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
                 "unrunnable": False,
                 "exact_repeat_determinism": first is None,
                 "first_divergence": first,
-                "n_targets": len(runnable),
+                "n_targets": len(target_results),
+                "n_runnable_targets": len(runnable),
+                "n_unrunnable_targets": len(target_results) - len(runnable),
             }
         )
     runnable_cells = [cell for cell in cells if not cell.get("unrunnable")]
@@ -603,7 +611,8 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
             "n_unrunnable_cells": len(unrunnable_cells),
             # The bitwise-identical claim scopes to runnable cells; unrunnable
             # (dispositioned) cells make no determinism claim.
-            "all_cells_bitwise_identical": all(
+            "all_cells_bitwise_identical": bool(runnable_cells)
+            and all(
                 cell["exact_repeat_determinism"] for cell in runnable_cells
             ),
         },

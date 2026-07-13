@@ -1,0 +1,84 @@
+# Seed-flip / held-out planner-inversion miner thresholds and descriptors.
+#
+# Issue #5446 — analysis tooling only. These are eligibility gates, discovery
+# thresholds, and diversity descriptors for the deterministic candidate miner
+# (`scripts/analysis/mine_seed_flips_and_inversions_issue_5446.py`, backed by
+# `robot_sf/benchmark/seed_flip_mining.py`). They are NOT benchmark metric
+# semantics and do NOT encode a planner-ranking claim.
+#
+# Do NOT tune these after inspecting Chapter 7 / dissertation candidates (issue
+# #5446 stop rule). Discovery and confirmation seeds must stay separate.
+schema_version: seed_flip_inversion_thresholds.v1
+issue: "#5446"
+
+# --- Eligibility gates (fail closed) -----------------------------------------
+eligibility:
+  # Every required field must be present and non-empty or the row is excluded.
+  required_provenance_fields:
+    - episode_id
+    - scenario_id
+    - seed
+    - config_hash # exact config match + pinned identity
+    - repo_commit # pinned SHA
+  # Only native execution counts as evidence; fallback/degraded/adapter excluded.
+  require_native_execution: true
+  native_execution_mode: native
+  # Typed collision semantics: a row that declares a non-"typed" value is excluded.
+  require_typed_collision_semantics_when_declared: true
+  # Release 0.0.2 collision-derived fields are withdrawn while #5097 is open.
+  withdrawn_release_tag: "0.0.2"
+  collision_derived_withdrawn_fields:
+    - total_collision_count
+    - snqi_collision_term
+    - success_rate_collision_gate
+
+# --- Discovery thresholds -----------------------------------------------------
+discovery:
+  outcome_metric: success # binary 0/1 outcome
+  min_seeds: 2 # a cell needs >= 2 distinct seeds to flip
+  triage_max_seeds: 3 # <= 3 seeds => triage-only (per issue #5446)
+  confidence: 0.95 # Wilson interval confidence level
+  min_heldout_cells: 1 # min leave-one-scenario-out cells for a trusted strength
+  posterior_prior: jeffreys_beta_0.5_0.5
+  interval_method: wilson_score
+
+# --- Separate candidate fields (never collapsed into one score) ---------------
+# The miner keeps each of these as its own field on every candidate. Missing
+# signals are reported `unavailable` and are never fabricated or weighted in.
+candidate_fields:
+  - seed_flip_posterior_mean
+  - seed_flip_entropy
+  - seed_flip_effective_denominator
+  - heldout_planner_skill_gap
+  - upset_outcome
+  - cross_planner_disagreement_entropy
+  - oracle_regret # consumed from #5302 when provided
+  - mechanism_novelty # consumed from #5308 quality-diversity when provided
+  - temporal_boundary_margin
+  - reproducibility
+  - visualizability
+
+# --- Diversity / Pareto selection descriptors --------------------------------
+# Axes maximized on the non-dominated frontier. No hidden weights: selection is
+# strict Pareto domination over these axes, not a scalar interestingness score.
+pareto_axes:
+  - seed_flip_entropy_bits
+  - abs_heldout_planner_skill_gap
+  - cross_planner_disagreement_entropy_bits
+  - seed_flip_effective_denominator
+
+# --- Sibling-issue signal consumption (link, do not reimplement) --------------
+# Provided via the miner's `--external` JSON. Absent tables are reported
+# `unavailable`; the miner never reimplements these signals.
+external_signals:
+  oracle_regret: "#5302"
+  transfer: "#5303"
+  quality_diversity: "#5308"
+  multiplicity: "#5351"
+
+# --- Candidate archetypes -----------------------------------------------------
+archetypes:
+  - seed_flip
+  - planner_upset
+  - causal_divergence # requires a temporal_boundary_margin signal
+  - disagreement_recovery # requires genuine cross-planner disagreement

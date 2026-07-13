@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5446 seed-flip / held-out planner-inversion candidate miner.** New
+  `robot_sf/benchmark/seed_flip_mining.py` (`seed_flip_inversion_candidates.v1`) mines *case
+  candidates* — reproducible seed-dependent outcome flips and genuine held-out planner upsets —
+  from benchmark result rows, deliberately replacing a single opaque interestingness score with
+  evidence gates + separate typed fields + non-circular strength + Pareto selection. Rows are
+  eligible only with complete provenance (episode id, scenario, seed, config hash, pinned commit),
+  native execution (fallback/degraded/adapter excluded), and typed collision semantics; withdrawn
+  release-0.0.2 collision-derived outcomes are excluded while #5097 is open. Each candidate keeps
+  its own seed-flip posterior (Jeffreys Beta) / entropy / effective-denominator, Wilson interval,
+  held-out planner-skill gap (estimated leave-one-scenario-out, raw paired outcomes retained),
+  cross-planner disagreement entropy, and `unavailable`-or-`consumed` slots for sibling-issue
+  signals (oracle regret #5302, transfer #5303, quality-diversity #5308, multiplicity #5351) — never
+  fabricated or folded into a composite. Four archetypes are reported (seed flip, planner upset,
+  causal divergence, disagreement/recovery), each `available`/`unavailable` from the data. The
+  manifest records every eligible candidate before diversity selection and every exclusion reason.
+  `scripts/analysis/mine_seed_flips_and_inversions_issue_5446.py` is the deterministic CLI
+  (`--json`/`--md`), with thresholds/descriptors in
+  `configs/analysis/issue_5446_seed_flip_inversion_thresholds.yaml`. Evidence is analysis tooling
+  plus synthetic-fixture recovery of known flips/upsets/negative-controls; it is not a benchmark
+  metric or planner-ranking claim, and confirmation runs are a separate exact-compute packet (no
+  benchmark campaign or Slurm/GPU run included).
 * **issue #5445 matched calibration comparison for online collision-risk estimators.** New
   `robot_sf/research/collision_risk/calibration.py` harness scores every estimator on *identical*
   matched inputs (scenario histories, candidate actions, footprints, horizons) and grades each

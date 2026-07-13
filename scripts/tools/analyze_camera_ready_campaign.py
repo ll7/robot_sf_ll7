@@ -850,7 +850,7 @@ def _build_scenario_difficulty_markdown(payload: dict[str, Any]) -> str:
     return "\n".join(_scenario_difficulty_markdown_lines(payload, heading_prefix="#")) + "\n"
 
 
-def _build_markdown_report(payload: dict[str, Any]) -> str:
+def _build_markdown_report(payload: dict[str, Any]) -> str:  # noqa: C901
     """Render the full camera-ready campaign analysis report.
 
     Returns:
@@ -860,6 +860,7 @@ def _build_markdown_report(payload: dict[str, Any]) -> str:
     planners = payload.get("planners", [])
     runtime_hotspots = payload.get("runtime_hotspots", {})
     scenario_difficulty = payload.get("scenario_difficulty", {})
+    campaign_integrity = payload.get("campaign_integrity") or {}
     credibility_scorecard = payload.get("credibility_scorecard", {})
     findings = payload.get("findings", [])
     lines = [
@@ -921,6 +922,16 @@ def _build_markdown_report(payload: dict[str, Any]) -> str:
     else:
         lines.append("- No runtime hotspot data available.")
 
+    lines.extend(["", "## Aggregate Integrity", ""])
+    lines.append(f"- Verdict: `{campaign_integrity.get('status', 'not_evaluated')}`")
+    for blocker in campaign_integrity.get("blockers", []):
+        lines.append(
+            f"- `{blocker.get('arm', 'unknown')}` `{blocker.get('invariant', 'unknown')}`: "
+            f"{blocker.get('details', {})}"
+        )
+    if campaign_integrity.get("claim_boundary"):
+        lines.append(f"- Claim boundary: {campaign_integrity['claim_boundary']}")
+
     if isinstance(scenario_difficulty, dict):
         lines.extend(
             [""] + _scenario_difficulty_markdown_lines(scenario_difficulty, heading_prefix="##")
@@ -948,6 +959,13 @@ def analyze_campaign(
     campaign = summary_payload.get("campaign", {}) if isinstance(summary_payload, dict) else {}
     run_entries = summary_payload.get("runs", [])
     row_map = _planner_row_index(summary_payload)
+    campaign_integrity = summary_payload.get("campaign_integrity")
+    if not isinstance(campaign_integrity, dict):
+        integrity_path = campaign_root / "reports" / "campaign_integrity.json"
+        try:
+            campaign_integrity = _read_json(integrity_path)
+        except (OSError, ValueError):
+            campaign_integrity = {}
 
     diagnostics: list[PlannerDiagnostics] = []
     findings: list[str] = []
@@ -998,6 +1016,11 @@ def analyze_campaign(
     scenario_difficulty = _load_scenario_difficulty_analysis(campaign_root, summary_payload)
     for finding in scenario_difficulty.get("findings", []):
         findings.append(f"scenario_difficulty: {finding}")
+    for blocker in campaign_integrity.get("blockers", []):
+        findings.append(
+            "aggregate_integrity: "
+            f"{blocker.get('arm', 'unknown')}: {blocker.get('invariant', 'unknown')}"
+        )
     findings = sorted(set(findings))
     credibility_scorecard = _build_credibility_scorecard(
         diagnostics=diagnostics_payload,
@@ -1019,6 +1042,7 @@ def analyze_campaign(
             "slowest_planners": slowest_planners,
         },
         "scenario_difficulty": scenario_difficulty,
+        "campaign_integrity": campaign_integrity,
         "credibility_scorecard": credibility_scorecard,
         "findings": findings,
     }

@@ -60,6 +60,7 @@ from robot_sf.benchmark.camera_ready._resume_plan import (
 from robot_sf.benchmark.camera_ready._run_state import (
     _build_arm_rollup,
     _campaign_success_counters,
+    validate_campaign_integrity,
 )
 from robot_sf.benchmark.camera_ready._summaries import (
     _SEED_VARIABILITY_METRICS,
@@ -1301,6 +1302,18 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     seed_variability_records = planner_run_results.seed_variability_records
     _finalize_checkpoint_provenance(manifest_payload, run_entries)
     arm_rollup = _build_arm_rollup(run_entries)
+    campaign_integrity = validate_campaign_integrity(
+        run_entries,
+        scenarios=scenarios,
+        resolved_seeds=resolved_seeds,
+        campaign_root=campaign_root,
+        campaign_manifest=manifest_payload,
+    )
+    for blocker in campaign_integrity["blockers"]:
+        warnings.append(
+            "Aggregate integrity blocker: "
+            f"arm='{blocker['arm']}' invariant='{blocker['invariant']}'"
+        )
 
     planner_rows.sort(
         key=lambda row: (row.get("snqi_mean", "nan") == "nan", row.get("planner_key"))
@@ -1579,8 +1592,23 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     success_counters = _campaign_success_counters(
         run_entries, expected_core_runs=expected_core_runs * len(kinematics_matrix)
     )
+    campaign_evidence_status = campaign_status_axes.evidence_status
+    campaign_status = campaign_outcome.status
+    campaign_status_reason = campaign_outcome.status_reason
+    campaign_exit_code = campaign_outcome.exit_code
+    if (
+        not campaign_integrity["benchmark_success_allowed"]
+        and success_counters["benchmark_success"]
+        and campaign_status_axes.evidence_status == "valid"
+    ):
+        campaign_evidence_status = "invalid"
+        campaign_status = "integrity_failed"
+        campaign_status_reason = "aggregate integrity validation failed"
+        campaign_exit_code = 1
     benchmark_success = bool(
-        success_counters["benchmark_success"] and campaign_status_axes.evidence_status == "valid"
+        success_counters["benchmark_success"]
+        and campaign_evidence_status == "valid"
+        and campaign_integrity["benchmark_success_allowed"]
     )
     confidence_settings = {
         "method": "bootstrap_mean_over_seed_means",
@@ -1832,12 +1860,12 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
             "accepted_unavailable_runs": campaign_outcome.accepted_unavailable_runs,
             "unexpected_failed_runs": campaign_outcome.unexpected_failed_runs,
             "campaign_execution_status": campaign_status_axes.campaign_execution_status,
-            "evidence_status": campaign_status_axes.evidence_status,
+            "evidence_status": campaign_evidence_status,
             "row_status_summary": row_status_summary,
             "benchmark_success": benchmark_success,
-            "status": campaign_outcome.status,
-            "status_reason": campaign_outcome.status_reason,
-            "exit_code": campaign_outcome.exit_code,
+            "status": campaign_status,
+            "status_reason": campaign_status_reason,
+            "exit_code": campaign_exit_code,
             "benchmark_success_basis": success_counters["benchmark_success_basis"],
             "core_successful_runs": success_counters["core_successful_runs"],
             "core_total_runs": success_counters["core_total_runs"],
@@ -1902,6 +1930,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         "planner_rows": planner_rows,
         "arm_rollup": arm_rollup,
         "runs": run_entries,
+        "campaign_integrity": campaign_integrity,
         "warnings": warnings,
         "soft_contract_warning": soft_contract_warning,
         "artifacts": {
@@ -1949,6 +1978,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
             "scenario_family_breakdown_csv": _repo_relative(family_csv_path),
             "scenario_family_breakdown_md": _repo_relative(family_md_path),
             "campaign_report_md": _repo_relative(report_md_path),
+            "campaign_integrity_json": _repo_relative(reports_dir / "campaign_integrity.json"),
             "expected_release_archive": expected_archive_name,
             "release_url": release_url,
             "release_asset_url": release_asset_url,
@@ -2145,6 +2175,8 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         campaign_summary
     )
     _write_json(credibility_scorecard_json_path, campaign_summary["credibility_scorecard"])
+    integrity_json_path = reports_dir / "campaign_integrity.json"
+    _write_json(integrity_json_path, campaign_integrity)
     _write_json(summary_json_path, campaign_summary)
     write_campaign_report(report_md_path, campaign_summary)
 
@@ -2216,18 +2248,19 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         "accepted_unavailable_runs": campaign_outcome.accepted_unavailable_runs,
         "unexpected_failed_runs": campaign_outcome.unexpected_failed_runs,
         "campaign_execution_status": campaign_status_axes.campaign_execution_status,
-        "evidence_status": campaign_status_axes.evidence_status,
+        "evidence_status": campaign_evidence_status,
         "row_status_summary": row_status_summary,
         "benchmark_success": benchmark_success,
-        "status": campaign_outcome.status,
-        "status_reason": campaign_outcome.status_reason,
-        "exit_code": campaign_outcome.exit_code,
+        "status": campaign_status,
+        "status_reason": campaign_status_reason,
+        "exit_code": campaign_exit_code,
         "benchmark_success_basis": success_counters["benchmark_success_basis"],
         "core_successful_runs": success_counters["core_successful_runs"],
         "core_total_runs": success_counters["core_total_runs"],
         "total_episodes": total_episodes,
         "runtime_sec": runtime_sec,
         "publication_bundle": publication_payload,
+        "campaign_integrity": campaign_integrity,
         "warnings": warnings,
         "soft_contract_warning": soft_contract_warning,
     }

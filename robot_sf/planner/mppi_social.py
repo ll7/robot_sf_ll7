@@ -307,7 +307,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
             t = (step + 1) * dt
 
             if ped_pos.size > 0:
-                ped_t = ped_pos + ped_vel * float(t)  # (peds, 2)
+                ped_t = self._predict_ped_positions(ped_pos, ped_vel, t)  # (peds, 2)
                 # (samples, 1, 2) - (1, peds, 2) -> (samples, peds)
                 dists = np.linalg.norm(pos[:, None, :] - ped_t[None, :, :], axis=2)
                 sample_min = np.min(dists, axis=1)

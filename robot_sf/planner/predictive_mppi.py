@@ -420,7 +420,6 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
         occ_needed = alive_local_norms > 1e-6
         if np.any(occ_needed):
             # Process each sample needing occupancy separately (predictor call)
-            occ_count = 0
             for i in range(np.sum(alive)):
                 if occ_needed[i]:
                     direction = final_world[i] - robot_pos
@@ -431,8 +430,7 @@ class PredictiveMPPIAdapter(OccupancyAwarePlannerMixin):
                         base_distance=float(np.linalg.norm(final_world[i] - robot_pos)),
                         num_samples=max(2, int(horizon)),
                     )
-                    mean_occ[occ_count] = float(obstacle_pen + 0.5 * ped_pen)
-                    occ_count += 1
+                    mean_occ[i] = float(obstacle_pen + 0.5 * ped_pen)
 
         reward = (
             float(self.config.goal_progress_weight) * progress

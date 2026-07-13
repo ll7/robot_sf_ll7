@@ -39,9 +39,16 @@ def _obs(
 class _StubPredictor:
     """Predictor test double exposing the subset used by the MPPI adapter."""
 
-    def __init__(self, future: np.ndarray, *, anchor: tuple[float, float] = (0.3, 0.0)) -> None:
+    def __init__(
+        self,
+        future: np.ndarray,
+        *,
+        anchor: tuple[float, float] = (0.3, 0.0),
+        path_penalty_scale: float = 0.0,
+    ) -> None:
         self.future = future
         self.anchor = anchor
+        self.path_penalty_scale = path_penalty_scale
         self.config = type("Cfg", (), {"predictive_rollout_dt": 0.2})
 
     def _socnav_fields(self, observation: dict[str, object]) -> tuple[dict, dict, dict]:
@@ -98,8 +105,8 @@ class _StubPredictor:
         num_samples: int,
     ) -> tuple[float, float]:
         """Return no path penalty for deterministic candidate scoring."""
-        del robot_pos, direction, observation, base_distance, num_samples
-        return 0.0, 0.0
+        del robot_pos, observation, base_distance, num_samples
+        return self.path_penalty_scale * float(np.linalg.norm(direction)), 0.0
 
     def plan(self, observation: dict[str, object]) -> tuple[float, float]:
         """Return the configured fallback anchor command."""
@@ -217,7 +224,11 @@ def test_predictive_mppi_batch_cost_parity_against_scalar() -> None:
     future = np.zeros((3, 8, 2), dtype=np.float32)
     future[0, :, :] = np.array([1.0, 0.3], dtype=np.float32)
     future[1, :, :] = np.array([1.3, -0.1], dtype=np.float32)
-    planner._predictor = _StubPredictor(future, anchor=(0.3, 0.0))
+    planner._predictor = _StubPredictor(
+        future,
+        anchor=(0.3, 0.0),
+        path_penalty_scale=0.7,
+    )
 
     obs = _obs(
         robot=(0.0, 0.0),
@@ -232,6 +243,7 @@ def test_predictive_mppi_batch_cost_parity_against_scalar() -> None:
     batch = rng.normal(0.3, 0.2, size=(8, horizon, 2))
     batch[:, :, 0] = np.clip(batch[:, :, 0], 0.0, cfg.max_linear_speed)
     batch[:, :, 1] = np.clip(batch[:, :, 1], -cfg.max_angular_speed, cfg.max_angular_speed)
+    batch[0] = 0.0
 
     robot_pos, heading, _speed, goal = planner._extract_state(obs)
     future_full, mask, _steps = planner._predict_future(obs)
@@ -277,6 +289,7 @@ def test_mppi_social_batch_cost_parity_against_scalar() -> None:
         sample_count=16,
         iterations=1,
         horizon_steps=6,
+        prediction_backend="stationary",
     )
     planner = MPPISocialPlannerAdapter(cfg)
 

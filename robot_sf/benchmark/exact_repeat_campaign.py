@@ -50,6 +50,7 @@ SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
 # separate map-runner pipeline). Such cells are recorded, not crashed,
 # and are excluded from the bitwise-identical repeat claim.
 UNRUNNABLE_DISPOSITION = "unrunnable_on_current_main"
+MIXED_DISPOSITION = "mixed_runnability"
 
 
 def canonical_sha256(value: Any) -> str:
@@ -520,17 +521,21 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
         if disposition is not None:
             if disposition != UNRUNNABLE_DISPOSITION:
                 raise ValueError(f"target {key} has an unsupported disposition {disposition!r}")
-            if "repeats" in result and result["repeats"] != []:
+            repeats = result.get("repeats")
+            if "repeats" in result and (not isinstance(repeats, list) or repeats):
                 raise ValueError(
                     f"target {key} has disposition {disposition!r} but also reports repeats"
                 )
+            disposition_reason = _require_text(
+                result.get("disposition_reason"), f"target {key} disposition_reason"
+            )
             verified = {
                 "scenario_id": key[0],
                 "planner": key[1],
                 "seed": key[2],
                 "unrunnable": True,
                 "disposition": disposition,
-                "disposition_reason": result.get("disposition_reason"),
+                "disposition_reason": disposition_reason,
                 "bitwise_identical": None,
                 "first_divergence": None,
                 "repeat_fingerprints": [],
@@ -563,6 +568,9 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
     cells = []
     for (scenario_id, planner), target_results in sorted(by_cell.items()):
         runnable = [item for item in target_results if not item.get("unrunnable")]
+        n_targets = len(target_results)
+        n_runnable_targets = len(runnable)
+        n_unrunnable_targets = n_targets - n_runnable_targets
         if not runnable:
             cells.append(
                 {
@@ -572,29 +580,49 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
                     "disposition": UNRUNNABLE_DISPOSITION,
                     "exact_repeat_determinism": None,
                     "first_divergence": None,
-                    "n_targets": len(target_results),
+                    "n_targets": n_targets,
                     "n_runnable_targets": 0,
-                    "n_unrunnable_targets": len(target_results),
+                    "n_unrunnable_targets": n_unrunnable_targets,
                 }
             )
             continue
         first = next(
             (item["first_divergence"] for item in runnable if item["first_divergence"]), None
         )
+        if n_unrunnable_targets:
+            cells.append(
+                {
+                    "scenario_id": scenario_id,
+                    "planner": planner,
+                    "unrunnable": False,
+                    "mixed": True,
+                    "disposition": MIXED_DISPOSITION,
+                    "exact_repeat_determinism": None,
+                    "first_divergence": first,
+                    "n_targets": n_targets,
+                    "n_runnable_targets": n_runnable_targets,
+                    "n_unrunnable_targets": n_unrunnable_targets,
+                }
+            )
+            continue
         cells.append(
             {
                 "scenario_id": scenario_id,
                 "planner": planner,
                 "unrunnable": False,
+                "mixed": False,
                 "exact_repeat_determinism": first is None,
                 "first_divergence": first,
-                "n_targets": len(target_results),
-                "n_runnable_targets": len(runnable),
-                "n_unrunnable_targets": len(target_results) - len(runnable),
+                "n_targets": n_targets,
+                "n_runnable_targets": n_runnable_targets,
+                "n_unrunnable_targets": 0,
             }
         )
-    runnable_cells = [cell for cell in cells if not cell.get("unrunnable")]
+    runnable_cells = [
+        cell for cell in cells if not cell.get("unrunnable") and not cell.get("mixed")
+    ]
     unrunnable_cells = [cell for cell in cells if cell.get("unrunnable")]
+    mixed_cells = [cell for cell in cells if cell.get("mixed")]
     verified = {
         "schema_version": VERIFIED_HOST_REPORT_SCHEMA_VERSION,
         "manifest_sha256": manifest["manifest_sha256"],
@@ -608,8 +636,9 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
             "n_cells": len(cells),
             "n_runnable_cells": len(runnable_cells),
             "n_unrunnable_cells": len(unrunnable_cells),
+            "n_mixed_cells": len(mixed_cells),
             # The bitwise-identical claim scopes to runnable cells; unrunnable
-            # (dispositioned) cells make no determinism claim.
+            # or mixed cells make no determinism claim.
             "all_cells_bitwise_identical": bool(runnable_cells)
             and all(cell["exact_repeat_determinism"] for cell in runnable_cells),
         },
@@ -652,25 +681,40 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     if set(first_targets) != set(targets) or set(second_targets) != set(targets):
         raise ValueError("verified host reports do not cover the manifest target set")
     cells: dict[tuple[str, str], list[bool]] = defaultdict(list)
-    unrunnable_cells: set[tuple[str, str]] = set()
+    target_counts: dict[tuple[str, str], int] = defaultdict(int)
+    unrunnable_target_counts: dict[tuple[str, str], int] = defaultdict(int)
     for key in sorted(targets):
+        cell_key = key[:2]
+        target_counts[cell_key] += 1
         if first_targets[key].get("unrunnable") or second_targets[key].get("unrunnable"):
-            unrunnable_cells.add(key[:2])
+            unrunnable_target_counts[cell_key] += 1
             continue
         identical = first_targets[key].get("repeat_fingerprints") == second_targets[key].get(
             "repeat_fingerprints"
         )
-        cells[key[:2]].append(bool(identical))
+        cells[cell_key].append(bool(identical))
     matrix = []
-    for cell_key in sorted(set(cells) | unrunnable_cells):
+    for cell_key in sorted(set(cells) | set(unrunnable_target_counts)):
         scenario_id, planner = cell_key
-        if cell_key in unrunnable_cells:
+        n_unrunnable_targets = unrunnable_target_counts.get(cell_key, 0)
+        if n_unrunnable_targets:
+            comparison_status = (
+                "unrunnable" if n_unrunnable_targets == target_counts[cell_key] else "mixed"
+            )
             matrix.append(
                 {
                     "scenario_id": scenario_id,
                     "planner": planner,
                     "bitwise_identical": None,
-                    "comparison_status": "unrunnable",
+                    "comparison_status": comparison_status,
+                    "disposition": (
+                        UNRUNNABLE_DISPOSITION
+                        if comparison_status == "unrunnable"
+                        else MIXED_DISPOSITION
+                    ),
+                    "n_targets": target_counts[cell_key],
+                    "n_runnable_targets": target_counts[cell_key] - n_unrunnable_targets,
+                    "n_unrunnable_targets": n_unrunnable_targets,
                 }
             )
             continue
@@ -684,7 +728,11 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
                 "comparison_status": "identical" if identical else "divergent",
             }
         )
-    runnable_rows = [row for row in matrix if row["comparison_status"] != "unrunnable"]
+    runnable_rows = [
+        row for row in matrix if row["comparison_status"] in {"identical", "divergent"}
+    ]
+    unrunnable_rows = [row for row in matrix if row["comparison_status"] == "unrunnable"]
+    mixed_rows = [row for row in matrix if row["comparison_status"] == "mixed"]
     return {
         "schema_version": CROSS_HOST_SCHEMA_VERSION,
         "manifest_sha256": manifest["manifest_sha256"],
@@ -694,7 +742,8 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
         "summary": {
             "n_cells": len(matrix),
             "n_runnable_cells": len(runnable_rows),
-            "n_unrunnable_cells": len(unrunnable_cells),
+            "n_unrunnable_cells": len(unrunnable_rows),
+            "n_mixed_cells": len(mixed_rows),
             "all_cells_bitwise_identical": version_match
             and bool(runnable_rows)
             and all(row["bitwise_identical"] for row in runnable_rows),
@@ -954,6 +1003,11 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
         planner_algo = _require_text(
             planner_def.get("algo"), f"planner_definition {planner_def_id!r} algo"
         )
+        if planner != planner_algo:
+            raise ValueError(
+                f"target {key} planner {planner!r} does not match "
+                f"planner_definition {planner_def_id!r} algo {planner_algo!r}"
+            )
 
         # Fail closed on planners the run_episode path cannot construct,
         # recording an explicit disposition instead of crashing the whole campaign.

@@ -204,6 +204,21 @@ def test_missing_packet_raises(tmp_path: pathlib.Path) -> None:
         evaluate_readiness(repo_root=tmp_path, packet_path="configs/research/nope.yaml")
 
 
+def test_campaign_gates_do_not_claim_no_runner_wired() -> None:
+    """Campaign gates must not say 'no packet-consuming runner is wired' (stale after #5428)."""
+    for gate in CAMPAIGN_GATES:
+        assert "no packet-consuming runner" not in gate.lower(), (
+            f"stale gate wording still present: {gate!r}"
+        )
+
+
+def test_campaign_gates_state_executor_is_wired_but_authorization_gated() -> None:
+    """Campaign gates must reflect that the executor is wired and explicitly authorization-gated."""
+    combined = " ".join(CAMPAIGN_GATES).lower()
+    assert "wired" in combined, "campaign gates must state the executor is wired"
+    assert "authorization" in combined, "campaign gates must state the authorization requirement"
+
+
 def test_render_markdown_states_claim_boundary_and_status() -> None:
     """The Markdown report leads with the claim boundary and shows the status."""
     readiness = evaluate_readiness(repo_root=REPO_ROOT, packet_path=PACKET_PATH)

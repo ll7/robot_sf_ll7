@@ -55,27 +55,61 @@ def _gh(args: list[str], *, timeout: int = 30) -> subprocess.CompletedProcess:
         )
 
 
-def latest_completed_run(runs: list[Any]) -> dict[str, Any] | None:
-    """Return the newest run whose ``status`` is ``completed``.
+# A completed run's ``conclusion`` is DECISIVE only when it actually evaluated
+# main's code: ``success`` (green) or ``failure`` (red). Every other value a
+# completed run can report — ``cancelled`` (the common case: a run SUPERSEDED by
+# a newer push), ``skipped``, ``neutral``, ``timed_out``, ``startup_failure``,
+# ``action_required`` or unknown/``None`` — is STALE: the checks rendered no
+# verdict on main and must be skipped exactly like an in-progress run. Treating
+# ``cancelled`` as red (the pre-2026-07-13 bug) froze every merge during
+# high-throughput windows, because rapid merges constantly supersede each other
+# into ``cancelled`` runs — the exact freeze that stranded ~8 gate-vetted PRs.
+GREEN_CONCLUSIONS = frozenset({"success"})
+RED_CONCLUSIONS = frozenset({"failure"})
 
-    ``runs`` is the list ``gh run list --json`` returns (newest first). We
-    sort by ``createdAt`` descending defensively rather than trusting order,
-    then take the first ``completed`` entry. In-progress / queued runs are
-    skipped: an unfinished run is not evidence of green OR red.
+
+def classify(conclusion: str | None) -> str:
+    """Bucket a completed run's ``conclusion`` into ``green`` / ``red`` / ``stale``."""
+    c = str(conclusion) if conclusion is not None else ""
+    if c in GREEN_CONCLUSIONS:
+        return "green"
+    if c in RED_CONCLUSIONS:
+        return "red"
+    return "stale"
+
+
+def latest_decisive_run(runs: list[Any]) -> dict[str, Any] | None:
+    """Return the newest COMPLETED run with a DECISIVE (green/red) conclusion.
+
+    Skips in-progress runs AND stale completed runs (``cancelled`` etc.),
+    neither of which is a verdict on main. Sorts by ``createdAt`` defensively.
     """
     completed = [
         run for run in runs if isinstance(run, dict) and str(run.get("status")) == "completed"
     ]
     completed.sort(key=lambda r: str(r.get("createdAt", "")), reverse=True)
-    return completed[0] if completed else None
+    for run in completed:
+        if classify(run.get("conclusion")) in ("green", "red"):
+            return run
+    return None
+
+
+def latest_completed_run(runs: list[Any]) -> dict[str, Any] | None:
+    """Deprecated alias for :func:`latest_decisive_run` (import stability)."""
+    return latest_decisive_run(runs)
 
 
 def decide(runs: list[Any]) -> tuple[bool, dict[str, Any] | None]:
-    """(is_green, deciding_run). Green iff the latest completed run succeeded."""
-    run = latest_completed_run(runs)
+    """(is_green, deciding_run). Green iff the latest DECISIVE run succeeded.
+
+    Fails closed: if no completed run rendered a decisive verdict (only
+    in-progress / stale runs in the window), returns ``(False, None)`` — the
+    hold stays, but as a "needs a fresh run" hold, not "main regressed".
+    """
+    run = latest_decisive_run(runs)
     if run is None:
         return False, None
-    return str(run.get("conclusion")) == "success", run
+    return classify(run.get("conclusion")) == "green", run
 
 
 def fetch_runs(

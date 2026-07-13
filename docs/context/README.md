@@ -93,6 +93,8 @@ knowledge, not every transient iteration detail.
 
 * Retrieval-first context index: [INDEX.md](INDEX.md)
 * Machine-readable context catalog: [catalog.yaml](catalog.yaml)
+* Collision causality, online risk, and Chapter 7 scenario discovery:
+  [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md)
 * Repository rule: [AGENTS.md](../../AGENTS.md)
 * Contributor workflow: [docs/dev_guide.md](../dev_guide.md)
 * Docs index entry: [docs/README.md](../README.md)

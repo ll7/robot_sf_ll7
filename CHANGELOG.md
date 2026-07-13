@@ -15,6 +15,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collision-checked deceleration or an explicit emergency-stop target. The `sipp_lattice` key is
   testing-only and requires `allow_testing_algorithms`; evidence is an exploratory CPU smoke, not
   a safety, liveness, or superiority claim. Slice 3 owns outcome evaluation.
+* **issue #5444 action-conditioned online collision-risk API and baselines.** New
+  `robot_sf/research/collision_risk/` package exposes a planner-agnostic, versioned
+  (`action_conditioned_collision_risk.v1`) estimate of `P(contact in (t, t+H] | action u)`.
+  A constant-velocity Monte Carlo baseline (exact disc-footprint segment geometry, declared
+  velocity-noise and cross-actor-correlation assumptions) emits the joint contact probability,
+  per-actor marginals (explicitly not summed as independent), first-passage/hazard decomposition,
+  and a union-bound vs intentionally-invalid independence comparison. Deterministic TTC /
+  velocity-obstacle / reachability warnings are labelled non-probabilistic, and an
+  uncertainty/OOD/abstention block plus estimator/forecast/geometry/horizon/action/config
+  provenance and p50/p95/p99 latency accompany every estimate.
+  `scripts/analysis/collision_risk_report.py` runs a frozen reference workload
+  (`configs/research/collision_risk_baseline.yaml`): p95 latency is ~10 ms (well under the 100 ms
+  deadline, classified `online`) and risk differs in the expected direction between two candidate
+  actions. Hard guards remain authoritative; no `safe` label is emitted and low probability is
+  never treated as safety. Evidence is API + baseline fixture, not a calibrated benchmark risk
+  claim; no benchmark campaign or Slurm/GPU run is included.
+* **issue #5442 frozen-state counterfactual replay: locate the last avoidable control action.**
+  New simulator-agnostic engine (`robot_sf/benchmark/last_avoidable_replay.py`) restores a
+  decision-point snapshot (including RNG state), verifies deterministic baseline replay, and branches
+  over the admissible robot action lattice at each step in `[t_danger, t_contact)` to report `t_uca`
+  (earliest avoidable unsafe control action) and `t_inevitable` (point of no return). Fail-closed: a
+  nondeterministic baseline or a missing feasible action set returns `unknown`, never `unavoidable`.
+  Ships a deterministic controlled kinematic fixture
+  (`robot_sf/benchmark/last_avoidable_fixtures.py`), the `last_avoidable_replay.v1` output schema, an
+  offline report CLI (`scripts/analysis/run_last_avoidable_replay_issue_5442.py`), and a context note
+  (`docs/context/issue_5442_last_avoidable_replay.md`). Controlled-fixture diagnostic evidence only;
+  `normative_fault` is always `not_assessed`. No production-simulator snapshot seam (that would be a
+  broad change — see the note), no benchmark/Slurm run, no metric/paper claim.
+* **issue #5441 `collision_causal_report.v1` fail-closed cause-report contract.** Adds
+  `robot_sf/benchmark/schemas/collision_causal_report.v1.json` and validator
+  `robot_sf/benchmark/collision_causal_report.py` that separate observed reconstruction, proximate
+  mechanism, and intervention-supported causal contribution for a single collision, always setting
+  `normative_fault: not_assessed`. The contract reuses `MECHANISM_LABELS`/`MECHANISM_CONFIDENCES`
+  (no competing taxonomy), marks unsupported fields (`t_uca`, `t_inevitable`, planner internals for
+  black-box planners) unavailable rather than inferred, forbids asserting a planner cause once
+  contact is inevitable, and ships one complete and one abstaining fixture. Producer inventory and
+  decision record: `docs/context/collision_causal_report_field_map_2026-07-13.md`. Schema/fixture
+  evidence only — not proof that real collisions can be causally attributed.
 
 * **issue #5419 authorization-gated DPCBF executor.** Bounded local `run_batch` arms require the
   exact public authorization ID. Atomic checkpoints bind inputs and completed JSONL artifacts;

@@ -1,0 +1,57 @@
+# Frozen reference workload + estimator config for the action-conditioned
+# collision-risk baseline (issue #5444).
+#
+# Status: API + baseline fixture evidence. This config drives the latency /
+# action-sensitivity report in scripts/analysis/collision_risk_report.py. It is
+# NOT a calibrated benchmark; it does not change any benchmark metric semantics.
+description: >-
+  Constant-velocity Monte Carlo action-conditioned collision-risk reference
+  workload for issue #5444. Small, frozen, reproducible; used to measure p95
+  latency against the 100 ms control deadline and to demonstrate that risk
+  differs in the expected direction between two candidate actions.
+
+estimator:
+  horizon_steps: 20          # H (2.0 s at dt = 0.1 s)
+  dt_s: 0.1
+  n_samples: 512             # Monte Carlo samples
+  velocity_std_m_s: 0.3      # per-axis constant-velocity perturbation
+  cross_actor_correlation: 0.3
+  robot_radius_m: 0.3
+  pedestrian_radius_m: 0.3
+  seed: 20260713
+  deadline_ms: 100.0         # control deadline for online classification
+  max_pedestrian_speed_m_s: 2.5
+  ci95_abstain_halfwidth: 0.05
+  min_samples_for_estimate: 64
+
+# Frozen small reference workload: a robot start, two candidate actions, and a
+# fixed set of pedestrians. The report runs both actions repeatedly to build the
+# latency distribution and to check the action-sensitivity direction.
+workload:
+  repeats: 200               # timed estimate calls per action
+  robot_start: [0.0, 0.0]
+  candidate_actions:
+    - action_id: drive_through
+      velocity: [1.0, 0.0]
+    - action_id: sidestep
+      velocity: [0.2, 1.2]
+  # Expected: the action that drives through the crowd carries the higher joint
+  # contact probability than the action that sidesteps.
+  higher_risk_action: drive_through
+  lower_risk_action: sidestep
+  pedestrians:
+    - id: 1
+      position: [1.5, 0.2]
+      velocity: [-0.4, 0.0]
+    - id: 2
+      position: [1.5, -0.2]
+      velocity: [-0.4, 0.0]
+    - id: 3
+      position: [2.0, 0.5]
+      velocity: [-0.5, -0.1]
+    - id: 4
+      position: [2.2, -0.4]
+      velocity: [-0.5, 0.1]
+    - id: 5
+      position: [2.5, 0.0]
+      velocity: [-0.6, 0.0]

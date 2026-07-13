@@ -115,9 +115,13 @@ def main(argv: list[str] | None = None) -> int:
         validation failure.
     """
     args = build_parser().parse_args(argv)
-    candidate_manifest = _load_json(args.candidates)
-    causal_reports = _load_json(args.causal) if args.causal is not None else None
-    risk_reports = _load_json(args.risk) if args.risk is not None else None
+    try:
+        candidate_manifest = _load_json(args.candidates)
+        causal_reports = _load_json(args.causal) if args.causal is not None else None
+        risk_reports = _load_json(args.risk) if args.risk is not None else None
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     try:
         manifest = build_ch7_case_capsule_manifest(

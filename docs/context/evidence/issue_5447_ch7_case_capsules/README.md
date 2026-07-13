@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#5478, 2026-07-13) - NEEDS-REVIEW -->
 # Issue #5447 — Chapter 7 causal-trajectory case capsules (builder scaffold)
 
 **Status:** builder/schema/validator delivered; **capsule set is blocked on data**
@@ -77,3 +78,5 @@ git diff --check
 3. **Downstream:** vector-figure rendering from pinned episode trajectories
    (reuse `robot_sf/benchmark/figures`), author-field completion, and the
    independent frozen-SHA visual/evidence review before dissertation integration.
+
+<!-- /AI-GENERATED -->

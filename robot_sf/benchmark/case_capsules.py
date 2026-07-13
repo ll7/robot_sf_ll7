@@ -43,6 +43,7 @@ that rendering step is reproducible.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -217,6 +218,11 @@ def _validate_candidate_manifest(manifest: Any) -> list[dict[str, Any]]:
             "candidate manifest has no candidates; refusing to build capsules from empty "
             "evidence (fail closed rather than fabricate a capsule set)"
         )
+    if not all(isinstance(candidate, dict) for candidate in candidates):
+        raise CaseCapsuleError(
+            "candidate manifest contains non-dict candidate records; refusing to build capsules "
+            "from malformed evidence"
+        )
     return candidates
 
 
@@ -246,7 +252,9 @@ def _candidate_sort_key(cand: dict[str, Any]) -> tuple[int, int, float, float]:
     Returns:
         A tuple usable as a ``sorted`` key (ascending -> best first via negation).
     """
-    flip = cand.get("seed_flip") or {}
+    flip = cand.get("seed_flip")
+    if not isinstance(flip, dict):
+        flip = {}
     return (
         0 if cand.get("selected") else 1,
         0 if not cand.get("triage_only") else 1,
@@ -377,19 +385,19 @@ def _build_admitted_capsule(
         "probability_panel": _probability_panel() if spec.requires_risk else None,
         # Causal labels only from a validated causal report; otherwise descriptive.
         "causal_label": (
-            {"status": "validated", "report_ref": causal_report}
+            {"status": "validated", "report_ref": copy.deepcopy(causal_report)}
             if causal_report is not None
             else "descriptive-only"
         ),
-        "risk_report_ref": risk_report if risk_report is not None else None,
+        "risk_report_ref": copy.deepcopy(risk_report) if risk_report is not None else None,
         "narrative": narrative,
         "source_provenance": {
             "candidate_id": cand.get("candidate_id"),
             "scenario_id": cand.get("scenario_id"),
             "planner": cand.get("planner"),
-            "reproducibility": cand.get("reproducibility"),
-            "seed_flip": cand.get("seed_flip"),
-            "upset_outcome": cand.get("upset_outcome"),
+            "reproducibility": copy.deepcopy(cand.get("reproducibility")),
+            "seed_flip": copy.deepcopy(cand.get("seed_flip")),
+            "upset_outcome": copy.deepcopy(cand.get("upset_outcome")),
         },
     }
 
@@ -434,11 +442,15 @@ def _resolve_capsule(
     if cand is None:
         return _unavailable_capsule(spec, f"no_source_candidate:{'|'.join(spec.source_archetypes)}")
 
-    causal_report = _report_ref(
-        causal_reports, str(cand.get("candidate_id")), str(cand.get("scenario_id"))
+    causal_report = (
+        _report_ref(causal_reports, str(cand.get("candidate_id")), str(cand.get("scenario_id")))
+        if spec.requires_causal
+        else None
     )
-    risk_report = _report_ref(
-        risk_reports, str(cand.get("candidate_id")), str(cand.get("scenario_id"))
+    risk_report = (
+        _report_ref(risk_reports, str(cand.get("candidate_id")), str(cand.get("scenario_id")))
+        if spec.requires_risk
+        else None
     )
 
     if spec.requires_causal and causal_report is None:
@@ -499,6 +511,12 @@ def build_ch7_case_capsule_manifest(
     """
     if min_capsules < 1:
         raise CaseCapsuleError(f"min_capsules must be >= 1, got {min_capsules}")
+    if causal_reports is not None and not isinstance(causal_reports, dict):
+        raise CaseCapsuleError(
+            f"causal_reports must be a dict, got {type(causal_reports).__name__}"
+        )
+    if risk_reports is not None and not isinstance(risk_reports, dict):
+        raise CaseCapsuleError(f"risk_reports must be a dict, got {type(risk_reports).__name__}")
     candidates = _validate_candidate_manifest(candidate_manifest)
 
     used: set[str] = set()
@@ -643,8 +661,14 @@ def _validate_capsule_figure(
     if not isinstance(figure, dict):
         violations.append(f"{cid}: missing figure_spec")
         return
-    if not figure.get("static_map_required") or not figure.get("metre_scale_required"):
-        violations.append(f"{cid}: figure_spec must require a static map and metre scale")
+    required_flags = (
+        "static_map_required",
+        "metre_scale_required",
+        "trajectory_sources_required",
+        "actor_footprints_at_marked_times_required",
+    )
+    if not all(figure.get(flag) for flag in required_flags):
+        violations.append(f"{cid}: figure_spec must require map/scale/trajectories/footprints")
     for key in ("marked_times", "why_this_time_matters"):
         if figure.get(key) == AUTHOR_REQUIRED:
             pending.append(f"{cid}: figure_spec.{key} author-required")
@@ -697,7 +721,7 @@ def _validate_admitted_capsule(
         violations.append(f"{cid}: causal grade but no validated causal_label")
 
 
-def validate_ch7_case_capsule_manifest(manifest: dict[str, Any]) -> CaseCapsuleValidation:
+def validate_ch7_case_capsule_manifest(manifest: Any) -> CaseCapsuleValidation:
     """Structurally validate a case-capsule manifest against the issue #5447 gates.
 
     Structural violations mark a malformed manifest. ``author_pending`` entries
@@ -709,6 +733,10 @@ def validate_ch7_case_capsule_manifest(manifest: dict[str, Any]) -> CaseCapsuleV
     """
     violations: list[str] = []
     pending: list[str] = []
+
+    if not isinstance(manifest, dict):
+        violations.append(f"manifest must be a dict, got {type(manifest).__name__}")
+        return CaseCapsuleValidation(violations, pending)
 
     if manifest.get("schema_version") != SCHEMA_VERSION:
         violations.append(
@@ -722,6 +750,9 @@ def validate_ch7_case_capsule_manifest(manifest: dict[str, Any]) -> CaseCapsuleV
         return CaseCapsuleValidation(violations, pending)
 
     for capsule in capsules:
+        if not isinstance(capsule, dict):
+            violations.append("capsules list contains non-dict records")
+            continue
         status = capsule.get("status")
         if status == "unavailable":
             if not capsule.get("reason"):

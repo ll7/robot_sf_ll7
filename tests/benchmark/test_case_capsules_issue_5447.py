@@ -22,6 +22,7 @@ from robot_sf.benchmark.case_capsules import (
     canonical_sha256,
     validate_ch7_case_capsule_manifest,
 )
+from scripts.analysis.build_ch7_case_capsules_issue_5447 import main as build_cli_main
 
 
 def _seed_flip_candidate(cid: str, scenario: str, planner: str, **over: Any) -> dict[str, Any]:
@@ -236,3 +237,110 @@ def test_case_capsule_author_required_sentinel_never_prefilled():
     # But the mechanically-derivable rationale is filled from candidate data.
     assert admitted["narrative"]["selection_rationale"] != AUTHOR_REQUIRED
     assert "up1" in admitted["narrative"]["selection_rationale"]
+
+
+def test_case_capsule_builder_rejects_non_dict_candidate_records():
+    """Malformed candidate records fail closed before sort-key access."""
+    with pytest.raises(CaseCapsuleError, match="non-dict candidate"):
+        build_ch7_case_capsule_manifest(_candidate_manifest([None]))  # type: ignore[list-item]
+
+
+def test_case_capsule_builder_normalizes_malformed_seed_flip():
+    """A malformed optional seed_flip field cannot crash candidate ranking."""
+    candidate = _seed_flip_candidate("sf1", "sA", "p1", seed_flip="malformed")
+    manifest = build_ch7_case_capsule_manifest(_candidate_manifest([candidate]), min_capsules=1)
+    admitted = next(c for c in manifest["capsules"] if c["status"] == "admitted")
+    assert admitted["source_candidate_id"] == "sf1"
+
+
+@pytest.mark.parametrize(
+    ("parameter", "value", "expected"),
+    [
+        ("causal_reports", [], "causal_reports must be a dict"),
+        ("risk_reports", [], "risk_reports must be a dict"),
+    ],
+)
+def test_case_capsule_builder_rejects_invalid_report_types(parameter, value, expected):
+    """Optional report bundles must be mappings when supplied."""
+    with pytest.raises(CaseCapsuleError, match=expected):
+        build_ch7_case_capsule_manifest(
+            _candidate_manifest([_seed_flip_candidate("sf1", "sA", "p1")]),
+            **{parameter: value},
+        )
+
+
+def test_case_capsule_builder_deep_copies_input_provenance_and_reports():
+    """Mutating an emitted capsule cannot mutate caller-owned nested inputs."""
+    candidate = _upset_candidate(
+        "up1",
+        "sB",
+        "p2",
+        reproducibility={"nested": {"value": 1}},
+        seed_flip={"effective_denominator": 5, "nested": {"value": 2}},
+    )
+    causal_candidate = _upset_candidate("up2", "sC", "p3", reproducibility={"nested": {"value": 4}})
+    causal = {"sC": {"nested": {"value": 3}}}
+    manifest = build_ch7_case_capsule_manifest(
+        _candidate_manifest([candidate, causal_candidate]), causal_reports=causal, min_capsules=1
+    )
+    admitted = next(
+        c for c in manifest["capsules"] if c["archetype"] == "paired_first_unsafe_action"
+    )
+    admitted["source_provenance"]["reproducibility"]["nested"]["value"] = 10
+    admitted["causal_label"]["report_ref"]["nested"]["value"] = 11
+    assert causal_candidate["reproducibility"]["nested"]["value"] == 4
+    assert causal["sC"]["nested"]["value"] == 3
+
+
+def test_case_capsule_reports_are_scoped_to_required_archetypes():
+    """Non-causal archetypes stay descriptive-only even when a report is available."""
+    candidate = _seed_flip_candidate("sf1", "sA", "p1")
+    manifest = build_ch7_case_capsule_manifest(
+        _candidate_manifest([candidate]),
+        causal_reports={"sA": {"report": "validated"}},
+        min_capsules=1,
+    )
+    hard = next(c for c in manifest["capsules"] if c["archetype"] == "hard_vs_easy_seed")
+    assert hard["causal_label"] == "descriptive-only"
+    assert hard["risk_report_ref"] is None
+
+
+def test_case_capsule_validator_rejects_non_dict_root_and_records():
+    """Malformed manifest roots and capsule records are structural violations."""
+    root_result = validate_ch7_case_capsule_manifest([])
+    assert not root_result.ok
+    assert any("manifest must be a dict" in v for v in root_result.structural_violations)
+
+    record_result = validate_ch7_case_capsule_manifest(
+        {"schema_version": SCHEMA_VERSION, "capsules": [None]}
+    )
+    assert not record_result.ok
+    assert any("non-dict records" in v for v in record_result.structural_violations)
+
+
+def test_case_capsule_validator_requires_all_figure_provenance_flags():
+    """Figure validation protects trajectory and actor-footprint requirements too."""
+    manifest = build_ch7_case_capsule_manifest(
+        _candidate_manifest([_seed_flip_candidate("sf1", "sA", "p1")]), min_capsules=1
+    )
+    hard = next(c for c in manifest["capsules"] if c["status"] == "admitted")
+    hard["figure_spec"]["trajectory_sources_required"] = False
+    result = validate_ch7_case_capsule_manifest(manifest)
+    assert not result.ok
+    assert any("map/scale/trajectories/footprints" in v for v in result.structural_violations)
+
+
+@pytest.mark.parametrize("payload", ["{", "[]"])
+def test_case_capsule_cli_fails_closed_on_malformed_json(tmp_path, capsys, payload):
+    """Missing or malformed JSON input uses the documented build-error exit code."""
+    candidates = tmp_path / "candidates.json"
+    candidates.write_text(payload, encoding="utf-8")
+    assert build_cli_main(["--candidates", str(candidates)]) == 2
+    assert "error:" in capsys.readouterr().err
+
+
+def test_case_capsule_cli_fails_closed_on_missing_json(tmp_path, capsys):
+    """A missing candidate file produces a concise fail-closed error."""
+    missing = tmp_path / "missing.json"
+    assert build_cli_main(["--candidates", str(missing)]) == 2
+    assert "error:" in capsys.readouterr().err

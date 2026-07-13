@@ -4268,3 +4268,7 @@ entries:
   status: evidence
   freshness: evidence
   area: reproducibility
+- path: docs/context/evidence/issue_5447_ch7_case_capsules/README.md
+  status: proposal
+  freshness: dated
+  area: benchmark_evidence

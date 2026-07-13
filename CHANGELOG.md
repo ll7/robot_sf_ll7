@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5447 Chapter 7 case-capsule manifest builder (scaffold).** New
+  `robot_sf/benchmark/case_capsules.py` (`ch7_case_capsule_manifest.v1`) assembles the Chapter 7
+  causal-trajectory worked-example set from a *validated* `seed_flip_inversion_candidates.v1`
+  candidate manifest (issue #5446) plus optional causal / online-risk reports (#5441–#5445). It is
+  honest-selection tooling, not a benchmark metric or figure renderer: it fails closed on
+  empty/wrong-schema input, labels archetypes with a missing source candidate or required report
+  `unavailable` (never substituted), grades capsules `descriptive-only` unless a validated causal
+  report is supplied, honours the four-capsule honest floor (`insufficient_evidence` below it), and
+  leaves subjective narrative/figure fields as an `AUTHOR_REQUIRED` sentinel the structural
+  validator reports as `author_pending`. Ships a thin CLI
+  (`scripts/analysis/build_ch7_case_capsules_issue_5447.py`), a frozen selection contract
+  (`configs/analysis/issue_5447_ch7_case_capsules.yaml`), and contract tests. The capsule *set*
+  itself remains blocked on the #5446 candidate manifest, which does not yet exist; see
+  `docs/context/evidence/issue_5447_ch7_case_capsules/README.md`.
+
 * **issue #5355 factorial campaign-readiness CLI gate.** New executable
   `scripts/validation/check_issue_5355_factorial_campaign_readiness.py` wraps the existing library
   gate `assess_campaign_readiness()` so ops can enforce the prediction-MPC 2x2 factorial

@@ -147,6 +147,9 @@ def test_tracked_manifest_metrics_flow_into_per_archetype_report(tmp_path: Path)
     )
 
     assert code == 0
+    updated_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert updated_manifest["status"] == "ready"
+    assert updated_manifest["claim_boundary"] == "captured_runtime_ready"
     summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["integration_readiness"]["ready"] is True
     reports = summary["per_archetype_metric_reports"]
@@ -164,6 +167,55 @@ def test_tracked_manifest_metrics_flow_into_per_archetype_report(tmp_path: Path)
 
     assert summary["ablation_reports"] == reports["clearance_m"]
     assert (durable_dir / "summary.json").exists()
+
+
+def test_manifest_rewrite_failure_is_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A manifest write failure blocks report generation and preserves the source manifest."""
+
+    module = _load_report_cli()
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps({"status": "pending_runtime_capture"}), encoding="utf-8")
+    records_path = tmp_path / "episode_records.jsonl"
+    records_path.write_text("", encoding="utf-8")
+    output_dir = tmp_path / "output"
+
+    monkeypatch.setattr(
+        module,
+        "assess_mean_matched_episode_records",
+        lambda manifest, records: {"ready": True, "trace_metric_keys": []},
+    )
+
+    def fail_rewrite(path: Path, manifest: dict[str, Any]) -> None:
+        raise OSError("simulated disk-full failure")
+
+    monkeypatch.setattr(module, "_rewrite_manifest_status", fail_rewrite)
+    code = _run_cli(
+        module,
+        [
+            "build_heterogeneous_population_ablation_report.py",
+            "--manifest",
+            str(manifest_path),
+            "--records",
+            str(records_path),
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert code == 2
+    assert json.loads(manifest_path.read_text(encoding="utf-8"))["status"] == (
+        "pending_runtime_capture"
+    )
+    failure = json.loads((output_dir / "manifest_rewrite_failure.json").read_text(encoding="utf-8"))
+    assert failure == {
+        "error": "simulated disk-full failure",
+        "manifest_path": str(manifest_path),
+        "reason": "manifest_rewrite_failed",
+        "status": "blocked",
+    }
+    assert not (output_dir / "summary.json").exists()
 
 
 def test_tracked_manifest_declares_required_response_law_sweep() -> None:

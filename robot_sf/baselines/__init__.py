@@ -149,4 +149,33 @@ def list_baselines() -> list[str]:
     return list(BASELINES.keys())
 
 
-__all__ = ["BASELINES", "get_baseline", "list_baselines"]
+# Aliases for the built-in naive goal-seeking policy that the benchmark runner
+# constructs directly (see ``robot_sf.benchmark.runner._create_robot_policy``),
+# outside the baseline registry above. Kept aligned with the ``goal`` canonical
+# planner declared in ``robot_sf.benchmark.algorithm_readiness``.
+SIMPLE_POLICY_ALIASES: frozenset[str] = frozenset(
+    {"simple_policy", "goal", "simple", "goal_policy"}
+)
+
+
+def is_runnable_algo(name: str) -> bool:
+    """Return whether ``robot_sf.benchmark.runner.run_episode`` can execute ``name``.
+
+    The benchmark episode runner resolves a planner either as the built-in
+    goal-seeking policy (``SIMPLE_POLICY_ALIASES``) or through the baseline
+    registry (``BASELINES``). Planners that live only in other execution
+    pipelines and have no episode-runner adapter are not reachable here.
+
+    Returns:
+        True when the algorithm can be constructed by ``run_episode``.
+    """
+    return name in SIMPLE_POLICY_ALIASES or name in BASELINES
+
+
+__all__ = [
+    "BASELINES",
+    "SIMPLE_POLICY_ALIASES",
+    "get_baseline",
+    "is_runnable_algo",
+    "list_baselines",
+]

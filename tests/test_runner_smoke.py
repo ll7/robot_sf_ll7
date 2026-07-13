@@ -103,6 +103,48 @@ def test_runner_single_episode_tmp(tmp_path: Path):
     assert reloaded["episode_id"] == record["episode_id"]
 
 
+def test_runner_goal_alias_executes_like_simple_policy(tmp_path: Path):
+    """The ``goal`` alias resolves to the built-in simple goal-seeking policy.
+
+    Historical benchmark bundles (e.g. #5263) label the naive goal planner
+    ``goal`` rather than ``simple_policy``. The runner must construct and execute
+    it end-to-end instead of raising ``ValueError: Unknown algorithm 'goal'``.
+
+    Args:
+        tmp_path: Temporary directory (unused, keeps signature uniform).
+    """
+    scenario = {
+        "id": "smoke-goal-alias",
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 1,
+    }
+    goal_record = run_episode(
+        scenario, seed=7, horizon=15, dt=0.1, record_forces=False, algo="goal"
+    )
+    schema = load_schema(SCHEMA_PATH)
+    validate_episode(goal_record, schema)
+    assert "metrics" in goal_record
+    assert goal_record["algo"] == "goal"
+
+    simple_record = run_episode(
+        {**scenario, "id": "smoke-simple-policy"},
+        seed=7,
+        horizon=15,
+        dt=0.1,
+        record_forces=False,
+        algo="simple_policy",
+    )
+    # The alias must drive the same policy: identical outcome and metrics.
+    assert goal_record["outcome"] == simple_record["outcome"]
+    assert goal_record["metrics"] == simple_record["metrics"]
+
+
 def _normalize_episode_record(record: dict[str, object]) -> dict[str, object]:
     """Remove runtime-only fields before comparing deterministic episode records."""
     normalized = dict(record)

@@ -1,0 +1,67 @@
+## Compute-Feasibility Matrix Config v1
+#
+# Purpose:
+#   Define the planner/scenario/deadline matrix for the representative-CPU
+#   compute-feasibility study enabled by the latency-stress harness (#5506/#5524).
+#
+# This config covers three planners, two maps, three pedestrian-count levels,
+# two control deadlines, and three seeds per cell. The matrix produces cold-
+# and steady-state per-cycle and component metrics, deadline-miss rates,
+# provenance, and conservative feasibility classification per cell.
+#
+# Canonical command:
+#   uv run python scripts/benchmark/run_compute_feasibility_matrix.py \
+#       --config configs/benchmarks/compute_feasibility_matrix_v1.yaml
+#
+# Output:
+#   output/compute_feasibility_matrix_v1/ directory with JSONL rows, a
+#   manifest.json provenance file, and a synthetic_summary.json report.
+
+schema_version: compute_feasibility_matrix.v1
+
+# Planners to evaluate
+planners:
+  - key: goal
+    algo: goal
+
+  - key: mppi_social
+    algo: mppi_social
+    algo_config:
+      goal_tolerance: 0.2
+      horizon_steps: 5
+      sample_count: 8
+      iterations: 1
+      elite_fraction: 0.25
+
+  - key: social_force
+    algo: social_force
+
+# Maps (SVG paths relative to repo root)
+maps:
+  - path: maps/svg_maps/atomic_empty_frame_test.svg
+    label: empty_8x8
+
+  - path: maps/svg_maps/classic_bottleneck_medium.svg
+    label: bottleneck_medium
+
+# Pedestrian counts per episode
+pedestrian_counts:
+  - 0
+  - 5
+  - 15
+
+# Declared control deadlines (ms)
+control_deadlines_ms:
+  - 100
+  - 50
+
+# Seeds per cell
+seeds: [42, 111, 987]
+
+# Fixed episode parameters
+horizon: 60
+dt: 0.1
+record_forces: false
+observation_mode: null
+observation_level: null
+benchmark_track: latency_feasibility_v1

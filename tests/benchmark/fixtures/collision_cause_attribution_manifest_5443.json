@@ -1,0 +1,149 @@
+{
+  "manifest_schema": "collision_cause_attribution_manifest.v1",
+  "issue": 5443,
+  "description": "Frozen ground-truth manifest for collision-cause attribution validation (issue #5443). Each entry pins the injected cause class, activation window, allowed intervention, ambiguity status, and avoidability before analysis. Covers the predeclared validation matrix: one activation per single cause, at least one interacting/ambiguous fixture, and negative controls. This is a validation contract, not benchmark evidence; it stores no raw traces or videos.",
+  "fixtures": [
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "obs_omission_01",
+      "cause_class": "observation_omission",
+      "activation_window": [12, 12],
+      "allowed_intervention": "restore_dropped_detection",
+      "ambiguity_status": "unambiguous",
+      "avoidable": true,
+      "notes": "A pedestrian detection is dropped from the observation for one step; restoring it at step 12 avoids contact."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "obs_delay_01",
+      "cause_class": "observation_delay",
+      "activation_window": [8, 11],
+      "allowed_intervention": "remove_observation_lag",
+      "ambiguity_status": "unambiguous",
+      "avoidable": true,
+      "notes": "Observation stream is delayed by three steps across the window; removing the lag lets the planner brake in time."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "prediction_miss_01",
+      "cause_class": "prediction_miss",
+      "activation_window": [15, 15],
+      "allowed_intervention": "correct_predicted_track",
+      "ambiguity_status": "unambiguous",
+      "avoidable": true,
+      "notes": "Pedestrian forecast omits a turn; correcting the predicted track at step 15 restores clearance."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "candidate_omission_01",
+      "cause_class": "candidate_omission",
+      "activation_window": [9, 9],
+      "allowed_intervention": "reinstate_omitted_candidate",
+      "ambiguity_status": "unambiguous",
+      "avoidable": true,
+      "notes": "The evasive candidate action is pruned from the candidate set; reinstating it avoids contact."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "bad_selection_01",
+      "cause_class": "bad_selection",
+      "activation_window": [10, 10],
+      "allowed_intervention": "select_safe_candidate",
+      "ambiguity_status": "unambiguous",
+      "avoidable": true,
+      "notes": "A safe candidate is present but the selector picks a colliding one; forcing the safe pick avoids contact."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "guard_omission_01",
+      "cause_class": "guard_omission",
+      "activation_window": [13, 14],
+      "allowed_intervention": "enable_safety_guard",
+      "ambiguity_status": "unambiguous",
+      "avoidable": true,
+      "notes": "The safety guard that would veto the unsafe command is disabled across the window; enabling it avoids contact."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "infeasible_command_01",
+      "cause_class": "infeasible_applied_command",
+      "activation_window": [11, 11],
+      "allowed_intervention": "apply_feasible_command",
+      "ambiguity_status": "unambiguous",
+      "avoidable": true,
+      "notes": "The commanded deceleration exceeds actuation limits and saturates; the feasible command still avoids contact."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "route_trap_01",
+      "cause_class": "route_trap",
+      "activation_window": [3, 3],
+      "allowed_intervention": "reroute_before_trap",
+      "ambiguity_status": "unambiguous",
+      "avoidable": true,
+      "notes": "The assigned route commits early to a corridor with no evasive room; rerouting before step 3 avoids the trap."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "already_unavoidable_01",
+      "cause_class": "already_unavoidable_contact",
+      "activation_window": [18, 18],
+      "allowed_intervention": "none",
+      "ambiguity_status": "unambiguous",
+      "avoidable": false,
+      "notes": "By step 18 the pedestrian has entered the braking distance with no feasible evasion; contact is unavoidable."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "metric_artifact_01",
+      "cause_class": "metric_artifact",
+      "activation_window": [20, 20],
+      "allowed_intervention": "none",
+      "ambiguity_status": "unambiguous",
+      "avoidable": false,
+      "notes": "A footprint-inflation quirk flags a collision at the reporting step though no physical contact occurs; the cause is a metric artifact, not a planner fault."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "ambiguous_pred_guard_01",
+      "cause_class": "interacting_ambiguous",
+      "activation_window": [10, 14],
+      "allowed_intervention": "none",
+      "ambiguity_status": "ambiguous",
+      "avoidable": true,
+      "candidate_causes": ["prediction_miss", "guard_omission"],
+      "notes": "A prediction miss and a guard omission overlap; either single intervention alone leaves contact, so no single cause is decisive."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "ambiguous_route_selection_01",
+      "cause_class": "interacting_ambiguous",
+      "activation_window": [5, 12],
+      "allowed_intervention": "none",
+      "ambiguity_status": "ambiguous",
+      "avoidable": true,
+      "candidate_causes": ["route_trap", "bad_selection"],
+      "notes": "An early route commitment and a late bad selection jointly cause contact; neither counterfactual alone resolves it."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "negative_control_jitter_01",
+      "cause_class": "none",
+      "activation_window": [-1, -1],
+      "allowed_intervention": "none",
+      "ambiguity_status": "negative_control",
+      "avoidable": false,
+      "notes": "A suspicious observation-jitter signal is present but does not change the counterfactual outcome; it must not be promoted to a cause."
+    },
+    {
+      "schema_version": "collision_cause_attribution_fixture.v1",
+      "fixture_id": "negative_control_guard_flap_01",
+      "cause_class": "none",
+      "activation_window": [-1, -1],
+      "allowed_intervention": "none",
+      "ambiguity_status": "negative_control",
+      "avoidable": false,
+      "notes": "A guard toggles briefly but its state never gates the applied command on this trace; correlation without causal effect."
+    }
+  ]
+}

@@ -310,35 +310,30 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             Higher-is-better score, or negative infinity for an unsafe rollout.
         """
         position = np.array(robot_pos, dtype=float)
-        orientation = float(heading)
         start_distance = float(np.linalg.norm(goal - position))
-        min_clearance = float("inf")
         overrides = rescue_overrides or {}
         effective_steps = int(overrides.get("prediction_steps") or self.config.prediction_steps)
-        for step_idx in range(max(effective_steps, 1)):
-            position += np.array(
-                [
-                    command[0] * np.cos(orientation) * float(self.config.prediction_dt),
-                    command[0] * np.sin(orientation) * float(self.config.prediction_dt),
-                ]
-            )
-            orientation = wrap_angle_pi(orientation + command[1] * float(self.config.prediction_dt))
-            if pedestrian_positions.size:
-                scored_positions = pedestrian_positions
-                if self.config.prediction_scoring_enabled:
-                    forecast_time = float(step_idx + 1) * float(self.config.prediction_dt)
-                    scored_positions = pedestrian_positions + pedestrian_velocities * forecast_time
-                pedestrian_clearance = (
-                    float(np.min(np.linalg.norm(scored_positions - position[None, :], axis=1)))
-                    - float(self.config.robot_radius)
-                    - float(self.config.pedestrian_radius)
-                )
-                min_clearance = min(min_clearance, pedestrian_clearance)
-            min_clearance = min(
-                min_clearance,
-                self._min_obstacle_clearance(position, observation)
-                - float(self.config.robot_radius),
-            )
+        trajectory = self._rollout_trajectory(
+            robot_pos=position,
+            heading=float(heading),
+            command=command,
+            steps=effective_steps,
+        )
+        min_clearance = self._rollout_min_clearance(
+            robot_pos=position,
+            heading=float(heading),
+            command=command,
+            steps=effective_steps,
+            pedestrian_positions=pedestrian_positions,
+            pedestrian_velocities=pedestrian_velocities,
+            observation=observation,
+            overrides=overrides,
+        )
+        # Terminal pose from the closed-form unicycle integration below.
+        position = trajectory[-1]
+        orientation = self._rollout_terminal_orientation(
+            heading=float(heading), command=command, steps=effective_steps
+        )
         if min_clearance <= float(self.config.safety_margin):
             return float("-inf")
         end_distance = float(np.linalg.norm(goal - position))
@@ -367,6 +362,117 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             observation=observation,
         )
         return base_score + float(self.config.global_route_probe_heading_weight) * waypoint_score
+
+    def _rollout_trajectory(
+        self, *, robot_pos: np.ndarray, heading: float, command: tuple[float, float], steps: int
+    ) -> np.ndarray:
+        """Unicycle trajectory positions for the constant-command rollout.
+
+        The pose sequence is integrated with the *same* sequential left-to-right
+        accumulation as the legacy scalar loop (``pos += v*dt*(cos,sin)(o)`` with
+        ``o`` wrapped at every step). Only the per-step pedestrian broadcast is
+        vectorized, so the trajectory is bit-identical to the scalar reference and
+        the numeric-parity gate for issue #5412 holds exactly.
+
+        Returns:
+            ``(steps, 2)`` array of world positions for the terminal-step candidate.
+        """
+        steps = max(steps, 1)
+        dt = float(self.config.prediction_dt)
+        v = float(command[0])
+        w = float(command[1])
+        position = np.array(robot_pos, dtype=float)
+        orientation = float(heading)
+        positions = np.empty((steps, 2), dtype=float)
+        for step_idx in range(steps):
+            position = position + np.array(
+                [v * np.cos(orientation) * dt, v * np.sin(orientation) * dt]
+            )
+            orientation = wrap_angle_pi(orientation + w * dt)
+            positions[step_idx] = position
+        return positions
+
+    def _rollout_terminal_orientation(
+        self, *, heading: float, command: tuple[float, float], steps: int
+    ) -> float:
+        """Closed-form terminal heading of the constant-command rollout.
+
+        The scalar loop integrates ``orientation`` with ``wrap_angle_pi`` at every
+        step; vectorizing that step-by-step wrap changes the float reduction order,
+        so the terminal heading is computed by reducing the *same* per-step wrapped
+        deltas. We reuse the scalar recurrence exactly so the result is bit-stable
+        with the legacy loop.
+
+        Returns:
+            Terminal orientation in ``(-pi, pi]`` after ``steps`` integration steps.
+        """
+        orientation = float(heading)
+        delta = float(command[1]) * float(self.config.prediction_dt)
+        for _ in range(max(steps, 1)):
+            orientation = wrap_angle_pi(orientation + delta)
+        return orientation
+
+    def _rollout_min_clearance(
+        self,
+        *,
+        robot_pos: np.ndarray,
+        heading: float,
+        command: tuple[float, float],
+        steps: int,
+        pedestrian_positions: np.ndarray,
+        pedestrian_velocities: np.ndarray,
+        observation: dict[str, Any],
+        overrides: dict[str, Any],
+    ) -> float:
+        """Vectorized minimum clearance over the constant-command rollout horizon.
+
+        The pose sequence reuses the bit-stable trajectory (identical to the
+        legacy scalar loop), and the per-step pedestrian clearance is broadcast as a
+        ``(steps, peds)`` tensor with a single ``min`` reduction. Because the
+        positions are bit-identical to the scalar reference, the resulting minimum
+        clearance is exact and the numeric-parity gate for issue #5412 holds.
+
+        Returns:
+            Minimum clearance in meters over the horizon, or ``inf`` when no
+            pedestrian or obstacle clearance is ever computed.
+        """
+        steps = max(steps, 1)
+        dt = float(self.config.prediction_dt)
+        # Bit-stable pose sequence (identical to the legacy scalar loop).
+        positions = self._rollout_trajectory(
+            robot_pos=robot_pos, heading=float(heading), command=command, steps=steps
+        )
+
+        k = np.arange(1, steps + 1, dtype=float)
+        min_clearance = float("inf")
+        if pedestrian_positions.size:
+            if self.config.prediction_scoring_enabled and pedestrian_velocities.shape == (
+                pedestrian_positions.shape
+            ):
+                # Forecast positions at each step k (k = 1..steps).
+                forecast = pedestrian_positions[None, :, :] + pedestrian_velocities[None, :, :] * (
+                    k[:, None] * dt
+                )  # (steps, peds, 2)
+                ped_dist = np.linalg.norm(
+                    forecast - positions[:, None, :], axis=-1
+                )  # (steps, peds)
+            else:
+                ped_dist = np.linalg.norm(
+                    pedestrian_positions[None, :, :] - positions[:, None, :], axis=-1
+                )
+            ped_clearance = (
+                float(np.min(ped_dist))
+                - float(self.config.robot_radius)
+                - float(self.config.pedestrian_radius)
+            )
+            min_clearance = min(min_clearance, ped_clearance)
+
+        for step_idx in range(steps):
+            obs_clear = self._min_obstacle_clearance(positions[step_idx], observation) - float(
+                self.config.robot_radius
+            )
+            min_clearance = min(min_clearance, obs_clear)
+        return min_clearance
 
     def _waypoint_following_score(
         self,

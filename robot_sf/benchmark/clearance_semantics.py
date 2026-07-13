@@ -267,8 +267,15 @@ def load_footprint_sweep_spec(config: Mapping[str, Any]) -> FootprintSweepSpec:
         conservative_buffer_m=_require_number(thresholds_block, "conservative_buffer_m"),
     )
     sweep = _require_mapping(block, "sweep")
-    threshold_sweep = block.get("threshold_sweep")
-    if isinstance(threshold_sweep, Mapping):
+    if "threshold_sweep" not in block:
+        contact = None
+        near_miss = None
+        conservative = None
+        threshold_rationale = ""
+    else:
+        threshold_sweep = block["threshold_sweep"]
+        if not isinstance(threshold_sweep, Mapping):
+            raise ValueError("footprint_semantics.threshold_sweep must be a mapping")
         if not threshold_sweep:
             raise ValueError(
                 "threshold_sweep block is present but empty: provide threshold lists or omit the block"
@@ -276,17 +283,10 @@ def load_footprint_sweep_spec(config: Mapping[str, Any]) -> FootprintSweepSpec:
         contact = _require_optional_number_list(threshold_sweep, "contact_threshold_m")
         near_miss = _require_optional_number_list(threshold_sweep, "near_miss_threshold_m")
         conservative = _require_optional_number_list(threshold_sweep, "conservative_buffer_m")
-        if contact is not None:
-            _validate_thresholds_not_empty(contact, near_miss, conservative)
+        _validate_thresholds_not_empty(contact, near_miss, conservative)
         threshold_rationale = str(threshold_sweep.get("rationale", ""))
-        # Validate monotonic ordering: every contact <= every near_miss <= every conservative
-        if contact is not None:
-            _validate_threshold_monotonic(contact, near_miss, conservative, thresholds)
-    else:
-        contact = None
-        near_miss = None
-        conservative = None
-        threshold_rationale = ""
+        # Validate ordering for the axes, while enumeration filters invalid cross-axis pairs.
+        _validate_threshold_monotonic(contact, near_miss, conservative)
     return FootprintSweepSpec(
         nominal_geometry=geometry,
         thresholds=thresholds,
@@ -490,8 +490,10 @@ def enumerate_threshold_sensitivity(spec: FootprintSweepSpec) -> list[dict[str, 
         Deterministic list of threshold-sensitivity rows, or ``None`` when the spec carries no
         threshold sweep.
     """
-    if spec.contact_thresholds_m is None:
+    threshold_lists = _validated_threshold_sweep_lists(spec)
+    if threshold_lists is None:
         return None
+    contact_thresholds, near_miss_thresholds, conservative_buffers = threshold_lists
     rows: list[dict[str, Any]] = []
     for robot_proxy in spec.robot_proxy_radii_m:
         for pedestrian_radius in spec.pedestrian_radii_m:
@@ -506,9 +508,9 @@ def enumerate_threshold_sensitivity(spec: FootprintSweepSpec) -> list[dict[str, 
                     geometry.robot_body_radius_m + geometry.pedestrian_body_radius_m
                 )
                 by_threshold: list[dict[str, Any]] = []
-                for contact_t in spec.contact_thresholds_m:
-                    for near_miss_t in spec.near_miss_thresholds_m:
-                        for buffer_t in spec.conservative_buffers_m:
+                for contact_t in contact_thresholds:
+                    for near_miss_t in near_miss_thresholds:
+                        for buffer_t in conservative_buffers:
                             # Skip threshold combos that violate monotonic ordering.
                             # The sweep defines independent axes for each threshold,
                             # but only valid (contact <= near_miss <= buffer) combos
@@ -552,51 +554,61 @@ def enumerate_threshold_sensitivity(spec: FootprintSweepSpec) -> list[dict[str, 
     return rows
 
 
+def _validated_threshold_sweep_lists(
+    spec: FootprintSweepSpec,
+) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]] | None:
+    """Return a complete threshold grid, or ``None`` when no grid is configured."""
+    contact = spec.contact_thresholds_m
+    near_miss = spec.near_miss_thresholds_m
+    conservative = spec.conservative_buffers_m
+    if contact is None and near_miss is None and conservative is None:
+        return None
+    if contact is None or near_miss is None or conservative is None:
+        raise ValueError("threshold sweep requires all three lists")
+    if not contact or not near_miss or not conservative:
+        raise ValueError("threshold sweep lists must be non-empty")
+    return contact, near_miss, conservative
+
+
 def _validate_thresholds_not_empty(
-    contact: tuple[float, ...],
-    near_miss: tuple[float, ...],
-    conservative: tuple[float, ...],
+    contact: tuple[float, ...] | None,
+    near_miss: tuple[float, ...] | None,
+    conservative: tuple[float, ...] | None,
 ) -> None:
     """All three threshold lists must be present when any is defined."""
-    if near_miss is None or conservative is None:
-        missing = []
-        if near_miss is None:
-            missing.append("near_miss_threshold_m")
-        if conservative is None:
-            missing.append("conservative_buffer_m")
+    missing = []
+    if contact is None:
+        missing.append("contact_threshold_m")
+    if near_miss is None:
+        missing.append("near_miss_threshold_m")
+    if conservative is None:
+        missing.append("conservative_buffer_m")
+    if missing:
         raise ValueError(f"threshold_sweep requires all three lists; missing: {', '.join(missing)}")
 
 
 def _validate_threshold_monotonic(
     contact: tuple[float, ...],
-    near_miss: tuple[float, ...] | None,
-    conservative: tuple[float, ...] | None,
-    nominal: ClearanceThresholds,
+    near_miss: tuple[float, ...],
+    conservative: tuple[float, ...],
 ) -> None:
     """Threshold sweep grids must preserve monotonic ordering: max(contact) <= min(near_miss)
     <= min(conservative). Fails closed on violation."""
-    if (
-        not contact
-        or (near_miss is not None and not near_miss)
-        or (conservative is not None and not conservative)
-    ):
+    if not contact or not near_miss or not conservative:
         raise ValueError("threshold_sweep lists must be non-empty")
     max_contact = max(contact)
-    if near_miss is not None:
-        min_near = min(near_miss)
-        if max_contact > min_near:
-            raise ValueError(
-                f"threshold_sweep ordering violated: max(contact_threshold_m)={max_contact} "
-                f"> min(near_miss_threshold_m)={min_near}"
-            )
-    if conservative is not None:
-        min_cons = min(conservative)
-        ref_min = min(near_miss) if near_miss is not None else nominal.near_miss_threshold_m
-        if ref_min > min_cons:
-            raise ValueError(
-                f"threshold_sweep ordering violated: min(near_miss_threshold_m)={ref_min} "
-                f"> min(conservative_buffer_m)={min_cons}"
-            )
+    min_near = min(near_miss)
+    if max_contact > min_near:
+        raise ValueError(
+            f"threshold_sweep ordering violated: max(contact_threshold_m)={max_contact} "
+            f"> min(near_miss_threshold_m)={min_near}"
+        )
+    min_cons = min(conservative)
+    if min_near > min_cons:
+        raise ValueError(
+            f"threshold_sweep ordering violated: min(near_miss_threshold_m)={min_near} "
+            f"> min(conservative_buffer_m)={min_cons}"
+        )
 
 
 def _require_finite_non_negative(value: Any, *, key: str) -> float:

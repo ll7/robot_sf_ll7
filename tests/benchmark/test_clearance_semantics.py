@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from robot_sf.benchmark.clearance_semantics import (
     PROXY_ENVELOPE_SURFACE_CLEARANCE,
     ClearanceGeometry,
     ClearanceThresholds,
+    FootprintSweepSpec,
     build_collision_threshold_sensitivity_table,
     build_footprint_clearance_manifest,
     classify_encounter,
@@ -32,7 +34,7 @@ CONFIG_RELATIVE_PATH = str(CONFIG_PATH.relative_to(REPO_ROOT))
 
 
 def _repo_config() -> dict[str, object]:
-    return load_fidelity_sensitivity_config(CONFIG_PATH)
+    return copy.deepcopy(load_fidelity_sensitivity_config(CONFIG_PATH))
 
 
 def _nominal_geometry() -> ClearanceGeometry:
@@ -390,6 +392,50 @@ def test_load_spec_fails_closed_on_empty_threshold_sweep_block() -> None:
 
     with pytest.raises(ValueError, match="threshold_sweep block is present but empty"):
         load_footprint_sweep_spec(config)
+
+
+@pytest.mark.parametrize("threshold_sweep", [None, [], "malformed"])
+def test_load_spec_fails_closed_on_malformed_threshold_sweep(
+    threshold_sweep: object,
+) -> None:
+    """A present threshold-sweep block must be a mapping, not silently ignored."""
+    config = _repo_config()
+    config["footprint_semantics"]["threshold_sweep"] = threshold_sweep
+
+    with pytest.raises(ValueError, match="threshold_sweep must be a mapping"):
+        load_footprint_sweep_spec(config)
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    ["contact_threshold_m", "near_miss_threshold_m", "conservative_buffer_m"],
+)
+def test_load_spec_fails_closed_on_any_missing_threshold_axis(missing_key: str) -> None:
+    """A configured threshold sweep must provide all three threshold axes."""
+    config = _repo_config()
+    threshold_sweep = config["footprint_semantics"]["threshold_sweep"]
+    del threshold_sweep[missing_key]
+
+    with pytest.raises(ValueError, match="missing:"):
+        load_footprint_sweep_spec(config)
+
+
+def test_enumerate_threshold_sensitivity_fails_closed_on_partial_spec() -> None:
+    """Programmatic specs cannot reach threshold enumeration with partial axes."""
+    spec = FootprintSweepSpec(
+        nominal_geometry=_nominal_geometry(),
+        thresholds=_nominal_thresholds(),
+        robot_proxy_radii_m=(1.0,),
+        pedestrian_radii_m=(0.4,),
+        encounter_center_distances_m=(1.37,),
+        rationale="test",
+        contact_thresholds_m=(0.0,),
+        near_miss_thresholds_m=None,
+        conservative_buffers_m=(0.3,),
+    )
+
+    with pytest.raises(ValueError, match="requires all three lists"):
+        enumerate_threshold_sensitivity(spec)
 
 
 def test_manifest_carries_threshold_sweep_rows() -> None:

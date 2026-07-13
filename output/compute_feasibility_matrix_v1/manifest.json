@@ -33,8 +33,113 @@
   "record_forces": false,
   "completed_cells": 108,
   "skipped_cached": 0,
+  "result_status": "native_with_budget_miss",
+  "classification_counts": {
+    "meets_budget_on_measured_host": 107,
+    "misses_budget_on_measured_host": 1
+  },
+  "provenance": {
+    "cpu_model": "AMD Ryzen 9 3950X 16-Core Processor",
+    "cpu_affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31
+    ],
+    "thread_settings": {
+      "environment": {
+        "OMP_NUM_THREADS": null,
+        "MKL_NUM_THREADS": null,
+        "OPENBLAS_NUM_THREADS": null,
+        "VECLIB_MAXIMUM_THREADS": null,
+        "NUMEXPR_NUM_THREADS": null
+      },
+      "threadpools": [
+        {
+          "user_api": "blas",
+          "internal_api": "openblas",
+          "num_threads": 32,
+          "version": "0.3.30",
+          "threading_layer": "pthreads",
+          "architecture": "Haswell"
+        },
+        {
+          "user_api": "openmp",
+          "internal_api": "openmp",
+          "num_threads": 16
+        },
+        {
+          "user_api": "blas",
+          "internal_api": "openblas",
+          "num_threads": 1,
+          "threading_layer": "disabled",
+          "architecture": "Zen"
+        },
+        {
+          "user_api": "blas",
+          "internal_api": "openblas",
+          "num_threads": 32,
+          "version": "0.3.30",
+          "threading_layer": "pthreads",
+          "architecture": "Haswell"
+        },
+        {
+          "user_api": "openmp",
+          "internal_api": "openmp",
+          "num_threads": 32
+        },
+        {
+          "user_api": "blas",
+          "internal_api": "openblas",
+          "num_threads": 32,
+          "version": "0.3.15",
+          "threading_layer": "openmp",
+          "architecture": "Zen"
+        }
+      ]
+    },
+    "dependency_versions": {
+      "python": "3.13.14",
+      "numpy": "2.3.5",
+      "numba": "0.65.1",
+      "torch": "2.10.0+cu128",
+      "stable_baselines3": "2.7.1",
+      "scipy": "1.17.1"
+    },
+    "git_commit": "d9784ccf1b478ef3d572d6b319c5570d6a0a6aa8",
+    "measured_host_identity": "AMD Ryzen 9 3950X 16-Core Processor"
+  },
   "output_files": {
     "rows_jsonl": "output/compute_feasibility_matrix_v1/rows.jsonl",
-    "summary": "output/compute_feasibility_matrix_v1/synthetic_summary.json"
+    "summary": "output/compute_feasibility_matrix_v1/synthetic_summary.json",
+    "sha256sums": "output/compute_feasibility_matrix_v1/sha256sums.txt"
   }
 }

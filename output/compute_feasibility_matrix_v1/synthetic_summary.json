@@ -166,5 +166,24 @@
     }
   },
   "non_native_cells": 0,
-  "total_cells": 108
+  "total_cells": 108,
+  "native_cells": 108,
+  "classification_counts": {
+    "meets_budget_on_measured_host": 107,
+    "misses_budget_on_measured_host": 1
+  },
+  "deadline_miss_cells": [
+    {
+      "planner_key": "social_force",
+      "map_label": "empty_8x8",
+      "pedestrian_count": 0,
+      "deadline_ms": 100.0,
+      "seed": 42,
+      "status": "native",
+      "classification": "misses_budget_on_measured_host",
+      "deadline_miss_rate": 0.01694915254237288,
+      "steady_state_latency_p99_ms": 72.48810580698803,
+      "steady_state_latency_max_ms": 171.6888640075922
+    }
+  ]
 }

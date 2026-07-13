@@ -254,3 +254,52 @@ def test_collision_risk_schema_rejects_inconsistent_probabilities() -> None:
     )
     with pytest.raises(RiskSchemaError):
         broken.validate()
+
+
+def test_public_contact_geometry_matches_private_aliases() -> None:
+    """The public contact geometry (issue #5468) is the exact private objects.
+
+    ``segment_min_distance`` / ``pedestrian_arrays`` were promoted from the
+    leading-underscore internals so downstream calibration and label-generation
+    code can match the estimator geometry through a documented public surface.
+    Both handles must resolve to the same function object (not a re-implementation)
+    and be re-exported from the package root.
+    """
+    from robot_sf.research.collision_risk import estimators as est
+    from robot_sf.research.collision_risk import pedestrian_arrays, segment_min_distance
+
+    assert segment_min_distance is est.segment_min_distance
+    assert pedestrian_arrays is est.pedestrian_arrays
+    # Backward-compatible private aliases still point at the promoted objects.
+    assert est._segment_min_distance is segment_min_distance
+    assert est._pedestrian_arrays is pedestrian_arrays
+
+
+def test_public_contact_geometry_computes_matched_contact() -> None:
+    """Public geometry helpers reproduce the estimator's contact predicate.
+
+    A head-on constant-velocity encounter must yield a non-positive footprint
+    clearance (contact) when scored through the public ``pedestrian_arrays`` +
+    ``segment_min_distance`` surface, matching the deterministic estimator field.
+    """
+    from robot_sf.research.collision_risk import pedestrian_arrays, segment_min_distance
+
+    config = _config()
+    action = action_from_constant_velocity(
+        "into", [0.0, 0.0], [1.0, 0.0], horizon_steps=HORIZON_STEPS, dt_s=DT_S
+    )
+    ped = PedestrianState(id=1, position=np.array([1.5, 0.0]), velocity=np.array([-1.0, 0.0]))
+
+    robot_xy = action.as_array(horizon_steps=config.horizon_steps)
+    ped_pos, ped_vel, radii, ids = pedestrian_arrays([ped], config)
+    assert ped_pos.shape == (1, 2)
+    assert ids.tolist() == [1]
+
+    steps = np.arange(config.horizon_steps + 1, dtype=float)
+    actor_xy = ped_pos[:, None, :] + steps[None, :, None] * config.dt_s * ped_vel[:, None, :]
+    clearance = segment_min_distance(robot_xy, actor_xy) - (radii + config.robot_radius_m)[:, None]
+    contact = bool((clearance <= 0.0).any())
+
+    estimate = estimate_action_conditioned_risk(action, [ped], config)
+    assert contact is True
+    assert estimate.deterministic.contact_certain is contact

@@ -1,0 +1,71 @@
+# Canonical issue-state surface for #5355 (2x2 prediction-x-constraint factorial).
+# Append-only. Records the closure-audit criterion->evidence mapping and the
+# remaining execution gate. Contains NO transient queue-routing state (no target
+# hosts, packet lineage, or submit routes) per AGENTS/PR-governance rules.
+issue: 5355
+title: "research: 2x2 factorial campaign - prediction on/off x constraint-handling on/off"
+schema: robot_sf.issue_state.v1
+
+# --- Closure audit (2026-07-12) ------------------------------------------------
+# The issue's own CPU-implementable acceptance criteria are all met; the campaign
+# result (the issue's raison d'etre) does not exist yet, so the issue stays OPEN.
+# Verdict is machine-checkable via
+# robot_sf.benchmark.prediction_mpc_factorial_preregistration.assess_campaign_readiness().
+closure_audit:
+  date: 2026-07-12
+  decision: keep_open
+  reason: >
+    Design, preregistration, arm implementation, intervention-fidelity, and
+    provenance criteria are complete and landed. Campaign execution remains
+    (GPU/ops queue) and two declared dependencies (#5351 analysis, #5353
+    capability matrix) are still open. Not closeable until the campaign runs.
+  criteria:
+    - criterion: "2x2 factorial design on one matched base planner (option 1, prediction-MPC)"
+      status: met
+      evidence: "configs/research/prediction_mpc_factorial_v1.yaml; PR #5361"
+    - criterion: "Preregistration doc (arms, endpoints, contrasts, multiplicity, seed budget, stop rules)"
+      status: met
+      evidence: "docs/context/issue_5355_factorial_preregistration.md; PRs #5371, #5361"
+    - criterion: "Four arm configs realize the preregistered 2x2 truth table"
+      status: met
+      evidence: "configs/algos/prediction_mpc_factorial_A{0,1}_B{0,1}.yaml; tests/planner/test_prediction_mpc_factorial_arm_identity.py"
+    - criterion: "Factor toggles implemented (A prediction, B hard-vs-soft clearance)"
+      status: met
+      evidence: "robot_sf/planner/prediction_mpc.py; PRs #5361, #5382"
+    - criterion: "Intervention-fidelity checks (each factor bites; toggles orthogonal; B-OFF non-degenerate)"
+      status: met
+      evidence: "tests/planner/test_prediction_mpc_factorial_fidelity_smoke.py; PR #5398"
+    - criterion: "Campaign config pinned by sha256 in the evidence registry"
+      status: met
+      evidence: "docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/preregistration_config_registry.json"
+    - criterion: "Pre-submission readiness gate enforces §6 before GPU submission"
+      status: met
+      evidence: "assess_campaign_readiness() in robot_sf/benchmark/prediction_mpc_factorial_preregistration.py; PR #5415"
+    - criterion: "Executable CLI gate for ops at the submission boundary (exit-code + report artifact)"
+      status: met
+      evidence: "scripts/validation/check_issue_5355_factorial_campaign_readiness.py; tests/validation/test_check_issue_5355_factorial_campaign_readiness.py"
+    - criterion: "Hierarchical paired analysis machinery available"
+      status: blocked
+      evidence: "tracked separately in #5351 (still open)"
+    - criterion: "Capability-matrix fairness gating available"
+      status: blocked
+      evidence: "tracked separately in #5353 (still open)"
+    - criterion: "Factorial campaign executed and results promoted"
+      status: not_started
+      evidence: "compute; ops queue; out of scope for CPU implementation lanes"
+
+remaining_gate:
+  blockers_remaining:
+    - "#5351 hierarchical paired analysis (open)"
+    - "#5353 capability-matrix fairness contract (open)"
+    - "campaign execution on the ops/GPU queue (not authorized in CPU lanes)"
+  blockers_new: []
+  blockers_intentional:
+    - "campaign RUN deferred to compute queue by design (issue sequencing)"
+  next_empirical_action: >
+    Once #5351 and #5353 land, flip their status in
+    configs/research/prediction_mpc_factorial_v1.yaml dependencies to resolved,
+    run the CLI gate
+    (uv run python scripts/validation/check_issue_5355_factorial_campaign_readiness.py)
+    and confirm it exits 0 (ready) on the exact submitted config, then submit the
+    factorial campaign through the ops queue.

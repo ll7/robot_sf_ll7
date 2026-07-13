@@ -297,6 +297,56 @@ class TestOptionalImportGuardInventory:
                 "Delta (snapshot_ceiling -> observed_count):\n" + "\n".join(mismatches)
             )
 
+    def test_snapshot_notes_match_generator_notes(self) -> None:
+        """Each committed note must equal the generator's NOTES value for that key.
+
+        This prevents the generator from silently overwriting hand-edited fixture
+        notes with stale values. When a note is improved in the fixture, the
+        generator's NOTES dict must be updated to match, or the generator must be
+        run to regenerate the fixture (which will fail this test until NOTES is
+        updated). See issue #5475.
+        """
+        import importlib.util
+        import sys
+
+        generator_path = REPO_ROOT / "scripts" / "dev" / "generate_optional_import_snapshot.py"
+        spec = importlib.util.spec_from_file_location("_generator", generator_path)
+        if spec is None or spec.loader is None:
+            pytest.fail(f"Could not load generator from {generator_path}")
+        generator_module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = generator_module
+        spec.loader.exec_module(generator_module)
+        generator_notes = getattr(generator_module, "NOTES", {})
+
+        fixture = _load_fixture()
+        spellings = fixture.get("spellings", {})
+
+        mismatches: list[str] = []
+        for key in sorted(spellings.keys()):
+            fixture_note = spellings.get(key, {}).get("note", "")
+            generator_note = generator_notes.get(key, "")
+            if fixture_note != generator_note:
+                if not fixture_note:
+                    mismatches.append(
+                        f"  - '{key}': fixture has no note, generator has: {generator_note!r}"
+                    )
+                elif not generator_note:
+                    mismatches.append(
+                        f"  - '{key}': generator has no note, fixture has: {fixture_note!r}"
+                    )
+                else:
+                    mismatches.append(
+                        f"  - '{key}': fixture note={fixture_note!r} != generator note={generator_note!r}"
+                    )
+
+        if mismatches:
+            pytest.fail(
+                "Optional-import guard snapshot notes have drifted from the generator's NOTES.\n"
+                "To fix: update NOTES in scripts/dev/generate_optional_import_snapshot.py to "
+                "match the fixture notes, then regenerate the fixture to confirm idempotence.\n"
+                "Drift:\n" + "\n".join(mismatches)
+            )
+
 
 class TestTryImportHelper:
     """Direct contract tests for the canonical helper."""

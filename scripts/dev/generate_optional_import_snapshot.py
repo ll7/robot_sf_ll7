@@ -65,7 +65,8 @@ NOTES = {
     "AttributeError+ImportError+RuntimeError": ("Blessed broad catch: optional native boundary."),
     "AttributeError+ImportError+TypeError": ("Blessed broad catch: optional dispatch boundary."),
     "AttributeError+ImportError+OSError+RuntimeError+TypeError+ValueError": (
-        "Blessed broad catch: defensive visualization ingest boundary."
+        "Blessed broad catches: defensive visualization ingest and "
+        "authorization-gated episode execution boundaries."
     ),
     "ImportError+OSError+RuntimeError+TypeError+ValueError": (
         "Blessed broad catch: defensive JSON/config ingest boundary. Review "

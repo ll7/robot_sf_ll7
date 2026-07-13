@@ -122,6 +122,9 @@ def build_adapter_policy(  # noqa: C901
 
     _attach_planner_reset(_policy, adapter)
     _policy._planner_adapter = adapter
+    _policy._cbf_filter = cbf_filter
+    _policy._kinematics_model = adapter_kinematics_model
+    _policy._meta = meta
     if hasattr(adapter, "bind_env"):
         _policy._planner_bind_env = adapter.bind_env
     if hasattr(adapter, "close"):

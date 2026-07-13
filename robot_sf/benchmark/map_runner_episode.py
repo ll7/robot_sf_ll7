@@ -36,7 +36,10 @@ from robot_sf.benchmark.interaction_exposure import (
     compute_interaction_exposure_fields,
     not_derivable_interaction_exposure,
 )
-from robot_sf.benchmark.latency_stress import not_available_latency_metrics
+from robot_sf.benchmark.latency_stress import (
+    LatencyMeasurementHarness,
+    not_available_latency_metrics,
+)
 from robot_sf.benchmark.map_runner_actions import DEFAULT_KINEMATICS as _DEFAULT_KINEMATICS
 from robot_sf.benchmark.map_runner_actions import (
     policy_command_to_env_action as _policy_command_to_env_action,
@@ -1584,6 +1587,9 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
         observation_mode=active_observation_mode,
         observation_level=resolved_observation_level,
     )
+    # Latency instrumentation resolves the planner configuration hash from the callable so
+    # cached policies remain provenance-bound when a new harness is activated per episode.
+    policy_fn._meta = algo_meta
     algo_meta["learned_checkpoint_observation_contract"] = learned_observation_contract
     active_observation_level = str(algo_meta["observation_level"]["key"])
     attach_track_metadata(
@@ -1728,6 +1734,10 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     visibility_evidence_reasons: list[str | None] = []
     env = make_robot_env(config=config, seed=int(seed), debug=False)
     try:
+        active_harness = LatencyMeasurementHarness.get_current()
+        if active_harness is not None:
+            policy_fn = active_harness.wrap_policy(policy_fn)
+
         obs, _ = env.reset(seed=int(seed))
         if callable(planner_bind_env):
             planner_bind_env(env)
@@ -1772,6 +1782,8 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
         ammv_command_actions: list[dict[str, Any]] = []
         view_integrity: dict[str, Any] | None = None
         for step_idx in range(horizon_val):
+            if active_harness is not None:
+                active_harness.start_cycle()
             policy_obs, step_noise_stats = apply_observation_noise(
                 obs,
                 noise_spec,
@@ -1892,6 +1904,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 cbf_filter_trace.append(cbf_record)
             selected_action_payload = _command_action_payload(policy_command)
             ammv_command_actions.append(selected_action_payload)
+            action_conversion_start = time.perf_counter() if active_harness is not None else None
             if step_is_native:
                 # Policy already outputs native env actions (e.g. delta velocities);
                 # skip the absolute→delta conversion done by _policy_command_to_env_action.
@@ -1902,6 +1915,12 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     config=config,
                     command=policy_command,
                 )
+            if active_harness is not None and action_conversion_start is not None:
+                active_harness.add_time(
+                    "action_conversion", (time.perf_counter() - action_conversion_start) * 1000.0
+                )
+            if active_harness is not None:
+                active_harness.end_cycle()
             obs, reward, terminated, truncated, info = env.step(action)
 
             # Snapshot mutable simulator buffers; do not keep view aliases across steps.

@@ -144,10 +144,29 @@ def _resolve_integrity_artifact_path(campaign_root: Path, raw_path: str) -> Path
     """
     path = Path(raw_path)
     if path.is_absolute():
-        return path
-    repo_candidate = (get_repository_root() / path).resolve()
-    if repo_candidate.exists():
-        return repo_candidate
+        if path.exists():
+            return path
+    else:
+        repo_candidate = (get_repository_root() / path).resolve()
+        if repo_candidate.exists():
+            return repo_candidate
+
+        campaign_candidate = (campaign_root / path).resolve()
+        if campaign_candidate.exists():
+            return campaign_candidate
+
+    # Relocation fallback: check if the path has a "runs" directory component and resolve it relative to campaign_root
+    try:
+        parts = path.parts
+        if "runs" in parts:
+            idx = parts.index("runs")
+            runs_rel_path = Path(*parts[idx:])
+            candidate = (campaign_root / runs_rel_path).resolve()
+            if candidate.exists():
+                return candidate
+    except (OSError, ValueError, TypeError):
+        pass
+
     return (campaign_root / path).resolve()
 
 

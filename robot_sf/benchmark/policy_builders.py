@@ -16,6 +16,7 @@ from robot_sf.planner.prediction_mpc import (
     build_prediction_mpc_config,
 )
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter, build_risk_dwa_config
+from robot_sf.planner.sipp_lattice import build_sipp_lattice_search_adapter
 from robot_sf.planner.teb_commitment import (
     TEBCommitmentPlannerAdapter,
     build_teb_commitment_config,
@@ -131,6 +132,36 @@ def _build_learned_prediction_mpc_policy_spec(algo_config: dict[str, Any]) -> Ad
     )
 
 
+def _build_sipp_lattice_policy_spec(algo_config: dict[str, Any]) -> AdapterPolicySpec:
+    """Build the Slice-2 bounded SIPP state-time search adapter spec.
+
+    The adapter is testing-only/experimental: it produces exploratory
+    implementation evidence (#5306 Slice 2), not benchmark superiority evidence.
+
+    Returns:
+        AdapterPolicySpec: Adapter construction payload for the map runner.
+    """
+
+    raw_opt_in = algo_config.get("allow_testing_algorithms", False)
+    opt_in = (
+        raw_opt_in
+        if isinstance(raw_opt_in, bool)
+        else str(raw_opt_in).strip().lower() in {"true", "1", "yes"}
+    )
+    if not opt_in:
+        raise ValueError(
+            "sipp_lattice is experimental/testing-only and requires allow_testing_algorithms: true"
+        )
+
+    return AdapterPolicySpec(
+        algo_key="sipp_lattice",
+        algo_config=algo_config,
+        adapter=build_sipp_lattice_search_adapter(algo_config),
+        adapter_name="SippLatticeSearchPlannerAdapter",
+        limitations="experimental_bounded_kinodynamic_sipp_search_testing_only",
+    )
+
+
 _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec]] = {
     "chance_constrained_mpc": _build_chance_constrained_mpc_policy_spec,
     **dict.fromkeys(LEARNED_PREDICTION_MPC_ALIASES, _build_learned_prediction_mpc_policy_spec),
@@ -140,6 +171,7 @@ _ADAPTER_POLICY_BUILDERS: dict[str, Callable[[dict[str, Any]], AdapterPolicySpec
     "prediction_mpc_cbf": _build_prediction_mpc_policy_spec,
     "dwa": _build_dwa_policy_spec,
     "risk_dwa": _build_risk_dwa_policy_spec,
+    "sipp_lattice": _build_sipp_lattice_policy_spec,
     "teb": _build_teb_policy_spec,
 }
 

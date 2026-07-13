@@ -1,0 +1,31 @@
+# Durable implementation state for issue #5413 (#5306 Slice 2); transient routing is excluded.
+issue: 5413
+parent_issue: 5306
+state_surface: sipp_lattice_slice2_implementation
+entries:
+  - recorded_at_utc: "2026-07-12T00:00:00Z"
+    status: slice2_implementation_delivered__slice3_evaluation_pending
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/5413"
+      live_issue_state_checked: open
+    new_capability: >-
+      Bounded weighted state-time search over AMV-feasible primitives with time-indexed
+      pedestrian occupancy, multi-step commitment, and an explicit-opt-in experimental
+      `sipp_lattice` map-runner registration.
+    evidence_tier: exploratory_implementation_plus_cpu_smoke
+    acceptance_evidence:
+      planner_tests: tests/planner/test_sipp_lattice.py
+      registration_tests: tests/benchmark/test_sipp_lattice_policy_builder.py
+      smoke: "6 CPU episodes through the real experimental registration path"
+    closure_boundary: >-
+      This PR may close #5413 after validation; parent #5306 and #5416 retain the
+      four-geometry outcome comparison against hybrid-rule, TEB, NMPC, and DWA.
+    out_of_scope: [full benchmark campaign, Slurm or GPU submission, paper claims]
+  - recorded_at_utc: "2026-07-12T16:37:30Z"
+    status: corrective_runtime_gate_validated__slice3_evaluation_pending
+    correction_evidence: >-
+      Matching-time forecast samples, trusted-horizon bounds, measured-rate reachability,
+      collision-checked deceleration, curved-footprint occupancy, finite-state fail-closed
+      handling, and normalized heading keys.
+    validation: focused pytest, Ruff, and deterministic CPU smoke
+    claim_boundary: exploratory implementation only

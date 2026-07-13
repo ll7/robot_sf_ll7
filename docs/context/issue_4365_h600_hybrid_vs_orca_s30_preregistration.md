@@ -73,3 +73,12 @@ test. No distinct CPU implementation follow-up remains inside this issue scope.
 Remaining empirical work is intentionally outside this terminality slice: authorized
 campaign submission, Slurm/GPU execution, full-roster S30 expansion, retained-row archive
 generation, benchmark interpretation, and paper/dissertation claim edits.
+
+## Terminal Job 13378 Outcome
+
+The authorized arm-restricted S30 campaign eventually completed as Slurm job
+`13378`, but resume-append history contaminated the official aggregate. The
+tracked [diagnostic closeout](evidence/issue_4365_job_13378_closeout/README.md)
+preserves the 63-file checksum inventory, exact final-public-commit slice, and
+non-promotion boundary. The result remains diagnostic-only; no paper,
+dissertation, leaderboard, or record-breaking claim is established.

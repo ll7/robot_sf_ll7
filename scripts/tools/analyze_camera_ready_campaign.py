@@ -252,6 +252,15 @@ def _resolve_safe_campaign_path(campaign_root: Path, raw_path: str, *, label: st
             continue
         if resolved.exists():
             return resolved
+    # Retrieved campaign bundles are self-contained, but their summaries retain
+    # repository-relative paths from the producing checkout. Resolve the stable
+    # campaign subtrees after relocation without trusting arbitrary suffixes.
+    for index, part in enumerate(candidate_path.parts):
+        if part not in {"preflight", "reports", "runs"}:
+            continue
+        relocated = (campaign_root / Path(*candidate_path.parts[index:])).resolve()
+        if relocated.is_relative_to(campaign_root.resolve()) and relocated.exists():
+            return relocated
     # Keep deterministic fallback for diagnostics while still rejecting traversal.
     fallback = (trusted_roots[0] / candidate_path).resolve()
     if fallback.is_relative_to(trusted_roots[0]):

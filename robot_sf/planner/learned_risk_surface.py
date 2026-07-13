@@ -16,7 +16,6 @@ import numpy as np
 
 from robot_sf.common.math_utils import wrap_angle_pi
 from robot_sf.errors import RobotSfError
-from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner.risk_dwa import RiskDWAPlannerAdapter
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
 
@@ -229,11 +228,23 @@ def deterministic_pedestrian_risk_surface(
     xx, yy = np.meshgrid(xs, ys)
     values = np.full((cfg.grid_height, cfg.grid_width), float(floor_risk), dtype=np.float32)
 
-    for ped in ped_positions:
-        px, py = world_to_ego(float(ped[0]), float(ped[1]), robot_pose)
-        dist_sq = (xx - px) ** 2 + (yy - py) ** 2
-        bump = np.exp(-0.5 * dist_sq / float(pedestrian_sigma) ** 2)
-        values = np.maximum(values, bump.astype(np.float32))
+    if ped_positions.shape[0] > 0:
+        # Vectorized world_to_ego: apply rotation + translation to all pedestrians.
+        robot_x, robot_y, theta = robot_pose[0][0], robot_pose[0][1], robot_pose[1]
+        ped_wx = ped_positions[:, 0]  # (N,)
+        ped_wy = ped_positions[:, 1]  # (N,)
+        dx = ped_wx - robot_x
+        dy = ped_wy - robot_y
+        cos_t = np.cos(-theta)
+        sin_t = np.sin(-theta)
+        ego_x = dx * cos_t - dy * sin_t  # (N,)
+        ego_y = dx * sin_t + dy * cos_t  # (N,)
+        # dist_sq shape: (N, grid_height, grid_width) then reduce max over pedestrians
+        dist_sq = (xx[None, :, :] - ego_x[:, None, None]) ** 2 + (
+            yy[None, :, :] - ego_y[:, None, None]
+        ) ** 2
+        bumps = np.exp(-0.5 * dist_sq / float(pedestrian_sigma) ** 2)
+        values = np.maximum(values, bumps.astype(np.float32).max(axis=0))
 
     return LocalRiskSurface(values=np.clip(values, 0.0, 1.0), spec=cfg)
 

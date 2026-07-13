@@ -462,15 +462,21 @@ class SonicCrowdNavAdapter:
         visible_masks = np.zeros((max(1, human_num),), dtype=np.float32)
 
         used = min(ped_count, spatial_edges.shape[0])
-        for i in range(used):
-            rel = np.asarray(ped_positions[i], dtype=float) - np.asarray(robot_pos, dtype=float)
-            vel = np.asarray(ped_velocities[i], dtype=float)
-            seq: list[float] = []
-            for step_idx in range(predict_steps + 1):
-                horizon_rel = rel + vel * (float(step_idx) * float(time_step))
-                seq.extend([float(horizon_rel[0]), float(horizon_rel[1])])
-            spatial_edges[i] = np.asarray(seq, dtype=np.float32)
-            visible_masks[i] = 1.0
+        if used > 0:
+            # Vectorized spatial edges: all pedestrians x all prediction steps.
+            # future: (used, predict_steps+1, 2) = rel + vel * time
+            rel = np.asarray(ped_positions[:used], dtype=float) - np.asarray(
+                robot_pos, dtype=float
+            )  # (used, 2)
+            vel = np.asarray(ped_velocities[:used], dtype=float)  # (used, 2)
+            steps = np.arange(predict_steps + 1, dtype=float).reshape(1, -1, 1) * float(
+                time_step
+            )  # (1, predict_steps+1, 1)
+            future = rel[:, None, :] + vel[:, None, :] * steps
+            # Interleave (x,y) pairs into flat sequences: (used, 2*(predict_steps+1))
+            seq = future.reshape(used, -1)
+            spatial_edges[:used] = seq.astype(np.float32)
+            visible_masks[:used] = 1.0
 
         if used > 0:
             distances = np.linalg.norm(spatial_edges[:used, :2], axis=1)

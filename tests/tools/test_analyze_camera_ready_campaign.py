@@ -627,6 +627,69 @@ def test_analyze_campaign_accepts_repo_relative_paths_from_campaign_checkout(
     assert analysis["scenario_difficulty"]["scenario_rows"][0]["scenario_id"] == "easy_case"
 
 
+def test_analyze_campaign_accepts_repo_relative_paths_after_campaign_relocation(
+    tmp_path: Path,
+) -> None:
+    """A self-contained retrieved campaign should not need its original checkout path."""
+    campaign_root = tmp_path / "retrieved" / "13378"
+    episodes_path = campaign_root / "runs" / "goal" / "episodes.jsonl"
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    _write_jsonl(
+        episodes_path,
+        [
+            {
+                "status": "success",
+                "termination_reason": "success",
+                "outcome": {
+                    "route_complete": True,
+                    "collision_event": False,
+                    "timeout_event": False,
+                },
+                "integrity": {"contradictions": []},
+                "metrics": {"success": True, "collisions": 0, "snqi": -0.1},
+                "algorithm_metadata": {"adapter_impact": {"status": "disabled"}},
+            }
+        ],
+    )
+    _write_json(
+        summary_path,
+        {
+            "campaign": {
+                "campaign_id": "original_campaign",
+                "runtime_sec": 1.0,
+                "episodes_per_second": 1.0,
+            },
+            "planner_rows": [
+                {
+                    "planner_key": "goal",
+                    "success_mean": "1.0000",
+                    "collisions_mean": "0.0000",
+                    "snqi_mean": "-0.1000",
+                }
+            ],
+            "runs": [
+                {
+                    "planner": {"key": "goal", "algo": "goal"},
+                    "runtime_sec": 1.0,
+                    "episodes_path": (
+                        "output/benchmarks/camera_ready/original_campaign/runs/goal/episodes.jsonl"
+                    ),
+                    "summary": {
+                        "written": 1,
+                        "episodes_per_second": 1.0,
+                        "preflight": {"status": "ok"},
+                        "algorithm_metadata_contract": {"adapter_impact": {"status": "disabled"}},
+                    },
+                }
+            ],
+        },
+    )
+
+    analysis = analyze_campaign(campaign_root)
+
+    assert analysis["planners"][0]["episodes_file"] == 1
+
+
 def test_analyze_campaign_accepts_legacy_success_rate_alias(tmp_path: Path) -> None:
     """Analyzer should treat metrics.success_rate as a legacy success alias."""
     campaign_root = tmp_path / "campaign"

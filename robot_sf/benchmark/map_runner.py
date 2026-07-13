@@ -94,7 +94,7 @@ from robot_sf.benchmark.map_runner_identity import (
     _compute_map_episode_id,
     _resolve_seed_list,
     _scenario_identity_payload,
-    _scenario_with_episode_seed_defaults,  # noqa: F401 - compatibility re-export.
+    _scenario_with_episode_seed_defaults,
     _select_seeds,  # noqa: F401 - compatibility re-export for tests.
     _suite_key,
 )
@@ -3058,22 +3058,23 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         if existing:
             filtered_jobs: list[tuple[dict[str, Any], int]] = []
             for sc, seed in jobs:
+                identity_scenario = _scenario_with_episode_seed_defaults(sc, seed=int(seed))
                 identity_algo, identity_cfg = _resolve_policy_search_candidate_runtime(
                     default_algo=algo,
                     algo_config_path=algo_config_path,
                     algo_config=raw_policy_cfg,
-                    scenario=sc,
+                    scenario=identity_scenario,
                 )
                 identity_cfg = _apply_planner_selector_v2_context(
                     identity_algo,
                     identity_cfg,
-                    scenario=sc,
+                    scenario=identity_scenario,
                     seed=int(seed),
                 )
                 identity_cfg = _apply_scenario_uncertainty_envelope_config(
                     identity_algo,
                     identity_cfg,
-                    sc,
+                    identity_scenario,
                 )
                 identity_observation_contract = resolve_learned_checkpoint_observation_contract(
                     identity_algo,
@@ -3097,7 +3098,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
                 )
                 identity_observation_level = str(identity_contract["observation_level"]["key"])
                 identity_payload = _scenario_identity_payload(
-                    sc,
+                    identity_scenario,
                     algo=identity_algo,
                     algo_config=identity_cfg,
                     horizon=horizon,

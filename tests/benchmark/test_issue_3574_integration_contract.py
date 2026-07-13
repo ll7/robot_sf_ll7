@@ -147,6 +147,9 @@ def test_tracked_manifest_metrics_flow_into_per_archetype_report(tmp_path: Path)
     )
 
     assert code == 0
+    updated_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert updated_manifest["status"] == "ready"
+    assert updated_manifest["claim_boundary"] == "captured_runtime_ready"
     summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
     assert summary["integration_readiness"]["ready"] is True
     reports = summary["per_archetype_metric_reports"]

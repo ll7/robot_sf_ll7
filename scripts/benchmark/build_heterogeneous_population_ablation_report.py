@@ -116,6 +116,17 @@ def main() -> int:  # noqa: C901,PLR0912,PLR0915
         )
         return 2
 
+    # Rewrite manifest status and claim_boundary to reflect captured runtime + readiness
+    manifest["status"] = "ready"
+    manifest["claim_boundary"] = "captured_runtime_ready"
+    try:
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        print(f"Updated manifest status and claim_boundary at {manifest_path}")
+    except OSError as e:
+        print(f"Warning: Failed to rewrite manifest at {manifest_path}: {e}")
+
     # Find planners and seeds
     planners = sorted({rec["planner"] for rec in records})
     seeds = sorted({rec["seed"] for rec in records})

@@ -45,6 +45,21 @@ class TestBuildShortAliases:
         assert "v3" not in alias.split("_")
         assert "fast" not in alias.split("_")
 
+    def test_colliding_long_names_get_unique_aliases(self) -> None:
+        names = [
+            "hybrid_rule_v3_fast_progress_static_escape",
+            "hybrid_rule_v2_fast_progress_static_escape",
+        ]
+        result = _build_short_aliases(names)
+        assert len(set(result.values())) == len(names)
+        assert result[names[0]] != result[names[1]]
+
+    def test_short_name_is_reserved_from_generated_alias_collision(self) -> None:
+        names = ["long_rule_v3_suffix_extra", "long_suffix_extra"]
+        result = _build_short_aliases(names)
+        assert result[names[1]] == names[1]
+        assert result[names[0]] != result[names[1]]
+
     def test_threshold_respected(self) -> None:
         names = ["exactly_18_chars!!"]  # 18 chars = default threshold
         result = _build_short_aliases(names, threshold=18)
@@ -104,6 +119,20 @@ class TestDeoverlapLabels:
         result = _deoverlap_labels(labels)
         gap_x = abs(result[0]["label_x"] - result[1]["label_x"])
         assert gap_x > 0
+        overlap_x = (
+            min(result[0]["label_x"] + result[0]["w"], result[1]["label_x"] + result[1]["w"])
+            - max(result[0]["label_x"], result[1]["label_x"])
+            + 3.0
+        )
+        overlap_y = (
+            min(result[0]["label_y"], result[1]["label_y"])
+            - max(
+                result[0]["label_y"] - result[0]["h"],
+                result[1]["label_y"] - result[1]["h"],
+            )
+            + 3.0
+        )
+        assert overlap_x <= 0 or overlap_y <= 0
 
     def test_returns_same_count(self) -> None:
         labels = [

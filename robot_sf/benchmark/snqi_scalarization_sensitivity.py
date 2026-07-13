@@ -1142,16 +1142,27 @@ def _build_short_aliases(planner_names: Sequence[str], *, threshold: int = 18) -
 
     _FILLER = frozenset({"rule", "v1", "v2", "v3", "v4", "fast", "progress", "static"})
     aliases: dict[str, str] = {}
+    used: set[str] = set()
+    reserved_short_names = {name for name in planner_names if len(name) <= threshold}
     for name in planner_names:
-        if len(name) <= threshold:
-            aliases[name] = name
+        if name in aliases:
             continue
-        tokens = [t for t in name.split("_") if t not in _FILLER]
-        if len(tokens) >= 2:
-            short = "_".join(tokens[:3])
+        if len(name) <= threshold:
+            short = name
         else:
-            short = name[:threshold]
+            tokens = [t for t in name.split("_") if t not in _FILLER]
+            if len(tokens) >= 2:
+                base_short = "_".join(tokens[:3])
+            else:
+                base_short = name[:threshold]
+            short = base_short
+            suffix_index = 1
+            while short in used or short in reserved_short_names:
+                suffix = f"_{suffix_index}"
+                short = f"{base_short[: max(1, threshold - len(suffix))]}{suffix}"
+                suffix_index += 1
         aliases[name] = short
+        used.add(short)
     return aliases
 
 
@@ -1201,18 +1212,18 @@ def _deoverlap_labels(
                 overlap_x = (
                     min(a["label_x"] + a["w"], b["label_x"] + b["w"])
                     - max(a["label_x"], b["label_x"])
-                    - padding
+                    + padding
                 )
                 overlap_y = (
                     min(a["label_y"], b["label_y"])
                     - max(a["label_y"] - a["h"], b["label_y"] - b["h"])
-                    - padding
+                    + padding
                 )
                 if overlap_x <= 0.0 or overlap_y <= 0.0:
                     continue
                 moved = True
-                dx = (a["anchor_x"] + a["w"] / 2) - (b["anchor_x"] + b["w"] / 2)
-                dy = (a["anchor_y"] - a["h"] / 2) - (b["anchor_y"] - b["h"] / 2)
+                dx = (a["label_x"] + a["w"] / 2) - (b["label_x"] + b["w"] / 2)
+                dy = (a["label_y"] - a["h"] / 2) - (b["label_y"] - b["h"] / 2)
                 if abs(dx) < 1.0 and abs(dy) < 1.0:
                     dx, dy = 0.5, -0.5
                 if abs(dx) > abs(dy):

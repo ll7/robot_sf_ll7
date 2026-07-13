@@ -282,6 +282,65 @@ def test_campaign_integrity_resolves_relocated_episode_paths(tmp_path: Path) -> 
     assert verdict["blockers"] == []
 
 
+@pytest.mark.parametrize(
+    "raw_path",
+    [
+        "../../outside/episodes.jsonl",
+        "/etc/passwd",
+    ],
+)
+def test_campaign_integrity_rejects_untrusted_episode_paths(
+    tmp_path: Path, raw_path: str
+) -> None:
+    """Traversal and external absolute paths become structured blockers."""
+    verdict = camera_ready_run_state_module.validate_campaign_integrity(
+        [
+            {
+                "status": "ok",
+                "planner": {"key": "goal", "kinematics": "differential_drive"},
+                "episodes_path": raw_path,
+                "summary": {"episodes_total": 1},
+            }
+        ],
+        scenarios=[{"id": "smoke", "seeds": [111]}],
+        resolved_seeds=[111],
+        campaign_root=tmp_path / "campaign",
+        campaign_manifest={"git": {"commit": "commit-a"}},
+    )
+
+    assert verdict["status"] == "invalid"
+    assert verdict["blockers"][0]["invariant"] == "unreadable_episode_artifact"
+
+
+def test_campaign_integrity_rejects_symlinked_episode_paths(tmp_path: Path) -> None:
+    """A symlinked episode artifact is rejected before it can be opened."""
+    campaign_root = tmp_path / "campaign"
+    episodes_dir = campaign_root / "runs" / "goal"
+    episodes_dir.mkdir(parents=True)
+    target = tmp_path / "outside-episodes.jsonl"
+    target.write_text("{}\n", encoding="utf-8")
+    link = episodes_dir / "episodes.jsonl"
+    link.symlink_to(target)
+
+    verdict = camera_ready_run_state_module.validate_campaign_integrity(
+        [
+            {
+                "status": "ok",
+                "planner": {"key": "goal", "kinematics": "differential_drive"},
+                "episodes_path": "runs/goal/episodes.jsonl",
+                "summary": {"episodes_total": 1},
+            }
+        ],
+        scenarios=[{"id": "smoke", "seeds": [111]}],
+        resolved_seeds=[111],
+        campaign_root=campaign_root,
+        campaign_manifest={"git": {"commit": "commit-a"}},
+    )
+
+    assert verdict["status"] == "invalid"
+    assert verdict["blockers"][0]["invariant"] == "unreadable_episode_artifact"
+
+
 def test_campaign_integrity_separates_contamination_invariants(tmp_path: Path) -> None:
     """Appended duplicate rows expose count, coverage, and provenance blockers separately."""
     episodes_path = tmp_path / "runs" / "goal" / "episodes.jsonl"

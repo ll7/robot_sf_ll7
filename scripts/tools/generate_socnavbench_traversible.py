@@ -37,6 +37,9 @@ Run the actual generation (maintainer step, SocNavBench environment with staged 
 
     uv run python scripts/tools/generate_socnavbench_traversible.py --map ETH
 
+    The `socnav` extra and the native Assimp library must be installed first; missing prerequisites
+    fail closed before the staged mesh is read with an actionable setup command.
+
 The build prints the SHA-256 of the produced ``data.pkl`` plus registry-style output
 tree checksum metadata so the external-data registry pin can be updated after the
 maintainer re-seeds the internal store.
@@ -47,7 +50,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
+from contextlib import contextmanager
+from ctypes.util import find_library
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -74,6 +80,12 @@ EXIT_BLOCKED = 2
 STATUS_READY = "ready"
 STATUS_ALREADY_PRESENT = "already_present"
 STATUS_BLOCKED_MISSING_MESH = "blocked_missing_mesh"
+
+SOCNAV_BUILD_DEPENDENCY_HINT = (
+    "Install the pinned SocNavBench mesh dependencies with `uv sync --extra socnav` "
+    "and install the native Assimp library (for example, `sudo apt-get install "
+    "libassimp-dev` on Debian/Ubuntu), then re-run the documented command."
+)
 
 
 class TraversibleGenerationError(RuntimeError):
@@ -216,8 +228,9 @@ def preflight(map_name: str, *, root: Path | None = None) -> dict[str, Any]:
     else:
         status = STATUS_READY
         next_action = (
-            "Inputs are staged. Run without --dry-run (in the SocNavBench environment) "
-            "to build the traversible."
+            "Inputs are staged. Install the SocNavBench mesh dependencies with `uv sync --extra "
+            "socnav` and the native Assimp library, then run without --dry-run to build the "
+            "traversible."
         )
 
     report: dict[str, Any] = {
@@ -240,6 +253,20 @@ def preflight(map_name: str, *, root: Path | None = None) -> dict[str, Any]:
     return report
 
 
+@contextmanager
+def _socnav_import_context(socnav_pkg: Path):
+    """Import and run SocNavBench while its cwd-relative config is active."""
+    original_cwd = Path.cwd()
+    original_sys_path = sys.path[:]
+    sys.path.insert(0, str(socnav_pkg))
+    os.chdir(socnav_pkg)
+    try:
+        yield
+    finally:
+        os.chdir(original_cwd)
+        sys.path[:] = original_sys_path
+
+
 def _build_socnav_traversible(paths: TraversiblePaths) -> None:  # pragma: no cover
     """Invoke SocNavBench's own renderer to build and pickle the traversible.
 
@@ -258,48 +285,55 @@ def _build_socnav_traversible(paths: TraversiblePaths) -> None:  # pragma: no co
     The renderer params object is reconstructed here as a flat ``DotMap`` carrying exactly
     the attributes ``SBPDRenderer.__init__``/``get_config`` read. The vendored tree's
     single renderer-params factory is commented out (``create_base_params`` does not exist),
-    so this explicit reconstruction is the defensible invocation; the maintainer confirms it
-    on the first real run.
+    so this explicit reconstruction is the defensible invocation. Upstream configuration is
+    imported from the SocNavBench root so its cwd-relative INI lookup cannot depend on the
+    caller's repository-root cwd.
     """
     socnav_pkg = Path(__file__).resolve().parents[2] / "third_party" / "socnavbench"
     if not socnav_pkg.is_dir():
         raise TraversibleGenerationError(f"Vendored SocNavBench package not found at {socnav_pkg}.")
-    # SocNavBench modules import each other by bare top-level names (``sbpd``, ``params``,
-    # ``mp_env`` ...), so its root must be importable directly.
-    sys.path.insert(0, str(socnav_pkg))
     try:
-        from dotmap import DotMap  # type: ignore
-        from params import central_params as central  # type: ignore
-        from sbpd.sbpd_renderer import SBPDRenderer  # type: ignore
-    except ImportError as exc:
+        with _socnav_import_context(socnav_pkg):
+            # pyassimp loads the system Assimp shared library during import. Check this
+            # before SBPDRenderer starts reading the staged mesh so a missing native
+            # prerequisite is reported as setup guidance rather than a raw traceback.
+            if find_library("assimp") is None:
+                raise TraversibleGenerationError(
+                    f"{SOCNAV_BUILD_DEPENDENCY_HINT} Underlying error: assimp library not found"
+                )
+            import pyassimp  # type: ignore  # noqa: F401
+            from dotmap import DotMap  # type: ignore
+            from params import central_params as central  # type: ignore
+            from sbpd.sbpd_renderer import SBPDRenderer  # type: ignore
+
+            building_params = central.create_building_params()
+            camera_params = central.create_camera_params()
+            # The occupancy-grid branch requires a square top view; force width == height so
+            # the mesh-only path is taken instead of the RGB/depth GL renderer.
+            camera_params.modalities = ["occupancy_grid"]
+            camera_params.height = camera_params.width
+
+            params = DotMap()
+            params.dataset_name = building_params.dataset_name
+            params.building_name = paths.map_name  # override to the requested custom map
+            # SBPDRenderer passes this object to mp_env.Building, which expects the nested
+            # physical robot fields (base, height, radius), not the outer config wrapper.
+            params.robot_params = central.create_robot_params().physical_params
+            params.flip = False
+            params.sbpd_data_dir = str(paths.socnav_root / DATASET_SUBPATH)
+            params.traversible_dir = str(paths.socnav_root / DATASET_SUBPATH / "traversibles")
+            # Force a fresh mesh-based build: load the mesh, and do NOT load a pre-existing
+            # pickle so get_config() regenerates the traversible and pickles it to data.pkl.
+            params.camera_params = camera_params
+            params.load_meshes = True
+            params.load_traversible_from_pickle_file = False
+
+            renderer = SBPDRenderer.get_renderer(params)
+            renderer.get_config()
+    except (ImportError, ModuleNotFoundError, OSError) as exc:
         raise TraversibleGenerationError(
-            "Failed to import SocNavBench. Generation must run in the SocNavBench "
-            "environment with its dependencies installed (dotmap, mp_env, swiftshader). "
-            f"Underlying error: {exc}"
+            f"{SOCNAV_BUILD_DEPENDENCY_HINT} Underlying error: {exc}"
         ) from exc
-
-    building_params = central.create_building_params()
-    camera_params = central.create_camera_params()
-    # The occupancy-grid branch requires a square top view; force width == height so the
-    # mesh-only path is taken instead of the RGB/depth GL renderer.
-    camera_params.modalities = ["occupancy_grid"]
-    camera_params.height = camera_params.width
-
-    params = DotMap()
-    params.dataset_name = building_params.dataset_name
-    params.building_name = paths.map_name  # override to the requested custom map
-    params.robot_params = central.create_robot_params()
-    params.flip = False
-    params.sbpd_data_dir = central.get_sbpd_data_dir()
-    params.traversible_dir = central.get_traversible_dir()
-    params.camera_params = camera_params
-    # Force a fresh mesh-based build: load the mesh, and do NOT load a pre-existing pickle
-    # so get_config() regenerates the traversible and pickles it to data.pkl.
-    params.load_meshes = True
-    params.load_traversible_from_pickle_file = False
-
-    renderer = SBPDRenderer.get_renderer(params)
-    renderer.get_config()
 
 
 def build_traversible(

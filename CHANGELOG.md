@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5355 factorial campaign-readiness CLI gate.** New executable
+  `scripts/validation/check_issue_5355_factorial_campaign_readiness.py` wraps the existing library
+  gate `assess_campaign_readiness()` so ops can enforce the prediction-MPC 2x2 factorial
+  preregistration §6 pre-submission requirements at the submission boundary. The process exit code
+  is the contract: `0` only when every criterion (config valid, four arm configs realize the truth
+  table, config pinned by sha256, all declared blocking dependencies resolved) passes, `1`
+  otherwise. Supports `--config`, `--registry`, `--out` (write report JSON), and `--json`. CPU-only,
+  no benchmark episodes, and a `ready` verdict authorizes no submission by itself. On the landed
+  config the gate reports NOT READY, blocked solely on open dependencies #5351/#5353 — matching the
+  closure audit. Successor slice to PR #5415 (added the library gate); this adds the executable
+  ops-facing entry point. Covered by `tests/validation/test_check_issue_5355_factorial_campaign_readiness.py`.
+
 * **issue #5468 public collision-risk contact geometry.** Promoted the canonical contact geometry of
   the action-conditioned collision-risk API to a documented public surface:
   `segment_min_distance` (closed-form per-interval minimum centre distance) and `pedestrian_arrays`

@@ -35,7 +35,7 @@ EXPECTED_EXPORT_ARTIFACT_HASHES = {
     "snqi_scalarization_sensitivity_planner_rows.csv": "198c31da9878317e056afbc54034c9f0caeeeb7cf4a3fc24bfd40d2ccc2e449c",
     "snqi_scalarization_sensitivity_decision_disagreement.csv": "534c0bd09af1550d5b7cb9a7ebbb3ef89c6e361e843d7542020ae69d5a219f2d",
     "snqi_scalarization_sensitivity.md": "77e426f8dc121131c5cf6d940789ba8591a7755445516c19c7a64f604e5cb0d1",
-    "snqi_scalarization_sensitivity_pareto.svg": "45596a65dca42f94a17481abd1ff077a71d8e6ae48ace5e89a59b961ac93ccb1",
+    "snqi_scalarization_sensitivity_pareto.svg": "5c4f4036eec0c09692c321b8e2bb5fb1b659a39a800bc3c65aa545381773c2ad",
 }
 ALLOWED_RAW_EPISODE_SOURCES = {
     "durable_artifact_pointer",

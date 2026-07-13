@@ -1,0 +1,81 @@
+# Chapter 7 causal-trajectory case-capsule selection contract (issue #5447).
+#
+# Synthesis/selection tooling only. This config declares the capsule archetype
+# targets, the honest floor/ceiling, and the exact build command for the
+# reproducible case-capsule manifest built by
+# `scripts/analysis/build_ch7_case_capsules_issue_5447.py`
+# (backed by `robot_sf/benchmark/case_capsules.py`).
+#
+# It is NOT a benchmark metric and encodes NO planner-ranking claim. Selection
+# thresholds must NOT be tuned after inspecting candidates (issue #5447 forbidden
+# paths: changing selection thresholds; substituting unvalidated rows). The
+# capsule set is built from a *frozen* #5446 candidate manifest at a pinned SHA.
+schema_version: ch7_case_capsule_manifest.v1
+issue: "#5447"
+depends_on:
+  candidate_manifest: "#5446 seed_flip_inversion_candidates.v1 (validated, pinned SHA)"
+  causal_reports: "#5441-#5445 validated causal / online-risk reports where available"
+
+# --- Honest set size (issue #5447 stop rule) ---------------------------------
+selection:
+  # Stop at a smaller honest set if fewer than this many archetypes pass gates.
+  min_capsules: 4
+  # Four to six worked examples; beyond this too many panels reduce explanation.
+  max_capsules: 6
+  # Triage-only (<=3-seed) candidates never silently back a paper-facing capsule.
+  allow_triage: false
+
+# --- Target capsule archetypes (issue #5447 target capsule set) ---------------
+# Each entry names the candidate archetype(s) it draws from and the validated
+# report it requires. Archetypes whose source candidate or required report is
+# missing are labelled `unavailable`, never substituted post hoc.
+archetypes:
+  - key: hard_vs_easy_seed
+    source: [seed_flip]
+    requires_causal: false
+    requires_risk: false
+    is_pair: true
+  - key: strong_fail_weak_success
+    source: [planner_upset]
+    requires_causal: false
+    requires_risk: false
+    is_pair: true
+  - key: paired_first_unsafe_action
+    source: [planner_upset, seed_flip]
+    requires_causal: true # counterfactual claim needs a validated causal report
+    requires_risk: false
+    is_pair: true
+  - key: near_miss_online_risk
+    source: [seed_flip, planner_upset]
+    requires_causal: false
+    requires_risk: true # online-risk panel needs a validated risk report
+    is_pair: false
+  - key: unexpected_recovery
+    source: [seed_flip, planner_upset]
+    requires_causal: false
+    requires_risk: false
+    needs_disagreement: true
+    is_pair: false
+  - key: ambiguous_abstention
+    source: [planner_upset, seed_flip]
+    requires_causal: true
+    requires_risk: false
+    optional: true
+
+# --- Reproducible build command ----------------------------------------------
+# Fill CANDIDATES/CAUSAL/RISK with the pinned frozen-SHA manifest paths once the
+# #5446 candidate manifest exists. Figure rendering is a separate downstream step.
+build_command: >-
+  uv run python scripts/analysis/build_ch7_case_capsules_issue_5447.py
+  --candidates ${CANDIDATE_MANIFEST}
+  --causal ${CAUSAL_REPORTS}
+  --risk ${RISK_REPORTS}
+  --json ${OUTPUT_MANIFEST}
+  --validate
+
+# --- Claim boundary -----------------------------------------------------------
+claim_boundary: >-
+  Capsules are descriptive-only unless a validated causal report is supplied.
+  Author-pending narrative/figure fields (competing explanation, what failed,
+  generalisation limits, marked times) must be completed and an independent
+  pinned-SHA visual/evidence review recorded before dissertation integration.

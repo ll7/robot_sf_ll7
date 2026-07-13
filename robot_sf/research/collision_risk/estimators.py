@@ -204,8 +204,15 @@ def action_from_constant_velocity(
     )
 
 
-def _segment_min_distance(robot_xy: np.ndarray, actor_xy: np.ndarray) -> np.ndarray:
+def segment_min_distance(robot_xy: np.ndarray, actor_xy: np.ndarray) -> np.ndarray:
     """Closed-form minimum centre distance per horizon interval.
+
+    This is the canonical contact geometry used by
+    :func:`estimate_action_conditioned_risk`. It is public so downstream
+    calibration, replay, and label-generation code can compute contact on the
+    *identical* geometry the estimator uses (see :func:`pedestrian_arrays`);
+    subtract the summed robot+actor radii to obtain footprint clearance, and a
+    non-positive clearance is a contact.
 
     Both the robot and each actor move linearly within a timestep interval, so
     the relative displacement is affine in the sub-step parameter ``u in [0, 1]``
@@ -231,11 +238,16 @@ def _segment_min_distance(robot_xy: np.ndarray, actor_xy: np.ndarray) -> np.ndar
     return np.linalg.norm(closest, axis=-1)
 
 
-def _pedestrian_arrays(
+def pedestrian_arrays(
     pedestrians: Sequence[PedestrianState],
     config: RiskEstimatorConfig,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Extract validated position/velocity/radius/id arrays from pedestrians.
+
+    Public companion to :func:`segment_min_distance`: downstream calibration and
+    label-generation code reuses this extractor so ground-truth contact labels
+    are computed on the same actor state the estimator scores. Fails closed on
+    non-2D or non-finite pedestrian state.
 
     Returns:
         Tuple ``(positions (K, 2), velocities (K, 2), radii (K,), ids (K,))``.
@@ -330,7 +342,7 @@ def _deterministic_fields(
         )
 
     nominal = _nominal_positions(ped_pos, ped_vel, config)  # (K, H+1, 2)
-    seg_dist = _segment_min_distance(robot_xy, nominal)  # (K, H)
+    seg_dist = segment_min_distance(robot_xy, nominal)  # (K, H)
     clearance = seg_dist - radii_sum[:, None]  # (K, H)
 
     flat_index = int(np.argmin(clearance))
@@ -353,7 +365,7 @@ def _deterministic_fields(
     robot_v0 = (robot_xy[1] - robot_xy[0]) / config.dt_s
     steps = np.arange(config.horizon_steps + 1, dtype=float)
     robot_cv = robot_xy[0][None, :] + steps[:, None] * config.dt_s * robot_v0[None, :]
-    vo_dist = _segment_min_distance(robot_cv, nominal)  # (K, H)
+    vo_dist = segment_min_distance(robot_cv, nominal)  # (K, H)
     vo_flags = tuple(bool(value) for value in (vo_dist - radii_sum[:, None] <= 0.0).any(axis=1))
 
     # Conservative reachable-set warning: actor within max robot reach over horizon.
@@ -427,7 +439,7 @@ def estimate_action_conditioned_risk(
     start_ns = time.perf_counter_ns()
 
     robot_xy = action.as_array(horizon_steps=config.horizon_steps)
-    ped_pos, ped_vel, radii, ids = _pedestrian_arrays(pedestrians, config)
+    ped_pos, ped_vel, radii, ids = pedestrian_arrays(pedestrians, config)
     radii_sum = radii + config.robot_radius_m
 
     deterministic = _deterministic_fields(robot_xy, ped_pos, ped_vel, radii_sum, config)
@@ -445,7 +457,7 @@ def estimate_action_conditioned_risk(
     else:
         rng = np.random.default_rng(config.seed)
         sampled = _sample_positions(ped_pos, ped_vel, config, rng)  # (S, K, H+1, 2)
-        seg_dist = _segment_min_distance(robot_xy, sampled)  # (S, K, H)
+        seg_dist = segment_min_distance(robot_xy, sampled)  # (S, K, H)
         contact = seg_dist - radii_sum[None, :, None] <= 0.0  # (S, K, H)
 
         contact_per_actor = contact.any(axis=2)  # (S, K)
@@ -572,6 +584,14 @@ def _build_uncertainty(
     )
 
 
+# Backward-compatible internal aliases. The leading-underscore names were the
+# only handle downstream code had before issue #5468 promoted the contact
+# geometry to public API; keep them as aliases so pre-existing imports of the
+# private names keep resolving to the exact same objects.
+_segment_min_distance = segment_min_distance
+_pedestrian_arrays = pedestrian_arrays
+
+
 __all__ = [
     "ESTIMATOR_ID",
     "FORECAST_MODEL_ID",
@@ -581,4 +601,6 @@ __all__ = [
     "RiskEstimatorConfig",
     "action_from_constant_velocity",
     "estimate_action_conditioned_risk",
+    "pedestrian_arrays",
+    "segment_min_distance",
 ]

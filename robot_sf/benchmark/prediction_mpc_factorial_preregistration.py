@@ -24,6 +24,22 @@ SCHEMA_VERSION = "robot_sf.issue_5355_prediction_mpc_factorial_preregistration.v
 EXPECTED_FACTORIAL_ARMS = ("A0_B0", "A0_B1", "A1_B0", "A1_B1")
 PAIRING_KEY_FIELDS = ("scenario_id", "seed")
 
+# Dependency-status tokens that count as resolved for the campaign-readiness gate.
+# A declared blocking dependency must reach one of these before GPU submission is
+# authorized; anything else (e.g. ``open``, ``in_progress``, blank) keeps the gate
+# fail-closed. See ``docs/context/issue_5355_factorial_preregistration.md`` §6.
+RESOLVED_DEPENDENCY_STATES = frozenset(
+    {"resolved", "closed", "merged", "done", "landed", "complete", "satisfied"}
+)
+
+# The evidence registry that pins the exact preregistration config by sha256,
+# relative to the repository root (prereg §6, "The campaign config lands with
+# sha256 in the evidence registry").
+DEFAULT_REGISTRY_RELATIVE_PATH = (
+    "docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration"
+    "/preregistration_config_registry.json"
+)
+
 
 def load_factorial_preregistration_config(path: str | Path) -> dict[str, Any]:
     """Load and validate an issue #5355 factorial pre-registration config.
@@ -216,6 +232,167 @@ def write_preregistration_plan(plan: Mapping[str, Any], output_dir: str | Path) 
     return path
 
 
+def dependency_blockers(dependencies: Any) -> list[str]:
+    """Return human-readable blockers for unresolved *blocking* dependencies.
+
+    A dependency entry blocks the campaign when it declares a truthy ``blocking``
+    reason and its ``status`` is not in :data:`RESOLVED_DEPENDENCY_STATES`. The
+    ``dependencies`` block is optional; a missing or empty block yields no
+    blockers (nothing is declared to wait on).
+
+    Returns:
+        Ordered blocker strings, one per unresolved blocking dependency.
+    """
+
+    if dependencies in (None, ""):
+        return []
+    if not isinstance(dependencies, Sequence) or isinstance(dependencies, (str, bytes)):
+        raise ValueError("dependencies must be a list of mappings")
+
+    blockers: list[str] = []
+    for entry in dependencies:
+        if not isinstance(entry, Mapping):
+            raise ValueError("each dependencies entry must be a mapping")
+        blocking_value = entry.get("blocking")
+        blocking_reason = str(blocking_value).strip() if blocking_value is not None else ""
+        if not blocking_reason:
+            continue
+        status_value = entry.get("status")
+        status = str(status_value).strip().lower() if status_value is not None else ""
+        if status in RESOLVED_DEPENDENCY_STATES:
+            continue
+        issue = entry.get("issue", "?")
+        blockers.append(
+            f"dependency #{issue} unresolved (status={status or 'unset'!s}): {blocking_reason}"
+        )
+    return blockers
+
+
+def assess_campaign_readiness(
+    config_path: str | Path,
+    *,
+    registry_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Fail-closed CPU readiness gate for the issue #5355 factorial campaign.
+
+    Aggregates the CPU-checkable acceptance criteria the preregistration
+    (``docs/context/issue_5355_factorial_preregistration.md`` §6) requires
+    *before* any GPU submission into a single verdict. This function never runs
+    benchmark episodes, touches GPU/Slurm, or promotes any benchmark/paper
+    claim; it only inspects tracked config and evidence artifacts.
+
+    Every criterion is treated as ``blocked`` unless it can be positively
+    verified, so an unreadable config, a stale registry digest, an invalid arm
+    config, or an unresolved declared dependency each keep ``ready`` False. This
+    encodes prereg §6 in code: the ``dependencies`` block (#5351 analysis,
+    #5353 capability matrix) is dead data today: nothing enforced that GPU
+    submission wait on it.
+
+    Args:
+        config_path: Path to the tracked factorial preregistration config.
+        registry_path: Optional override for the sha256 evidence registry. When
+            omitted, the default evidence registry is resolved relative to the
+            config's repository root.
+
+    Returns:
+        Readiness report: ``ready`` bool, per-criterion status mapping, the
+        ordered ``blockers`` list, and a ``claim_boundary`` string.
+    """
+
+    config_path = Path(config_path)
+    criteria: dict[str, dict[str, Any]] = {}
+    blockers: list[str] = []
+
+    def _record(name: str, ok: bool, detail: str) -> None:
+        criteria[name] = {"ready": bool(ok), "detail": detail}
+        if not ok:
+            blockers.append(f"{name}: {detail}")
+
+    # Criterion 1: the preregistration config parses and satisfies the contract.
+    config: dict[str, Any] | None = None
+    try:
+        config = load_factorial_preregistration_config(config_path)
+        _record("preregistration_config_valid", True, f"validated {config_path}")
+    except (ValueError, OSError, yaml.YAMLError) as exc:
+        _record("preregistration_config_valid", False, str(exc))
+
+    # Criterion 2: all four arm configs build and realize the 2x2 truth table.
+    if config is not None:
+        try:
+            arm_results = validate_arm_configs(config_path)
+            invalid = {k: v.get("error") for k, v in arm_results.items() if not v.get("valid")}
+            if len(arm_results) == len(EXPECTED_FACTORIAL_ARMS) and not invalid:
+                _record("arm_configs_valid", True, "all four arm configs valid")
+            else:
+                _record("arm_configs_valid", False, f"invalid arms: {invalid or 'incomplete set'}")
+        except (ValueError, OSError, yaml.YAMLError) as exc:
+            _record("arm_configs_valid", False, str(exc))
+    else:
+        _record("arm_configs_valid", False, "skipped: preregistration config invalid")
+
+    # Criterion 3: the exact config is pinned by sha256 in the evidence registry.
+    _record("evidence_registry_pinned", *_check_registry_pinned(config_path, registry_path))
+
+    # Criterion 4: every declared blocking dependency (#5351, #5353) is resolved.
+    if config is not None:
+        try:
+            dep_blockers = dependency_blockers(config.get("dependencies"))
+            if dep_blockers:
+                _record("dependencies_resolved", False, "; ".join(dep_blockers))
+            else:
+                _record("dependencies_resolved", True, "no unresolved blocking dependencies")
+        except ValueError as exc:
+            _record("dependencies_resolved", False, str(exc))
+    else:
+        _record("dependencies_resolved", False, "skipped: preregistration config invalid")
+
+    return {
+        "schema_version": "robot_sf.issue_5355_prediction_mpc_factorial_readiness.v1",
+        "issue": 5355,
+        "config_path": str(config_path),
+        "ready": not blockers,
+        "criteria": criteria,
+        "blockers": blockers,
+        "claim_boundary": (
+            "CPU readiness gate only; no benchmark, paper, or release claim and no "
+            "GPU/Slurm submission is authorized by a ready verdict."
+        ),
+    }
+
+
+def _check_registry_pinned(config_path: Path, registry_path: str | Path | None) -> tuple[bool, str]:
+    """Check that the sha256 evidence registry pins the exact config bytes.
+
+    Returns:
+        ``(ok, detail)`` where ``ok`` is True only when the registry exists,
+        pins the given config path, and its digest matches the config bytes.
+    """
+
+    if registry_path is None:
+        resolved = _resolve_existing_path(DEFAULT_REGISTRY_RELATIVE_PATH, config_path=config_path)
+    else:
+        resolved = Path(registry_path)
+    if not resolved.is_file():
+        return False, f"evidence registry not found: {resolved}"
+    try:
+        registry = json.loads(resolved.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return False, f"unreadable evidence registry: {exc}"
+    if not isinstance(registry, dict):
+        return False, "evidence registry must be a JSON object/dictionary"
+    pinned_config = _resolve_existing_path(
+        str(registry.get("config_path", "")), config_path=resolved
+    )
+    if not pinned_config.is_file():
+        return False, f"registry config_path missing: {registry.get('config_path')}"
+    actual = hashlib.sha256(pinned_config.read_bytes()).hexdigest()
+    if actual != str(registry.get("config_sha256", "")):
+        return False, "registry config_sha256 does not match config bytes"
+    if pinned_config.resolve() != config_path.resolve():
+        return False, f"registry pins a different config: {pinned_config}"
+    return True, f"config pinned by sha256 in {resolved}"
+
+
 def _validate_factorial_arms(value: Any, *, config_path: str | Path | None) -> None:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError("factorial_arms must be list")
@@ -332,11 +509,15 @@ def _reject_transient_routing_state(config: Mapping[str, Any]) -> None:
 
 
 __all__ = [
+    "DEFAULT_REGISTRY_RELATIVE_PATH",
     "EXPECTED_FACTORIAL_ARMS",
     "PAIRING_KEY_FIELDS",
+    "RESOLVED_DEPENDENCY_STATES",
     "SCHEMA_VERSION",
+    "assess_campaign_readiness",
     "build_preregistration_plan",
     "check_planned_rows",
+    "dependency_blockers",
     "load_factorial_preregistration_config",
     "validate_arm_configs",
     "validate_factorial_preregistration_config",

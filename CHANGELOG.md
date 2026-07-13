@@ -24,6 +24,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and is not benchmark, sim-to-real, or paper-facing evidence. Implements the maintainer 2026-07-12
   scope addition on #3207.
 
+* **issue #5447 Chapter 7 case-capsule manifest builder (scaffold).** New
+  `robot_sf/benchmark/case_capsules.py` (`ch7_case_capsule_manifest.v1`) assembles the Chapter 7
+  causal-trajectory worked-example set from a *validated* `seed_flip_inversion_candidates.v1`
+  candidate manifest (issue #5446) plus optional causal / online-risk reports (#5441–#5445). It is
+  honest-selection tooling, not a benchmark metric or figure renderer: it fails closed on
+  empty/wrong-schema input, labels archetypes with a missing source candidate or required report
+  `unavailable` (never substituted), grades capsules `descriptive-only` unless a validated causal
+  report is supplied, honours the four-capsule honest floor (`insufficient_evidence` below it), and
+  leaves subjective narrative/figure fields as an `AUTHOR_REQUIRED` sentinel the structural
+  validator reports as `author_pending`. Ships a thin CLI
+  (`scripts/analysis/build_ch7_case_capsules_issue_5447.py`), a frozen selection contract
+  (`configs/analysis/issue_5447_ch7_case_capsules.yaml`), and contract tests. The capsule *set*
+  itself remains blocked on the #5446 candidate manifest, which does not yet exist; see
+  `docs/context/evidence/issue_5447_ch7_case_capsules/README.md`.
+
+* **issue #5355 factorial campaign-readiness CLI gate.** New executable
+  `scripts/validation/check_issue_5355_factorial_campaign_readiness.py` wraps the existing library
+  gate `assess_campaign_readiness()` so ops can enforce the prediction-MPC 2x2 factorial
+  preregistration §6 pre-submission requirements at the submission boundary. The process exit code
+  is the contract: `0` only when every criterion (config valid, four arm configs realize the truth
+  table, config pinned by sha256, all declared blocking dependencies resolved) passes, `1`
+  otherwise. Supports `--config`, `--registry`, `--out` (write report JSON), and `--json`. CPU-only,
+  no benchmark episodes, and a `ready` verdict authorizes no submission by itself. On the landed
+  config the gate reports NOT READY, blocked solely on open dependencies #5351/#5353 — matching the
+  closure audit. Successor slice to PR #5415 (added the library gate); this adds the executable
+  ops-facing entry point. Covered by `tests/validation/test_check_issue_5355_factorial_campaign_readiness.py`.
+
+* **issue #5468 public collision-risk contact geometry.** Promoted the canonical contact geometry of
+  the action-conditioned collision-risk API to a documented public surface:
+  `segment_min_distance` (closed-form per-interval minimum centre distance) and `pedestrian_arrays`
+  (validated actor position/velocity/radius/id extractor) are now re-exported from
+  `robot_sf.research.collision_risk`. Downstream calibration, replay, and label-generation code can
+  compute contact on the *identical* geometry the estimator uses instead of importing
+  underscore-prefixed internals; `calibration.py` now consumes the public names. Backward-compatible
+  private aliases (`_segment_min_distance`, `_pedestrian_arrays`) still resolve to the same objects.
+  No behavior change; covered by tests asserting the public and internal handles agree.
+
 * **issue #5446 seed-flip / held-out planner-inversion candidate miner.** New
   `robot_sf/benchmark/seed_flip_mining.py` (`seed_flip_inversion_candidates.v1`) mines *case
   candidates* — reproducible seed-dependent outcome flips and genuine held-out planner upsets —
@@ -186,6 +223,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/test_robot_sf_error_migration_4993.py` (59 compatibility tests).
 
 ### Added
+
+* **issue #5355 fail-closed campaign-readiness gate for the prediction-MPC factorial.** Adds
+  `assess_campaign_readiness()` and `dependency_blockers()` to
+  `robot_sf/benchmark/prediction_mpc_factorial_preregistration.py`, turning the preregistration's
+  §6 pre-submission requirements into an executable verdict. The CPU-only, no-submit gate aggregates
+  four criteria (preregistration config valid, four arm configs valid, exact-config sha256 pinned in
+  the evidence registry, and every declared blocking dependency resolved) and stays `ready: False`
+  unless each is positively verified. It encodes prereg §6 in code: the config's `dependencies`
+  block (#5351 hierarchical analysis, #5353 capability matrix) was previously inert prose, so nothing
+  prevented a premature GPU submission. On the landed config the gate reports the design,
+  preregistration, implementation, and provenance criteria as met and identifies #5351/#5353 as the
+  sole remaining blockers. Adds unit + integration tests in `tests/test_prediction_mpc_factorial.py`.
+  No campaign, GPU/Slurm, or metric change.
 
 * **issue #5372 fidelity smoke + arm-config identity checks for the #5355 factorial.** Adds two CPU-only, tiny-horizon test modules under `tests/planner/`: a toggle-effect fidelity smoke (`test_prediction_mpc_factorial_fidelity_smoke.py`) that runs all four canonical arm configs (`configs/algos/prediction_mpc_factorial_A{0,1}_B{0,1}.yaml`) on two named scenarios and asserts each factor flip changes the decision trace, the toggles are orthogonal, and the B-OFF arms complete episodes as functional soft-cost planners (prereg §6); and a static preflight identity test (`test_prediction_mpc_factorial_arm_identity.py`) asserting the four arms share the observation contract, kinematics, and runtime budget and differ only in the two factor flags plus the implied soft pedestrian weight (prereg §2, §7). Test-only; no campaign, GPU, or metric change.
 

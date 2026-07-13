@@ -16,14 +16,24 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-DEFAULT_PACKET = Path("configs/benchmarks/issue_5348_s30_attempt6_resume_launch_packet.yaml")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_PACKET = REPO_ROOT / "configs/benchmarks/issue_5348_s30_attempt6_resume_launch_packet.yaml"
 SCHEMA_VERSION = "s30-attempt6-resume-launch-packet.v1"
+EXPECTED_CAMPAIGN_CONFIG = (
+    "configs/benchmarks/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30.yaml"
+)
+EXPECTED_PUBLICATION_FILES = (
+    "reports/campaign_table.csv",
+    "campaign_manifest.json",
+    "run_meta.json",
+)
 EPISODES_PER_ARM = 1440
 PRESERVED_PPO_EPISODES = 562
 REMAINING_PPO_EPISODES = 878
@@ -92,8 +102,19 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
     _require(campaign.get("attempt") == 6, "campaign.attempt must be 6")
     _require(campaign.get("episodes_per_arm") == EPISODES_PER_ARM, "episodes_per_arm must be 1440")
     _require(campaign.get("arm_count") == ARM_COUNT, "arm_count must be 6")
-    config_path = str(campaign.get("config", ""))
-    _require(config_path.endswith("_h600_hybrid_vs_orca_s30.yaml"), "unexpected campaign config")
+    config_path = campaign.get("config")
+    _require(
+        config_path == EXPECTED_CAMPAIGN_CONFIG,
+        f"campaign.config must be {EXPECTED_CAMPAIGN_CONFIG}",
+    )
+    config_sha256 = campaign.get("config_sha256")
+    config_file = REPO_ROOT / EXPECTED_CAMPAIGN_CONFIG
+    _require(config_file.is_file(), f"campaign config is missing: {EXPECTED_CAMPAIGN_CONFIG}")
+    actual_config_sha256 = hashlib.sha256(config_file.read_bytes()).hexdigest()
+    _require(
+        config_sha256 == actual_config_sha256,
+        "campaign.config_sha256 does not match the checked-in campaign config",
+    )
 
     # --- Step-1 preservation: five clean arms complete, 562 PPO rows preserved, no restart.
     preservation = _require_mapping(packet, "preservation")
@@ -180,6 +201,11 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
 
     # --- Step-4 publication: durable evidence with provenance, no raw artifacts in git.
     publication = _require_mapping(packet, "publication")
+    required_files = publication.get("required_files")
+    _require(
+        required_files == list(EXPECTED_PUBLICATION_FILES),
+        "publication.required_files must declare the complete campaign output contract",
+    )
     _require(
         str(publication.get("evidence_dir", "")).startswith("docs/context/evidence/"),
         "publication evidence_dir must be under docs/context/evidence/",
@@ -240,11 +266,12 @@ def validate_packet(packet: dict[str, Any]) -> dict[str, Any]:  # noqa: PLR0915
 
 
 def _load_packet(path: Path) -> dict[str, Any]:
-    if not path.is_file():
-        raise FileNotFoundError(path)
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    resolved_path = path if path.is_absolute() else REPO_ROOT / path
+    if not resolved_path.is_file():
+        raise FileNotFoundError(resolved_path)
+    payload = yaml.safe_load(resolved_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise PacketError(f"{path} must contain a YAML mapping")
+        raise PacketError(f"{resolved_path} must contain a YAML mapping")
     return payload
 
 

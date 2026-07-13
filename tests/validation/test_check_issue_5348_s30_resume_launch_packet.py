@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -58,6 +59,10 @@ def test_config_reference_exists_on_disk() -> None:
     """The packet points at the real six-arm S30 campaign config."""
     config = REPO_ROOT / _load_packet()["campaign"]["config"]
     assert config.is_file(), f"missing S30 campaign config: {config}"
+    assert (
+        hashlib.sha256(config.read_bytes()).hexdigest()
+        == _load_packet()["campaign"]["config_sha256"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -90,6 +95,20 @@ def test_config_reference_exists_on_disk() -> None:
         (
             lambda p: p["gating"].__setitem__("gate_status", "blocked"),
             "gate_status must be satisfied",
+        ),
+        (
+            lambda p: p["campaign"].__setitem__(
+                "config", "configs/benchmarks/missing_h600_hybrid_vs_orca_s30.yaml"
+            ),
+            "campaign.config must be",
+        ),
+        (
+            lambda p: p["campaign"].__setitem__("config_sha256", "0" * 64),
+            "config_sha256 does not match",
+        ),
+        (
+            lambda p: p["publication"].__setitem__("required_files", ["campaign_manifest.json"]),
+            "publication.required_files must declare",
         ),
     ],
 )

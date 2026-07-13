@@ -11,8 +11,11 @@
   Factor A's ON state; its explicit collision-constraint set is the toggleable Factor B.
 - **Implementation status**: the arm configs, `predictor_backend`,
   `hard_pedestrian_constraints_enabled`, and the fail-closed soft-clearance-weight contract
-  now exist. CPU configuration and intervention-fidelity tests cover them (§6, §8), but no
-  campaign row has run; GPU submission remains blocked on #5351.
+  now exist. CPU configuration and intervention-fidelity tests cover them (§6, §8), and both
+  declared blocking dependencies have since closed: #5351 (hierarchical paired analysis) and
+  #5353 (matched-capability fairness contract). Their dependency states were reconciled in the
+  pinned config via #5483. The remaining gate is the authorized campaign RUN (compute, ops
+  queue) — the config change alone authorizes no GPU submission.
 
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/5355>
 
@@ -280,8 +283,9 @@ The pre-submission requirements are aggregated into a single fail-closed verdict
 `assess_campaign_readiness()` in
 `robot_sf/benchmark/prediction_mpc_factorial_preregistration.py`: it stays `ready: False` unless the
 preregistration config validates, all four arm configs build, the exact config is sha256-pinned in
-the evidence registry, and every declared blocking dependency (§8: #5351, #5353) is resolved. The
-gate is CPU-only and authorizes no submission by itself.
+the evidence registry, and every declared blocking dependency (§8: #5351, #5353) is resolved. As of
+the #5483 reconciliation both dependencies are `closed`, so the gate's dependency criterion now
+passes; the gate is CPU-only and authorizes no submission by itself.
 
 ### 6.1 Toggle-effect smoke (each factor demonstrably changes behavior)
 On **2 scenarios** — one static-structural (`classic_doorway`) and one dynamic
@@ -340,10 +344,13 @@ or row archiving occurs under this pre-registration.
 4. **CPU semantic checks** validate the arm truth table, pinned scenario digest, S30 seed set,
    registry checksum, current-position hold, active B-on constraint, B-off soft weight, and
    functional forward progress.
-5. **Remaining execution gate:** confirmatory analysis consumes **#5351**; capability parity is
-   cross-checked against the #5353 contract already landed by #5370. No campaign submission or
-   evidence claim is authorized until the exact-config fidelity smoke and these dependencies are
-   satisfied.
+5. **Remaining execution gate:** confirmatory analysis consumes **#5351** (closed, delivered by
+   #5366) and capability parity is cross-checked against the #5353 contract (closed, delivered by
+   #5370) — both dependency states were reconciled to `closed` in the pinned config via #5483, and
+   the readiness gate's dependency criterion therefore passes. No campaign submission or evidence
+   claim is authorized: the remaining gate is the **authorized campaign RUN** (compute through the
+   ops queue). A ready verdict from `assess_campaign_readiness()` authorizes no GPU/Slurm submission
+   and promotes no benchmark or paper claim.
 
 ---
 

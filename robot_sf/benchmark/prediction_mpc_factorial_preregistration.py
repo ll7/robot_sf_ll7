@@ -268,6 +268,51 @@ def dependency_blockers(dependencies: Any) -> list[str]:
     return blockers
 
 
+# Canonical issue-state truth for the #5355 factorial dependencies. This is the
+# reconciliation source of truth from #5483: both #5351 (hierarchical paired
+# analysis, delivered by #5366) and #5353 (matched-capability fairness contract,
+# delivered by #5370) are CLOSED. Any dependency entry declaring one of these
+# issue numbers with a non-resolved status is drifted and must be reconciled in
+# the pinned config + evidence registry rather than silently gating the campaign.
+RECONCILED_CLOSED_DEPENDENCY_ISSUES = frozenset({5351, 5353})
+
+
+def check_dependency_state_consistency(dependencies: Any) -> dict[str, Any]:
+    """Detect dependency-status drift against the reconciled-closed truth.
+
+    Returns:
+        A report with ``consistent`` bool, the ``closed_issues`` reconciled set,
+        and an ``inconsistent`` list naming any declared dependency whose issue
+        is reconciled-closed but whose declared ``status`` is not a resolved
+        token. Used by the #5483 regression guard so a future edit cannot silently
+        reset a closed dependency back to ``open``.
+    """
+
+    report: dict[str, Any] = {
+        "consistent": True,
+        "closed_issues": sorted(RECONCILED_CLOSED_DEPENDENCY_ISSUES),
+        "inconsistent": [],
+    }
+    if dependencies in (None, ""):
+        return report
+    if not isinstance(dependencies, Sequence) or isinstance(dependencies, (str, bytes)):
+        raise ValueError("dependencies must be a list of mappings")
+    for entry in dependencies:
+        if not isinstance(entry, Mapping):
+            raise ValueError("each dependencies entry must be a mapping")
+        issue = entry.get("issue")
+        if int(issue) not in RECONCILED_CLOSED_DEPENDENCY_ISSUES:
+            continue
+        status_value = entry.get("status")
+        status = str(status_value).strip().lower() if status_value is not None else ""
+        if status not in RESOLVED_DEPENDENCY_STATES:
+            report["consistent"] = False
+            report["inconsistent"].append(
+                f"#{issue} reconciled-closed but declared status={status or 'unset'!s}"
+            )
+    return report
+
+
 def assess_campaign_readiness(
     config_path: str | Path,
     *,
@@ -516,6 +561,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "assess_campaign_readiness",
     "build_preregistration_plan",
+    "check_dependency_state_consistency",
     "check_planned_rows",
     "dependency_blockers",
     "load_factorial_preregistration_config",

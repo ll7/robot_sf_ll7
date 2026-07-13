@@ -48,35 +48,35 @@ class TestReadinessCLI:
         assert code == 1
         out = capsys.readouterr().out
         assert "NOT READY" in out
-        assert "#5351" in out
-        assert "#5353" in out
 
-    def test_real_config_exits_nonzero_on_open_dependencies(self, capsys):
-        """The landed packet is blocked only on #5351/#5353 -> exit 1."""
+    def test_real_config_exits_zero_after_dependency_reconciliation(self, capsys):
+        """#5483 reconciliation: #5351 and #5353 are now closed, so the CPU gate
+        passes all four criteria; a READY verdict authorizes no submission."""
         code = main(["--config", str(CONFIG_PATH)])
-        assert code == 1
+        assert code == 0
         out = capsys.readouterr().out
-        assert "NOT READY" in out
-        assert "#5351" in out
-        assert "#5353" in out
+        assert "READY" in out
+        assert "#5351" not in out
+        assert "#5353" not in out
 
     def test_json_flag_emits_machine_readable_report(self, capsys):
         code = main(["--config", str(CONFIG_PATH), "--json"])
-        assert code == 1
+        assert code == 0
         report = json.loads(capsys.readouterr().out)
         assert report["issue"] == 5355
-        assert report["ready"] is False
+        assert report["ready"] is True
         assert report["criteria"]["preregistration_config_valid"]["ready"] is True
-        assert report["criteria"]["dependencies_resolved"]["ready"] is False
+        assert report["criteria"]["dependencies_resolved"]["ready"] is True
+        assert report["blockers"] == []
 
     def test_out_writes_report_artifact(self, tmp_path, capsys):
         out_path = tmp_path / "nested" / "readiness.json"
         code = main(["--config", str(CONFIG_PATH), "--out", str(out_path)])
-        assert code == 1
+        assert code == 0
         assert out_path.is_file()
         written = json.loads(out_path.read_text(encoding="utf-8"))
         assert written["config_path"] == str(CONFIG_PATH)
-        assert written["ready"] is False
+        assert written["ready"] is True
 
     def test_ready_config_exits_zero(self, tmp_path, capsys):
         cfg, registry = _resolved_config_and_registry(tmp_path)

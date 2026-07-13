@@ -63,8 +63,33 @@ divergent, not a successful comparison.
 ## Evidence status and remaining action
 
 No full benchmark campaign, Slurm/GPU submission, or paper/dissertation claim update was made.
-The runnable-definition and executor blockers are resolved. The remaining empirical actions are to
-run the 420 CPU-only repeats on one host, register the verified report under this evidence directory,
-then run and compare the second-host near-miss repeat with its environment manifest. The executor
-records the host, Python, NumPy, Numba, Git revision, and root `uv.lock` SHA-256 fingerprint so a
-verified result can be reproduced or rejected when dependencies drift.
+The runnable-definition and executor blockers are resolved.
+
+### Issue #5498 single-host exact-repeat result (registered 2026-07-13)
+
+The predeclared 420 CPU-only repeats (140 targets, 3 repeats each, single worker) were executed on
+one host and the verified report is registered under this directory:
+
+- `issue_5498_host_result.json` — raw `scenario_exact_repeat_host_result.v1` payload (machine id redacted).
+- `issue_5498_verified_host_result.json` — `scenario_exact_repeat_verified_host_result.v1` after `verify-host`.
+- `issue_5498_provenance.json` — reproducible command, manifest/git revision, and artifact SHA-256.
+
+Coverage: 140/140 targets executed, **no missing or silently skipped targets**. Planners `orca`
+(60 targets) and `goal` (20 targets) run natively; all 80 native-run targets are bitwise-identical
+across their three repeats (SHA-256 outcome+metric trajectory hashes agree). Planner `ppo` (60
+targets) **degraded**: its forked planner-step worker crashes/timing-out on this host, the runner
+falls back to a zero-velocity action, and every repeat is a no-op. Those 60 targets are recorded as
+explicit `unrunnable` dispositions with the `degraded` flag and are **excluded from the
+bitwise-identical determinism claim** (3 of 7 cells unrunnable). This is exactly the fail-closed
+behavior issue #5498 requires: fallback/degraded rows are not success evidence.
+
+Evidence grade: observed single-host diagnostic. NOT benchmark or paper-facing evidence. The ppo
+degradation is a host/runner isolation defect, not a determinism verdict; it is recorded, not
+promoted.
+
+### Remaining action after #5498
+
+The predeclared **second-host near-miss comparison** is not yet run. It requires a second
+distinct host with matching pinned NumPy/Numba versions; register `cross_host_matrix.json` via
+`compare-hosts` once that run exists. The ppo cells must remain unrunnable/degraded in any
+cross-host matrix until the planner-step worker isolation defect is fixed so ppo can run natively.

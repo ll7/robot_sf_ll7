@@ -18,6 +18,7 @@ from robot_sf.benchmark.exact_repeat_campaign import (
     _check_manifest_from_bundle,
     _compute_trajectory_hash,
     _get_environment_fingerprint,
+    _record_is_degraded,
     _safe_json_value,
     canonical_sha256,
     execute_campaign,
@@ -525,3 +526,95 @@ def test_execute_campaign_bundle_sha_validation():
     }
     with pytest.raises(ValueError, match="bundle_sha256"):
         execute_campaign(bundle, output_dir=Path("/tmp/no_such_dir"))
+
+
+# --- _record_is_degraded -------------------------------------------------
+
+
+def test_record_is_degraded_detects_fallback_status():
+    """A planner-step fallback status marks a record as degraded."""
+    assert (
+        _record_is_degraded(
+            {"algorithm_metadata": {"status": "policy_step_error_fallback"}, "outcome": {}}
+        )
+        is True
+    )
+    assert (
+        _record_is_degraded(
+            {"algorithm_metadata": {"status": "policy_step_timeout_fallback"}, "outcome": {}}
+        )
+        is True
+    )
+
+
+def test_record_is_degraded_detects_timeout_event():
+    """An outcome timeout_event marks a record as degraded even when status is ok."""
+    assert (
+        _record_is_degraded(
+            {"algorithm_metadata": {"status": "ok"}, "outcome": {"timeout_event": True}}
+        )
+        is True
+    )
+
+
+def test_record_is_degraded_accepts_native_record():
+    """A native run with ok status and no timeout is not degraded."""
+    assert (
+        _record_is_degraded(
+            {"algorithm_metadata": {"status": "ok"}, "outcome": {"timeout_event": False}}
+        )
+        is False
+    )
+
+
+# --- execute_campaign degraded disposition (issue #5498) ------------------
+
+
+def _degraded_mock_runner(
+    scenario_params: dict[str, Any],
+    seed: int,
+    *,
+    algo: str = "goal",
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Mock run_episode whose records look like a fallen-back planner step."""
+    record = _build_mock_record(seed)
+    record["algorithm_metadata"] = {"status": "policy_step_error_fallback"}
+    record["outcome"] = {"timeout_event": True}
+    return record
+
+
+def test_execute_campaign_dispositions_degraded_fallback_targets(
+    tmp_path, manifest, resolved_bundle
+):
+    """Targets whose repeats all degrade to a fallback are explicit unrunnable dispositions.
+
+    Per issue #5498, fallback/degraded rows are not valid exact-repeat evidence, so the
+    executor records them with the unrunnable disposition (empty repeats, degraded flag),
+    and the verifier excludes them from the bitwise-identical determinism claim.
+    """
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "degraded_disposition",
+        run_episode=_degraded_mock_runner,
+    )
+
+    by_planner = {}
+    for result in host_result["results"]:
+        by_planner.setdefault(result["planner"], []).append(result)
+
+    # Every planner target degrades under the mock runner.
+    for results in by_planner.values():
+        for result in results:
+            assert result["disposition"] == UNRUNNABLE_DISPOSITION
+            assert result["degraded"] is True
+            assert result["repeats"] == []
+            assert "fallback" in result["disposition_reason"]
+
+    verified = verify_host_report(manifest, host_result)
+    # All seven cells are unrunnable; no determinism claim is made.
+    assert verified["summary"]["n_runnable_cells"] == 0
+    assert verified["summary"]["n_unrunnable_cells"] == 7
+    assert verified["summary"]["all_cells_bitwise_identical"] is False
+    for target in verified["targets"]:
+        assert target["unrunnable"] is True

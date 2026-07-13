@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5442 frozen-state counterfactual replay: locate the last avoidable control action.**
+  New simulator-agnostic engine (`robot_sf/benchmark/last_avoidable_replay.py`) restores a
+  decision-point snapshot (including RNG state), verifies deterministic baseline replay, and branches
+  over the admissible robot action lattice at each step in `[t_danger, t_contact)` to report `t_uca`
+  (earliest avoidable unsafe control action) and `t_inevitable` (point of no return). Fail-closed: a
+  nondeterministic baseline or a missing feasible action set returns `unknown`, never `unavoidable`.
+  Ships a deterministic controlled kinematic fixture
+  (`robot_sf/benchmark/last_avoidable_fixtures.py`), the `last_avoidable_replay.v1` output schema, an
+  offline report CLI (`scripts/analysis/run_last_avoidable_replay_issue_5442.py`), and a context note
+  (`docs/context/issue_5442_last_avoidable_replay.md`). Controlled-fixture diagnostic evidence only;
+  `normative_fault` is always `not_assessed`. No production-simulator snapshot seam (that would be a
+  broad change — see the note), no benchmark/Slurm run, no metric/paper claim.
 * **issue #5441 `collision_causal_report.v1` fail-closed cause-report contract.** Adds
   `robot_sf/benchmark/schemas/collision_causal_report.v1.json` and validator
   `robot_sf/benchmark/collision_causal_report.py` that separate observed reconstruction, proximate

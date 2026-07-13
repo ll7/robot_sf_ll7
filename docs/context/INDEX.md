@@ -4,6 +4,9 @@ Collision causality, action-conditioned online risk, and statistically defensibl
 scenario discovery research program:
 [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md).
 
+Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
+[issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).
+
 Issue #5441 `collision_causal_report.v1` field-producer map, temporal causal-graph nodes, and
 fail-closed contract decision record (model-scoped, `normative_fault: not_assessed`):
 [collision_causal_report_field_map_2026-07-13.md](collision_causal_report_field_map_2026-07-13.md).

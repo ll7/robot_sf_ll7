@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #3207 collision-envelope / physical-footprint clearance-semantics diagnostic.** New
+  `robot_sf/benchmark/clearance_semantics.py` (`footprint-clearance-semantics.v1`) formalizes the
+  distinct clearance quantities that reported traces conflate — center-to-center distance,
+  proxy-envelope surface clearance (planning radii), geometric-body clearance (physical radii),
+  pedestrian/obstacle contact, and conservative-buffer breach — and enumerates a bounded
+  robot-proxy / pedestrian-radius sweep plus a collision/near-miss threshold-sensitivity table that
+  flags whether an encounter classification depends on the proxy-footprint choice rather than on
+  physical contact. Driven by a new `footprint_semantics` block in
+  `configs/research/fidelity_sensitivity_v1.yaml` (distinct from the existing `clearance_radius`
+  axis, which only perturbs the pedestrian radius); the loader fails closed on missing/malformed
+  sweep metadata. CLI: `scripts/benchmark/build_footprint_clearance_manifest.py`. Diagnostic only:
+  it runs no benchmark episodes, changes no frozen-release collision/near-miss metric semantics,
+  and is not benchmark, sim-to-real, or paper-facing evidence. Implements the maintainer 2026-07-12
+  scope addition on #3207.
+
 * **issue #5446 seed-flip / held-out planner-inversion candidate miner.** New
   `robot_sf/benchmark/seed_flip_mining.py` (`seed_flip_inversion_candidates.v1`) mines *case
   candidates* — reproducible seed-dependent outcome flips and genuine held-out planner upsets —

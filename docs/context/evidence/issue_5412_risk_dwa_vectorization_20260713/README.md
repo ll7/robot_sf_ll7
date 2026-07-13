@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5412, 2026-07-13) - NEEDS-REVIEW -->
+
 # RiskDWA vectorization timing record
 
 Status: diagnostic performance evidence for PR #5511 and issue #5412. This

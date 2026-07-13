@@ -204,29 +204,22 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         Returns:
             float: Scalar score where higher is better.
         """
-        dt = float(self.config.rollout_dt)
         steps = max(int(self.config.rollout_steps), 1)
         x = np.array(robot_pos, dtype=float)
         theta = float(heading)
         start_dist = float(np.linalg.norm(goal - x))
-        min_ped_clear = float("inf")
-        min_obs_clear = float("inf")
 
-        for step in range(steps):
-            t = (step + 1) * dt
-            x = x + np.array(
-                [
-                    float(command[0]) * np.cos(theta) * dt,
-                    float(command[0]) * np.sin(theta) * dt,
-                ]
-            )
-            theta = _wrap_angle(theta + float(command[1]) * dt)
-
-            if ped_pos.size > 0:
-                ped_t = ped_pos + ped_vel * t
-                ped_dist = np.linalg.norm(ped_t - x[None, :], axis=1)
-                min_ped_clear = min(min_ped_clear, float(np.min(ped_dist)))
-            min_obs_clear = min(min_obs_clear, self._min_obstacle_clearance(x, observation))
+        trajectory, theta = self._rollout_trajectory(
+            robot_pos=x, heading=theta, command=command, steps=steps
+        )
+        min_ped_clear, min_obs_clear = self._rollout_min_clearance(
+            positions=trajectory,
+            steps=steps,
+            ped_pos=ped_pos,
+            ped_vel=ped_vel,
+            observation=observation,
+        )
+        x = trajectory[-1]
 
         end_dist = float(np.linalg.norm(goal - x))
         progress = start_dist - end_dist
@@ -251,6 +244,72 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             - float(self.config.ttc_weight) * ttc_term
             - float(self.config.smoothness_weight) * smooth_penalty
         )
+
+    def _rollout_trajectory(
+        self, *, robot_pos: np.ndarray, heading: float, command: tuple[float, float], steps: int
+    ) -> tuple[np.ndarray, float]:
+        """Unicycle trajectory positions for the constant-command rollout.
+
+        The pose sequence is integrated with the *same* sequential left-to-right
+        accumulation as the legacy scalar loop (``pos += v*dt*(cos,sin)(o)`` with
+        ``o`` wrapped at every step). Only the per-step pedestrian/obstacle
+        clearance reduction is vectorized, so the scalar recurrence remains the
+        parity reference for issue #5412.
+
+        Returns:
+            Tuple of the ``(steps, 2)`` world positions and terminal orientation.
+        """
+        steps = max(steps, 1)
+        dt = float(self.config.rollout_dt)
+        v = float(command[0])
+        w = float(command[1])
+        position = np.array(robot_pos, dtype=float)
+        orientation = float(heading)
+        positions = np.empty((steps, 2), dtype=float)
+        for step_idx in range(steps):
+            position = position + np.array(
+                [v * np.cos(orientation) * dt, v * np.sin(orientation) * dt]
+            )
+            orientation = _wrap_angle(orientation + w * dt)
+            positions[step_idx] = position
+        return positions, orientation
+
+    def _rollout_min_clearance(
+        self,
+        *,
+        positions: np.ndarray,
+        steps: int,
+        ped_pos: np.ndarray,
+        ped_vel: np.ndarray,
+        observation: dict[str, Any],
+    ) -> tuple[float, float]:
+        """Vectorized minimum clearance over the constant-command rollout horizon.
+
+        The precomputed scalar trajectory is reused, and per-step pedestrian
+        clearance is broadcast as a ``(steps, peds)`` tensor with a single ``min``
+        reduction. The scalar rollout remains the numeric-parity reference for
+        issue #5412.
+
+        Returns:
+            ``(min_ped_clearance, min_obs_clearance)`` in meters over the horizon,
+            each ``inf`` when no corresponding clearance is ever computed.
+        """
+        steps = max(steps, 1)
+        dt = float(self.config.rollout_dt)
+
+        min_ped_clear = float("inf")
+        if ped_pos.size > 0:
+            k = np.arange(1, steps + 1, dtype=float)
+            forecast = ped_pos[None, :, :] + ped_vel[None, :, :] * (k[:, None, None] * dt)
+            ped_dist = np.linalg.norm(forecast - positions[:, None, :], axis=-1)
+            min_ped_clear = float(np.min(ped_dist))
+
+        min_obs_clear = float("inf")
+        for step_idx in range(steps):
+            min_obs_clear = min(
+                min_obs_clear, self._min_obstacle_clearance(positions[step_idx], observation)
+            )
+        return min_ped_clear, min_obs_clear
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return best unicycle command `(v, omega)` for the current observation."""

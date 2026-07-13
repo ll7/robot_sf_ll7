@@ -49,10 +49,10 @@ from robot_sf.nav.predictive_types import PedestrianState
 from robot_sf.research.collision_risk.estimators import (
     CandidateAction,
     RiskEstimatorConfig,
-    _pedestrian_arrays,
-    _segment_min_distance,
     action_from_constant_velocity,
     estimate_action_conditioned_risk,
+    pedestrian_arrays,
+    segment_min_distance,
 )
 from robot_sf.research.collision_risk.schema import latency_summary_from_samples
 
@@ -611,7 +611,7 @@ def _realize_contact(
         ``(realized_contact, first_contact_step)`` with ``-1`` when no contact.
     """
     robot_xy = action.as_array(horizon_steps=config.horizon_steps)
-    ped_pos, ped_vel, radii, _ids = _pedestrian_arrays(pedestrians, config)
+    ped_pos, ped_vel, radii, _ids = pedestrian_arrays(pedestrians, config)
     radii_sum = radii + config.robot_radius_m
     n_actors = ped_pos.shape[0]
     if n_actors == 0:
@@ -624,7 +624,7 @@ def _realize_contact(
     realized_pos = (
         ped_pos[:, None, :] + steps[None, :, None] * config.dt_s * realized_vel[:, None, :]
     )  # (K, H+1, 2)
-    seg_dist = _segment_min_distance(robot_xy, realized_pos)  # (K, H)
+    seg_dist = segment_min_distance(robot_xy, realized_pos)  # (K, H)
     contact = seg_dist - radii_sum[:, None] <= 0.0  # (K, H)
     contact_any_step = contact.any(axis=0)  # (H,)
     if not bool(contact_any_step.any()):

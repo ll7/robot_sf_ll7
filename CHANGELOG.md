@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5468 public collision-risk contact geometry.** Promoted the canonical contact geometry of
+  the action-conditioned collision-risk API to a documented public surface:
+  `segment_min_distance` (closed-form per-interval minimum centre distance) and `pedestrian_arrays`
+  (validated actor position/velocity/radius/id extractor) are now re-exported from
+  `robot_sf.research.collision_risk`. Downstream calibration, replay, and label-generation code can
+  compute contact on the *identical* geometry the estimator uses instead of importing
+  underscore-prefixed internals; `calibration.py` now consumes the public names. Backward-compatible
+  private aliases (`_segment_min_distance`, `_pedestrian_arrays`) still resolve to the same objects.
+  No behavior change; covered by tests asserting the public and internal handles agree.
+
 * **issue #5446 seed-flip / held-out planner-inversion candidate miner.** New
   `robot_sf/benchmark/seed_flip_mining.py` (`seed_flip_inversion_candidates.v1`) mines *case
   candidates* — reproducible seed-dependent outcome flips and genuine held-out planner upsets —

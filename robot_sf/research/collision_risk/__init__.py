@@ -11,6 +11,8 @@ Public surface:
 - :class:`~robot_sf.research.collision_risk.estimators.CandidateAction`
 - :func:`~robot_sf.research.collision_risk.estimators.action_from_constant_velocity`
 - :func:`~robot_sf.research.collision_risk.estimators.estimate_action_conditioned_risk`
+- :func:`~robot_sf.research.collision_risk.estimators.segment_min_distance` (canonical contact geometry)
+- :func:`~robot_sf.research.collision_risk.estimators.pedestrian_arrays` (matched actor-state extractor)
 - :class:`~robot_sf.research.collision_risk.schema.ActionConditionedRiskEstimate`
 
 Status: API + baseline fixture evidence, not a calibrated benchmark risk claim.
@@ -28,6 +30,8 @@ from robot_sf.research.collision_risk.estimators import (
     RiskEstimatorConfig,
     action_from_constant_velocity,
     estimate_action_conditioned_risk,
+    pedestrian_arrays,
+    segment_min_distance,
 )
 from robot_sf.research.collision_risk.schema import (
     DETERMINISTIC_FIELD_LABEL,
@@ -63,4 +67,6 @@ __all__ = [
     "action_from_constant_velocity",
     "estimate_action_conditioned_risk",
     "latency_summary_from_samples",
+    "pedestrian_arrays",
+    "segment_min_distance",
 ]

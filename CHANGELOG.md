@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5413 bounded kinodynamic SIPP search (#5306 Slice 2).** Adds trusted-horizon,
+  time-aligned pedestrian occupancy; weighted state-time search; reachable command transitions;
+  curved-footprint static checks; and multi-cycle commitment. Bounded failure uses a reachable,
+  collision-checked deceleration or an explicit emergency-stop target. The `sipp_lattice` key is
+  testing-only and requires `allow_testing_algorithms`; evidence is an exploratory CPU smoke, not
+  a safety, liveness, or superiority claim. Slice 3 owns outcome evaluation.
 * **issue #5444 action-conditioned online collision-risk API and baselines.** New
   `robot_sf/research/collision_risk/` package exposes a planner-agnostic, versioned
   (`action_conditioned_collision_risk.v1`) estimate of `P(contact in (t, t+H] | action u)`.

@@ -389,6 +389,99 @@ class TestPreregistrationHarness:
         assert len(result["incomplete_pairs"]) > 0
 
 
+class TestDependencyStateReconciliationIssue5483:
+    """Regression coverage that the pinned factorial config stays reconciled (#5483).
+
+    #5353 (matched-capability fairness contract) is resolved, while #5351
+    (hierarchical paired analysis) remains open. The consistency guard protects the
+    reconciled #5353 state from silently drifting back to ``open``.
+    """
+
+    CONFIG_PATH = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
+    REGISTRY_PATH = (
+        REPO_ROOT
+        / "docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration"
+        / "preregistration_config_registry.json"
+    )
+
+    def test_landed_config_declares_5351_open_and_5353_resolved(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            load_factorial_preregistration_config,
+        )
+
+        config = load_factorial_preregistration_config(self.CONFIG_PATH)
+        by_issue = {int(d["issue"]): d for d in config.get("dependencies", [])}
+        assert by_issue[5351]["status"] == "open"
+        assert by_issue[5353]["status"] == "resolved"
+
+    def test_landed_config_passes_dependency_consistency_guard(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            check_dependency_state_consistency,
+            load_factorial_preregistration_config,
+        )
+
+        config = load_factorial_preregistration_config(self.CONFIG_PATH)
+        report = check_dependency_state_consistency(config.get("dependencies"))
+        assert report["consistent"] is True
+        assert report["inconsistent"] == []
+
+    def test_consistency_guard_flags_reopened_closed_dependency(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            check_dependency_state_consistency,
+        )
+
+        drifted = [
+            {"issue": 5351, "status": "open", "blocking": "analysis machinery"},
+            {"issue": 5353, "status": "open", "blocking": "capability matrix"},
+        ]
+        report = check_dependency_state_consistency(drifted)
+        assert report["consistent"] is False
+        assert any("#5353" in item for item in report["inconsistent"])
+
+    def test_registry_digest_matches_landed_config(self):
+        config_bytes = self.CONFIG_PATH.read_bytes()
+        registry = json.loads(self.REGISTRY_PATH.read_text(encoding="utf-8"))
+        assert registry["config_sha256"] == hashlib.sha256(config_bytes).hexdigest()
+
+    def test_readiness_gate_still_blocks_on_5351_after_reconciliation(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        report = assess_campaign_readiness(self.CONFIG_PATH)
+        assert report["criteria"]["dependencies_resolved"]["ready"] is False
+        assert any("#5351" in blocker for blocker in report["blockers"])
+
+    def test_readiness_gate_consumes_consistency_guard(self, tmp_path):
+        """A non-blocking drift on reconciled #5353 still fails the gate."""
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        config = yaml.safe_load(self.CONFIG_PATH.read_text(encoding="utf-8"))
+        for dependency in config["dependencies"]:
+            if int(dependency["issue"]) == 5353:
+                dependency["status"] = "open"
+                dependency["blocking"] = ""
+        cfg = tmp_path / "drifted.yaml"
+        cfg.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+        registry = tmp_path / "registry.json"
+        registry.write_text(
+            json.dumps(
+                {
+                    "campaign_id": "issue_5355_prediction_mpc_factorial_v1",
+                    "config_path": str(cfg),
+                    "config_sha256": hashlib.sha256(cfg.read_bytes()).hexdigest(),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = assess_campaign_readiness(cfg, registry_path=registry)
+        assert report["ready"] is False
+        assert any("#5353" in blocker for blocker in report["blockers"])
+
+
 class TestDependencyBlockers:
     """Test the pure dependency-resolution helper (prereg §6 gate input)."""
 
@@ -466,7 +559,6 @@ class TestCampaignReadinessGate:
         report = assess_campaign_readiness(self.CONFIG_PATH)
         assert report["ready"] is False
         criteria = report["criteria"]
-        # Design/preregistration/implementation/provenance criteria are all met...
         assert criteria["preregistration_config_valid"]["ready"] is True
         assert criteria["arm_configs_valid"]["ready"] is True
         assert criteria["evidence_registry_pinned"]["ready"] is True

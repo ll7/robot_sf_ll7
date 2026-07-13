@@ -24,7 +24,7 @@ def test_run_batch_sequential_worker_failure_logs_warning(tmp_path, monkeypatch)
     handle = logger.add(capture_message, level="WARNING")
     monkeypatch.setattr(runner, "_run_job_worker", fake_run_job)
     try:
-        wrote, failures = runner._run_batch_sequential(
+        wrote, failures, abort_metadata = runner._run_batch_sequential(
             [({"id": "scenario-1"}, 42)],
             out_path=tmp_path / "episodes.jsonl",
             schema={},
@@ -38,6 +38,7 @@ def test_run_batch_sequential_worker_failure_logs_warning(tmp_path, monkeypatch)
     assert wrote == 0
     assert len(failures) == 1
     assert failures[0]["scenario_id"] == "scenario-1"
+    assert abort_metadata is None
     assert any(
         "Benchmark batch job failed in serial execution" in msg.record["message"]
         for msg in captured

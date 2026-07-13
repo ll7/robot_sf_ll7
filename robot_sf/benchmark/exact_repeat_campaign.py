@@ -46,9 +46,8 @@ DEFAULT_REPEATS = 3
 SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
 
 # Explicit per-cell disposition for planners the exact-repeat ``execute`` path
-# cannot construct on current main (e.g. ``orca``, which historically ran only in
-# the map-runner holonomic world-velocity pipeline backed by upstream RVO2, not in
-# the ``run_episode`` baseline registry). Such cells are recorded, not crashed,
+# cannot construct on current main (for example, a planner registered only in a
+# separate map-runner pipeline). Such cells are recorded, not crashed,
 # and are excluded from the bitwise-identical repeat claim.
 UNRUNNABLE_DISPOSITION = "unrunnable_on_current_main"
 
@@ -612,9 +611,7 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
             # The bitwise-identical claim scopes to runnable cells; unrunnable
             # (dispositioned) cells make no determinism claim.
             "all_cells_bitwise_identical": bool(runnable_cells)
-            and all(
-                cell["exact_repeat_determinism"] for cell in runnable_cells
-            ),
+            and all(cell["exact_repeat_determinism"] for cell in runnable_cells),
         },
     }
     return verified

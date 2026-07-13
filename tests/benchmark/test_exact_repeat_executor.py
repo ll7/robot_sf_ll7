@@ -237,6 +237,18 @@ def _deterministic_mock_runner(
     return _build_mock_record(seed)
 
 
+def _bundle_with_unsupported_planner(
+    resolved_bundle: dict[str, Any],
+) -> dict[str, Any]:
+    """Return a resolved bundle whose ORCA cell names an unsupported probe planner."""
+    bundle = copy.deepcopy(resolved_bundle)
+    bundle["planner_definitions"]["orca"]["algo"] = "retired_orca_probe"
+    bundle["bundle_sha256"] = canonical_sha256(
+        {key: value for key, value in bundle.items() if key != "bundle_sha256"}
+    )
+    return bundle
+
+
 def test_execute_campaign_produces_valid_host_report(tmp_path, manifest, resolved_bundle):
     """Execute with mock runner produces a host_result.json that passes verify_host_report."""
     output_dir = tmp_path / "host_run"
@@ -255,14 +267,14 @@ def test_execute_campaign_produces_valid_host_report(tmp_path, manifest, resolve
     assert verified["summary"]["n_cells"] == 7
 
 
-def test_execute_campaign_dispositions_unrunnable_orca_cells(tmp_path, resolved_bundle):
-    """orca cells are recorded as an explicit disposition instead of crashing.
+def test_execute_campaign_dispositions_unrunnable_planner_cells(tmp_path, resolved_bundle):
+    """Unsupported planner cells are recorded as an explicit disposition.
 
-    The #5263 bundle contains ``algo: orca`` cells, which the ``run_episode``
-    baseline registry cannot construct on current main. Rather than raising
-    ``ValueError: Unknown algorithm 'orca'``, execute must emit a schema-compatible
-    per-cell disposition and continue running the other cells.
+    The probe planner is deliberately absent from the ``run_episode`` baseline
+    registry. Rather than raising ``ValueError: Unknown algorithm``, execute must
+    emit a schema-compatible per-cell disposition and continue other cells.
     """
+    unsupported_bundle = _bundle_with_unsupported_planner(resolved_bundle)
 
     def guarded_runner(scenario_params, seed, *, algo="goal", **kwargs):
         # The runner must never be invoked for an unrunnable planner.
@@ -270,7 +282,9 @@ def test_execute_campaign_dispositions_unrunnable_orca_cells(tmp_path, resolved_
         return _build_mock_record(seed)
 
     host_result = execute_campaign(
-        resolved_bundle, output_dir=tmp_path / "orca_disposition", run_episode=guarded_runner
+        unsupported_bundle,
+        output_dir=tmp_path / "unsupported_disposition",
+        run_episode=guarded_runner,
     )
 
     by_planner = {}
@@ -282,7 +296,7 @@ def test_execute_campaign_dispositions_unrunnable_orca_cells(tmp_path, resolved_
     for result in orca_results:
         assert result["disposition"] == UNRUNNABLE_DISPOSITION
         assert result["repeats"] == []
-        assert "orca" in result["disposition_reason"]
+        assert "retired_orca_probe" in result["disposition_reason"]
 
     # Runnable planners still execute their repeats normally.
     for planner in ("ppo", "goal"):
@@ -294,10 +308,11 @@ def test_execute_campaign_dispositions_unrunnable_orca_cells(tmp_path, resolved_
 def test_verify_host_report_scopes_repeat_claim_to_runnable_cells(
     tmp_path, manifest, resolved_bundle
 ):
-    """verify-host accepts orca dispositions and scopes the claim to runnable cells."""
+    """verify-host scopes repeat claims to runnable cells."""
+    unsupported_bundle = _bundle_with_unsupported_planner(resolved_bundle)
     host_result = execute_campaign(
-        resolved_bundle,
-        output_dir=tmp_path / "orca_verify",
+        unsupported_bundle,
+        output_dir=tmp_path / "unsupported_verify",
         run_episode=_deterministic_mock_runner,
     )
     verified = verify_host_report(manifest, host_result)
@@ -305,7 +320,7 @@ def test_verify_host_report_scopes_repeat_claim_to_runnable_cells(
 
     assert summary["n_targets"] == 140
     assert summary["n_cells"] == 7
-    # orca contributes 3 unrunnable cells (60 targets); ppo(3) + goal(1) remain.
+    # The probe planner contributes 3 unrunnable cells (60 targets); ppo(3) + goal(1) remain.
     assert summary["n_unrunnable_cells"] == 3
     assert summary["n_runnable_cells"] == 4
     assert summary["n_unrunnable_targets"] == 60
@@ -320,9 +335,7 @@ def test_verify_host_report_scopes_repeat_claim_to_runnable_cells(
         assert cell["exact_repeat_determinism"] is None
 
 
-def test_verify_host_report_rejects_disposition_with_repeats(
-    tmp_path, manifest, resolved_bundle
-):
+def test_verify_host_report_rejects_disposition_with_repeats(tmp_path, manifest, resolved_bundle):
     """A disposition cannot hide fabricated repeat evidence."""
     host_result = execute_campaign(
         resolved_bundle,
@@ -335,9 +348,7 @@ def test_verify_host_report_rejects_disposition_with_repeats(
         verify_host_report(manifest, host_result)
 
 
-def test_verify_host_report_preserves_mixed_cell_target_counts(
-    tmp_path, manifest, resolved_bundle
-):
+def test_verify_host_report_preserves_mixed_cell_target_counts(tmp_path, manifest, resolved_bundle):
     """Mixed cells retain both runnable and dispositioned target counts."""
     host_result = execute_campaign(
         resolved_bundle,
@@ -430,7 +441,7 @@ def test_execute_campaign_reexecutes_a_malformed_cache_entry(tmp_path, resolved_
     """A non-mapping cache entry is ignored instead of crashing resume execution."""
     output_dir = tmp_path / "host_run_malformed_cache"
     execute_campaign(resolved_bundle, output_dir=output_dir, run_episode=_deterministic_mock_runner)
-    # Pick a runnable target: unrunnable planners (e.g. orca) are dispositioned
+    # Pick a runnable target: unsupported planners are dispositioned
     # without invoking the runner, so they never re-execute on a corrupt cache.
     target = next(t for t in resolved_bundle["targets"] if is_runnable_algo(t["planner"]))
     cache_file = (

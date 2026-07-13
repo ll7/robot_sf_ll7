@@ -10,7 +10,7 @@ release_id: paper_experiment_matrix_v2_h600_s30_v0_0_3
 release_tag: "0.0.3"
 maturity: pre-1.0
 canonical_campaign_config: ../paper_experiment_matrix_v2_h600_s30_extended.yaml
-campaign_config_sha256: "2d6cc39121790ece94baf5d51b6229d3f67cf319e411d8df0adb0fbf9b6f1366"
+campaign_config_sha256: "143ab63a235f40326c93c93044fba95e808388751f04d8ca979b89d1142ca465"
 expected_paper_profile_version: paper-matrix-v1
 expected_paper_interpretation_profile: baseline-ready-core
 

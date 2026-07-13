@@ -54,7 +54,10 @@ horizon: 600
 dt: 0.1
 record_forces: true
 resume: true
-stop_on_failure: true
+# stop_on_failure false: with a fixed --campaign-id the run is resumable, so a single
+# broken arm should surface as a failed row and let the other 13 arms complete; fix,
+# then resume the same campaign id to fill only the gaps.
+stop_on_failure: false
 bootstrap_samples: 300
 bootstrap_confidence: 0.95
 bootstrap_seed: 123

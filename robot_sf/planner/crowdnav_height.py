@@ -18,8 +18,6 @@ import numpy as np
 import torch
 from gymnasium import spaces
 
-from robot_sf.sensor.range_sensor import circle_line_intersection_distance
-
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -738,27 +736,71 @@ class CrowdNavHeightAdapter:
             if ped_positions is None
             else np.asarray(ped_positions, dtype=float).reshape(-1, 2)
         )
-        origin_xy = (float(origin[0]), float(origin[1]))
-        for idx, direction in enumerate(directions):
-            best = sensor_range
-            for seg in segments:
-                hit = _ray_segment_intersection_distance(
-                    origin,
-                    direction,
-                    seg[:2],
-                    seg[2:4],
-                )
-                if hit is not None and hit < best:
-                    best = hit
-            ray_vec = (float(direction[0]), float(direction[1]))
-            for ped in peds:
-                hit = circle_line_intersection_distance(
-                    ((float(ped[0]), float(ped[1])), ped_radius),
-                    origin_xy,
-                    ray_vec,
-                )
-                best = min(best, hit)
-            distances[idx] = float(min(best, sensor_range))
+        # Vectorized raycast: broadcast intersections over all rays x obstacles/pedestrians.
+        num_rays = directions.shape[0]
+        num_segs = segments.shape[0] if segments.ndim > 1 else 0
+
+        # --- Obstacle intersections (rays x segments) ---
+        obstacle_hits = np.full(num_rays, sensor_range, dtype=float)
+        if num_segs > 0:
+            seg_starts = segments[:, :2]  # (S, 2)
+            seg_ends = segments[:, 2:4]  # (S, 2)
+            seg_vec = seg_ends - seg_starts  # (S, 2)
+            # denom = dir x seg: (R, 1) x (1, S) -> (R, S)
+            denom = (
+                directions[:, 0, None] * seg_vec[None, :, 1]
+                - directions[:, 1, None] * seg_vec[None, :, 0]
+            )
+            delta = seg_starts - origin  # (S, 2)
+            # t = (delta x seg) / denom, u = (delta x dir) / denom
+            t_num = delta[:, 0] * seg_vec[:, 1] - delta[:, 1] * seg_vec[:, 0]  # (S,)
+            u_num = (
+                directions[:, 1, None] * delta[None, :, 0]
+                - directions[:, 0, None] * delta[None, :, 1]
+            )  # (R, S)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                t = t_num[None, :] / denom  # (R, S)
+                u = u_num / denom  # (R, S)
+            valid = (
+                (t >= 0)
+                & (u >= 0)
+                & (u <= 1)
+                & (np.abs(denom) > 1e-9)
+                & np.isfinite(t)
+                & np.isfinite(u)
+            )
+            t[~valid] = np.inf
+            obstacle_hits = t.min(axis=1)
+
+        # --- Pedestrian intersections (rays x peds) ---
+        ped_hits = np.full(num_rays, sensor_range, dtype=float)
+        num_peds = peds.shape[0]
+        if num_peds > 0:
+            r_sq = ped_radius**2
+            # Ray origin relative to each ped center (circle-line formula): (P,)
+            p1x = origin[0] - peds[:, 0]  # (P,)
+            p1y = origin[1] - peds[:, 1]  # (P,)
+            norm_p1 = p1x**2 + p1y**2  # (P,)
+            # Quadratic coefficients: a (per-ray), b (R,P), c (P,)
+            a = directions[:, 0] ** 2 + directions[:, 1] ** 2  # (R,)
+            b = 2.0 * (
+                directions[:, 0, None] * p1x[None, :] + directions[:, 1, None] * p1y[None, :]
+            )  # (R, P)
+            c = norm_p1[None, :] - r_sq  # (R, P)
+            disc = b**2 - 4.0 * a[:, None] * c  # (R, P)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                sqrt_disc = np.sqrt(np.maximum(disc, 0.0))
+                t1 = (-b - sqrt_disc) / (2.0 * a[:, None])
+                t2 = (-b + sqrt_disc) / (2.0 * a[:, None])
+            valid_t = (disc >= 0) & ((t1 >= 0) | (t2 >= 0)) & np.isfinite(t1) & np.isfinite(t2)
+            pos_t = np.where(t1 >= 0, t1, t2)
+            pos_t[~valid_t] = np.inf
+            ped_hits = pos_t.min(axis=1)
+
+        # Combine: closest hit per ray, clipped to sensor range
+        distances = np.clip(np.minimum(obstacle_hits, ped_hits), 0.0, sensor_range).astype(
+            np.float32
+        )
         return distances
 
     def _build_model_inputs(

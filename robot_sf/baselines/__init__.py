@@ -85,6 +85,23 @@ def _get_brne_planner():
     return module.BRNEPlanner
 
 
+def _get_orca_planner():
+    """Lazy import for the ORCA baseline adapter.
+
+    Returns:
+        The OrcaPlanner class.
+
+    Note:
+        Restores the historical ``orca`` algorithm in the baseline registry
+        (issue #5491) so ``runner.run_episode(algo="orca")`` and the
+        exact-repeat ``execute_campaign`` path no longer crash with an
+        ``Unknown algorithm 'orca'`` error. Uses the benchmark-ready
+        ``ORCAPlannerAdapter`` (rvo2 solver when available).
+    """
+    module = importlib.import_module("robot_sf.baselines.orca")
+    return module.OrcaPlanner
+
+
 # Registry of available baseline algorithms
 BASELINES: dict[str, type] = {
     "social_force": _get_social_force_planner,
@@ -96,6 +113,7 @@ BASELINES: dict[str, type] = {
     "dr_mpc": _get_drm_mp_planner,
     "drl_vo": _get_drl_vo_planner,
     "brne": _get_brne_planner,
+    "orca": _get_orca_planner,
 }
 
 

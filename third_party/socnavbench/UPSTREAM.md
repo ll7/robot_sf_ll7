@@ -10,6 +10,8 @@ License: MIT (see LICENSE)
 - Imports are preserved in the SocNavBench style (e.g., `control_pipelines.*`) and
   resolved by inserting this directory on `sys.path`.
 - A minimal `dotmap.py` shim is included to replace the external `dotmap` dependency.
+- The ETH traversible generator also vendors the upstream mesh-loading bridge (`mp_env` and
+  `sbpd/sbpd.py`) at this same commit. Its Apache-licensed source notices are retained.
 
 ## Files vendored
 - agents/agent.py
@@ -36,6 +38,7 @@ License: MIT (see LICENSE)
 - planners/planner.py
 - planners/sampling_planner.py
 - sbpd/sbpd_renderer.py
+- sbpd/sbpd.py
 - simulators/sim_state.py
 - systems/dubins_3d.py
 - systems/dubins_car.py
@@ -48,6 +51,12 @@ License: MIT (see LICENSE)
 - utils/fmm_map.py
 - utils/utils.py
 - utils/voxel_map_utils.py
+- mp_env/__init__.py
+- mp_env/map_utils.py
+- mp_env/mp_env.py
+- mp_env/render/__init__.py
+- mp_env/render/rotation_utils.py
+- mp_env/render/swiftshader_renderer.py
 - waypoint_grids/base.py
 - waypoint_grids/projected_image_space_grid.py
 - waypoint_grids/uniform_sampling_grid.py

@@ -38,7 +38,9 @@ from robot_sf.research.collision_risk.calibration import (
     time_to_warning_summary,
 )
 
-CONFIG_PATH = Path("configs/analysis/issue_5445_matched_calibration.yaml")
+CONFIG_PATH = (
+    Path(__file__).resolve().parents[1] / "configs/analysis/issue_5445_matched_calibration.yaml"
+)
 
 
 def _small_config(**overrides: object) -> RiskEstimatorConfig:

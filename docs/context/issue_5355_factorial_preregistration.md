@@ -276,6 +276,13 @@ primary conclusion.
 
 Both checks must pass on the **exact** submitted config before any GPU submission.
 
+The pre-submission requirements are aggregated into a single fail-closed verdict by
+`assess_campaign_readiness()` in
+`robot_sf/benchmark/prediction_mpc_factorial_preregistration.py`: it stays `ready: False` unless the
+preregistration config validates, all four arm configs build, the exact config is sha256-pinned in
+the evidence registry, and every declared blocking dependency (§8: #5351, #5353) is resolved. The
+gate is CPU-only and authorizes no submission by itself.
+
 ### 6.1 Toggle-effect smoke (each factor demonstrably changes behavior)
 On **2 scenarios** — one static-structural (`classic_doorway`) and one dynamic
 (`francis2023_circular_crossing`) — run all four arms for a small fixed seed set and compare

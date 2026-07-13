@@ -57,7 +57,7 @@ def test_serial_execute_map_jobs_gpu_teardown(
     feasibility_totals: dict[str, Any] = {}
 
     # Execute
-    wrote, _, failures, _, _, _, _ = _serial_execute_map_jobs(
+    wrote, _, failures, _, _, _, _, _ = _serial_execute_map_jobs(
         jobs=jobs,
         fixed_params=fixed_params,
         out_path=out_path,

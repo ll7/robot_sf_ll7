@@ -1,0 +1,66 @@
+name: Superseded draft scanner
+
+# Detect zombie draft PRs whose reason-to-exist ended (linked issue closed or
+# superseded by a merged PR). Emits a JSON report and a markdown comment-ready
+# summary. Non-gating advisory — promotes repo hygiene without auto-closing.
+#
+# Motivating evidence: draft PRs #5368 and #5374 sat ~14h as zombies after their
+# twin PRs merged or content landed elsewhere. See issue #5393.
+
+on:
+  schedule:
+    - cron: "30 6 * * 1-5"  # Mon-Fri 06:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan-superseded-drafts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run superseded draft scanner
+        id: scan
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p output/superseded-drafts
+          uv run python scripts/dev/scan_superseded_drafts.py \
+            --repo "${{ github.repository }}" \
+            --markdown \
+            --output output/superseded-drafts/report.json \
+            2>output/superseded-drafts/summary.md
+          cat output/superseded-drafts/summary.md
+
+      - name: Summarize outcome
+        if: always()
+        run: |
+          printf 'Scanner exit: %s\n' "${{ steps.scan.outcome }}"
+          if [ -f output/superseded-drafts/report.json ]; then
+            printf 'Hard candidates: '
+            python -c "import json; print(json.load(open('output/superseded-drafts/report.json'))['hard_candidate_count'])" || true
+          fi
+
+      - name: Upload report artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: superseded-draft-report
+          path: output/superseded-drafts/
+          if-no-files-found: warn

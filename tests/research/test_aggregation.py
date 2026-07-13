@@ -1,11 +1,18 @@
 """Unit tests for metric aggregation module."""
 
+import json
+from pathlib import Path
+
 import pytest
 
 from robot_sf.research.aggregation import (
+    _load_manifest_payload,
     aggregate_metrics,
     bootstrap_ci,
     compute_completeness_score,
+    export_metrics_csv,
+    export_metrics_json,
+    extract_seed_metrics,
 )
 
 
@@ -268,3 +275,165 @@ def test_completeness_score_fail():
     assert completeness["score"] == 0.0
     assert completeness["expected"] == 2
     assert completeness["completed"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Mutation-coverage slice: export / manifest / extraction paths (issue #5508)
+# ---------------------------------------------------------------------------
+
+
+def test_export_metrics_json_roundtrip(tmp_path: Path):
+    """Exported JSON carries schema_version and the full metrics payload."""
+    aggregated = [
+        {"metric_name": "success_rate", "condition": "baseline", "mean": 0.7, "median": 0.7},
+    ]
+    out = tmp_path / "metrics.json"
+    export_metrics_json(aggregated, str(out))
+
+    assert out.exists()
+    payload = tmp_path.joinpath("metrics.json").read_text(encoding="utf-8")
+    loaded = json.loads(payload)
+    assert loaded["schema_version"] == "1.0.0"
+    assert loaded["metrics"] == aggregated
+
+
+def test_export_metrics_json_creates_parent_dirs(tmp_path: Path):
+    """export_metrics_json creates missing parent directories."""
+    out = tmp_path / "nested" / "dir" / "metrics.json"
+    export_metrics_json([], str(out))
+    assert out.exists()
+
+
+def test_export_metrics_csv_roundtrip(tmp_path: Path):
+    """Exported CSV is tab-delimited and round-trips through pandas."""
+    import pandas as pd
+
+    aggregated = [
+        {"metric_name": "success_rate", "condition": "baseline", "mean": 0.7},
+        {"metric_name": "collision_rate", "condition": "baseline", "mean": 0.1},
+    ]
+    out = tmp_path / "metrics.csv"
+    export_metrics_csv(aggregated, str(out))
+
+    assert out.exists()
+    df = pd.read_csv(out, sep="\t")
+    assert list(df.columns) == ["metric_name", "condition", "mean"]
+    assert len(df) == 2
+    assert df["mean"].iloc[0] == 0.7
+
+
+def test_export_metrics_csv_creates_parent_dirs(tmp_path: Path):
+    """export_metrics_csv creates missing parent directories."""
+    out = tmp_path / "deep" / "metrics.csv"
+    export_metrics_csv([], str(out))
+    assert out.exists()
+
+
+def test_load_manifest_payload_json(tmp_path: Path):
+    """JSON manifests load as a single payload."""
+    path = tmp_path / "m.json"
+    path.write_text(json.dumps({"seed": 1, "policy_type": "baseline"}), encoding="utf-8")
+    payload = _load_manifest_payload(path)
+    assert payload == {"seed": 1, "policy_type": "baseline"}
+
+
+def test_load_manifest_payload_jsonl_takes_last_line(tmp_path: Path):
+    """JSONL manifests use the last non-empty line."""
+    path = tmp_path / "m.jsonl"
+    path.write_text('\n{"seed": 1}\n\n{"seed": 2, "policy_type": "x"}\n', encoding="utf-8")
+    payload = _load_manifest_payload(path)
+    assert payload == {"seed": 2, "policy_type": "x"}
+
+
+def test_load_manifest_payload_empty_jsonl_raises(tmp_path: Path):
+    """Empty JSONL manifests raise ValueError."""
+    path = tmp_path / "empty.jsonl"
+    path.write_text("\n\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Empty manifest"):
+        _load_manifest_payload(path)
+
+
+def test_extract_seed_metrics_basic(tmp_path: Path):
+    """extract_seed_metrics reads per-seed metrics and summary aliases."""
+    m1 = tmp_path / "a.json"
+    m1.write_text(
+        json.dumps(
+            {
+                "seed": 42,
+                "policy_type": "baseline",
+                "variant_id": 1,
+                "metrics": {"success_rate": 0.8, "collision_rate": 0.1},
+            }
+        ),
+        encoding="utf-8",
+    )
+    m2 = tmp_path / "b.json"
+    m2.write_text(
+        json.dumps(
+            {
+                "seed": 7,
+                "policy_type": "pretrained",
+                "summary": {"metrics": {"success_rate": 0.9, "timesteps_to_convergence": 300.0}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    records, failures = extract_seed_metrics([str(m1), str(m2)])
+    assert failures == []
+    assert len(records) == 2
+
+    by_seed = {r["seed"]: r for r in records}
+    assert by_seed[42]["success_rate"] == 0.8
+    assert by_seed[42]["collision_rate"] == 0.1
+    assert by_seed[42]["policy_type"] == "baseline"
+    assert by_seed[42]["variant_id"] == 1
+    assert by_seed[7]["timesteps_to_convergence"] == 300.0
+    assert by_seed[7]["policy_type"] == "pretrained"
+
+
+def test_extract_seed_metrics_missing_metrics_fails(tmp_path: Path):
+    """Manifests without a metrics block are reported as failures."""
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"seed": 3, "policy_type": "baseline"}), encoding="utf-8")
+
+    records, failures = extract_seed_metrics([str(bad)])
+    assert records == []
+    assert len(failures) == 1
+    assert failures[0]["path"] == str(bad)
+    assert failures[0]["seed"] == 3
+    assert "metrics not found" in failures[0]["reason"]
+
+
+def test_extract_seed_metrics_no_numeric_metrics_fails(tmp_path: Path):
+    """Manifests with non-numeric metrics only are failures."""
+    bad = tmp_path / "meta.json"
+    bad.write_text(
+        json.dumps({"seed": 5, "policy_type": "baseline", "metrics": {"policy_type": "baseline"}}),
+        encoding="utf-8",
+    )
+
+    records, failures = extract_seed_metrics([str(bad)])
+    assert records == []
+    assert failures[0]["reason"] == "no numeric metrics found"
+
+
+def test_extract_seed_metrics_unparseable_jsonl_fails(tmp_path: Path):
+    """Malformed JSON lines are captured as parse failures."""
+    bad = tmp_path / "broken.jsonl"
+    bad.write_text("{not valid json}", encoding="utf-8")
+
+    records, failures = extract_seed_metrics([str(bad)])
+    assert records == []
+    assert len(failures) == 1
+    assert failures[0]["seed"] is None
+    assert "Expecting" in failures[0]["reason"]
+
+
+def test_extract_seed_metrics_missing_file_fails(tmp_path: Path):
+    """A missing manifest path is captured as a failure, not a crash."""
+    missing = tmp_path / "does_not_exist.json"
+    records, failures = extract_seed_metrics([str(missing)])
+    assert records == []
+    assert len(failures) == 1
+    assert failures[0]["reason"]

@@ -48,12 +48,19 @@ the regression test asserts numeric-first ordering.
 
 ## Untested functions
 
-The 218 `no tests` mutants are a coverage gap, not successful mutation evidence:
+The 218 `no tests` mutants from the first slice are a coverage gap, not successful mutation
+evidence. The second slice (this update) added 12 targeted tests in
+`tests/research/test_aggregation.py` covering `export_metrics_json`, `export_metrics_csv`,
+`_load_manifest_payload`, and `extract_seed_metrics`, including round-trips, parent-directory
+creation, JSONL last-line semantics, empty/malformed manifests, missing metrics, non-numeric
+metrics, and missing files. Re-running `mutmut` on the selected test file is expected to move the
+majority of those 218 mutants out of the no-test category.
 
 - `export_metrics_json`: 29;
 - `export_metrics_csv`: 17;
 - `_load_manifest_payload`: 14;
 - `extract_seed_metrics`: 158.
 
-Adding targeted mutation coverage for those functions remains on open issue #5508. The scheduled
-diagnostic job and any future mutation-score claim must report this no-test category separately.
+The scheduled diagnostic job and any future mutation-score claim must still report the no-test
+category separately. Remaining on #5508: a scheduled (weekly/nightly) `mutmut` workflow that
+produces a surviving-mutant report and alerts on regressions.

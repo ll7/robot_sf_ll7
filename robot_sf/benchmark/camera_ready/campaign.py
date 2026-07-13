@@ -1856,6 +1856,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
             "total_episodes": total_episodes,
             "successful_runs": successful_runs,
             "total_runs": len(run_entries),
+            "seed_count": len(resolved_seeds),
             "non_success_runs": campaign_outcome.non_success_runs,
             "accepted_unavailable_runs": campaign_outcome.accepted_unavailable_runs,
             "unexpected_failed_runs": campaign_outcome.unexpected_failed_runs,

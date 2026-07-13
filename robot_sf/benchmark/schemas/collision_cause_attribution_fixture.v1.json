@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "collision_cause_attribution_fixture.v1.json",
+  "title": "Collision-Cause Attribution Ground-Truth Fixture v1",
+  "description": "Frozen ground-truth record for one injected (or negative-control) collision fault used to validate the collision-cause analyser (issue #5443, deps #5441/#5442). Pins cause class, activation window, allowed intervention, ambiguity status, and avoidability before analysis. Validation-side contract only: it makes no benchmark or paper-grade claim and stores no raw traces or videos.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "fixture_id",
+    "cause_class",
+    "activation_window",
+    "allowed_intervention",
+    "ambiguity_status",
+    "avoidable"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "collision_cause_attribution_fixture.v1"
+    },
+    "fixture_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_.:-]+$"
+    },
+    "cause_class": {
+      "type": "string",
+      "enum": [
+        "observation_omission",
+        "observation_delay",
+        "prediction_miss",
+        "candidate_omission",
+        "bad_selection",
+        "guard_omission",
+        "infeasible_applied_command",
+        "route_trap",
+        "already_unavoidable_contact",
+        "metric_artifact",
+        "interacting_ambiguous",
+        "none"
+      ]
+    },
+    "activation_window": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": -1
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Inclusive [start, end] control-step window; single-step activation uses start == end; negative controls use [-1, -1]."
+    },
+    "allowed_intervention": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The single intervention permitted to test avoidability; 'none' when unavoidable or no actual cause."
+    },
+    "ambiguity_status": {
+      "type": "string",
+      "enum": [
+        "unambiguous",
+        "ambiguous",
+        "negative_control"
+      ]
+    },
+    "avoidable": {
+      "type": "boolean"
+    },
+    "candidate_causes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Plausible causes for an ambiguous fixture (provenance only)."
+    },
+    "notes": {
+      "type": "string"
+    }
+  }
+}

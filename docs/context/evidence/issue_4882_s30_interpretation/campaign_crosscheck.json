@@ -1,0 +1,28 @@
+{
+  "amv_coverage_status": "incomplete",
+  "claim_boundary": "Diagnostic-only S30 interpretation. This packet does not promote a paper, dissertation, record-breaking, universal-planner, or real-world claim.",
+  "composed_rows": 8640,
+  "contaminated_aggregate_excluded": true,
+  "expected_rows": 8640,
+  "fallback_or_degraded_rows": 0,
+  "job13376_analyzer_findings": [
+    "hybrid_rule_v3_fast_progress_static_escape (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=7200",
+    "hybrid_rule_v3_fast_progress_static_escape_continuous (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=7200",
+    "orca (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=7200",
+    "ppo (differential_drive): episode count mismatch: summary.written=562, episodes.jsonl=2755",
+    "scenario_adaptive_hybrid_orca_v1 (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=7200",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=7200"
+  ],
+  "job13378_analyzer_findings": [
+    "hybrid_rule_v3_fast_progress_static_escape (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=8640",
+    "hybrid_rule_v3_fast_progress_static_escape_continuous (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=8640",
+    "orca (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=8640",
+    "ppo (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=4195",
+    "scenario_adaptive_hybrid_orca_v1 (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=8640",
+    "scenario_adaptive_hybrid_orca_v2_collision_guard (differential_drive): episode count mismatch: summary.written=1440, episodes.jsonl=8640"
+  ],
+  "matrix_hash_match": true,
+  "schema_version": "issue_4882_campaign_crosscheck.v1",
+  "snqi_contract_status": "fail_excluded_from_rank_verdict",
+  "status": "pass_with_documented_raw_append_history"
+}

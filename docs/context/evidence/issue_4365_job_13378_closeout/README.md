@@ -20,14 +20,17 @@ paper-facing claim, or a record-breaking claim.
   before analysis outputs were generated.
 - Inventory: [`SHA256SUMS.original`](SHA256SUMS.original).
 - Machine-readable closeout: [`summary.json`](summary.json).
+- Exact closeout analysis: [`job13378_closeout_analysis.md`](job13378_closeout_analysis.md),
+  SHA-256 `ae7f859d34ce9488fa0f119e69d701726bc4d08b166d458bac1fbaa210dfd6e1`.
 - Private operations record:
-  [`4e4f22af77f586ff021b62a550cf877491c07689`](https://github.com/ll7/robot_sf_ll7-private-ops/commit/4e4f22af77f586ff021b62a550cf877491c07689),
+  [`fee4106`](https://github.com/ll7/robot_sf_ll7-private-ops/commit/fee4106),
   job `13378`.
 
-The raw 1.4 GiB payload is intentionally not committed. Its retrieval locator
-and terminal state are retained in private operations; this tracked packet
-preserves the compact interpretation and complete original checksum inventory.
-The exact private-operations submission commit was not recorded and remains an
+The raw 1.4 GiB payload is intentionally not committed. It is retained in the
+private artifact hub with a verified 63-file checksum manifest, and private
+operations records that durable manifest. This tracked packet preserves the
+public compact interpretation and complete original checksum inventory. The
+exact private-operations submission commit was not recorded and remains an
 explicit provenance gap.
 
 ## Integrity finding
@@ -71,7 +74,8 @@ ORCA's. None of those boundaries is repaired by retaining this packet.
 ## Code follow-up
 
 Issue [#5449](https://github.com/ll7/robot_sf_ll7/issues/5449) fixes the
-seed-default resume-identity mismatch that allowed duplicate append and makes
-the analyzer consume relocated self-contained campaigns without a symlink.
-That implementation prevents recurrence; it does not retroactively repair this
-frozen result.
+seed-default resume-identity mismatch. Issue
+[#5453](https://github.com/ll7/robot_sf_ll7/issues/5453), merged through PR
+[#5505](https://github.com/ll7/robot_sf_ll7/pull/5505), adds mixed-attempt
+aggregation guards. Those implementations prevent recurrence; they do not
+retroactively repair this frozen result.

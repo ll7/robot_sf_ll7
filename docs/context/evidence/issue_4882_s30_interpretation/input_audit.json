@@ -1,0 +1,158 @@
+{
+  "claim_boundary": "Diagnostic-only S30 interpretation. This packet does not promote a paper, dissertation, record-breaking, universal-planner, or real-world claim.",
+  "horizon": 600,
+  "scenario_count": 48,
+  "scenario_matrix_hash": "152eba3969a9",
+  "schema_version": "issue_4882_input_audit.v1",
+  "seeds": [
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    126,
+    127,
+    128,
+    129,
+    130,
+    131,
+    132,
+    133,
+    134,
+    135,
+    136,
+    137,
+    138,
+    139,
+    140
+  ],
+  "selection_rule": "For job 13376, select the exact public commit launched by scheduler job 13376; its rows are the only commit block timestamped inside the scheduler interval. For job 13388, require the single clean-root public commit.",
+  "sources": [
+    {
+      "episodes_path_sha256": "b394f0444ddc7edbf34bd1ad0a37170b78c889f91b81ff6ca3da65e764c453d6",
+      "execution_mode": "adapter",
+      "job_id": "13376",
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "raw_commit_counts": {
+        "2f2040173347cd6f170cdea78f6dc9bbc8c22bbf": 1440,
+        "a08bfe038b479e44076df219a6747ad68d66f4ca": 1440,
+        "cc060fb78e18897ee625b901d2b0ac3e68caa820": 1440,
+        "cef4b78a4946bdaa2beb1ac396466aebd3db54bc": 1440,
+        "f4027d066429cad6b8a9d6b79d1b031a8de51076": 1440
+      },
+      "raw_rows": 7200,
+      "scheduler_state": "FAILED",
+      "selected_commit": "cef4b78a4946bdaa2beb1ac396466aebd3db54bc",
+      "selected_rows": 1440,
+      "selected_timestamp_max": "2026-07-11T14:49:06.185231+00:00",
+      "selected_timestamp_min": "2026-07-11T11:42:04.237277+00:00",
+      "selected_unique_identities": 1440
+    },
+    {
+      "episodes_path_sha256": "9f0950123534cb8b526e75c7549e3a726a06e48cd87e47479358efb781e7553a",
+      "execution_mode": "adapter",
+      "job_id": "13376",
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "raw_commit_counts": {
+        "2f2040173347cd6f170cdea78f6dc9bbc8c22bbf": 1440,
+        "a08bfe038b479e44076df219a6747ad68d66f4ca": 1440,
+        "cc060fb78e18897ee625b901d2b0ac3e68caa820": 1440,
+        "cef4b78a4946bdaa2beb1ac396466aebd3db54bc": 1440,
+        "f4027d066429cad6b8a9d6b79d1b031a8de51076": 1440
+      },
+      "raw_rows": 7200,
+      "scheduler_state": "FAILED",
+      "selected_commit": "cef4b78a4946bdaa2beb1ac396466aebd3db54bc",
+      "selected_rows": 1440,
+      "selected_timestamp_max": "2026-07-11T18:30:08.007446+00:00",
+      "selected_timestamp_min": "2026-07-11T14:50:57.281040+00:00",
+      "selected_unique_identities": 1440
+    },
+    {
+      "episodes_path_sha256": "4187ccefc6ca7d907e35240e50f4474cd403d253de566cef06f2938c10b8fda1",
+      "execution_mode": "adapter",
+      "job_id": "13376",
+      "planner_key": "orca",
+      "raw_commit_counts": {
+        "2f2040173347cd6f170cdea78f6dc9bbc8c22bbf": 1440,
+        "a08bfe038b479e44076df219a6747ad68d66f4ca": 1440,
+        "cc060fb78e18897ee625b901d2b0ac3e68caa820": 1440,
+        "cef4b78a4946bdaa2beb1ac396466aebd3db54bc": 1440,
+        "f4027d066429cad6b8a9d6b79d1b031a8de51076": 1440
+      },
+      "raw_rows": 7200,
+      "scheduler_state": "FAILED",
+      "selected_commit": "cef4b78a4946bdaa2beb1ac396466aebd3db54bc",
+      "selected_rows": 1440,
+      "selected_timestamp_max": "2026-07-11T18:47:57.837016+00:00",
+      "selected_timestamp_min": "2026-07-11T18:32:01.262808+00:00",
+      "selected_unique_identities": 1440
+    },
+    {
+      "episodes_path_sha256": "2043415150420b520a2b86ce3074851b2927e0f7841afddb0509d4fb66a5c0e7",
+      "execution_mode": "native",
+      "job_id": "13388",
+      "planner_key": "ppo",
+      "raw_commit_counts": {
+        "502564935b337b0ebd9ce92f36c3fd925f77d2a4": 1440
+      },
+      "raw_rows": 1440,
+      "scheduler_state": "COMPLETED",
+      "selected_commit": "502564935b337b0ebd9ce92f36c3fd925f77d2a4",
+      "selected_rows": 1440,
+      "selected_timestamp_max": "2026-07-13T10:28:06.450101+00:00",
+      "selected_timestamp_min": "2026-07-13T09:53:12.298463+00:00",
+      "selected_unique_identities": 1440
+    },
+    {
+      "episodes_path_sha256": "83465ab851590d32d95563f2e403e8b18f2f93685af2ced5d5ffa7d0f262f412",
+      "execution_mode": "adapter",
+      "job_id": "13376",
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "raw_commit_counts": {
+        "2f2040173347cd6f170cdea78f6dc9bbc8c22bbf": 1440,
+        "a08bfe038b479e44076df219a6747ad68d66f4ca": 1440,
+        "cc060fb78e18897ee625b901d2b0ac3e68caa820": 1440,
+        "cef4b78a4946bdaa2beb1ac396466aebd3db54bc": 1440,
+        "f4027d066429cad6b8a9d6b79d1b031a8de51076": 1440
+      },
+      "raw_rows": 7200,
+      "scheduler_state": "FAILED",
+      "selected_commit": "cef4b78a4946bdaa2beb1ac396466aebd3db54bc",
+      "selected_rows": 1440,
+      "selected_timestamp_max": "2026-07-11T08:31:37.181999+00:00",
+      "selected_timestamp_min": "2026-07-11T05:28:05.930283+00:00",
+      "selected_unique_identities": 1440
+    },
+    {
+      "episodes_path_sha256": "4c4e5ac609e1658707acb3ddb96c3c2acf00f17a683574e19679c3576031902a",
+      "execution_mode": "adapter",
+      "job_id": "13376",
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "raw_commit_counts": {
+        "2f2040173347cd6f170cdea78f6dc9bbc8c22bbf": 1440,
+        "a08bfe038b479e44076df219a6747ad68d66f4ca": 1440,
+        "cc060fb78e18897ee625b901d2b0ac3e68caa820": 1440,
+        "cef4b78a4946bdaa2beb1ac396466aebd3db54bc": 1440,
+        "f4027d066429cad6b8a9d6b79d1b031a8de51076": 1440
+      },
+      "raw_rows": 7200,
+      "scheduler_state": "FAILED",
+      "selected_commit": "cef4b78a4946bdaa2beb1ac396466aebd3db54bc",
+      "selected_rows": 1440,
+      "selected_timestamp_max": "2026-07-11T11:40:13.591521+00:00",
+      "selected_timestamp_min": "2026-07-11T08:33:26.648161+00:00",
+      "selected_unique_identities": 1440
+    }
+  ]
+}

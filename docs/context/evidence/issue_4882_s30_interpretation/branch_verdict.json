@@ -1,0 +1,80 @@
+{
+  "claim_boundary": "Diagnostic-only S30 interpretation. This packet does not promote a paper, dissertation, record-breaking, universal-planner, or real-world claim.",
+  "collision_field": "outcome.collision_event",
+  "comparisons": [
+    {
+      "collision_delta": -0.07777777777777777,
+      "collision_delta_ci": [
+        -0.1013888888888889,
+        -0.054843750000001495
+      ],
+      "collision_supports_lower": true,
+      "comparator": "orca",
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+      "success_delta": 0.07916666666666666,
+      "success_delta_ci": [
+        0.05208333333333332,
+        0.10694444444444444
+      ],
+      "success_separates_positive": true
+    },
+    {
+      "collision_delta": -0.13472222222222224,
+      "collision_delta_ci": [
+        -0.15902777777777777,
+        -0.10972222222222223
+      ],
+      "collision_supports_lower": true,
+      "comparator": "orca",
+      "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "success_delta": 0.0909722222222222,
+      "success_delta_ci": [
+        0.06458333333333334,
+        0.11666666666666671
+      ],
+      "success_separates_positive": true
+    },
+    {
+      "collision_delta": -0.06805555555555555,
+      "collision_delta_ci": [
+        -0.09305555555555557,
+        -0.04444444444444444
+      ],
+      "collision_supports_lower": true,
+      "comparator": "orca",
+      "planner_key": "scenario_adaptive_hybrid_orca_v1",
+      "success_delta": 0.07291666666666667,
+      "success_delta_ci": [
+        0.04583333333333333,
+        0.1
+      ],
+      "success_separates_positive": true
+    },
+    {
+      "collision_delta": -0.07222222222222223,
+      "collision_delta_ci": [
+        -0.09722222222222224,
+        -0.04791666666666667
+      ],
+      "collision_supports_lower": true,
+      "comparator": "orca",
+      "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "success_delta": 0.07291666666666667,
+      "success_delta_ci": [
+        0.04583333333333333,
+        0.10000000000000002
+      ],
+      "success_separates_positive": true
+    }
+  ],
+  "evidence_status": "diagnostic-only",
+  "primary_rule": "paired seed-block 95% CI for success delta excludes zero above zero",
+  "schema_version": "issue_4882_branch_verdict.v1",
+  "secondary_check": "paired seed-block collision-event delta CI excludes zero below zero",
+  "success_field": "metrics.success",
+  "target_pair": [
+    "hybrid_rule_v3_fast_progress_static_escape_continuous",
+    "orca"
+  ],
+  "verdict": "branch_a_separation"
+}

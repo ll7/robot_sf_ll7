@@ -19,7 +19,10 @@
     "remote_retrieved_hash_multiset_match": true,
     "raw_payload_committed": false,
     "raw_payload_size_gib_approx": 1.4,
-    "private_ops_commit": "4e4f22af77f586ff021b62a550cf877491c07689",
+    "closeout_analysis_path": "docs/context/evidence/issue_4365_job_13378_closeout/job13378_closeout_analysis.md",
+    "closeout_analysis_sha256": "ae7f859d34ce9488fa0f119e69d701726bc4d08b166d458bac1fbaa210dfd6e1",
+    "private_hub_manifest_recorded": true,
+    "private_ops_commit": "fee4106",
     "private_ops_submission_commit_recorded": false
   },
   "official_artifact": {

@@ -1,0 +1,294 @@
+{
+  "claim_boundary": "Diagnostic-only S30 interpretation. This packet does not promote a paper, dissertation, record-breaking, universal-planner, or real-world claim.",
+  "evidence_status": "diagnostic-only",
+  "independence_caveat": "S20 is the preregistered 111-130 prefix, not an independent rerun; this isolates seed-budget sensitivity on the identical h600 matrix.",
+  "metrics": {
+    "collision_event": {
+      "higher_is_better": false,
+      "kendall_tau": 1.0,
+      "planners": [
+        {
+          "metric_delta": 0.008680555555555525,
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank_delta": 0.0,
+          "s20_rank": 2.0,
+          "s20_value": 0.196875,
+          "s30_rank": 2.0,
+          "s30_value": 0.20555555555555552
+        },
+        {
+          "metric_delta": 0.0027777777777778234,
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank_delta": 0.0,
+          "s20_rank": 1.0,
+          "s20_value": 0.14583333333333331,
+          "s30_rank": 1.0,
+          "s30_value": 0.14861111111111114
+        },
+        {
+          "metric_delta": -5.551115123125783e-17,
+          "planner_key": "orca",
+          "rank_delta": 0.0,
+          "s20_rank": 6.0,
+          "s20_value": 0.2833333333333333,
+          "s30_rank": 6.0,
+          "s30_value": 0.28333333333333327
+        },
+        {
+          "metric_delta": 0.002083333333333326,
+          "planner_key": "ppo",
+          "rank_delta": 0.0,
+          "s20_rank": 5.0,
+          "s20_value": 0.2625,
+          "s30_rank": 5.0,
+          "s30_value": 0.26458333333333334
+        },
+        {
+          "metric_delta": 0.00798611111111111,
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank_delta": 0.0,
+          "s20_rank": 4.0,
+          "s20_value": 0.20729166666666665,
+          "s30_rank": 4.0,
+          "s30_value": 0.21527777777777776
+        },
+        {
+          "metric_delta": 0.007986111111111083,
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank_delta": 0.0,
+          "s20_rank": 3.0,
+          "s20_value": 0.203125,
+          "s30_rank": 3.0,
+          "s30_value": 0.21111111111111108
+        }
+      ],
+      "s20_order": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "scenario_adaptive_hybrid_orca_v1",
+        "ppo",
+        "orca"
+      ],
+      "s30_order": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "scenario_adaptive_hybrid_orca_v1",
+        "ppo",
+        "orca"
+      ],
+      "top_changed": false
+    },
+    "success": {
+      "higher_is_better": true,
+      "kendall_tau": 0.8666666666666667,
+      "planners": [
+        {
+          "metric_delta": -0.012152777777777568,
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank_delta": 0.0,
+          "s20_rank": 2.0,
+          "s20_value": 0.771875,
+          "s30_rank": 2.0,
+          "s30_value": 0.7597222222222224
+        },
+        {
+          "metric_delta": -0.013888888888888729,
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank_delta": 0.0,
+          "s20_rank": 1.0,
+          "s20_value": 0.7854166666666667,
+          "s30_rank": 1.0,
+          "s30_value": 0.7715277777777779
+        },
+        {
+          "metric_delta": -0.000694444444444442,
+          "planner_key": "orca",
+          "rank_delta": 0.0,
+          "s20_rank": 6.0,
+          "s20_value": 0.6812499999999999,
+          "s30_rank": 6.0,
+          "s30_value": 0.6805555555555555
+        },
+        {
+          "metric_delta": 0.0017361111111110494,
+          "planner_key": "ppo",
+          "rank_delta": 0.0,
+          "s20_rank": 5.0,
+          "s20_value": 0.715625,
+          "s30_rank": 5.0,
+          "s30_value": 0.717361111111111
+        },
+        {
+          "metric_delta": -0.013194444444444398,
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank_delta": -0.5,
+          "s20_rank": 4.0,
+          "s20_value": 0.7666666666666666,
+          "s30_rank": 3.5,
+          "s30_value": 0.7534722222222222
+        },
+        {
+          "metric_delta": -0.013194444444444509,
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank_delta": 0.5,
+          "s20_rank": 3.0,
+          "s20_value": 0.7666666666666667,
+          "s30_rank": 3.5,
+          "s30_value": 0.7534722222222222
+        }
+      ],
+      "s20_order": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "scenario_adaptive_hybrid_orca_v1",
+        "ppo",
+        "orca"
+      ],
+      "s30_order": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "scenario_adaptive_hybrid_orca_v1",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "ppo",
+        "orca"
+      ],
+      "top_changed": false
+    },
+    "time_to_goal_norm": {
+      "higher_is_better": false,
+      "kendall_tau": 0.3333333333333333,
+      "planners": [
+        {
+          "metric_delta": 0.00767708333333339,
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape",
+          "rank_delta": 0.0,
+          "s20_rank": 1.0,
+          "s20_value": 0.4459826388888889,
+          "s30_rank": 1.0,
+          "s30_value": 0.4536597222222223
+        },
+        {
+          "metric_delta": 0.012296875000000096,
+          "planner_key": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+          "rank_delta": 3.0,
+          "s20_rank": 2.0,
+          "s20_value": 0.4476163194444444,
+          "s30_rank": 5.0,
+          "s30_value": 0.4599131944444445
+        },
+        {
+          "metric_delta": 0.0016174768518518734,
+          "planner_key": "orca",
+          "rank_delta": 0.0,
+          "s20_rank": 6.0,
+          "s20_value": 0.5183802083333333,
+          "s30_rank": 6.0,
+          "s30_value": 0.5199976851851852
+        },
+        {
+          "metric_delta": -0.000767939814814822,
+          "planner_key": "ppo",
+          "rank_delta": -3.0,
+          "s20_rank": 5.0,
+          "s20_value": 0.45679687500000005,
+          "s30_rank": 2.0,
+          "s30_value": 0.4560289351851852
+        },
+        {
+          "metric_delta": 0.009381365740740721,
+          "planner_key": "scenario_adaptive_hybrid_orca_v1",
+          "rank_delta": 0.0,
+          "s20_rank": 3.0,
+          "s20_value": 0.44844270833333333,
+          "s30_rank": 3.0,
+          "s30_value": 0.45782407407407405
+        },
+        {
+          "metric_delta": 0.009371527777777833,
+          "planner_key": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+          "rank_delta": 0.0,
+          "s20_rank": 4.0,
+          "s20_value": 0.44847222222222216,
+          "s30_rank": 4.0,
+          "s30_value": 0.45784375
+        }
+      ],
+      "s20_order": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "scenario_adaptive_hybrid_orca_v1",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "ppo",
+        "orca"
+      ],
+      "s30_order": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "ppo",
+        "scenario_adaptive_hybrid_orca_v1",
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "top_changed": false
+    }
+  },
+  "s20_seeds": [
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    126,
+    127,
+    128,
+    129,
+    130
+  ],
+  "s20_surface": "derived prefix of the same frozen S30 rows",
+  "s30_seeds": [
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117,
+    118,
+    119,
+    120,
+    121,
+    122,
+    123,
+    124,
+    125,
+    126,
+    127,
+    128,
+    129,
+    130,
+    131,
+    132,
+    133,
+    134,
+    135,
+    136,
+    137,
+    138,
+    139,
+    140
+  ],
+  "schema_version": "issue_4882_s20_s30_rank_stability.v1"
+}

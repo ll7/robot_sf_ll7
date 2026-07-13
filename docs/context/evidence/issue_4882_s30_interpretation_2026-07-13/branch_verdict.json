@@ -1,0 +1,112 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "issue_4882.s30_branch_verdict.v1",
+  "branch": "branch_b_boundary",
+  "branch_headline_basis": "Most-conservative reading per guardrail: the task-specified scenario-clustered hierarchical bootstrap (resample 48 scenarios, then 30 seeds within each) applied to the literally stated rule ('the leading hybrid arm's CI separates from ORCA's on the primary metric'). Under it the leading hybrid's per-arm success CI overlaps ORCA's.",
+  "branch_under_seed_block_fixed_suite": "branch_a_separation",
+  "verdict_is_method_dependent": true,
+  "decisive_unspecified_fork": "The pre-registration declares neither the bootstrap resampling unit nor the CI-overlap-vs-paired-delta rule. The branch flips on the resampling/inference target: scenario-clustered (generalize to new scenarios) -> boundary under the per-arm-CI rule; seed-block (fixed 48-scenario suite) -> separation. Maintainer must ratify the canonical inference target.",
+  "primary_metric": "success_rate",
+  "leading_hybrid_arm": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+  "baseline_arm": "orca",
+  "leading_hybrid_success_point": 0.7715277777777778,
+  "orca_success_point": 0.6805555555555556,
+  "readings": {
+    "scenario_clustered_marginal_ci_nonoverlap": false,
+    "scenario_clustered_paired_delta_excludes_zero": true,
+    "seed_block_marginal_ci_nonoverlap": true,
+    "seed_block_paired_delta_excludes_zero": true
+  },
+  "leading_hybrid_success_ci_scenario_clustered": [
+    0.6875,
+    0.8486111111111111
+  ],
+  "orca_success_ci_scenario_clustered": [
+    0.5909722222222222,
+    0.7666666666666667
+  ],
+  "leading_hybrid_success_ci_seed_block": [
+    0.7472222222222222,
+    0.79375
+  ],
+  "orca_success_ci_seed_block": [
+    0.6569444444444444,
+    0.7027777777777777
+  ],
+  "paired_success_delta_leading_hybrid_minus_orca": {
+    "scenario_clustered": {
+      "point": 0.09097222222222223,
+      "ci95": [
+        0.02430555555555558,
+        0.16249999999999998
+      ],
+      "excludes_zero": true
+    },
+    "seed_block": {
+      "point": 0.09097222222222223,
+      "ci95": [
+        0.06458333333333333,
+        0.1166666666666667
+      ],
+      "excludes_zero": true
+    }
+  },
+  "paired_collision_delta_leading_hybrid_minus_orca": {
+    "scenario_clustered": {
+      "point": -0.13472222222222222,
+      "ci95": [
+        -0.21736111111111114,
+        -0.05486111111111111
+      ],
+      "excludes_zero": true
+    },
+    "seed_block": {
+      "point": -0.13472222222222222,
+      "ci95": [
+        -0.15902777777777777,
+        -0.10972222222222222
+      ],
+      "excludes_zero": true
+    }
+  },
+  "all_four_hybrids_separate_success_and_collision": {
+    "scenario_clustered": {
+      "hybrid_rule_v3_fast_progress_static_escape": {
+        "success_excl0": true,
+        "collision_excl0": false
+      },
+      "hybrid_rule_v3_fast_progress_static_escape_continuous": {
+        "success_excl0": true,
+        "collision_excl0": true
+      },
+      "scenario_adaptive_hybrid_orca_v1": {
+        "success_excl0": false,
+        "collision_excl0": false
+      },
+      "scenario_adaptive_hybrid_orca_v2_collision_guard": {
+        "success_excl0": false,
+        "collision_excl0": false
+      }
+    },
+    "seed_block": {
+      "hybrid_rule_v3_fast_progress_static_escape": {
+        "success_excl0": true,
+        "collision_excl0": true
+      },
+      "hybrid_rule_v3_fast_progress_static_escape_continuous": {
+        "success_excl0": true,
+        "collision_excl0": true
+      },
+      "scenario_adaptive_hybrid_orca_v1": {
+        "success_excl0": true,
+        "collision_excl0": true
+      },
+      "scenario_adaptive_hybrid_orca_v2_collision_guard": {
+        "success_excl0": true,
+        "collision_excl0": true
+      }
+    }
+  },
+  "effect_direction": "hybrid > orca (all point estimates)",
+  "claim_boundary": "diagnostic-only; feeds maintainer branch decision; promotes no paper/dissertation/leaderboard claim"
+}

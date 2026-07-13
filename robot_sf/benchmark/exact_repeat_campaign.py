@@ -955,7 +955,7 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
             planner_def.get("algo"), f"planner_definition {planner_def_id!r} algo"
         )
 
-        # Fail closed on planners the run_episode path cannot construct (e.g. orca),
+        # Fail closed on planners the run_episode path cannot construct,
         # recording an explicit disposition instead of crashing the whole campaign.
         if not is_runnable_algo(planner_algo):
             result_entry = {

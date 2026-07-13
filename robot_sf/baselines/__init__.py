@@ -164,8 +164,7 @@ def is_runnable_algo(name: str) -> bool:
     The benchmark episode runner resolves a planner either as the built-in
     goal-seeking policy (``SIMPLE_POLICY_ALIASES``) or through the baseline
     registry (``BASELINES``). Planners that live only in other execution
-    pipelines (e.g. the map-runner holonomic world-velocity ORCA path backed by
-    upstream RVO2) are not reachable here.
+    pipelines and have no episode-runner adapter are not reachable here.
 
     Returns:
         True when the algorithm can be constructed by ``run_episode``.

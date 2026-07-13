@@ -443,8 +443,8 @@ def test_execute_campaign_reexecutes_a_malformed_cache_entry(tmp_path, resolved_
     """A non-mapping cache entry is ignored instead of crashing resume execution."""
     output_dir = tmp_path / "host_run_malformed_cache"
     execute_campaign(resolved_bundle, output_dir=output_dir, run_episode=_deterministic_mock_runner)
-    # Pick a runnable target: unsupported planners are dispositioned
-    # without invoking the runner, so they never re-execute on a corrupt cache.
+    # Pick a runnable target; unsupported planners are dispositioned without
+    # invoking the runner, so they never re-execute on a corrupt cache.
     target = next(t for t in resolved_bundle["targets"] if is_runnable_algo(t["planner"]))
     cache_file = (
         output_dir

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -15,10 +16,12 @@ from robot_sf.benchmark.clearance_semantics import (
     PROXY_ENVELOPE_SURFACE_CLEARANCE,
     ClearanceGeometry,
     ClearanceThresholds,
+    FootprintSweepSpec,
     build_collision_threshold_sensitivity_table,
     build_footprint_clearance_manifest,
     classify_encounter,
     enumerate_footprint_sweep,
+    enumerate_threshold_sensitivity,
     evaluate_clearance,
     load_footprint_sweep_spec,
     write_footprint_clearance_manifest,
@@ -31,7 +34,7 @@ CONFIG_RELATIVE_PATH = str(CONFIG_PATH.relative_to(REPO_ROOT))
 
 
 def _repo_config() -> dict[str, object]:
-    return load_fidelity_sensitivity_config(CONFIG_PATH)
+    return copy.deepcopy(load_fidelity_sensitivity_config(CONFIG_PATH))
 
 
 def _nominal_geometry() -> ClearanceGeometry:
@@ -272,3 +275,210 @@ def test_write_manifest_is_deterministic_json(tmp_path: Path) -> None:
     reloaded = json.loads(path.read_text(encoding="utf-8"))
     assert reloaded["schema_version"] == FOOTPRINT_CLEARANCE_SCHEMA
     assert reloaded["cell_count"] == 27
+
+
+# ---- Threshold-sweep tests (issue #5485) ----
+
+
+def test_load_spec_includes_threshold_sweep_from_config() -> None:
+    """The tracked config now carries and validates threshold sweep values."""
+    spec = load_footprint_sweep_spec(_repo_config())
+
+    assert spec.contact_thresholds_m == (0.0, 0.05, 0.10)
+    assert spec.near_miss_thresholds_m == (0.15, 0.20, 0.30)
+    assert spec.conservative_buffers_m == (0.20, 0.30, 0.50)
+    assert "threshold" in spec.threshold_rationale.lower()
+
+
+def test_enumerate_threshold_sensitivity_returns_bounded_grid() -> None:
+    """Threshold sensitivity enumerates (proxy x ped x distance) x (contact x near-miss x buffer)."""
+    spec = load_footprint_sweep_spec(_repo_config())
+
+    rows = enumerate_threshold_sensitivity(spec)
+
+    assert rows is not None
+    # 3 proxy radii x 3 ped radii x 3 distances = 27 geometry rows
+    assert len(rows) == 3 * 3 * 3
+    first = rows[0]
+    assert set(first) == {
+        "robot_proxy_radius_m",
+        "pedestrian_radius_m",
+        "center_to_center_distance_m",
+        "geometric_body_clearance_m",
+        "classes_by_threshold",
+        "distinct_class_count",
+        "threshold_sensitive",
+    }
+    # Only valid monotonic combos survive: contact <= near_miss <= conservative.
+    # With contact=[0.0, 0.05, 0.10], near_miss=[0.15, 0.20, 0.30],
+    # conservative=[0.20, 0.30, 0.50], 24 of 27 combos are valid.
+    assert len(first["classes_by_threshold"]) == 24
+
+
+def test_threshold_sensitivity_flags_rows_where_class_changes() -> None:
+    """At least one geometry row must flip class across threshold combos."""
+    spec = load_footprint_sweep_spec(_repo_config())
+
+    rows = enumerate_threshold_sensitivity(spec)
+
+    assert rows is not None
+    assert any(r["threshold_sensitive"] for r in rows)
+    for row in rows:
+        assert row["distinct_class_count"] >= 1
+        assert (row["distinct_class_count"] > 1) == row["threshold_sensitive"]
+
+
+def test_boundary_transition_traceable_to_threshold_and_geometry() -> None:
+    """A threshold-sensitive row must show which threshold combo produced which class."""
+    spec = load_footprint_sweep_spec(_repo_config())
+
+    rows = enumerate_threshold_sensitivity(spec)
+    assert rows is not None
+    sensitive = [r for r in rows if r["threshold_sensitive"]]
+    assert sensitive, "need at least one sensitive row for traceability"
+
+    first = sensitive[0]
+    # Each threshold combo entry records geometry, thresholds, and class
+    entry = first["classes_by_threshold"][0]
+    assert "contact_threshold_m" in entry
+    assert "near_miss_threshold_m" in entry
+    assert "conservative_buffer_m" in entry
+    assert "encounter_class" in entry
+    assert "robot_proxy_radius_m" in first
+    assert "pedestrian_radius_m" in first
+    assert "center_to_center_distance_m" in first
+
+
+def test_threshold_sensitivity_returns_none_without_sweep() -> None:
+    """Without a threshold_sweep block, enumerate returns None (backward compat)."""
+    config = _repo_config()
+    config["footprint_semantics"].pop("threshold_sweep", None)
+    spec = load_footprint_sweep_spec(config)
+
+    assert spec.contact_thresholds_m is None
+    assert enumerate_threshold_sensitivity(spec) is None
+
+
+def test_load_spec_fails_closed_on_incomplete_threshold_sweep() -> None:
+    """A threshold_sweep block must define all three lists or none."""
+    config = _repo_config()
+    config["footprint_semantics"]["threshold_sweep"] = {
+        "contact_threshold_m": [0.0, 0.05],
+        # missing near_miss_threshold_m and conservative_buffer_m
+    }
+
+    with pytest.raises(ValueError, match="missing:"):
+        load_footprint_sweep_spec(config)
+
+
+def test_load_spec_fails_closed_on_nonmonotonic_threshold_sweep() -> None:
+    """Threshold sweep must preserve contact <= near_miss <= conservative ordering."""
+    config = _repo_config()
+    config["footprint_semantics"]["threshold_sweep"] = {
+        "contact_threshold_m": [0.0, 0.50],
+        "near_miss_threshold_m": [0.15, 0.20],
+        "conservative_buffer_m": [0.20, 0.30],
+        "rationale": "test",
+    }
+
+    with pytest.raises(ValueError, match="ordering violated"):
+        load_footprint_sweep_spec(config)
+
+
+def test_load_spec_fails_closed_on_empty_threshold_sweep_block() -> None:
+    """An empty threshold_sweep block fails closed."""
+    config = _repo_config()
+    config["footprint_semantics"]["threshold_sweep"] = {}
+
+    with pytest.raises(ValueError, match="threshold_sweep block is present but empty"):
+        load_footprint_sweep_spec(config)
+
+
+@pytest.mark.parametrize("threshold_sweep", [None, [], "malformed"])
+def test_load_spec_fails_closed_on_malformed_threshold_sweep(
+    threshold_sweep: object,
+) -> None:
+    """A present threshold-sweep block must be a mapping, not silently ignored."""
+    config = _repo_config()
+    config["footprint_semantics"]["threshold_sweep"] = threshold_sweep
+
+    with pytest.raises(ValueError, match="threshold_sweep must be a mapping"):
+        load_footprint_sweep_spec(config)
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    ["contact_threshold_m", "near_miss_threshold_m", "conservative_buffer_m"],
+)
+def test_load_spec_fails_closed_on_any_missing_threshold_axis(missing_key: str) -> None:
+    """A configured threshold sweep must provide all three threshold axes."""
+    config = _repo_config()
+    threshold_sweep = config["footprint_semantics"]["threshold_sweep"]
+    del threshold_sweep[missing_key]
+
+    with pytest.raises(ValueError, match="missing:"):
+        load_footprint_sweep_spec(config)
+
+
+def test_enumerate_threshold_sensitivity_fails_closed_on_partial_spec() -> None:
+    """Programmatic specs cannot reach threshold enumeration with partial axes."""
+    spec = FootprintSweepSpec(
+        nominal_geometry=_nominal_geometry(),
+        thresholds=_nominal_thresholds(),
+        robot_proxy_radii_m=(1.0,),
+        pedestrian_radii_m=(0.4,),
+        encounter_center_distances_m=(1.37,),
+        rationale="test",
+        contact_thresholds_m=(0.0,),
+        near_miss_thresholds_m=None,
+        conservative_buffers_m=(0.3,),
+    )
+
+    with pytest.raises(ValueError, match="requires all three lists"):
+        enumerate_threshold_sensitivity(spec)
+
+
+def test_manifest_carries_threshold_sweep_rows() -> None:
+    """The manifest records threshold_sweep_rows and threshold_sensitive_row_count."""
+    manifest = build_footprint_clearance_manifest(
+        _repo_config(), config_path=CONFIG_RELATIVE_PATH, git_head="abc1234"
+    )
+
+    assert manifest["threshold_sweep_rows"] is not None
+    assert len(manifest["threshold_sweep_rows"]) == 3 * 3 * 3
+    assert manifest["threshold_sensitive_row_count"] is not None
+    assert manifest["threshold_sensitive_row_count"] >= 1
+    assert "threshold_sensitive" in manifest["required_outputs"]
+
+
+def test_manifest_threshold_rows_are_none_without_sweep() -> None:
+    """When no threshold sweep is configured, manifest records None."""
+    config = _repo_config()
+    config["footprint_semantics"].pop("threshold_sweep", None)
+    manifest = build_footprint_clearance_manifest(
+        config, config_path=CONFIG_RELATIVE_PATH, git_head="abc1234"
+    )
+
+    assert manifest["threshold_sweep_rows"] is None
+    assert manifest["threshold_sensitive_row_count"] is None
+
+
+def test_threshold_sweep_spec_with_sweep() -> None:
+    """FootprintSweepSpec carries threshold sweep values when provided."""
+    spec = load_footprint_sweep_spec(_repo_config())
+    assert spec.contact_thresholds_m is not None
+    assert len(spec.contact_thresholds_m) == 3
+    assert spec.threshold_rationale
+
+
+def test_threshold_sensitive_row_count_matches_flags() -> None:
+    """The summary count matches the number of rows flagged as threshold_sensitive."""
+    spec = load_footprint_sweep_spec(_repo_config())
+    rows = enumerate_threshold_sensitivity(spec)
+    assert rows is not None
+
+    manifest = build_footprint_clearance_manifest(
+        _repo_config(), config_path=CONFIG_RELATIVE_PATH, git_head="abc1234"
+    )
+    expected = sum(1 for r in rows if r["threshold_sensitive"])
+    assert manifest["threshold_sensitive_row_count"] == expected

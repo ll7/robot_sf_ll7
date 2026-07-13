@@ -75,6 +75,9 @@ def main() -> int:
         f"cells={manifest['cell_count']} "
         f"proxy_radius_sensitive_rows={manifest['proxy_radius_sensitive_row_count']}"
     )
+    ts_rows = manifest.get("threshold_sensitive_row_count")
+    if ts_rows is not None:
+        print(f"threshold_sensitive_rows={ts_rows}")
     return 0
 
 

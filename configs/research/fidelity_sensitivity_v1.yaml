@@ -190,6 +190,15 @@ footprint_semantics:
     robot_proxy_radius_m: [0.60, 1.00, 1.40]
     pedestrian_radius_m: [0.30, 0.40, 0.50]
     encounter_center_distances_m: [1.10, 1.37, 1.80]
+  threshold_sweep:
+    rationale: >
+      Sweep contact, near-miss, and conservative-buffer thresholds to distinguish
+      how class labels change when the decision boundaries shift versus when the
+      proxy geometry shifts. Contact values are the tightest; near-miss sits above;
+      conservative buffer is the widest safety zone.
+    contact_threshold_m: [0.0, 0.05, 0.10]
+    near_miss_threshold_m: [0.15, 0.20, 0.30]
+    conservative_buffer_m: [0.20, 0.30, 0.50]
 
 result_contract:
   required_outputs:

@@ -24,6 +24,10 @@ entries:
   status: proposal
   freshness: dated
   area: research_design
+- path: docs/context/evidence/issue_5443_collision_cause_attribution_contract.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/evidence_registry_dispositions.yaml
   status: evidence
   freshness: evidence

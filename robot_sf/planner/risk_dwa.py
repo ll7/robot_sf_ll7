@@ -209,7 +209,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         theta = float(heading)
         start_dist = float(np.linalg.norm(goal - x))
 
-        trajectory = self._rollout_trajectory(
+        trajectory, theta = self._rollout_trajectory(
             robot_pos=x, heading=theta, command=command, steps=steps
         )
         min_ped_clear, min_obs_clear = self._rollout_min_clearance(
@@ -220,7 +220,6 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             observation=observation,
         )
         x = trajectory[-1]
-        theta = self._rollout_terminal_orientation(heading=theta, command=command, steps=steps)
 
         end_dist = float(np.linalg.norm(goal - x))
         progress = start_dist - end_dist
@@ -248,7 +247,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
     def _rollout_trajectory(
         self, *, robot_pos: np.ndarray, heading: float, command: tuple[float, float], steps: int
-    ) -> np.ndarray:
+    ) -> tuple[np.ndarray, float]:
         """Unicycle trajectory positions for the constant-command rollout.
 
         The pose sequence is integrated with the *same* sequential left-to-right
@@ -258,7 +257,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         parity reference for issue #5412.
 
         Returns:
-            ``(steps, 2)`` array of world positions for the rollout horizon.
+            Tuple of the ``(steps, 2)`` world positions and terminal orientation.
         """
         steps = max(steps, 1)
         dt = float(self.config.rollout_dt)
@@ -273,27 +272,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             )
             orientation = _wrap_angle(orientation + w * dt)
             positions[step_idx] = position
-        return positions
-
-    def _rollout_terminal_orientation(
-        self, *, heading: float, command: tuple[float, float], steps: int
-    ) -> float:
-        """Terminal heading of the constant-command rollout.
-
-        The scalar loop integrates ``orientation`` with ``_wrap_angle`` at every
-        step; vectorizing that step-by-step wrap changes the float reduction order,
-        so the terminal heading is computed by reducing the *same* per-step wrapped
-        deltas. We reuse the scalar recurrence exactly so the result is bit-stable
-        with the legacy loop.
-
-        Returns:
-            Terminal orientation in ``(-pi, pi]`` after ``steps`` integration steps.
-        """
-        orientation = float(heading)
-        delta = float(command[1]) * float(self.config.rollout_dt)
-        for _ in range(max(steps, 1)):
-            orientation = _wrap_angle(orientation + delta)
-        return orientation
+        return positions, orientation
 
     def _rollout_min_clearance(
         self,

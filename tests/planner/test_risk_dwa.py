@@ -254,7 +254,7 @@ def test_risk_dwa_vectorized_rollout_trajectory_matches_scalar() -> None:
         heading = float(rng.uniform(-np.pi, np.pi))
         command = (float(rng.uniform(0.0, 1.2)), float(rng.uniform(-1.2, 1.2)))
         steps = int(rng.integers(1, 30))
-        traj = RiskDWAPlannerAdapter(config)._rollout_trajectory(
+        traj, _ = RiskDWAPlannerAdapter(config)._rollout_trajectory(
             robot_pos=robot_pos, heading=heading, command=command, steps=steps
         )
         dt = float(config.rollout_dt)

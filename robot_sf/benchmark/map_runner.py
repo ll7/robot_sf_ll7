@@ -2536,7 +2536,7 @@ def _run_map_jobs_with_policy_cache(
     out_path: Path,
     schema: dict[str, Any],
     workers: int,
-    circuit_breaker_threshold: int = 10,
+    circuit_breaker_threshold: int | None = None,
 ) -> Any:
     """Run one arm with policies cached until the batch completes.
 
@@ -2548,6 +2548,7 @@ def _run_map_jobs_with_policy_cache(
     Returns:
         The normal map-batch execution result.
     """
+    circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     policy_cache: dict[
         tuple[str, str, str | None, str | None, bool], tuple[Any, dict[str, Any]]
     ] = {}

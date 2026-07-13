@@ -249,6 +249,34 @@ class TestSequentialCircuitBreaker:
         assert abort_meta["consecutive_failures"] == 3
         assert abort_meta["projected_episodes_saved"] == 17
 
+    def test_threshold_one_trips_on_first_failure(self, tmp_path: Path) -> None:
+        """A threshold of 1 aborts immediately after the first failure."""
+
+        def failing_worker(job):
+            raise RuntimeError("CUDA out of memory on device 0")
+
+        out_file = tmp_path / "episodes.jsonl"
+        jobs = [(_dummy_scenario(), i) for i in range(5)]
+        schema = _dummy_schema()
+
+        with patch(f"{_RUNNER_MOD}._run_job_worker", side_effect=failing_worker):
+            written, failures, abort_meta = _run_batch_sequential(
+                jobs,
+                out_path=out_file,
+                schema=schema,
+                fixed_params=_dummy_fixed_params(),
+                progress_cb=None,
+                fail_fast=False,
+                circuit_breaker_threshold=1,
+            )
+
+        assert written == 0
+        assert len(failures) == 1
+        assert abort_meta is not None
+        assert abort_meta["consecutive_failures"] == 1
+        assert abort_meta["first_fail_index"] == 1
+        assert abort_meta["projected_episodes_saved"] == 4
+
     def test_zero_threshold_disables_circuit_breaker(self, tmp_path: Path) -> None:
         """A threshold of 0 disables the circuit breaker entirely."""
 

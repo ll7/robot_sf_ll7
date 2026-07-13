@@ -11,7 +11,11 @@ from typing import Any, NamedTuple
 
 from loguru import logger
 
-from robot_sf.benchmark.circuit_breaker import build_abort_metadata, error_signature
+from robot_sf.benchmark.circuit_breaker import (
+    build_abort_metadata,
+    error_signature,
+    normalize_circuit_breaker_threshold,
+)
 
 # Set PyTorch allocator configuration early before torch is loaded.
 os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
@@ -92,7 +96,7 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
     apply_worker_metadata_bridge,
     scenario_id,
     feasibility_totals: FeasibilityTotals,
-    circuit_breaker_threshold: int = 10,
+    circuit_breaker_threshold: int | None = None,
 ) -> tuple[
     int,
     list[dict[str, Any]],
@@ -108,6 +112,7 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
     Returns:
         Write count, failures, adapter counters, and runtime algorithm contract.
     """
+    circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     wrote = 0
     episode_records: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
@@ -320,13 +325,14 @@ def execute_map_jobs(  # noqa: PLR0913
     executor_cls,
     as_completed_fn,
     multiprocessing_context: Any | None = None,
-    circuit_breaker_threshold: int = 10,
+    circuit_breaker_threshold: int | None = None,
 ) -> BatchExecutionResult:
     """Execute map-runner jobs and append validated JSONL records.
 
     Returns:
         Batch execution counters and metadata accumulators.
     """
+    circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     out_path = Path(out_path)
     feasibility_totals = _initial_feasibility_totals()
     batch_started = time.perf_counter()

@@ -125,16 +125,24 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
             return ped_pos
         return ped_pos + ped_vel * float(t)
 
-    def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:
+    def _min_obstacle_clearance(
+        self,
+        point: np.ndarray,
+        observation: dict[str, Any] | None = None,
+        *,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
+    ) -> float:
         """Estimate grid-obstacle clearance around one rollout point.
 
         Returns:
             float: Approximate obstacle clearance in meters, ``inf`` when unknown.
         """
-        payload = self._extract_grid_payload(observation)
-        if payload is None:
+        if grid_payload is None:
+            assert observation is not None
+            grid_payload = self._extract_grid_payload(observation)
+        if grid_payload is None:
             return float("inf")
-        grid, meta = payload
+        grid, meta = grid_payload
         channel = self._preferred_channel(meta)
         if channel < 0 or channel >= grid.shape[0]:
             return float("inf")
@@ -160,11 +168,11 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
 
         dr = obs_idx[:, 0] + r0 - row
         dc = obs_idx[:, 1] + c0 - col
-        cell_dist = np.sqrt(dr.astype(float) ** 2 + dc.astype(float) ** 2)
+        cell_dist_sq = dr.astype(float) ** 2 + dc.astype(float) ** 2
         resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
-        return float(np.min(cell_dist) * max(resolution, 1e-6))
+        return float(np.sqrt(np.min(cell_dist_sq)) * max(resolution, 1e-6))
 
-    def _sequence_cost(
+    def _sequence_cost(  # noqa: PLR0913
         self,
         *,
         sequence: np.ndarray,
@@ -175,6 +183,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         ped_pos: np.ndarray,
         ped_vel: np.ndarray,
         observation: dict[str, Any],
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> float:
         """Evaluate one sampled MPPI control sequence.
 
@@ -214,7 +223,10 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                     if ttc.size > 0:
                         min_ttc = min(min_ttc, float(np.min(ttc)))
 
-            min_obs = min(min_obs, self._min_obstacle_clearance(x, observation))
+            min_obs = min(
+                min_obs,
+                self._min_obstacle_clearance(x, observation=observation, grid_payload=grid_payload),
+            )
             smooth_penalty += abs(v - prev_v) + 0.2 * abs(w)
             prev_v = v
 
@@ -253,6 +265,8 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
         iterations = max(int(self.config.iterations), 1)
         elite_n = max(2, round(samples * float(self.config.elite_fraction)))
 
+        grid_payload = self._cache_grid_payload(observation)
+
         mean = np.zeros((horizon, 2), dtype=float)
         mean[:, 0] = min(speed_cap, max(0.0, speed + 0.1))
         mean[:, 1] = np.clip(
@@ -289,6 +303,7 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                         ped_pos=ped_pos,
                         ped_vel=ped_vel,
                         observation=observation,
+                        grid_payload=grid_payload,
                     )
                     for i in range(samples)
                 ],

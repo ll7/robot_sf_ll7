@@ -7,7 +7,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+* **issue #5468 public collision-risk contact geometry.** Promoted the canonical contact geometry of
+  the action-conditioned collision-risk API to a documented public surface:
+  `segment_min_distance` (closed-form per-interval minimum centre distance) and `pedestrian_arrays`
+  (validated actor position/velocity/radius/id extractor) are now re-exported from
+  `robot_sf.research.collision_risk`. Downstream calibration, replay, and label-generation code can
+  compute contact on the *identical* geometry the estimator uses instead of importing
+  underscore-prefixed internals; `calibration.py` now consumes the public names. Backward-compatible
+  private aliases (`_segment_min_distance`, `_pedestrian_arrays`) still resolve to the same objects.
+  No behavior change; covered by tests asserting the public and internal handles agree.
+
+* **issue #5446 seed-flip / held-out planner-inversion candidate miner.** New
+  `robot_sf/benchmark/seed_flip_mining.py` (`seed_flip_inversion_candidates.v1`) mines *case
+  candidates* — reproducible seed-dependent outcome flips and genuine held-out planner upsets —
+  from benchmark result rows, deliberately replacing a single opaque interestingness score with
+  evidence gates + separate typed fields + non-circular strength + Pareto selection. Rows are
+  eligible only with complete provenance (episode id, scenario, seed, config hash, pinned commit),
+  native execution (fallback/degraded/adapter excluded), and typed collision semantics; withdrawn
+  release-0.0.2 collision-derived outcomes are excluded while #5097 is open. Each candidate keeps
+  its own seed-flip posterior (Jeffreys Beta) / entropy / effective-denominator, Wilson interval,
+  held-out planner-skill gap (estimated leave-one-scenario-out, raw paired outcomes retained),
+  cross-planner disagreement entropy, and `unavailable`-or-`consumed` slots for sibling-issue
+  signals (oracle regret #5302, transfer #5303, quality-diversity #5308, multiplicity #5351) — never
+  fabricated or folded into a composite. Four archetypes are reported (seed flip, planner upset,
+  causal divergence, disagreement/recovery), each `available`/`unavailable` from the data. The
+  manifest records every eligible candidate before diversity selection and every exclusion reason.
+  `scripts/analysis/mine_seed_flips_and_inversions_issue_5446.py` is the deterministic CLI
+  (`--json`/`--md`), with thresholds/descriptors in
+  `configs/analysis/issue_5446_seed_flip_inversion_thresholds.yaml`. Evidence is analysis tooling
+  plus synthetic-fixture recovery of known flips/upsets/negative-controls; it is not a benchmark
+  metric or planner-ranking claim, and confirmation runs are a separate exact-compute packet (no
+  benchmark campaign or Slurm/GPU run included).
+* **issue #5445 matched calibration comparison for online collision-risk estimators.** New
+  `robot_sf/research/collision_risk/calibration.py` harness scores every estimator on *identical*
+  matched inputs (scenario histories, candidate actions, footprints, horizons) and grades each
+  against the same realized collision outcome. It reports Brier score, log loss, reliability data
+  with bin counts, expected calibration error (with a bootstrap CI), area under the precision-recall
+  curve, false-negative rate at predeclared thresholds, time-to-warning, horizon monotonicity, and
+  action sensitivity — all weight-aware — plus per-family/density/prediction-model stratification and
+  a `use online` / `offline analysis only` / `revise` / `stop` verdict per estimator. Deterministic
+  TTC/velocity-obstacle/reachability warnings are graded as rankings/warnings only, never placed on a
+  probability reliability curve; contracted-but-missing estimators (multimodal-forecast MC, the #1472
+  learned-risk model) are recorded as `unavailable` rather than dropped.
+  `scripts/analysis/collision_risk_calibration_report.py` runs a frozen, preregistered packet
+  (`configs/analysis/issue_5445_matched_calibration.yaml`) and fails closed below a preregistered
+  eligible-sample count. Labels are drawn from an explicit constant-velocity forecast model
+  (optionally misspecified per family), so this is **API + fixture evidence**: it validates the
+  machinery, shows self-consistency of the constant-velocity Monte Carlo estimator against its own
+  model, and demonstrates that a strong misspecification is detected (ECE 0.166 vs in-model ~0.05).
+  Not calibrated benchmark risk for the simulator distribution and never a real-world risk claim; no
+  benchmark campaign or Slurm/GPU run is included. See
+  `docs/context/evidence/issue_5445_calibration_preregistration_2026-07-13.md`.
+* **issue #5413 bounded kinodynamic SIPP search (#5306 Slice 2).** Adds trusted-horizon,
+  time-aligned pedestrian occupancy; weighted state-time search; reachable command transitions;
+  curved-footprint static checks; and multi-cycle commitment. Bounded failure uses a reachable,
+  collision-checked deceleration or an explicit emergency-stop target. The `sipp_lattice` key is
+  testing-only and requires `allow_testing_algorithms`; evidence is an exploratory CPU smoke, not
+  a safety, liveness, or superiority claim. Slice 3 owns outcome evaluation.
+* **issue #5444 action-conditioned online collision-risk API and baselines.** New
+  `robot_sf/research/collision_risk/` package exposes a planner-agnostic, versioned
+  (`action_conditioned_collision_risk.v1`) estimate of `P(contact in (t, t+H] | action u)`.
+  A constant-velocity Monte Carlo baseline (exact disc-footprint segment geometry, declared
+  velocity-noise and cross-actor-correlation assumptions) emits the joint contact probability,
+  per-actor marginals (explicitly not summed as independent), first-passage/hazard decomposition,
+  and a union-bound vs intentionally-invalid independence comparison. Deterministic TTC /
+  velocity-obstacle / reachability warnings are labelled non-probabilistic, and an
+  uncertainty/OOD/abstention block plus estimator/forecast/geometry/horizon/action/config
+  provenance and p50/p95/p99 latency accompany every estimate.
+  `scripts/analysis/collision_risk_report.py` runs a frozen reference workload
+  (`configs/research/collision_risk_baseline.yaml`): p95 latency is ~10 ms (well under the 100 ms
+  deadline, classified `online`) and risk differs in the expected direction between two candidate
+  actions. Hard guards remain authoritative; no `safe` label is emitted and low probability is
+  never treated as safety. Evidence is API + baseline fixture, not a calibrated benchmark risk
+  claim; no benchmark campaign or Slurm/GPU run is included.
+* **issue #5442 frozen-state counterfactual replay: locate the last avoidable control action.**
+  New simulator-agnostic engine (`robot_sf/benchmark/last_avoidable_replay.py`) restores a
+  decision-point snapshot (including RNG state), verifies deterministic baseline replay, and branches
+  over the admissible robot action lattice at each step in `[t_danger, t_contact)` to report `t_uca`
+  (earliest avoidable unsafe control action) and `t_inevitable` (point of no return). Fail-closed: a
+  nondeterministic baseline or a missing feasible action set returns `unknown`, never `unavoidable`.
+  Ships a deterministic controlled kinematic fixture
+  (`robot_sf/benchmark/last_avoidable_fixtures.py`), the `last_avoidable_replay.v1` output schema, an
+  offline report CLI (`scripts/analysis/run_last_avoidable_replay_issue_5442.py`), and a context note
+  (`docs/context/issue_5442_last_avoidable_replay.md`). Controlled-fixture diagnostic evidence only;
+  `normative_fault` is always `not_assessed`. No production-simulator snapshot seam (that would be a
+  broad change — see the note), no benchmark/Slurm run, no metric/paper claim.
+* **issue #5441 `collision_causal_report.v1` fail-closed cause-report contract.** Adds
+  `robot_sf/benchmark/schemas/collision_causal_report.v1.json` and validator
+  `robot_sf/benchmark/collision_causal_report.py` that separate observed reconstruction, proximate
+  mechanism, and intervention-supported causal contribution for a single collision, always setting
+  `normative_fault: not_assessed`. The contract reuses `MECHANISM_LABELS`/`MECHANISM_CONFIDENCES`
+  (no competing taxonomy), marks unsupported fields (`t_uca`, `t_inevitable`, planner internals for
+  black-box planners) unavailable rather than inferred, forbids asserting a planner cause once
+  contact is inevitable, and ships one complete and one abstaining fixture. Producer inventory and
+  decision record: `docs/context/collision_causal_report_field_map_2026-07-13.md`. Schema/fixture
+  evidence only — not proof that real collisions can be causally attributed.
+
+* **issue #5419 authorization-gated DPCBF executor.** Bounded local `run_batch` arms require the
+  exact public authorization ID. Atomic checkpoints bind inputs and completed JSONL artifacts;
+  dirty, orphaned, malformed, duplicate, or mismatched state fails closed. No Slurm/GPU run or
+  safety-performance claim is included.
+
 ### Fixed
+
+* **issue #5464 PR Contract Check no longer flags modified evidence files as new.** The
+  `pr-contract-check.yml` workflow used `actions/checkout` on `pull_request` without fetching the
+  base branch, so `origin/main` was absent in the runner. `pr_contract_check.py`'s `is_file_new`
+  then treated the failed `git show origin/main:path` as "file is new" for *every* changed evidence
+  file, raising false-positive `AI-GENERATED`/`NEEDS-REVIEW` marker blockers on `docs/context/evidence/**`
+  files that already exist marker-less on `main` (observed on PR #5463). Fixed on two fronts: the
+  workflow now fetches the base ref (so `origin/<base>` resolves) and passes an authoritative
+  `--added-files-file` derived from the GitHub `pulls/{n}/files` API (`status == "added"`); and the
+  script now treats an unresolvable base ref as "unknown, not new" and prefers the authoritative
+  added-files signal over the git heuristic when available. CI-tooling correctness fix
+  (`diagnostic-only`); no benchmark, metric, or evidence-content change.
+* **issue #5429 `load_scenario_matrix` no longer misroutes single-document abstract scenario
+  files.** A single-document YAML file whose top-level content is a *list* of abstract benchmark
+  scenarios (the `density`/`flow`/`obstacle` form, e.g. `yaml.safe_dump([s1, s2])`) is now returned
+  directly — symmetric with the existing multi-document stream behavior — instead of being sent
+  through the map-oriented `robot_sf/training/scenario_loader.py::load_scenarios`. Previously such
+  files were validated as map manifests and emitted misleading
+  `Scenario entry N is missing a name or scenario_id` / `has no map_file or map_id` warnings even
+  though abstract scenarios legitimately carry neither. Single-document *mappings* still route to the
+  include-aware manifest loader (unchanged), and an empty single-document list now fails closed with
+  a clear `ValueError` rather than a silent zero-job run.
 
 * **issue #5340 main CI regression from unconditional `spaces.Sequence` leaf.** PRs #5335
   and #5337 unconditionally added `spaces.Sequence` leaves to the SocNav structured observation

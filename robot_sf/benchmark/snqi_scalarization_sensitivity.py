@@ -1129,8 +1129,77 @@ def format_markdown(report: Mapping[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _nice_ticks(low: float, high: float, *, target_count: int = 6) -> tuple[float, ...]:
+    """Return round tick values inside a numeric domain.
+
+    Returns:
+        Tick values at a step in ``{1, 2, 2.5, 5} x 10^k``.
+    """
+
+    span = high - low
+    raw_step = span / max(target_count - 1, 1)
+    magnitude = 10.0 ** math.floor(math.log10(raw_step))
+    normalized_step = raw_step / magnitude
+    factor = min((1.0, 2.0, 2.5, 5.0, 10.0), key=lambda value: abs(value - normalized_step))
+    step = factor * magnitude
+    epsilon = step * 1e-9
+    first = math.ceil((low - epsilon) / step) * step
+    last = math.floor((high + epsilon) / step) * step
+    count = max(0, round((last - first) / step) + 1)
+    precision = max(0, -math.floor(math.log10(step))) + 2
+    return tuple(round(first + index * step, precision) for index in range(count))
+
+
+def _format_tick(value: float, ticks: Sequence[float]) -> str:
+    """Format a tick value without floating-point noise.
+
+    Returns:
+        A fixed-point tick label with enough decimals for the selected step.
+    """
+
+    step = abs(ticks[1] - ticks[0]) if len(ticks) > 1 else 1.0
+    decimals = max(0, -math.floor(math.log10(step)))
+    while not math.isclose(step, round(step, decimals), rel_tol=0.0, abs_tol=step * 1e-9):
+        decimals += 1
+    if math.isclose(value, 0.0, abs_tol=step * 1e-9):
+        value = 0.0
+    return f"{value:.{decimals}f}"
+
+
+def _point_label_position(
+    cx: float,
+    cy: float,
+    index: int,
+    *,
+    plot_left: float,
+    plot_right: float,
+    plot_top: float,
+    plot_bottom: float,
+) -> tuple[float, float, str]:
+    """Place point indices in alternating quadrants while respecting plot edges.
+
+    Returns:
+        Label x/y coordinates and SVG text-anchor value.
+    """
+
+    label_dx, label_dy = ((9.0, -8.0), (-9.0, -8.0), (9.0, 14.0), (-9.0, 14.0))[(index - 1) % 4]
+    if cx > plot_right - 24:
+        label_dx = -9.0
+    elif cx < plot_left + 24:
+        label_dx = 9.0
+    if cy < plot_top + 18:
+        label_dy = 14.0
+    elif cy > plot_bottom - 18:
+        label_dy = -8.0
+    anchor = "end" if label_dx < 0.0 else "start"
+    return cx + label_dx, cy + label_dy, anchor
+
+
 def format_pareto_svg(report: Mapping[str, Any], *, width: int = 900, height: int = 560) -> str:
     """Render a dependency-free SVG Pareto figure.
+
+    Numeric axes use data-derived round tick intervals. Points use compact
+    numeric labels, with full planner names listed in a deterministic legend.
 
     Returns:
         SVG figure text.
@@ -1147,6 +1216,8 @@ def format_pareto_svg(report: Mapping[str, Any], *, width: int = 900, height: in
     ys = [float(row.get("snqi_mean", 0.0)) for row in rows] or [0.0]
     x_min, x_max = _padded_domain(xs)
     y_min, y_max = _padded_domain(ys)
+    x_ticks = _nice_ticks(x_min, x_max)
+    y_ticks = _nice_ticks(y_min, y_max)
 
     def x_pos(value: float) -> float:
         return margin_left + ((value - x_min) / (x_max - x_min)) * plot_width
@@ -1164,30 +1235,137 @@ def format_pareto_svg(report: Mapping[str, Any], *, width: int = 900, height: in
         f"{y_pos(float(row.get('snqi_mean', 0.0))):.1f}"
         for row in front
     )
+
+    ranked_rows = sorted(
+        rows,
+        key=lambda row: (
+            not bool(row.get("pareto_front")),
+            -float(row.get("constraints_first_score", 0.0)),
+            str(row.get("planner", "unknown")),
+        ),
+    )
+
+    # --- build SVG ---
     parts = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" role="img">',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"'
+        f' viewBox="0 0 {width} {height}" role="img">',
+        "<!-- AI-GENERATED figure export (robot_sf format_pareto_svg); NEEDS-REVIEW -->",
         "<title>SNQI scalarization sensitivity Pareto diagnostic</title>",
         '<rect width="100%" height="100%" fill="#ffffff"/>',
-        f'<line x1="{margin_left}" y1="{height - margin_bottom}" x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#333"/>',
-        f'<line x1="{margin_left}" y1="{margin_top}" x2="{margin_left}" y2="{height - margin_bottom}" stroke="#333"/>',
-        f'<text x="{width / 2:.1f}" y="{height - 24}" text-anchor="middle" font-family="sans-serif" font-size="15">Constraints-first score (higher is better)</text>',
-        f'<text x="24" y="{height / 2:.1f}" text-anchor="middle" transform="rotate(-90 24 {height / 2:.1f})" font-family="sans-serif" font-size="15">SNQI mean (higher is better)</text>',
     ]
+
+    for tick in x_ticks:
+        x = x_pos(tick)
+        parts.extend(
+            [
+                f'<line class="gridline x-gridline" x1="{x:.1f}" y1="{margin_top}"'
+                f' x2="{x:.1f}" y2="{height - margin_bottom}" stroke="#E5E5E5"/>',
+                f'<line class="axis-tick x-axis-tick" x1="{x:.1f}"'
+                f' y1="{height - margin_bottom}" x2="{x:.1f}"'
+                f' y2="{height - margin_bottom + 6}" stroke="#333"/>',
+                f'<text class="tick-label x-tick-label" x="{x:.1f}"'
+                f' y="{height - margin_bottom + 22}" text-anchor="middle"'
+                f' font-family="sans-serif" font-size="11">'
+                f"{_format_tick(tick, x_ticks)}</text>",
+            ]
+        )
+    for tick in y_ticks:
+        y = y_pos(tick)
+        parts.extend(
+            [
+                f'<line class="gridline y-gridline" x1="{margin_left}" y1="{y:.1f}"'
+                f' x2="{width - margin_right}" y2="{y:.1f}" stroke="#E5E5E5"/>',
+                f'<line class="axis-tick y-axis-tick" x1="{margin_left - 6}" y1="{y:.1f}"'
+                f' x2="{margin_left}" y2="{y:.1f}" stroke="#333"/>',
+                f'<text class="tick-label y-tick-label" x="{margin_left - 10}" y="{y + 4:.1f}"'
+                f' text-anchor="end" font-family="sans-serif" font-size="11">'
+                f"{_format_tick(tick, y_ticks)}</text>",
+            ]
+        )
+
+    parts.extend(
+        [
+            f'<line class="axis x-axis" x1="{margin_left}" y1="{height - margin_bottom}"'
+            f' x2="{width - margin_right}" y2="{height - margin_bottom}" stroke="#333"/>',
+            f'<line class="axis y-axis" x1="{margin_left}" y1="{margin_top}"'
+            f' x2="{margin_left}" y2="{height - margin_bottom}" stroke="#333"/>',
+            f'<text x="{width / 2:.1f}" y="{height - 24}" text-anchor="middle"'
+            f' font-family="sans-serif" font-size="15">'
+            "Constraints-first score (higher is better)</text>",
+            f'<text x="24" y="{height / 2:.1f}" text-anchor="middle"'
+            f' transform="rotate(-90 24 {height / 2:.1f})" font-family="sans-serif"'
+            f' font-size="15">SNQI mean (higher is better)</text>',
+        ]
+    )
+
     if polyline:
         parts.append(
             f'<polyline points="{polyline}" fill="none" stroke="#1f77b4" stroke-width="2.5"/>'
         )
-    for row in rows:
+
+    for index, row in enumerate(ranked_rows, start=1):
         cx = x_pos(float(row.get("constraints_first_score", 0.0)))
         cy = y_pos(float(row.get("snqi_mean", 0.0)))
-        color = "#1f77b4" if bool(row.get("pareto_front")) else "#777777"
-        planner = html.escape(str(row.get("planner", "unknown")))
+        is_front = bool(row.get("pareto_front"))
+        color = "#1f77b4" if is_front else "#777777"
+        name = str(row.get("planner", "unknown"))
+        point_class = "front" if is_front else "non-front"
+        label_x, label_y, label_anchor = _point_label_position(
+            cx,
+            cy,
+            index,
+            plot_left=margin_left,
+            plot_right=width - margin_right,
+            plot_top=margin_top,
+            plot_bottom=height - margin_bottom,
+        )
         parts.extend(
             [
-                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="{color}"/>',
-                f'<text x="{cx + 8:.1f}" y="{cy - 8:.1f}" font-family="sans-serif" font-size="12">{planner}</text>',
+                f'<circle class="point-halo {point_class}" cx="{cx:.1f}" cy="{cy:.1f}"'
+                ' r="7" fill="white"/>',
+                f'<circle class="pareto-point {point_class}" data-planner="{html.escape(name)}"'
+                f' cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="{color}"/>',
+                f'<text class="point-index {point_class}" x="{label_x:.1f}" y="{label_y:.1f}"'
+                f' text-anchor="{label_anchor}" font-family="sans-serif" font-size="11"'
+                f' font-weight="600" fill="{color}">{index}</text>',
             ]
         )
+
+    if ranked_rows:
+        legend_x = margin_left + 12
+        legend_y = margin_top + 12
+        legend_width = min(
+            plot_width - 24,
+            max(
+                230.0,
+                max(len(str(row.get("planner", "unknown"))) for row in ranked_rows) * 5.8 + 48,
+            ),
+        )
+        legend_height = 30 + len(ranked_rows) * 16
+        parts.extend(
+            [
+                f'<rect class="planner-legend" x="{legend_x}" y="{legend_y}"'
+                f' width="{legend_width:.1f}" height="{legend_height}" rx="4"'
+                ' fill="#ffffff" fill-opacity="0.94" stroke="#CCCCCC"/>',
+                f'<text x="{legend_x + 10}" y="{legend_y + 17}" font-family="sans-serif"'
+                ' font-size="11" font-weight="600" fill="#333">Planner legend</text>',
+            ]
+        )
+        for index, row in enumerate(ranked_rows, start=1):
+            entry_y = legend_y + 26 + index * 16
+            is_front = bool(row.get("pareto_front"))
+            color = "#1f77b4" if is_front else "#777777"
+            name = html.escape(str(row.get("planner", "unknown")))
+            parts.extend(
+                [
+                    f'<circle class="legend-swatch" cx="{legend_x + 12}" cy="{entry_y - 4}"'
+                    f' r="4" fill="{color}"/>',
+                    f'<text class="legend-entry" x="{legend_x + 22}" y="{entry_y}"'
+                    f' font-family="sans-serif" font-size="10" fill="#333">'
+                    f"{index}. {name}</text>",
+                ]
+            )
+
     parts.append("</svg>")
     return "\n".join(parts) + "\n"
 

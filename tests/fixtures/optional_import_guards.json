@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 102,
+  "total_guards": 106,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 2,
@@ -60,12 +60,13 @@
       ]
     },
     "AttributeError+ImportError+OSError+RuntimeError+TypeError+ValueError": {
-      "count_ceiling": 1,
-      "has_as_count": 1,
+      "count_ceiling": 2,
+      "has_as_count": 2,
       "pragma_no_cover_count": 0,
       "blessed": true,
-      "note": "Blessed broad catch: defensive visualization ingest boundary.",
+      "note": "Blessed broad catches: defensive visualization ingest and authorization-gated episode execution boundaries.",
       "samples": [
+        "robot_sf/benchmark/issue_4142_dpcbf_dense_runner.py:951",
         "robot_sf/benchmark/visualization.py:467"
       ]
     },
@@ -90,9 +91,9 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 71,
-      "has_as_count": 14,
-      "pragma_no_cover_count": 24,
+      "count_ceiling": 74,
+      "has_as_count": 15,
+      "pragma_no_cover_count": 25,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
@@ -107,12 +108,15 @@
         "robot_sf/baselines/sicnav.py:420",
         "robot_sf/baselines/sicnav.py:298",
         "robot_sf/benchmark/cli.py:198",
+        "robot_sf/benchmark/collision_causal_report.py:47",
         "robot_sf/benchmark/distributions.py:131",
         "robot_sf/benchmark/episode_replay_figure.py:37",
         "robot_sf/benchmark/episode_replay_figure.py:50",
         "robot_sf/benchmark/episode_replay_figure.py:57",
         "robot_sf/benchmark/episode_replay_figure.py:852",
         "robot_sf/benchmark/episode_replay_figure.py:890",
+        "robot_sf/benchmark/figure_qa.py:502",
+        "robot_sf/benchmark/figure_qa.py:570",
         "robot_sf/benchmark/figures/export.py:155",
         "robot_sf/benchmark/full_classic/encode.py:36",
         "robot_sf/benchmark/full_classic/encode.py:86",
@@ -134,8 +138,8 @@
         "robot_sf/benchmark/live_forecast_replay_gate.py:954",
         "robot_sf/benchmark/near_miss_determinism.py:394",
         "robot_sf/benchmark/plots.py:28",
-        "robot_sf/benchmark/runner.py:41",
-        "robot_sf/benchmark/runner.py:47",
+        "robot_sf/benchmark/runner.py:42",
+        "robot_sf/benchmark/runner.py:48",
         "robot_sf/benchmark/scenario_generator.py:48",
         "robot_sf/benchmark/scenario_schema.py:25",
         "robot_sf/benchmark/schema_validator.py:20",
@@ -190,7 +194,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive ingest boundary. Review carefully.",
       "samples": [
-        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:266"
+        "robot_sf/benchmark/camera_ready/resource_lifecycle.py:269"
       ]
     },
     "ImportError+RuntimeError": {

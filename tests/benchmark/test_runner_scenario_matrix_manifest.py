@@ -72,3 +72,287 @@ def test_load_scenario_matrix_accepts_task_bundle_reference() -> None:
         "goal_behind_robot",
         "single_ped_crossing_orthogonal",
     ]
+
+
+# Abstract benchmark scenarios (density/flow/obstacle form) carry neither a
+# ``name``/``scenario_id`` nor a ``map_file``/``map_id``. They must load from a
+# single-document top-level list the same way they load from a multi-document
+# stream, without routing through the map-oriented manifest validator (#5429).
+_ABSTRACT_SCENARIOS = [
+    {
+        "id": "batch-uni-low-open",
+        "density": "low",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 2,
+    },
+    {
+        "id": "batch-uni-high-open",
+        "density": "high",
+        "flow": "uni",
+        "obstacle": "open",
+        "groups": 0.0,
+        "speed_var": "low",
+        "goal_topology": "point",
+        "robot_context": "embedded",
+        "repeats": 2,
+    },
+]
+
+
+def _capture_loader_logs() -> tuple[list[str], int]:
+    """Attach a loguru sink capturing scenario-loader messages.
+
+    Returns:
+        Tuple of (captured message list, sink handler id) for later removal.
+    """
+    from loguru import logger
+
+    messages: list[str] = []
+    handler_id = logger.add(
+        lambda message: messages.append(message.record["message"]),
+        filter="robot_sf.training.scenario_loader",
+        level="WARNING",
+    )
+    return messages, handler_id
+
+
+def test_load_scenario_matrix_single_doc_list_returns_abstract_scenarios(tmp_path: Path) -> None:
+    """A single-document list of abstract scenarios loads verbatim (#5429)."""
+    from loguru import logger
+
+    matrix_path = tmp_path / "abstract_matrix.yaml"
+    _write_yaml(matrix_path, _ABSTRACT_SCENARIOS)
+
+    messages, handler_id = _capture_loader_logs()
+    try:
+        scenarios = load_scenario_matrix(matrix_path)
+    finally:
+        logger.remove(handler_id)
+
+    assert scenarios == _ABSTRACT_SCENARIOS
+    # No entry gained a name/map field, and the map-oriented validator was not
+    # invoked, so its misleading "missing name"/"no map_file" warnings are absent.
+    assert all("name" not in sc and "map_file" not in sc for sc in scenarios)
+    assert not any("missing a name" in m or "no map_file" in m for m in messages)
+
+
+def test_load_scenario_matrix_single_doc_list_matches_stream(tmp_path: Path) -> None:
+    """Single-document list and multi-document stream yield identical scenarios (#5429)."""
+    list_path = tmp_path / "list.yaml"
+    list_path.write_text(yaml.safe_dump(_ABSTRACT_SCENARIOS), encoding="utf-8")
+
+    stream_path = tmp_path / "stream.yaml"
+    stream_path.write_text(yaml.safe_dump_all(_ABSTRACT_SCENARIOS), encoding="utf-8")
+
+    assert load_scenario_matrix(list_path) == load_scenario_matrix(stream_path)
+
+
+def test_load_scenario_matrix_empty_single_doc_list_fails_closed(tmp_path: Path) -> None:
+    """An empty single-document list raises instead of a silent zero-job run (#5429)."""
+    import pytest
+
+    empty_path = tmp_path / "empty.yaml"
+    empty_path.write_text("[]\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="empty scenario list"):
+        load_scenario_matrix(empty_path)
+
+
+def test_load_scenario_matrix_single_doc_map_list_preserves_manifest_validation(
+    tmp_path: Path,
+) -> None:
+    """Top-level map manifests still resolve and validate through the shared loader."""
+    import pytest
+
+    matrix_path = tmp_path / "map_matrix.yaml"
+    matrix_path.write_text(
+        "- name: named_map\n  map_id: definitely-not-a-real-map\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Unknown map_id"):
+        load_scenario_matrix(matrix_path)
+
+
+# ---------------------------------------------------------------------------
+# Single-document mapping with abstract scenarios (#5433)
+# ---------------------------------------------------------------------------
+
+_MAPPING_ABSTRACT_SCENARIOS = {
+    "scenarios": [
+        {
+            "id": "map-uni-low-open",
+            "density": "low",
+            "flow": "uni",
+            "obstacle": "open",
+            "groups": 0.0,
+            "speed_var": "low",
+            "goal_topology": "point",
+            "robot_context": "embedded",
+            "repeats": 2,
+        },
+        {
+            "id": "map-uni-high-open",
+            "density": "high",
+            "flow": "uni",
+            "obstacle": "open",
+            "groups": 0.0,
+            "speed_var": "low",
+            "goal_topology": "point",
+            "robot_context": "embedded",
+            "repeats": 2,
+        },
+    ]
+}
+
+
+def test_load_scenario_matrix_mapping_abstract_scenarios_returns_directly(
+    tmp_path: Path,
+) -> None:
+    """A single-doc mapping whose ``scenarios:`` entries are all abstract loads
+    verbatim without routing through the map-oriented manifest loader (#5433)."""
+    from loguru import logger
+
+    matrix_path = tmp_path / "mapping_abstract.yaml"
+    _write_yaml(matrix_path, _MAPPING_ABSTRACT_SCENARIOS)
+
+    messages, handler_id = _capture_loader_logs()
+    try:
+        scenarios = load_scenario_matrix(matrix_path)
+    finally:
+        logger.remove(handler_id)
+
+    assert scenarios == _MAPPING_ABSTRACT_SCENARIOS["scenarios"]
+    assert all("name" not in sc and "map_file" not in sc for sc in scenarios)
+    assert not any("missing a name" in m or "no map_file" in m for m in messages)
+
+
+def test_load_scenario_matrix_mapping_matches_list_and_stream(tmp_path: Path) -> None:
+    """Mapping, list, and stream forms of the same abstract scenarios agree (#5433)."""
+    mapping_path = tmp_path / "mapping.yaml"
+    _write_yaml(mapping_path, _MAPPING_ABSTRACT_SCENARIOS)
+
+    list_path = tmp_path / "list.yaml"
+    _write_yaml(list_path, _MAPPING_ABSTRACT_SCENARIOS["scenarios"])
+
+    stream_path = tmp_path / "stream.yaml"
+    stream_path.write_text(
+        yaml.safe_dump_all(_MAPPING_ABSTRACT_SCENARIOS["scenarios"]),
+        encoding="utf-8",
+    )
+
+    assert load_scenario_matrix(mapping_path) == load_scenario_matrix(list_path)
+    assert load_scenario_matrix(mapping_path) == load_scenario_matrix(stream_path)
+
+
+def test_load_scenario_matrix_mapping_with_includes_preserves_manifest_path(
+    tmp_path: Path,
+) -> None:
+    """A mapping that uses ``includes`` still routes through the manifest loader."""
+    map_path = tmp_path / "map.svg"
+    map_path.write_text("<svg></svg>", encoding="utf-8")
+
+    include_path = tmp_path / "include.yaml"
+    _write_yaml(
+        include_path,
+        {
+            "scenarios": [
+                {
+                    "name": "sc_included",
+                    "map_file": "map.svg",
+                    "simulation_config": {"max_episode_steps": 50},
+                    "metadata": {"archetype": "crossing", "density": "low"},
+                }
+            ]
+        },
+    )
+
+    manifest_path = tmp_path / "manifest.yaml"
+    _write_yaml(manifest_path, {"scenarios": [], "includes": ["include.yaml"]})
+
+    scenarios = load_scenario_matrix(manifest_path)
+    assert len(scenarios) == 1
+    assert scenarios[0]["name"] == "sc_included"
+
+
+def test_load_scenario_matrix_mapping_with_named_entry_preserves_manifest_path(
+    tmp_path: Path,
+) -> None:
+    """A mapping whose entries carry ``name``/``map_id`` validates through the loader."""
+    import pytest
+
+    matrix_path = tmp_path / "named_mapping.yaml"
+    _write_yaml(
+        matrix_path,
+        {"scenarios": [{"name": "named_map", "map_id": "definitely-not-a-real-map"}]},
+    )
+
+    with pytest.raises(ValueError, match="Unknown map_id"):
+        load_scenario_matrix(matrix_path)
+
+
+def test_load_scenario_matrix_mapping_empty_scenarios_fails_closed(tmp_path: Path) -> None:
+    """A mapping with an empty ``scenarios:`` list raises (fail closed, #5433)."""
+    import pytest
+
+    matrix_path = tmp_path / "empty_mapping.yaml"
+    _write_yaml(matrix_path, {"scenarios": []})
+
+    with pytest.raises(ValueError, match="missing scenarios|no runnable scenarios"):
+        load_scenario_matrix(matrix_path)
+
+
+def test_load_scenario_matrix_mapping_malformed_entries_fail_closed(tmp_path: Path) -> None:
+    """A mapping whose ``scenarios:`` list contains non-mapping entries raises."""
+    import pytest
+
+    matrix_path = tmp_path / "malformed_mapping.yaml"
+    matrix_path.write_text("scenarios:\n  - not-a-mapping\n  - 42\n", encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        load_scenario_matrix(matrix_path)
+
+
+def test_run_batch_accepts_mapping_form_abstract_matrix(tmp_path: Path) -> None:
+    """Canonical ``run_batch`` path smoke test for mapping-form abstract matrix (#5433)."""
+    from robot_sf.benchmark.runner import run_batch
+
+    matrix_path = tmp_path / "abstract_mapping.yaml"
+    _write_yaml(
+        matrix_path,
+        {
+            "scenarios": [
+                {
+                    "id": "smoke-uni-low",
+                    "density": "low",
+                    "flow": "uni",
+                    "obstacle": "open",
+                    "groups": 0.0,
+                    "speed_var": "low",
+                    "goal_topology": "point",
+                    "robot_context": "embedded",
+                    "repeats": 1,
+                },
+            ]
+        },
+    )
+
+    out_file = tmp_path / "episodes.jsonl"
+    summary = run_batch(
+        matrix_path,
+        out_path=out_file,
+        schema_path="robot_sf/benchmark/schemas/episode.schema.v1.json",
+        base_seed=42,
+        horizon=10,
+        dt=0.1,
+        record_forces=False,
+        append=False,
+    )
+    assert summary["total_jobs"] == 1
+    assert summary["written"] == 1
+    assert out_file.exists()

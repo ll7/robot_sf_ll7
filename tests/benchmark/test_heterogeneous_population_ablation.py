@@ -318,16 +318,11 @@ def test_mean_matched_harness_manifest_fails_closed_on_missing_control_trace_inp
 
     manifest = build_mean_matched_harness_manifest(_manifest_config())
 
-    assert manifest["status"] == "blocked_pending_control_trace"
-    assert any(
-        f"{EPISODE_CONTROL_TRACE_PATH} missing" in blocker for blocker in manifest["blockers"]
-    )
-    assert any("steps[].clearance_m missing" in blocker for blocker in manifest["blockers"])
-    assert any(
-        "steps[].near_field_exposure_s missing" in blocker for blocker in manifest["blockers"]
-    )
+    assert manifest["status"] == "pending_runtime_capture"
+    assert manifest["blockers"] == []
     first_row = manifest["manifest_rows"][0]
     assert first_row["trace_readiness"]["ready"] is False
+    assert first_row["trace_readiness"]["status"] == "pending_runtime_capture"
     assert (
         f"scenario.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY}"
         in first_row["expected_episode_output_keys"]
@@ -548,6 +543,38 @@ def test_episode_record_readiness_blocks_missing_or_misaligned_trace_metadata() 
     )
 
 
+@pytest.mark.parametrize("missing_field", ["clearance_m", "near_field_exposure_s"])
+def test_episode_record_readiness_blocks_trace_without_per_step_metric_field(
+    missing_field: str,
+) -> None:
+    """Readiness fails closed when the runtime trace omits a required per-step metric.
+
+    This reproduces the exact SLURM-job-13379 failure mode (issue #5421, residual test
+    contract from closed duplicate PR #5402): the ``pedestrian_control_trace`` is present
+    but a per-step ``clearance_m`` / ``near_field_exposure_s`` field is absent, so
+    integration readiness cannot correctly evaluate the ablation. The field is removed with
+    ``del`` rather than ``dict.pop(field, None)`` so that fixture/schema drift which renames
+    or drops the metric raises ``KeyError`` here and fails this test loudly, instead of
+    silently no-op'ing and leaving the missing-per-step-metric path unexercised. Both metric
+    fields are covered independently because the per-metric readiness check reports only the
+    first missing key it encounters, so one generic case would never prove the second guard.
+    """
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+    records = _episode_records_for_manifest(manifest)
+    trace = records[0]["algorithm_metadata"]["pedestrian_control_trace"]
+    del trace["pedestrians"][0]["steps"][0][missing_field]
+
+    readiness = assess_mean_matched_episode_records(manifest, records)
+
+    assert readiness["status"] == "blocked"
+    assert readiness["ready"] is False
+    assert any(
+        f"control_trace.pedestrians[0].steps[0] missing '{missing_field}'" in blocker
+        for blocker in readiness["blockers"]
+    )
+
+
 def test_episode_record_readiness_blocks_missing_rank_metric() -> None:
     """Records cannot reach rank analysis without its finite episode metric."""
 
@@ -559,6 +586,23 @@ def test_episode_record_readiness_blocks_missing_rank_metric() -> None:
 
     assert readiness["status"] == "blocked"
     assert any("metrics missing or not mapping" in blocker for blocker in readiness["blockers"])
+
+
+def test_episode_record_readiness_blocks_manifest_readiness_contradiction() -> None:
+    """Readiness fails closed when manifest is truly blocked but records appear complete."""
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+    records = _episode_records_for_manifest(manifest)
+    manifest["status"] = "blocked_pending_control_trace"
+
+    readiness = assess_mean_matched_episode_records(manifest, records)
+
+    assert readiness["status"] == "blocked"
+    assert readiness["ready"] is False
+    assert any(
+        "manifest status is blocked_pending_control_trace" in blocker
+        for blocker in readiness["blockers"]
+    )
 
 
 def test_report_cli_stops_before_analysis_when_integration_readiness_is_blocked(
@@ -640,9 +684,9 @@ def test_repo_harness_config_builds_valid_manifest_and_fails_closed() -> None:
 
     assert manifest["schema_version"] == MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA
     assert manifest["issue"] == 3574
-    # Without episode runs the manifest is blocked — it fails closed, not open.
-    assert manifest["status"] == "blocked_pending_control_trace"
-    assert manifest["blockers"], "manifest must name the missing trace fields"
+    # Labels are present in arm populations, so manifest is pending runtime capture.
+    assert manifest["status"] == "pending_runtime_capture"
+    assert manifest["blockers"] == []
     # Paired arms must appear in every row.
     arms_seen = {row["population_arm"] for row in manifest["manifest_rows"]}
     assert arms_seen == {"heterogeneous", "mean_matched_homogeneous"}

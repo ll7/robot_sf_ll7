@@ -221,6 +221,43 @@ def test_mppi_is_deterministic_for_fixed_seed() -> None:
     assert a1 == a2
 
 
+def test_mppi_caches_absent_grid_payload_and_accepts_full_elite_fraction(monkeypatch) -> None:
+    """MPPI should cache a missing grid and keep full-elite configurations valid."""
+    planner = MPPISocialPlannerAdapter(
+        MPPISocialConfig(sample_count=8, elite_fraction=1.0, iterations=1, horizon_steps=2)
+    )
+    calls = 0
+
+    def _extract_grid_payload(_observation):
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(planner, "_extract_grid_payload", _extract_grid_payload)
+
+    linear, angular = planner.plan(_obs())
+
+    assert calls == 1
+    assert 0.0 <= linear <= planner.config.max_linear_speed
+    assert abs(angular) <= planner.config.max_angular_speed
+
+
+def test_mppi_obstacle_clearance_extracts_direct_payload_once(monkeypatch) -> None:
+    """Direct clearance calls should retain the uncached extraction contract."""
+    planner = MPPISocialPlannerAdapter(MPPISocialConfig())
+    grid = np.zeros((1, 5, 5), dtype=float)
+    grid[0, 2, 3] = 1.0
+    monkeypatch.setattr(
+        planner,
+        "_extract_grid_payload",
+        lambda _observation: (grid, {"resolution": [0.5], "channel_indices": [0]}),
+    )
+    monkeypatch.setattr(planner, "_world_to_grid", lambda point, meta, grid_shape: (2, 2))
+
+    clearance = planner._min_obstacle_clearance(np.asarray([0.0, 0.0]), _obs())
+
+    assert clearance == 0.5
+
+
 def test_mppi_progress_escape_breaks_stall() -> None:
     """MPPI should inject progress command when first action is too conservative."""
     cfg = MPPISocialConfig(

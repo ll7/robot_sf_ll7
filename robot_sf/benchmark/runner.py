@@ -22,6 +22,7 @@ import shlex
 import sys
 import time
 import uuid
+from collections.abc import Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import (
@@ -401,10 +402,36 @@ class _PlannerStepProcess:
 
 
 def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
-    """Load a scenario matrix from YAML (stream, list, or dict with scenarios).
+    """Load a scenario matrix from YAML (stream, list, or mapping manifest).
+
+    Routing (see issues #5429, #5433):
+      - A **multi-document** YAML stream is an abstract scenario matrix; each
+        document is returned directly without include expansion.
+      - A **single document that is a list** is likewise an abstract scenario
+        matrix (the natural ``yaml.safe_dump([s1, s2])`` form) and is returned
+        directly. It is *not* sent through the map-oriented manifest loader,
+        which would emit misleading ``missing name``/``no map_file`` warnings
+        for abstract benchmark scenarios that legitimately carry neither.
+      - A **single document that is a mapping** containing a ``scenarios:`` list
+        of purely abstract entries (no ``name``/``scenario_id``/``map_file``/``map_id``)
+        and no manifest-only keys (``includes``, ``select_scenarios``,
+        ``scenario_overrides``, ``scenario_overrides_by_name``, ``map_search_paths``)
+        is likewise an abstract scenario matrix and is returned directly.
+      - All other **single-document mappings** are treated as manifests and
+        deferred to the include-aware :func:`load_scenarios` (supports
+        ``includes``, ``scenarios:``, ``select_scenarios``, overrides, and
+        per-scenario ``map_file``/``map_id`` references).
+
+    Args:
+        path: Scenario matrix YAML path or a ``bundle:`` task-bundle reference.
 
     Returns:
         List of scenario dictionaries.
+
+    Raises:
+        ValueError: If the file is empty or a single-document list/mapping
+            yields no scenarios (fail closed instead of a silent ``written=0``
+            run).
     """
     if is_task_bundle_reference(path):
         return [dict(s) for s in load_scenarios(path)]
@@ -417,7 +444,58 @@ def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
     # Preserve legacy YAML stream behavior (multiple docs) without include expansion.
     if len(docs) > 1:
         return [dict(s) for s in docs]
-    # Single-document path: defer to include-aware loader for manifests.
+    # A single-document top-level list is an abstract scenario matrix, symmetric
+    # with the multi-document stream above; return it directly rather than routing
+    # abstract scenarios through the map-oriented manifest validator.
+    single_doc = docs[0]
+    if isinstance(single_doc, list):
+        if not single_doc:
+            raise ValueError(
+                f"Scenario matrix '{scenario_path}' contains an empty scenario list; "
+                "scenario config has no runnable scenarios."
+            )
+        if any(not isinstance(scenario, Mapping) for scenario in single_doc):
+            raise ValueError(f"Scenario matrix '{scenario_path}' list entries must be mappings.")
+        # Preserve the legacy manifest path for named or map-referenced entries.  Those entries
+        # rely on validation, map-id resolution, and relative-path rebasing even when the YAML
+        # document itself is a top-level list.
+        if any(
+            any(key in scenario for key in ("name", "scenario_id", "map_file", "map_id"))
+            for scenario in single_doc
+        ):
+            scenarios = load_scenarios(scenario_path, base_dir=scenario_path)
+            return [dict(s) for s in scenarios]
+        return [dict(s) for s in single_doc]
+    # A single-document mapping with a ``scenarios:`` list whose entries are all
+    # abstract (no name/scenario_id/map_file/map_id) and whose top-level keys
+    # carry no manifest-only features (includes, select, overrides, search paths)
+    # is an abstract scenario matrix in mapping form.  Return it directly so the
+    # map-oriented manifest validator does not emit misleading warnings (#5433).
+    if isinstance(single_doc, Mapping) and "scenarios" in single_doc:
+        _MANIFEST_ONLY_KEYS = frozenset(
+            {
+                "includes",
+                "include",
+                "scenario_files",
+                "select_scenarios",
+                "scenario_overrides",
+                "scenario_overrides_by_name",
+                "map_search_paths",
+            }
+        )
+        scenario_entries = single_doc["scenarios"]
+        if (
+            not _MANIFEST_ONLY_KEYS & single_doc.keys()
+            and isinstance(scenario_entries, list)
+            and scenario_entries
+            and all(isinstance(s, Mapping) for s in scenario_entries)
+            and not any(
+                any(k in s for k in ("name", "scenario_id", "map_file", "map_id"))
+                for s in scenario_entries
+            )
+        ):
+            return [dict(s) for s in scenario_entries]
+    # Single-document mapping: defer to include-aware loader for manifests.
     scenarios = load_scenarios(scenario_path, base_dir=scenario_path)
     return [dict(s) for s in scenarios]
 

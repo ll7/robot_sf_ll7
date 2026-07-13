@@ -30,6 +30,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plus synthetic-fixture recovery of known flips/upsets/negative-controls; it is not a benchmark
   metric or planner-ranking claim, and confirmation runs are a separate exact-compute packet (no
   benchmark campaign or Slurm/GPU run included).
+* **issue #5445 matched calibration comparison for online collision-risk estimators.** New
+  `robot_sf/research/collision_risk/calibration.py` harness scores every estimator on *identical*
+  matched inputs (scenario histories, candidate actions, footprints, horizons) and grades each
+  against the same realized collision outcome. It reports Brier score, log loss, reliability data
+  with bin counts, expected calibration error (with a bootstrap CI), area under the precision-recall
+  curve, false-negative rate at predeclared thresholds, time-to-warning, horizon monotonicity, and
+  action sensitivity — all weight-aware — plus per-family/density/prediction-model stratification and
+  a `use online` / `offline analysis only` / `revise` / `stop` verdict per estimator. Deterministic
+  TTC/velocity-obstacle/reachability warnings are graded as rankings/warnings only, never placed on a
+  probability reliability curve; contracted-but-missing estimators (multimodal-forecast MC, the #1472
+  learned-risk model) are recorded as `unavailable` rather than dropped.
+  `scripts/analysis/collision_risk_calibration_report.py` runs a frozen, preregistered packet
+  (`configs/analysis/issue_5445_matched_calibration.yaml`) and fails closed below a preregistered
+  eligible-sample count. Labels are drawn from an explicit constant-velocity forecast model
+  (optionally misspecified per family), so this is **API + fixture evidence**: it validates the
+  machinery, shows self-consistency of the constant-velocity Monte Carlo estimator against its own
+  model, and demonstrates that a strong misspecification is detected (ECE 0.166 vs in-model ~0.05).
+  Not calibrated benchmark risk for the simulator distribution and never a real-world risk claim; no
+  benchmark campaign or Slurm/GPU run is included. See
+  `docs/context/evidence/issue_5445_calibration_preregistration_2026-07-13.md`.
 * **issue #5413 bounded kinodynamic SIPP search (#5306 Slice 2).** Adds trusted-horizon,
   time-aligned pedestrian occupancy; weighted state-time search; reachable command transitions;
   curved-footprint static checks; and multi-cycle commitment. Bounded failure uses a reachable,

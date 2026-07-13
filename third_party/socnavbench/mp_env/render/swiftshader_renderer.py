@@ -24,14 +24,13 @@ r"""Implements loading and rendering of meshes. Contains 2 classes:
   here.
 """
 
-import numpy as np
-import os
-import cv2
 import ctypes
+import glob
 import logging
 import os
-import glob
 import sys
+
+import cv2
 import numpy as np
 import pyassimp as assimp
 from OpenGL.GLES2 import *
@@ -114,7 +113,7 @@ class Shape():
             for m in self.meshes:
                 try:
                     file_name = os.path.join(dir_name, all_files[i])
-                except:
+                except IndexError:
                     print("%sout of bounds reference to index" % (color_text["red"]),
                           i, "out of", len(all_files), "%s" % (color_text["reset"]))
                     continue

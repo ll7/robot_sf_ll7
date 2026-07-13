@@ -229,7 +229,8 @@ class Building:
         )
 
         # Update The Human Traversible
-        if appearance_dataset.surreal_params.compute_human_traversible:
+        surreal_params = appearance_dataset.surreal_params
+        if surreal_params and surreal_params.compute_human_traversible:
             map = self.map
             env = self.env
             robot: DotMap = self.robot

@@ -34,7 +34,7 @@ def get_dataset(dataset_name, imset, data_dir, surreal_params=None):
                                                 data_dir=data_dir,
                                                 surreal_params=surreal_params)
     else:
-        assert(False and 'Not one of sbpd')
+        raise ValueError(f"Unsupported dataset: {dataset_name}")
     return dataset
 
 
@@ -54,7 +54,8 @@ class Loader():
 
         dir_name = os.path.join(building['data_dir'], 'mesh', building['name'])
         obj_files = glob.glob1(dir_name, '*.obj')
-        assert len(obj_files) > 0 and "could not find .obj file"
+        if not obj_files:
+            raise FileNotFoundError(f"Could not find .obj file in {dir_name}")
         mesh_file_name = obj_files[0]
         mesh_file_name_full = os.path.join(dir_name, mesh_file_name)
         #logging.error('Loading building from obj file: %s', mesh_file_name_full)

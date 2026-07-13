@@ -1,3 +1,4 @@
+# AI-GENERATED NEEDS-REVIEW
 pair,metric,delta_point,sc_ci_lo,sc_ci_hi,sc_excl0,sb_ci_lo,sb_ci_hi,sb_excl0
 hybrid_rule_v3_fast_progress_static_escape_vs_orca,success,+0.0792,+0.0042,+0.1569,True,+0.0521,+0.1063,True
 hybrid_rule_v3_fast_progress_static_escape_vs_orca,collision,-0.0778,-0.1667,+0.0125,False,-0.1021,-0.0549,True

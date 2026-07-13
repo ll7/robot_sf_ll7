@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "issue_4882.s30_branch_verdict.v1",
   "branch": "branch_b_boundary",
   "branch_headline_basis": "Most-conservative reading per guardrail: the task-specified scenario-clustered hierarchical bootstrap (resample 48 scenarios, then 30 seeds within each) applied to the literally stated rule ('the leading hybrid arm's CI separates from ORCA's on the primary metric'). Under it the leading hybrid's per-arm success CI overlaps ORCA's.",

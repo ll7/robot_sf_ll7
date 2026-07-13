@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "issue_4882.pairwise_deltas.v1",
   "pairwise": {
     "hybrid_rule_v3_fast_progress_static_escape_vs_orca": {

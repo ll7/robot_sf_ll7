@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "issue_4882.rank_stability.v1",
   "method": "S20-prefix (seeds 111-130) vs S30 (111-140) on the same clean slice, exploiting S10\u2282S20\u2282S30 prefix nesting",
   "ranks": {

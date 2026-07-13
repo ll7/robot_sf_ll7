@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "issue_4882.campaign_crosscheck.v1",
   "arms_expected": 6,
   "arms_present": 6,

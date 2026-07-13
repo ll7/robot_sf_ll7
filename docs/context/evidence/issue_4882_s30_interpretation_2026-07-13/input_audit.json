@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "issue_4882.input_audit.v1",
   "canonical_identity": "(scenario_id, seed, horizon=600); 48 scenarios x 30 seeds (paper_eval_s30, seeds 111-140) = 1440",
   "contamination_and_filter": {

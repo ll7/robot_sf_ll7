@@ -1,5 +1,5 @@
 <!-- AI-GENERATED (robot_sf#4882, 2026-07-13) — NEEDS-REVIEW -->
-# S20-prefix vs S30 Rank Stability
+# Issue #4882 — S20-Prefix vs S30 Rank Stability
 
 Diagnostic only. Compares the planner ranking at the **S20 prefix** (seeds 111–130, the first 20 of the
 S30 schedule) against the full **S30** ranking (seeds 111–140), exploiting the pre-registered

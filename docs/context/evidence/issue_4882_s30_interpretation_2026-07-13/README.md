@@ -1,5 +1,5 @@
 <!-- AI-GENERATED (robot_sf#4882, 2026-07-13) — NEEDS-REVIEW -->
-# Issue #4882 — S30 Hybrid-vs-ORCA Interpretation Packet (independent read)
+# Issue #4882 — S30 Hybrid-vs-ORCA Interpretation Packet (Independent Read)
 
 Independent, diagnostic-only interpretation of the arm-restricted h600 **S30** (30-seed,
 seeds 111–140) hybrid-vs-ORCA benchmark wave pre-registered in

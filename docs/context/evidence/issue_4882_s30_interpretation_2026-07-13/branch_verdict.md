@@ -1,5 +1,5 @@
 <!-- AI-GENERATED (robot_sf#4882, 2026-07-13) — NEEDS-REVIEW -->
-# S30 Hybrid-vs-ORCA Branch Verdict
+# Issue #4882 — S30 Hybrid-vs-ORCA Branch Verdict
 
 **Tested pair:** leading hybrid `hybrid_rule_v3_fast_progress_static_escape_continuous` vs `orca`.
 **Primary metric:** episode success rate. **Effect direction:** hybrid > ORCA (all point estimates).

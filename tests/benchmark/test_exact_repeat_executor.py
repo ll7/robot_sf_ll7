@@ -337,8 +337,9 @@ def test_verify_host_report_scopes_repeat_claim_to_runnable_cells(
 
 def test_verify_host_report_rejects_disposition_with_repeats(tmp_path, manifest, resolved_bundle):
     """A disposition cannot hide fabricated repeat evidence."""
+    unsupported_bundle = _bundle_with_unsupported_planner(resolved_bundle)
     host_result = execute_campaign(
-        resolved_bundle,
+        unsupported_bundle,
         output_dir=tmp_path / "malformed_disposition",
         run_episode=_deterministic_mock_runner,
     )
@@ -350,8 +351,9 @@ def test_verify_host_report_rejects_disposition_with_repeats(tmp_path, manifest,
 
 def test_verify_host_report_preserves_mixed_cell_target_counts(tmp_path, manifest, resolved_bundle):
     """Mixed cells retain both runnable and dispositioned target counts."""
+    unsupported_bundle = _bundle_with_unsupported_planner(resolved_bundle)
     host_result = execute_campaign(
-        resolved_bundle,
+        unsupported_bundle,
         output_dir=tmp_path / "mixed_cell",
         run_episode=_deterministic_mock_runner,
     )

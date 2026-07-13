@@ -11,6 +11,12 @@ from typing import Any, NamedTuple
 
 from loguru import logger
 
+from robot_sf.benchmark.circuit_breaker import (
+    build_abort_metadata,
+    error_signature,
+    normalize_circuit_breaker_threshold,
+)
+
 # Set PyTorch allocator configuration early before torch is loaded.
 os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
 
@@ -29,6 +35,7 @@ class BatchExecutionResult(NamedTuple):
     runtime_algorithm_contract: dict[str, Any] | None
     feasibility_totals: FeasibilityTotals
     batch_runtime_sec: float
+    abort_metadata: dict[str, Any] | None
 
 
 def _initial_feasibility_totals() -> FeasibilityTotals:
@@ -89,12 +96,23 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
     apply_worker_metadata_bridge,
     scenario_id,
     feasibility_totals: FeasibilityTotals,
-) -> tuple[int, list[dict[str, Any]], list[dict[str, Any]], bool, int, int, dict[str, Any] | None]:
+    circuit_breaker_threshold: int | None = None,
+) -> tuple[
+    int,
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    bool,
+    int,
+    int,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
     """Execute map-runner jobs serially and append successful records.
 
     Returns:
         Write count, failures, adapter counters, and runtime algorithm contract.
     """
+    circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     wrote = 0
     episode_records: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
@@ -102,9 +120,13 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
     adapter_adapted_steps = 0
     adapter_samples_seen = False
     runtime_algorithm_contract: dict[str, Any] | None = None
+    abort_metadata: dict[str, Any] | None = None
+    last_signature: tuple[str, str] | None = None
+    consecutive_failures = 0
+    first_fail_index: int | None = None
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("a", encoding="utf-8") as handle:
-        for scenario, seed in jobs:
+        for idx, (scenario, seed) in enumerate(jobs, start=1):
             try:
                 rec = run_map_job((scenario, seed, fixed_params))
                 (
@@ -124,6 +146,9 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
                 write_validated_to_handle(handle, schema, rec)
                 wrote += 1
                 episode_records.append(rec)
+                last_signature = None
+                consecutive_failures = 0
+                first_fail_index = None
             except Exception as exc:  # pragma: no cover - error path
                 logger.exception(
                     "Map batch worker failed in serial execution: scenario={} seed={}",
@@ -137,6 +162,30 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
                         "error": repr(exc),
                     }
                 )
+                if circuit_breaker_threshold > 0:
+                    signature = error_signature(exc)
+                    if signature == last_signature:
+                        consecutive_failures += 1
+                    else:
+                        last_signature = signature
+                        consecutive_failures = 1
+                        first_fail_index = idx
+                    if consecutive_failures >= circuit_breaker_threshold:
+                        abort_metadata = build_abort_metadata(
+                            signature=signature,
+                            consecutive_failures=consecutive_failures,
+                            first_fail_index=first_fail_index or idx,
+                            episodes_completed_before_onset=wrote,
+                            total_jobs=len(jobs),
+                        )
+                        logger.warning(
+                            "Map circuit breaker tripped after {} consecutive identical "
+                            "failures at {}/{} jobs",
+                            consecutive_failures,
+                            idx,
+                            len(jobs),
+                        )
+                        break
             finally:
                 # Force garbage collection to clean up model/env refs between consecutive arms
                 gc.collect()
@@ -153,6 +202,7 @@ def _serial_execute_map_jobs(  # noqa: PLR0913
         adapter_native_steps,
         adapter_adapted_steps,
         runtime_algorithm_contract,
+        abort_metadata,
     )
 
 
@@ -275,12 +325,14 @@ def execute_map_jobs(  # noqa: PLR0913
     executor_cls,
     as_completed_fn,
     multiprocessing_context: Any | None = None,
+    circuit_breaker_threshold: int | None = None,
 ) -> BatchExecutionResult:
     """Execute map-runner jobs and append validated JSONL records.
 
     Returns:
         Batch execution counters and metadata accumulators.
     """
+    circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     out_path = Path(out_path)
     feasibility_totals = _initial_feasibility_totals()
     batch_started = time.perf_counter()
@@ -293,6 +345,7 @@ def execute_map_jobs(  # noqa: PLR0913
             adapter_native_steps,
             adapter_adapted_steps,
             runtime_algorithm_contract,
+            abort_metadata,
         ) = _serial_execute_map_jobs(
             jobs=jobs,
             fixed_params=fixed_params,
@@ -303,8 +356,10 @@ def execute_map_jobs(  # noqa: PLR0913
             apply_worker_metadata_bridge=apply_worker_metadata_bridge,
             scenario_id=scenario_id,
             feasibility_totals=feasibility_totals,
+            circuit_breaker_threshold=circuit_breaker_threshold,
         )
     else:
+        abort_metadata = None
         (
             wrote,
             episode_records,
@@ -338,4 +393,5 @@ def execute_map_jobs(  # noqa: PLR0913
         runtime_algorithm_contract=runtime_algorithm_contract,
         feasibility_totals=feasibility_totals,
         batch_runtime_sec=float(max(time.perf_counter() - batch_started, 0.0)),
+        abort_metadata=(abort_metadata if workers <= 1 else None),
     )

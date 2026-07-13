@@ -304,6 +304,73 @@ def test_campaign_integrity_separates_contamination_invariants(tmp_path: Path) -
     } <= invariants
 
 
+def test_campaign_integrity_handles_heterogeneous_seed_values(tmp_path: Path) -> None:
+    """Malformed optional seeds produce blockers instead of a sorting TypeError."""
+    episodes_path = tmp_path / "runs" / "goal" / "episodes.jsonl"
+    episodes_path.parent.mkdir(parents=True)
+    rows = [
+        {
+            "scenario_id": "smoke",
+            "seed": None,
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": None,
+                "config_hash": "scenario-config",
+                "repo_commit": "commit-a",
+            },
+        },
+        {
+            "scenario_id": "smoke",
+            "seed": "",
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": "",
+                "config_hash": "scenario-config",
+                "repo_commit": "commit-a",
+            },
+        },
+        {
+            "scenario_id": "smoke",
+            "seed": "non-numeric",
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": "non-numeric",
+                "config_hash": "scenario-config",
+                "repo_commit": "commit-a",
+            },
+        },
+        {
+            "scenario_id": "smoke",
+            "seed": 0,
+            "result_provenance": {
+                "scenario_id": "smoke",
+                "seed": 0,
+                "config_hash": "scenario-config",
+                "repo_commit": "commit-a",
+            },
+        },
+    ]
+    episodes_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    verdict = camera_ready_run_state_module.validate_campaign_integrity(
+        [
+            {
+                "status": "ok",
+                "planner": {"key": "goal", "kinematics": "differential_drive"},
+                "episodes_path": str(episodes_path),
+                "summary": {"episodes_total": 4},
+            }
+        ],
+        scenarios=[{"id": "smoke", "seeds": [0, 1]}],
+        resolved_seeds=[0, 1],
+        campaign_root=tmp_path,
+        campaign_manifest={"git": {"commit": "commit-a"}},
+    )
+
+    assert verdict["status"] == "invalid"
+    assert any(blocker["invariant"] == "count_mismatch" for blocker in verdict["blockers"])
+
+
 def test_scenario_with_kinematics_patches_copy_without_mutating_input() -> None:
     """Scenario kinematics patching preserves unrelated fields and leaves input untouched."""
     scenario = {

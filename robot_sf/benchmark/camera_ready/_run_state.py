@@ -74,15 +74,37 @@ def _campaign_success_counters(
     }
 
 
+def _coerce_identifier(value: Any) -> int | str | None:
+    """Normalize an optional logical identifier without collapsing valid falsy values.
+
+    Returns:
+        Integer, string, or ``None`` representation of the identifier.
+    """
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def _episode_identity(record: Mapping[str, Any]) -> tuple[str, int | str | None]:
     """Return the stable logical identity used by aggregate-integrity checks."""
-    scenario_id = str(record.get("scenario_id", "")).strip()
-    seed = record.get("seed")
-    try:
-        seed = int(seed) if seed is not None else None
-    except (TypeError, ValueError):
-        seed = str(seed)
-    return scenario_id, seed
+    return str(record.get("scenario_id", "")).strip(), _coerce_identifier(record.get("seed"))
+
+
+def _episode_identity_sort_key(
+    identity: tuple[str, int | str | None],
+) -> tuple[str, tuple[int, str]]:
+    """Return a total ordering for identities containing heterogeneous seed values."""
+    seed = identity[1]
+    if seed is None:
+        seed_key = (0, "")
+    elif isinstance(seed, int):
+        seed_key = (1, str(seed))
+    else:
+        seed_key = (2, seed)
+    return identity[0], seed_key
 
 
 def _expected_episode_identities(
@@ -213,9 +235,13 @@ def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
             "expected": len(expected),
             "observed": len(records),
             "declared": declared,
-            "missing_identities": [list(identity) for identity in sorted(expected - observed_set)],
+            "missing_identities": [
+                list(identity)
+                for identity in sorted(expected - observed_set, key=_episode_identity_sort_key)
+            ],
             "unexpected_identities": [
-                list(identity) for identity in sorted(observed_set - expected)
+                list(identity)
+                for identity in sorted(observed_set - expected, key=_episode_identity_sort_key)
             ],
         }
         declared_count: int | None = None

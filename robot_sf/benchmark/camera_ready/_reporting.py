@@ -791,6 +791,7 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
     rows = payload.get("planner_rows", [])
     warnings = payload.get("warnings", [])
     scorecard = payload.get("credibility_scorecard")
+    campaign_integrity = payload.get("campaign_integrity") or {}
     accepted_unavailable_rows = [
         row
         for row in rows
@@ -816,6 +817,7 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
         f"- Campaign status: `{campaign.get('status', 'unknown')}`",
         f"- Campaign execution status: `{campaign.get('campaign_execution_status', 'unknown')}`",
         f"- Evidence status: `{campaign.get('evidence_status', 'unknown')}`",
+        f"- Aggregate integrity: `{campaign_integrity.get('status', 'not_evaluated')}`",
         f"- Status reason: `{campaign.get('status_reason', 'unknown')}`",
         f"- Benchmark success: `{campaign.get('benchmark_success', False)}`",
         f"- Successful rows: `{campaign.get('successful_runs', 0)}` / `{campaign.get('total_runs', 0)}`",
@@ -856,6 +858,24 @@ def write_campaign_report(  # noqa: C901, PLR0912, PLR0915
             )
     else:
         lines.append("No planner rows were produced.")
+
+    lines.extend(["", "## Aggregate Integrity", ""])
+    if campaign_integrity.get("status") == "valid":
+        lines.append("Final arm aggregates have exact logical coverage and compatible provenance.")
+    else:
+        lines.append(
+            "Publication is blocked: aggregate integrity is not valid; no rows were deduplicated "
+            "or selected as a favorable slice."
+        )
+        for blocker in campaign_integrity.get("blockers", []):
+            details = blocker.get("details", {})
+            lines.append(
+                f"- `{blocker.get('arm', 'unknown')}` `{blocker.get('invariant', 'unknown')}`: "
+                f"{_escape_markdown_cell(details)}"
+            )
+    lines.append(
+        f"Claim boundary: {_escape_markdown_cell(campaign_integrity.get('claim_boundary', ''))}"
+    )
 
     arm_rollup = payload.get("arm_rollup") or []
     if arm_rollup:

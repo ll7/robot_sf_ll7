@@ -7,7 +7,10 @@ helpers so existing imports keep working while orchestration is split gradually.
 
 from __future__ import annotations
 
+import json
 import subprocess
+from collections import Counter
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -25,8 +28,6 @@ from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
-
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
 
 
@@ -70,6 +71,273 @@ def _campaign_success_counters(
         "successful_runs": successful_runs,
         "core_total_runs": core_total_runs,
         "core_successful_runs": core_successful_runs,
+    }
+
+
+def _coerce_identifier(value: Any) -> int | str | None:
+    """Normalize an optional logical identifier without collapsing valid falsy values.
+
+    Returns:
+        Integer, string, or ``None`` representation of the identifier.
+    """
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _episode_identity(record: Mapping[str, Any]) -> tuple[str, int | str | None]:
+    """Return the stable logical identity used by aggregate-integrity checks."""
+    return str(record.get("scenario_id", "")).strip(), _coerce_identifier(record.get("seed"))
+
+
+def _episode_identity_sort_key(
+    identity: tuple[str, int | str | None],
+) -> tuple[str, tuple[int, str]]:
+    """Return a total ordering for identities containing heterogeneous seed values."""
+    seed = identity[1]
+    if seed is None:
+        seed_key = (0, "")
+    elif isinstance(seed, int):
+        seed_key = (1, str(seed))
+    else:
+        seed_key = (2, seed)
+    return identity[0], seed_key
+
+
+def _expected_episode_identities(
+    scenarios: Sequence[Mapping[str, Any]],
+    resolved_seeds: Sequence[int],
+) -> set[tuple[str, int]]:
+    """Build the expected scenario/seed denominator from the prepared campaign matrix.
+
+    Returns:
+        Set of logical scenario/seed identities expected in every successful arm.
+    """
+    expected: set[tuple[str, int]] = set()
+    fallback_seeds = [int(seed) for seed in resolved_seeds]
+    for scenario in scenarios:
+        scenario_id = str(
+            scenario.get("id") or scenario.get("scenario_id") or scenario.get("name") or ""
+        ).strip()
+        raw_seeds = scenario.get("seeds")
+        seeds = (
+            raw_seeds if isinstance(raw_seeds, Sequence) and not isinstance(raw_seeds, str) else ()
+        )
+        if not seeds:
+            seeds = fallback_seeds
+        for seed in seeds:
+            try:
+                expected.add((scenario_id, int(seed)))
+            except (TypeError, ValueError):
+                continue
+    return expected
+
+
+def _resolve_integrity_artifact_path(campaign_root: Path, raw_path: str) -> Path:
+    """Resolve a campaign-relative or repository-relative artifact path.
+
+    Returns:
+        Resolved artifact path.
+    """
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path
+    repo_candidate = (get_repository_root() / path).resolve()
+    if repo_candidate.exists():
+        return repo_candidate
+    return (campaign_root / path).resolve()
+
+
+def _integrity_blocker(arm: str, invariant: str, **details: Any) -> dict[str, Any]:
+    """Build one deterministic, machine-readable aggregate-integrity blocker.
+
+    Returns:
+        Blocker payload with arm, invariant, and structured details.
+    """
+    return {"arm": arm, "invariant": invariant, "details": details}
+
+
+def validate_campaign_integrity(  # noqa: C901, PLR0912, PLR0915
+    run_entries: Sequence[Mapping[str, Any]],
+    *,
+    scenarios: Sequence[Mapping[str, Any]],
+    resolved_seeds: Sequence[int],
+    campaign_root: Path,
+    campaign_manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate final arm aggregates without modifying or deduplicating their rows.
+
+    The checker intentionally treats an appended row as evidence of contamination.  It never
+    selects a favorable slice: every successful arm must have exact logical coverage and enough
+    row-level provenance to establish one compatible public commit/config attempt.
+
+    Returns:
+        Machine-readable integrity verdict and blockers.
+    """
+    expected = _expected_episode_identities(scenarios, resolved_seeds)
+    blockers: list[dict[str, Any]] = []
+    manifest_git = str(
+        (campaign_manifest.get("git") or {}).get("commit")
+        if isinstance(campaign_manifest.get("git"), Mapping)
+        else campaign_manifest.get("git_hash", "")
+    ).strip()
+
+    for entry in run_entries:
+        if str(entry.get("status", "")) != "ok":
+            continue
+        planner = entry.get("planner")
+        planner = planner if isinstance(planner, Mapping) else {}
+        arm = f"{planner.get('key', 'unknown')} ({planner.get('kinematics', 'unknown')})"
+        raw_path = str(entry.get("episodes_path", "")).strip()
+        if not raw_path:
+            blockers.append(_integrity_blocker(arm, "missing_episode_artifact"))
+            continue
+        episodes_path = _resolve_integrity_artifact_path(campaign_root, raw_path)
+        try:
+            records: list[dict[str, Any]] = []
+            with episodes_path.open("r", encoding="utf-8") as handle:
+                for line_number, line in enumerate(handle, start=1):
+                    if not line.strip():
+                        continue
+                    payload = json.loads(line)
+                    if not isinstance(payload, dict):
+                        raise ValueError("episode row must be an object")
+                    records.append(payload)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            blockers.append(_integrity_blocker(arm, "unreadable_episode_artifact", error=str(exc)))
+            continue
+
+        observed = [_episode_identity(record) for record in records]
+        observed_set = set(observed)
+        duplicate_counts = Counter(observed)
+        duplicates = sorted(
+            [identity for identity, count in duplicate_counts.items() if count > 1],
+            key=str,
+        )
+        if duplicates:
+            blockers.append(
+                _integrity_blocker(
+                    arm,
+                    "duplicate_logical_coverage",
+                    identities=[list(identity) for identity in duplicates],
+                )
+            )
+
+        summary = entry.get("summary")
+        summary = summary if isinstance(summary, Mapping) else {}
+        declared = summary.get("episodes_total")
+        if declared is None:
+            declared = summary.get("written")
+        count_details = {
+            "expected": len(expected),
+            "observed": len(records),
+            "declared": declared,
+            "missing_identities": [
+                list(identity)
+                for identity in sorted(expected - observed_set, key=_episode_identity_sort_key)
+            ],
+            "unexpected_identities": [
+                list(identity)
+                for identity in sorted(observed_set - expected, key=_episode_identity_sort_key)
+            ],
+        }
+        declared_count: int | None = None
+        if declared is not None:
+            try:
+                declared_count = int(declared)
+            except (TypeError, ValueError):
+                declared_count = None
+        if len(records) != len(expected) or (
+            declared is not None and declared_count != len(records)
+        ):
+            blockers.append(_integrity_blocker(arm, "count_mismatch", **count_details))
+
+        commits: set[str] = set()
+        configs_by_identity: dict[tuple[str, int | str | None], set[str]] = {}
+        for record in records:
+            result_provenance = record.get("result_provenance")
+            result_provenance = result_provenance if isinstance(result_provenance, Mapping) else {}
+            row_config = str(
+                result_provenance.get("config_hash") or record.get("config_hash") or ""
+            ).strip()
+            row_commit = str(
+                result_provenance.get("repo_commit") or record.get("git_hash") or ""
+            ).strip()
+            if not row_config or not row_commit:
+                blockers.append(
+                    _integrity_blocker(
+                        arm,
+                        "missing_provenance",
+                        identity=list(_episode_identity(record)),
+                        missing=[
+                            field
+                            for field, value in (
+                                ("config_hash", row_config),
+                                ("commit", row_commit),
+                            )
+                            if not value
+                        ],
+                    )
+                )
+            if row_commit:
+                commits.add(row_commit)
+            identity = _episode_identity(record)
+            configs_by_identity.setdefault(identity, set()).add(row_config)
+            if result_provenance:
+                if _episode_identity(result_provenance) != identity:
+                    blockers.append(
+                        _integrity_blocker(
+                            arm,
+                            "row_provenance_identity_mismatch",
+                            identity=list(identity),
+                            provenance_identity=list(_episode_identity(result_provenance)),
+                        )
+                    )
+
+        if manifest_git and commits - {manifest_git}:
+            blockers.append(
+                _integrity_blocker(
+                    arm,
+                    "mixed_commit_provenance",
+                    expected=manifest_git,
+                    observed=sorted(commits),
+                )
+            )
+        elif len(commits) > 1:
+            blockers.append(
+                _integrity_blocker(arm, "mixed_commit_provenance", observed=sorted(commits))
+            )
+        mixed_configs = {
+            identity: sorted(values)
+            for identity, values in configs_by_identity.items()
+            if len(values) > 1
+        }
+        if mixed_configs:
+            blockers.append(
+                _integrity_blocker(
+                    arm,
+                    "mixed_config_provenance",
+                    identities={
+                        str(identity): values for identity, values in mixed_configs.items()
+                    },
+                )
+            )
+
+    status = "valid" if not blockers else "invalid"
+    return {
+        "schema_version": "benchmark-camera-ready-integrity.v1",
+        "status": status,
+        "benchmark_success_allowed": status == "valid",
+        "expected_identity_count": len(expected),
+        "checked_arm_count": sum(str(entry.get("status", "")) == "ok" for entry in run_entries),
+        "blockers": blockers,
+        "claim_boundary": (
+            "A derived clean slice is diagnostic-only unless it was predeclared and "
+            "provenance-complete."
+        ),
     }
 
 

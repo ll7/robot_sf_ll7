@@ -14,6 +14,7 @@ from robot_sf.benchmark.latency_stress import classify_feasibility
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RUNNER = REPO_ROOT / "scripts" / "benchmark" / "run_compute_feasibility_matrix.py"
+CONFIG_PATH = REPO_ROOT / "configs" / "benchmarks" / "compute_feasibility_matrix_v1.yaml"
 
 
 def _import_runner() -> Any:
@@ -38,9 +39,8 @@ class TestConfigValidation:
 
     def test_accepts_valid_config(self) -> None:
         """Canonical config must load without error."""
-        config_path = REPO_ROOT / "configs" / "benchmarks" / "compute_feasibility_matrix_v1.yaml"
         mod = _import_runner()
-        config = mod._load_config(config_path)
+        config = mod._load_config(CONFIG_PATH)
 
         assert config["schema_version"] == "compute_feasibility_matrix.v1"
         assert len(config["planners"]) >= 2
@@ -49,15 +49,26 @@ class TestConfigValidation:
         assert len(config["control_deadlines_ms"]) >= 1
         assert len(config["seeds"]) >= 1
 
+    @pytest.mark.parametrize("map_path", ["maps/svg_maps/missing.svg", "configs"])
+    def test_rejects_missing_or_directory_map(self, tmp_path: Path, map_path: str) -> None:
+        """Config loading must fail closed when a map is absent or not a file."""
+        config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+        config["maps"][0]["path"] = map_path
+        bad_path = tmp_path / "bad_map.yaml"
+        bad_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+
+        mod = _import_runner()
+        with pytest.raises(FileNotFoundError, match="Map file not found"):
+            mod._load_config(bad_path)
+
 
 class TestMatrixExpansion:
     """Matrix cell expansion must produce correct Cartesian product."""
 
     def test_cell_count(self) -> None:
         """Cell count must equal planners × maps × peds × deadlines × seeds."""
-        config_path = REPO_ROOT / "configs" / "benchmarks" / "compute_feasibility_matrix_v1.yaml"
         mod = _import_runner()
-        config = mod._load_config(config_path)
+        config = mod._load_config(CONFIG_PATH)
         cells = mod._expand_cells(config)
 
         expected = (
@@ -68,12 +79,12 @@ class TestMatrixExpansion:
             * len(config["seeds"])
         )
         assert len(cells) == expected
+        assert len(cells) == 108
 
     def test_cell_uniqueness(self) -> None:
         """Each cell tuple must appear exactly once."""
-        config_path = REPO_ROOT / "configs" / "benchmarks" / "compute_feasibility_matrix_v1.yaml"
         mod = _import_runner()
-        config = mod._load_config(config_path)
+        config = mod._load_config(CONFIG_PATH)
         cells = mod._expand_cells(config)
 
         tuples = {
@@ -90,9 +101,8 @@ class TestMatrixExpansion:
 
     def test_cell_fields_populated(self) -> None:
         """Each cell must carry all required fields."""
-        config_path = REPO_ROOT / "configs" / "benchmarks" / "compute_feasibility_matrix_v1.yaml"
         mod = _import_runner()
-        config = mod._load_config(config_path)
+        config = mod._load_config(CONFIG_PATH)
         cells = mod._expand_cells(config)
 
         for cell in cells:
@@ -259,15 +269,41 @@ class TestSummaryGeneration:
         assert goal_100["n_cells"] == 1
         assert goal_100["mean_ms"] == 40.0
 
+    def test_malformed_and_nonfinite_rows_are_excluded(self) -> None:
+        """Malformed and non-finite rows must not enter aggregate statistics."""
+        rows = [
+            {
+                "cell": {"planner_key": "goal", "deadline_ms": 100.0},
+                "status": "native",
+                "latency": {"steady_state_latency_p95_ms": 40.0},
+            },
+            {"status": "native", "latency": {"steady_state_latency_p95_ms": 50.0}},
+            {
+                "cell": {"planner_key": "goal", "deadline_ms": 100.0},
+                "status": "native",
+                "latency": {"steady_state_latency_p95_ms": float("nan")},
+            },
+            {
+                "cell": {"planner_key": "goal", "deadline_ms": 100.0},
+                "status": "native",
+                "latency": {"steady_state_latency_p95_ms": "not-a-number"},
+            },
+        ]
+
+        mod = _import_runner()
+        summary = mod._build_summary(rows)
+
+        assert summary["total_cells"] == 4
+        assert summary["non_native_cells"] == 3
+        assert summary["goal"]["p95_ms_deadline_100"]["values"] == [40.0]
+
 
 class TestMatrixCell:
     """MatrixCell dataclass must carry expected fields."""
 
     def test_cell_construction(self) -> None:
         """Cell should be constructible with all fields."""
-        import importlib
-
-        mod = importlib.import_module("scripts.benchmark.run_compute_feasibility_matrix")
+        mod = _import_runner()
         cell = mod.MatrixCell(
             planner_key="goal",
             algo="goal",
@@ -288,9 +324,7 @@ class TestMatrixCell:
 
     def test_cell_with_algo_config(self) -> None:
         """Cell should carry algo_config when provided."""
-        import importlib
-
-        mod = importlib.import_module("scripts.benchmark.run_compute_feasibility_matrix")
+        mod = _import_runner()
         cell = mod.MatrixCell(
             planner_key="mppi_social",
             algo="mppi_social",
@@ -304,6 +338,90 @@ class TestMatrixCell:
 
         assert cell.algo_config["horizon_steps"] == 5
         assert cell.algo_config["sample_count"] == 8
+
+
+class TestRunnerFailureContracts:
+    """The runner must preserve fail-closed and cache contracts on bad inputs."""
+
+    def test_optional_values_normalize_none(self) -> None:
+        """Null optional values must resolve to documented defaults."""
+        mod = _import_runner()
+        assert mod._normalize_horizon(None) == 60
+        assert mod._normalize_dt(None) == 0.1
+
+    @pytest.mark.parametrize("payload", ["{", "[]"])
+    def test_invalid_cache_is_a_miss(self, tmp_path: Path, payload: str) -> None:
+        """Corrupt and non-object cache payloads must be rerun, not trusted."""
+        mod = _import_runner()
+        cache_path = tmp_path / "cell.json"
+        cache_path.write_text(payload, encoding="utf-8")
+        cell = mod.MatrixCell(
+            planner_key="goal",
+            algo="goal",
+            algo_config=None,
+            map_label="test",
+            map_path="maps/svg_maps/atomic_empty_frame_test.svg",
+            pedestrian_count=0,
+            deadline_ms=100.0,
+            seed=42,
+        )
+
+        assert mod._load_cached_row(cache_path, cell=cell, config_hash="hash") is None
+
+    def test_multi_cycle_cell_is_classified(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Already-extracted cycle totals must reach feasibility classification as floats."""
+        mod = _import_runner()
+
+        class _FakeHarness:
+            def __init__(self, **_: Any) -> None:
+                pass
+
+            def __enter__(self) -> _FakeHarness:
+                return self
+
+            def __exit__(self, *_: Any) -> None:
+                return None
+
+            def get_metrics(self) -> dict[str, Any]:
+                return {
+                    "cold_start_latency_ms": 10.0,
+                    "steady_state_latency_p50_ms": 20.0,
+                    "steady_state_latency_p95_ms": 20.0,
+                    "steady_state_latency_p99_ms": 20.0,
+                    "steady_state_latency_max_ms": 20.0,
+                    "deadline_miss_rate": 0.0,
+                    "steady_state_averages": {},
+                    "cycles": [{"total_ms": 10.0}, {"total_ms": 20.0}],
+                }
+
+        monkeypatch.setattr(mod, "LatencyMeasurementHarness", _FakeHarness)
+        monkeypatch.setattr(mod, "_run_map_episode", lambda *_args, **_kwargs: {})
+        monkeypatch.setattr(
+            mod,
+            "collect_environment_provenance",
+            lambda **kwargs: {"config_hash": kwargs["config_hash"]},
+        )
+        cell = mod.MatrixCell(
+            planner_key="goal",
+            algo="goal",
+            algo_config=None,
+            map_label="test",
+            map_path="maps/svg_maps/atomic_empty_frame_test.svg",
+            pedestrian_count=0,
+            deadline_ms=50.0,
+            seed=42,
+        )
+
+        row = mod._run_cell(
+            cell,
+            settings=mod.RunnerSettings(horizon=2, dt=0.1, record_forces=False),
+            repo_root=REPO_ROOT,
+            scenario_path=CONFIG_PATH,
+            matrix_config_hash="matrix",
+        )
+
+        assert row["status"] == "native"
+        assert row["classification"] == "meets_budget_on_measured_host"
 
 
 class TestFeasibilityClassification:

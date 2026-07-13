@@ -4,7 +4,7 @@
 #   Define the planner/scenario/deadline matrix for the representative-CPU
 #   compute-feasibility study enabled by the latency-stress harness (#5506/#5524).
 #
-# This config covers two planners, two maps, three pedestrian-count levels,
+# This config covers three planners, two maps, three pedestrian-count levels,
 # two control deadlines, and three seeds per cell. The matrix produces cold-
 # and steady-state per-cycle and component metrics, deadline-miss rates,
 # provenance, and conservative feasibility classification per cell.
@@ -23,11 +23,9 @@ schema_version: compute_feasibility_matrix.v1
 planners:
   - key: goal
     algo: goal
-    benchmark_profile: baseline-safe
 
   - key: mppi_social
     algo: mppi_social
-    benchmark_profile: baseline-safe
     algo_config:
       goal_tolerance: 0.2
       horizon_steps: 5
@@ -37,7 +35,6 @@ planners:
 
   - key: social_force
     algo: social_force
-    benchmark_profile: baseline-safe
 
 # Maps (SVG paths relative to repo root)
 maps:

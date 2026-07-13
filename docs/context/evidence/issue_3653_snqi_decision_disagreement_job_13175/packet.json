@@ -45,8 +45,8 @@
     {
       "kind": "pareto_svg",
       "path": "snqi_scalarization_sensitivity_pareto.svg",
-      "sha256": "45596a65dca42f94a17481abd1ff077a71d8e6ae48ace5e89a59b961ac93ccb1",
-      "size_bytes": 1990
+      "sha256": "5c4f4036eec0c09692c321b8e2bb5fb1b659a39a800bc3c65aa545381773c2ad",
+      "size_bytes": 8972
     }
   ],
   "bundle_inventory": "artifact_inventory.json",
@@ -79,7 +79,7 @@
       },
       {
         "path": "snqi_scalarization_sensitivity_pareto.svg",
-        "sha256": "45596a65dca42f94a17481abd1ff077a71d8e6ae48ace5e89a59b961ac93ccb1"
+        "sha256": "5c4f4036eec0c09692c321b8e2bb5fb1b659a39a800bc3c65aa545381773c2ad"
       }
     ],
     "preflight_status": "ready",

@@ -229,6 +229,74 @@ def test_check_evidence_tree_hygiene_non_distance_series_unaffected(
 
 
 @patch("subprocess.run")
+def test_base_ref_is_resolvable(mock_run: MagicMock) -> None:
+    """Issue #5464: base_ref_is_resolvable reflects git rev-parse success/failure."""
+    mock_run.return_value = MagicMock(returncode=0)
+    assert pr_contract_check.base_ref_is_resolvable("origin/main") is True
+
+    mock_run.return_value = MagicMock(returncode=128)
+    assert pr_contract_check.base_ref_is_resolvable("origin/main") is False
+
+
+@patch("scripts.ci.pr_contract_check.base_ref_is_resolvable", return_value=False)
+def test_is_file_new_unresolvable_base_returns_false(
+    _mock_resolvable: MagicMock, tmp_path: Path
+) -> None:
+    """Issue #5464: an existing file is NOT reported new when the base ref is unresolvable.
+
+    This is the exact false-positive path: on a shallow CI checkout ``origin/main`` is
+    absent, and the old code returned True for every on-disk file. It must return False.
+    """
+    f = tmp_path / "some_evidence.json"
+    f.write_text("{}", encoding="utf-8")
+    assert pr_contract_check.is_file_new(str(f), "origin/main") is False
+
+
+def test_get_added_files(tmp_path: Path) -> None:
+    """Issue #5464: get_added_files parses the added-files list, else returns None."""
+    assert pr_contract_check.get_added_files(None) is None
+    assert pr_contract_check.get_added_files(tmp_path / "missing.txt") is None
+
+    added = tmp_path / "pr_added_files.txt"
+    added.write_text(
+        "docs/context/evidence/new_a.json\n\ndocs/context/evidence/new_b.svg\n",
+        encoding="utf-8",
+    )
+    assert pr_contract_check.get_added_files(added) == {
+        "docs/context/evidence/new_a.json",
+        "docs/context/evidence/new_b.svg",
+    }
+
+
+def test_check_evidence_tree_hygiene_authoritative_added_files(tmp_path: Path) -> None:
+    """Issue #5464: with an authoritative added set, only added files get marker blockers.
+
+    A marker-less evidence file that is *modified* (not in the added set) must not be
+    flagged, while a marker-less *added* file still is. No git heuristic is consulted.
+    """
+    evidence_dir = tmp_path / "docs/context/evidence"
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+
+    modified = evidence_dir / "packet.json"
+    modified.write_text('{"note": "predates marker convention"}', encoding="utf-8")
+    added = evidence_dir / "brand_new.json"
+    added.write_text('{"note": "no marker"}', encoding="utf-8")
+
+    # Only ``brand_new.json`` is authoritatively added.
+    added_set = {str(added).replace("\\", "/")}
+    blockers = pr_contract_check.check_evidence_tree_hygiene(
+        [str(modified), str(added)], "origin/main", added_set
+    )
+    marker_blockers = [b for b in blockers if "marker convention" in b]
+    assert len(marker_blockers) == 1
+    assert str(added) in marker_blockers[0]
+    assert str(modified) not in marker_blockers[0]
+
+    # Empty added set (PR that only modifies evidence) → no marker blockers at all.
+    assert not pr_contract_check.check_evidence_tree_hygiene([str(modified)], "origin/main", set())
+
+
+@patch("subprocess.run")
 def test_check_successor_discipline(mock_run: MagicMock) -> None:
     """Test check_successor_discipline warns on lack of successor statement."""
     # Issue in title has merged PRs, but body lacks successor statement

@@ -1,0 +1,73 @@
+name: paper_experiment_matrix_v2_h600_s30_extended__arm_scenario_adaptive_hybrid_orca_v2_collision_guard
+paper_facing: true
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+amv_profile:
+  name: amv-paper-v1
+  contract_version: '1'
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case:
+    - delivery_robot
+    - shared_space_micromobility
+    context:
+    - sidewalk
+    - shared_space
+    speed_regime:
+    - walking_speed
+    - scooter_speed
+    maneuver_type:
+    - overtake
+    - crossing
+    - bottleneck
+seed_policy:
+  mode: seed-set
+  seed_set: paper_eval_s30
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+workers: 8
+horizon: 600
+dt: 0.1
+record_forces: true
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+kinematics_matrix:
+- differential_drive
+export_publication_bundle: true
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: '{release_tag}'
+doi: 10.5281/zenodo.<record-id>
+paper_interpretation_profile: baseline-ready-core
+planners:
+- key: scenario_adaptive_hybrid_orca_v2_collision_guard
+  algo: hybrid_rule_local_planner
+  planner_group: experimental
+  algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+  benchmark_profile: experimental
+split_provenance:
+  source_config: configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended.yaml
+  source_sha256: b3f7718cc27ff07975dc99f9c1c9d7e3183e0312d586945074cd5ac089b3fdf2
+  split_mode: per_planner
+  arm_key: scenario_adaptive_hybrid_orca_v2_collision_guard
+  arm_index: 8
+  arm_total: 14
+  tool: split_campaign_config_by_planner.py

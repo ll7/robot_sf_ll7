@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "robot_sf.issue4365.job13378.diagnostic_closeout.v1",
   "evidence_status": "diagnostic-only",
   "disposition": "artifact-integrity-blocked-for-promotion",

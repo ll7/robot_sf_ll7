@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5449, 2026-07-13) - NEEDS-REVIEW -->
+
 # Issue #4365 Job 13378 Diagnostic Closeout
 
 Evidence status: **diagnostic-only; artifact-integrity blocked for promotion**.

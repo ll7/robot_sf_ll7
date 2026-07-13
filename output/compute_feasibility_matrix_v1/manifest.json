@@ -1,0 +1,40 @@
+{
+  "schema_version": "compute_feasibility_manifest.v1",
+  "config_file": "configs/benchmarks/compute_feasibility_matrix_v1.yaml",
+  "config_hash": "b8edcc7785efecdd",
+  "git_commit": "d9784ccf1b478ef3d572d6b319c5570d6a0a6aa8",
+  "ts": "2026-07-13T22:59:18.044022+00:00",
+  "total_cells": 108,
+  "planners": [
+    "goal",
+    "mppi_social",
+    "social_force"
+  ],
+  "maps": [
+    "empty_8x8",
+    "bottleneck_medium"
+  ],
+  "pedestrian_counts": [
+    0,
+    5,
+    15
+  ],
+  "deadlines_ms": [
+    100,
+    50
+  ],
+  "seeds": [
+    42,
+    111,
+    987
+  ],
+  "horizon": 60,
+  "dt": 0.1,
+  "record_forces": false,
+  "completed_cells": 108,
+  "skipped_cached": 0,
+  "output_files": {
+    "rows_jsonl": "output/compute_feasibility_matrix_v1/rows.jsonl",
+    "summary": "output/compute_feasibility_matrix_v1/synthetic_summary.json"
+  }
+}

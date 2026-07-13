@@ -320,16 +320,13 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             steps=effective_steps,
         )
         min_clearance = self._rollout_min_clearance(
-            robot_pos=position,
-            heading=float(heading),
-            command=command,
+            positions=trajectory,
             steps=effective_steps,
             pedestrian_positions=pedestrian_positions,
             pedestrian_velocities=pedestrian_velocities,
             observation=observation,
-            overrides=overrides,
         )
-        # Terminal pose from the closed-form unicycle integration below.
+        # Terminal pose from the trajectory and matching heading recurrence.
         position = trajectory[-1]
         orientation = self._rollout_terminal_orientation(
             heading=float(heading), command=command, steps=effective_steps
@@ -370,9 +367,9 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
         The pose sequence is integrated with the *same* sequential left-to-right
         accumulation as the legacy scalar loop (``pos += v*dt*(cos,sin)(o)`` with
-        ``o`` wrapped at every step). Only the per-step pedestrian broadcast is
-        vectorized, so the trajectory is bit-identical to the scalar reference and
-        the numeric-parity gate for issue #5412 holds exactly.
+        ``o`` wrapped at every step). Only the per-step pedestrian clearance
+        reduction is vectorized, so the scalar recurrence remains the parity
+        reference for issue #5412.
 
         Returns:
             ``(steps, 2)`` array of world positions for the terminal-step candidate.
@@ -395,7 +392,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def _rollout_terminal_orientation(
         self, *, heading: float, command: tuple[float, float], steps: int
     ) -> float:
-        """Closed-form terminal heading of the constant-command rollout.
+        """Terminal heading of the constant-command rollout.
 
         The scalar loop integrates ``orientation`` with ``wrap_angle_pi`` at every
         step; vectorizing that step-by-step wrap changes the float reduction order,
@@ -415,22 +412,18 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
     def _rollout_min_clearance(
         self,
         *,
-        robot_pos: np.ndarray,
-        heading: float,
-        command: tuple[float, float],
+        positions: np.ndarray,
         steps: int,
         pedestrian_positions: np.ndarray,
         pedestrian_velocities: np.ndarray,
         observation: dict[str, Any],
-        overrides: dict[str, Any],
     ) -> float:
         """Vectorized minimum clearance over the constant-command rollout horizon.
 
-        The pose sequence reuses the bit-stable trajectory (identical to the
-        legacy scalar loop), and the per-step pedestrian clearance is broadcast as a
-        ``(steps, peds)`` tensor with a single ``min`` reduction. Because the
-        positions are bit-identical to the scalar reference, the resulting minimum
-        clearance is exact and the numeric-parity gate for issue #5412 holds.
+        The precomputed scalar trajectory is reused, and per-step pedestrian
+        clearance is broadcast as a ``(steps, peds)`` tensor with a single ``min``
+        reduction. The scalar rollout remains the numeric-parity reference for
+        issue #5412.
 
         Returns:
             Minimum clearance in meters over the horizon, or ``inf`` when no
@@ -438,10 +431,6 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         """
         steps = max(steps, 1)
         dt = float(self.config.prediction_dt)
-        # Bit-stable pose sequence (identical to the legacy scalar loop).
-        positions = self._rollout_trajectory(
-            robot_pos=robot_pos, heading=float(heading), command=command, steps=steps
-        )
 
         k = np.arange(1, steps + 1, dtype=float)
         min_clearance = float("inf")
@@ -451,7 +440,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             ):
                 # Forecast positions at each step k (k = 1..steps).
                 forecast = pedestrian_positions[None, :, :] + pedestrian_velocities[None, :, :] * (
-                    k[:, None] * dt
+                    k[:, None, None] * dt
                 )  # (steps, peds, 2)
                 ped_dist = np.linalg.norm(
                     forecast - positions[:, None, :], axis=-1

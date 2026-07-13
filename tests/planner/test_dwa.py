@@ -604,7 +604,7 @@ def _scalar_rollout_score(  # noqa: PLR0913
 
 
 def test_dwa_vectorized_rollout_matches_scalar_reference():
-    """The vectorized rollout must reproduce the scalar reference for a fixed seed set.
+    """The vectorized rollout must reproduce finite scalar scores for a fixed seed set.
 
     This is the numeric-parity gate required by issue #5412 for the
     behavior-changing DWA vectorization: outputs must stay within 1e-9 of the
@@ -622,36 +622,10 @@ def test_dwa_vectorized_rollout_matches_scalar_reference():
     planner = DWAPlannerAdapter(config)
     robot_pos, heading, _ls, _as, goal, peds, pvels = planner._extract_state(obs)
 
-    worst = 0.0
-    for v in np.linspace(0.0, 1.0, 7):
-        for w in np.linspace(-1.2, 1.2, 11):
-            cmd = (float(v), float(w))
-            vec = planner._rollout_score(
-                robot_pos=robot_pos,
-                heading=heading,
-                goal=goal,
-                pedestrian_positions=peds,
-                pedestrian_velocities=pvels,
-                command=cmd,
-                observation=obs,
-            )
-            scalar = _scalar_rollout_score(
-                planner,
-                robot_pos=robot_pos,
-                heading=heading,
-                goal=goal,
-                command=cmd,
-                pedestrian_positions=peds,
-                pedestrian_velocities=pvels,
-                observation=obs,
-                config=config,
-            )
-            worst = max(worst, abs(vec - scalar))
     # Numeric-parity gate (issue #5412): feasible scores must match the legacy
-    # step-by-step loop to 1e-9. The closed-form batch changes the float
-    # reduction order, so a handful of commands may flip infeasibility near the
-    # safety-margin boundary; we record those as the documented divergence and
-    # assert only the feasible-score parity.
+    # step-by-step loop to 1e-9. A handful of commands may flip infeasibility
+    # near the safety-margin boundary; record those as the documented divergence.
+    worst_finite_drift = 0.0
     diverging_infeasible = 0
     for v in np.linspace(0.0, 1.0, 7):
         for w in np.linspace(-1.2, 1.2, 11):
@@ -681,15 +655,13 @@ def test_dwa_vectorized_rollout_matches_scalar_reference():
             if vec_inf != scalar_inf:
                 diverging_infeasible += 1
             elif not vec_inf:
-                # Parity tolerance: the closed-form batch changes the float
-                # reduction order (accumulated ``o += w*dt`` vs ``heading + w*dt*k``),
-                # so feasible scores drift by the documented ~1e-2 worst case. This
-                # is the gated tolerance from issue #5412, not a correctness bug.
-                assert abs(vec - scalar) <= 1e-2, (
+                worst_finite_drift = max(worst_finite_drift, abs(vec - scalar))
+                assert abs(vec - scalar) <= 1e-9, (
                     f"score parity violated for {cmd}: vec={vec}, scalar={scalar}"
                 )
+    assert worst_finite_drift <= 1e-9
     # With no occupancy grid in this fixture the only clearance source is the
-    # pedestrian term; the drift flips at most a couple of boundary commands.
+    # pedestrian term; the boundary classification allowance is explicit.
     assert diverging_infeasible <= 3
 
 
@@ -732,14 +704,45 @@ def test_dwa_vectorized_rollout_matches_scalar_parity_fixture():
     assert vec == pytest.approx(scalar, rel=0.0, abs=1e-9)
 
 
-def test_dwa_vectorized_rollout_trajectory_matches_scalar():
-    """Closed-form trajectory must equal the step-by-step scalar integration.
+def test_dwa_vectorized_rollout_prediction_parity_supports_multiple_pedestrians():
+    """Prediction scoring broadcasts over every active pedestrian."""
+    config = DWAPlannerConfig(prediction_scoring_enabled=True, prediction_steps=15)
+    obs = _observation(
+        goal=(3.0, 0.0),
+        pedestrians=[(1.5, 1.5), (-1.5, 1.5), (1.5, -1.5)],
+        pedestrian_velocities=[(0.0, -0.2), (0.2, 0.0), (-0.1, 0.1)],
+    )
+    planner = DWAPlannerAdapter(config)
+    robot_pos, heading, _ls, _as, goal, peds, pvels = planner._extract_state(obs)
+    command = (0.5, 0.2)
+    vectorized = planner._rollout_score(
+        robot_pos=robot_pos,
+        heading=heading,
+        goal=goal,
+        pedestrian_positions=peds,
+        pedestrian_velocities=pvels,
+        command=command,
+        observation=obs,
+    )
+    scalar = _scalar_rollout_score(
+        planner,
+        robot_pos=robot_pos,
+        heading=heading,
+        goal=goal,
+        command=command,
+        pedestrian_positions=peds,
+        pedestrian_velocities=pvels,
+        observation=obs,
+        config=config,
+    )
+    assert vectorized == pytest.approx(scalar, rel=0.0, abs=1e-9)
 
-    The vectorized batch computes ``sin/cos`` of ``heading + w*dt*k`` while the
-    scalar loop accumulates ``o += w*dt``; cumulated over the horizon these reduce
-    floating point differently, so we assert the documented last-ULP drift
-    tolerance rather than bit-identity. The planner *score* (the real output) is
-    gated to 1e-9 by the two parity tests above.
+
+def test_dwa_vectorized_rollout_trajectory_matches_scalar():
+    """The rollout trajectory matches the step-by-step scalar integration.
+
+    The helper intentionally retains the legacy sequential heading and position
+    recurrence; the planner score is gated separately by the parity tests above.
     """
     config = DWAPlannerConfig()
     rng = np.random.default_rng(7)
@@ -759,5 +762,5 @@ def test_dwa_vectorized_rollout_trajectory_matches_scalar():
             pos = pos + np.array([command[0] * np.cos(o) * dt, command[0] * np.sin(o) * dt])
             o = wrap_angle_pi(o + command[1] * dt)
         worst = max(worst, float(np.max(np.abs(traj[-1] - pos))))
-    # Measured worst-case horizon drift for the float-reduction-order change.
+    # The helper and scalar reference should have no measurable drift.
     assert worst <= 0.1

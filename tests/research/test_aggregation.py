@@ -1,6 +1,5 @@
 """Unit tests for metric aggregation module."""
 
-import numpy as np
 import pytest
 
 from robot_sf.research.aggregation import (
@@ -16,24 +15,28 @@ def test_aggregate_metrics_basic():
         {
             "seed": 42,
             "policy_type": "baseline",
+            "variant_id": 1,
             "success_rate": 0.7,
             "timesteps_to_convergence": 500000,
         },
         {
             "seed": 123,
             "policy_type": "baseline",
+            "variant_id": 2,
             "success_rate": 0.75,
             "timesteps_to_convergence": 480000,
         },
         {
             "seed": 42,
             "policy_type": "pretrained",
+            "variant_id": 3,
             "success_rate": 0.85,
             "timesteps_to_convergence": 280000,
         },
         {
             "seed": 123,
             "policy_type": "pretrained",
+            "variant_id": 4,
             "success_rate": 0.88,
             "timesteps_to_convergence": 270000,
         },
@@ -51,14 +54,24 @@ def test_aggregate_metrics_basic():
     assert "success_rate" in metrics
     assert "timesteps_to_convergence" in metrics
 
+    # Assert non-metric/metadata columns are NOT aggregated as metrics
+    assert "seed" not in metrics
+    assert "policy_type" not in metrics
+    assert "variant_id" not in metrics
+
     # Check baseline success_rate aggregation
     baseline_success = next(
         r for r in result if r["condition"] == "baseline" and r["metric_name"] == "success_rate"
     )
     assert baseline_success["mean"] == pytest.approx(0.725, abs=1e-6)
+    assert baseline_success["median"] == pytest.approx(0.725, abs=1e-6)
+    assert baseline_success["p95"] == pytest.approx(0.7475, abs=1e-6)
+    assert baseline_success["std"] == pytest.approx(0.035355, abs=1e-5)
     assert baseline_success["sample_size"] == 2
-    assert baseline_success["ci_low"] is not None
-    assert baseline_success["ci_high"] is not None
+    assert baseline_success["ci_low"] == pytest.approx(0.7, abs=1e-6)
+    assert baseline_success["ci_high"] == pytest.approx(0.75, abs=1e-6)
+    assert baseline_success["ci_confidence"] == 0.95
+    assert baseline_success["effect_size"] is None
 
 
 def test_aggregate_metrics_single_value():
@@ -73,6 +86,9 @@ def test_aggregate_metrics_single_value():
         r for r in result if r["condition"] == "baseline" and r["metric_name"] == "success_rate"
     )
     assert baseline_success["mean"] == 0.7
+    assert baseline_success["median"] == 0.7
+    assert baseline_success["p95"] == 0.7
+    assert baseline_success["std"] == 0.0
     assert baseline_success["sample_size"] == 1
     assert baseline_success["ci_low"] is None  # No CI for single value
     assert baseline_success["ci_high"] is None
@@ -83,11 +99,8 @@ def test_bootstrap_ci_basic():
     values = [1.0, 2.0, 3.0, 4.0, 5.0]
     ci_low, ci_high = bootstrap_ci(values, ci_samples=1000, ci_confidence=0.95, seed=42)
 
-    assert ci_low is not None
-    assert ci_high is not None
-    assert ci_low < np.mean(values)
-    assert ci_high > np.mean(values)
-    assert ci_low < ci_high
+    assert ci_low == pytest.approx(1.8, abs=1e-6)
+    assert ci_high == pytest.approx(4.2, abs=1e-6)
 
 
 def test_bootstrap_ci_insufficient_data():
@@ -108,8 +121,18 @@ def test_aggregate_metrics_empty():
 def test_aggregate_metrics_missing_values():
     """Test aggregation with missing/None values."""
     metric_records = [
-        {"seed": 42, "policy_type": "baseline", "success_rate": 0.7, "collision_rate": None},
-        {"seed": 123, "policy_type": "baseline", "success_rate": 0.75, "collision_rate": 0.1},
+        {
+            "seed": 42,
+            "policy_type": "baseline",
+            "collision_rate": None,
+            "success_rate": 0.7,
+        },
+        {
+            "seed": 123,
+            "policy_type": "baseline",
+            "collision_rate": 0.1,
+            "success_rate": 0.75,
+        },
     ]
 
     result = aggregate_metrics(metric_records, group_by="policy_type")
@@ -130,12 +153,118 @@ def test_aggregate_metrics_missing_values():
 
 def test_completeness_score():
     """Completeness scoring tracks missing and failed seeds."""
-
     completeness = compute_completeness_score(
         expected_seeds=[1, 2, 3], completed_seeds=[1, 2], failed_seeds=[3]
     )
 
-    assert completeness["score"] == pytest.approx(66.7, rel=1e-2)
+    assert completeness["score"] == 66.7
     assert completeness["missing_seeds"] == []
     assert completeness["failed_seeds"] == ["3"]
     assert completeness["status"] == "PARTIAL"
+    assert completeness["expected"] == 3
+    assert completeness["completed"] == 2
+
+
+def test_aggregate_metrics_missing_groupby_field():
+    """Verify that aggregate_metrics returns [] if group_by field is missing from df."""
+    metric_records = [{"seed": 42, "success_rate": 0.7}]
+    result = aggregate_metrics(metric_records, group_by="policy_type")
+    assert result == []
+
+
+def test_aggregate_metrics_seed_reproducibility():
+    """Verify that seed parameter ensures reproducible CIs, and different seeds differ."""
+    metric_records = [
+        {"seed": i, "policy_type": "baseline", "success_rate": float(i) / 50.0} for i in range(50)
+    ]
+    res1 = aggregate_metrics(metric_records, seed=42)
+    res2 = aggregate_metrics(metric_records, seed=42)
+    res3 = aggregate_metrics(metric_records, seed=123)
+
+    ci1 = (res1[0]["ci_low"], res1[0]["ci_high"])
+    ci2 = (res2[0]["ci_low"], res2[0]["ci_high"])
+    ci3 = (res3[0]["ci_low"], res3[0]["ci_high"])
+
+    assert ci1 == ci2
+    assert ci1 != ci3
+    assert res1[0]["ci_low"] == pytest.approx(0.40916, abs=1e-5)
+    assert res1[0]["ci_high"] == pytest.approx(0.56323, abs=1e-5)
+
+
+def test_aggregate_metrics_entirely_none_metric():
+    """Verify that a metric column that is entirely None is skipped, without breaking the loop."""
+    metric_records = [
+        {
+            "seed": 1,
+            "policy_type": "baseline",
+            "collision_rate": None,
+            "success_rate": 0.7,
+        },
+        {
+            "seed": 2,
+            "policy_type": "baseline",
+            "collision_rate": None,
+            "success_rate": 0.8,
+        },
+        {
+            "seed": 3,
+            "policy_type": "pretrained",
+            "collision_rate": 0.1,
+            "success_rate": 0.9,
+        },
+    ]
+    result = aggregate_metrics(metric_records)
+    baseline_metrics = {r["metric_name"] for r in result if r["condition"] == "baseline"}
+    assert baseline_metrics == {"success_rate"}
+
+
+def test_bootstrap_ci_exactly_two_values():
+    """Verify bootstrap_ci computes a valid CI when values has exactly 2 elements."""
+    values = [1.0, 2.0]
+    ci_low, ci_high = bootstrap_ci(values, seed=42)
+    assert ci_low is not None
+    assert ci_high is not None
+    assert ci_low <= ci_high
+
+
+def test_bootstrap_ci_uses_lower_percentile_boundary():
+    """Verify the lower confidence bound uses the declared percentile boundary."""
+    values = [0.01, 0.11, 0.29, 0.73, 0.97]
+    ci_low, _ = bootstrap_ci(values, ci_samples=200, seed=42)
+    assert ci_low == pytest.approx(0.0856, abs=1e-6)
+
+
+def test_bootstrap_ci_defaults():
+    """Verify bootstrap_ci works correctly with default arguments (no confidence or samples specified)."""
+    values = [0.03, 0.17, 0.31, 0.58, 0.91]
+    ci_low, ci_high = bootstrap_ci(values, seed=42)
+    assert ci_low == pytest.approx(0.142, abs=1e-6)
+    assert ci_high == pytest.approx(0.66805, abs=1e-6)
+
+
+def test_completeness_score_empty_expected():
+    """Verify completeness score handles empty expected_seeds by returning score 0.0."""
+    completeness = compute_completeness_score(expected_seeds=[], completed_seeds=[])
+    assert completeness["score"] == 0.0
+    assert completeness["status"] == "PASS"
+
+
+def test_completeness_score_sorting():
+    """Verify completeness score correctly sorts missing and failed seeds."""
+    completeness = compute_completeness_score(
+        expected_seeds=[10, 2, "abc", 1, "1a", 11, 3],
+        completed_seeds=[1],
+        failed_seeds=[10, 2, "abc", "1a"],
+    )
+    assert completeness["missing_seeds"] == ["3", "11"]
+    # failed seeds should sort numeric first: 2, 10, 1a, abc
+    assert completeness["failed_seeds"] == ["2", "10", "1a", "abc"]
+
+
+def test_completeness_score_fail():
+    """Verify completeness score status is FAIL when there are no completed seeds."""
+    completeness = compute_completeness_score(expected_seeds=[1, 2], completed_seeds=[])
+    assert completeness["status"] == "FAIL"
+    assert completeness["score"] == 0.0
+    assert completeness["expected"] == 2
+    assert completeness["completed"] == 0

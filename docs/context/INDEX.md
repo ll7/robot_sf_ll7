@@ -4,6 +4,9 @@ Collision causality, action-conditioned online risk, and statistically defensibl
 scenario discovery research program:
 [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md).
 
+Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
+[issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).
+
 Issue #5355 prediction-MPC 2x2 factorial preregistration (prediction on/off x constraint-handling on/off):
 [issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md).
 

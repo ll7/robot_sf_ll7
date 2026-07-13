@@ -197,6 +197,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5355 fail-closed campaign-readiness gate for the prediction-MPC factorial.** Adds
+  `assess_campaign_readiness()` and `dependency_blockers()` to
+  `robot_sf/benchmark/prediction_mpc_factorial_preregistration.py`, turning the preregistration's
+  §6 pre-submission requirements into an executable verdict. The CPU-only, no-submit gate aggregates
+  four criteria (preregistration config valid, four arm configs valid, exact-config sha256 pinned in
+  the evidence registry, and every declared blocking dependency resolved) and stays `ready: False`
+  unless each is positively verified. It encodes prereg §6 in code: the config's `dependencies`
+  block (#5351 hierarchical analysis, #5353 capability matrix) was previously inert prose, so nothing
+  prevented a premature GPU submission. On the landed config the gate reports the design,
+  preregistration, implementation, and provenance criteria as met and identifies #5351/#5353 as the
+  sole remaining blockers. Adds unit + integration tests in `tests/test_prediction_mpc_factorial.py`.
+  No campaign, GPU/Slurm, or metric change.
+
 * **issue #5372 fidelity smoke + arm-config identity checks for the #5355 factorial.** Adds two CPU-only, tiny-horizon test modules under `tests/planner/`: a toggle-effect fidelity smoke (`test_prediction_mpc_factorial_fidelity_smoke.py`) that runs all four canonical arm configs (`configs/algos/prediction_mpc_factorial_A{0,1}_B{0,1}.yaml`) on two named scenarios and asserts each factor flip changes the decision trace, the toggles are orthogonal, and the B-OFF arms complete episodes as functional soft-cost planners (prereg §6); and a static preflight identity test (`test_prediction_mpc_factorial_arm_identity.py`) asserting the four arms share the observation contract, kinematics, and runtime budget and differ only in the two factor flags plus the implied soft pedestrian weight (prereg §2, §7). Test-only; no campaign, GPU, or metric change.
 
 * **issue #4978 scenario flakiness audit applied to a real multi-planner campaign.** Ships a

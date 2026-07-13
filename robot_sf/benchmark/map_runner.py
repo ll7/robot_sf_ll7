@@ -28,6 +28,7 @@ from robot_sf.benchmark.algorithm_readiness import (
     BenchmarkProfile,
     require_algorithm_allowed,
 )
+from robot_sf.benchmark.circuit_breaker import normalize_circuit_breaker_threshold
 from robot_sf.benchmark.fallback_policy import availability_payload
 from robot_sf.benchmark.latency_stress import (
     not_available_latency_metrics,
@@ -2535,6 +2536,7 @@ def _run_map_jobs_with_policy_cache(
     out_path: Path,
     schema: dict[str, Any],
     workers: int,
+    circuit_breaker_threshold: int | None = None,
 ) -> Any:
     """Run one arm with policies cached until the batch completes.
 
@@ -2546,6 +2548,7 @@ def _run_map_jobs_with_policy_cache(
     Returns:
         The normal map-batch execution result.
     """
+    circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     policy_cache: dict[
         tuple[str, str, str | None, str | None, bool], tuple[Any, dict[str, Any]]
     ] = {}
@@ -2610,6 +2613,7 @@ def _run_map_jobs_with_policy_cache(
             executor_cls=ProcessPoolExecutor,
             as_completed_fn=as_completed,
             multiprocessing_context=None,
+            circuit_breaker_threshold=circuit_breaker_threshold,
         )
     finally:
         for policy, _metadata in policy_cache.values():
@@ -2760,12 +2764,14 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
     multiprocessing_context: Any | None = None,
     workers: int = 1,
     resume: bool = True,
+    circuit_breaker_threshold: int | None = None,
 ) -> dict[str, Any]:
     """Run map-based scenarios and append episode records.
 
     Returns:
         Summary payload with counts and failure details.
     """
+    circuit_breaker_threshold = normalize_circuit_breaker_threshold(circuit_breaker_threshold)
     ped_impact_radius_m, ped_impact_window_steps = _normalize_pedestrian_impact_controls(
         experimental_ped_impact=experimental_ped_impact,
         ped_impact_radius_m=ped_impact_radius_m,
@@ -3173,6 +3179,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             out_path=out_path,
             schema=schema,
             workers=workers,
+            circuit_breaker_threshold=circuit_breaker_threshold,
         )
         if (
             workers <= 1
@@ -3192,6 +3199,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
             executor_cls=ProcessPoolExecutor,
             as_completed_fn=as_completed,
             multiprocessing_context=multiprocessing_context,
+            circuit_breaker_threshold=circuit_breaker_threshold,
         )
     )
     wrote = batch_execution.wrote
@@ -3250,6 +3258,7 @@ def run_map_batch(  # noqa: C901,PLR0912,PLR0913,PLR0915
         suite_key=suite_key,
         kinematics_tag=kinematics_tag,
         metric_affecting_config=metric_affecting_config,
+        abort_metadata=batch_execution.abort_metadata,
     )
     # Emit provenance manifest alongside the JSONL output.
     _record_result_provenance_manifest(

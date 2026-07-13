@@ -387,3 +387,154 @@ class TestPreregistrationHarness:
         result = check_planned_rows(rows)
         assert result["complete"] is False
         assert len(result["incomplete_pairs"]) > 0
+
+
+class TestDependencyBlockers:
+    """Test the pure dependency-resolution helper (prereg §6 gate input)."""
+
+    def test_no_dependencies_block_is_empty(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            dependency_blockers,
+        )
+
+        assert dependency_blockers(None) == []
+        assert dependency_blockers([]) == []
+
+    def test_open_blocking_dependency_is_a_blocker(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            dependency_blockers,
+        )
+
+        deps = [{"issue": 5351, "status": "open", "blocking": "analysis machinery"}]
+        blockers = dependency_blockers(deps)
+        assert len(blockers) == 1
+        assert "#5351" in blockers[0]
+        assert "analysis machinery" in blockers[0]
+
+    def test_resolved_dependency_is_not_a_blocker(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            dependency_blockers,
+        )
+
+        for state in ("resolved", "closed", "merged", "done"):
+            deps = [{"issue": 5351, "status": state, "blocking": "analysis machinery"}]
+            assert dependency_blockers(deps) == []
+
+    def test_non_blocking_dependency_is_ignored(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            dependency_blockers,
+        )
+
+        # No ``blocking`` reason => informational only, never blocks submission.
+        assert dependency_blockers([{"issue": 42, "status": "open"}]) == []
+
+    def test_none_dependency_fields_are_treated_as_missing(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            dependency_blockers,
+        )
+
+        assert dependency_blockers([{"issue": 42, "blocking": None, "status": None}]) == []
+        blockers = dependency_blockers([{"issue": 42, "blocking": "analysis", "status": None}])
+        assert blockers == ["dependency #42 unresolved (status=unset): analysis"]
+
+    def test_malformed_dependencies_raise(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            dependency_blockers,
+        )
+
+        with pytest.raises(ValueError):
+            dependency_blockers("not-a-list")
+        with pytest.raises(ValueError):
+            dependency_blockers([["not", "a", "mapping"]])
+
+
+class TestCampaignReadinessGate:
+    """Test the fail-closed campaign-readiness gate for issue #5355."""
+
+    CONFIG_PATH = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
+
+    def test_real_config_is_blocked_only_on_open_dependencies(self):
+        """The landed packet is campaign-ready except for #5351/#5353 (closure audit)."""
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        report = assess_campaign_readiness(self.CONFIG_PATH)
+        assert report["ready"] is False
+        criteria = report["criteria"]
+        # Design/preregistration/implementation/provenance criteria are all met...
+        assert criteria["preregistration_config_valid"]["ready"] is True
+        assert criteria["arm_configs_valid"]["ready"] is True
+        assert criteria["evidence_registry_pinned"]["ready"] is True
+        # ...and the sole remaining gate is the two declared open dependencies.
+        assert criteria["dependencies_resolved"]["ready"] is False
+        joined = " ".join(report["blockers"])
+        assert "#5351" in joined
+        assert "#5353" in joined
+
+    def test_missing_registry_blocks_readiness(self, tmp_path):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        report = assess_campaign_readiness(
+            self.CONFIG_PATH, registry_path=tmp_path / "does_not_exist.json"
+        )
+        assert report["ready"] is False
+        assert report["criteria"]["evidence_registry_pinned"]["ready"] is False
+
+    def test_non_object_registry_blocks_readiness(self, tmp_path):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        registry = tmp_path / "registry.json"
+        registry.write_text("[]", encoding="utf-8")
+        report = assess_campaign_readiness(self.CONFIG_PATH, registry_path=registry)
+        assert report["ready"] is False
+        detail = report["criteria"]["evidence_registry_pinned"]["detail"]
+        assert "JSON object/dictionary" in detail
+
+    def test_invalid_config_fails_closed(self, tmp_path):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        bad = tmp_path / "bad.yaml"
+        bad.write_text("issue: 5355\nschema_version: wrong\n", encoding="utf-8")
+        report = assess_campaign_readiness(bad)
+        assert report["ready"] is False
+        assert report["criteria"]["preregistration_config_valid"]["ready"] is False
+
+    def test_ready_when_dependencies_resolved_and_registry_matches(self, tmp_path):
+        """End-to-end ready verdict once the declared dependencies are marked resolved."""
+        import hashlib
+        import json
+
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        # Copy the real config verbatim but mark the blocking dependencies resolved.
+        source = self.CONFIG_PATH.read_text(encoding="utf-8")
+        resolved_text = source.replace("status: open", "status: resolved")
+        assert "status: open" not in resolved_text
+        cfg = tmp_path / "prediction_mpc_factorial_resolved.yaml"
+        cfg.write_text(resolved_text, encoding="utf-8")
+
+        # Pin the copy with a matching sha256 registry (arm/scenario paths resolve via cwd).
+        registry = tmp_path / "registry.json"
+        registry.write_text(
+            json.dumps(
+                {
+                    "campaign_id": "issue_5355_prediction_mpc_factorial_v1",
+                    "config_path": str(cfg),
+                    "config_sha256": hashlib.sha256(cfg.read_bytes()).hexdigest(),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = assess_campaign_readiness(cfg, registry_path=registry)
+        assert report["ready"] is True, report["blockers"]
+        assert all(c["ready"] for c in report["criteria"].values())

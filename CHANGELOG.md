@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`docs/context/issue_5442_last_avoidable_replay.md`). Controlled-fixture diagnostic evidence only;
   `normative_fault` is always `not_assessed`. No production-simulator snapshot seam (that would be a
   broad change — see the note), no benchmark/Slurm run, no metric/paper claim.
+* **issue #5441 `collision_causal_report.v1` fail-closed cause-report contract.** Adds
+  `robot_sf/benchmark/schemas/collision_causal_report.v1.json` and validator
+  `robot_sf/benchmark/collision_causal_report.py` that separate observed reconstruction, proximate
+  mechanism, and intervention-supported causal contribution for a single collision, always setting
+  `normative_fault: not_assessed`. The contract reuses `MECHANISM_LABELS`/`MECHANISM_CONFIDENCES`
+  (no competing taxonomy), marks unsupported fields (`t_uca`, `t_inevitable`, planner internals for
+  black-box planners) unavailable rather than inferred, forbids asserting a planner cause once
+  contact is inevitable, and ships one complete and one abstaining fixture. Producer inventory and
+  decision record: `docs/context/collision_causal_report_field_map_2026-07-13.md`. Schema/fixture
+  evidence only — not proof that real collisions can be causally attributed.
 
 * **issue #5419 authorization-gated DPCBF executor.** Bounded local `run_batch` arms require the
   exact public authorization ID. Atomic checkpoints bind inputs and completed JSONL artifacts;

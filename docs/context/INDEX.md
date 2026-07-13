@@ -7,6 +7,10 @@ scenario discovery research program:
 Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
 [issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).
 
+Issue #5441 `collision_causal_report.v1` field-producer map, temporal causal-graph nodes, and
+fail-closed contract decision record (model-scoped, `normative_fault: not_assessed`):
+[collision_causal_report_field_map_2026-07-13.md](collision_causal_report_field_map_2026-07-13.md).
+
 Issue #5355 prediction-MPC 2x2 factorial preregistration (prediction on/off x constraint-handling on/off):
 [issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md).
 

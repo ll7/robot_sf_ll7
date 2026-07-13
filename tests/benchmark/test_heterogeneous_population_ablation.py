@@ -23,7 +23,11 @@ from robot_sf.benchmark.heterogeneous_population_ablation import (
     build_mean_matched_population_pair,
     build_per_archetype_ablation_report,
 )
+from robot_sf.benchmark.heterogeneous_population_ablation_runner import run_manifest_row
 from robot_sf.benchmark.pedestrian_control_trace import PEDESTRIAN_CONTROL_TRACE_LABELS_KEY
+
+_REPO_ROOT = Path(__file__).parents[2]
+_CLASSIC_CROSSING_MAP = _REPO_ROOT / "maps/svg_maps/classic_crossing.svg"
 
 
 def _archetypes() -> dict[str, ArchetypePopulationSpec]:
@@ -706,4 +710,122 @@ def test_repo_harness_config_manifest_includes_near_field_exposure_metric() -> N
     assert any(
         "near_field_clearance_threshold_m" in key
         for key in first_row["expected_episode_output_keys"]
+    )
+
+
+def _single_cell_manifest_config() -> dict[str, object]:
+    """One paired cell (2 rows) with a small population for a fast runtime capture."""
+
+    return {
+        "trace_metric_keys": ["clearance_m", "near_field_exposure_s"],
+        "planners": [{"key": "goal", "algo": "goal"}],
+        "seeds": [101],
+        "scenarios": [
+            {
+                "id": "issue_3574_classic_crossing_density_002",
+                "density": 0.02,
+                "population_size": 6,
+                "archetype_seed": 3574,
+                "response_law_seed": 3574,
+                "pedestrian_control_trace_near_field_clearance_m": 1.0,
+                "composition": {"cautious": 0.25, "standard": 0.5, "hurried": 0.25},
+                "archetypes": {
+                    "cautious": {"desired_speed_factor": 0.7, "radius_m": 0.35},
+                    "standard": {"desired_speed_factor": 1.0, "radius_m": 0.3},
+                    "hurried": {"desired_speed_factor": 1.4, "radius_m": 0.25},
+                },
+            }
+        ],
+    }
+
+
+def _run_single_cell_records(tmp_path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
+    """Build the paired manifest and run each row through the real harness path.
+
+    Returns:
+        The manifest and the emitted, campaign-annotated episode records.
+    """
+
+    manifest = build_mean_matched_harness_manifest(_single_cell_manifest_config())
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    manifest_rows = manifest["manifest_rows"]
+    assert isinstance(manifest_rows, list)
+
+    records = [
+        run_manifest_row(
+            row,
+            map_path=_CLASSIC_CROSSING_MAP,
+            scenario_path=manifest_path,
+            horizon=30,
+        )
+        for row in manifest_rows
+    ]
+    return manifest, records
+
+
+@pytest.mark.slow
+def test_harness_emits_control_trace_that_clears_readiness_gate(tmp_path: Path) -> None:
+    """A runtime rerun emits the trace fields the readiness gate demands (issue #5397).
+
+    This exercises the exact SLURM-job-13379 seam end to end: the map-runner harness
+    must attach ``algorithm_metadata.pedestrian_control_trace`` with per-step
+    ``clearance_m`` / ``near_field_exposure_s`` (and its clearance threshold) for both
+    paired arms, so ``assess_mean_matched_episode_records`` reports ``ready`` and the
+    manifest's ``pending_runtime_capture`` state is cleared -- i.e. a real ablation
+    result becomes producible.
+    """
+
+    if not _CLASSIC_CROSSING_MAP.exists():
+        pytest.skip(f"classic crossing map not available at {_CLASSIC_CROSSING_MAP}")
+
+    manifest, records = _run_single_cell_records(tmp_path)
+    assert manifest["status"] == "pending_runtime_capture"
+
+    arms_seen = {record["population_arm"] for record in records}
+    assert arms_seen == {"heterogeneous", "mean_matched_homogeneous"}
+
+    for record in records:
+        trace = record["algorithm_metadata"]["pedestrian_control_trace"]
+        assert trace["near_field_clearance_threshold_m"] == pytest.approx(1.0)
+        assert trace["pedestrians"], "trace must carry per-pedestrian rows"
+        for pedestrian in trace["pedestrians"]:
+            assert pedestrian["steps"], "each pedestrian must carry per-step rows"
+            for step in pedestrian["steps"]:
+                # The two readiness-required per-step metric fields must be present.
+                assert "clearance_m" in step
+                assert "near_field_exposure_s" in step
+                assert math.isfinite(step["clearance_m"])
+                assert math.isfinite(step["near_field_exposure_s"])
+
+    readiness = assess_mean_matched_episode_records(manifest, records)
+    assert readiness["status"] == "ready"
+    assert readiness["ready"] is True
+    assert readiness["blockers"] == []
+    assert readiness["observed_row_count"] == readiness["expected_row_count"] == len(records)
+
+
+@pytest.mark.slow
+def test_harness_emission_readiness_fails_closed_when_trace_dropped(tmp_path: Path) -> None:
+    """Stripping the emitted trace makes the same records fail the readiness gate.
+
+    Proves the ready verdict above is caused by the emitted control trace and not by
+    an unconditional pass: readiness is ``ready=true`` ONLY when the trace is present.
+    """
+
+    if not _CLASSIC_CROSSING_MAP.exists():
+        pytest.skip(f"classic crossing map not available at {_CLASSIC_CROSSING_MAP}")
+
+    manifest, records = _run_single_cell_records(tmp_path)
+
+    # Drop the trace from one arm exactly as job 13379 did (harness produced records
+    # but no control trace) and confirm readiness refuses to report ready.
+    records[0]["algorithm_metadata"].pop("pedestrian_control_trace")
+
+    readiness = assess_mean_matched_episode_records(manifest, records)
+    assert readiness["status"] == "blocked"
+    assert readiness["ready"] is False
+    assert any(
+        f"{EPISODE_CONTROL_TRACE_PATH} missing or not mapping" in blocker
+        for blocker in readiness["blockers"]
     )

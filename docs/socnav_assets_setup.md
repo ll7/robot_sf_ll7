@@ -34,6 +34,17 @@ Install SocNav Python prerequisites in this repo environment:
 uv sync --extra socnav
 ```
 
+The `socnav` extra includes the pinned upstream `mp_env` mesh bridge dependencies used by the
+ETH traversible generator. On Debian/Ubuntu, install the native Assimp loader once as well:
+
+```bash
+sudo apt-get install libassimp-dev
+```
+
+If the native library is unavailable, the generation command fails before reading the staged mesh
+and prints this exact setup action. The repository-root command does not download dependencies or
+licensed data.
+
 ## 2. Obtain Data From Official Sources
 
 ### 2.1 Curated SD3DIS maps and `wayptnav_data` (recommended path)

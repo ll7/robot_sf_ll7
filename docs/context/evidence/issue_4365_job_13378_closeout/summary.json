@@ -1,0 +1,84 @@
+{
+  "schema_version": "robot_sf.issue4365.job13378.diagnostic_closeout.v1",
+  "evidence_status": "diagnostic-only",
+  "disposition": "artifact-integrity-blocked-for-promotion",
+  "job": {
+    "slurm_job_id": "13378",
+    "slurm_state": "COMPLETED",
+    "exit_code": "0:0",
+    "elapsed": "14:28:14",
+    "public_commit": "a596a33b27acc835a6c1b399bd36cd2699792437",
+    "campaign_id": "issue4365_h600_hybrid_vs_orca_s30_run_20260704",
+    "scenario_matrix_hash": "152eba3969a9"
+  },
+  "artifact_inventory": {
+    "original_file_count": 63,
+    "sha256sums_path": "docs/context/evidence/issue_4365_job_13378_closeout/SHA256SUMS.original",
+    "sorted_hash_multiset_sha256": "67c2c05543e1f13b47798112e377ae606b46f3817afed89c6150091790c822e5",
+    "remote_retrieved_hash_multiset_match": true,
+    "raw_payload_committed": false,
+    "raw_payload_size_gib_approx": 1.4,
+    "private_ops_commit": "4e4f22af77f586ff021b62a550cf877491c07689",
+    "private_ops_submission_commit_recorded": false
+  },
+  "official_artifact": {
+    "declared_rows_per_planner": 1440,
+    "jsonl_rows": {
+      "scenario_adaptive_hybrid_orca_v1": 8640,
+      "scenario_adaptive_hybrid_orca_v2_collision_guard": 8640,
+      "hybrid_rule_v3_fast_progress_static_escape": 8640,
+      "hybrid_rule_v3_fast_progress_static_escape_continuous": 8640,
+      "orca": 8640,
+      "ppo": 4195
+    },
+    "integrity_failure": "resume-append history from multiple public commits",
+    "usable_for_planner_ranking": false
+  },
+  "final_public_commit_slice": {
+    "rows_per_planner": 1440,
+    "scenario_count": 48,
+    "seed_count": 30,
+    "unique_scenario_seed_pairs_per_planner": 1440,
+    "metric_schema": {
+      "success": "metrics.success",
+      "collision": "outcome.collision_event"
+    },
+    "hybrid_v3_continuous": {
+      "success": 0.77153,
+      "collision": 0.14861,
+      "mean_episode_wall_seconds": 18.2559
+    },
+    "orca": {
+      "success": 0.68056,
+      "collision": 0.28333,
+      "mean_episode_wall_seconds": 1.3423
+    },
+    "ppo": {
+      "success": 0.71736,
+      "collision": 0.26458
+    },
+    "hybrid_v3_continuous_minus_orca": {
+      "success_difference": 0.09097,
+      "success_95pct_seed_block_bootstrap": [0.06458, 0.11667],
+      "collision_difference": -0.13472,
+      "collision_95pct_seed_block_bootstrap": [-0.15833, -0.10972]
+    },
+    "hybrid_v3_continuous_minus_ppo": {
+      "success_difference": 0.05417,
+      "success_95pct_seed_block_bootstrap": [0.02708, 0.08056],
+      "collision_difference": -0.11597,
+      "collision_95pct_seed_block_bootstrap": [-0.13611, -0.09583]
+    },
+    "inference_boundary": "diagnostic seed-block percentile bootstrap; not preregistered inference"
+  },
+  "claim_boundaries": {
+    "paper_facing": false,
+    "snqi_contract_pass": false,
+    "amv_coverage_complete": false,
+    "independent_clean_machine_validation": false,
+    "real_world_validation": false,
+    "official_aggregate_usable_for_ranking": false
+  },
+  "code_followup_issue": 5449,
+  "rerun_launched": false
+}

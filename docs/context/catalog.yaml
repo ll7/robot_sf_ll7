@@ -28,6 +28,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5445_calibration_preregistration_2026-07-13.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/evidence_registry_dispositions.yaml
   status: evidence
   freshness: evidence

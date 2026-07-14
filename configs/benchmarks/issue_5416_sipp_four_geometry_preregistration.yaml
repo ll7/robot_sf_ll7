@@ -101,10 +101,10 @@ outcomes:
     - runtime_bound_exits
     - fallback_count
     - commitment_invalidations
-advancement_rule: >-
-     Advance only when the paired slice has no collision regression and either improves
-     collision-free completion or materially reduces deadlock. Runtime improvement alone
-     does not qualify; five seeds are a diagnostic evidence slice, not a record claim.
+  advancement_rule: >-
+    Advance only when the paired slice has no collision regression and either improves
+    collision-free completion or materially reduces deadlock. Runtime improvement alone
+    does not qualify; five seeds are a diagnostic evidence slice, not a record claim.
 
 inference_contract:
   resampling_unit:

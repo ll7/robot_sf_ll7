@@ -99,6 +99,8 @@ def validate_packet(  # noqa: C901, PLR0915
 ) -> dict[str, Any]:
     """Validate the issue #5302 contract and return a compact summary."""
     root = repo_root or Path(__file__).resolve().parents[2]
+    from scripts.validation.check_preregistration_inference_contract import check_inference_contract
+    check_inference_contract(packet, repo_root=root)
     _walk_for_forbidden_keys(packet)
     _require(packet.get("schema_version") == SCHEMA_VERSION, "schema_version mismatch")
     _require(packet.get("issue") == 5302, "issue must be 5302")
@@ -278,6 +280,7 @@ def validate_packet(  # noqa: C901, PLR0915
         and all(
             "check_issue_5302_oracle_gap_packet.py" in str(command)
             or "test_check_issue_5302_oracle_gap_packet.py" in str(command)
+            or "check_preregistration_inference_contract.py" in str(command)
             for command in no_submit
         ),
         "validation must contain only checker/test commands",

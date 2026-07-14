@@ -17,7 +17,11 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from robot_sf.benchmark.artifact_publication import export_publication_bundle
+from robot_sf.benchmark.artifact_publication import (
+    PublicationPreflightError,
+    export_publication_bundle,
+    verify_publication_bundle_preflight,
+)
 from robot_sf.benchmark.camera_ready_campaign import (
     load_campaign_config,
     prepare_campaign_preflight,
@@ -151,7 +155,24 @@ def _build_publication_payload(
     }
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _run_publication_preflight(bundle_dir: Path) -> None:
+    """Run the final publication preflight over an exported bundle directory.
+
+    A missing bundle directory is treated as "not exported here" and is skipped
+    rather than failing (the export step owns the hard failure when it runs).
+
+    Raises:
+        PublicationPreflightError: If a built publication bundle is internally
+            self-inconsistent (issue #5530). The release must not be treated as
+            release-valid when this fails.
+    """
+    resolved = Path(bundle_dir).resolve()
+    if not resolved.is_dir():
+        return
+    verify_publication_bundle_preflight(resolved)
+
+
+def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     """Run the benchmark release entrypoint and return a POSIX exit code."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
     args = parse_release_args(raw_argv)
@@ -261,12 +282,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     release_benchmark_success = bool(run_payload.get("benchmark_success")) and not missing
     result["release_benchmark_success"] = release_benchmark_success
     if release_benchmark_success:
-        publication_payload = _build_publication_payload(
-            campaign_root=campaign_root,
-            release_tag=manifest.release_tag,
-            doi=manifest.doi,
-            repository_url=manifest.repository_url,
-        )
+        try:
+            publication_payload = _build_publication_payload(
+                campaign_root=campaign_root,
+                release_tag=manifest.release_tag,
+                doi=manifest.doi,
+                repository_url=manifest.repository_url,
+            )
+            _run_publication_preflight(Path(publication_payload["bundle_dir"]))
+        except PublicationPreflightError as exc:
+            result["publication_bundle"] = None
+            result["publication_preflight_status"] = "fail"
+            result["publication_preflight_violations"] = [str(exc)]
+            release_benchmark_success = False
+            result["release_status"] = "publication_preflight_failed"
+            result["release_status_reason"] = (
+                "publication bundle failed the final self-consistency preflight"
+            )
+            result["release_exit_code"] = 2
+            _write_json(release_dir / "release_result.json", result)
+            print(json.dumps(result, indent=2))
+            return 2
         result["publication_bundle"] = publication_payload
 
         summary_path = campaign_root / "reports" / "campaign_summary.json"

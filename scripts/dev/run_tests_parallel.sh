@@ -34,6 +34,12 @@ Environment overrides:
     combined in the single-job CI topology).
   PYTEST_SHARD_INDEX=<int>
     pytest-split shard index in 1..PYTEST_SHARD_COUNT (default 1).
+  PR_READY_SERIAL_FALLBACK=1|0
+    Opt-in fallback for issue #5633: when the parallel run crashes (e.g.
+    native-extension segfaults under xdist), rerun serially with a single
+    worker to separate an environment crash from real test failures. Disabled
+    by default so the gate stays fail-closed: an environment crash is neither
+    success nor a silently skipped validation.
 
 Examples:
   scripts/dev/run_tests_parallel.sh
@@ -203,6 +209,22 @@ fi
 
 echo "Resolved pytest-xdist workers: $worker_spec" >&2
 
+# Fallback for issue #5633: when parallel pytest workers crash on a
+# native-extension/segfault combination (not an ordinary assertion failure),
+# a serial rerun separates the environment crash from real test failures.
+# Default is fail-closed: only an explicit opt-in reruns serially. The
+# diagnostic itself (issue #5633) captures the crash signature and runtime
+# fingerprint so the crash is never misread as a passed or skipped gate.
+serial_fallback="${PR_READY_SERIAL_FALLBACK:-0}"
+case "$serial_fallback" in
+  1|true|yes|on) serial_fallback=1 ;;
+  0|false|no|off) serial_fallback=0 ;;
+  *)
+    echo "Invalid PR_READY_SERIAL_FALLBACK value '$serial_fallback' (expected 1|0|true|false|yes|no|on|off)." >&2
+    exit 2
+    ;;
+esac
+
 cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")
 
 # pytest-split sharding: when CI provisions multiple shards, run a disjoint
@@ -349,4 +371,43 @@ esac
 if [[ ${#pytest_args[@]} -gt 0 ]]; then
   cmd+=("${pytest_args[@]}")
 fi
-"${cmd[@]}"
+
+# Run pytest, capturing output so parallel-worker crashes can be classified
+# (issue #5633). We capture to a log and print it on failure so the crash
+# signature is never silently swallowed by `set -e`.
+pytest_log="$(mktemp "${TMPDIR:-/tmp}/pytest_run.XXXXXX.log")"
+set +e
+"${cmd[@]}" >"$pytest_log" 2>&1
+pytest_exit=$?
+set -e
+if [[ "$pytest_exit" -ne 0 ]]; then
+  cat "$pytest_log" >&2
+  # Classify the captured failure. The diagnostic is fail-closed: it only
+  # reports, it never converts an incomplete run into success evidence.
+  uv run python "$SCRIPT_DIR/diagnose_xdist_crash.py" \
+    --log-file "$pytest_log" \
+    --requested-workers "$worker_spec" \
+    --dist-mode "$dist_mode" >&2 || true
+  # Opt-in serial fallback: rerun with a single worker to separate an
+  # environment crash from real failures. Disabled by default so the gate
+  # stays fail-closed (an env crash is not success and not silently skipped).
+  if [[ "$serial_fallback" == "1" ]]; then
+    printf '\n[pr_ready_check] PR_READY_SERIAL_FALLBACK=1: rerunning serially to separate env crash from real failures.\n' >&2
+    serial_log="$(mktemp "${TMPDIR:-/tmp}/pytest_serial.XXXXXX.log")"
+    ROBOT_SF_PYTEST_WORKERS_OVERRIDE=1 \
+      PYTEST_NUM_WORKERS=1 \
+      uv run pytest -n 1 --dist "$dist_mode" "${cmd[@]:3}" >"$serial_log" 2>&1
+    serial_exit=$?
+    cat "$serial_log" >&2
+    uv run python "$SCRIPT_DIR/diagnose_xdist_crash.py" \
+      --log-file "$serial_log" \
+      --requested-workers 1 \
+      --dist-mode "$dist_mode" \
+      --serialized-ok "$([[ "$serial_exit" -eq 0 ]] && echo true || echo false)" >&2 || true
+    rm -f "$serial_log"
+  fi
+  rm -f "$pytest_log"
+  exit "$pytest_exit"
+fi
+rm -f "$pytest_log"
+true

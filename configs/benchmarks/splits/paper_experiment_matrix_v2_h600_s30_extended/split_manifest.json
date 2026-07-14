@@ -1,0 +1,105 @@
+{
+  "children": [
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_prediction_planner.yaml",
+      "planner_keys": [
+        "prediction_planner"
+      ],
+      "sha256": "8fc9ea75eae0ab585a65012775bf245c2cb6deefed6ffc0089532fd257533889"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_goal.yaml",
+      "planner_keys": [
+        "goal"
+      ],
+      "sha256": "144978a02ffcf1e1d014054e1d15ec6200f41164913988a66116afb386394efb"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_social_force.yaml",
+      "planner_keys": [
+        "social_force"
+      ],
+      "sha256": "27f5fe3ac0abecfa3b7b93c31b963f2cc63f5d9a31c02ffbf8e151216b5b41c6"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_orca.yaml",
+      "planner_keys": [
+        "orca"
+      ],
+      "sha256": "20b74c376eef8ffa8dbcda5c0ff436e6d47d2df80803a9ad904c93ddb5ec362e"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_ppo.yaml",
+      "planner_keys": [
+        "ppo"
+      ],
+      "sha256": "792f6793d47bfcf7658a700545e6e8f572b52ba0add306cce2841fdac78b7270"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_socnav_sampling.yaml",
+      "planner_keys": [
+        "socnav_sampling"
+      ],
+      "sha256": "c97d5ccf2e5c4359e415bdc27962218495f7c5a3eae6471b6131f4c61fb7a0ea"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_sacadrl.yaml",
+      "planner_keys": [
+        "sacadrl"
+      ],
+      "sha256": "100247e93b2f61e5d5440010fbc7f7978db6b05555710417a12d93424ab3c8e7"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_scenario_adaptive_hybrid_orca_v1.yaml",
+      "planner_keys": [
+        "scenario_adaptive_hybrid_orca_v1"
+      ],
+      "sha256": "b865b71862fe28a1042aaead10a9c949c5c3ec8a6a8c8f8611b6d51b2fa6da41"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_scenario_adaptive_hybrid_orca_v2_collision_guard.yaml",
+      "planner_keys": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard"
+      ],
+      "sha256": "56bcb65071c507f82697528533ad26f144c78d404c453bc09a62e6fdef52f7ee"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_hybrid_rule_v3_fast_progress_static_escape.yaml",
+      "planner_keys": [
+        "hybrid_rule_v3_fast_progress_static_escape"
+      ],
+      "sha256": "d50ca61ea00fa6c3ebd15feb67319b0af2e49214931f6fce91d6393732acf8dc"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_hybrid_rule_v3_fast_progress_static_escape_continuous.yaml",
+      "planner_keys": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous"
+      ],
+      "sha256": "5ad6f65a018f7b13014962d2e8476fb7e711452776223e1519038226878a80ed"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_guarded_ppo.yaml",
+      "planner_keys": [
+        "guarded_ppo"
+      ],
+      "sha256": "fa005ecb7bafe9480c6bc2ee376876d6bd3facdbb42605326ffd15dd9ff3fccc"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_predictive_mppi.yaml",
+      "planner_keys": [
+        "predictive_mppi"
+      ],
+      "sha256": "b7554d416e3996471166c5917996f0323c064cc7d0eca7a7f96c9445a9d6cba9"
+    },
+    {
+      "filename": "paper_experiment_matrix_v2_h600_s30_extended__arm_risk_dwa.yaml",
+      "planner_keys": [
+        "risk_dwa"
+      ],
+      "sha256": "a6b08b94e66880c3e9ba66e0869fc807c9e7bb20d9595c0b57e4a81c9154012a"
+    }
+  ],
+  "source_config": "configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended.yaml",
+  "source_sha256": "b3f7718cc27ff07975dc99f9c1c9d7e3183e0312d586945074cd5ac089b3fdf2",
+  "split_mode": "per_planner"
+}

@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import os
 import random
+import sys
 
 import pytest
 
-from robot_sf.common.seed import _import_torch, get_seed_state_sample, set_global_seed
+from robot_sf.common.seed import (
+    _import_torch,
+    _set_torch_deterministic_algorithms,
+    get_seed_state_sample,
+    set_global_seed,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -33,8 +39,8 @@ def restore_torch_determinism():
     yield
 
     try:
-        if prev_algos is not None and hasattr(torch, "use_deterministic_algorithms"):
-            torch.use_deterministic_algorithms(prev_algos)
+        if prev_algos is not None:
+            _set_torch_deterministic_algorithms(torch, prev_algos)
         if prev_cudnn_det is not None:
             if prev_det_flag is not None:
                 prev_cudnn_det.deterministic = prev_det_flag
@@ -82,3 +88,26 @@ def test_torch_optional_behavior():
         assert rep.has_torch is True
     else:
         assert rep.has_torch is False
+
+
+def test_torch_213_python312_uses_c_level_determinism_setter():
+    """Avoid Torch 2.13.0's Python 3.12 Dynamo/Triton import path."""
+    if sys.version_info[:2] != (3, 12):
+        pytest.skip("Torch 2.13.0 compatibility guard targets Python 3.12")
+
+    calls: list[tuple[bool, bool]] = []
+
+    class FakeC:
+        def _set_deterministic_algorithms(self, enabled: bool, *, warn_only: bool = False):
+            calls.append((enabled, warn_only))
+
+    class FakeTorch:
+        __version__ = "2.13.0+cpu"
+        _C = FakeC()
+
+        @staticmethod
+        def use_deterministic_algorithms(_enabled: bool):
+            pytest.fail("Torch 2.13.0 Python 3.12 guard must bypass the public wrapper")
+
+    assert _set_torch_deterministic_algorithms(FakeTorch(), True)
+    assert calls == [(True, False)]

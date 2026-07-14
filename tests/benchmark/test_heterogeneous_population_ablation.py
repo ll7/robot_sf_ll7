@@ -23,6 +23,7 @@ from robot_sf.benchmark.heterogeneous_population_ablation import (
     build_mean_matched_harness_manifest,
     build_mean_matched_population_pair,
     build_per_archetype_ablation_report,
+    build_runtime_population_control_trace_labels,
 )
 from robot_sf.benchmark.heterogeneous_population_ablation_runner import (
     build_episode_scenario,
@@ -32,6 +33,7 @@ from robot_sf.benchmark.pedestrian_control_trace import PEDESTRIAN_CONTROL_TRACE
 
 _REPO_ROOT = Path(__file__).parents[2]
 _CLASSIC_CROSSING_MAP = _REPO_ROOT / "maps/svg_maps/classic_crossing.svg"
+_CLASSIC_HEAD_ON_MAP = _REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg"
 
 
 def _archetypes() -> dict[str, ArchetypePopulationSpec]:
@@ -100,6 +102,27 @@ def test_mean_matched_population_pair_preserves_weighted_speed_and_radius() -> N
     ]
     assert {label["archetype"] for label in homogeneous_labels} == {"mean_matched_homogeneous"}
     assert {label["desired_speed_factor"] for label in homogeneous_labels} == {1.025}
+
+
+def test_runtime_trace_labels_preserve_declared_labels_when_count_matches() -> None:
+    """The legacy fixed-count smoke keeps byte-compatible label records."""
+
+    report = build_mean_matched_population_pair(
+        population_size=12,
+        composition={"cautious": 0.25, "standard": 0.5, "hurried": 0.25},
+        archetypes=_archetypes(),
+        seed=3574,
+    )
+    arm_population = report["arms"]["heterogeneous"]
+
+    assert (
+        build_runtime_population_control_trace_labels(
+            arm_population,
+            pedestrian_count=12,
+            archetype_seed=3574,
+        )
+        == arm_population[PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]
+    )
 
 
 def test_mean_matched_population_pair_rejects_unknown_archetype() -> None:
@@ -959,6 +982,105 @@ def test_matrix_harness_runs_each_geometry_end_to_end(tmp_path: Path) -> None:
         assert record["scenario_params"]["simulation_config"]["ped_density"] == pytest.approx(
             row["density"]
         )
+
+
+@pytest.mark.slow
+def test_matrix_harness_aligns_trace_labels_to_each_density_population(tmp_path: Path) -> None:
+    """Different-density cells label and trace every pedestrian actually instantiated."""
+
+    matrix_path = tmp_path / "two_density_matrix.yaml"
+    matrix_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    {
+                        "name": "crossing_density_002",
+                        "map_file": str(_CLASSIC_CROSSING_MAP),
+                        "simulation_config": {"ped_density": 0.02},
+                    },
+                    {
+                        "name": "head_on_density_005",
+                        "map_file": str(_CLASSIC_HEAD_ON_MAP),
+                        "simulation_config": {"ped_density": 0.05},
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
+    config["scenario_matrix"] = str(matrix_path)
+    config["scenario_matrix_derivation"]["population_size"] = 12
+    manifest = build_mean_matched_harness_manifest(config, config_path=str(matrix_path))
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    records = [
+        run_manifest_row(row, scenario_path=manifest_path, horizon=3)
+        for row in manifest["manifest_rows"]
+    ]
+
+    counts_by_scenario: dict[str, set[int]] = {}
+    for record in records:
+        assert "disposition" not in record
+        trace = record["algorithm_metadata"]["pedestrian_control_trace"]
+        labels = record["scenario_params"][PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]
+        pedestrian_count = trace["pedestrian_count"]
+        assert pedestrian_count == len(trace["pedestrians"]) == len(labels)
+        assert record["scenario_params"]["simulation_config"]["population_size"] == pedestrian_count
+        counts_by_scenario.setdefault(record["scenario_id"], set()).add(pedestrian_count)
+        for pedestrian in trace["pedestrians"]:
+            assert pedestrian["steps"]
+            for step in pedestrian["steps"]:
+                assert "clearance_m" in step
+                assert "near_field_exposure_s" in step
+
+    assert all(len(counts) == 1 for counts in counts_by_scenario.values())
+    assert len({next(iter(counts)) for counts in counts_by_scenario.values()}) == 2
+
+
+@pytest.mark.slow
+def test_unrealizable_runtime_mix_records_row_disposition_and_continues(tmp_path: Path) -> None:
+    """A too-small instantiated population blocks only its row with an explicit reason."""
+
+    config = _single_cell_manifest_config()
+    scenario = config["scenarios"][0]
+    assert isinstance(scenario, dict)
+    scenario["density"] = 0.0
+    scenario["map_file"] = str(_CLASSIC_CROSSING_MAP)
+    manifest = build_mean_matched_harness_manifest(config)
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    disposition = run_manifest_row(
+        manifest["manifest_rows"][0],
+        scenario_path=manifest_path,
+        horizon=1,
+    )
+
+    assert disposition["status"] == "disposed"
+    assert disposition["disposition"] == "population_mix_not_realizable"
+    assert "instantiated pedestrian count" in disposition["disposition_reason"]
+    assert disposition["scenario_id"] == manifest["manifest_rows"][0]["scenario_id"]
+    assert disposition["population_arm"] == "heterogeneous"
+    assert disposition["algorithm_metadata"]["pedestrian_control_trace"] == {
+        "status": "not_available",
+        "reason": disposition["disposition_reason"],
+    }
+    readiness = assess_mean_matched_episode_records(manifest, [disposition])
+    assert any(
+        "row disposition population_mix_not_realizable" in blocker
+        for blocker in readiness["blockers"]
+    )
+
+    scenario["density"] = 0.02
+    viable_manifest = build_mean_matched_harness_manifest(config)
+    viable = run_manifest_row(
+        viable_manifest["manifest_rows"][0],
+        scenario_path=manifest_path,
+        horizon=1,
+    )
+    assert "disposition" not in viable
 
 
 @pytest.mark.slow

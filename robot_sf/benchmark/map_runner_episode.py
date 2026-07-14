@@ -173,6 +173,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 PolicyBuilder = Callable[..., tuple[Any, dict[str, Any]]]
+PedestrianControlTraceLabelBuilder = Callable[[int], list[dict[str, Any]]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1676,6 +1677,7 @@ class _EpisodeStepLoopResult:
 def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     *,
     seed: int,
+    scenario: dict[str, Any] | None = None,
     config: Any,
     horizon_val: int,
     policy_fn: Any,
@@ -1700,6 +1702,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     record_simulation_step_trace: bool,
     single_pedestrian_intent_metadata: Any,
     single_pedestrian_vru_metadata: Any,
+    pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
 ) -> _EpisodeStepLoopResult:
     """Run the env reset, the per-step episode loop, and planner/env teardown.
 
@@ -1739,6 +1742,21 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
             policy_fn = active_harness.wrap_policy(policy_fn)
 
         obs, _ = env.reset(seed=int(seed))
+        if pedestrian_control_trace_label_builder is not None:
+            if scenario is None:
+                raise ValueError("runtime trace label building requires the episode scenario")
+            instantiated_count = int(np.asarray(env.simulator.ped_pos).reshape(-1, 2).shape[0])
+            runtime_labels = pedestrian_control_trace_label_builder(instantiated_count)
+            if len(runtime_labels) != instantiated_count:
+                raise ValueError(
+                    "runtime pedestrian control trace label builder must return one label per "
+                    f"instantiated pedestrian (got {len(runtime_labels)}, expected "
+                    f"{instantiated_count})"
+                )
+            scenario["pedestrian_control_trace_labels"] = runtime_labels
+            simulation_config = scenario.get("simulation_config")
+            if isinstance(simulation_config, dict):
+                simulation_config["population_size"] = instantiated_count
         if callable(planner_bind_env):
             planner_bind_env(env)
         if callable(planner_reset):
@@ -2631,6 +2649,7 @@ def run_map_episode(  # noqa: PLR0913
     cbf_safety_filter: dict[str, Any] | None = None,
     record_planner_decision_trace: bool = False,
     record_simulation_step_trace: bool = False,
+    pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
     close_policy: bool = True,
     policy_builder: PolicyBuilder,
 ) -> dict[str, Any]:
@@ -2683,6 +2702,9 @@ def run_map_episode(  # noqa: PLR0913
     robot_command_mode = ctx.robot_command_mode
     algo = ctx.algo
     policy_cfg = ctx.policy_cfg
+    if pedestrian_control_trace_label_builder is not None:
+        config.sim_config.population_size = None
+        config.sim_config.pedestrian_control_trace_labels = None
     policy_contract = _prepare_policy_and_observation_contract(
         scenario=scenario,
         algo=algo,
@@ -2700,6 +2722,7 @@ def run_map_episode(  # noqa: PLR0913
     )
     loop_result = _run_episode_step_loop(
         seed=seed,
+        scenario=scenario,
         config=config,
         horizon_val=horizon_val,
         policy_fn=policy_contract.policy_fn,
@@ -2724,6 +2747,7 @@ def run_map_episode(  # noqa: PLR0913
         record_simulation_step_trace=record_simulation_step_trace,
         single_pedestrian_intent_metadata=policy_contract.single_pedestrian_intent_metadata,
         single_pedestrian_vru_metadata=policy_contract.single_pedestrian_vru_metadata,
+        pedestrian_control_trace_label_builder=pedestrian_control_trace_label_builder,
     )
     post_loop = _compute_post_loop_metrics(
         robot_positions=loop_result.robot_positions,

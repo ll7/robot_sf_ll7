@@ -33,6 +33,7 @@ MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA = "mean_matched_heterogeneity_harness.
 MEAN_MATCHED_EPISODE_READINESS_SCHEMA = "mean_matched_episode_readiness.v1"
 EPISODE_CONTROL_TRACE_PATH = "algorithm_metadata.pedestrian_control_trace"
 RANK_METRIC_KEY = "mean_clearance"
+DEFAULT_MEAN_MATCHED_ARCHETYPE_SEED = 3574
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,10 @@ class ArchetypePopulationSpec:
     desired_speed_factor: float
     radius_m: float
     response_law: str | None = None
+
+
+class PopulationMixNotRealizableError(ValueError):
+    """Raised when an instantiated row is too small to represent its declared mix."""
 
 
 def build_mean_matched_population_pair(
@@ -142,6 +147,165 @@ def build_mean_matched_population_pair(
             },
         },
     }
+
+
+def build_runtime_population_control_trace_labels(
+    arm_population: Mapping[str, Any],
+    pedestrian_count: int,
+    *,
+    archetype_seed: int = DEFAULT_MEAN_MATCHED_ARCHETYPE_SEED,
+) -> list[dict[str, Any]]:
+    """Materialize trace labels for the pedestrians instantiated in one runtime row.
+
+    The manifest population remains the declared distribution plan. Runtime labels
+    reapply that plan to the scenario-specific pedestrian count using the same
+    largest-remainder allocator and deterministic seeds as the simulator. A row
+    fails closed when its count would drop a positive archetype or response-law
+    category entirely.
+
+    Returns:
+        Simulator-indexed labels whose length equals ``pedestrian_count``.
+
+    Raises:
+        PopulationMixNotRealizableError: The runtime count cannot represent the mix.
+        ValueError: The arm population does not carry the required label plan.
+    """
+
+    if isinstance(pedestrian_count, bool) or pedestrian_count < 0:
+        raise ValueError("pedestrian_count must be a non-negative integer")
+    population_count = int(pedestrian_count)
+    composition = _runtime_population_composition(arm_population, "composition")
+    archetype_counts = _require_runtime_mix_representable(
+        population_count,
+        composition,
+        mix_name="archetype",
+    )
+    archetype_labels = assign_archetype_labels(
+        population_count,
+        composition,
+        seed=archetype_seed,
+    )
+
+    response_law_composition_raw = arm_population.get("response_law_composition")
+    response_law_labels: Sequence[Any] | None = None
+    if response_law_composition_raw is not None:
+        response_law_composition = _runtime_population_composition(
+            arm_population,
+            "response_law_composition",
+        )
+        _require_runtime_mix_representable(
+            population_count,
+            response_law_composition,
+            mix_name="response-law",
+        )
+        response_law_labels = assign_archetype_labels(
+            population_count,
+            response_law_composition,
+            seed=arm_population.get("response_law_seed"),
+        )
+
+    templates = _runtime_population_record_templates(arm_population)
+    declared_labels = arm_population.get(PEDESTRIAN_CONTROL_TRACE_LABELS_KEY)
+    if not isinstance(declared_labels, Sequence) or isinstance(declared_labels, str):
+        raise ValueError(f"arm_population.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY} must be sequence")
+    source = next(
+        (
+            str(label.get("source", "")).strip()
+            for label in declared_labels
+            if isinstance(label, Mapping) and str(label.get("source", "")).strip()
+        ),
+        "",
+    )
+    if not source:
+        raise ValueError(f"arm_population.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY} source missing")
+    if len(declared_labels) == population_count:
+        if not all(isinstance(label, Mapping) for label in declared_labels):
+            raise ValueError(
+                f"arm_population.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY} entries must be mappings"
+            )
+        return [dict(label) for label in declared_labels]
+
+    runtime_records: list[dict[str, Any]] = []
+    for simulator_index, archetype in enumerate(archetype_labels):
+        archetype_name = str(archetype)
+        template = templates.get(archetype_name)
+        if template is None:
+            raise ValueError(f"arm_population.records missing archetype template: {archetype_name}")
+        runtime_records.append(
+            {
+                "simulator_index": simulator_index,
+                "archetype": archetype_name,
+                "desired_speed_factor": template["desired_speed_factor"],
+                "radius_m": template.get("radius_m"),
+                "response_law": (
+                    str(response_law_labels[simulator_index])
+                    if response_law_labels is not None
+                    else template.get("response_law")
+                ),
+            }
+        )
+
+    labels = build_generated_population_control_trace_labels(runtime_records, source=source)
+    if len(labels) != population_count or sum(archetype_counts.values()) != population_count:
+        raise AssertionError("runtime population label allocation produced an inconsistent count")
+    return labels
+
+
+def _runtime_population_composition(
+    arm_population: Mapping[str, Any], field_name: str
+) -> dict[str, float]:
+    """Return a validated runtime composition from one arm population."""
+
+    value = arm_population.get(field_name)
+    if not isinstance(value, Mapping):
+        raise ValueError(f"arm_population.{field_name} must be mapping")
+    return _normalize_composition(value)
+
+
+def _require_runtime_mix_representable(
+    pedestrian_count: int,
+    composition: Mapping[str, float],
+    *,
+    mix_name: str,
+) -> dict[str, int]:
+    """Return allocated counts or reject a row that drops a positive category."""
+
+    counts = allocate_archetype_counts(pedestrian_count, dict(composition))
+    missing = sorted(
+        name for name, fraction in composition.items() if fraction > 0 and counts[name] == 0
+    )
+    if missing:
+        categories = ", ".join(missing)
+        raise PopulationMixNotRealizableError(
+            f"instantiated pedestrian count {pedestrian_count} cannot realize declared "
+            f"{mix_name} mix; zero-count categories: {categories}"
+        )
+    return counts
+
+
+def _runtime_population_record_templates(
+    arm_population: Mapping[str, Any],
+) -> dict[str, Mapping[str, Any]]:
+    """Index one declared population record per archetype for runtime relabeling.
+
+    Returns:
+        One representative declared record for each archetype.
+    """
+
+    records = arm_population.get("records")
+    if not isinstance(records, Sequence) or isinstance(records, str):
+        raise ValueError("arm_population.records must be sequence")
+    templates: dict[str, Mapping[str, Any]] = {}
+    for index, record in enumerate(records):
+        if not isinstance(record, Mapping):
+            raise ValueError(f"arm_population.records[{index}] must be mapping")
+        archetype = str(record.get("archetype", "")).strip()
+        if not archetype:
+            raise ValueError(f"arm_population.records[{index}].archetype missing")
+        if "desired_speed_factor" not in record:
+            raise ValueError(f"arm_population.records[{index}].desired_speed_factor missing")
+        templates.setdefault(archetype, record)
+    return templates
 
 
 def build_per_archetype_ablation_report(
@@ -670,6 +834,10 @@ def _episode_trace_blockers(
     manifest_row: Mapping[str, Any],
     metric_keys: Sequence[str],
 ) -> list[str]:
+    disposition = record.get("disposition")
+    if disposition is not None:
+        reason = str(record.get("disposition_reason", "reason missing")).strip()
+        return [f"row disposition {disposition}: {reason}"]
     algorithm_metadata = record.get("algorithm_metadata")
     if not isinstance(algorithm_metadata, Mapping):
         return ["algorithm_metadata missing or not mapping"]
@@ -1069,19 +1237,17 @@ def _trace_population_metadata_blockers(
     arm_population = manifest_row.get("arm_population")
     if not isinstance(arm_population, Mapping):
         return ["manifest row arm_population missing or not mapping"]
-    expected_labels = arm_population.get(PEDESTRIAN_CONTROL_TRACE_LABELS_KEY)
-    if not isinstance(expected_labels, Sequence) or isinstance(expected_labels, str):
-        return [f"manifest row arm_population.{PEDESTRIAN_CONTROL_TRACE_LABELS_KEY} missing"]
     pedestrians = trace.get("pedestrians")
     if not isinstance(pedestrians, Sequence) or isinstance(pedestrians, str):
         return ["control_trace.pedestrians must be a sequence"]
-    blockers: list[str] = []
-    if len(pedestrians) != len(expected_labels):
-        blockers.append(
-            "control_trace pedestrian count does not match manifest arm population: "
-            f"{len(pedestrians)} != {len(expected_labels)}"
+    try:
+        expected_labels = build_runtime_population_control_trace_labels(
+            arm_population,
+            pedestrian_count=len(pedestrians),
         )
-        return blockers
+    except ValueError as exc:
+        return [str(exc)]
+    blockers: list[str] = []
 
     for index, (pedestrian, expected_label) in enumerate(
         zip(pedestrians, expected_labels, strict=True)
@@ -1400,11 +1566,14 @@ def _population_record(
 
 
 __all__ = [
+    "DEFAULT_MEAN_MATCHED_ARCHETYPE_SEED",
     "HETEROGENEOUS_POPULATION_ABLATION_SCHEMA",
     "MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA",
     "ArchetypePopulationSpec",
+    "PopulationMixNotRealizableError",
     "audit_smoke_mean_match",
     "build_mean_matched_harness_manifest",
     "build_mean_matched_population_pair",
     "build_per_archetype_ablation_report",
+    "build_runtime_population_control_trace_labels",
 ]

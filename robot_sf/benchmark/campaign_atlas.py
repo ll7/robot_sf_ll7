@@ -46,6 +46,7 @@ import numpy as np
 from matplotlib.patches import Polygon, Rectangle
 
 from robot_sf.benchmark.event_ledger import EPISODE_EVENT_LEDGER_SCHEMA_VERSION
+from robot_sf.common.optional_import import try_import
 
 CAMPAIGN_ATLAS_SCHEMA_VERSION = "campaign_atlas.v1"
 EVENT_DETECTOR_VERSION = EPISODE_EVENT_LEDGER_SCHEMA_VERSION
@@ -901,11 +902,10 @@ def render_html_atlas_exploration(summary: AtlasSummary, out: Path) -> Path:
     parity = _summary_parity_dict(summary)
 
     cells = parity["cells"]
-    try:
-        import altair as alt  # noqa: PLC0415, F401  (optional exploration-only dependency)
-
-        body = _render_altair_html(cells)
-    except ImportError:
+    altair = try_import("altair")
+    if altair is not None:
+        body = _render_altair_html(cells, altair)
+    else:
         body = _render_table_html(cells)
 
     embedded = json.dumps(parity, sort_keys=True, indent=2)
@@ -950,10 +950,8 @@ def _render_table_html(cells: Sequence[dict[str, Any]]) -> str:
     )
 
 
-def _render_altair_html(cells: Sequence[dict[str, Any]]) -> str:
+def _render_altair_html(cells: Sequence[dict[str, Any]], alt: Any) -> str:
     """Return an Altair/Vega-Lite HTML block for the exploration atlas."""
-    import altair as alt  # noqa: PLC0415
-
     data = [
         {
             **cell,

@@ -8,7 +8,8 @@ import pytest
 
 from scripts.validation import check_issue_5416_sipp_four_geometry_packet as checker
 
-PACKET = Path("configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+PACKET = REPO_ROOT / "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
 
 
 def test_packet_passes_tracked_geometry_and_roster_gate() -> None:
@@ -48,12 +49,30 @@ def test_packet_rejects_transient_routing_state() -> None:
         checker.validate_packet(packet)
 
 
+def test_packet_rejects_non_mapping_scenario_row() -> None:
+    """Malformed selected rows fail through the packet error contract."""
+    packet = checker.load_packet(PACKET)
+    packet["scenario_contract"]["selected_rows"][0] = None
+
+    with pytest.raises(checker.PacketError, match=r"selected_rows\[0\] must be a mapping"):
+        checker.validate_packet(packet)
+
+
 def test_packet_requires_all_five_result_seeds() -> None:
     """The paired diagnostic seed budget cannot silently shrink."""
     packet = checker.load_packet(PACKET)
     packet["scenario_contract"]["result_producing_seeds"] = [111]
 
     with pytest.raises(checker.PacketError, match="seed set mismatch"):
+        checker.validate_packet(packet)
+
+
+def test_packet_rejects_outcome_name_drift() -> None:
+    """The preregistration keeps the primary outcome order and names stable."""
+    packet = checker.load_packet(PACKET)
+    packet["outcomes"]["primary_in_order"][0] = "unregistered_outcome"
+
+    with pytest.raises(checker.PacketError, match="primary outcome order mismatch"):
         checker.validate_packet(packet)
 
 

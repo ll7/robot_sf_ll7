@@ -35,6 +35,19 @@ EXPECTED_PLANNERS = (
     "nmpc_social",
     "dwa",
 )
+EXPECTED_PRIMARY_OUTCOMES = (
+    "collision_free_success_rate",
+    "pedestrian_and_static_collision_count_rate",
+    "deadlock_timeout_max_steps_rate",
+    "paired_progress_and_time_to_goal_conditional_on_collision_free_completion",
+    "planner_step_runtime_median_p95",
+)
+EXPECTED_DIAGNOSTICS = (
+    "expansion_limit_hits",
+    "runtime_bound_exits",
+    "fallback_count",
+    "commitment_invalidations",
+)
 ALLOWED_CERTIFICATION_ELIGIBILITY = {"eligible", "stress_only"}
 FORBIDDEN_TRANSIENT_KEYS = {
     "target_host",
@@ -88,8 +101,8 @@ def load_packet(path: Path) -> dict[str, Any]:
 
 def _check_certification(row: dict[str, Any], *, root: Path) -> dict[str, Any]:
     """Certify one selected scenario and return a compact gate result."""
-    scenario_id = str(row["scenario_id"])
-    source_path = root / _repo_path(row["source_path"], f"{scenario_id}.source_path")
+    scenario_id = str(row.get("scenario_id"))
+    source_path = root / _repo_path(row.get("source_path"), f"{scenario_id}.source_path")
     certificates = certify_scenario_file(source_path, scenario_id=scenario_id)
     _require(len(certificates) == 1, f"{scenario_id} must yield exactly one certificate")
     payload = certificate_to_dict(certificates[0])
@@ -138,6 +151,8 @@ def validate_packet(packet: dict[str, Any], *, repo_root: Path | None = None) ->
     _require((root / scenarios["scenario_matrix"]).is_file(), "scenario matrix is missing")
     rows = scenarios.get("selected_rows")
     _require(isinstance(rows, list), "selected_rows must be a list")
+    for index, row in enumerate(rows):
+        _require(isinstance(row, dict), f"selected_rows[{index}] must be a mapping")
     _require(
         tuple(row.get("scenario_id") for row in rows) == EXPECTED_SCENARIOS,
         "scenario order mismatch",
@@ -164,40 +179,47 @@ def validate_packet(packet: dict[str, Any], *, repo_root: Path | None = None) ->
 
     certification: list[dict[str, Any]] = []
     for row in rows:
-        _require(isinstance(row, dict), "selected scenario rows must be mappings")
         certification.append(_check_certification(row, root=root))
 
     roster = _mapping(packet, "planner_roster")
     planner_rows = roster.get("required")
     _require(isinstance(planner_rows, list), "planner_roster.required must be a list")
+    for index, row in enumerate(planner_rows):
+        _require(isinstance(row, dict), f"planner_roster.required[{index}] must be a mapping")
     _require(
         tuple(row.get("planner_id") for row in planner_rows) == EXPECTED_PLANNERS,
         "planner roster mismatch",
     )
     for row in planner_rows:
-        _require(isinstance(row, dict), "planner roster rows must be mappings")
         algorithm = str(row.get("algorithm", ""))
         readiness = get_algorithm_readiness(algorithm)
         _require(readiness is not None, f"unknown planner readiness key: {algorithm}")
         _require(
             readiness.requires_explicit_opt_in is True, f"{algorithm} must remain explicit-opt-in"
         )
+        planner_id = str(row.get("planner_id"))
         _require(
-            canonical_algorithm_name(algorithm) == canonical_algorithm_name(str(row["planner_id"])),
-            f"planner alias mismatch for {row['planner_id']}",
+            canonical_algorithm_name(algorithm) == canonical_algorithm_name(planner_id),
+            f"planner alias mismatch for {planner_id}",
         )
-        config_path = _repo_path(row.get("config_path"), f"{row['planner_id']}.config_path")
+        config_path = _repo_path(row.get("config_path"), f"{planner_id}.config_path")
         resolved = root / config_path
-        _require(resolved.is_file(), f"planner config missing: {config_path}")
+        _require(resolved.is_file(), f"{planner_id} config missing: {config_path}")
         config = yaml.safe_load(resolved.read_text(encoding="utf-8")) or {}
         _require(
             isinstance(config, dict) and config.get("allow_testing_algorithms") is True,
-            f"{row['planner_id']} config must opt in explicitly",
+            f"{planner_id} config must opt in explicitly",
         )
 
     outcomes = _mapping(packet, "outcomes")
-    _require(len(outcomes.get("primary_in_order", [])) == 5, "five primary outcomes are required")
-    _require(len(outcomes.get("diagnostics", [])) == 4, "four planner diagnostics are required")
+    _require(
+        outcomes.get("primary_in_order") == list(EXPECTED_PRIMARY_OUTCOMES),
+        "primary outcome order mismatch",
+    )
+    _require(
+        outcomes.get("diagnostics") == list(EXPECTED_DIAGNOSTICS),
+        "planner diagnostics mismatch",
+    )
     _require(
         "collision regression" in str(outcomes.get("advancement_rule", "")),
         "advancement rule must protect collisions",
@@ -251,7 +273,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         result = validate_packet(load_packet(args.packet))
-    except (OSError, PacketError, ValueError, yaml.YAMLError) as exc:
+    except (
+        OSError,
+        PacketError,
+        ValueError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        yaml.YAMLError,
+    ) as exc:
         if args.as_json:
             print(json.dumps({"status": "not_ready", "error": str(exc)}))
         else:

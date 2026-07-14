@@ -347,3 +347,368 @@ def test_preflight_skips_release_check_when_not_required(tmp_path: Path) -> None
     (bundle_dir / "payload" / "reports" / "campaign_summary.json").unlink()
     report = verify_publication_bundle_preflight(bundle_dir, require_release_reconciliation=False)
     assert report["status"] == "pass"
+
+
+# --- Coverage for the remaining fail-closed preflight branches (issue #5691) ---
+
+
+def _episodes_path(bundle_dir: Path) -> Path:
+    """Return the seeded arm episodes ledger path used by the synthetic bundle."""
+    return bundle_dir / "payload" / "runs" / "orca__holonomic" / "episodes.jsonl"
+
+
+def _load_manifest(bundle_dir: Path) -> dict:
+    """Read and return the publication manifest dict for mutation."""
+    return json.loads((bundle_dir / "publication_manifest.json").read_text(encoding="utf-8"))
+
+
+def _save_manifest(bundle_dir: Path, manifest: dict) -> None:
+    """Write the publication manifest dict back to the bundle."""
+    (bundle_dir / "publication_manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "output/local_cache",
+        "file:///tmp/rel",
+        "./relative",
+        "../escape",
+        "https://localhost:8080/x",
+        "10.5281/zenodo.{release_tag}",
+    ],
+)
+def test_preflight_rejects_each_unresolved_channel_placeholder(tmp_path: Path, value: str) -> None:
+    """Every documented placeholder shape in publication_channels must fail closed."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest["publication_channels"]["release_url"] = value
+    _save_manifest(bundle_dir, manifest)
+    with pytest.raises(PublicationPreflightError, match="retains an unresolved placeholder"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_ignores_empty_channel_value(tmp_path: Path) -> None:
+    """An empty publication_channels value is not a placeholder and must not fail."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest["publication_channels"]["notes"] = ""
+    _save_manifest(bundle_dir, manifest)
+    report = verify_publication_bundle_preflight(bundle_dir)
+    assert report["status"] == "pass"
+
+
+def test_preflight_warns_when_publication_channels_omitted(tmp_path: Path) -> None:
+    """A missing publication_channels block is a warning, not a blocking violation."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest.pop("publication_channels", None)
+    _save_manifest(bundle_dir, manifest)
+    report = verify_publication_bundle_preflight(bundle_dir)
+    assert report["status"] == "pass"
+    assert any("omits publication_channels" in w for w in report["warnings"])
+
+
+def test_preflight_tolerates_non_dict_publication_channels(tmp_path: Path) -> None:
+    """A present but non-dict publication_channels block is neither warning nor violation."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest["publication_channels"] = "not-a-dict"
+    _save_manifest(bundle_dir, manifest)
+    report = verify_publication_bundle_preflight(bundle_dir)
+    assert report["status"] == "pass"
+    assert not any("publication_channels" in w for w in report["warnings"])
+
+
+def test_preflight_accepts_checksums_with_comments_and_blank_lines(tmp_path: Path) -> None:
+    """Comment and blank lines in checksums.sha256 are skipped during parsing."""
+    bundle_dir = _build_bundle(tmp_path)
+    checksums_path = bundle_dir / "checksums.sha256"
+    lines = checksums_path.read_text(encoding="utf-8").splitlines()
+    rewritten = ["# header comment", "", *lines, "", "# trailing comment", ""]
+    checksums_path.write_text("\n".join(rewritten) + "\n", encoding="utf-8")
+    report = verify_publication_bundle_preflight(bundle_dir)
+    assert report["status"] == "pass"
+
+
+@pytest.mark.parametrize(
+    ("body", "match"),
+    [
+        ("abcdef  payload/manifest.json\n", "malformed checksum entry"),
+        ("g" * 64 + "  payload/manifest.json\n", "malformed checksum entry"),
+        ("# only a comment\n\n# trailing\n", None),
+    ],
+    ids=["short-digest", "nonhex-digest", "no-entries"],
+)
+def test_preflight_fails_on_malformed_checksum_file(tmp_path: Path, body: str, match: str) -> None:
+    """Malformed checksum lines surface as fail-closed checksum violations."""
+    bundle_dir = _build_bundle(tmp_path)
+    (bundle_dir / "checksums.sha256").write_text(body, encoding="utf-8")
+    with pytest.raises(PublicationPreflightError, match="checksums.sha256 cannot be validated"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_duplicate_checksum_path(tmp_path: Path) -> None:
+    """Duplicate paths in checksums.sha256 must be rejected."""
+    bundle_dir = _build_bundle(tmp_path)
+    checksums_path = bundle_dir / "checksums.sha256"
+    first_line = checksums_path.read_text(encoding="utf-8").splitlines()[0]
+    checksums_path.write_text(first_line + "\n" + first_line + "\n", encoding="utf-8")
+    with pytest.raises(PublicationPreflightError, match="duplicate path"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_checksum_path_escaping_bundle_root(tmp_path: Path) -> None:
+    """A checksum path with ``..`` must not reach outside the bundle root."""
+    bundle_dir = _build_bundle(tmp_path)
+    checksums_path = bundle_dir / "checksums.sha256"
+    first_line = checksums_path.read_text(encoding="utf-8").splitlines()[0]
+    escaped = f"{'0' * 64}  ../escape.txt\n"
+    checksums_path.write_text(first_line + "\n" + escaped, encoding="utf-8")
+    with pytest.raises(PublicationPreflightError, match="escapes bundle root"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_checksum_digest_drift(tmp_path: Path) -> None:
+    """A checksum that does not recompute against its bundle file must fail."""
+    bundle_dir = _build_bundle(tmp_path)
+    checksums_path = bundle_dir / "checksums.sha256"
+    lines = checksums_path.read_text(encoding="utf-8").splitlines()
+    sha, path = lines[0].split(maxsplit=1)
+    tampered = list(sha)
+    tampered[0] = "1" if tampered[0] == "0" else "0"
+    lines[0] = "".join(tampered) + "  " + path
+    checksums_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(PublicationPreflightError, match="checksum mismatch at bundle root"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_when_manifest_files_not_a_list(tmp_path: Path) -> None:
+    """publication_manifest files must be a list; otherwise fail closed."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest["files"] = "not-a-list"
+    _save_manifest(bundle_dir, manifest)
+    with pytest.raises(PublicationPreflightError, match="files must be a list"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_non_object_manifest_file_entry(tmp_path: Path) -> None:
+    """A non-object entry in manifest files is reported as a violation."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest["files"] = ["not-an-object", *manifest["files"]]
+    _save_manifest(bundle_dir, manifest)
+    with pytest.raises(PublicationPreflightError, match="files must contain objects"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_manifest_file_entry_missing_path(tmp_path: Path) -> None:
+    """A manifest file entry without a non-empty path is rejected."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest["files"] = [{"sha256": "0" * 64}, *manifest["files"]]
+    _save_manifest(bundle_dir, manifest)
+    with pytest.raises(PublicationPreflightError, match="path must be a non-empty string"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_malformed_manifest_sha256(tmp_path: Path) -> None:
+    """A manifest file sha256 of the wrong length is rejected."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest["files"][0]["sha256"] = "0" * 10
+    _save_manifest(bundle_dir, manifest)
+    with pytest.raises(PublicationPreflightError, match="sha256 is malformed for file"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_duplicate_manifest_file(tmp_path: Path) -> None:
+    """Duplicate manifest file entries (same path) are rejected."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    duplicate = dict(manifest["files"][0])
+    manifest["files"].append(duplicate)
+    _save_manifest(bundle_dir, manifest)
+    with pytest.raises(PublicationPreflightError, match="duplicate publication manifest file"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_release_result_not_a_json_object(tmp_path: Path) -> None:
+    """A release_result.json that is valid JSON but not an object must fail closed."""
+    bundle_dir = _build_bundle(tmp_path)
+    (bundle_dir / "payload" / "release" / "release_result.json").write_text(
+        "[1, 2]\n", encoding="utf-8"
+    )
+    with pytest.raises(
+        PublicationPreflightError, match="release reconciliation cannot be validated"
+    ):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_when_campaign_summary_has_no_campaign_block(tmp_path: Path) -> None:
+    """A campaign_summary without an object campaign block is rejected."""
+    bundle_dir = _build_bundle(tmp_path)
+    (bundle_dir / "payload" / "reports" / "campaign_summary.json").write_text(
+        json.dumps({"not_a_campaign": True}), encoding="utf-8"
+    )
+    with pytest.raises(
+        PublicationPreflightError, match="campaign block is missing or not an object"
+    ):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_episode_row_that_is_not_an_object(tmp_path: Path) -> None:
+    """An episode row that is valid JSON but not an object must be rejected."""
+    bundle_dir = _build_bundle(tmp_path)
+    _episodes_path(bundle_dir).write_text("[1, 2]\n", encoding="utf-8")
+    with pytest.raises(PublicationPreflightError, match="episode row must be an object"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_episode_ledger_without_software_commit(tmp_path: Path) -> None:
+    """An event_ledger missing its software_commit is rejected, not silently dropped."""
+    bundle_dir = _build_bundle(tmp_path)
+    _episodes_path(bundle_dir).write_text(
+        json.dumps({"episode_id": "ep-1", "event_ledger": {}}) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(PublicationPreflightError, match="event_ledger.software_commit is required"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_when_no_episode_ledger_files_present(tmp_path: Path) -> None:
+    """A payload with no runs/*/episodes.jsonl files reports a provenance violation."""
+    bundle_dir = _build_bundle(tmp_path)
+    _episodes_path(bundle_dir).unlink()
+    with pytest.raises(PublicationPreflightError, match="publication payload contains no runs"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_handles_unreadable_episode_ledger(tmp_path: Path) -> None:
+    """An unreadable episode ledger is a fail-closed violation, not a crash."""
+    bundle_dir = _build_bundle(tmp_path)
+    ledger = _episodes_path(bundle_dir)
+    ledger.chmod(0o000)
+    try:
+        with pytest.raises(PublicationPreflightError, match="cannot read episode ledger"):
+            verify_publication_bundle_preflight(bundle_dir)
+    finally:
+        ledger.chmod(0o644)
+
+
+def test_preflight_skips_blank_episode_rows(tmp_path: Path) -> None:
+    """Blank lines between episode rows are skipped by both ledger passes."""
+    bundle_dir = _build_bundle(tmp_path)
+    ledger = _episodes_path(bundle_dir)
+    original = ledger.read_text(encoding="utf-8")
+    ledger.write_text("\n" + original + "\n\n", encoding="utf-8")
+    report = verify_publication_bundle_preflight(bundle_dir)
+    assert report["status"] == "pass"
+
+
+def test_preflight_accepts_goal_only_row_without_timeout(tmp_path: Path) -> None:
+    """An exact_events row with goal_reached but not timeout is not ambiguous."""
+    bundle_dir = _build_bundle(tmp_path)
+    _episodes_path(bundle_dir).write_text(
+        json.dumps(
+            {
+                "episode_id": "ep-2",
+                "event_ledger": {
+                    "software_commit": "abc123",
+                    "exact_events": {"goal_reached": True, "timeout": False},
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report = verify_publication_bundle_preflight(bundle_dir)
+    assert report["status"] == "pass"
+    assert report["evidence"]["goal_reached_timeout_rows"] == 0
+
+
+def test_preflight_accepts_goal_timeout_row_with_boundary_note(tmp_path: Path) -> None:
+    """A goal_reached+timeout row is acceptable with an explicit boundary note."""
+    bundle_dir = _build_bundle(tmp_path)
+    _episodes_path(bundle_dir).write_text(
+        json.dumps(
+            {
+                "episode_id": "ep-2",
+                "goal_timeout_boundary_note": "reached the goal on the final timeout step",
+                "event_ledger": {
+                    "software_commit": "abc123",
+                    "exact_events": {"goal_reached": True, "timeout": True, "collision": False},
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    report = verify_publication_bundle_preflight(bundle_dir)
+    assert report["status"] == "pass"
+
+
+def test_preflight_fails_when_provenance_repository_commit_missing(tmp_path: Path) -> None:
+    """A missing provenance.repository.commit is a blocking violation."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest.pop("provenance", None)
+    _save_manifest(bundle_dir, manifest)
+    with pytest.raises(PublicationPreflightError, match="provenance.repository.commit is missing"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_when_provenance_repository_block_missing(tmp_path: Path) -> None:
+    """A provenance dict without a repository block is rejected."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest["provenance"] = {}
+    _save_manifest(bundle_dir, manifest)
+    with pytest.raises(PublicationPreflightError, match="provenance.repository.commit is missing"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_when_repository_commit_is_empty(tmp_path: Path) -> None:
+    """An empty repository commit string is treated as missing."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest.setdefault("provenance", {}).setdefault("repository", {})["commit"] = ""
+    _save_manifest(bundle_dir, manifest)
+    with pytest.raises(PublicationPreflightError, match="provenance.repository.commit is missing"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_missing_manifest(tmp_path: Path) -> None:
+    """A missing publication_manifest.json raises immediately."""
+    bundle_dir = _build_bundle(tmp_path)
+    (bundle_dir / "publication_manifest.json").unlink()
+    with pytest.raises(PublicationPreflightError, match="Publication preflight failed: missing"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_missing_checksums(tmp_path: Path) -> None:
+    """A missing checksums.sha256 raises immediately."""
+    bundle_dir = _build_bundle(tmp_path)
+    (bundle_dir / "checksums.sha256").unlink()
+    with pytest.raises(PublicationPreflightError, match="Publication preflight failed: missing"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_on_invalid_manifest_json(tmp_path: Path) -> None:
+    """A malformed publication_manifest.json fails closed with a structured error."""
+    bundle_dir = _build_bundle(tmp_path)
+    (bundle_dir / "publication_manifest.json").write_text("{not-json}\n", encoding="utf-8")
+    with pytest.raises(PublicationPreflightError, match="Publication preflight failed:"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_fails_when_manifest_missing_schema_version(tmp_path: Path) -> None:
+    """A manifest without a schema_version is reported as a violation."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest = _load_manifest(bundle_dir)
+    manifest.pop("schema_version", None)
+    _save_manifest(bundle_dir, manifest)
+    with pytest.raises(PublicationPreflightError, match="missing schema_version"):
+        verify_publication_bundle_preflight(bundle_dir)

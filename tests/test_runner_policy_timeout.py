@@ -100,3 +100,40 @@ def test_planner_step_process_reports_eof_between_poll_and_recv() -> None:
 
     with pytest.raises(RuntimeError, match="exited before returning an action"):
         step_process.step({"obs": "value"})
+
+
+@pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")
+def test_planner_step_worker_is_reaped_on_policy_close() -> None:
+    """Closing a runner policy must terminate its forked planner-step worker.
+
+    Regression for issue #5594: a leaked worker kept pytest-xdist's gateway fds
+    open and was reparented to PID 1 after the readiness command exited, so the
+    shared host was left with an orphaned ``[pytest-xdist running]`` process.
+    """
+    psutil = pytest.importorskip("psutil")
+    policy, _ = runner._create_robot_policy("random", None, seed=7)
+
+    try:
+        before_pids = {p.pid for p in psutil.Process().children()}
+
+        velocity = policy(
+            np.array([0.0, 0.0]),
+            np.array([0.0, 0.0]),
+            np.array([1.0, 0.0]),
+            np.empty((0, 2)),
+            0.1,
+        )
+        assert velocity.shape == (2,)
+
+        after_step_pids = {p.pid for p in psutil.Process().children()}
+        worker_pids = after_step_pids - before_pids
+        # Exactly one forked planner-step worker should be running after a step.
+        assert len(worker_pids) == 1
+    finally:
+        policy.close()  # type: ignore[attr-defined]
+
+    # The worker process must be reaped, not orphaned under PID 1.
+    remaining_pids = {p.pid for p in psutil.Process().children()}
+    assert not worker_pids.issubset(remaining_pids)
+    for pid in worker_pids:
+        assert not psutil.pid_exists(pid)

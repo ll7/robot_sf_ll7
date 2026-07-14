@@ -1,0 +1,147 @@
+# Issue #5416 / #5306 Slice 3: four-geometry SIPP evidence packet.
+#
+# Plain-language summary: this freezes the planner roster, four failure geometries,
+# paired seeds, outcomes, and fail-closed evidence rules before any campaign run.
+# It is a preregistration contract, not benchmark or paper evidence.
+schema_version: issue_5416_sipp_four_geometry_preregistration.v1
+issue: 5416
+parent_issue: 5306
+predecessor_issue: 5413
+research_task_id: RSF-PLANNER-SIPP-SLICE3-20260712
+
+claim_boundary: >-
+  Preregistration and CPU contract evidence only. This packet does not run the full
+  benchmark campaign, establish planner superiority, promote safety/liveness claims,
+  or edit paper/dissertation claims. Any future result is exploratory_synthetic_benchmark_only
+  until native rows, geometry gates, paired seeds, and complete provenance pass.
+
+execution_boundary:
+  benchmark_campaign_run_in_this_pr: false
+  compute_submit_authorized: false
+  paper_claim_edits: false
+  metric_semantics_changes: false
+  fallback_or_degraded_success_allowed: false
+
+scenario_contract:
+  scenario_matrix: configs/scenarios/classic_interactions.yaml
+  selected_rows:
+    - scenario_id: classic_head_on_corridor_low
+      family: corridor
+      geometry_role: head_on_corridor
+      source_path: configs/scenarios/archetypes/classic_head_on_corridor.yaml
+      certification_caveat: eligible_hard_but_solvable
+    - scenario_id: classic_doorway_low
+      family: doorway
+      geometry_role: doorway
+      source_path: configs/scenarios/archetypes/classic_doorway.yaml
+      certification_caveat: stress_only_knife_edge
+    - scenario_id: classic_station_platform_medium
+      family: platform
+      geometry_role: station_platform
+      source_path: configs/scenarios/archetypes/classic_station_platform.yaml
+      certification_caveat: eligible_dynamic_interaction
+    - scenario_id: classic_merging_low
+      family: merging
+      geometry_role: merging
+      source_path: configs/scenarios/archetypes/classic_merging.yaml
+      certification_caveat: eligible_long_detour
+  smoke_seed: 111
+  result_producing_seeds: [111, 112, 113, 114, 115]
+  horizon_steps: 500
+  dt_seconds: 0.1
+  pairing:
+    same_scenario_seed_set_across_planners: true
+    scenario_order_frozen: true
+    no_seed_substitution: true
+  geometry_gate:
+    certifier: scenario_cert.v1
+    checker_command: uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --json
+    allowed_eligibility: [eligible, stress_only]
+    excluded_row_action: visible_exclusion_and_no_attribution
+    platform_and_merging_caveat: >-
+      If current geometry/solvability checks exclude either row, retain the row and
+      exclusion reason but do not attribute its failure to a planner; use a reviewed
+      repaired/certified row only if one already exists.
+
+planner_roster:
+  selection_policy: >-
+    Compare exactly these five keys under the shared observation/action/kinematics
+    contract; preserve construction failures as visible failed rows.
+  required:
+    - planner_id: sipp_lattice
+      algorithm: sipp_lattice
+      role: candidate_explicit_opt_in
+      config_path: configs/algos/sipp_lattice_slice2_smoke.yaml
+    - planner_id: hybrid_rule_v0_minimal
+      algorithm: hybrid_rule_local_planner
+      role: experimental_comparator
+      config_path: configs/algos/hybrid_rule_v0_minimal.yaml
+    - planner_id: teb
+      algorithm: teb
+      role: experimental_comparator
+      config_path: configs/algos/teb_commitment_camera_ready.yaml
+    - planner_id: nmpc_social
+      algorithm: nmpc_social
+      role: experimental_comparator
+      config_path: configs/algos/nmpc_social_exploratory.yaml
+    - planner_id: dwa
+      algorithm: dwa
+      role: experimental_comparator
+      config_path: configs/algos/dwa_classic.yaml
+
+outcomes:
+  primary_in_order:
+    - collision_free_success_rate
+    - pedestrian_and_static_collision_count_rate
+    - deadlock_timeout_max_steps_rate
+    - paired_progress_and_time_to_goal_conditional_on_collision_free_completion
+    - planner_step_runtime_median_p95
+  diagnostics:
+    - expansion_limit_hits
+    - runtime_bound_exits
+    - fallback_count
+    - commitment_invalidations
+  advancement_rule: >-
+    Advance only when the paired slice has no collision regression and either improves
+    collision-free completion or materially reduces deadlock. Runtime improvement alone
+    does not qualify; five seeds are a diagnostic evidence slice, not a record claim.
+
+row_policy:
+  successful_evidence_values: [successful_evidence]
+  eligible_execution_modes: [native]
+  visible_but_ineligible_values: [diagnostic_only, fallback, degraded, not_available, failed, blocked]
+  exclusion_rule: >-
+    Missing rows, construction failures, schema/provenance mismatches, non-native execution,
+    or incomplete planner-by-scenario-by-seed pairing remain visible and block interpretation.
+
+provenance_contract:
+  required:
+    - frozen benchmark/scenario/seed/planner-grid configs
+    - public git SHA and clean/dirty state
+    - exact command and package/environment manifest
+    - CPU route, job identifier, resource request, and wall time
+    - per-episode JSONL and aggregate summary
+    - planner diagnostics for expansions, bounds, fallbacks, and invalidations
+    - denominator/exclusion table and paired-seed comparison
+    - claim-boundary note: exploratory_synthetic_benchmark_only
+  durable_evidence_required_before_claim: true
+  durable_evidence_path: docs/context/evidence/issue_5416_sipp_four_geometry
+  raw_episode_policy: keep_raw_jsonl_videos_logs_out_of_git
+
+validation:
+  contract_commands:
+    - uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --json
+    - uv run pytest -q tests/validation/test_check_issue_5416_sipp_four_geometry_packet.py
+    - uv run pytest -q tests/planner/test_sipp_lattice.py tests/benchmark/test_sipp_lattice_policy_builder.py
+  future_smoke: >-
+    Run one selected-row seed-111 native experimental map-runner smoke with horizon 500,
+    dt 0.1, and workers 1 after the geometry gate passes; write only to ignored output/.
+  campaign_execution_allowed_in_this_pr: false
+
+readiness_decision:
+  status: blocked_pending_geometry_gate_and_native_campaign_bundle
+  benchmark_campaign_run: false
+  compute_submit_authorized: false
+  ranking_claim_promotion: false
+  paper_claim_edits: false
+  fallback_degraded_success_allowed: false

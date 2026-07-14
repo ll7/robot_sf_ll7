@@ -19,20 +19,14 @@ _SPEC.loader.exec_module(runner)
 
 # Hub-local verified-harvest artifacts (only present on the pinned analysis host).
 # Never committed; this test skips elsewhere so the suite stays portable.
-_REAL_HARVEST_DIR = Path(
-    "~/git/robot_sf_ll7/output/issue3216-13274-harvest"
-).expanduser()
+_REAL_HARVEST_DIR = Path("~/git/robot_sf_ll7/output/issue3216-13274-harvest").expanduser()
 _REAL_CAMPAIGN_DIR = _REAL_HARVEST_DIR / "issue3216_s20_headline_ci"
-_REAL_HARVEST_LOG = Path(
-    "~/git/context/codex-orchestrator/runtime/harvest_13274.log"
-).expanduser()
+_REAL_HARVEST_LOG = Path("~/git/context/codex-orchestrator/runtime/harvest_13274.log").expanduser()
 _REAL_PLANNER_CONFIG = Path(
     "~/git/robot_sf_ll7/configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
 ).expanduser()
 _REAL_HARVEST_PRESENT = (
-    _REAL_CAMPAIGN_DIR.is_dir()
-    and _REAL_HARVEST_LOG.is_file()
-    and _REAL_PLANNER_CONFIG.is_file()
+    _REAL_CAMPAIGN_DIR.is_dir() and _REAL_HARVEST_LOG.is_file() and _REAL_PLANNER_CONFIG.is_file()
 )
 
 
@@ -209,7 +203,9 @@ def test_runner_rejects_nonfinite_snqi_diagnostics(tmp_path: Path) -> None:
     assert "must be finite numeric values" in result.stderr
 
 
-@pytest.mark.skipif(not _REAL_HARVEST_PRESENT, reason="real job-13274 harvest not present on this host")
+@pytest.mark.skipif(
+    not _REAL_HARVEST_PRESENT, reason="real job-13274 harvest not present on this host"
+)
 class TestRealHarvestReproducibility:
     """Reproduce the verified job-13274 analysis identically on a second run.
 
@@ -243,6 +239,7 @@ class TestRealHarvestReproducibility:
                 capture_output=True,
                 check=False,
             )
+
         run_a = run_against(first)
         assert run_a.returncode == 0, run_a.stderr
         assert (first / "result.json").exists()
@@ -262,8 +259,7 @@ class TestRealHarvestReproducibility:
         assert failure["contract_status"] == "fail"
         assert failure["enforcement"] == "warn"
         assert any(
-            c["check"] == "rank_alignment_spearman"
-            and c["value"] < c["fail_threshold"]
+            c["check"] == "rank_alignment_spearman" and c["value"] < c["fail_threshold"]
             for c in failure["failed_checks"]
         )
 

@@ -1175,10 +1175,16 @@ def run_episode(
     scenario_path: pathlib.Path,
     variant: VariantSpec,
     planner_name: str,
+    planner_group: str | None = None,
     seed: int,
     horizon: int,
 ) -> dict[str, Any]:
-    """Run one actual simulator episode and return a compact row."""
+    """Run one actual simulator episode and return a compact row.
+
+    ``planner_group`` is supplied by the fixed-scope runner so strict latency
+    evidence promotion can reconcile rows with the serialized launch plan. The
+    bounded slice path leaves it unset for backward-compatible row consumers.
+    """
     config = build_robot_config_from_scenario(scenario, scenario_path=scenario_path)
     baseline_dt = float(config.sim_config.time_per_step_in_secs)
     target_duration = min(
@@ -1242,7 +1248,7 @@ def run_episode(
     success = route_success and not collision
     min_clearance = min(clearances) if clearances else None
     speed_band = _robot_speed_cap(config.robot_config)
-    return {
+    row = {
         "variant": variant.key,
         "axis": variant.axis,
         "variant_source_key": variant.source_key,
@@ -1282,6 +1288,9 @@ def run_episode(
             "distance_to_goal": _finite_or_none(meta.get("distance_to_goal")),
         },
     }
+    if planner_group is not None:
+        row["planner_group"] = planner_group
+    return row
 
 
 def _stable_seed(seed: int, *parts: str) -> int:
@@ -1681,6 +1690,7 @@ def _default_fixed_scope_cell_runner(
                 scenario_path=scenario_path,
                 variant=binding.variant,
                 planner_name=binding.planner_name,
+                planner_group=binding.cell.planner_group,
                 seed=int(binding.cell.seed),
                 horizon=horizon,
             )

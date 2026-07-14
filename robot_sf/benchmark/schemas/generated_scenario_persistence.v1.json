@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/generated_scenario_persistence.v1.json",
+  "title": "RobotSF Generated Scenario Persistence (v1)",
+  "description": "Evidence gate between a generated scenario candidate and a reusable critical scenario. Exact replay, critical-event reproduction, and perturbation persistence are reported independently; promotion fails closed on any fail/unknown required status.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scenario_id",
+    "source_episode",
+    "generated_scenario",
+    "planner",
+    "seed",
+    "config",
+    "commit_hashes",
+    "exact_replay",
+    "critical_event_reproduced",
+    "perturbation_persistence",
+    "promotion"
+  ],
+  "properties": {
+    "schema_version": {"const": "generated_scenario_persistence.v1"},
+    "scenario_id": {"type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-]*$"},
+    "source_episode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["episode_id", "source_seed", "source_map", "replay_digest"],
+      "properties": {
+        "episode_id": {"type": "string", "minLength": 1},
+        "source_seed": {"type": "integer"},
+        "source_map": {"type": "string", "minLength": 1},
+        "replay_digest": {"type": "string", "minLength": 1}
+      }
+    },
+    "generated_scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog_schema_version", "scenario_id"],
+      "properties": {
+        "catalog_schema_version": {"type": "string", "minLength": 1},
+        "scenario_id": {"type": "string", "minLength": 1},
+        "catalog_entry_digest": {"type": "string", "minLength": 1}
+      }
+    },
+    "planner": {"type": "string", "minLength": 1},
+    "seed": {"type": "integer"},
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config_id", "frozen"],
+      "properties": {
+        "config_id": {"type": "string", "minLength": 1},
+        "frozen": {"type": "boolean"},
+        "config_hash": {"type": "string", "minLength": 1}
+      }
+    },
+    "commit_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "config"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "config": {"type": "string", "minLength": 1}
+      }
+    },
+    "exact_replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "divergence_reason", "replay_digest"],
+      "properties": {
+        "status": {"enum": ["pass", "fail", "unknown"]},
+        "divergence_reason": {"type": "string", "minLength": 1},
+        "replay_digest": {"type": "string", "minLength": 1}
+      }
+    },
+    "critical_event_reproduced": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "event_type",
+        "time_tolerance_s",
+        "location_tolerance_m",
+        "observed_time_delta_s",
+        "observed_location_delta_m"
+      ],
+      "properties": {
+        "status": {"enum": ["pass", "fail", "unknown"]},
+        "event_type": {"type": "string", "minLength": 1},
+        "time_tolerance_s": {"type": "number", "minimum": 0},
+        "location_tolerance_m": {"type": "number", "minimum": 0},
+        "observed_time_delta_s": {"type": ["number", "null"], "minimum": 0},
+        "observed_location_delta_m": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "perturbation_persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grid",
+        "cells",
+        "persistence_rate",
+        "persistence_interval",
+        "missing_cell_reasons"
+      ],
+      "properties": {
+        "grid": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["timing_offsets_s", "speed_deltas_m_s"],
+          "properties": {
+            "timing_offsets_s": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 1
+            },
+            "speed_deltas_m_s": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 1
+            }
+          }
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["timing_offset_s", "speed_delta_m_s", "verdict"],
+            "properties": {
+              "timing_offset_s": {"type": "number"},
+              "speed_delta_m_s": {"type": "number"},
+              "verdict": {"enum": ["pass", "fail", "unknown"]},
+              "reason": {"type": "string", "minLength": 1}
+            }
+          },
+          "minItems": 0
+        },
+        "persistence_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "persistence_interval": {
+          "type": "array",
+          "items": {"type": "number"},
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "missing_cell_reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["timing_offset_s", "speed_delta_m_s", "reason"],
+            "properties": {
+              "timing_offset_s": {"type": "number"},
+              "speed_delta_m_s": {"type": "number"},
+              "reason": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    "promotion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verdict", "exclusion_reason", "required_statuses"],
+      "properties": {
+        "verdict": {"enum": ["promote", "reject", "blocked"]},
+        "exclusion_reason": {"type": "string", "minLength": 1},
+        "required_statuses": {
+          "type": "array",
+          "items": {"type": "string", "enum": ["exact_replay", "critical_event_reproduced", "perturbation_persistence"]},
+          "minItems": 1
+        }
+      }
+    }
+  }
+}

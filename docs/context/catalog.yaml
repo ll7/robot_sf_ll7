@@ -56,6 +56,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5600_persistence_gate.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5412_risk_dwa_vectorization_20260713/README.md
   status: evidence
   freshness: evidence
@@ -3529,6 +3533,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_4249_recovery_3216_rank_stability
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5247_job_13274_rank_stability
   status: evidence
   freshness: evidence
   area: benchmark_evidence

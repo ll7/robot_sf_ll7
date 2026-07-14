@@ -1,0 +1,297 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/scenario_evidence_crosswalk.v1.json",
+  "title": "RobotSF Scenario-Evidence Crosswalk (v1)",
+  "description": "Deterministic join of scenario taxonomy, predicate availability, and evidence/replay eligibility. Benchmark-evidence metadata only: geometry groups are descriptive and never imply a causal mechanism; validated mechanisms are supplied by a validated causal report and must be null here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source",
+    "generated_at_utc",
+    "repo_commit",
+    "claim_boundary",
+    "predicate_export_consumed",
+    "evidence_catalog_consumed",
+    "summary",
+    "content_sha256",
+    "rows"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "scenario_evidence_crosswalk.v1"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repo_commit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "predicate_export_consumed": {
+      "type": "boolean"
+    },
+    "evidence_catalog_consumed": {
+      "type": "boolean"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_count",
+        "eligible_scenarios",
+        "excluded_scenarios",
+        "predicate_export_available",
+        "predicate_unavailable"
+      ],
+      "properties": {
+        "scenario_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "eligible_scenarios": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "excluded_scenarios": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "predicate_export_available": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "predicate_unavailable": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "content_sha256": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64,
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/crosswalk_row"
+      }
+    }
+  },
+  "$defs": {
+    "string_or_null": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "optional_string_list": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "predicate_record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "predicate",
+        "schema_version"
+      ],
+      "properties": {
+        "predicate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "motivated_by": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "predicate_availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "export_status",
+        "exported_predicates",
+        "missing_or_degraded_predicates",
+        "motivated_not_exported_predicates"
+      ],
+      "properties": {
+        "export_status": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "export_status_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exported_predicates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/predicate_record"
+          }
+        },
+        "missing_or_degraded_predicates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/predicate_record"
+          }
+        },
+        "motivated_not_exported_predicates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/predicate_record"
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eligibility",
+        "validated_mechanism",
+        "validated_mechanism_provenance",
+        "trace_ids",
+        "replay_ids",
+        "generated_candidate_ids",
+        "case_capsule_ids"
+      ],
+      "properties": {
+        "eligibility": {
+          "type": "string",
+          "enum": [
+            "eligible",
+            "excluded",
+            "degraded",
+            "unavailable"
+          ]
+        },
+        "exclusion_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "validated_mechanism": {
+          "const": null
+        },
+        "validated_mechanism_provenance": {
+          "const": null
+        },
+        "trace_ids": {
+          "$ref": "#/$defs/optional_string_list"
+        },
+        "replay_ids": {
+          "$ref": "#/$defs/optional_string_list"
+        },
+        "generated_candidate_ids": {
+          "$ref": "#/$defs/optional_string_list"
+        },
+        "case_capsule_ids": {
+          "$ref": "#/$defs/optional_string_list"
+        }
+      }
+    },
+    "crosswalk_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_id",
+        "source_config_hash",
+        "scenario_family",
+        "interaction_class",
+        "map_id",
+        "geometry_group",
+        "geometry_group_provenance",
+        "geometry_group_note",
+        "hazard_tags",
+        "hazard_tag_source",
+        "seeds",
+        "predicate_availability",
+        "evidence"
+      ],
+      "properties": {
+        "scenario_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_config_hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenario_family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interaction_class": {
+          "type": "string",
+          "minLength": 1
+        },
+        "map_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "geometry_group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "geometry_group_provenance": {
+          "type": "string",
+          "minLength": 1
+        },
+        "geometry_group_note": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hazard_tags": {
+          "$ref": "#/$defs/optional_string_list"
+        },
+        "hazard_tag_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "seeds": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        },
+        "predicate_availability": {
+          "$ref": "#/$defs/predicate_availability"
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        }
+      }
+    }
+  }
+}

@@ -12,6 +12,7 @@
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner_env.py": 1,
       "robot_sf/benchmark/runner.py": 7,
+      "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/snqi/cli.py": 3,
       "robot_sf/benchmark/snqi/compute.py": 1,
       "scripts/analysis/amv_timeout_trace_analyzer.py": 1,
@@ -304,6 +305,15 @@
       "lineno": 1747,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
+    },
+    {
+      "col_offset": 4,
+      "context": "validate_selection_manifest",
+      "fingerprint": "2850e96f4494686e",
+      "handler": "Exception",
+      "lineno": 1044,
+      "path": "robot_sf/benchmark/scenario_generation/portfolio_selector.py",
+      "source": "except Exception as exc:"
     },
     {
       "col_offset": 4,

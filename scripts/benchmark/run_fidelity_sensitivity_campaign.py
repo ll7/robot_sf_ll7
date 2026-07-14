@@ -78,11 +78,12 @@ CLAIM_BOUNDARY = (
 )
 ARCHETYPE_SPEED_FACTORS = {"cautious": 0.8, "standard": 1.0, "hurried": 1.2}
 
-FIXED_SCOPE_PLAN_SCHEMA_VERSION = "issue_3207_fidelity_fixed_scope_run_plan.v1"
+FIXED_SCOPE_PLAN_SCHEMA_VERSION = "issue_3207_fidelity_fixed_scope_run_plan.v2"
 FIXED_SCOPE_PLAN_CLAIM_BOUNDARY = (
     "fixed_scope_run_plan_enumeration_only: consumes the issue #3207 fixed-scope preflight "
     "packet and enumerates the concrete planner_group x axis-variant x seed run cells that the "
-    "full fixed-scope campaign would execute. It launches no episode and promotes no claim; "
+    "full fixed-scope campaign would execute, plus the exact scenario source and identifiers "
+    "resolved from the configured benchmark profile. It launches no episode and promotes no claim; "
     "execution stays fail-closed behind unmet launch prerequisites (ORCA/rvo2 runtime "
     "dependency, hybrid-rule explicit opt-in, and the post-run rank-identifiability recheck). "
     "It is not benchmark evidence, not simulator-realism evidence, not sim-to-real evidence, "
@@ -98,6 +99,10 @@ class FixedScopeNotLaunchableError(RuntimeError):
     rank-identifiability recheck unsatisfied, so an actual full campaign launch
     must fail closed rather than silently run against unresolved prerequisites.
     """
+
+
+class ScenarioScopeResolutionError(ValueError):
+    """Raised when a fixed-scope scenario surface cannot resolve to runnable scenarios."""
 
 
 @dataclass(frozen=True)
@@ -120,6 +125,108 @@ class FixedScopeRunCell:
     baseline_variant: bool
     seed: int
     scenario_set: str
+
+
+def _scenario_ids(scenarios: Sequence[Mapping[str, Any]], *, source: pathlib.Path) -> list[str]:
+    """Return unique ordered scenario names, failing closed on ambiguous identities."""
+    identifiers: list[str] = []
+    for index, scenario in enumerate(scenarios):
+        raw_name = scenario.get("name")
+        if not isinstance(raw_name, str) or not raw_name.strip():
+            raise ScenarioScopeResolutionError(
+                f"scenario {index} from {_repo_rel(source)} has no non-empty name"
+            )
+        identifiers.append(raw_name.strip())
+    duplicates = sorted({name for name in identifiers if identifiers.count(name) > 1})
+    if duplicates:
+        raise ScenarioScopeResolutionError(
+            f"scenario source {_repo_rel(source)} has duplicate names: {duplicates}"
+        )
+    return identifiers
+
+
+def resolve_fixed_scope_scenarios(scenario_surface: str | pathlib.Path) -> dict[str, Any]:
+    """Resolve a scenario manifest or benchmark profile to an exact runnable scope.
+
+    ``fixed_scope.scenario_set`` historically names the paper benchmark profile, whose
+    ``scenario_matrix`` field points at the actual scenario manifest. Passing the profile
+    directly to :func:`load_scenarios` fails because it is not itself a scenario manifest.
+    This resolver records both surfaces and the expanded scenario identifiers so plan-only
+    preflight proves the same scope the execute path will consume.
+
+    Returns:
+        A JSON-serializable ready resolution packet.
+
+    Raises:
+        ScenarioScopeResolutionError: If the surface, matrix reference, or expanded scenario
+            identities are missing or malformed.
+    """
+    requested = pathlib.Path(scenario_surface)
+    if not requested.is_absolute():
+        requested = REPO_ROOT / requested
+    requested = requested.resolve()
+    requested_display = _repo_rel(requested)
+
+    try:
+        data = yaml.safe_load(requested.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise ScenarioScopeResolutionError(
+            f"cannot read configured scenario surface {requested_display}: {exc}"
+        ) from exc
+
+    resolved = requested
+    source_kind = "scenario_manifest"
+    if isinstance(data, Mapping) and "scenario_matrix" in data:
+        raw_matrix = data.get("scenario_matrix")
+        if not isinstance(raw_matrix, str) or not raw_matrix.strip():
+            raise ScenarioScopeResolutionError(
+                f"benchmark profile {requested_display} has no valid scenario_matrix path"
+            )
+        matrix_path = pathlib.Path(raw_matrix)
+        if not matrix_path.is_absolute():
+            repo_relative = REPO_ROOT / matrix_path
+            profile_relative = requested.parent / matrix_path
+            matrix_path = repo_relative if repo_relative.exists() else profile_relative
+        resolved = matrix_path.resolve()
+        source_kind = "benchmark_profile_scenario_matrix"
+
+    try:
+        scenarios = list(load_scenarios(resolved))
+        identifiers = _scenario_ids(scenarios, source=resolved)
+    except (OSError, ValueError) as exc:
+        if isinstance(exc, ScenarioScopeResolutionError):
+            raise
+        raise ScenarioScopeResolutionError(
+            f"cannot load scenario source {_repo_rel(resolved)}: {exc}"
+        ) from exc
+
+    return {
+        "status": "ready",
+        "requested_scenario_surface": requested_display,
+        "resolved_scenario_source": _repo_rel(resolved),
+        "source_kind": source_kind,
+        "scenario_count": len(identifiers),
+        "scenario_ids": identifiers,
+        "blocker": None,
+    }
+
+
+def _blocked_scenario_resolution(
+    scenario_surface: str | pathlib.Path, reason: str
+) -> dict[str, Any]:
+    """Return the stable fail-closed packet for an unresolvable scenario scope."""
+    requested = pathlib.Path(scenario_surface)
+    if not requested.is_absolute():
+        requested = REPO_ROOT / requested
+    return {
+        "status": "blocked",
+        "requested_scenario_surface": _repo_rel(requested.resolve()),
+        "resolved_scenario_source": None,
+        "source_kind": None,
+        "scenario_count": 0,
+        "scenario_ids": [],
+        "blocker": reason,
+    }
 
 
 def enumerate_fixed_scope_run_cells(
@@ -223,8 +330,20 @@ def build_fixed_scope_run_plan(
 
     blockers = list(preflight["blockers"])
     launch_prerequisites = list(preflight["launch_prerequisites"])
+    scenario_surface = str(materialized["scenario_set"])
+    try:
+        scenario_resolution = resolve_fixed_scope_scenarios(scenario_surface)
+    except ScenarioScopeResolutionError as exc:
+        reason = str(exc)
+        scenario_resolution = _blocked_scenario_resolution(scenario_surface, reason)
+        blockers.append(f"scenario_scope_unresolvable:{reason}")
     gate_reasons = blockers + launch_prerequisites
     executable = bool(preflight["preflight_ready"]) and not gate_reasons
+    expected_episode_count = (
+        len(cells) * int(scenario_resolution["scenario_count"])
+        if scenario_resolution["status"] == "ready"
+        else None
+    )
 
     return {
         "schema_version": FIXED_SCOPE_PLAN_SCHEMA_VERSION,
@@ -241,7 +360,9 @@ def build_fixed_scope_run_plan(
         "launched": False,
         "run_cell_count": len(cells),
         "run_cells_per_scenario_expected": expected_cells,
+        "expected_episode_count": expected_episode_count,
         "materialized_scope": materialized,
+        "scenario_resolution": scenario_resolution,
         "planner_resolution": preflight["planner_resolution"],
         "primary_metric": preflight["primary_metric"],
         "blockers": blockers,
@@ -1450,7 +1571,9 @@ def _run_fixed_scope_plan_only(args: argparse.Namespace, config: Mapping[str, An
     print(f"wrote fixed-scope run plan: {_repo_rel(plan_path)}")
     print(
         f"preflight_decision={plan['preflight_decision']} executable={plan['executable']} "
-        f"launched={plan['launched']} run_cells={plan['run_cell_count']}"
+        f"launched={plan['launched']} run_cells={plan['run_cell_count']} "
+        f"scenarios={plan['scenario_resolution']['scenario_count']} "
+        f"expected_episodes={plan['expected_episode_count']}"
     )
     for reason in plan["gate_reasons"]:
         print(f"  launch gate: {reason}")
@@ -1518,11 +1641,21 @@ def _run_fixed_scope_execute(args: argparse.Namespace, config: Mapping[str, Any]
 
     # Reached only when every launch gate is cleared (not on the shipped config).
     bindings = bind_fixed_scope_run_plan(plan, config)
-    scenario_set = str(plan["materialized_scope"]["scenario_set"])
-    scenario_path = REPO_ROOT / scenario_set
+    scenario_resolution = plan["scenario_resolution"]
+    scenario_source = scenario_resolution.get("resolved_scenario_source")
+    if not isinstance(scenario_source, str) or not scenario_source:
+        raise FixedScopeNotLaunchableError("fixed-scope scenario resolution is not ready")
+    scenario_path = pathlib.Path(scenario_source)
+    if not scenario_path.is_absolute():
+        scenario_path = REPO_ROOT / scenario_path
     scenarios = list(load_scenarios(scenario_path))
     if not scenarios:
         raise ValueError(f"fixed-scope scenario set produced no scenarios: {scenario_path}")
+    observed_scenario_ids = _scenario_ids(scenarios, source=scenario_path)
+    if observed_scenario_ids != list(scenario_resolution["scenario_ids"]):
+        raise FixedScopeNotLaunchableError(
+            "fixed-scope scenario identities drifted after plan construction; refusing to execute"
+        )
     rows = execute_fixed_scope_cells(
         bindings,
         cell_runner=_default_fixed_scope_cell_runner(
@@ -1542,7 +1675,7 @@ def _run_fixed_scope_execute(args: argparse.Namespace, config: Mapping[str, Any]
         config=config,
         rows=rows,
         variants=list(build_fixed_scope_variant_index(config).values()),
-        scenario_set=scenario_set,
+        scenario_set=_repo_rel(scenario_path),
         horizon=int(args.horizon),
         raw_rows_path=raw_rows_path,
         git_provenance=_git_provenance(),

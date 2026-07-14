@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5034 fixed-scope scenario resolution.** The fidelity-sensitivity run plan now resolves
+  the configured paper benchmark profile to its actual scenario matrix before launch, records all
+  48 scenario identifiers and the expected 7,344 episode count, and passes that resolved source to
+  the execute path. Missing, malformed, or ambiguous scenario scopes block the plan before any
+  episode runs. This closes a launcher integration gap only: no campaign, fallback/degraded row,
+  safety-metric result, or paper/dissertation claim is produced by this change.
+
 * **issue #3207 collision-envelope / physical-footprint clearance-semantics diagnostic.** New
   `robot_sf/benchmark/clearance_semantics.py` (`footprint-clearance-semantics.v1`) formalizes the
   distinct clearance quantities that reported traces conflate — center-to-center distance,

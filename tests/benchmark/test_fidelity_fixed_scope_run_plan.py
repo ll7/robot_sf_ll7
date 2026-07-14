@@ -84,6 +84,49 @@ def test_run_plan_cell_count_matches_preflight_materialization() -> None:
     assert plan["run_cells_per_scenario_expected"] == expected
 
 
+def test_run_plan_resolves_benchmark_profile_to_exact_scenario_scope() -> None:
+    """The launch plan must name the scenarios the benchmark profile actually selects."""
+    plan = _plan()
+
+    resolution = plan["scenario_resolution"]
+    assert resolution["status"] == "ready"
+    assert resolution["requested_scenario_surface"] == (
+        "configs/benchmarks/paper_experiment_matrix_v1.yaml"
+    )
+    assert resolution["resolved_scenario_source"] == (
+        "configs/scenarios/classic_interactions_francis2023.yaml"
+    )
+    assert resolution["source_kind"] == "benchmark_profile_scenario_matrix"
+    assert resolution["scenario_count"] == len(resolution["scenario_ids"]) == 48
+    assert "classic_cross_trap_low" in resolution["scenario_ids"]
+    assert plan["expected_episode_count"] == plan["run_cell_count"] * 48
+
+
+def test_unresolvable_scenario_scope_blocks_plan_fail_closed(tmp_path: Path) -> None:
+    """A profile whose scenario matrix is missing must never remain launchable."""
+    benchmark_profile = tmp_path / "benchmark.yaml"
+    benchmark_profile.write_text(
+        "scenario_matrix: missing_scenarios.yaml\n",
+        encoding="utf-8",
+    )
+    config = _config()
+    config["fixed_scope"]["scenario_set"] = str(benchmark_profile)
+
+    plan = campaign_runner.build_fixed_scope_run_plan(
+        config,
+        config_path="configs/research/fidelity_sensitivity_v1.yaml",
+        git_head="test-head",
+    )
+
+    assert plan["executable"] is False
+    assert plan["scenario_resolution"]["status"] == "blocked"
+    assert plan["scenario_resolution"]["scenario_ids"] == []
+    assert plan["expected_episode_count"] is None
+    assert any(reason.startswith("scenario_scope_unresolvable:") for reason in plan["blockers"])
+    with pytest.raises(campaign_runner.FixedScopeNotLaunchableError):
+        campaign_runner.ensure_fixed_scope_launchable(plan)
+
+
 def test_run_cells_carry_resolved_algorithm_and_scope_axes() -> None:
     """Each cell exposes the resolved catalog algorithm, axis, variant, and seed."""
     config = _config()
@@ -216,6 +259,8 @@ def test_plan_only_cli_writes_plan_without_running_episodes(tmp_path: Path) -> N
     assert plan["schema_version"] == campaign_runner.FIXED_SCOPE_PLAN_SCHEMA_VERSION
     assert plan["launched"] is False
     assert plan["run_cell_count"] == _expected_run_cell_count(_config())
+    assert plan["scenario_resolution"]["status"] == "ready"
+    assert plan["scenario_resolution"]["scenario_count"] == 48
 
 
 def test_plan_only_cli_require_launchable_passes_when_prerequisites_bound(tmp_path: Path) -> None:
@@ -388,6 +433,51 @@ def test_fixed_scope_execute_cli_fails_closed_and_writes_no_rows(
     )
     assert exit_code == 1
     assert not (raw_root / "episode_rows.jsonl").exists()
+
+
+def test_fixed_scope_execute_loads_resolved_scenario_matrix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real execute boundary must not pass a benchmark profile to the scenario loader."""
+    loaded_paths: list[Path] = []
+    real_load_scenarios = campaign_runner.load_scenarios
+
+    def _recording_load_scenarios(path: str | Path):
+        loaded_paths.append(Path(path).resolve())
+        return real_load_scenarios(path)
+
+    monkeypatch.setattr(campaign_runner, "load_scenarios", _recording_load_scenarios)
+    monkeypatch.setattr(
+        campaign_runner,
+        "execute_fixed_scope_cells",
+        lambda bindings, *, cell_runner: [],
+    )
+    monkeypatch.setattr(
+        campaign_runner,
+        "build_report",
+        lambda **kwargs: {"rank_stability": {"rank_identifiable": True}},
+    )
+    monkeypatch.setattr(campaign_runner, "write_outputs", lambda **kwargs: None)
+    monkeypatch.setattr(
+        campaign_runner,
+        "select_rank_identifiability_contract_spec",
+        lambda plan: None,
+    )
+
+    exit_code = campaign_runner.main(
+        [
+            "--fixed-scope-execute",
+            "--raw-root",
+            str(tmp_path / "raw"),
+            "--evidence-dir",
+            str(tmp_path / "evidence"),
+        ]
+    )
+
+    assert exit_code == 0
+    assert loaded_paths
+    assert all(path.name == "classic_interactions_francis2023.yaml" for path in loaded_paths)
+    assert not any(path.name == "paper_experiment_matrix_v1.yaml" for path in loaded_paths)
 
 
 # ---------------------------------------------------------------------------

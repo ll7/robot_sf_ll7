@@ -76,7 +76,7 @@ analysis = [
 ]
 analytics = [
     "duckdb>=1.4.0",
-    "pyarrow>=23.0.0",
+    "pyarrow>=25.0.0",
 ]
 viz = [
     "seaborn>=0.13.2",

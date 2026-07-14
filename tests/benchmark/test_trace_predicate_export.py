@@ -12,6 +12,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from robot_sf.benchmark.identity.hash_utils import read_jsonl as _read_jsonl
 from robot_sf.benchmark.trace_predicate_export import (
     DEGRADED_PREDICATE_STATUSES,
@@ -22,6 +24,7 @@ from robot_sf.benchmark.trace_predicate_export import (
     TRACE_PREDICATE_COVERAGE_SCHEMA_VERSION,
     TRACE_PREDICATE_EXPORT_SCHEMA_VERSION,
     TRACE_PREDICATE_MANIFEST_SCHEMA_VERSION,
+    TracePredicateExportError,
     build_trace_predicate_coverage_report,
     build_trace_predicate_export,
     build_trace_predicate_manifest,
@@ -29,6 +32,8 @@ from robot_sf.benchmark.trace_predicate_export import (
     write_trace_predicate_export,
 )
 from scripts.tools.export_trace_predicates import main as export_cli_main
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _record_with_all_predicates() -> dict[str, Any]:
@@ -148,6 +153,25 @@ class TestBuildExport:
         assert block["export_status"] == EXPORT_STATUS_DEGRADED
         assert block["status"] == "unavailable"
         assert block["status_reason"] == "missing_visibility_evidence"
+
+    def test_missing_episode_identity_fails_closed(self) -> None:
+        """Required query identity must not be replaced with synthetic defaults."""
+        record = _record_with_all_predicates()
+        record.pop("scenario_id")
+        with pytest.raises(TracePredicateExportError, match="scenario_id"):
+            build_trace_predicate_export([record])
+
+    def test_malformed_predicate_record_fails_closed(self) -> None:
+        """Malformed producer payloads must not be promoted as exported evidence."""
+        record = _record_with_all_predicates()
+        record["safety_predicates"]["late_evasive_predicate"]["fields"] = None
+        with pytest.raises(TracePredicateExportError, match="fields"):
+            build_trace_predicate_export([record])
+
+        record = _record_with_all_predicates()
+        record["safety_predicates"]["occlusion_near_miss_predicate"]["status"] = "wat"
+        with pytest.raises(TracePredicateExportError, match="invalid status"):
+            build_trace_predicate_export([record])
 
     def test_batch_deterministic_order(self) -> None:
         """Batch export is deterministically ordered by run/scenario/seed/episode."""
@@ -389,6 +413,31 @@ class TestCLIIntegration:
             )
             assert code == 1
 
+    def test_cli_rejects_partial_bundle_export(self) -> None:
+        """A malformed requested source must not produce successful partial artifacts."""
+        with tempfile.TemporaryDirectory() as tmp:
+            valid = Path(tmp) / "valid.jsonl"
+            valid.write_text(json.dumps(_record_with_all_predicates()) + "\n", encoding="utf-8")
+            malformed = Path(tmp) / "malformed.jsonl"
+            malformed.write_text("{not-json}\n", encoding="utf-8")
+            out = Path(tmp) / "out"
+
+            code = export_cli_main(
+                [
+                    "--bundle",
+                    str(valid),
+                    "--bundle",
+                    str(malformed),
+                    "--release",
+                    "partial-input",
+                    "--output-dir",
+                    str(out),
+                ]
+            )
+
+            assert code == 1
+            assert not out.exists()
+
 
 class TestRealCampaignSmoke:
     """Real-campaign smoke test against an existing evidence bundle.
@@ -410,12 +459,13 @@ class TestRealCampaignSmoke:
         ``output/`` is gitignored and therefore absent from fresh worktrees; the bundle
         commonly lives in the main checkout. Return ``None`` when unavailable so tests skip.
         """
-        if cls.RELATIVE_BUNDLE.is_file():
-            return cls.RELATIVE_BUNDLE
+        for root in (REPO_ROOT,):
+            bundle = root / cls.RELATIVE_BUNDLE
+            if bundle.is_file():
+                return bundle
         # Sibling main checkout. The worktree container here is
         # ``.../robot_sf_ll7.worktrees/<branch>/``; the main checkout is ``.../robot_sf_ll7``.
-        here = Path(__file__).resolve()
-        container = here.parents[3]  # .../robot_sf_ll7.worktrees
+        container = REPO_ROOT.parent
         if container.name.endswith(".worktrees"):
             main_root = container.with_name(container.name[: -len(".worktrees")])
             alt = main_root / cls.RELATIVE_BUNDLE

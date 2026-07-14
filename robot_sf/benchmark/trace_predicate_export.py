@@ -64,6 +64,13 @@ MOTIVATED_TRACE_PREDICATES: tuple[dict[str, str], ...] = (
         "schema_version": OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
     },
 )
+_SUPPORTED_PREDICATE_SCHEMAS: dict[str, tuple[str, ...]] = {
+    "oscillatory_control": (OSCILLATORY_PREDICATE_SCHEMA,),
+    # Existing durable campaign bundles contain the v1 late-evasive record; retain its
+    # provenance while accepting the current producer schema for new campaigns.
+    "late_evasive": ("safety_predicate.late_evasive.v1", LATE_EVASIVE_PREDICATE_SCHEMA),
+    "occlusion_near_miss": (OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,),
+}
 
 EXPORT_STATUS_EXPORTED = "exported"
 EXPORT_STATUS_MISSING = "missing"
@@ -72,6 +79,12 @@ EXPORT_STATUS_DEGRADED = "degraded"
 # Degraded statuses a present predicate record may legitimately carry (fail closed:
 # surfaced in the manifest, never silently treated as a clean measurement).
 DEGRADED_PREDICATE_STATUSES = frozenset({"not_applicable", "unavailable"})
+_PREDICATE_STATUSES = frozenset({"true", "false", *DEGRADED_PREDICATE_STATUSES})
+_PREDICATE_FLAGS = {
+    "oscillatory_control": "oscillation",
+    "late_evasive": "late_evasive",
+    "occlusion_near_miss": "occlusion_near_miss",
+}
 
 
 class TracePredicateExportError(ValueError):
@@ -81,18 +94,84 @@ class TracePredicateExportError(ValueError):
 def _episode_metadata(record: Mapping[str, Any], *, run_id: str | None) -> dict[str, Any]:
     """Return the scenario/planner/seed/run metadata for one episode record."""
 
+    def required_text(keys: tuple[str, ...], label: str) -> str:
+        for key in keys:
+            value = record.get(key)
+            if isinstance(value, str):
+                value = value.strip()
+            if value not in (None, ""):
+                return str(value)
+        raise TracePredicateExportError(f"missing required episode field: {label}")
+
+    seed = record.get("seed")
+    if isinstance(seed, bool) or seed is None:
+        raise TracePredicateExportError("missing required episode field: seed")
+    try:
+        normalized_seed = int(seed)
+    except (TypeError, ValueError) as exc:
+        raise TracePredicateExportError(f"episode seed must be an integer, got {seed!r}") from exc
+    if isinstance(seed, float) and not seed.is_integer():
+        raise TracePredicateExportError(f"episode seed must be an integer, got {seed!r}")
+
     return {
-        "scenario_id": str(record.get("scenario_id") or "unknown"),
-        "seed": int(record.get("seed") or 0),
-        "planner_id": str(
-            record.get("algo") or record.get("planner") or record.get("planner_id") or "unknown"
-        ),
+        "scenario_id": required_text(("scenario_id",), "scenario_id"),
+        "seed": normalized_seed,
+        "planner_id": required_text(("algo", "planner", "planner_id"), "planner"),
         "run_id": run_id or "unknown_run",
-        "episode_id": str(record.get("episode_id") or "unknown_episode"),
+        "episode_id": required_text(("episode_id",), "episode_id"),
         "software_commit": (
             str(record["git_hash"]) if record.get("git_hash") is not None else None
         ),
     }
+
+
+def _status_violations(predicate_record: Mapping[str, Any], *, predicate: str) -> list[str]:
+    """Return fail-closed status violations for one predicate record."""
+
+    status = predicate_record.get("status")
+    if predicate == "occlusion_near_miss" and status is None:
+        return ["degraded predicate occlusion_near_miss must carry a status"]
+    if status is None:
+        return []
+    if not isinstance(status, str) or status not in _PREDICATE_STATUSES:
+        return [f"predicate {predicate} has invalid status: {status!r}"]
+    if status in DEGRADED_PREDICATE_STATUSES:
+        reason = predicate_record.get("status_reason")
+        if not isinstance(reason, str) or not reason.strip():
+            return [f"degraded predicate {predicate} must carry a non-empty status_reason"]
+    return []
+
+
+def _predicate_record_violations(
+    predicate_record: Mapping[str, Any], *, predicate: str, schema_versions: Sequence[str]
+) -> list[str]:
+    """Return fail-closed violations for one producer predicate record."""
+
+    violations: list[str] = []
+    if predicate_record.get("predicate") != predicate:
+        violations.append(
+            f"predicate {predicate} must declare predicate={predicate!r}, "
+            f"got {predicate_record.get('predicate')!r}"
+        )
+    if predicate_record.get("schema_version") not in schema_versions:
+        violations.append(
+            f"predicate {predicate} must declare one of schema_versions={tuple(schema_versions)!r}, "
+            f"got {predicate_record.get('schema_version')!r}"
+        )
+    evidence_kind = predicate_record.get("evidence_kind")
+    if evidence_kind is not None and (
+        not isinstance(evidence_kind, str) or not evidence_kind.strip()
+    ):
+        violations.append(f"predicate {predicate} evidence_kind must be a non-empty string")
+    for field_name in ("fields", "thresholds"):
+        if not isinstance(predicate_record.get(field_name), Mapping):
+            violations.append(f"predicate {predicate} must carry a mapping for {field_name}")
+    flag_name = _PREDICATE_FLAGS[predicate]
+    if not isinstance(predicate_record.get(flag_name), bool):
+        violations.append(f"predicate {predicate} must carry boolean field {flag_name}")
+
+    violations.extend(_status_violations(predicate_record, predicate=predicate))
+    return violations
 
 
 def _export_predicate_block(
@@ -104,14 +183,26 @@ def _export_predicate_block(
     """Return one predicate block for an episode, failing closed on gaps."""
 
     predicate_record = safety_predicates.get(record_key)
-    if not isinstance(predicate_record, Mapping):
+    predicate = record_key.removesuffix("_predicate")
+    if record_key not in safety_predicates:
         return {
             **metadata,
-            "predicate": record_key.removesuffix("_predicate"),
+            "predicate": predicate,
             "schema_version": schema_version,
             "export_status": EXPORT_STATUS_MISSING,
             "reason": "predicate_record_absent",
         }
+    if not isinstance(predicate_record, Mapping):
+        raise TracePredicateExportError(
+            f"predicate {predicate} record must be a mapping, got {type(predicate_record).__name__}"
+        )
+    violations = _predicate_record_violations(
+        predicate_record,
+        predicate=predicate,
+        schema_versions=_SUPPORTED_PREDICATE_SCHEMAS[predicate],
+    )
+    if violations:
+        raise TracePredicateExportError("; ".join(violations))
 
     status = predicate_record.get("status")
     export_status = (
@@ -119,12 +210,14 @@ def _export_predicate_block(
     )
     block: dict[str, Any] = {
         **metadata,
-        "predicate": predicate_record.get("predicate", record_key.removesuffix("_predicate")),
-        "schema_version": predicate_record.get("schema_version", schema_version),
+        "predicate": predicate_record["predicate"],
+        "schema_version": predicate_record["schema_version"],
         "export_status": export_status,
-        "fields": predicate_record.get("fields", {}),
-        "thresholds": predicate_record.get("thresholds", {}),
+        "fields": predicate_record["fields"],
+        "thresholds": predicate_record["thresholds"],
     }
+    if "evidence_kind" in predicate_record:
+        block["evidence_kind"] = predicate_record["evidence_kind"]
     # Preserve the diagnostic boolean and any fail-closed status reason.
     for flag in ("oscillation", "late_evasive", "occlusion_near_miss"):
         if flag in predicate_record:
@@ -204,12 +297,17 @@ def build_trace_predicate_manifest(
         predicate = spec["predicate"]
         present = 0
         degraded = 0
+        observed_schema_versions: set[str] = set()
         for row in export_rows:
             block = row["predicates"][predicate]
             if block["export_status"] == EXPORT_STATUS_EXPORTED:
                 present += 1
+                if isinstance(block.get("schema_version"), str):
+                    observed_schema_versions.add(block["schema_version"])
             elif block["export_status"] == EXPORT_STATUS_DEGRADED:
                 degraded += 1
+                if isinstance(block.get("schema_version"), str):
+                    observed_schema_versions.add(block["schema_version"])
                 gaps.append(
                     {
                         "scenario_id": row["scenario_id"],
@@ -236,11 +334,13 @@ def build_trace_predicate_manifest(
                         "reason": block.get("reason"),
                     }
                 )
+        schema_versions = sorted(observed_schema_versions)
         predicate_types.append(
             {
                 "predicate": predicate,
                 "record_key": spec["record_key"],
-                "schema_version": spec["schema_version"],
+                "schema_version": schema_versions[0] if schema_versions else spec["schema_version"],
+                "schema_versions": schema_versions,
                 "episodes_present": present,
                 "episodes_degraded": degraded,
                 "export_status": EXPORT_STATUS_EXPORTED if present else EXPORT_STATUS_MISSING,
@@ -344,6 +444,11 @@ def export_trace_predicates_from_bundle(
         export_rows.extend(build_trace_predicate_export(episodes, run_id=run_id))
         sources.append(str(path))
 
+    if failed_sources:
+        details = "; ".join(failed_sources)
+        raise TracePredicateExportError(
+            f"refusing partial trace predicate export; failed source(s): {details}"
+        )
     if not export_rows and not failed_sources:
         raise TracePredicateExportError("no episode records found in any provided bundle")
 
@@ -363,7 +468,8 @@ def validate_trace_predicate_export(payload: Mapping[str, Any]) -> list[str]:
 
     violations: list[str] = []
     for required in ("scenario_id", "seed", "planner_id", "episode_id", "predicates"):
-        if required not in payload:
+        value = payload.get(required)
+        if required not in payload or value is None or value == "":
             violations.append(f"export row missing required field: {required}")
     predicates = payload.get("predicates")
     if not isinstance(predicates, Mapping):
@@ -378,10 +484,16 @@ def validate_trace_predicate_export(payload: Mapping[str, Any]) -> list[str]:
         status = block.get("export_status")
         if status not in (EXPORT_STATUS_EXPORTED, EXPORT_STATUS_DEGRADED, EXPORT_STATUS_MISSING):
             violations.append(f"predicate {predicate} has invalid export_status: {status!r}")
-        if status == EXPORT_STATUS_MISSING and block.get("reason") is None:
+        if status == EXPORT_STATUS_MISSING and not isinstance(block.get("reason"), str):
             violations.append(f"missing predicate {predicate} must carry a reason")
-        if status == EXPORT_STATUS_DEGRADED and block.get("status") is None:
-            violations.append(f"degraded predicate {predicate} must carry a status")
+        if status != EXPORT_STATUS_MISSING:
+            violations.extend(
+                _predicate_record_violations(
+                    block,
+                    predicate=predicate,
+                    schema_versions=_SUPPORTED_PREDICATE_SCHEMAS[predicate],
+                )
+            )
     return violations
 
 

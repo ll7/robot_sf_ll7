@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -136,3 +137,34 @@ def test_rejects_directory_as_provenance_path() -> None:
     provenance["required_paths"].append("configs")
     with pytest.raises(FileNotFoundError, match="provenance path missing"):
         checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_invalid_inference_contract_is_packet_error() -> None:
+    """Inference-contract failures stay inside the packet checker's error contract."""
+    packet = _packet()
+    contract = packet["inference_contract"]
+    assert isinstance(contract, dict)
+    decision_rule = contract["decision_rule"]
+    assert isinstance(decision_rule, dict)
+    decision_rule["threshold"] = ""
+    with pytest.raises(checker.PacketError, match="decision_rule.threshold"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_main_reports_invalid_inference_contract_as_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The CLI emits structured JSON instead of a traceback for a bad contract."""
+    packet = _packet()
+    contract = packet["inference_contract"]
+    assert isinstance(contract, dict)
+    decision_rule = contract["decision_rule"]
+    assert isinstance(decision_rule, dict)
+    decision_rule["threshold"] = ""
+    path = tmp_path / "invalid.yaml"
+    path.write_text(yaml.safe_dump(packet), encoding="utf-8")
+
+    assert checker.main(["--packet", str(path), "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "not_ready"
+    assert "decision_rule.threshold" in payload["error"]

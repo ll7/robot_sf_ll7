@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import json
+from typing import TYPE_CHECKING
 
 import pytest
 import yaml
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from scripts.validation.check_preregistration_inference_contract import (
     InferenceContractError,
     check_inference_contract,
     check_yaml_file,
+    main,
 )
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _minimal_valid_packet() -> dict[str, object]:
@@ -272,3 +275,10 @@ def test_custom_section_key() -> None:
     pkt["analysis_plan"] = contract
     result = check_inference_contract(pkt, section_key="analysis_plan")
     assert result["status"] == "ok"
+
+
+def test_config_listing_includes_all_research_yaml(capsys: pytest.CaptureFixture[str]) -> None:
+    """Discovery includes research configs whose names omit ``preregistration``."""
+    assert main(["--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "configs/research/prediction_mpc_factorial_v1.yaml" in payload["configs"]

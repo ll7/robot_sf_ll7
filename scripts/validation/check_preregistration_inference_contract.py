@@ -46,15 +46,8 @@ def _mapping(payload: dict[str, Any], key: str) -> dict[str, Any]:
     return value
 
 
-REQUIRED_TOPLEVEL_KEYS = (
-    "resampling_unit",
-    "inference_population",
-    "estimand",
-    "decision_rule",
-)
-
 REQUIRED_RESAMPLING_UNIT_KEYS = ("method", "rationale")
-REQUIRED_INFERRENCE_POPULATION_KEYS = ("type", "rationale")
+REQUIRED_INFERENCE_POPULATION_KEYS = ("type", "rationale")
 REQUIRED_ESTIMAND_KEYS = ("type", "description")
 REQUIRED_DECISION_RULE_KEYS = ("rule", "threshold")
 
@@ -83,7 +76,7 @@ def _validate_resampling_unit(section: dict[str, Any]) -> None:
 
 
 def _validate_inference_population(section: dict[str, Any]) -> None:
-    for key in REQUIRED_INFERRENCE_POPULATION_KEYS:
+    for key in REQUIRED_INFERENCE_POPULATION_KEYS:
         value = section.get(key)
         _require(
             isinstance(value, str) and len(value.strip()) >= 5,
@@ -235,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         candidates = (
             list(root.glob("configs/analysis/*_packet.yaml"))
             + list(root.glob("configs/benchmarks/*_preregistration.yaml"))
-            + list(root.glob("configs/research/*preregistration*.yaml"))
+            + list(root.glob("configs/research/*.yaml"))
         )
         if args.as_json:
             print(json.dumps({"configs": sorted(str(c.relative_to(root)) for c in candidates)}))

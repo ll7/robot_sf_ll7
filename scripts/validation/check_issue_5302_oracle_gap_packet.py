@@ -14,6 +14,11 @@ from typing import Any
 
 import yaml
 
+from scripts.validation.check_preregistration_inference_contract import (
+    InferenceContractError,
+    check_inference_contract,
+)
+
 DEFAULT_PACKET = Path("configs/analysis/issue_5302_oracle_gap_packet.yaml")
 SCHEMA_VERSION = "issue_5302_oracle_gap_analysis_packet.v1"
 EXPECTED_PLANNERS = (
@@ -99,9 +104,10 @@ def validate_packet(  # noqa: C901, PLR0915
 ) -> dict[str, Any]:
     """Validate the issue #5302 contract and return a compact summary."""
     root = repo_root or Path(__file__).resolve().parents[2]
-    from scripts.validation.check_preregistration_inference_contract import check_inference_contract
-
-    check_inference_contract(packet, repo_root=root)
+    try:
+        check_inference_contract(packet, repo_root=root)
+    except InferenceContractError as exc:
+        raise PacketError(str(exc)) from exc
     _walk_for_forbidden_keys(packet)
     _require(packet.get("schema_version") == SCHEMA_VERSION, "schema_version mismatch")
     _require(packet.get("issue") == 5302, "issue must be 5302")

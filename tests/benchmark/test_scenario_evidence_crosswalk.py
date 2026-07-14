@@ -198,9 +198,7 @@ def test_unsafe_artifact_reference_is_structured_and_regular_file_only(tmp_path:
     symlink.symlink_to(outside)
 
     for reference in ("../outside.json", str(outside), "symlink.json", "subdir"):
-        evidence_catalog = {
-            "doorway_low": {"eligibility": "eligible", "trace_ids": [reference]}
-        }
+        evidence_catalog = {"doorway_low": {"eligibility": "eligible", "trace_ids": [reference]}}
         with pytest.raises(
             ScenarioEvidenceCrosswalkError,
             match="unreadable_episode_artifact",

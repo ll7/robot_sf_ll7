@@ -36,6 +36,7 @@ class HybridPortfolioConfig:
     near_field_distance: float = 2.5
     hysteresis_steps: int = 6
     fallback_on_exception: bool = True
+    adaptive_switching_enabled: bool = True
 
 
 class HybridPortfolioAdapter:
@@ -91,6 +92,8 @@ class HybridPortfolioAdapter:
         Returns:
             str: Name of the desired portfolio head.
         """
+        if not self.config.adaptive_switching_enabled:
+            return self._active_head
         near_count, min_clearance = self._extract_ped_clearance(observation)
         if min_clearance <= float(self.config.emergency_clearance):
             return "orca"
@@ -263,6 +266,7 @@ def build_hybrid_portfolio_build_config(cfg: dict[str, Any] | None) -> HybridPor
         near_field_distance=float(hybrid_raw.get("near_field_distance", 2.5)),
         hysteresis_steps=int(hybrid_raw.get("hysteresis_steps", 6)),
         fallback_on_exception=bool(hybrid_raw.get("fallback_on_exception", True)),
+        adaptive_switching_enabled=bool(hybrid_raw.get("adaptive_switching_enabled", True)),
     )
 
     # Reuse full builders so all sub-head tuning keys remain available.

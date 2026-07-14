@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.identity.hash_utils import sha256_file as _sha256_file
+from scripts.tools.record_post_campaign_stage_status import load_stage_status
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_VERSION = "robot-sf-slurm-job-finalization.v1"
@@ -235,6 +236,56 @@ def _artifact_status(artifacts: list[ArtifactRecord]) -> str:
     return "required_missing"
 
 
+def _load_stage_status(
+    path: str | Path,
+    *,
+    repo_root: Path,
+) -> tuple[dict[str, Any] | None, str, str | None]:
+    """Load the optional campaign/report exit-lane envelope for finalization."""
+    resolved = _resolve_path(path, repo_root=repo_root)
+    try:
+        return load_stage_status(resolved), "loaded", None
+    except FileNotFoundError:
+        return None, "missing", None
+    except (OSError, ValueError) as exc:
+        return None, "invalid", str(exc)
+
+
+def _exit_code_lanes(stage_status: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Extract the validated exit-code lanes without allowing a downstream remap."""
+    if stage_status is None:
+        return None
+    return {
+        "campaign": stage_status["campaign"],
+        "post_campaign_stage": stage_status["post_campaign_stage"],
+        "job_exit_code": stage_status["job_exit_code"],
+    }
+
+
+def _claim_boundary(
+    *,
+    base: str,
+    exit_code_lanes: dict[str, Any] | None,
+) -> str:
+    """Add the report-stage evidence boundary when an envelope is available."""
+    if not exit_code_lanes:
+        return base
+    campaign = exit_code_lanes["campaign"]
+    stage = exit_code_lanes["post_campaign_stage"]
+    if campaign["exit_code"] == 0 and stage["exit_code"] != 0:
+        return (
+            "Campaign execution completed with exit 0, but the post-campaign report stage "
+            f"failed with exit {stage['exit_code']}; this is not benchmark evidence until "
+            "the report is available and validated."
+        )
+    if campaign["exit_code"] != 0:
+        return (
+            f"Campaign execution failed with exit {campaign['exit_code']}; post-campaign "
+            "status cannot promote the run to benchmark evidence."
+        )
+    return base
+
+
 def issue_update_markdown(report: dict[str, Any]) -> str:
     """Return issue-ready Markdown summarizing the finalization result."""
     lines = [
@@ -248,6 +299,23 @@ def issue_update_markdown(report: dict[str, Any]) -> str:
     ]
     if report.get("claim_decision"):
         lines.append(f"- claim decision: `{report['claim_decision']}`")
+    exit_code_lanes = report.get("exit_code_lanes")
+    stage_status = report.get("post_campaign_stage_status")
+    if stage_status and stage_status.get("load_status") != "not_requested":
+        lines.append(
+            f"- post-campaign status envelope: `{stage_status['load_status']}` "
+            f"(`{stage_status['path']}`)"
+        )
+    if exit_code_lanes is not None:
+        campaign = exit_code_lanes["campaign"]
+        stage = exit_code_lanes["post_campaign_stage"]
+        lines.extend(
+            [
+                f"- campaign exit lane: `{campaign['status']}` / `{campaign['exit_code']}`",
+                f"- post-campaign stage lane: `{stage['status']}` / `{stage['exit_code']}`",
+                f"- job exit code: `{exit_code_lanes['job_exit_code']}`",
+            ]
+        )
     lines.extend(
         [
             f"- claim boundary: {report['claim_boundary']}",
@@ -276,8 +344,23 @@ def ledger_update_markdown(report: dict[str, Any]) -> str:
     )
 
 
-def _next_action(classification: str) -> str:
+def _next_action(
+    classification: str,
+    *,
+    exit_code_lanes: dict[str, Any] | None = None,
+) -> str:
     """Return conservative next-action text for a classification."""
+    if (
+        classification == "success"
+        and exit_code_lanes is not None
+        and exit_code_lanes["campaign"]["exit_code"] == 0
+        and exit_code_lanes["post_campaign_stage"]["exit_code"] != 0
+    ):
+        return (
+            "Campaign execution completed with exit 0, but post-campaign reporting failed; "
+            "retain the rows for diagnosis and repair or rerun the report stage before any "
+            "benchmark interpretation."
+        )
     return {
         "success": (
             "Review checksums, promote artifacts to a durable store if downstream work depends on "
@@ -307,6 +390,7 @@ def build_finalization_report(  # noqa: PLR0913
     notes: str = "",
     durable_uri: str | None = None,
     claim_decision: str | None = None,
+    post_campaign_stage_status: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a compact SLURM finalization report."""
     validated_uri = validate_durable_uri(durable_uri)
@@ -319,10 +403,52 @@ def build_finalization_report(  # noqa: PLR0913
         artifact_record(path, repo_root=repo_root, role="optional", required=False)
         for path in (optional_artifacts or [])
     )
+    stage_status_payload: dict[str, Any] | None = None
+    stage_status_metadata: dict[str, Any] = {
+        "path": None,
+        "load_status": "not_requested",
+    }
+    if post_campaign_stage_status is not None:
+        resolved_stage_status = _resolve_path(post_campaign_stage_status, repo_root=repo_root)
+        artifacts.append(
+            artifact_record(
+                resolved_stage_status,
+                repo_root=repo_root,
+                role="post_campaign_stage_status",
+                required=True,
+            )
+        )
+        stage_status_payload, load_status, load_error = _load_stage_status(
+            resolved_stage_status,
+            repo_root=repo_root,
+        )
+        stage_status_metadata = {
+            "path": _repo_relative(resolved_stage_status, repo_root=repo_root),
+            "load_status": load_status,
+        }
+        if load_error is not None:
+            stage_status_metadata["error"] = load_error
+
+    exit_code_lanes = _exit_code_lanes(stage_status_payload)
     classification = classify_finalization(
         job_state=job_state,
         artifacts=artifacts,
         manual_decision=manual_decision,
+    )
+    if stage_status_metadata["load_status"] == "invalid":
+        classification = "manual_decision_required"
+    elif (
+        classification == "success"
+        and exit_code_lanes is not None
+        and exit_code_lanes["campaign"]["exit_code"] != 0
+    ):
+        classification = "failed"
+    claim_boundary = _claim_boundary(
+        base=(
+            "compact local finalization manifest only; not durable benchmark evidence until "
+            "artifacts have durable retrieval URIs and policy-specific validation"
+        ),
+        exit_code_lanes=exit_code_lanes,
     )
     report: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
@@ -335,13 +461,13 @@ def build_finalization_report(  # noqa: PLR0913
         "durable_uri": validated_uri,
         "durable_status": classify_durable_status(classification, validated_uri),
         "artifacts": [asdict(artifact) for artifact in artifacts],
-        "claim_boundary": (
-            "compact local finalization manifest only; not durable benchmark evidence until "
-            "artifacts have durable retrieval URIs and policy-specific validation"
-        ),
-        "next_action": _next_action(classification),
+        "claim_boundary": claim_boundary,
+        "next_action": _next_action(classification, exit_code_lanes=exit_code_lanes),
         "notes": notes,
     }
+    if post_campaign_stage_status is not None:
+        report["exit_code_lanes"] = exit_code_lanes
+        report["post_campaign_stage_status"] = stage_status_metadata
     if normalized_claim_decision is not None:
         report["claim_decision"] = normalized_claim_decision
     report["issue_update_markdown"] = issue_update_markdown(report)
@@ -361,6 +487,7 @@ def build_control_plane_finalization_report(  # noqa: PLR0913
     notes: str = "",
     durable_uri: str | None = None,
     claim_decision: str | None = None,
+    post_campaign_stage_status: str | Path | None = None,
 ) -> dict[str, Any]:
     """Build a report using the July 2026 research-control-plane run contract."""
     root = Path(run_root)
@@ -376,6 +503,7 @@ def build_control_plane_finalization_report(  # noqa: PLR0913
         notes=notes,
         durable_uri=durable_uri,
         claim_decision=claim_decision,
+        post_campaign_stage_status=post_campaign_stage_status,
     )
 
 
@@ -439,6 +567,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=[],
         help="Optional artifact path, relative to repo root unless absolute. May be repeated.",
     )
+    parser.add_argument(
+        "--post-campaign-stage-status",
+        type=Path,
+        help=(
+            "Validated robot-sf-post-campaign-stage-status.v1 envelope emitted by a launcher; "
+            "the envelope is required when this option is supplied."
+        ),
+    )
     parser.add_argument("--output", type=Path, required=True, help="JSON report output path.")
     parser.add_argument("--markdown-output", type=Path, help="Optional issue-update Markdown path.")
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT, help="Repository root.")
@@ -485,6 +621,7 @@ def main(argv: list[str] | None = None) -> int:
             notes=args.notes,
             durable_uri=args.durable_uri,
             claim_decision=args.claim_decision,
+            post_campaign_stage_status=args.post_campaign_stage_status,
         )
     else:
         report = build_finalization_report(
@@ -498,6 +635,7 @@ def main(argv: list[str] | None = None) -> int:
             notes=args.notes,
             durable_uri=args.durable_uri,
             claim_decision=args.claim_decision,
+            post_campaign_stage_status=args.post_campaign_stage_status,
         )
     write_report(report, args.output, markdown_output=args.markdown_output)
     print(report["issue_update_markdown"])

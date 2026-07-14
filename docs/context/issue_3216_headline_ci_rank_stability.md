@@ -69,6 +69,13 @@ for benchmark claims. Hard campaign failures remain nonzero and skip reporting.
 This prevents a missing report dependency or artifact from relabeling completed
 planner rows as a failed campaign without hiding the reporting blocker.
 
+The downstream finalizer can consume the same envelope with
+`scripts/tools/slurm_job_finalize.py --post-campaign-stage-status`. It validates that the job
+exit code still matches the campaign lane, records the campaign/report/job exit lanes, and
+returns a completed campaign as successful when only reporting failed while keeping the run
+outside benchmark evidence. Missing, malformed, or mismatched envelopes fail closed for manual
+decision rather than guessing which downstream exit code to trust.
+
 ## Reuse of canonical owners (no reinvention)
 
 Per AGENTS.md "Canonical Owner Check", the statistics are **composed**, not

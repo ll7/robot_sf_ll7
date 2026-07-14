@@ -123,12 +123,16 @@ def _check_episode(
     state.episode_field_present += 1
     try:
         stored_snqi = float(metrics["snqi"])
+        if not math.isfinite(stored_snqi):
+            raise ValueError("value is not finite")
     except (TypeError, ValueError) as exc:
         state.add("snqi_field_type", f"{source}: metrics.snqi is not a finite number: {exc}")
         return
     metric_values = dict(metrics)
     try:
         recomputed_snqi = curvature_aware_snqi(metric_values, weights, baseline_stats=baseline)
+        if not math.isfinite(recomputed_snqi):
+            raise ValueError("value is not finite")
     except (ValueError, TypeError, KeyError, AttributeError) as exc:
         state.add("snqi_recompute_failed", f"{source}: curvature-aware recompute failed: {exc}")
         return

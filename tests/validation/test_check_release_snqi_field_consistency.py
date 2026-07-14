@@ -172,6 +172,61 @@ def test_stored_field_mismatch_with_recompute_fails(tmp_path: Path) -> None:
     assert report["violation_counts"]["snqi_field_recompute_mismatch"] == 1
 
 
+@pytest.mark.parametrize("non_finite", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_stored_field_fails_closed(tmp_path: Path, non_finite: float) -> None:
+    """Non-finite stored SNQI values cannot enter aggregation or ranking."""
+    weights = load_weight_mapping(WEIGHTS_PATH)
+    baseline = load_baseline_mapping(BASELINE_PATH)
+    rows = [_episode(collision=False, seed=1, weights=weights, baseline=baseline)]
+    rows[0]["metrics"]["snqi"] = non_finite
+    diag_ordering = [
+        {
+            "planner_key": "planner",
+            "kinematics": "differential_drive",
+            "episode_count": 1,
+            "mean_snqi": 0.0,
+            "rank": 1,
+        }
+    ]
+    bundle, digest = _build_bundle(
+        tmp_path, rows_by_arm={"planner__differential_drive": rows}, diag_ordering=diag_ordering
+    )
+
+    report = audit_bundle(bundle, expected_bundle_sha256=digest, expected_release_tag="test-v1")
+
+    assert report["status"] == "fail"
+    assert report["violation_counts"]["snqi_field_type"] == 1
+    assert report["counts"]["snqi_recomputed_rows"] == 0
+
+
+def test_non_finite_recomputed_field_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-finite SNQI recomputation cannot enter aggregation or ranking."""
+    weights = load_weight_mapping(WEIGHTS_PATH)
+    baseline = load_baseline_mapping(BASELINE_PATH)
+    rows = [_episode(collision=False, seed=1, weights=weights, baseline=baseline)]
+    diag_ordering = [
+        {
+            "planner_key": "planner",
+            "kinematics": "differential_drive",
+            "episode_count": 1,
+            "mean_snqi": rows[0]["metrics"]["snqi"],
+            "rank": 1,
+        }
+    ]
+    bundle, digest = _build_bundle(
+        tmp_path, rows_by_arm={"planner__differential_drive": rows}, diag_ordering=diag_ordering
+    )
+    monkeypatch.setattr(_MODULE, "curvature_aware_snqi", lambda *args, **kwargs: float("nan"))
+
+    report = audit_bundle(bundle, expected_bundle_sha256=digest, expected_release_tag="test-v1")
+
+    assert report["status"] == "fail"
+    assert report["violation_counts"]["snqi_recompute_failed"] == 1
+    assert report["counts"]["snqi_recomputed_rows"] == 0
+
+
 def test_field_vs_diagnostics_ordering_drift_fails(tmp_path: Path) -> None:
     """When diagnostics ordering contradicts the per-episode field basis, the gate fails.
 

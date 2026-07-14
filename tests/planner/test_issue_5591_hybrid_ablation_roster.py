@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from robot_sf.planner.hybrid_portfolio import (
@@ -17,6 +18,7 @@ from robot_sf.planner.hybrid_portfolio import (
     HybridPortfolioConfig,
     build_hybrid_portfolio_build_config,
 )
+from scripts.validation.build_issue_5591_hybrid_ablation_delta import _arm_summary, _delta
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALGO_DIR = REPO_ROOT / "configs" / "algos"
@@ -153,3 +155,47 @@ def test_adaptive_switching_default_is_enabled() -> None:
     """The default config keeps adaptive switching on (backward compatible)."""
     cfg = build_hybrid_portfolio_build_config(_load(REFERENCE))
     assert cfg.hybrid.adaptive_switching_enabled is True
+
+
+def test_delta_analyzer_skips_unusable_numeric_cells_without_nan() -> None:
+    """Blank and non-finite cells must not contaminate summaries or deltas."""
+    rows = [
+        {
+            "collision_rate": "0.2",
+            "near_miss_rate": "",
+            "comfort_rate": "NaN",
+            "time_to_goal_norm": "inf",
+            "success_rate": "0.8",
+        },
+        {
+            "collision_rate": "0.4",
+            "near_miss_rate": "0.1",
+            "comfort_rate": "0.6",
+            "time_to_goal_norm": "1.2",
+            "success_rate": "bad",
+        },
+    ]
+
+    summary = _arm_summary(rows)
+
+    assert summary["collision_rate"] == pytest.approx(0.3)
+    assert summary["near_miss_rate"] == 0.1
+    assert summary["comfort_rate"] == 0.6
+    assert summary["time_to_goal_norm"] == 1.2
+    assert summary["success_rate"] == 0.8
+    assert summary["skipped_numeric_cells"] == 4
+    assert summary["skipped_numeric_cells_by_metric"] == {
+        "collision_rate": 0,
+        "near_miss_rate": 1,
+        "comfort_rate": 1,
+        "time_to_goal_norm": 1,
+        "success_rate": 1,
+    }
+    assert _delta(summary, summary)["near_miss_rate"] == 0.0
+
+
+def test_delta_analyzer_uses_null_when_no_finite_value_exists() -> None:
+    """An all-invalid metric remains explicitly unavailable, never NaN."""
+    empty_metric = _arm_summary([{"success_rate": ""}])
+    assert empty_metric["success_rate"] is None
+    assert _delta(empty_metric, empty_metric)["success_rate"] is None

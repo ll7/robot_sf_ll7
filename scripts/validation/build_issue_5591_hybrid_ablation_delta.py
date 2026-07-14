@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -52,11 +53,15 @@ EFFICIENCY_METRICS = ("time_to_goal_norm", "success_rate")
 NUMERIC_COLUMNS = SAFETY_METRICS + COMFORT_METRICS + EFFICIENCY_METRICS
 
 
-def _as_float(value: Any, default: float = float("nan")) -> float:
+def _as_float(value: Any) -> float | None:
+    """Parse a finite numeric cell, returning ``None`` for unusable input."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
-        return default
+        return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _read_arm_rows(rows_path: Path) -> list[dict[str, str]]:
@@ -66,35 +71,47 @@ def _read_arm_rows(rows_path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def _mean(values: Sequence[float]) -> float:
-    finite = [v for v in values if v == v]  # drop NaN (NaN != NaN)  # noqa: PLR0124
+def _mean(values: Sequence[float]) -> float | None:
+    finite = [v for v in values if math.isfinite(v)]
     if not finite:
-        return float("nan")
+        return None
     return sum(finite) / len(finite)
 
 
-def _arm_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, float]:
+def _arm_summary(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     """Aggregate mean metric values and crash/degraded counts for one arm."""
-    summary: dict[str, float] = {"n_episodes": len(rows)}
+    summary: dict[str, Any] = {"n_episodes": len(rows)}
+    skipped_by_metric: dict[str, int] = {}
     for col in NUMERIC_COLUMNS:
-        summary[col] = _mean([_as_float(r.get(col)) for r in rows])
+        values = [_as_float(r.get(col)) for r in rows]
+        usable = [value for value in values if value is not None]
+        skipped_by_metric[col] = len(values) - len(usable)
+        summary[col] = _mean(usable)
     crashed = sum(
         1 for r in rows if str(r.get("status", "")).lower() in {"crashed", "error", "failed"}
     )
     degraded = sum(1 for r in rows if str(r.get("degraded", "")).lower() in {"true", "1", "yes"})
     summary["crashed_episodes"] = float(crashed)
     summary["degraded_episodes"] = float(degraded)
-    summary["crash_rate"] = (crashed / len(rows)) if rows else float("nan")
-    summary["degraded_rate"] = (degraded / len(rows)) if rows else float("nan")
+    summary["crash_rate"] = (crashed / len(rows)) if rows else None
+    summary["degraded_rate"] = (degraded / len(rows)) if rows else None
+    summary["skipped_numeric_cells"] = sum(skipped_by_metric.values())
+    summary["skipped_numeric_cells_by_metric"] = skipped_by_metric
     return summary
 
 
-def _delta(ref: Mapping[str, float], arm: Mapping[str, float]) -> dict[str, float]:
-    out: dict[str, float] = {}
+def _subtract(left: Any, right: Any) -> float | None:
+    if left is None or right is None:
+        return None
+    return left - right
+
+
+def _delta(ref: Mapping[str, Any], arm: Mapping[str, Any]) -> dict[str, float | None]:
+    out: dict[str, float | None] = {}
     for col in NUMERIC_COLUMNS:
-        out[col] = arm[col] - ref[col]
-    out["crash_rate_delta"] = arm["crash_rate"] - ref["crash_rate"]
-    out["degraded_rate_delta"] = arm["degraded_rate"] - ref["degraded_rate"]
+        out[col] = _subtract(arm[col], ref[col])
+    out["crash_rate_delta"] = _subtract(arm["crash_rate"], ref["crash_rate"])
+    out["degraded_rate_delta"] = _subtract(arm["degraded_rate"], ref["degraded_rate"])
     return out
 
 
@@ -127,7 +144,7 @@ def build(campaign_root: Path) -> dict[str, Any]:
     deltas = {arm: _delta(ref_summary, summaries[arm]) for arm in ALL_ARMS if arm not in missing}
 
     # Per-mechanism-group breakdown (only if mechanism labels are present).
-    mechanism_groups: dict[str, dict[str, dict[str, float]]] = defaultdict(dict)
+    mechanism_groups: dict[str, dict[str, dict[str, float | None]]] = defaultdict(dict)
     has_mechanism = any("mechanism_group" in r for r in arm_rows[REFERENCE_ARM])
     if has_mechanism:
         for arm in ALL_ARMS:
@@ -185,6 +202,13 @@ def main() -> int:
     result = build(args.campaign_root)
     out_path = args.out / "issue_5591_hybrid_ablation_delta.json"
     _write_json(out_path, result)
+
+    skipped = sum(
+        int(summary.get("skipped_numeric_cells", 0))
+        for summary in result.get("per_arm_summary", {}).values()
+    )
+    if skipped:
+        print(f"[issue_5591] skipped {skipped} unusable numeric cells", file=sys.stderr)
 
     status = result.get("status")
     if status in {"blocked_missing_reference_arm"}:

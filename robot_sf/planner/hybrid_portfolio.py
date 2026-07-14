@@ -92,9 +92,9 @@ class HybridPortfolioAdapter:
         Returns:
             str: Name of the desired portfolio head.
         """
-        near_count, min_clearance = self._extract_ped_clearance(observation)
-        if not bool(self.config.adaptive_switching_enabled):
+        if not self.config.adaptive_switching_enabled:
             return self._active_head
+        near_count, min_clearance = self._extract_ped_clearance(observation)
         if min_clearance <= float(self.config.emergency_clearance):
             return "orca"
         if near_count >= int(self.config.dense_ped_count) or min_clearance <= float(

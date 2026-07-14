@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5097 successor-release collision-consumer audit.** A fail-closed, CPU-only verifier now
+  checks signed publication bundles without extraction, reconciling typed exact collision events
+  with component/total counts, binary success, and the canonical SNQI collision term. The tracked
+  release 0.0.3 report verifies all 20,160 public rows and records release-wide inconsistencies as
+  explicit caveats; it is diagnostic metric-integrity evidence, not release-wide benchmark,
+  planner-ranking, SNQI-validity, or paper-facing evidence.
+
 * **issue #3207 collision-envelope / physical-footprint clearance-semantics diagnostic.** New
   `robot_sf/benchmark/clearance_semantics.py` (`footprint-clearance-semantics.v1`) formalizes the
   distinct clearance quantities that reported traces conflate — center-to-center distance,

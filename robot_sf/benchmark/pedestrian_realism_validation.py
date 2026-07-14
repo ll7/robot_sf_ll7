@@ -61,6 +61,7 @@ __all__ = [
     "RECONSTRUCTION_CLAIM_BOUNDARY",
     "RECONSTRUCTION_SCHEMA_VERSION",
     "RealismCrowdInputs",
+    "RealismEntryExitFlow",
     "RealismMetricConfig",
     "RealismReconstructionPlan",
     "RealismScorecard",
@@ -98,6 +99,7 @@ RECONSTRUCTION_CLAIM_BOUNDARY = (
 STATUS_NOT_AVAILABLE = "not_available"
 STATUS_OK = "ok"
 STATUS_EMPTY = "empty"
+EVIDENCE_STATUS_DIAGNOSTIC_ONLY = "diagnostic-only"
 
 
 @dataclass(frozen=True)
@@ -155,6 +157,42 @@ class RealismTrackPair:
 
 
 @dataclass(frozen=True)
+class RealismEntryExitFlow:
+    """Observed entry/exit timing and displacement for one real track.
+
+    This record preserves the source track's temporal admission information for a replay
+    planner. It is not a scene annotation: the entry and exit points are observed trajectory
+    endpoints, and the flow direction is inferred from the dominant displacement axis.
+    """
+
+    pedestrian_id: int
+    entry_time_s: float
+    exit_time_s: float
+    entry_position: tuple[float, float]
+    exit_position: tuple[float, float]
+    flow_direction: str
+
+    @property
+    def observed_duration_s(self) -> float:
+        """Return the observed duration between the first and last samples."""
+
+        return float(self.exit_time_s - self.entry_time_s)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe representation for caller-owned decision packets."""
+
+        return {
+            "pedestrian_id": int(self.pedestrian_id),
+            "entry_time_s": float(self.entry_time_s),
+            "exit_time_s": float(self.exit_time_s),
+            "entry_position": [float(value) for value in self.entry_position],
+            "exit_position": [float(value) for value in self.exit_position],
+            "flow_direction": self.flow_direction,
+            "observed_duration_s": self.observed_duration_s,
+        }
+
+
+@dataclass(frozen=True)
 class RealismCrowdInputs:
     """Matched simulation/real crowd arrays for distribution-metric comparison.
 
@@ -187,6 +225,9 @@ class RealismScorecard:
         config: JSON-safe metric configuration used.
         reference_source: Provenance note for the real reference data.
         notes: Caveat and limitation notes.
+        reconstruction: Content-light reconstruction readiness summary, when a parsed
+            trajectory set was supplied. The serialized scorecard derives an explicit
+            diagnostic-only or unavailable evidence boundary from ``status``.
     """
 
     dataset_id: str
@@ -195,6 +236,7 @@ class RealismScorecard:
     config: dict[str, Any] = field(default_factory=dict)
     reference_source: str = ""
     notes: list[str] = field(default_factory=list)
+    reconstruction: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe mapping representation of the scorecard."""
@@ -204,10 +246,16 @@ class RealismScorecard:
             "claim_boundary": REALISM_CLAIM_BOUNDARY,
             "dataset_id": self.dataset_id,
             "status": self.status,
+            "evidence_status": (
+                EVIDENCE_STATUS_DIAGNOSTIC_ONLY
+                if self.status == STATUS_OK
+                else STATUS_NOT_AVAILABLE
+            ),
             "metrics": self.metrics,
             "config": self.config,
             "reference_source": self.reference_source,
             "notes": list(self.notes),
+            "reconstruction": self.reconstruction,
         }
 
 
@@ -231,6 +279,8 @@ class RealismReconstructionPlan:
     flow_direction_counts: dict[str, int]
     total_sample_count: int
     blockers: tuple[str, ...]
+    entry_exit_flows: tuple[RealismEntryExitFlow, ...] = ()
+    timing_status: str = "unavailable"
 
     def summary_dict(self) -> dict[str, Any]:
         """Return a content-light JSON-safe summary without trajectory coordinates."""
@@ -244,6 +294,9 @@ class RealismReconstructionPlan:
             "geometry_status": self.geometry_status,
             "flow_axis": self.flow_axis,
             "flow_direction_counts": dict(self.flow_direction_counts),
+            "entry_exit_flow_count": len(self.entry_exit_flows),
+            "timing_status": self.timing_status,
+            "entry_exit_time_span_s": _entry_exit_time_span(self.entry_exit_flows),
             "pedestrian_count": len(self.pedestrians),
             "total_sample_count": self.total_sample_count,
             "blockers": list(self.blockers),
@@ -613,6 +666,7 @@ def build_dataset_scorecard(
     lane_formation: dict[str, Any] | None,
     reference_source: str,
     notes: Sequence[str] | None = None,
+    reconstruction: dict[str, Any] | None = None,
 ) -> RealismScorecard:
     """Aggregate per-metric results into a per-dataset scorecard.
 
@@ -624,6 +678,7 @@ def build_dataset_scorecard(
         lane_formation: Lane-formation comparison mapping (or ``None``).
         reference_source: Provenance note for the real reference data.
         notes: Caveat notes.
+        reconstruction: Content-light reconstruction readiness summary.
 
     Returns:
         A :class:`RealismScorecard` with aggregated statistics.
@@ -674,10 +729,11 @@ def build_dataset_scorecard(
         config=_config_to_dict(config),
         reference_source=reference_source,
         notes=list(notes or []),
+        reconstruction=reconstruction,
     )
 
 
-def run_realism_validation(
+def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for callers
     *,
     dataset_id: str,
     crowds: RealismCrowdInputs | None = None,
@@ -685,6 +741,7 @@ def run_realism_validation(
     rmse_pairs: Sequence[RealismTrackPair] | None = None,
     reference_source: str = "",
     notes: Sequence[str] | None = None,
+    reconstruction: dict[str, Any] | None = None,
     movement_axis: int = 0,
     lateral_axis: int = 1,
 ) -> RealismScorecard:
@@ -701,6 +758,9 @@ def run_realism_validation(
     corresponding distribution metric degrade to ``empty`` (fail-closed), so a
     partial run still produces a labeled scorecard. A missing real reference is
     never reported as a passing realism result.
+
+    The optional ``reconstruction`` mapping is serialized as a content-light readiness
+    summary; it does not change any metric computation or promote benchmark evidence.
 
     Returns:
         A :class:`RealismScorecard` aggregating all computed metrics.
@@ -738,6 +798,7 @@ def run_realism_validation(
         lane_formation=lane,
         reference_source=reference_source,
         notes=notes,
+        reconstruction=reconstruction,
     )
 
 
@@ -755,7 +816,7 @@ def build_track_reconstruction_plan(
     derived from observed positions and padded only to keep a replay container
     non-degenerate. This is an explicit partial reconstruction: the track parser
     does not provide static obstacles, scene semantics, or entry/exit geometry
-    beyond the observed first/last positions.
+    beyond the observed first/last positions and relative entry times.
 
     Args:
         track_set: Parsed real track set, or ``None`` when the asset is not staged.
@@ -781,14 +842,20 @@ def build_track_reconstruction_plan(
         "Static scene geometry is not encoded in ETH/UCY trajectory tracks; "
         "trajectory bounds are diagnostic-only and cannot seed a scene-faithful benchmark."
     )
+    timing_blocker = (
+        "Replay preserves relative entry delays but not per-waypoint timestamps; a simulator "
+        "trace adapter is required for time-faithful trajectory comparison."
+    )
     if track_set is None or not track_set.tracks:
         return _empty_reconstruction_plan(
             dataset_id=resolved_dataset_id,
             split=split,
             geometry_blocker=geometry_blocker,
+            timing_blocker=timing_blocker,
         )
 
     track_arrays = _validated_track_arrays(track_set)
+    replay_start_time_s = min(float(times[0]) for times, _positions in track_arrays)
 
     all_positions = np.concatenate([positions for _times, positions in track_arrays], axis=0)
     min_xy = np.min(all_positions, axis=0) - float(padding_m)
@@ -805,11 +872,12 @@ def build_track_reconstruction_plan(
     if float(np.max(axis_magnitudes)) > direction_epsilon_m:
         flow_axis_index = int(np.argmax(axis_magnitudes))
     flow_axis = None if flow_axis_index is None else ("x" if flow_axis_index == 0 else "y")
-    pedestrians, direction_counts = _build_reconstruction_pedestrians(
+    pedestrians, direction_counts, entry_exit_flows = _build_reconstruction_pedestrians(
         track_set,
         track_arrays,
         flow_axis_index=flow_axis_index,
         direction_epsilon_m=direction_epsilon_m,
+        replay_start_time_s=replay_start_time_s,
     )
 
     return RealismReconstructionPlan(
@@ -822,7 +890,9 @@ def build_track_reconstruction_plan(
         flow_axis=flow_axis,
         flow_direction_counts=direction_counts,
         total_sample_count=sum(times.shape[0] for times, _positions in track_arrays),
-        blockers=(geometry_blocker,),
+        blockers=(geometry_blocker, timing_blocker),
+        entry_exit_flows=tuple(entry_exit_flows),
+        timing_status="entry_delay_only",
     )
 
 
@@ -831,6 +901,7 @@ def _empty_reconstruction_plan(
     dataset_id: str,
     split: str,
     geometry_blocker: str,
+    timing_blocker: str,
 ) -> RealismReconstructionPlan:
     """Build the fail-closed plan used when no parsed tracks are available.
 
@@ -856,7 +927,10 @@ def _empty_reconstruction_plan(
         blockers=(
             "No parsed real tracks are available; stage the dataset and rerun the parser.",
             geometry_blocker,
+            timing_blocker,
         ),
+        entry_exit_flows=(),
+        timing_status="unavailable",
     )
 
 
@@ -880,6 +954,8 @@ def _validated_track_arrays(
             )
         if not np.all(np.isfinite(times)) or not np.all(np.isfinite(positions)):
             raise ValueError(f"track {track.pedestrian_id} contains non-finite values")
+        if not np.all(np.diff(times) > 0.0):
+            raise ValueError(f"track {track.pedestrian_id} times must be strictly increasing")
         arrays.append((times, positions))
     return arrays
 
@@ -890,22 +966,47 @@ def _build_reconstruction_pedestrians(
     *,
     flow_axis_index: int | None,
     direction_epsilon_m: float,
-) -> tuple[list[SinglePedestrianDefinition], dict[str, int]]:
+    replay_start_time_s: float,
+) -> tuple[
+    list[SinglePedestrianDefinition],
+    dict[str, int],
+    list[RealismEntryExitFlow],
+]:
     """Convert tracks to simulator definitions and count inferred directions.
 
     Returns:
-        A pair containing replay definitions and conservative flow-direction counts.
+        A triple containing replay definitions, conservative flow-direction counts, and
+        observed entry/exit flow records.
     """
 
     direction_counts = {"positive": 0, "negative": 0, "stationary": 0, "off_axis": 0}
     pedestrians: list[SinglePedestrianDefinition] = []
+    entry_exit_flows: list[RealismEntryExitFlow] = []
     for track, (times, positions) in zip(track_set.tracks, track_arrays, strict=True):
         waypoints = _trajectory_waypoints(positions)
+        entry_delay_s = float(times[0] - replay_start_time_s)
+        flow_direction = _increment_direction_count(
+            direction_counts,
+            positions[-1] - positions[0],
+            flow_axis_index=flow_axis_index,
+            direction_epsilon_m=direction_epsilon_m,
+        )
+        entry_exit_flows.append(
+            RealismEntryExitFlow(
+                pedestrian_id=int(track.pedestrian_id),
+                entry_time_s=float(times[0]),
+                exit_time_s=float(times[-1]),
+                entry_position=(float(positions[0, 0]), float(positions[0, 1])),
+                exit_position=(float(positions[-1, 0]), float(positions[-1, 1])),
+                flow_direction=flow_direction,
+            )
+        )
         pedestrians.append(
             SinglePedestrianDefinition(
                 id=f"{track_set.split}_p{track.pedestrian_id}",
                 start=(float(positions[0, 0]), float(positions[0, 1])),
                 trajectory=waypoints,
+                start_delay_s=entry_delay_s,
                 metadata={
                     "reconstruction_mode": "trajectory_waypoint_replay",
                     "source_asset_id": track_set.asset_id,
@@ -913,17 +1014,18 @@ def _build_reconstruction_pedestrians(
                     "source_pedestrian_id": int(track.pedestrian_id),
                     "observed_sample_count": int(times.shape[0]),
                     "observed_duration_s": float(times[-1] - times[0]),
+                    "entry_time_s": float(times[0]),
+                    "exit_time_s": float(times[-1]),
+                    "entry_delay_s": entry_delay_s,
+                    "entry_position": [float(value) for value in positions[0]],
+                    "exit_position": [float(value) for value in positions[-1]],
+                    "flow_direction": flow_direction,
+                    "timing_status": "entry_delay_only",
                     "claim_boundary": RECONSTRUCTION_CLAIM_BOUNDARY,
                 },
             )
         )
-        _increment_direction_count(
-            direction_counts,
-            positions[-1] - positions[0],
-            flow_axis_index=flow_axis_index,
-            direction_epsilon_m=direction_epsilon_m,
-        )
-    return pedestrians, direction_counts
+    return pedestrians, direction_counts, entry_exit_flows
 
 
 def _trajectory_waypoints(positions: np.ndarray) -> list[tuple[float, float]]:
@@ -947,18 +1049,24 @@ def _increment_direction_count(
     *,
     flow_axis_index: int | None,
     direction_epsilon_m: float,
-) -> None:
-    """Increment one conservative direction category for a track displacement."""
+) -> str:
+    """Increment and return one conservative direction category for a displacement.
+
+    Returns:
+        The direction bucket used in ``counts``.
+    """
 
     displacement_norm = float(np.linalg.norm(displacement))
     if displacement_norm <= direction_epsilon_m:
-        counts["stationary"] += 1
+        direction = "stationary"
     elif flow_axis_index is None or abs(displacement[flow_axis_index]) <= direction_epsilon_m:
-        counts["off_axis"] += 1
+        direction = "off_axis"
     elif displacement[flow_axis_index] > 0.0:
-        counts["positive"] += 1
+        direction = "positive"
     else:
-        counts["negative"] += 1
+        direction = "negative"
+    counts[direction] += 1
+    return direction
 
 
 def _require_non_negative_finite(value: float, name: str) -> None:
@@ -1018,6 +1126,7 @@ def run_realism_validation_from_track_set(
 
     cfg = config or RealismMetricConfig()
     base_notes = list(notes or [])
+    reconstruction = build_track_reconstruction_plan(track_set, dataset_id=dataset_id)
     if track_set is None or not track_set.tracks:
         return build_dataset_scorecard(
             dataset_id=dataset_id,
@@ -1036,6 +1145,7 @@ def run_realism_validation_from_track_set(
                 "This is not success evidence (fail-closed). Stage the dataset per "
                 "docs/datasets/eth-ucy.md and re-run."
             ],
+            reconstruction=reconstruction.summary_dict(),
         )
 
     real_positions, real_velocities = _gridded_crowd_from_tracks(track_set, cfg)
@@ -1060,6 +1170,7 @@ def run_realism_validation_from_track_set(
             f"Real reference gridded from {len(track_set.tracks)} parsed pedestrians; "
             "velocities finite-differenced on the common grid."
         ],
+        reconstruction=reconstruction.summary_dict(),
         movement_axis=movement_axis,
         lateral_axis=1,
     )
@@ -1100,6 +1211,7 @@ def run_realism_validation_from_staged_dataset(
             provenance_manifest=dataset.provenance_manifest,
         )
     except EthUcyDataError as exc:
+        reconstruction = build_track_reconstruction_plan(None, dataset_id=dataset_id)
         return build_dataset_scorecard(
             dataset_id=dataset_id,
             config=cfg,
@@ -1113,6 +1225,7 @@ def run_realism_validation_from_staged_dataset(
                 "This is not success evidence (fail-closed); complete acquisition and provenance "
                 "staging before rerunning.",
             ],
+            reconstruction=reconstruction.summary_dict(),
         )
 
     reconstruction = build_track_reconstruction_plan(track_set, dataset_id=dataset_id)
@@ -1175,11 +1288,23 @@ def render_scorecard_markdown(scorecard: RealismScorecard) -> str:
         "",
         f"Claim boundary: {sc['claim_boundary']}.",
         "",
-        f"**Status: `{sc['status']}`**  |  schema `{sc['schema_version']}`",
+        f"**Status: `{sc['status']}`**  |  evidence status: `{sc['evidence_status']}`  "
+        f"|  schema `{sc['schema_version']}`",
         "",
     ]
     if sc["reference_source"]:
         lines += [f"Reference: {sc['reference_source']}", ""]
+    reconstruction = sc.get("reconstruction")
+    if isinstance(reconstruction, dict):
+        lines += [
+            "## Reconstruction Readiness",
+            "",
+            f"- status: `{reconstruction.get('status', 'unavailable')}`",
+            f"- geometry: `{reconstruction.get('geometry_status', 'unavailable')}`",
+            f"- timing: `{reconstruction.get('timing_status', 'unavailable')}`",
+            f"- entry/exit flows: {reconstruction.get('entry_exit_flow_count', 0)}",
+            "",
+        ]
     rmse = sc["metrics"].get("trajectory_rmse", {})
     if "rmse_m" in rmse:
         lines += [
@@ -1340,6 +1465,23 @@ def _empty_metric(metric_id: str) -> dict[str, Any]:
     """Return a standardized empty-metric placeholder mapping."""
 
     return {"metric_id": metric_id, "status": STATUS_EMPTY, "count": 0}
+
+
+def _entry_exit_time_span(
+    flows: Sequence[RealismEntryExitFlow],
+) -> dict[str, float] | None:
+    """Summarize observed entry/exit times without exporting trajectory coordinates.
+
+    Returns:
+        First-entry and last-exit times, or ``None`` when no flow records exist.
+    """
+
+    if not flows:
+        return None
+    return {
+        "first_entry_time_s": float(min(flow.entry_time_s for flow in flows)),
+        "last_exit_time_s": float(max(flow.exit_time_s for flow in flows)),
+    }
 
 
 def _derive_scorecard_status(

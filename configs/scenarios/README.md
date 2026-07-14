@@ -11,6 +11,9 @@ This directory supports a mix of **per-scenario**, **per-archetype**, and
   planner checks. It is intentionally separate from stress, adversarial, and camera-ready evidence.
 - `confirmation_v1.yaml`: compact confirmation matrix with issue-596 atomic and sparse
   interaction archetypes for non-paper robustness checks.
+- `sets/issue_5592_atomic_topology_second_matrix.yaml`: issue #5592 pre-registered topology
+  subset, reusing issue-596 definitions with an explicit paired five-seed override; it is a
+  generalization-check contract, not benchmark evidence.
 - `single/`: one scenario per file (manual fine-tuning and small edits).
 - `archetypes/`: groups of related scenarios (may contain one or many entries).
 - `sets/`: manifest files that include other scenario files.

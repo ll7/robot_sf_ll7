@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 import yaml
 from gymnasium import spaces
+from loguru import logger
 
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.baselines.social_force import Observation
@@ -343,6 +344,22 @@ def test_predict_action_success_and_error_paths():
         predict=lambda *_args, **_kwargs: (_ for _ in ()).throw(IndexError("bad")),
     )
     assert planner._predict_action(np.array([1.0, 2.0])) is None
+
+
+def test_predict_action_logs_exception_details() -> None:
+    """Prediction failures should retain the exception text in the Loguru message."""
+    planner = PPOPlanner(_planner_config())
+    planner._model = SimpleNamespace(
+        predict=lambda *_args, **_kwargs: (_ for _ in ()).throw(IndexError("bad observation")),
+    )
+    captured: list[str] = []
+    handler = logger.add(lambda message: captured.append(message.record["message"]), level="DEBUG")
+    try:
+        assert planner._predict_action(np.array([1.0, 2.0])) is None
+    finally:
+        logger.remove(handler)
+
+    assert "PPO model prediction failed: bad observation" in captured
 
 
 def test_build_model_obs_image_requires_payload():

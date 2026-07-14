@@ -338,14 +338,28 @@ def load_package_b_manifest(
     manifest_path: Path,
     *,
     repo_root: Path | None = None,
-) -> tuple[SearchConfig, tuple[str, ...], tuple[int, ...], tuple[int, ...]]:
+) -> tuple[
+    SearchConfig,
+    tuple[str, ...],
+    tuple[str, ...],
+    tuple[int, ...],
+    tuple[int, ...],
+]:
     """Load a Package-B manifest and derive the runner configuration.
 
     Returns:
         A base ``SearchConfig`` scoped to the first objective/budget/seed, the
-        sampler names, the budget grid, and the repeated seeds declared by the
-        manifest. All repository-relative paths are resolved against ``repo_root``
-        (or the current working directory when it is omitted).
+        list of objectives to compare, the sampler names, the budget grid, and
+        the repeated seeds declared by the manifest. All repository-relative
+        paths are resolved against ``repo_root`` (or the current working
+        directory when it is omitted).
+
+        The compared objectives come from the manifest's top-level ``objectives``
+        list when present (enabling multi-objective comparison such as issue
+        #5326, where ``temporal_robustness`` is compared against
+        ``worst_case_snqi``). When the top-level list is absent, the single
+        ``base_config.objective`` is used for backward compatibility with the
+        issue #3079 manifest.
     """
     root = (repo_root or Path.cwd()).resolve()
     manifest_path = (
@@ -374,11 +388,9 @@ def load_package_b_manifest(
         )
 
     policy = base_config.get("policy")
-    objective = base_config.get("objective")
+    objectives = _manifest_objectives(payload, base_config)
     if not isinstance(policy, str) or not policy.strip():
         raise ValueError("Package-B manifest base_config.policy must be a non-empty string")
-    if not isinstance(objective, str) or not objective.strip():
-        raise ValueError("Package-B manifest base_config.objective must be a non-empty string")
 
     budgets = _manifest_int_tuple(payload, "budget_grid")
     seeds = _manifest_int_tuple(payload, "repeated_seeds")
@@ -395,12 +407,37 @@ def load_package_b_manifest(
         policy=policy,
         scenario_template=_path("scenario_template"),
         search_space=_path("search_space"),
-        objective=objective,
+        objective=objectives[0],
         output_dir=output_dir,
         budget=budgets[0],
         seed=seeds[0],
     )
-    return config, samplers, budgets, seeds
+    return config, objectives, samplers, budgets, seeds
+
+
+def _manifest_objectives(payload: dict[str, Any], base_config: dict[str, Any]) -> tuple[str, ...]:
+    """Resolve the compared objective list from a Package-B manifest.
+
+    Prefers the top-level ``objectives`` list (multi-objective comparison, e.g.
+    issue #5326). Falls back to the single ``base_config.objective`` for the
+    issue #3079 manifest, which declares only one objective. Duplicate entries
+    are rejected so the comparison matrix cannot collapse a cell.
+    """
+    top_level = payload.get("objectives")
+    if isinstance(top_level, list) and top_level:
+        if any(not isinstance(item, str) or not item.strip() for item in top_level):
+            raise ValueError("Package-B manifest objectives must be a non-empty string list")
+        deduped = tuple(str(item) for item in dict.fromkeys(top_level))
+        if len(deduped) != len(top_level):
+            raise ValueError("Package-B manifest objectives must not contain duplicates")
+        return deduped
+
+    single = base_config.get("objective")
+    if not isinstance(single, str) or not single.strip():
+        raise ValueError(
+            "Package-B manifest must declare objectives (top-level list) or base_config.objective"
+        )
+    return (single,)
 
 
 def render_durable_comparison_table(
@@ -685,12 +722,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if args.manifest is not None:
         repo_root = args.repo_root.resolve()
-        config, samplers, budgets, seeds = load_package_b_manifest(
+        config, objectives, samplers, budgets, seeds = load_package_b_manifest(
             args.manifest,
             repo_root=repo_root,
         )
         output_dir = config.output_dir
-        objectives = [config.objective]
         out_json = (
             args.out_json
             if args.out_json is None or args.out_json.is_absolute()

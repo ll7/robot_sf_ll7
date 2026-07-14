@@ -251,6 +251,8 @@ def test_release_run_exports_publication_only_after_benchmark_success(
     manifest = _manifest_fixture()
     sentinel_cfg = object()
     called = {"orca_preflight": False}
+    export_release_result_states: list[bool] = []
+    publication_preflight_called = {"value": False}
 
     def _fake_orca_preflight(cfg) -> None:
         """Release runs should fail fast before campaign execution when ORCA is unavailable."""
@@ -306,17 +308,33 @@ def test_release_run_exports_publication_only_after_benchmark_success(
             "canonical_campaign_config": "configs/benchmarks/paper_experiment_matrix_v1.yaml",
         },
     )
-    monkeypatch.setattr(
-        run_benchmark_release,
-        "_build_publication_payload",
-        lambda **kwargs: {
+
+    def _fake_build_publication_payload(**kwargs):
+        """Record that each refreshed export sees the final release result."""
+        del kwargs
+        export_release_result_states.append(
+            (campaign_root / "release" / "release_result.json").is_file()
+        )
+        return {
             "bundle_dir": "output/benchmarks/publication/bundle",
             "archive_path": "output/benchmarks/publication/bundle.tar.gz",
             "checksums_path": "output/benchmarks/publication/bundle/checksums.sha256",
             "manifest_path": "output/benchmarks/publication/bundle/publication_manifest.json",
             "file_count": 3,
             "total_bytes": 123,
-        },
+        }
+
+    def _fake_publication_preflight(bundle_dir: Path) -> None:
+        """The final preflight must run after the release result has been written."""
+        del bundle_dir
+        publication_preflight_called["value"] = True
+        assert (campaign_root / "release" / "release_result.json").is_file()
+
+    monkeypatch.setattr(
+        run_benchmark_release, "_build_publication_payload", _fake_build_publication_payload
+    )
+    monkeypatch.setattr(
+        run_benchmark_release, "_run_publication_preflight", _fake_publication_preflight
     )
 
     exit_code = run_benchmark_release.main(["--manifest", "manifest.yaml"])
@@ -339,6 +357,9 @@ def test_release_run_exports_publication_only_after_benchmark_success(
     assert payload["publication_bundle"]["archive_path"].endswith("bundle.tar.gz")
     assert (campaign_root / "release" / "release_result.json").exists()
     assert (campaign_root / "release" / "release_manifest.resolved.json").exists()
+    assert export_release_result_states[0] is False
+    assert all(export_release_result_states[1:])
+    assert publication_preflight_called["value"] is True
 
 
 def test_release_run_preserves_campaign_status_for_accepted_unavailable_only(

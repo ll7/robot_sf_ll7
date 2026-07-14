@@ -8,12 +8,32 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts/analysis/run_issue3216_rank_stability.py"
 _SPEC = importlib.util.spec_from_file_location("issue5247_rank_stability", _SCRIPT)
 assert _SPEC is not None and _SPEC.loader is not None
 runner = importlib.util.module_from_spec(_SPEC)
 sys.modules["issue5247_rank_stability"] = runner
 _SPEC.loader.exec_module(runner)
+
+# Hub-local verified-harvest artifacts (only present on the pinned analysis host).
+# Never committed; this test skips elsewhere so the suite stays portable.
+_REAL_HARVEST_DIR = Path(
+    "~/git/robot_sf_ll7/output/issue3216-13274-harvest"
+).expanduser()
+_REAL_CAMPAIGN_DIR = _REAL_HARVEST_DIR / "issue3216_s20_headline_ci"
+_REAL_HARVEST_LOG = Path(
+    "~/git/context/codex-orchestrator/runtime/harvest_13274.log"
+).expanduser()
+_REAL_PLANNER_CONFIG = Path(
+    "~/git/robot_sf_ll7/configs/benchmarks/paper_experiment_matrix_v1_scenario_horizons_h500_s20.yaml"
+).expanduser()
+_REAL_HARVEST_PRESENT = (
+    _REAL_CAMPAIGN_DIR.is_dir()
+    and _REAL_HARVEST_LOG.is_file()
+    and _REAL_PLANNER_CONFIG.is_file()
+)
 
 
 def _write_json(path: Path, payload: object) -> None:
@@ -187,3 +207,71 @@ def test_runner_rejects_nonfinite_snqi_diagnostics(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "must be finite numeric values" in result.stderr
+
+
+@pytest.mark.skipif(not _REAL_HARVEST_PRESENT, reason="real job-13274 harvest not present on this host")
+class TestRealHarvestReproducibility:
+    """Reproduce the verified job-13274 analysis identically on a second run.
+
+    This exercises the runner against the ALREADY-COMPLETE 8,640-episode campaign
+    (Slurm job 13274, salvaged 2026-07-11) exactly as issue #5247 requires: it
+    verifies the harvest-completion marker, delegates to the canonical #3216 CLI,
+    and produces constraints-first success rank-stability artifacts. The run must
+    be deterministic -- identical output hashes on re-invocation -- which is the
+    issue's core ``Verify`` gate over real data. Outputs are written to tmp_path
+    only; nothing under the harvested tree is mutated.
+    """
+
+    def test_real_harvest_analysis_is_deterministic(self, tmp_path: Path) -> None:
+        first = tmp_path / "run1"
+        second = tmp_path / "run2"
+        command = [
+            sys.executable,
+            str(_SCRIPT),
+            "--campaign-root",
+            str(_REAL_CAMPAIGN_DIR),
+            "--harvest-log",
+            str(_REAL_HARVEST_LOG),
+            "--planner-config",
+            str(_REAL_PLANNER_CONFIG),
+        ]
+
+        def run_against(out_dir: Path) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [*command, "--output-dir", str(out_dir)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        run_a = run_against(first)
+        assert run_a.returncode == 0, run_a.stderr
+        assert (first / "result.json").exists()
+        run_b = run_against(second)
+        assert run_b.returncode == 0, run_b.stderr
+
+        first_prov = json.loads((first / "analysis_provenance.json").read_text(encoding="utf-8"))
+        second_prov = json.loads((second / "analysis_provenance.json").read_text(encoding="utf-8"))
+        assert first_prov["output_sha256"] == second_prov["output_sha256"]
+        for artifact in ("result.json", "report.md"):
+            h_a = _sha256(first / artifact)
+            h_b = _sha256(second / artifact)
+            assert h_a == h_b, f"{artifact} differs across runs"
+
+        # The real SNQI soft-contract failure must be captured exactly.
+        failure = first_prov["snqi_contract_failure"]
+        assert failure["contract_status"] == "fail"
+        assert failure["enforcement"] == "warn"
+        assert any(
+            c["check"] == "rank_alignment_spearman"
+            and c["value"] < c["fail_threshold"]
+            for c in failure["failed_checks"]
+        )
+
+
+def _sha256(path: Path) -> str:
+    """Return the SHA-256 digest of one regular file."""
+    import hashlib
+
+    digest = hashlib.sha256()
+    digest.update(path.read_bytes())
+    return digest.hexdigest()

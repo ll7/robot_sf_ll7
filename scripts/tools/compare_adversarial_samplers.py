@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
+
 from robot_sf.adversarial.attribution import attribution_from_episode_record
 from robot_sf.adversarial.bundle import write_trajectory_csv
 from robot_sf.adversarial.certification import passed_status
@@ -271,6 +273,83 @@ def _candidate_mode(item: Any) -> str | None:
     return None
 
 
+def build_comparison_payload(
+    *,
+    rows: Sequence[SamplerComparisonRow],
+    objectives: Sequence[str],
+    budgets: Sequence[int],
+    seeds: Sequence[int],
+    claim_scope: str = "not_paper_facing_benchmark_evidence",
+    report_status: str = "diagnostic_local_nominal",
+    held_out_status: str = "not_evaluated_narrow_archive",
+) -> dict[str, Any]:
+    """Build the durable Package-B comparison report payload from result rows.
+
+    The payload preserves the existing report-gate contract: every sampler/budget/seed
+    cell appears exactly once, held-out yield stays null, and the claim scope stays
+    diagnostic. The resulting mapping can be written directly and validated by
+    ``validate_package_b_report``.
+    """
+    return {
+        "schema_version": "adversarial-sampler-comparison.v3",
+        "report_status": report_status,
+        "claim_scope": claim_scope,
+        "objectives": list(objectives),
+        "budget_grid": list(budgets),
+        "seeds": list(seeds),
+        "package_b_notes": {
+            "learned_failure_proposal_issue_2921": "stretch_out_of_scope",
+            "held_out_family_yield": held_out_status,
+        },
+        "rows": [asdict(r) for r in rows],
+    }
+
+
+def load_package_b_manifest(
+    manifest_path: Path,
+) -> tuple[SearchConfig, tuple[str, ...], tuple[int, ...], tuple[int, ...]]:
+    """Load a Package-B manifest and derive the runner configuration.
+
+    Returns:
+        A base ``SearchConfig`` scoped to the first objective/budget/seed, the
+        sampler names, the budget grid, and the repeated seeds declared by the
+        manifest. The manifest's ``base_config`` paths are resolved relative to
+        the repository root so the command matches the committed example command.
+    """
+    payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Package-B manifest payload must be a mapping")
+    base_config = payload.get("base_config")
+    if not isinstance(base_config, dict):
+        raise ValueError("Package-B manifest base_config must be a mapping")
+    output_artifacts = payload.get("output_artifacts")
+    output_dir = (
+        Path(output_artifacts["output_dir"])
+        if isinstance(output_artifacts, dict) and output_artifacts.get("output_dir")
+        else Path("output/adversarial/issue_3079_package_b")
+    )
+
+    def _path(key: str) -> Path:
+        value = base_config.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"Package-B manifest base_config.{key} must be a non-empty path")
+        return Path(value)
+
+    config = SearchConfig.from_files(
+        policy=str(base_config.get("policy", "goal")),
+        scenario_template=_path("scenario_template"),
+        search_space=_path("search_space"),
+        objective=str(base_config.get("objective", "worst_case_snqi")),
+        output_dir=output_dir,
+        budget=int((payload.get("budget_grid") or [64])[0]),
+        seed=int((payload.get("repeated_seeds") or [123])[0]),
+    )
+    samplers = tuple(payload.get("samplers") or ("random", "coordinate", "optuna"))
+    budgets = tuple(int(b) for b in payload.get("budget_grid") or [16, 32, 64])
+    seeds = tuple(int(s) for s in payload.get("repeated_seeds") or [1101, 2202, 3303])
+    return config, samplers, budgets, seeds
+
+
 def _synthetic_evaluator(
     config: SearchConfig,
     candidate: CandidateSpec,
@@ -333,6 +412,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Package-B manifest (adversarial-package-b-comparison.v1) whose budget grid, "
+            "repeated seeds, samplers, and output root drive the comparison. Overrides "
+            "--package-b-budget-grid, --seed, --sampler, and --output-dir."
+        ),
+    )
+    parser.add_argument(
         "--budget",
         type=int,
         action="append",
@@ -374,39 +463,42 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the sampler comparison CLI."""
     args = parse_args(argv)
-    objectives = args.objectives or ["worst_case_snqi"]
-    config = SearchConfig.from_files(
-        policy=args.policy,
-        scenario_template=args.scenario_template,
-        search_space=args.search_space,
-        objective=objectives[0],
-        output_dir=args.output_dir,
-        budget=(args.budget or [8])[0],
-        seed=(args.seed or [123])[0],
-    )
-    budgets = (16, 32, 64) if args.package_b_budget_grid and args.budget is None else args.budget
-    seeds = args.seed or [123]
+    if args.manifest is not None:
+        config, samplers, budgets, seeds = load_package_b_manifest(args.manifest)
+        output_dir = config.output_dir
+        objectives = [config.objective]
+    else:
+        objectives = args.objectives or ["worst_case_snqi"]
+        output_dir = args.output_dir
+        config = SearchConfig.from_files(
+            policy=args.policy,
+            scenario_template=args.scenario_template,
+            search_space=args.search_space,
+            objective=objectives[0],
+            output_dir=output_dir,
+            budget=(args.budget or [8])[0],
+            seed=(args.seed or [123])[0],
+        )
+        budgets = (
+            (16, 32, 64) if args.package_b_budget_grid and args.budget is None else args.budget
+        )
+        seeds = args.seed or [123]
+        samplers = args.samplers or ("random", "coordinate", "optuna")
+
     rows = run_sampler_comparison(
         config=config,
-        sampler_names=tuple(args.samplers or ("random", "coordinate", "optuna")),
+        sampler_names=tuple(samplers),
         objective_names=objectives,
         synthetic=bool(args.synthetic),
         budgets=budgets,
         seeds=seeds,
     )
-    payload = {
-        "schema_version": "adversarial-sampler-comparison.v3",
-        "report_status": "diagnostic_local_nominal",
-        "claim_scope": "not_paper_facing_benchmark_evidence",
-        "objectives": objectives,
-        "budget_grid": list(budgets or [config.budget]),
-        "seeds": list(seeds),
-        "package_b_notes": {
-            "learned_failure_proposal_issue_2921": "stretch_out_of_scope",
-            "held_out_family_yield": "not_evaluated_narrow_archive",
-        },
-        "rows": [asdict(r) for r in rows],
-    }
+    payload = build_comparison_payload(
+        rows=rows,
+        objectives=objectives,
+        budgets=budgets,
+        seeds=seeds,
+    )
     if args.out_json is not None:
         args.out_json.parent.mkdir(parents=True, exist_ok=True)
         args.out_json.write_text(

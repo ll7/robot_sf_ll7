@@ -915,3 +915,141 @@ def _finite_number(value: Any) -> float | None:
         return None
     parsed = float(value)
     return parsed if math.isfinite(parsed) else None
+
+
+@dataclass(frozen=True)
+class PackageBConfirmationSidecar:
+    """Producer for one Package-B confirmation sidecar bound to a source report."""
+
+    source_report_path: Path
+    confirmation_path: Path
+    confirmation_rows: tuple[dict[str, Any], ...]
+    source_report_sha256: str | None
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return the durable sidecar JSON payload."""
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "issue": EXPECTED_ISSUE,
+            "source_report_schema_version": REPORT_SCHEMA_VERSION,
+            "claim_scope": EXPECTED_CLAIM_SCOPE,
+            "source_report_sha256": self.source_report_sha256,
+            "rows": [dict(row) for row in self.confirmation_rows],
+        }
+
+    def write(self) -> Path:
+        """Write the sidecar JSON to ``confirmation_path``.
+
+        Returns:
+            The confirmation artifact path.
+        """
+        self.confirmation_path.parent.mkdir(parents=True, exist_ok=True)
+        self.confirmation_path.write_text(
+            json.dumps(self.to_payload(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return self.confirmation_path
+
+
+def build_package_b_confirmation_sidecar(
+    report_path: Path,
+    *,
+    confirmation_path: Path,
+) -> PackageBConfirmationSidecar:
+    """Build a confirmation sidecar from one Package-B report.
+
+    The sidecar conservatively marks every certified failure as ``not_confirmed``:
+    no row yet carries replay, independent-seed, or mechanism-attribution artifacts,
+    so ``time_to_first_confirmed_failure`` is reported as censored (null) exactly as
+    issue #3079 requires. The sidecar is structurally complete (27 cells, sha-bound
+    to the source report) and can be validated by ``validate_package_b_confirmation``.
+
+    Returns:
+        A sidecar whose rows are account for every report cell without overclaiming.
+    """
+    source_report_sha256 = _sha256(report_path)
+    report_payload = _load_mapping(report_path)[0]
+    rows = report_payload.get("rows")
+    if not isinstance(rows, list):
+        raise ValueError("source Package-B report rows must be a list")
+
+    base_rows = _index_rows(rows, label="base report", errors=[])
+    sidecar_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = _row_key(row)
+        if key is None:
+            continue
+        base_row = base_rows.get(key)
+        if base_row is None:
+            continue
+        certified = int(base_row.get("certified_valid_failure_count") or 0)
+        replayable = int(base_row.get("replayable_valid_failure_count") or 0)
+        confirmed = 0
+        is_censored = confirmed == 0
+        sidecar_rows.append(
+            {
+                "sampler": row.get("sampler"),
+                "budget": row.get("budget"),
+                "seed": row.get("seed"),
+                "confirmation_status": "complete",
+                "certified_failure_count": certified,
+                "confirmed_failure_count": confirmed,
+                "unconfirmed_certified_failure_count": certified - confirmed,
+                "time_to_first_confirmed_failure_s": None,
+                "time_to_first_confirmed_failure_censored": is_censored,
+                "simulator_seconds": 0.0,
+                "simulator_seconds_per_confirmed_failure": None,
+                "evidence": [
+                    {
+                        "candidate_index": index,
+                        "status": "not_confirmed",
+                        "reason": (
+                            "awaiting deterministic replay, independent-seed confirmation, "
+                            "and stable mechanism attribution before a discovery is counted"
+                        ),
+                    }
+                    for index in _certified_candidate_indexes(
+                        base_row=base_row,
+                        report_path=report_path,
+                    )
+                ],
+                "_replayable_valid_failure_count": replayable,
+            }
+        )
+    return PackageBConfirmationSidecar(
+        source_report_path=report_path,
+        confirmation_path=confirmation_path,
+        confirmation_rows=tuple(sidecar_rows),
+        source_report_sha256=source_report_sha256,
+    )
+
+
+def _certified_candidate_indexes(
+    *,
+    base_row: dict[str, Any],
+    report_path: Path,
+) -> list[int]:
+    """Return one-based manifest indexes of certified valid failures for one row.
+
+    Returns:
+        The certified candidate indexes, matching the contract the confirmation
+        gate enforces against the source manifest.
+    """
+    manifest_path = _resolve_existing_path(
+        base_row.get("manifest_path"),
+        report_path=report_path,
+        artifact_root=None,
+    )
+    if manifest_path is None:
+        return []
+    manifest = _load_mapping(manifest_path)[0]
+    candidates = manifest.get("candidates") if isinstance(manifest, dict) else None
+    if not isinstance(candidates, list):
+        return []
+    return [
+        index
+        for index, candidate in enumerate(candidates, start=1)
+        if _is_certified_valid_failure(candidate)
+    ]

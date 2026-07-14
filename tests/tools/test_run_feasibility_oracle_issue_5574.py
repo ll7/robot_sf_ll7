@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import pytest
 
 from scripts.tools import run_feasibility_oracle_issue_5574 as cli
 
-if TYPE_CHECKING:
-    from pathlib import Path
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_resolve_envelope_radii_uses_repository_defaults() -> None:
@@ -42,7 +41,12 @@ def test_main_writes_report_without_importing_a_campaign_runner(
     monkeypatch.setattr(
         sys,
         "argv",
-        ["run_feasibility_oracle_issue_5574.py", "--output", str(output)],
+        [
+            "run_feasibility_oracle_issue_5574.py",
+            str(_REPO_ROOT / "configs/scenarios/francis2023.yaml"),
+            "--output",
+            str(output),
+        ],
     )
 
     assert cli.main() == 0

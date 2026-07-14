@@ -361,7 +361,7 @@ def run_envelope_sensitivity_sweep(
     )
 
 
-def build_issue_5574_feasibility_report(
+def build_issue_5574_feasibility_report(  # noqa: C901
     scenario_path: Path,
     *,
     scenario_ids: Sequence[str] = DEFAULT_ISSUE_5574_SCENARIO_IDS,
@@ -396,6 +396,8 @@ def build_issue_5574_feasibility_report(
         ValueError: If selection, envelope ordering, or manifest resolution is invalid.
     """
     source = Path(scenario_path)
+    if not source.is_file():
+        raise FileNotFoundError(f"Scenario manifest file not found: {source}")
     requested_ids = tuple(str(value).strip() for value in scenario_ids)
     if not requested_ids or any(not value for value in requested_ids):
         raise ValueError("scenario_ids must contain at least one non-empty scenario id")
@@ -446,6 +448,7 @@ def build_issue_5574_feasibility_report(
     return {
         "schema_version": ISSUE_5574_REPORT_SCHEMA,
         "issue": "5574",
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
         "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
         "scenario_manifest": source.as_posix(),
         "scenario_ids": list(requested_ids),

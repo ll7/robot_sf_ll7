@@ -159,6 +159,7 @@
     0.5
   ],
   "issue": "5574",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "rollout_algo": "goal",
   "scenario_ids": [
     "francis2023_narrow_doorway",

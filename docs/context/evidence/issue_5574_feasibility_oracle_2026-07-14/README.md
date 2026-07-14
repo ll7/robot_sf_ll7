@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5574, 2026-07-14) - NEEDS-REVIEW -->
+
 # Issue #5574 Feasibility Oracle Evidence
 
 This packet uses the planner-free oracle to decide whether the two named Francis 2023 zero-success candidate cells are infeasible under the nominal collision envelope or merely unresolved. It is diagnostic-only evidence, not a benchmark result.

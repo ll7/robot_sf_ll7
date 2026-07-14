@@ -685,6 +685,17 @@ def test_issue_5574_report_rejects_missing_candidate_cell(tmp_path: Path) -> Non
         )
 
 
+def test_issue_5574_report_rejects_missing_manifest(tmp_path: Path) -> None:
+    """A missing scenario manifest fails closed before report selection."""
+
+    with pytest.raises(FileNotFoundError, match="Scenario manifest file not found"):
+        build_issue_5574_feasibility_report(
+            tmp_path / "missing.yaml",
+            scenario_ids=("present",),
+            envelope_radii_m=(1.0, 0.5),
+        )
+
+
 def test_issue_5574_report_requires_reduced_radius_after_nominal(tmp_path: Path) -> None:
     """The batch contract rejects an ambiguous or non-reduced sensitivity axis."""
     scenario_path = tmp_path / "candidates.yaml"

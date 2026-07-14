@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import ast
+import io
 import re
 import subprocess
 import sys
+import tokenize
 from pathlib import Path
 
 EVIDENCE_PATH_FRAGMENT = "docs/context/evidence"
@@ -28,11 +30,45 @@ def _has_write_mode(call: ast.Call) -> bool:
     return False
 
 
-class _DirectWriterVisitor(ast.NodeVisitor):
-    """Find calls that can write generated output without the shared module."""
+def _expr_mentions_evidence(expr: ast.AST, evidence_names: set[str]) -> bool:
+    """Return whether an expression resolves to an evidence-tree path."""
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        return EVIDENCE_PATH_FRAGMENT in expr.value
+    if isinstance(expr, ast.Name):
+        return expr.id in evidence_names
+    return any(
+        _expr_mentions_evidence(child, evidence_names) for child in ast.iter_child_nodes(expr)
+    )
 
-    def __init__(self) -> None:
+
+def _evidence_path_names(tree: ast.AST) -> set[str]:
+    """Collect simple names assigned from expressions containing the evidence path."""
+    evidence_names: set[str] = set()
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            else:
+                continue
+            if node.value is None or not _expr_mentions_evidence(node.value, evidence_names):
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name) and target.id not in evidence_names:
+                    evidence_names.add(target.id)
+                    changed = True
+    return evidence_names
+
+
+class _DirectWriterVisitor(ast.NodeVisitor):
+    """Find direct writes whose target resolves to the evidence tree."""
+
+    def __init__(self, evidence_names: set[str]) -> None:
         self.violations: list[tuple[int, str]] = []
+        self.evidence_names = evidence_names
 
     def _record(self, node: ast.Call, operation: str) -> None:
         self.violations.append((node.lineno, operation))
@@ -40,33 +76,62 @@ class _DirectWriterVisitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:
         function = node.func
         if isinstance(function, ast.Attribute):
-            if function.attr in WRITE_METHODS:
+            if function.attr in WRITE_METHODS and _expr_mentions_evidence(
+                function.value, self.evidence_names
+            ):
                 self._record(node, f".{function.attr}()")
-            elif function.attr == "open" and _has_write_mode(node):
+            elif (
+                function.attr == "open"
+                and _has_write_mode(node)
+                and _expr_mentions_evidence(function.value, self.evidence_names)
+            ):
                 self._record(node, ".open(..., write mode)")
-            elif function.attr == "DictWriter":
+            elif (
+                function.attr == "DictWriter"
+                and node.args
+                and _expr_mentions_evidence(node.args[0], self.evidence_names)
+            ):
                 self._record(node, "csv.DictWriter()")
-            elif function.attr == "dump" and isinstance(function.value, ast.Name):
-                if function.value.id == "json":
-                    self._record(node, "json.dump()")
-            elif function.attr in {"_write_sha256sums", "write_sha256sums"}:
+            elif (
+                function.attr == "dump"
+                and len(node.args) >= 2
+                and _expr_mentions_evidence(node.args[1], self.evidence_names)
+            ):
+                self._record(node, "json.dump()")
+            elif function.attr in {"_write_sha256sums", "write_sha256sums"} and any(
+                _expr_mentions_evidence(argument, self.evidence_names) for argument in node.args
+            ):
                 if not (isinstance(function.value, ast.Name) and function.value.id == "writers"):
                     self._record(node, f"{function.attr}()")
-        elif isinstance(function, ast.Name) and function.id == "open" and _has_write_mode(node):
+        elif (
+            isinstance(function, ast.Name)
+            and function.id == "open"
+            and _has_write_mode(node)
+            and node.args
+            and _expr_mentions_evidence(node.args[0], self.evidence_names)
+        ):
             self._record(node, "open(..., write mode)")
         self.generic_visit(node)
 
 
 def _exemption(source: str) -> tuple[bool, str | None]:
     """Return whether source has a valid file-level exemption."""
-    for line_number, line in enumerate(source.splitlines(), start=1):
-        match = EXEMPTION_PATTERN.search(line)
-        if match is None:
-            continue
-        reason = match.group(1).strip()
-        if not reason:
-            return True, f"line {line_number} has an empty evidence-writer exemption reason"
-        return True, None
+    try:
+        tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+        comment_tokens = (token for token in tokens if token.type == tokenize.COMMENT)
+        for token in comment_tokens:
+            if token.start[1] != 0:
+                continue
+            match = EXEMPTION_PATTERN.match(token.string)
+            if match is None:
+                continue
+            reason = match.group(1).strip()
+            if not reason:
+                return True, f"line {token.start[0]} has an empty evidence-writer exemption reason"
+            return True, None
+    except (IndentationError, tokenize.TokenError):
+        # Let ast.parse below report malformed source as a fail-closed blocker.
+        return False, None
     return False, None
 
 
@@ -85,15 +150,12 @@ def check_file(path: str | Path) -> list[str]:
         return [f"BLOCKER: evidence-writer exemption in '{source_path}' {exemption_error}"]
     if has_exemption:
         return []
-    if EVIDENCE_PATH_FRAGMENT not in source:
-        return []
-
     try:
         tree = ast.parse(source, filename=str(source_path))
     except SyntaxError as exc:
         return [f"BLOCKER: cannot parse changed Python file '{source_path}': {exc}"]
 
-    visitor = _DirectWriterVisitor()
+    visitor = _DirectWriterVisitor(_evidence_path_names(tree))
     visitor.visit(tree)
     return [
         f"BLOCKER: '{source_path}:{line}' directly uses {operation} in a file that writes "

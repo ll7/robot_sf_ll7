@@ -49,6 +49,55 @@ write_json(OUTPUT / 'report.json', {'status': 'diagnostic-only'})
     assert check_file(path) == []
 
 
+def test_exemption_text_in_string_does_not_bypass_guard(tmp_path: Path) -> None:
+    """A string containing the exemption text is not a file-level comment."""
+    path = _write_fixture(
+        tmp_path,
+        """
+EXEMPTION_TEXT = "# evidence-writer-exempt: not a comment"
+from pathlib import Path
+OUTPUT = Path("docs/context/evidence/example")
+OUTPUT.joinpath("report.md").write_text("# report", encoding="utf-8")
+""",
+    )
+    blockers = check_file(path)
+    assert len(blockers) == 1
+    assert "write_text" in blockers[0]
+
+
+def test_indented_exemption_comment_does_not_bypass_guard(tmp_path: Path) -> None:
+    """An indented exemption comment is not a file-level exemption."""
+    path = _write_fixture(
+        tmp_path,
+        """
+if True:
+    # evidence-writer-exempt: not file-level
+    pass
+from pathlib import Path
+OUTPUT = Path("docs/context/evidence/example")
+OUTPUT.joinpath("report.md").write_text("# report", encoding="utf-8")
+""",
+    )
+    blockers = check_file(path)
+    assert len(blockers) == 1
+    assert "write_text" in blockers[0]
+
+
+def test_evidence_path_read_does_not_classify_tmp_writes(tmp_path: Path) -> None:
+    """Reading an evidence fixture does not make unrelated temporary writes blockers."""
+    path = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+FIXTURE = Path("docs/context/evidence/example/report.json")
+manifest_path = tmp_path / "manifest.json"
+manifest_path.write_text("{}", encoding="utf-8")
+FIXTURE.read_text(encoding="utf-8")
+""",
+    )
+    assert check_file(path) == []
+
+
 def test_handwritten_evidence_markdown_is_ignored(tmp_path: Path) -> None:
     """The Python-only guard does not classify a handwritten Markdown file."""
     path = tmp_path / "docs/context/evidence/README.md"

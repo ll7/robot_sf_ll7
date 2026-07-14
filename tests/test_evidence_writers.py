@@ -153,6 +153,15 @@ class TestWriteText:
         else:
             raise AssertionError("unmarked evidence text should be rejected")
 
+    def test_rejects_empty_unmarked_text_with_value_error(self, tmp_path: Path) -> None:
+        path = tmp_path / "README.md"
+        try:
+            write_text(path, "")
+        except ValueError as exc:
+            assert "AI-GENERATED" in str(exc)
+        else:
+            raise AssertionError("empty unmarked evidence text should be rejected")
+
     def test_preserves_existing_pinned_marker(self, tmp_path: Path) -> None:
         path = tmp_path / "README.md"
         content = "<!-- AI-GENERATED (robot_sf#4921, 2026-07-14) - NEEDS-REVIEW -->\n# Report\n"

@@ -137,11 +137,15 @@ def write_text(
         marker = review_marker(issue_ref, marker_date=marker_date)
         if not content.startswith(marker):
             content = f"{marker}\n{content}"
-    elif not (
-        content.startswith(("<!-- AI-GENERATED", "# AI-GENERATED"))
-        and "NEEDS-REVIEW" in content.splitlines()[0]
-    ):
-        raise ValueError(f"generated evidence text must start with an AI-GENERATED marker: {path}")
+    else:
+        first_line = content.splitlines()[0] if content else ""
+        if not (
+            content.startswith(("<!-- AI-GENERATED", "# AI-GENERATED"))
+            and "NEEDS-REVIEW" in first_line
+        ):
+            raise ValueError(
+                f"generated evidence text must start with an AI-GENERATED marker: {path}"
+            )
     path.write_text(content, encoding="utf-8")
 
 

@@ -28,6 +28,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.benchmark.snqi_scalarization_sensitivity import format_pareto_svg
 
@@ -51,6 +53,7 @@ def _load_checker():
     return module
 
 
+@pytest.mark.base_sensitive
 def test_pinned_svg_regenerates_identically_from_pinned_report() -> None:
     """The tracked SVG is exactly what the current renderer produces from its report.
 
@@ -67,6 +70,7 @@ def test_pinned_svg_regenerates_identically_from_pinned_report() -> None:
     )
 
 
+@pytest.mark.base_sensitive
 def test_pinned_svg_hash_matches_packet_checker_constant() -> None:
     """The pinned SVG bytes match the checksum the packet checker enforces.
 
@@ -79,6 +83,7 @@ def test_pinned_svg_hash_matches_packet_checker_constant() -> None:
     assert sha256_file(SVG_PATH) == expected
 
 
+@pytest.mark.base_sensitive
 def test_pinned_svg_keeps_both_pareto_front_points_identifiable() -> None:
     """Acceptance item 4: the two Pareto-front points stay identifiable.
 

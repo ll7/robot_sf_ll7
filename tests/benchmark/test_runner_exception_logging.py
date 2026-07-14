@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from loguru import logger
 
 from robot_sf.benchmark import runner
 
 
+@pytest.mark.base_sensitive
 def test_run_batch_sequential_worker_failure_logs_warning(tmp_path, monkeypatch) -> None:
     """Worker exceptions in the serial batch path should be logged before being summarized."""
     captured: list = []

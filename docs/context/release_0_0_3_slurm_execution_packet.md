@@ -1,3 +1,6 @@
+> Note: all `output/benchmarks/splits/...` paths in this packet are generated at plan time
+> by `run_split_camera_ready_campaign.py plan` (gitignored), not tracked configs.
+
 # Release 0.0.3 (h600/s30 extended, 14 arms) — SLURM execution packet + local fallback
 
 Date: 2026-07-13. Worktree: `rebase-0_0_3-campaign` at commit `00c5a2410`.
@@ -60,11 +63,11 @@ Commands actually run in this worktree:
 ```bash
 uv run python scripts/tools/split_campaign_config_by_planner.py \
   --config configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended.yaml \
-  --out-dir configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended
-# -> Wrote 14 split config(s): configs/benchmarks/splits/.../split_manifest.json
+  --out-dir output/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended
+# -> Wrote 14 split config(s): output/benchmarks/splits/.../split_manifest.json
 
 uv run python scripts/tools/run_split_camera_ready_campaign.py plan \
-  --split-manifest configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json \
+  --split-manifest output/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/split_manifest.json \
   --output-root output/benchmarks/release_v0_0_3_arms \
   --campaign-prefix release_0_0_3_h600_s30 \
   --packet output/benchmarks/release_v0_0_3_split_plan/execution_packet.json
@@ -79,7 +82,7 @@ deterministically.
 
 | Artifact | Path |
 |---|---|
-| Per-arm child configs + manifest | `configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/` (14 `*.yaml` + `split_manifest.json`) |
+| Per-arm child configs + manifest | `output/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/` (14 `*.yaml` + `split_manifest.json`) |
 | Execution packet (the plan output) | `output/benchmarks/release_v0_0_3_split_plan/execution_packet.json` |
 | Per-arm campaign roots (created when arms run) | `output/benchmarks/release_v0_0_3_arms/release_0_0_3_h600_s30__arm_<key>/` |
 
@@ -95,7 +98,7 @@ guarded_ppo, predictive_mppi, risk_dwa
 
 ```bash
 uv run python scripts/tools/run_camera_ready_benchmark.py \
-  --config configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_<key>.yaml \
+  --config output/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_<key>.yaml \
   --output-root output/benchmarks/release_v0_0_3_arms \
   --campaign-id release_0_0_3_h600_s30__arm_<key> \
   --mode run --skip-publication-bundle
@@ -426,7 +429,7 @@ alone consuming most of that window.
   and `robot_sf/planner/predictive_foresight.py:46` passes that string straight to the foresight
   model with no CPU fallback branch. This machine is Darwin/Apple Silicon with no CUDA device.
   **Before running the `ppo` arm locally, its child config
-  (`configs/benchmarks/splits/.../paper_experiment_matrix_v2_h600_s30_extended__arm_ppo.yaml`)
+  (`output/benchmarks/splits/.../paper_experiment_matrix_v2_h600_s30_extended__arm_ppo.yaml`)
   needs `predictive_foresight_device` overridden to `cpu`** (and the child's sha256 in
   `split_manifest.json` recomputed, then `plan` re-run) — otherwise the arm fails at
   model-load time, not at OOM time.
@@ -458,7 +461,7 @@ for key in prediction_planner predictive_mppi ppo goal social_force orca socnav_
            hybrid_rule_v3_fast_progress_static_escape_continuous guarded_ppo risk_dwa; do
   KMP_DUPLICATE_LIB_OK=TRUE OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   uv run python scripts/tools/run_camera_ready_benchmark.py \
-    --config "configs/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_${key}.yaml" \
+    --config "output/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_${key}.yaml" \
     --output-root output/benchmarks/release_v0_0_3_arms \
     --campaign-id "release_0_0_3_h600_s30__arm_${key}" \
     --mode run --skip-publication-bundle \

@@ -5,7 +5,7 @@ Plain-language summary: this bundle promotes raw fidelity-campaign episode rows 
 
 - Schema: `control-action-latency-sweep-evidence-promotion.v2`
 - Git head: `9e69b82e411a9efba3dc125593fd2c550cf15589`
-- Raw rows: `output/fidelity_latency_raw/episode_rows.jsonl`
+- Raw rows: `ignored_output/fidelity_latency_raw/episode_rows.jsonl` (non-durable local input)
 - Preflight decision: `ready`
 - Evidence tier: `targeted smoke`
 - Result classification: `diagnostic-only`

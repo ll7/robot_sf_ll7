@@ -103,6 +103,15 @@ class LatencyEvidenceError(RobotSfError, RuntimeError):
     """Raised when raw rows are not promotable as latency-sweep evidence (fail closed)."""
 
 
+def _persisted_raw_rows_path(raw_rows_path: str | Path) -> str:
+    """Return a non-durable raw-row reference suitable for tracked evidence."""
+    normalized = str(raw_rows_path).replace("\\", "/")
+    output_marker = "output/"
+    if output_marker in normalized:
+        return f"ignored_output/{normalized.split(output_marker, maxsplit=1)[1]}"
+    return normalized
+
+
 @dataclass(frozen=True)
 class LatencyCell:
     """One classified control-action-latency episode row.
@@ -707,7 +716,9 @@ def build_latency_evidence(
         config_path: Repo-relative config path recorded for provenance.
         git_head: Git head recorded for provenance.
         date: ISO date string recorded for provenance.
-        raw_rows_path: Repo-relative path of the source raw row file.
+        raw_rows_path: Path of the source raw row file. When it is under the
+            ignored ``output/`` tree, the persisted packet records the explicit
+            non-durable ``ignored_output/`` reference instead.
         fixed_scope_plan: Optional serialized fixed-scope run plan. When supplied,
             exact scenario/planner-group/variant/seed coverage is required before
             the packet can be promoted.
@@ -760,7 +771,7 @@ def build_latency_evidence(
         "date": date,
         "git_head": git_head,
         "config_path": config_path,
-        "raw_rows_path": raw_rows_path,
+        "raw_rows_path": _persisted_raw_rows_path(raw_rows_path),
         "claim_boundary": CLAIM_BOUNDARY,
         "evidence_tier": EVIDENCE_TIER,
         "result_classification": RESULT_CLASSIFICATION,

@@ -124,6 +124,7 @@ def test_promoter_accepts_cheap_lane_rows(cheap_lane_runner: object, tmp_path: P
         raw_rows_path="output/fidelity_latency_raw/episode_rows.jsonl",
     )
     assert packet["latency_coverage"]["coverage_complete"] is True
+    assert packet["raw_rows_path"] == "ignored_output/fidelity_latency_raw/episode_rows.jsonl"
     assert packet["scope"]["excluded_row_count"] == 0
     assert packet["scope"]["result_row_count"] == len(rows)
     written = promoter.write_latency_evidence(packet, evidence_dir)

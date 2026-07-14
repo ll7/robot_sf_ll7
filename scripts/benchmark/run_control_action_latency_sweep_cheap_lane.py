@@ -104,7 +104,9 @@ def run_sweep(
     if not scenarios:
         raise ValueError(f"scenario set produced no scenarios: {scenario_path}")
     planner_names = list(planner_names)
-    unsupported = sorted({planner for planner in planner_names if planner not in NATIVE_CPU_PLANNERS})
+    unsupported = sorted(
+        {planner for planner in planner_names if planner not in NATIVE_CPU_PLANNERS}
+    )
     if unsupported:
         raise ValueError(
             "unsupported planner request for cheap-lane CPU slice: "

@@ -557,7 +557,7 @@ def test_write_latency_evidence_writes_bundle(tmp_path: Path) -> None:
     summary = json.loads((tmp_path / "ev" / "summary.json").read_text(encoding="utf-8"))
     assert summary == packet
     with (tmp_path / "ev" / "per_cell_metrics.csv").open(encoding="utf-8") as handle:
-        records = list(csv.DictReader(handle))
+        records = list(csv.DictReader(line for line in handle if not line.startswith("#")))
     assert len(records) == 6
     assert {record["classification"] for record in records} == {"result"}
     readme = (tmp_path / "ev" / "README.md").read_text(encoding="utf-8")

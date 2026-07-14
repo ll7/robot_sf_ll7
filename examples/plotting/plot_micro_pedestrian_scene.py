@@ -130,8 +130,8 @@ class _FancyArrowLegendHandler(HandlerPatch):
         trans,
     ):
         arrow = FancyArrow(
-            0,
-            0.5 * height,
+            -xdescent,
+            -ydescent + 0.5 * height,
             width,
             0,
             width=0.10 * height,

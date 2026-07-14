@@ -65,3 +65,21 @@ resolves the one-environment worker mode to `DummyVecEnv` before constructing a 
 Multi-environment tests require complete LiDAR observations to be bit-identical to scalar threaded
 execution. These checks establish compatibility and rollout integration only; the standard-config
 throughput comparison required by issue #4981 remains separate.
+
+## Issue #4981 throughput acceptance
+
+The tracked vectorized-environment (VecEnv) acceptance profile
+`configs/training/lidar/issue_4981_vecenv_throughput_acceptance.yaml` fixes the standard workload,
+environment count, worker modes, seeds, warmup, measurement length, repetitions, and strict `>3x`
+decision rule for the in-process `threaded` candidates. `subproc` remains a measured comparator,
+not an acceptance candidate. Preview the exact local CPU command without launching the measurement:
+
+```bash
+uv run python scripts/validation/run_issue_4981_vecenv_throughput_acceptance.py --dry-run
+```
+
+Use `--run` only for the reviewed acceptance measurement. The wrapper fails closed unless the
+tracked tree is clean, the single-environment fallback and LiDAR-equivalence tests pass, and the
+comparator JSON exactly matches the profile and current commit. Its `met`, `not_met`, and `blocked`
+states apply only to host-specific rollout throughput; they are not training-quality, navigation
+benchmark, cross-host, GPU, or paper/dissertation evidence.

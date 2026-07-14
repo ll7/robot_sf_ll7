@@ -776,7 +776,7 @@ def _create_robot_policy(  # noqa: C901, PLR0915
             metadata["status"] = "policy_step_error_fallback"
             metadata["fallback_reason"] = "policy_step_error"
             timeout_metadata["last_error"] = str(exc)
-            logger.warning("Planner step failed unexpectedly: %s", exc)
+            logger.opt(exception=True).warning("Planner step failed unexpectedly: {}", exc)
             action = {"vx": 0.0, "vy": 0.0}
 
         # Convert action to velocity (handle both action spaces)

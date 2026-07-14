@@ -24,6 +24,7 @@ from __future__ import annotations
 from types import MethodType
 from typing import TYPE_CHECKING
 
+import numpy as np
 from loguru import logger
 from python_motion_planning.common import TYPES
 from python_motion_planning.path_planner import ThetaStar
@@ -37,6 +38,26 @@ if TYPE_CHECKING:
     from python_motion_planning.common import Grid
 
 
+if njit:
+
+    @njit(cache=True)
+    def _contains_free(free_vals, value) -> bool:
+        """Return whether a typed array of free cell values contains value."""
+        for i in range(free_vals.shape[0]):
+            if free_vals[i] == value:
+                return True
+        return False
+
+else:
+
+    def _contains_free(free_vals, value) -> bool:
+        """Return whether a typed int64 array of free cell values contains value."""
+        for i in range(free_vals.shape[0]):
+            if free_vals[i] == value:
+                return True
+        return False
+
+
 def _python_los_blocks(type_map, x0, y0, x1, y1, free_vals) -> bool:
     """Pure-Python Bresenham line traversal.
 
@@ -46,7 +67,7 @@ def _python_los_blocks(type_map, x0, y0, x1, y1, free_vals) -> bool:
         y0: Start Y index.
         x1: End X index.
         y1: End Y index.
-        free_vals: Set of cell values considered traversable.
+        free_vals: Int64 array of cell values considered traversable.
 
     Returns:
         True when an obstacle is encountered along the segment, else False.
@@ -57,9 +78,9 @@ def _python_los_blocks(type_map, x0, y0, x1, y1, free_vals) -> bool:
     if not (0 <= x1 < width and 0 <= y1 < height):
         return True
 
-    if type_map[x0, y0] not in free_vals:
+    if not _contains_free(free_vals, type_map[x0, y0]):
         return True
-    if type_map[x1, y1] not in free_vals:
+    if not _contains_free(free_vals, type_map[x1, y1]):
         return True
 
     dx = abs(x1 - x0)
@@ -69,7 +90,7 @@ def _python_los_blocks(type_map, x0, y0, x1, y1, free_vals) -> bool:
     err = dx - dy
 
     while True:
-        if type_map[x0, y0] not in free_vals:
+        if not _contains_free(free_vals, type_map[x0, y0]):
             return True
         if x0 == x1 and y0 == y1:
             return False
@@ -96,10 +117,10 @@ if njit:
             return True
 
         v0 = type_map[x0, y0]
-        if v0 not in free_vals:
+        if not _contains_free(free_vals, v0):
             return True
         v1 = type_map[x1, y1]
-        if v1 not in free_vals:
+        if not _contains_free(free_vals, v1):
             return True
 
         dx = abs(x1 - x0)
@@ -110,7 +131,7 @@ if njit:
 
         while True:
             v = type_map[x0, y0]
-            if v not in free_vals:
+            if not _contains_free(free_vals, v):
                 return True
             if x0 == x1 and y0 == y1:
                 return False
@@ -128,7 +149,7 @@ def _bind_fast_in_collision(grid: Grid) -> None:
 
     The bound method uses either the Numba-accelerated LOS or a Python fallback.
     """
-    free_vals = {TYPES.FREE, TYPES.START, TYPES.GOAL}
+    free_vals = np.array([TYPES.FREE, TYPES.START, TYPES.GOAL], dtype=np.int64)
     if njit:
 
         def fast_in_collision(self, p1, p2):

@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from gymnasium import spaces as gym_spaces
 
+from robot_sf.baselines.interface import Observation
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 
 
@@ -130,8 +131,40 @@ def test_ppo_dict_obs_keeps_nested_env_obs_compatible_with_flat_model_space() ->
         "goal_current",
         "pedestrians_positions",
     }
+
+
+def test_ppo_dict_obs_converts_legacy_runner_observation() -> None:
+    """Dict PPO must convert the exact-repeat runner's structured Observation input."""
+    model = _FakePPOModel(
+        gym_spaces.Dict(
+            {
+                "robot_position": _box((2,)),
+                "robot_speed": _box((2,)),
+                "goal_current": _box((2,)),
+                "goal_next": _box((2,)),
+                "pedestrians_positions": _box((2, 2)),
+                "pedestrians_velocities": _box((2, 2)),
+                "pedestrians_count": _box((1,)),
+                "pedestrians_radius": _box((1,)),
+                "sim_timestep": _box((1,)),
+            }
+        )
+    )
+    planner = _planner_with_model(model)
+    observation = Observation(
+        dt=0.1,
+        robot={"position": [1.0, 2.0], "velocity": [0.1, 0.2], "goal": [4.0, 5.0]},
+        agents=[{"position": [2.0, 3.0], "velocity": [0.0, 0.1]}],
+    )
+
+    action = planner.step(observation)
+
+    assert action == {"vx": pytest.approx(0.4), "vy": pytest.approx(-0.2)}
+    assert model.last_obs is not None
     np.testing.assert_allclose(model.last_obs["robot_position"], [1.0, 2.0])
+    np.testing.assert_allclose(model.last_obs["robot_speed"], [0.1, 0.2])
     np.testing.assert_allclose(model.last_obs["goal_current"], [4.0, 5.0])
+    np.testing.assert_allclose(model.last_obs["pedestrians_positions"], [[2.0, 3.0], [0.0, 0.0]])
 
 
 def test_ppo_dict_obs_backfills_missing_leaf_key_with_space_default() -> None:

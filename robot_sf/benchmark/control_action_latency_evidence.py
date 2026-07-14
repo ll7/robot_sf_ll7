@@ -16,7 +16,8 @@ sim-to-real / paper-facing claim**. It is the deterministic promoter that turns 
 raw campaign row file into a durable compact evidence bundle. It fails closed when
 the raw rows do not cover the required action-latency step set (0, 1, 3) among
 native result rows, so a partial or non-latency run cannot be silently promoted as
-the latency sweep.
+the latency sweep. When given the serialized fixed-scope run plan, it additionally
+requires exact planner-group / variant / seed / scenario coverage before promotion.
 
 Episode row contract (the shape :func:`run_episode` in
 ``scripts/benchmark/run_fidelity_sensitivity_campaign.py`` emits)::
@@ -61,7 +62,9 @@ from robot_sf.benchmark.control_action_latency_preflight import (
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.errors import RobotSfError
 
-PROMOTION_SCHEMA_VERSION = "control-action-latency-sweep-evidence-promotion.v1"
+PROMOTION_SCHEMA_VERSION = "control-action-latency-sweep-evidence-promotion.v2"
+FIXED_SCOPE_COVERAGE_CONTRACT = "control_action_latency_fixed_scope_coverage.v1"
+FIXED_SCOPE_PLAN_SCHEMA_VERSION = "issue_3207_fidelity_fixed_scope_run_plan.v2"
 ISSUE = 5034
 PARENT_ISSUE = 4977
 DEPENDENCY_PR = "#5026"
@@ -84,8 +87,9 @@ CLAIM_BOUNDARY = (
 EXCLUSION_POLICY = (
     "Per the issue #691 benchmark fallback policy, any row whose execution_mode is not "
     "native/adapter or whose availability_status is not available, plus any latency-axis row "
-    "missing action_latency metadata, is recorded as an exclusion and never contributes to the "
-    "result metrics. This keeps fallback/degraded execution out of the latency result set."
+    "missing action_latency metadata or a valid seed, is recorded as an exclusion and never "
+    "contributes to the result metrics. This keeps fallback/degraded execution out of the "
+    "latency result set."
 )
 
 
@@ -97,17 +101,20 @@ class LatencyEvidenceError(RobotSfError, RuntimeError):
 class LatencyCell:
     """One classified control-action-latency episode row.
 
-    ``classification`` is ``result`` for native, latency-metadata-bearing rows and
-    ``exclusion`` for everything else (fallback / degraded / non-native / missing
-    latency metadata). Only ``result`` cells contribute to the aggregate metrics.
+    ``classification`` is ``result`` for native, latency-metadata-bearing rows with
+    a valid seed and ``exclusion`` for everything else (fallback / degraded /
+    non-native / missing latency metadata). Only ``result`` cells contribute to the
+    aggregate metrics.
     """
 
     planner: str
+    planner_group: str | None
     latency_step: int | None
     latency_ms: float | None
     variant: str
+    variant_source_key: str | None
     baseline_variant: bool
-    seed: int
+    seed: int | None
     scenario_id: str
     success_rate: float | None
     collision_rate: float | None
@@ -145,6 +152,11 @@ def _row_availability_status(row: Mapping[str, Any]) -> str:
     """Return a row's availability status, defaulting to ``available`` when unset."""
     status = row.get("availability_status")
     return str(status) if isinstance(status, str) and status else "available"
+
+
+def _row_seed(row: Mapping[str, Any]) -> int | None:
+    """Return the integer seed marker, or ``None`` when it is missing/invalid."""
+    return _coerce_int(row.get("seed"))
 
 
 def _numeric_metric(metrics: Mapping[str, Any], name: str) -> float | None:
@@ -198,11 +210,11 @@ def classify_latency_row(row: Mapping[str, Any]) -> LatencyCell:
     """Classify one episode row as a latency ``result`` cell or an ``exclusion``.
 
     The row must belong to the ``control_action_latency`` axis. A row is a
-    ``result`` only when it carries action-latency metadata, finite required
-    outcome metrics, a native/adapter execution mode, and an available status.
-    Anything else (fallback / degraded / non-native / missing metadata or
-    required metrics) becomes an ``exclusion`` with a precise reason, so malformed
-    or fallback execution can never enter the latency result set.
+    ``result`` only when it carries action-latency metadata, a valid seed, finite
+    required outcome metrics, a native/adapter execution mode, and an available
+    status. Anything else (fallback / degraded / non-native / missing metadata,
+    seed, or required metrics) becomes an ``exclusion`` with a precise reason, so
+    malformed or fallback execution can never enter the latency result set.
 
     Returns:
         The classified :class:`LatencyCell` for the row.
@@ -222,10 +234,13 @@ def classify_latency_row(row: Mapping[str, Any]) -> LatencyCell:
     availability_status = _row_availability_status(row)
     latency_step = _latency_step_from_row(row)
     latency_ms = _latency_ms_from_row(row)
+    seed = _row_seed(row)
 
     reasons: list[str] = []
     if latency_step is None:
         reasons.append("missing_action_latency_metadata")
+    if seed is None:
+        reasons.append("missing_or_invalid_seed")
     if execution_mode not in NATIVE_EXECUTION_MODES:
         reasons.append(f"non_native_execution_mode:{execution_mode}")
     if availability_status not in AVAILABLE_AVAILABILITY_STATUSES:
@@ -236,11 +251,21 @@ def classify_latency_row(row: Mapping[str, Any]) -> LatencyCell:
 
     return LatencyCell(
         planner=str(row.get("planner") or "unknown"),
+        planner_group=(
+            str(row["planner_group"])
+            if isinstance(row.get("planner_group"), str) and row["planner_group"]
+            else None
+        ),
         latency_step=latency_step,
         latency_ms=latency_ms,
         variant=str(row.get("variant") or row.get("variant_source_key") or "unknown"),
+        variant_source_key=(
+            str(row["variant_source_key"])
+            if isinstance(row.get("variant_source_key"), str) and row["variant_source_key"]
+            else None
+        ),
         baseline_variant=bool(row.get("baseline_variant", False)),
-        seed=int(row.get("seed") or 0),
+        seed=seed,
         scenario_id=str(row.get("scenario_id") or "unknown"),
         success_rate=success_rate,
         collision_rate=collision_rate,
@@ -337,6 +362,303 @@ def _required_step_coverage(
     }
 
 
+def _latency_variant_steps(config: Mapping[str, Any]) -> dict[str, int]:
+    """Return the configured action-latency step for every latency variant.
+
+    Returns:
+        Mapping from source variant key to configured action-latency steps.
+    """
+    axes = config.get("axes")
+    if not isinstance(axes, Sequence) or isinstance(axes, (str, bytes)):
+        raise LatencyEvidenceError("fidelity config has no valid axes list")
+    axis = next(
+        (
+            candidate
+            for candidate in axes
+            if isinstance(candidate, Mapping) and candidate.get("key") == AXIS_KEY
+        ),
+        None,
+    )
+    if not isinstance(axis, Mapping):
+        raise LatencyEvidenceError(f"fidelity config has no '{AXIS_KEY}' axis")
+    variants = axis.get("variants")
+    if not isinstance(variants, Sequence) or isinstance(variants, (str, bytes)):
+        raise LatencyEvidenceError(f"'{AXIS_KEY}' axis has no valid variants list")
+
+    result: dict[str, int] = {}
+    for raw_variant in variants:
+        if not isinstance(raw_variant, Mapping):
+            continue
+        key = raw_variant.get("key")
+        patch = raw_variant.get("patch")
+        sim_config = patch.get("sim_config") if isinstance(patch, Mapping) else None
+        step = (
+            _coerce_int(sim_config.get("action_latency_steps"))
+            if isinstance(sim_config, Mapping)
+            else None
+        )
+        if isinstance(key, str) and key and step is not None:
+            result[key] = step
+    if not result:
+        raise LatencyEvidenceError(f"'{AXIS_KEY}' axis has no action-latency variant steps")
+    return result
+
+
+def _scope_key_label(key: tuple[Any, Any, Any, Any]) -> str:
+    """Render one fixed-scope identity key compactly for fail-closed errors.
+
+    Returns:
+        A bounded human-readable identity string.
+    """
+    planner_group, variant, seed, scenario_id = key
+    return (
+        f"planner_group={planner_group!r},variant={variant!r},seed={seed!r},"
+        f"scenario_id={scenario_id!r}"
+    )
+
+
+def _sample_scope_keys(keys: Sequence[tuple[Any, Any, Any, Any]], limit: int = 3) -> str:
+    """Render a bounded sample of fixed-scope identity keys.
+
+    Returns:
+        A compact list containing at most ``limit`` identity strings.
+    """
+    ordered = sorted(
+        keys,
+        key=lambda key: tuple("" if value is None else str(value) for value in key),
+    )
+    sample = [_scope_key_label(key) for key in ordered[:limit]]
+    suffix = "..." if len(ordered) > limit else ""
+    return "[" + "; ".join(sample) + suffix + "]"
+
+
+def _fixed_scope_scenario_ids(plan: Mapping[str, Any]) -> list[str]:
+    """Validate the plan header and return its resolved scenario identifiers.
+
+    Returns:
+        Unique scenario identifiers from a ready fixed-scope plan.
+    """
+    if plan.get("schema_version") != FIXED_SCOPE_PLAN_SCHEMA_VERSION:
+        raise LatencyEvidenceError(
+            "fixed-scope plan schema is unsupported; expected "
+            f"{FIXED_SCOPE_PLAN_SCHEMA_VERSION!r}, got {plan.get('schema_version')!r}"
+        )
+    if plan.get("preflight_ready") is not True:
+        raise LatencyEvidenceError(
+            "fixed-scope plan is not preflight-ready; refusing to validate campaign evidence"
+        )
+
+    resolution = plan.get("scenario_resolution")
+    if not isinstance(resolution, Mapping) or resolution.get("status") != "ready":
+        raise LatencyEvidenceError(
+            "fixed-scope plan has no ready scenario resolution; refusing to validate evidence"
+        )
+    raw_scenario_ids = resolution.get("scenario_ids")
+    if not isinstance(raw_scenario_ids, Sequence) or isinstance(raw_scenario_ids, (str, bytes)):
+        raise LatencyEvidenceError("fixed-scope plan has no scenario_ids list")
+    if not all(isinstance(value, str) and value for value in raw_scenario_ids):
+        raise LatencyEvidenceError("fixed-scope plan scenario_ids must be non-empty strings")
+    scenario_ids = list(raw_scenario_ids)
+    if not scenario_ids or len(set(scenario_ids)) != len(scenario_ids):
+        raise LatencyEvidenceError("fixed-scope plan scenario_ids must be non-empty and unique")
+    return scenario_ids
+
+
+def _fixed_scope_expected_cells(
+    plan: Mapping[str, Any],
+    scenario_ids: Sequence[str],
+    variant_steps: Mapping[str, int],
+) -> tuple[dict[tuple[Any, Any, Any, Any], int], int]:
+    """Expand latency run cells across the plan's resolved scenarios.
+
+    Returns:
+        A map from expected row identity to configured latency steps, plus the
+        number of latency cells per scenario declared by the plan.
+    """
+    run_cells = plan.get("run_cells")
+    if not isinstance(run_cells, Sequence) or isinstance(run_cells, (str, bytes)):
+        raise LatencyEvidenceError("fixed-scope plan has no run_cells list")
+    expected: dict[tuple[Any, Any, Any, Any], int] = {}
+    latency_cell_count = 0
+    for raw_cell in run_cells:
+        if not isinstance(raw_cell, Mapping) or raw_cell.get("axis") != AXIS_KEY:
+            continue
+        latency_cell_count += 1
+        planner_group = raw_cell.get("planner_group")
+        variant = raw_cell.get("variant")
+        seed = _coerce_int(raw_cell.get("seed"))
+        if not isinstance(planner_group, str) or not planner_group:
+            raise LatencyEvidenceError("fixed-scope latency plan cell is missing planner_group")
+        if not isinstance(variant, str) or variant not in variant_steps:
+            raise LatencyEvidenceError(
+                f"fixed-scope latency plan cell names an unknown variant: {variant!r}"
+            )
+        if seed is None:
+            raise LatencyEvidenceError(
+                f"fixed-scope latency plan cell has an invalid seed: {raw_cell.get('seed')!r}"
+            )
+        for scenario_id in scenario_ids:
+            key = (planner_group, variant, seed, scenario_id)
+            if key in expected:
+                raise LatencyEvidenceError(
+                    "fixed-scope latency plan contains duplicate expected cell: "
+                    + _scope_key_label(key)
+                )
+            expected[key] = variant_steps[variant]
+
+    if not expected:
+        raise LatencyEvidenceError(f"fixed-scope plan contains no '{AXIS_KEY}' run cells")
+    return expected, latency_cell_count
+
+
+def _fixed_scope_expectations(
+    plan: Mapping[str, Any], config: Mapping[str, Any]
+) -> tuple[dict[tuple[Any, Any, Any, Any], int], dict[str, Any]]:
+    """Build expected latency-row identities from a serialized fixed-scope plan.
+
+    Returns:
+        Expected identity-to-step mapping and a compact scope summary.
+    """
+    scenario_ids = _fixed_scope_scenario_ids(plan)
+    variant_steps = _latency_variant_steps(config)
+    expected, latency_cell_count = _fixed_scope_expected_cells(plan, scenario_ids, variant_steps)
+    return expected, {
+        "scenario_count": len(scenario_ids),
+        "planner_group_count": len({key[0] for key in expected}),
+        "variant_count": len({key[1] for key in expected}),
+        "seed_count": len({key[2] for key in expected}),
+        "latency_cell_count_per_scenario": latency_cell_count,
+        "expected_row_count": len(expected),
+        "expected_latency_steps": sorted(set(expected.values())),
+    }
+
+
+def _fixed_scope_observed_rows(
+    rows: Sequence[Mapping[str, Any]], cells: Sequence[LatencyCell]
+) -> dict[tuple[Any, Any, Any, Any], list[tuple[LatencyCell, Mapping[str, Any]]]]:
+    """Group classified latency rows by their fixed-scope identity.
+
+    Returns:
+        Observed identity keys mapped to their raw row and classified-cell entries.
+    """
+    latency_rows = [
+        row for row in rows if isinstance(row, Mapping) and str(row.get("axis") or "") == AXIS_KEY
+    ]
+    if len(latency_rows) != len(cells):
+        raise LatencyEvidenceError(
+            "fixed-scope latency coverage input is internally inconsistent: "
+            f"{len(latency_rows)} latency rows produced {len(cells)} classified cells"
+        )
+
+    observed: dict[tuple[Any, Any, Any, Any], list[tuple[LatencyCell, Mapping[str, Any]]]] = {}
+    for row, cell in zip(latency_rows, cells, strict=True):
+        key = (cell.planner_group, cell.variant_source_key, cell.seed, cell.scenario_id)
+        observed.setdefault(key, []).append((cell, row))
+    return observed
+
+
+def _fixed_scope_coverage_failures(
+    expected: Mapping[tuple[Any, Any, Any, Any], int],
+    observed: Mapping[tuple[Any, Any, Any, Any], Sequence[tuple[LatencyCell, Mapping[str, Any]]]],
+) -> dict[str, Any]:
+    """Classify missing, duplicate, malformed, and unexpected fixed-scope rows.
+
+    Returns:
+        Failure buckets plus the set of valid expected identity keys.
+    """
+    valid_keys: set[tuple[Any, Any, Any, Any]] = set()
+    missing_keys: list[tuple[Any, Any, Any, Any]] = []
+    duplicate_keys: list[tuple[Any, Any, Any, Any]] = []
+    invalid_keys: list[tuple[Any, Any, Any, Any]] = []
+    for key, expected_step in expected.items():
+        entries = observed.get(key, [])
+        if not entries:
+            missing_keys.append(key)
+            continue
+        if len(entries) > 1:
+            duplicate_keys.append(key)
+            continue
+        cell, row = entries[0]
+        metadata = row.get("action_latency")
+        if (
+            cell.classification != "result"
+            or not isinstance(metadata, Mapping)
+            or cell.latency_step != expected_step
+        ):
+            invalid_keys.append(key)
+            continue
+        valid_keys.add(key)
+
+    return {
+        "valid_keys": valid_keys,
+        "missing_keys": missing_keys,
+        "duplicate_keys": duplicate_keys,
+        "invalid_keys": invalid_keys,
+        "unexpected_keys": [key for key in observed if key not in expected],
+    }
+
+
+def validate_fixed_scope_latency_coverage(
+    rows: Sequence[Mapping[str, Any]],
+    cells: Sequence[LatencyCell],
+    *,
+    plan: Mapping[str, Any],
+    config: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Require exact fixed-scope identity coverage before promoting real rows.
+
+    The ordinary promoter intentionally accepts compact representative fixtures.
+    Supplying the issue #3207 fixed-scope plan enables the stricter #5034 contract:
+    every expected planner-group/variant/seed/scenario cell must appear exactly once,
+    carry structured action-latency metadata, and classify as a native result. Any
+    missing, duplicate, unexpected, fallback, degraded, or malformed expected cell
+    fails closed before a durable summary can be written.
+
+    Returns:
+        A compact verified coverage summary for the fixed-scope packet.
+    """
+    expected, summary = _fixed_scope_expectations(plan, config)
+    observed = _fixed_scope_observed_rows(rows, cells)
+    failures = _fixed_scope_coverage_failures(expected, observed)
+    missing_keys = failures["missing_keys"]
+    duplicate_keys = failures["duplicate_keys"]
+    invalid_keys = failures["invalid_keys"]
+    unexpected_keys = failures["unexpected_keys"]
+    if missing_keys or duplicate_keys or invalid_keys or unexpected_keys:
+        reasons: list[str] = []
+        if missing_keys:
+            reasons.append(
+                f"missing_expected={len(missing_keys)} sample={_sample_scope_keys(missing_keys)}"
+            )
+        if duplicate_keys:
+            reasons.append(
+                f"duplicate_expected={len(duplicate_keys)} sample={_sample_scope_keys(duplicate_keys)}"
+            )
+        if invalid_keys:
+            reasons.append(
+                f"non_native_or_malformed_expected={len(invalid_keys)} "
+                f"sample={_sample_scope_keys(invalid_keys)}"
+            )
+        if unexpected_keys:
+            reasons.append(
+                f"unexpected_rows={len(unexpected_keys)} sample={_sample_scope_keys(unexpected_keys)}"
+            )
+        raise LatencyEvidenceError(f"{FIXED_SCOPE_COVERAGE_CONTRACT} failed: " + "; ".join(reasons))
+
+    summary.update(
+        {
+            "contract": FIXED_SCOPE_COVERAGE_CONTRACT,
+            "status": "verified",
+            "observed_row_count": len(cells),
+            "observed_result_row_count": len(failures["valid_keys"]),
+            "observed_planner_groups": sorted({key[0] for key in failures["valid_keys"]}),
+            "observed_variant_source_keys": sorted({key[1] for key in failures["valid_keys"]}),
+            "observed_seeds": sorted({key[2] for key in failures["valid_keys"]}),
+        }
+    )
+    return summary
+
+
 def _exclusion_summary(cells: Sequence[LatencyCell]) -> dict[str, Any]:
     """Return a summary of excluded latency rows and their reasons (#691 discipline).
 
@@ -364,6 +686,7 @@ def build_latency_evidence(
     git_head: str,
     date: str | None,
     raw_rows_path: str,
+    fixed_scope_plan: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the durable compact control-action-latency evidence packet.
 
@@ -379,6 +702,9 @@ def build_latency_evidence(
         git_head: Git head recorded for provenance.
         date: ISO date string recorded for provenance.
         raw_rows_path: Repo-relative path of the source raw row file.
+        fixed_scope_plan: Optional serialized fixed-scope run plan. When supplied,
+            exact scenario/planner-group/variant/seed coverage is required before
+            the packet can be promoted.
 
     Returns:
         JSON-serializable evidence packet with per-cell and aggregate latency
@@ -397,6 +723,15 @@ def build_latency_evidence(
     if not cells:
         raise LatencyEvidenceError(
             f"raw rows contain no '{AXIS_KEY}' axis rows; cannot promote as the latency sweep"
+        )
+
+    fixed_scope_coverage = None
+    if fixed_scope_plan is not None:
+        fixed_scope_coverage = validate_fixed_scope_latency_coverage(
+            rows,
+            cells,
+            plan=fixed_scope_plan,
+            config=config,
         )
 
     aggregates = aggregate_latency_metrics(cells)
@@ -426,6 +761,7 @@ def build_latency_evidence(
         "preflight_observed_latency_steps": preflight["observed_latency_steps"],
         "required_result_metrics": list(REQUIRED_RESULT_METRICS),
         "latency_coverage": coverage,
+        "fixed_scope_coverage": fixed_scope_coverage,
         "scope": {
             "latency_row_count": len(cells),
             "result_row_count": len(result_cells),
@@ -482,6 +818,16 @@ def _format_markdown(packet: Mapping[str, Any]) -> str:
         "| Planner | Latency steps | Latency ms | Cells | Success | Collision | Min clearance |",
         "|---|---:|---:|---:|---:|---:|---:|",
     ]
+    fixed_scope_coverage = packet.get("fixed_scope_coverage")
+    if isinstance(fixed_scope_coverage, Mapping):
+        aggregate_header = lines.index("## Aggregate metrics per latency cell")
+        lines[aggregate_header:aggregate_header] = [
+            "- Fixed-scope coverage: "
+            f"`{fixed_scope_coverage['status']}` "
+            f"({fixed_scope_coverage['observed_result_row_count']}/"
+            f"{fixed_scope_coverage['expected_row_count']} expected rows)",
+            "",
+        ]
     for row in packet["aggregate_metrics"]:
         ms = row.get("action_latency_ms")
         min_clearance = row.get("min_clearance")
@@ -535,9 +881,11 @@ def write_latency_evidence(packet: Mapping[str, Any], evidence_dir: str | Path) 
     csv_path = out / "per_cell_metrics.csv"
     fieldnames = [
         "planner",
+        "planner_group",
         "latency_step",
         "latency_ms",
         "variant",
+        "variant_source_key",
         "baseline_variant",
         "seed",
         "scenario_id",
@@ -556,11 +904,13 @@ def write_latency_evidence(packet: Mapping[str, Any], evidence_dir: str | Path) 
             writer.writerow(
                 {
                     "planner": cell["planner"],
+                    "planner_group": cell["planner_group"] or "",
                     "latency_step": cell["latency_step"]
                     if cell["latency_step"] is not None
                     else "",
                     "latency_ms": cell["latency_ms"] if cell["latency_ms"] is not None else "",
                     "variant": cell["variant"],
+                    "variant_source_key": cell["variant_source_key"] or "",
                     "baseline_variant": cell["baseline_variant"],
                     "seed": cell["seed"],
                     "scenario_id": cell["scenario_id"],
@@ -616,6 +966,22 @@ def load_latency_rows(raw_rows_path: str | Path) -> list[dict[str, Any]]:
     return rows
 
 
+def load_fixed_scope_plan(plan_path: str | Path) -> dict[str, Any]:
+    """Load a serialized fixed-scope plan for strict evidence promotion.
+
+    Returns:
+        The decoded fixed-scope plan mapping.
+    """
+    path = Path(plan_path)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise LatencyEvidenceError(f"fixed-scope plan {path} cannot be read: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise LatencyEvidenceError(f"fixed-scope plan {path} must contain a JSON object")
+    return payload
+
+
 def promote_latency_evidence(
     raw_rows_path: str | Path,
     evidence_dir: str | Path,
@@ -624,6 +990,7 @@ def promote_latency_evidence(
     config_path: str,
     git_head: str,
     date: str | None,
+    fixed_scope_plan: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Load raw rows, build the latency evidence packet, and write the bundle.
 
@@ -644,6 +1011,7 @@ def promote_latency_evidence(
         git_head=git_head,
         date=date,
         raw_rows_path=str(raw_rows_path),
+        fixed_scope_plan=fixed_scope_plan,
     )
     written = write_latency_evidence(packet, evidence_dir)
     return {
@@ -655,5 +1023,6 @@ def promote_latency_evidence(
         "result_row_count": packet["scope"]["result_row_count"],
         "excluded_row_count": packet["scope"]["excluded_row_count"],
         "latency_coverage": packet["latency_coverage"],
+        "fixed_scope_coverage": packet["fixed_scope_coverage"],
         "claim_boundary": CLAIM_BOUNDARY,
     }

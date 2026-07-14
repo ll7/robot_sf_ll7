@@ -28,6 +28,12 @@ def test_shipped_packet_is_ready_without_running_campaign() -> None:
     assert result["campaign_execution_allowed"] is False
 
 
+def test_missing_packet_raises_file_not_found(tmp_path: Path) -> None:
+    """A missing packet is a file error, not an apparently invalid packet."""
+    with pytest.raises(FileNotFoundError, match="packet not found"):
+        checker.load_packet(tmp_path / "missing.yaml")
+
+
 def test_rejects_roster_expansion() -> None:
     """Adding a registered planner must not silently change the pre-registered roster."""
     packet = _packet()
@@ -37,6 +43,20 @@ def test_rejects_roster_expansion() -> None:
     assert isinstance(required, list)
     required.append({"planner_id": "goal", "role": "extra"})
     with pytest.raises(checker.PacketError, match="planner roster"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_missing_planner_config_raises_file_not_found() -> None:
+    """A required planner config cannot be treated as a generic packet error."""
+    packet = _packet()
+    roster = packet["planner_roster"]
+    assert isinstance(roster, dict)
+    required = roster["required"]
+    assert isinstance(required, list)
+    ppo = required[1]
+    assert isinstance(ppo, dict)
+    ppo["config_path"] = "configs/algos/missing.yaml"
+    with pytest.raises(FileNotFoundError, match="planner config missing"):
         checker.validate_packet(packet, repo_root=REPO_ROOT)
 
 
@@ -72,6 +92,28 @@ def test_rejects_non_native_success_policy() -> None:
         checker.validate_packet(packet, repo_root=REPO_ROOT)
 
 
+def test_rejects_output_sibling_path() -> None:
+    """A sibling of output/ must not satisfy the disposable-root contract."""
+    packet = _packet()
+    outputs = packet["outputs"]
+    assert isinstance(outputs, dict)
+    outputs["local_root"] = "output_sibling/benchmarks/issue_5302_oracle_gap"
+    with pytest.raises(checker.PacketError, match="outputs.local_root"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_durable_evidence_sibling_path() -> None:
+    """A sibling of docs/context/evidence/ must not satisfy the durable-root contract."""
+    packet = _packet()
+    outputs = packet["outputs"]
+    assert isinstance(outputs, dict)
+    durable = outputs["durable_evidence"]
+    assert isinstance(durable, dict)
+    durable["path"] = "docs/context/evidence_sibling/issue_5302_oracle_gap"
+    with pytest.raises(checker.PacketError, match="durable evidence"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
 def test_rejects_missing_provenance_path() -> None:
     """A missing canonical schema owner blocks readiness."""
     packet = _packet()
@@ -80,5 +122,17 @@ def test_rejects_missing_provenance_path() -> None:
     provenance = inputs["provenance"]
     assert isinstance(provenance, dict)
     provenance["required_paths"].append("missing/canonical_owner.py")
-    with pytest.raises(checker.PacketError, match="provenance path missing"):
+    with pytest.raises(FileNotFoundError, match="provenance path missing"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_directory_as_provenance_path() -> None:
+    """A directory cannot stand in for a required provenance file."""
+    packet = _packet()
+    inputs = packet["input_contract"]
+    assert isinstance(inputs, dict)
+    provenance = inputs["provenance"]
+    assert isinstance(provenance, dict)
+    provenance["required_paths"].append("configs")
+    with pytest.raises(FileNotFoundError, match="provenance path missing"):
         checker.validate_packet(packet, repo_root=REPO_ROOT)

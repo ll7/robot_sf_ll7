@@ -87,13 +87,14 @@ def _walk_for_forbidden_keys(value: Any, path: str = "packet") -> None:
 
 def load_packet(path: Path) -> dict[str, Any]:
     """Load a YAML packet and require a mapping root."""
-    _require(path.is_file(), f"packet not found: {path}")
+    if not path.is_file():
+        raise FileNotFoundError(f"packet not found: {path}")
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     _require(isinstance(payload, dict), "packet must be a YAML mapping")
     return payload
 
 
-def validate_packet(  # noqa: PLR0915
+def validate_packet(  # noqa: C901, PLR0915
     packet: dict[str, Any], *, repo_root: Path | None = None
 ) -> dict[str, Any]:
     """Validate the issue #5302 contract and return a compact summary."""
@@ -135,7 +136,8 @@ def validate_packet(  # noqa: PLR0915
             config_path = _repo_relative_path(
                 row.get("config_path"), f"{row['planner_id']}.config_path"
             )
-            _require((root / config_path).is_file(), f"planner config missing: {config_path}")
+            if not (root / config_path).is_file():
+                raise FileNotFoundError(f"planner config missing: {config_path}")
     gated = roster.get("gated_or_deferred")
     _require(
         isinstance(gated, list)
@@ -185,7 +187,8 @@ def validate_packet(  # noqa: PLR0915
     )
     for path in provenance_paths:
         rel = _repo_relative_path(path, "input_contract.provenance.required_paths")
-        _require((root / rel).exists(), f"provenance path missing: {rel}")
+        if not (root / rel).is_file():
+            raise FileNotFoundError(f"provenance path missing: {rel}")
 
     ceilings = _mapping(packet, "ceilings")
     _require(
@@ -248,7 +251,10 @@ def validate_packet(  # noqa: PLR0915
 
     outputs = _mapping(packet, "outputs")
     local_root = str(outputs.get("local_root", ""))
-    _require(local_root.startswith("output/"), "outputs.local_root must be under output/")
+    _require(
+        PurePosixPath(local_root).parts[:1] == ("output",),
+        "outputs.local_root must be under output/",
+    )
     _require(outputs.get("disposable") is True, "local outputs must be disposable")
     required_outputs = outputs.get("required_paths")
     _require(
@@ -258,7 +264,7 @@ def validate_packet(  # noqa: PLR0915
     durable = _mapping(outputs, "durable_evidence")
     durable_path = _repo_relative_path(durable.get("path"), "outputs.durable_evidence.path")
     _require(
-        durable_path.startswith("docs/context/evidence/"),
+        PurePosixPath(durable_path).parts[:3] == ("docs", "context", "evidence"),
         "durable evidence must use context evidence",
     )
     _require(

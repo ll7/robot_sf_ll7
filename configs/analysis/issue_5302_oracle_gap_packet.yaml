@@ -197,9 +197,8 @@ validation:
     - uv run python scripts/validation/check_issue_5302_oracle_gap_packet.py --json
     - uv run pytest tests/validation/test_check_issue_5302_oracle_gap_packet.py -q
   future_analysis_command: >-
-    uv run python scripts/analysis/analyze_issue_5302_oracle_gap.py
-    --packet configs/analysis/issue_5302_oracle_gap_packet.yaml
-    --input <durable-result-bundle> --output-dir output/benchmarks/issue_5302_oracle_gap
+    Reserved for the native campaign analysis follow-up under parent issue #5302;
+    no executable analysis command is introduced in this contract-only PR.
   campaign_execution_allowed_in_this_pr: false
 
 readiness_decision:

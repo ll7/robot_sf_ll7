@@ -1608,6 +1608,52 @@ def test_sampler_comparison_multi_objective(tmp_path: Path) -> None:
         )
 
 
+def test_issue_5326_objective_comparison_contract(tmp_path: Path) -> None:
+    """Issue #5326 comparison must tag both objectives and write the signed robustness sidecar.
+
+    The signed temporal-logic robustness objective (issue #5304) must produce a
+    per-candidate ``robustness_report.json`` sidecar, while the baseline
+    ``worst_case_snqi`` objective must not. The comparison row must also expose
+    the fallback/degraded exclusion fields so the durable report can fail closed
+    against degraded execution.
+    """
+    config = _config(tmp_path, workers=1)
+
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=("random", "random"),
+        objective_names=("worst_case_snqi", "temporal_robustness"),
+        synthetic=True,
+    )
+
+    by_objective = {(row.objective, row.sampler): row for row in rows}
+    assert ("worst_case_snqi", "random") in by_objective
+    assert ("temporal_robustness", "random") in by_objective
+
+    snqi_row = by_objective[("worst_case_snqi", "random")]
+    signed_row = by_objective[("temporal_robustness", "random")]
+
+    bundle_dir = Path(str(signed_row.best_bundle_path))
+    assert (bundle_dir / "robustness_report.json").is_file()
+    report = json.loads((bundle_dir / "robustness_report.json").read_text(encoding="utf-8"))
+    assert report["schema_version"] == "robustness-report.v1"
+    assert {p["property_name"] for p in report["properties"]} == {
+        "clearance",
+        "ttc",
+        "goal",
+        "progress",
+        "collision",
+    }
+
+    snqi_bundle_dir = Path(str(snqi_row.best_bundle_path))
+    assert not (snqi_bundle_dir / "robustness_report.json").exists()
+
+    for row in rows:
+        assert row.fallback_candidate_count == 0
+        assert row.degraded_candidate_count == 0
+        assert row.held_out_family_status == "not_evaluated_narrow_archive"
+
+
 def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Path) -> None:
     """Search-space validation must fail closed before benchmark evaluation."""
     config = _config(tmp_path)

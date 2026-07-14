@@ -1,6 +1,7 @@
 {
-  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "issue_5596_blind_corner_diagnostic.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "source_commit": "81856f9658fc54ad19bae175901695be0ba94ece",
   "issue": "5596",
   "scenario_id": "francis2023_blind_corner",
   "claim_boundary": "diagnostic_only_not_benchmark_evidence",
@@ -91,19 +92,37 @@
     "results": [
       {
         "envelope_radius_m": 1.0,
-        "feasible": null,
-        "termination_reason": "route_follow_intervention_unavailable",
-        "steps": null,
-        "status": "blocked",
-        "blocker": "canonical map runner lacks waypoint-goal and pose-continuation support; see #5636"
+        "feasible": false,
+        "termination_reason": "collision",
+        "steps": 102,
+        "status": "failed",
+        "blocker": null,
+        "stateful": true,
+        "waypoint_count": 73,
+        "collision_seen": true,
+        "robot_final_position": [
+          23.975908279418945,
+          24.89849281311035
+        ],
+        "route_follow_provenance": "single continuous episode; pose + remaining horizon preserved across certified waypoints (issue #5636)",
+        "claim_boundary": "diagnostic_only_not_benchmark_evidence"
       },
       {
         "envelope_radius_m": 0.5,
-        "feasible": null,
-        "termination_reason": "route_follow_intervention_unavailable",
-        "steps": null,
-        "status": "blocked",
-        "blocker": "canonical map runner lacks waypoint-goal and pose-continuation support; see #5636"
+        "feasible": false,
+        "termination_reason": "collision",
+        "steps": 131,
+        "status": "failed",
+        "blocker": null,
+        "stateful": true,
+        "waypoint_count": 72,
+        "collision_seen": true,
+        "robot_final_position": [
+          24.415822982788086,
+          19.937482833862305
+        ],
+        "route_follow_provenance": "single continuous episode; pose + remaining horizon preserved across certified waypoints (issue #5636)",
+        "claim_boundary": "diagnostic_only_not_benchmark_evidence"
       }
     ]
   },
@@ -125,12 +144,12 @@
   ],
   "mechanism": {
     "explanation_1_scripted_controller_incomplete": false,
-    "explanation_2_route_geometry_or_config_cause": false,
+    "explanation_2_route_geometry_or_config_cause": true,
     "explanation_3_scenario_runtime_drift": null,
-    "supported_explanation": "route_follow_intervention_blocked",
+    "supported_explanation": "route_geometry_or_config_cause",
     "oracle_nominal_feasible": false,
-    "route_follow_intervention_feasible": null,
-    "route_follow_intervention_status": "blocked",
+    "route_follow_intervention_feasible": false,
+    "route_follow_intervention_status": "failed",
     "claim_boundary": "diagnostic_only_not_benchmark_evidence"
   }
 }

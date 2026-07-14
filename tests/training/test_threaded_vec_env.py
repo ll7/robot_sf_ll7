@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from threading import Barrier
 
 import gymnasium as gym
@@ -11,6 +12,7 @@ from gymnasium import spaces
 
 from robot_sf.sensor import range_sensor
 from robot_sf.sensor.range_sensor import LidarScannerSettings, lidar_ray_scan_ranges_only
+from robot_sf.training import threaded_vec_env as threaded_vec_env_module
 from robot_sf.training.threaded_vec_env import ThreadedVecEnv
 
 
@@ -101,6 +103,46 @@ def test_threaded_vec_env_steps_sibling_environments_concurrently() -> None:
         ]
     finally:
         vec_env.close()
+
+
+def test_threaded_vec_env_scopes_gil_releasing_forces_to_plain_mode(monkeypatch) -> None:
+    """Plain threaded steps opt in, while coordinated LiDAR steps retain their own schedule."""
+    context_entries: list[None] = []
+
+    @contextmanager
+    def _record_context():
+        context_entries.append(None)
+        yield
+
+    monkeypatch.setattr(
+        threaded_vec_env_module,
+        "social_force_gil_releasing_context",
+        _record_context,
+    )
+
+    plain_barrier = Barrier(2)
+    plain_env = ThreadedVecEnv(
+        [lambda: _BarrierEnv(plain_barrier), lambda: _BarrierEnv(plain_barrier)]
+    )
+    try:
+        plain_env.reset()
+        plain_env.step(np.zeros((2, 1), dtype=np.float32))
+    finally:
+        plain_env.close()
+    assert len(context_entries) == 2
+
+    context_entries.clear()
+    batch_barrier = Barrier(2)
+    batch_env = ThreadedVecEnv(
+        [lambda: _BarrierEnv(batch_barrier), lambda: _BarrierEnv(batch_barrier)],
+        batch_lidar=True,
+    )
+    try:
+        batch_env.reset()
+        batch_env.step(np.zeros((2, 1), dtype=np.float32))
+    finally:
+        batch_env.close()
+    assert context_entries == []
 
 
 def test_threaded_vec_env_preserves_sb3_terminal_observation_and_auto_reset() -> None:

@@ -1,4 +1,3 @@
-# ruff: noqa: D103
 """Tests for route-conditioned learned local planner adapter."""
 
 from __future__ import annotations

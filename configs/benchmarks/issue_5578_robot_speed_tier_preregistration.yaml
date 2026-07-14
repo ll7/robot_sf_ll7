@@ -1,0 +1,217 @@
+# Issue #5578 robot speed-tier sweep preregistration.
+#
+# Plain-language summary: this freezes a comparable six-scenario speed sweep so
+# future results can test whether the current <=2.0 m/s evidence boundary changes
+# in the 3.0-4.2 m/s micromobility band. This packet is protocol evidence only.
+schema_version: robot_sf.issue_5578_robot_speed_tier_preregistration.v1
+issue: 5578
+governance_issue: 5557
+study_id: issue_5578_robot_speed_tier_sweep_above_2mps_v1
+status: preregistration
+
+claim_boundary: >-
+  Preregistration and CPU contract evidence only. This packet does not run the
+  benchmark campaign, establish planner superiority, promote speed-effect claims,
+  or edit paper/dissertation claims. A future result is not benchmark evidence unless
+  every native row and provenance requirement below passes.
+
+execution_boundary:
+  full_benchmark_campaign_in_this_pr: false
+  compute_submit_authorized: false
+  paper_claim_edits: false
+  metric_semantics_changes: false
+  fallback_or_degraded_success_allowed: false
+
+baseline_protocol:
+  release_reference: configs/benchmarks/paper_experiment_matrix_v1_h600_hybrid_vs_orca_s30.yaml
+  scenario_matrix: configs/scenarios/classic_interactions.yaml
+  seed_set_name: paper_eval_s30
+  horizon_steps: 600
+  dt_seconds: 0.1
+  workers: 1
+
+scenario_contract:
+  selection_rule: >-
+    Fixed middle-band slice: one medium-density interaction row for each of five
+    planner-dependent classic mechanisms plus the fixed station-platform interaction.
+    No scenario may be added, removed, or replaced after the first campaign row.
+  selected_scenarios:
+    - scenario_id: classic_head_on_corridor_medium
+      source_path: configs/scenarios/archetypes/classic_head_on_corridor.yaml
+      mechanism: head_on_corridor
+    - scenario_id: classic_doorway_medium
+      source_path: configs/scenarios/archetypes/classic_doorway.yaml
+      mechanism: doorway
+    - scenario_id: classic_group_crossing_medium
+      source_path: configs/scenarios/archetypes/classic_group_crossing.yaml
+      mechanism: group_crossing
+    - scenario_id: classic_merging_medium
+      source_path: configs/scenarios/archetypes/classic_merging.yaml
+      mechanism: merging
+    - scenario_id: classic_overtaking_medium
+      source_path: configs/scenarios/archetypes/classic_overtaking.yaml
+      mechanism: overtaking
+    - scenario_id: classic_station_platform_medium
+      source_path: configs/scenarios/archetypes/classic_station_platform.yaml
+      mechanism: station_platform
+  scenario_count: 6
+  fixed_pairing:
+    same_scenario_seed_set_across_speed_tiers: true
+    same_scenario_seed_set_across_planners: true
+    scenario_order_frozen: true
+    no_seed_substitution: true
+
+seed_policy:
+  source_path: configs/benchmarks/seed_sets_v1.yaml
+  set_name: paper_eval_s30
+  seeds:
+    - 111
+    - 112
+    - 113
+    - 114
+    - 115
+    - 116
+    - 117
+    - 118
+    - 119
+    - 120
+    - 121
+    - 122
+    - 123
+    - 124
+    - 125
+    - 126
+    - 127
+    - 128
+    - 129
+    - 130
+    - 131
+    - 132
+    - 133
+    - 134
+    - 135
+    - 136
+    - 137
+    - 138
+    - 139
+    - 140
+
+robot_speed_axis:
+  axis_name: robot_speed_cap_m_s
+  baseline_cap_m_s: 2.0
+  tiers:
+    - tier_id: cap_2_0_nominal
+      cap_m_s: 2.0
+      role: nominal_reference
+    - tier_id: cap_3_0
+      cap_m_s: 3.0
+      role: preregistered_extension
+    - tier_id: cap_4_2
+      cap_m_s: 4.2
+      role: preregistered_extension
+  override_contract:
+    runtime_binding: robot_config.drive_speed_cap
+    runtime_reference_config: configs/research/robot_speed_band_v1.yaml
+    robot_only_axis: true
+    pedestrian_speed_axis_fixed: true
+    supported_drive_models:
+      bicycle_drive: max_velocity
+      differential_drive: max_linear_speed
+    braking_authority: carry_drive_model_max_decel_into_each_tier
+
+planner_roster:
+  selection_assumption: >-
+    "Top hybrid" is operationalized as the currently promoted collision-guarded
+    hybrid arm. This is reversible before execution if the roster audit names a
+    different top hybrid; the selected arm and this packet must then be updated
+    together before any rows are produced.
+  arms:
+    - planner_id: scenario_adaptive_hybrid_orca_v2_collision_guard
+      algorithm: hybrid_rule_local_planner
+      role: top_hybrid_candidate
+      config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    - planner_id: ppo
+      algorithm: ppo
+      role: learned_comparator
+      config_path: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
+    - planner_id: orca
+      algorithm: orca
+      role: classical_baseline
+      config_path: null
+    - planner_id: prediction_planner
+      algorithm: prediction_planner
+      role: predictive_comparator
+      config_path: configs/algos/prediction_planner_camera_ready.yaml
+
+inference_contract:
+  resampling_unit: scenario_clustered_hierarchical
+  resampling_unit_rationale: >-
+    Resample scenario clusters first and seeds within scenario second so the fixed
+    suite preserves interaction-mechanism heterogeneity while retaining paired
+    seed-level contrasts.
+  inference_population: fixed_declared_suite
+  estimand: paired_delta
+  estimand_definition: >-
+    For each planner and non-nominal tier, estimate the tier-minus-2.0 m/s change
+    on the same scenario-seed pairs, then summarize across the six declared scenarios.
+  primary_metrics:
+    - success_rate
+    - collision_rate
+    - near_miss_rate
+  typed_collision_breakdown:
+    - ped_collision_rate
+    - obstacle_collision_rate
+    - agent_collision_rate
+    - unclassified_collision_rate
+  multiplicity:
+    method: holm_bonferroni
+    family: planner_by_non_nominal_tier_by_primary_metric
+    tests_per_planner: 6
+  decision_rule:
+    confidence_level: 0.95
+    success_rate_harm_threshold: -0.05
+    collision_rate_harm_threshold: 0.02
+    near_miss_rate_harm_threshold: 0.05
+    labels:
+      materially_harmful: >-
+        Adjusted interval crosses the corresponding preregistered harm threshold
+        in the harmful direction for at least one primary metric.
+      no_material_shift: >-
+        All adjusted intervals remain within the preregistered harm thresholds.
+      inconclusive: >-
+        The native paired result is complete but neither decision condition is met.
+
+result_contract:
+  required_cell_keys:
+    - scenario_id
+    - speed_tier_id
+    - speed_cap_m_s
+    - planner_id
+    - seed
+    - horizon_steps
+    - dt_seconds
+    - execution_mode
+  required_per_tier_summary:
+    - success_rate
+    - collision_rate
+    - near_miss_rate
+    - typed_collision_breakdown
+    - paired_delta_vs_cap_2_0
+  expected_cell_count: 2160
+  expected_speed_scenario_cells: 18
+
+provenance_contract:
+  required:
+    - public_git_sha_and_clean_dirty_state
+    - exact_command_and_environment_manifest
+    - per_episode_jsonl_and_aggregate_summary
+    - typed_collision_breakdown_and_denominator_table
+    - native_execution_mode_for_every_claimed_row
+    - exclusion_table_for_missing_failed_fallback_or_degraded_rows
+  durable_evidence_path: docs/context/evidence/issue_5578_robot_speed_tier_sweep
+  raw_episode_policy: keep_raw_jsonl_videos_logs_out_of_git
+
+validation:
+  checker_command: uv run python scripts/validation/check_issue_5578_robot_speed_tier_preregistration.py --json
+  focused_test_command: uv run pytest -q tests/validation/test_check_issue_5578_robot_speed_tier_preregistration.py
+  campaign_execution_allowed_in_this_pr: false

@@ -791,7 +791,11 @@ def _create_robot_policy(  # noqa: C901, PLR0915
             except (RuntimeError, TypeError, ValueError) as exc:
                 timeout_metadata["worker_errors"] += 1
                 timeout_metadata["last_error"] = str(exc)
-                if retries < retry_budget and isinstance(exc, RuntimeError):
+                if (
+                    retries < retry_budget
+                    and isinstance(exc, RuntimeError)
+                    and step_runner is not None
+                ):
                     retries += 1
                     timeout_metadata["step_retries"] += 1
                     logger.warning(

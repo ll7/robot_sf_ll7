@@ -88,6 +88,14 @@ class _TransientTimeoutStepProcess(_TransientStepProcess):
         return {"vx": 1.0, "vy": 0.0}
 
 
+class _UnavailableStepProcess:
+    """Step-process stand-in that fails during isolation initialization."""
+
+    def __init__(self, _planner: Any, *, timeout_s: float) -> None:
+        del timeout_s
+        raise RuntimeError("planner-step isolation unavailable")
+
+
 class _EOFConn:
     """Pipe stand-in that simulates a worker closing before sending a payload."""
 
@@ -181,6 +189,29 @@ def test_planner_step_error_logs_exception_details(monkeypatch: pytest.MonkeyPat
         and "bad worker observation" in message
         for message in captured
     )
+
+
+def test_orca_isolation_unavailable_does_not_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Initialization failures must fall back without consuming ORCA retries."""
+    monkeypatch.setitem(baselines.BASELINES, "orca", _TransientPlanner)
+    monkeypatch.setattr(runner, "_PlannerStepProcess", _UnavailableStepProcess)
+    policy, metadata = runner._create_robot_policy("orca", None, seed=123)
+
+    velocity = policy(
+        np.array([0.0, 0.0]),
+        np.array([0.0, 0.0]),
+        np.array([1.0, 0.0]),
+        np.empty((0, 2)),
+        0.1,
+    )
+
+    assert velocity == pytest.approx(np.array([0.0, 0.0]))
+    assert metadata["status"] == "policy_step_error_fallback"
+    assert metadata["policy_step_timeout"]["worker_errors"] == 1
+    assert metadata["policy_step_timeout"]["step_retries"] == 0
+    assert metadata["policy_step_timeout"]["fallback_actions"] == 1
 
 
 @pytest.mark.parametrize(

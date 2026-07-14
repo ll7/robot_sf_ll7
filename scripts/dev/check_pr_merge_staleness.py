@@ -251,15 +251,22 @@ def _resolve_repo(explicit: str) -> str | None:
     return repo if repo else None
 
 
-def _fetch_pr_base_sha(pr_number: str) -> tuple[str | None, str | None]:
-    """Return (base_sha, error_message) for a PR."""
-    result = _gh(
-        ["pr", "view", pr_number, "--json", "baseRefOid", "--jq", ".baseRefOid"],
-    )
+def _fetch_pr_base_sha(pr_number: str, *, repo: str) -> tuple[str | None, str | None]:
+    """Return ``(base_sha, error_message)`` using the gh-compatible REST API."""
+    # ``baseRefOid`` is not available in the installed gh 2.45.0 JSON field
+    # set.  The pull-request REST endpoint is stable across supported gh
+    # versions and exposes the same value as ``base.sha``.
+    result = _gh(["api", f"repos/{repo}/pulls/{pr_number}"])
     if result.returncode != 0:
-        return None, result.stderr.strip() or "gh pr view failed"
-    sha = result.stdout.strip()
-    if not sha:
+        return None, result.stderr.strip() or "gh api pull request failed"
+    payload, parse_error = _parse_json(result.stdout)
+    if parse_error or payload is None:
+        return None, parse_error or "gh API response is not an object"
+    base = payload.get("base")
+    if not isinstance(base, dict):
+        return None, "PR base metadata is missing"
+    sha = base.get("sha")
+    if not isinstance(sha, str) or not sha:
         return None, "PR base SHA is empty"
     return sha, None
 
@@ -305,7 +312,7 @@ def main(argv: list[str] | None = None) -> int:
             print("Failed to detect repository.  Pass --repo owner/repo.", file=sys.stderr)
             return 1
 
-        base_sha, err = _fetch_pr_base_sha(pr_number)
+        base_sha, err = _fetch_pr_base_sha(pr_number, repo=repo)
         if base_sha is None:
             _output({"status": "error", "error": err}, as_json=args.json)
             return 1

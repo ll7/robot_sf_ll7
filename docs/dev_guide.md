@@ -362,8 +362,10 @@ prevents merging a PR whose CI ran against a stale main:
 - **Behavior**: when the check detects that main has moved since the PR's CI ran, it returns exit
   code 1 and the merger skips the PR with a staleness report. The precise path reads the completed
   workflow run's recorded `pull_requests[].base.sha`; when that provenance is unavailable, the
-  checker falls back to the PR base-vs-main comparison. The author must `gh pr update-branch` and
-  re-run CI before the PR becomes mergeable again.
+  checker falls back to the PR base-vs-main comparison. The author must update the branch and
+  re-run CI before the PR becomes mergeable again. Because the installed `gh` version does not
+  provide `gh pr update-branch`, use the guarded repository helper after recording the current
+  head SHA: `uv run python scripts/dev/update_pr_branch.py <number> --expected-head-sha <sha>`.
 
 **Why not GitHub merge queue?** The native merge queue is the ideal solution — it re-validates each
 PR against the up-to-date prospective main before merging automatically. We chose the gate-side rule
@@ -395,6 +397,7 @@ scripts/dev/run_ci_local.sh
 scripts/dev/local_signoff.sh --no-setup lint test
 scripts/dev/check_docs_proof_consistency_diff.sh
 scripts/dev/sbatch_use_max_time.sh --partition <partition> --qos <qos> --sbatch-arg --partition=<partition> --sbatch-arg --qos=<qos> SLURM/templates/gpu_training.sl
+uv run python scripts/dev/update_pr_branch.py <pr-number> --expected-head-sha <head-sha>
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests

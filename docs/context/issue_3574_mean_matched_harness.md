@@ -32,6 +32,43 @@ The output uses schema `mean_matched_heterogeneity_harness.v1`. Missing episode
 trace inputs are fail-closed blockers until a future run supplies stable
 per-pedestrian archetype labels and per-step metric values.
 
+## Scenario-Matrix Extension (#5504)
+
+The harness can now ingest the canonical robot_sf.scenario_matrix.v1 YAML format so each
+generated row runs on the map and pedestrian density declared by its own matrix cell.
+Configure this with scenario_matrix plus a required scenario_matrix_derivation block:
+
+```yaml
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+scenario_matrix_derivation:
+  population_size: 12
+  composition: {cautious: 0.25, standard: 0.5, hurried: 0.25}
+  archetypes: { ... }
+```
+
+The derivation block is fixed across matrix cells and must explicitly provide the population size,
+composition, archetype parameters, and any seeds used by the harness. The matrix cell supplies
+map_file and simulation_config.ped_density; neither value is invented or silently inherited.
+Response-law fractions and the two mean-matched population arms remain the only harness treatment
+axes. Legacy inline scenarios configs remain unchanged and omit additive row map fields.
+
+The two-geometry CPU smoke uses
+configs/benchmarks/issue_5504_mean_matched_harness_scenario_matrix_smoke.yaml:
+
+```bash
+uv run python scripts/benchmark/build_heterogeneity_ablation_manifest_issue_3574.py \
+  --config configs/benchmarks/issue_5504_mean_matched_harness_scenario_matrix_smoke.yaml \
+  --output output/issue_5504_mean_matched_harness/manifest.json
+uv run python scripts/benchmark/run_heterogeneous_population_ablation_issue_3574.py \
+  --manifest output/issue_5504_mean_matched_harness/manifest.json \
+  --output output/issue_5504_mean_matched_harness/episode_records.jsonl
+```
+
+Rows from matrix-derived manifests carry their own map_file; the runner fails closed when a
+legacy inline row lacks a map unless the caller supplies the explicit --legacy-map fallback.
+This remains harness smoke/integration proof only: it is not a full benchmark campaign or a
+paper-facing result.
+
 The report command consumes both the manifest and episode records. It writes
 `integration_readiness.json` and exits with status 2 before metric or rank analysis when rows are
 missing, duplicated, unexpected, or lack aligned trace metadata:

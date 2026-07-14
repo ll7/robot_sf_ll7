@@ -56,6 +56,18 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5352_release_0_0_2_cold_start_repro_2026-07-14/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5352_release_0_0_2_cold_start_repro_2026-07-14/checksum_verification_report.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5352_release_0_0_2_cold_start_repro_2026-07-14/cold_start_reproduction_report.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5596_blind_corner_diagnostic/README.md
   status: evidence
   freshness: evidence

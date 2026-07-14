@@ -1,0 +1,78 @@
+{
+  "schema_version": "release_snqi_field_consistency.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "status": "fail",
+  "result_classification": "snqi_field_inconsistent",
+  "evidence_grade": "diagnostic-only",
+  "diagnostic_only": true,
+  "benchmark_promotion": false,
+  "paper_facing": false,
+  "claim_boundary": "Diagnostic-only reconciliation of the per-episode metrics.snqi field against the snqi_diagnostics.json planner_ordering basis, recomputed with the same curvature-aware SNQI scalarizer that produced the stored field. A pass is not release-wide benchmark success, planner-ranking evidence, SNQI contract validity, or a paper claim.",
+  "source": {
+    "bundle_name": "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final_publication_bundle.tar.gz",
+    "bundle_sha256": "3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7",
+    "release_asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/0.0.3/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final_publication_bundle.tar.gz"
+  },
+  "integrity": {
+    "snqi_weights_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2",
+    "snqi_baseline_sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a",
+    "provenance_reconcile": {
+      "weights_version": "snqi_weights_camera_ready_v3",
+      "baseline_version": "snqi_baseline_camera_ready_v3",
+      "weights_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2",
+      "baseline_sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a",
+      "weights_sha256_matches_local": true,
+      "baseline_sha256_matches_local": true
+    }
+  },
+  "counts": {
+    "rows": 20160,
+    "episode_field_present": 20160,
+    "snqi_recomputed_rows": 20160,
+    "arms": 14
+  },
+  "ordering": {
+    "field_planner_ordering": {
+      "scenario_adaptive_hybrid_orca_v1::differential_drive": 1,
+      "hybrid_rule_v3_fast_progress_static_escape::differential_drive": 2,
+      "scenario_adaptive_hybrid_orca_v2_collision_guard::differential_drive": 3,
+      "hybrid_rule_v3_fast_progress_static_escape_continuous::differential_drive": 4,
+      "ppo::differential_drive": 5,
+      "prediction_planner::differential_drive": 6,
+      "goal::differential_drive": 7,
+      "socnav_sampling::differential_drive": 8,
+      "orca::differential_drive": 9,
+      "predictive_mppi::differential_drive": 10,
+      "risk_dwa::differential_drive": 11,
+      "guarded_ppo::differential_drive": 12,
+      "sacadrl::differential_drive": 13,
+      "social_force::differential_drive": 14
+    },
+    "diagnostics_planner_ordering": {
+      "ppo::differential_drive": 1,
+      "hybrid_rule_v3_fast_progress_static_escape_continuous::differential_drive": 2,
+      "hybrid_rule_v3_fast_progress_static_escape::differential_drive": 3,
+      "scenario_adaptive_hybrid_orca_v2_collision_guard::differential_drive": 4,
+      "scenario_adaptive_hybrid_orca_v1::differential_drive": 5,
+      "orca::differential_drive": 6,
+      "socnav_sampling::differential_drive": 7,
+      "prediction_planner::differential_drive": 8,
+      "goal::differential_drive": 9,
+      "sacadrl::differential_drive": 10,
+      "guarded_ppo::differential_drive": 11,
+      "social_force::differential_drive": 12,
+      "predictive_mppi::differential_drive": 13,
+      "risk_dwa::differential_drive": 14
+    }
+  },
+  "violation_count": 1,
+  "violation_counts": {
+    "field_vs_diagnostics_ordering": 1
+  },
+  "violations": [
+    {
+      "code": "field_vs_diagnostics_ordering",
+      "message": "per-episode field arm ordering disagrees with snqi_diagnostics.json planner_ordering"
+    }
+  ]
+}

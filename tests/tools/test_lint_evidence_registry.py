@@ -485,3 +485,69 @@ def test_exclude_codes_and_policy_merge(tmp_path: Path) -> None:
     assert result.returncode == 0
     report = json.loads(result.stdout)
     assert set(report["excluded_codes"]) == {"dangling_commit", "config_missing_at_commit"}
+
+
+def test_synthetic_commit_is_rejected(tmp_path: Path) -> None:
+    """A commit field with a 40-hex SHA plus extra characters is a synthetic commit.
+
+    See issue #5558: synthetic commits like
+    ``d4e17b...-reconciled-5483`` cannot be used with ``git checkout`` and must
+    be replaced with a real SHA or an explicit ``missing:<reason>`` placeholder.
+    """
+    linter = _load_linter()
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-synthetic",
+        commit="d4e17b3581fda0fd78456f4dbe984332534b86b85bab2c2fdd8c41697c81cdb0-reconciled-5483",
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="synthetic.json",
+    )
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert {issue["code"] for issue in report["issues"]} >= {"synthetic_commit"}
+
+
+def test_real_sha1_passes_synthetic_check(tmp_path: Path) -> None:
+    """A valid 40-hex SHA without extra characters must not be flagged as synthetic."""
+    linter = _load_linter()
+    repo, evidence, commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    _write_entry(
+        evidence,
+        campaign_id="campaign-real-sha1",
+        commit=commit,  # real 40-char hex SHA
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="real.json",
+    )
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    synthetic = [i for i in report["issues"] if i["code"] == "synthetic_commit"]
+    assert synthetic == []
+
+
+def test_missing_placeholder_passes_synthetic_check(tmp_path: Path) -> None:
+    """A ``missing:<reason>`` placeholder is not a synthetic commit."""
+    linter = _load_linter()
+    repo, evidence, _commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+    entry = {
+        "campaign_id": "campaign-missing",
+        "config_path": "configs/campaign.yaml",
+        "config_sha256": config_sha256,
+        "commit": "missing:not-yet-created",
+        "artifact_path": "docs/context/evidence/artifact.json",
+        "sha256": artifact_sha256,
+    }
+    path = evidence / "missing.json"
+    path.write_text(json.dumps(entry), encoding="utf-8")
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    synthetic = [i for i in report["issues"] if i["code"] == "synthetic_commit"]
+    assert synthetic == []

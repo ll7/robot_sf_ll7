@@ -7,7 +7,7 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "numpy>=2.4.6",
+    "numpy>=1.26.4",
     "toml>=0.10.2",
     "numba>=0.60.0",
     "scipy>=1.17.1",

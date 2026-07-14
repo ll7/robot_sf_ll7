@@ -30,6 +30,13 @@ def parse_args() -> argparse.Namespace:
         default="output/issue_3574_mean_matched_harness/episode_records.jsonl",
         help="Path to write the resulting episode records JSONL.",
     )
+    parser.add_argument(
+        "--legacy-map",
+        help=(
+            "Explicit fallback map for legacy inline manifests that predate per-row map_file "
+            "fields; matrix-derived rows always use their own map."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -54,11 +61,7 @@ def main() -> int:
 
     records: list[dict[str, Any]] = []
 
-    # Map file is relative to repo root; validated once before the run loop.
-    map_path = REPO_ROOT / "maps/svg_maps/classic_crossing.svg"
-    if not map_path.exists():
-        print(f"Error: Map file not found at {map_path}")
-        return 1
+    legacy_map_path = None if args.legacy_map is None else REPO_ROOT / args.legacy_map
 
     for idx, row in enumerate(manifest_rows):
         scenario_id = row["scenario_id"]
@@ -76,7 +79,7 @@ def main() -> int:
             # trace the readiness gate requires (issue #5397).
             rec = run_manifest_row(
                 row,
-                map_path=map_path,
+                map_path=legacy_map_path,
                 scenario_path=manifest_path,
                 horizon=600,
                 dt=0.1,

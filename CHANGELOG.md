@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5034 fixed-scope scenario resolution.** The fidelity-sensitivity run plan now resolves
+  the configured paper benchmark profile to its actual scenario matrix before launch, records all
+  48 scenario identifiers and the expected 7,344 episode count, and passes that resolved source to
+  the execute path. Missing, malformed, or ambiguous scenario scopes block the plan before any
+  episode runs. This closes a launcher integration gap only: no campaign, fallback/degraded row,
+  safety-metric result, or paper/dissertation claim is produced by this change.
+
 * **Issue #5097 successor-release collision-consumer audit.** A fail-closed, CPU-only verifier now
   checks signed publication bundles without extraction, reconciling typed exact collision events
   with component/total counts, binary success, and the canonical SNQI collision term. The tracked

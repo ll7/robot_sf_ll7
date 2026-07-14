@@ -1,0 +1,14 @@
+# Two-geometry scenario-matrix fixture for the issue #5504 harness smoke.
+#
+# Each expanded cell owns its map_file and simulation_config.ped_density.
+# The mean-matched harness supplies the population derivation separately.
+
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../archetypes/classic_cross_trap.yaml
+  - ../archetypes/classic_head_on_corridor.yaml
+select_scenarios:
+  - classic_cross_trap_low
+  - classic_head_on_corridor_low
+map_search_paths:
+  - ../../../maps/svg_maps

@@ -1,0 +1,161 @@
+# Extended long-horizon release campaign for benchmark release 0.0.3.
+# Derived from paper_experiment_matrix_v1.yaml (canonical 0.0.2 release campaign) with:
+#   - horizon: 100 -> 600  (successor surface per #257/#4364: timeout no longer dominant,
+#     waiting strategies visible; matches the h600 hybrid-roster precedent)
+#   - seed set: eval (3) -> paper_eval_s30 (30)  (discharges the 30-seed successor promise, #4364)
+#   - roster: core 7 + 4 hybrid-rule arms (h600 hybrid-roster winners) + guarded_ppo,
+#     predictive_mppi, risk_dwa (h600 launch-packet candidates). socnav_bench stays excluded
+#     (licensed dataset assets, see benchmark_release_0_0_2_scoped_rationale.md).
+#   - workers: 1 -> 32  (~19.7k episodes at h600 are infeasible single-worker; sized
+#     for one 128-core/1TB EPYC node -- per-episode seeding keeps rows deterministic,
+#     bootstrap seed fixed at 123; parallel-worker precedent:
+#     paper_experiment_matrix_v1_h600_hybrid_roster.yaml)
+#   - snqi_contract enforcement: enforce -> warn  (h600 precedent: component-dominance
+#     profile shifts at long horizon; a contract violation is a reportable finding,
+#     not a reason to abort a release run. Diagnostics are exported either way.)
+name: paper_experiment_matrix_v2_h600_s30_extended
+paper_facing: true
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+
+amv_profile:
+  name: amv-paper-v1
+  contract_version: "1"
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case: [delivery_robot, shared_space_micromobility]
+    context: [sidewalk, shared_space]
+    speed_regime: [walking_speed, scooter_speed]
+    maneuver_type: [overtake, crossing, bottleneck]
+
+seed_policy:
+  mode: seed-set
+  seed_set: paper_eval_s30
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+
+workers: 32
+horizon: 600
+dt: 0.1
+record_forces: true
+resume: true
+# stop_on_failure false: with a fixed --campaign-id the run is resumable, so a single
+# broken arm should surface as a failed row and let the other 13 arms complete; fix,
+# then resume the same campaign id to fill only the gaps.
+stop_on_failure: false
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: true
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: "{release_tag}"
+doi: 10.5281/zenodo.<record-id>
+paper_interpretation_profile: baseline-ready-core
+
+planners:
+  # --- core 7 (identical stanzas to the canonical 0.0.2 release campaign) ---
+  - key: prediction_planner
+    algo: prediction_planner
+    planner_group: experimental
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    benchmark_profile: experimental
+
+  - key: goal
+    algo: goal
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: social_force
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+
+  - key: orca
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fallback
+
+  - key: ppo
+    algo: ppo
+    planner_group: experimental
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true
+
+  - key: socnav_sampling
+    algo: socnav_sampling
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fail-fast
+
+  - key: sacadrl
+    algo: sacadrl
+    planner_group: experimental
+    benchmark_profile: experimental
+    socnav_missing_prereq_policy: fallback
+
+  # --- hybrid-rule arms (stanzas as executed in paper_experiment_matrix_v1_h600_hybrid_roster.yaml) ---
+  - key: scenario_adaptive_hybrid_orca_v1
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+    benchmark_profile: experimental
+
+  - key: scenario_adaptive_hybrid_orca_v2_collision_guard
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    benchmark_profile: experimental
+
+  - key: hybrid_rule_v3_fast_progress_static_escape
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+    benchmark_profile: experimental
+
+  - key: hybrid_rule_v3_fast_progress_static_escape_continuous
+    algo: hybrid_rule_local_planner
+    planner_group: experimental
+    algo_config: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+    benchmark_profile: experimental
+
+  # --- h600 launch-packet candidate arms (stanzas as in their *_compare / certification configs) ---
+  - key: guarded_ppo
+    algo: guarded_ppo
+    planner_group: experimental
+    algo_config: configs/algos/guarded_ppo_camera_ready.yaml
+    benchmark_profile: experimental
+
+  - key: predictive_mppi
+    algo: predictive_mppi
+    planner_group: experimental
+    algo_config: configs/algos/predictive_mppi_camera_ready.yaml
+    benchmark_profile: experimental
+
+  - key: risk_dwa
+    algo: risk_dwa
+    planner_group: experimental
+    algo_config: configs/algos/risk_dwa_camera_ready.yaml
+    benchmark_profile: experimental

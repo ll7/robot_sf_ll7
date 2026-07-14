@@ -646,6 +646,31 @@ class TestCLIIntegration:
             coverage = (output_dir / "trace_predicates_coverage.md").read_text(encoding="utf-8")
             assert "oscillation" in coverage
 
+    def test_cli_file_write_failure_blocks_before_manifest_and_coverage(self) -> None:
+        """A critical export write failure preserves the pending manifest and blocks."""
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = Path(tmpdir) / "input.jsonl"
+            input_path.write_text(
+                json.dumps(_record_with_all_predicates()) + "\n",
+                encoding="utf-8",
+            )
+            output_dir = Path(tmpdir) / "output"
+            output_dir.mkdir()
+            pending_manifest = output_dir / "trace_predicates_manifest.json"
+            pending_manifest.write_text('{"status": "pending"}\n', encoding="utf-8")
+
+            with mock.patch(
+                "scripts.tools.export_trace_predicates.export_to_jsonl",
+                side_effect=OSError("Disk full"),
+            ):
+                exit_code = export_cli_main([str(input_path), "--output-dir", str(output_dir)])
+
+            assert exit_code == 3
+            assert pending_manifest.read_text(encoding="utf-8") == '{"status": "pending"}\n'
+            assert not (output_dir / "trace_predicates_coverage.md").exists()
+
 
 # ---------------------------------------------------------------------------
 # Schema version consistency

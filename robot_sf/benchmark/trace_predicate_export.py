@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -231,7 +232,7 @@ def build_predicate_export_record(
     # Ensure ledger exists
     if not isinstance(ledger, Mapping) or not ledger.get("schema_version"):
         # Build ledger in-place from the record
-        record_copy = dict(record)
+        record_copy = deepcopy(dict(record))
         ledger_result = ensure_event_ledger(record_copy)
         ledger = ledger_result if isinstance(ledger_result, Mapping) else {}
         record = record_copy

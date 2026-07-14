@@ -26,12 +26,14 @@ import argparse
 import json
 import logging
 import sys
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.event_ledger import ensure_event_ledger
 from robot_sf.benchmark.trace_predicate_export import (
     MOTIVATED_PREDICATE_FAMILIES,
+    PredicateExportRecord,
     build_coverage_report,
     build_export_manifest,
     build_predicate_export_batch,
@@ -78,11 +80,51 @@ def _ensure_ledgers(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Ensure every record has an event ledger, building if missing."""
     result: list[dict[str, Any]] = []
     for rec in records:
-        rec_copy = dict(rec)
+        rec_copy = deepcopy(rec)
         rec_copy.setdefault("event_ledger", {})
         ensure_event_ledger(rec_copy)
         result.append(rec_copy)
     return result
+
+
+def _write_export_artifacts(
+    export_records: list[PredicateExportRecord],
+    all_records: list[dict[str, Any]],
+    *,
+    output_dir: Path,
+    predicate_families: list[str] | None,
+) -> None:
+    """Write the export and dependent artifacts as one fail-closed stage."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    jsonl_path = output_dir / "trace_predicates.jsonl"
+    checksum = export_to_jsonl(export_records, jsonl_path)
+    logger.info("Exported %d records to %s (sha256: %s)", len(export_records), jsonl_path, checksum)
+
+    manifest = build_export_manifest(export_records)
+    manifest_path = output_dir / "trace_predicates_manifest.json"
+    write_manifest(manifest, manifest_path)
+    logger.info("Wrote manifest to %s", manifest_path)
+
+    coverage_rows = build_coverage_report(export_records, predicate_families=predicate_families)
+    coverage_path = output_dir / "trace_predicates_coverage.md"
+    write_coverage_report(coverage_rows, coverage_path, total_episodes=len(all_records))
+    logger.info("Wrote coverage report to %s", coverage_path)
+
+
+def _log_export_summary(export_records: list[PredicateExportRecord]) -> None:
+    """Log exported and missing predicate families."""
+    families_with_records = set()
+    families_missing = set()
+    for rec in export_records:
+        families_with_records.update(rec.surrogate_events)
+        families_missing.update(rec.missing_fields)
+
+    logger.info(
+        "Predicate families exported: %s", ", ".join(sorted(families_with_records)) or "(none)"
+    )
+    if families_missing:
+        logger.info("Predicate families missing: %s", ", ".join(sorted(families_missing)))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -156,39 +198,18 @@ def main(argv: list[str] | None = None) -> int:
 
     # Determine output directory
     output_dir = args.output_dir or args.input.parent if args.input.is_file() else args.input
-    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        _write_export_artifacts(
+            export_records,
+            all_records,
+            output_dir=output_dir,
+            predicate_families=args.families,
+        )
+    except OSError as exc:
+        logger.exception("Trace predicate export blocked by file I/O failure: %s", exc)
+        return 3
 
-    # Write JSONL export
-    jsonl_path = output_dir / "trace_predicates.jsonl"
-    checksum = export_to_jsonl(export_records, jsonl_path)
-    logger.info("Exported %d records to %s (sha256: %s)", len(export_records), jsonl_path, checksum)
-
-    # Build and write manifest
-    manifest = build_export_manifest(export_records)
-    manifest_path = output_dir / "trace_predicates_manifest.json"
-    write_manifest(manifest, manifest_path)
-    logger.info("Wrote manifest to %s", manifest_path)
-
-    # Build and write coverage report
-    coverage_rows = build_coverage_report(export_records, predicate_families=args.families)
-    coverage_path = output_dir / "trace_predicates_coverage.md"
-    write_coverage_report(coverage_rows, coverage_path, total_episodes=len(all_records))
-    logger.info("Wrote coverage report to %s", coverage_path)
-
-    # Summary
-    families_with_records = set()
-    families_missing = set()
-    for rec in export_records:
-        for fam in rec.surrogate_events:
-            families_with_records.add(fam)
-        for fam in rec.missing_fields:
-            families_missing.add(fam)
-
-    logger.info(
-        "Predicate families exported: %s", ", ".join(sorted(families_with_records)) or "(none)"
-    )
-    if families_missing:
-        logger.info("Predicate families missing: %s", ", ".join(sorted(families_missing)))
+    _log_export_summary(export_records)
 
     return 0
 

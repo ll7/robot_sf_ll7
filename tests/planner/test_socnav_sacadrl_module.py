@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
+from robot_sf.planner import socnav
 from robot_sf.planner import socnav_sacadrl as sacadrl
 
 
@@ -189,6 +190,23 @@ def test_adapter_builds_network_input_and_agent_states(monkeypatch) -> None:
     assert adapter._heuristic_plan(observation)[0] >= 0.0
     assert adapter._heuristic_plan(_observation())[0] >= 0.0
 
+    closest_last = sacadrl.SACADRLPlannerAdapter(
+        config=sacadrl.SocNavPlannerConfig(
+            sacadrl_max_other_agents=2, sacadrl_sorting_method="closest_last"
+        ),
+        allow_fallback=True,
+    )
+    selected_states, _selected_count = closest_last._build_other_agents_states(
+        np.array([[1.0, 0.0], [2.0, 0.0], [10.0, 0.0]]),
+        np.zeros((3, 2)),
+        np.zeros(2),
+        0.3,
+        0.3,
+        np.array([1.0, 0.0]),
+        np.array([0.0, 1.0]),
+    )
+    assert selected_states[:, -1].tolist() == pytest.approx([1.4, 0.4])
+
 
 def test_checkpoint_resolution_hashes_bundle_and_fails_closed(tmp_path: Path, monkeypatch) -> None:
     """Checkpoint resolution retains suffix handling, provenance hashing, and fail-closed errors."""
@@ -203,6 +221,15 @@ def test_checkpoint_resolution_hashes_bundle_and_fails_closed(tmp_path: Path, mo
     provenance = adapter.diagnostics()["checkpoint_provenance"]
     assert provenance["checkpoint_sha256"]
     assert provenance["hash_source"] == "computed_tensorflow_checkpoint_bundle"
+
+    dotted_prefix = tmp_path / "model.v1.ckpt-100"
+    (tmp_path / "model.v1.ckpt-100.meta").write_bytes(b"meta")
+    (tmp_path / "model.v1.ckpt-100.index").write_bytes(b"index")
+    (tmp_path / "model.v1.ckpt-100.data-00000-of-00001").write_bytes(b"data")
+    dotted = sacadrl.SACADRLPlannerAdapter(
+        config=sacadrl.SocNavPlannerConfig(sacadrl_checkpoint_path=str(dotted_prefix) + ".meta")
+    )
+    assert dotted._resolve_checkpoint_prefix() == dotted_prefix
 
     implicit = sacadrl.SACADRLPlannerAdapter()
     monkeypatch.setattr(sacadrl, "resolve_model_path", lambda _model_id: prefix)
@@ -236,11 +263,17 @@ def test_adapter_model_lifecycle_and_model_backed_plan(monkeypatch) -> None:
     assert failed.diagnostics()["checkpoint_provenance"]["load_status"] == "fallback"
 
     strict = sacadrl.SACADRLPlannerAdapter(allow_fallback=False)
-    monkeypatch.setattr(
-        strict, "_build_model", lambda: (_ for _ in ()).throw(RuntimeError("missing"))
-    )
+    attempts = 0
+
+    def fail_strictly():
+        nonlocal attempts
+        attempts += 1
+        raise RuntimeError("missing")
+
+    monkeypatch.setattr(strict, "_build_model", fail_strictly)
     with pytest.raises(RuntimeError, match="missing"):
         strict._ensure_model()
+    assert attempts == 1
     with pytest.raises(RuntimeError, match="missing"):
         strict._ensure_model()
 
@@ -259,3 +292,17 @@ def test_adapter_model_lifecycle_and_model_backed_plan(monkeypatch) -> None:
     action = planned.plan(_observation())
     assert action == (1.0, planned.config.max_angular_speed)
     assert planned.plan(_observation(goal=(0.1, 0.0))) == (0.0, 0.0)
+
+    fallback = sacadrl.SACADRLPlannerAdapter(allow_fallback=True)
+    monkeypatch.setattr(fallback, "_ensure_model", lambda: None)
+    assert fallback.plan(_observation(goal=(0.1, 0.0))) == (0.0, 0.0)
+
+
+def test_facade_wildcard_import_includes_lazy_public_exports() -> None:
+    """Lazy public symbols remain visible through facade introspection and wildcard import."""
+    assert "SACADRLPlannerAdapter" in dir(socnav)
+    assert "make_sacadrl_policy" in dir(socnav)
+    assert "SACADRLPlannerAdapter" in socnav.__all__
+    assert "make_sacadrl_policy" in socnav.__all__
+    assert socnav.SACADRLPlannerAdapter is sacadrl.SACADRLPlannerAdapter
+    assert socnav.make_sacadrl_policy is sacadrl.make_sacadrl_policy

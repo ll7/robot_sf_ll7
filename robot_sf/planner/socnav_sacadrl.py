@@ -149,13 +149,15 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             tuple[float, float]: Linear and angular velocity command.
         """
+        dist_to_goal = self._distance_to_goal(observation)
+        if dist_to_goal <= self.config.goal_tolerance:
+            return 0.0, 0.0
+
         model = self._ensure_model()
         if model is None:
             return self._heuristic_plan(observation)
 
-        obs_vec, pref_speed, dist_to_goal = self._build_network_input(observation)
-        if dist_to_goal <= self.config.goal_tolerance:
-            return 0.0, 0.0
+        obs_vec, pref_speed, _dist_to_goal = self._build_network_input(observation)
 
         predictions = model.predict(obs_vec)[0]
         action_idx = int(np.argmax(predictions))
@@ -201,6 +203,7 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
                 }
             )
         except Exception as exc:
+            self._load_error = exc
             self._checkpoint_provenance.update(
                 {
                     "load_succeeded": False,
@@ -210,7 +213,6 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
                 }
             )
             if self._allow_fallback:
-                self._load_error = exc
                 if not self._fallback_warned:
                     logger.warning(
                         "Falling back to heuristic SACADRL behavior: {}. "
@@ -252,10 +254,10 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
         else:
             prefix = checkpoint_path
 
-        meta_path = prefix.with_suffix(".meta")
+        meta_path = prefix.with_name(f"{prefix.name}.meta")
         if not meta_path.exists():
             raise FileNotFoundError(f"GA3C-CADRL checkpoint meta file not found: {meta_path}")
-        index_path = prefix.with_suffix(".index")
+        index_path = prefix.with_name(f"{prefix.name}.index")
         if not index_path.exists():
             raise FileNotFoundError(f"GA3C-CADRL checkpoint index file not found: {index_path}")
         data_files = list(prefix.parent.glob(f"{prefix.name}.data*"))
@@ -280,6 +282,13 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
             }
         )
         return prefix
+
+    def _distance_to_goal(self, observation: dict) -> float:
+        """Return the robot-to-goal distance without loading the optional model."""
+        robot_state, goal_state, _ped_state = self._socnav_fields(observation)
+        robot_pos = np.asarray(robot_state["position"], dtype=float)
+        goal = np.asarray(goal_state["current"], dtype=float)
+        return float(np.linalg.norm(goal - robot_pos))
 
     def _compute_goal_frame(
         self, robot_pos: np.ndarray, robot_heading: float, goal: np.ndarray
@@ -415,7 +424,8 @@ class SACADRLPlannerAdapter(SamplingPlannerAdapter):
 
         if sorting:
             if self.config.sacadrl_sorting_method == "closest_last":
-                sorted_ids = sorted(sorting, key=lambda x: (-x[1], x[2]))
+                nearest = sorted(sorting, key=lambda x: (x[1], x[2]))[:max_other]
+                sorted_ids = sorted(nearest, key=lambda x: (-x[1], x[2]))
             else:
                 sorted_ids = sorted(sorting, key=lambda x: (x[1], x[2]))
             selected = [idx for idx, _dist, _orth in sorted_ids[:max_other]]

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from importlib import import_module
 from math import atan2, pi
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from loguru import logger
@@ -67,6 +67,9 @@ except ImportError:  # pragma: no cover - optional dependency
     load_predictive_checkpoint = None  # type: ignore[assignment]
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
 
+if TYPE_CHECKING:
+    from robot_sf.planner.socnav_sacadrl import SACADRLPlannerAdapter, make_sacadrl_policy
+
 _SOCNAV_ROOT_ENV = "ROBOT_SF_SOCNAV_ROOT"
 _SOCNAV_ALLOW_UNTRUSTED_ENV = "ROBOT_SF_SOCNAV_ALLOW_UNTRUSTED_ROOT"
 _SOCNAV_DEFAULT_ROOT = Path(__file__).resolve().parents[2] / "third_party" / "socnavbench"
@@ -104,6 +107,17 @@ def __getattr__(name: str) -> Any:
     value = getattr(module, name)
     globals()[name] = value
     return value
+
+
+def __dir__() -> list[str]:
+    """Include lazy SACADRL public names in module introspection and wildcard imports.
+
+    Returns:
+        list[str]: Sorted names exposed by the facade and its lazy exports.
+    """
+    return sorted(
+        set(globals()) | {name for name in _SACADRL_LAZY_EXPORTS if not name.startswith("_")}
+    )
 
 
 @dataclass
@@ -4446,3 +4460,54 @@ class SocNavBenchSamplingAdapter(SamplingPlannerAdapter):
             use_upstream=True,
             allow_fallback=allow_fallback,
         )
+
+
+__all__ = [
+    "FORECAST_VARIANT_CHOICES",
+    "PREDICTIVE_OBSTACLE_FEATURE_SCHEMA",
+    "Any",
+    "Callable",
+    "HRVOPlannerAdapter",
+    "LocalObstacleFeatureExtractor",
+    "ORCAPlannerAdapter",
+    "OccupancyAwarePlannerMixin",
+    "Path",
+    "PredictionPlannerAdapter",
+    "PredictiveTrajectoryModel",
+    "SACADRLPlannerAdapter",
+    "SamplingPlannerAdapter",
+    "SocNavBenchComplexPolicy",
+    "SocNavBenchSamplingAdapter",
+    "SocNavPlannerConfig",
+    "SocNavPlannerPolicy",
+    "SocialForcePlannerAdapter",
+    "TrivialReferencePlannerAdapter",
+    "atan2",
+    "dataclass",
+    "import_module",
+    "infer_predictive_feature_schema",
+    "load_predictive_checkpoint",
+    "logger",
+    "make_hrvo_policy",
+    "make_orca_policy",
+    "make_prediction_policy",
+    "make_sacadrl_policy",
+    "make_social_force_policy",
+    "normalize_obstacle_lines",
+    "np",
+    "obstacle_lines_from_map",
+    "obstacle_lines_from_observation",
+    "os",
+    "pi",
+    "resolve_model_path",
+    "rvo2",
+    "sf_forces",
+    "sys",
+    "tf",
+    "threading",
+    "torch",
+    "validate_predictive_runtime_feature_schema",
+    "world_to_ego",
+    "wrap_angle_pi",
+    "wrap_angle_pi_closed",
+]

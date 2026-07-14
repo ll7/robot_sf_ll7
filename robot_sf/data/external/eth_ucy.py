@@ -20,14 +20,23 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from robot_sf.errors import RobotSfError
-from scripts.tools.manage_external_data import (
+from robot_sf.data.external.paths import (
     EXTERNAL_DATA_ROOT_ENV,
-    resolve_asset_local_path_by_id,
+    resolve_external_data_path,
 )
+from robot_sf.errors import RobotSfError
 
 ETH_UCY_ASSET_ID = "eth-ucy"
 ACQUISITION_DOC = "docs/datasets/eth-ucy.md"
+_DEFAULT_DATASET_ROOT = Path(__file__).resolve().parents[3] / "output" / "external_data" / "eth-ucy"
+
+# Required provenance groups mirror the external-data registry: one trajectory file group and
+# one local license/terms group. Alternatives within a group are accepted, but every group must
+# be represented in the manifest before a real-data scorecard can proceed.
+ETH_UCY_PROVENANCE_REQUIRED_PATH_GROUPS = {
+    "trajectory": ("**/obsmat.txt", "**/*.vsp", "**/*.txt"),
+    "license_or_readme": ("**/README*", "**/LICENSE*", "**/TERMS*"),
+}
 
 # Minimum structural column floor per trajectory format. The loader consumes at
 # least (frame, pedestrian id, x, y), so four finite numeric columns is the
@@ -108,7 +117,14 @@ def dataset_root(root: Path | str | None = None) -> Path:
 
     if root is not None:
         return Path(root).expanduser().resolve()
-    return resolve_asset_local_path_by_id(ETH_UCY_ASSET_ID).expanduser().resolve()
+    return (
+        resolve_external_data_path(
+            ETH_UCY_ASSET_ID,
+            _DEFAULT_DATASET_ROOT,
+        )
+        .expanduser()
+        .resolve()
+    )
 
 
 def _resolve_split_file(root: Path, spec: EthUcySplitSpec) -> EthUcySplitPath | None:

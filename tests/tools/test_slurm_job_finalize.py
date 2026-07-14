@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from scripts.tools import slurm_job_finalize
+from scripts.tools import record_post_campaign_stage_status, slurm_job_finalize
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -199,6 +199,215 @@ def test_cli_returns_nonzero_for_missing_artifacts(tmp_path: Path) -> None:
     assert exit_code == 1
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["classification"] == "missing_artifacts"
+
+
+def test_cli_fails_closed_when_status_envelope_is_missing(tmp_path: Path) -> None:
+    """An explicitly requested status envelope is a required finalization artifact."""
+    summary = tmp_path / "campaign" / "reports" / "campaign_summary.json"
+    _write(summary, '{"soft_contract_warning": true, "warnings": []}\n')
+    output = tmp_path / "missing-status.json"
+
+    exit_code = slurm_job_finalize.main(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--issue",
+            "5244",
+            "--job-id",
+            "13274",
+            "--job-state",
+            "COMPLETED",
+            "--expected-artifact",
+            str(summary),
+            "--post-campaign-stage-status",
+            str(tmp_path / "campaign" / "reports" / "missing.json"),
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert exit_code == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["classification"] == "missing_artifacts"
+    assert report["post_campaign_stage_status"]["load_status"] == "missing"
+    assert report["exit_code_lanes"] is None
+
+
+def test_cli_preserves_campaign_exit_when_post_campaign_report_fails(
+    tmp_path: Path,
+) -> None:
+    """A report-stage exit 5 stays visible without remapping a completed campaign."""
+    summary = tmp_path / "campaign" / "reports" / "campaign_summary.json"
+    _write(summary, '{"soft_contract_warning": true, "warnings": ["SNQI warning"]}\n')
+    stage_status = tmp_path / "campaign" / "reports" / "post_campaign_stage_status.json"
+    assert (
+        record_post_campaign_stage_status.main(
+            [
+                "--campaign-summary",
+                str(summary),
+                "--campaign-exit-code",
+                "0",
+                "--stage-name",
+                "headline_ci_rank_stability_report",
+                "--stage-exit-code",
+                "5",
+                "--output",
+                str(stage_status),
+            ]
+        )
+        == 0
+    )
+    output = tmp_path / "finalization.json"
+
+    exit_code = slurm_job_finalize.main(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--issue",
+            "5244",
+            "--job-id",
+            "13274",
+            "--job-state",
+            "COMPLETED",
+            "--expected-artifact",
+            str(summary),
+            "--post-campaign-stage-status",
+            str(stage_status),
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert exit_code == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["classification"] == "success"
+    assert report["exit_code_lanes"] == {
+        "campaign": {
+            "exit_code": 0,
+            "soft_contract_warning": True,
+            "status": "completed",
+            "summary_json": str(summary),
+            "summary_status": "loaded",
+            "warnings": ["SNQI warning"],
+        },
+        "post_campaign_stage": {
+            "exit_code": 5,
+            "name": "headline_ci_rank_stability_report",
+            "status": "report_stage_failed",
+        },
+        "job_exit_code": 0,
+    }
+    assert report["post_campaign_stage_status"]["load_status"] == "loaded"
+    assert "not benchmark evidence" in report["claim_boundary"]
+    assert "report_stage_failed` / `5" in report["issue_update_markdown"]
+
+
+def test_cli_keeps_hard_campaign_exit_nonzero_from_status_envelope(tmp_path: Path) -> None:
+    """A hard campaign exit remains failed even if the scheduler state says completed."""
+    summary = tmp_path / "campaign" / "reports" / "campaign_summary.json"
+    _write(summary, '{"soft_contract_warning": false, "warnings": []}\n')
+    stage_status = tmp_path / "campaign" / "reports" / "post_campaign_stage_status.json"
+    assert (
+        record_post_campaign_stage_status.main(
+            [
+                "--campaign-summary",
+                str(summary),
+                "--campaign-exit-code",
+                "2",
+                "--stage-name",
+                "headline_ci_rank_stability_report",
+                "--stage-exit-code",
+                "0",
+                "--output",
+                str(stage_status),
+            ]
+        )
+        == 0
+    )
+    output = tmp_path / "hard-finalization.json"
+
+    exit_code = slurm_job_finalize.main(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--issue",
+            "5244",
+            "--job-id",
+            "13274",
+            "--job-state",
+            "COMPLETED",
+            "--expected-artifact",
+            str(summary),
+            "--post-campaign-stage-status",
+            str(stage_status),
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert exit_code == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["classification"] == "failed"
+    assert report["exit_code_lanes"]["campaign"]["exit_code"] == 2
+    assert report["exit_code_lanes"]["job_exit_code"] == 2
+
+
+def test_cli_fails_closed_on_mismatched_exit_lanes(tmp_path: Path) -> None:
+    """A malformed envelope cannot silently choose a downstream exit code."""
+    summary = tmp_path / "campaign" / "reports" / "campaign_summary.json"
+    _write(summary, '{"soft_contract_warning": true, "warnings": []}\n')
+    stage_status = tmp_path / "campaign" / "reports" / "post_campaign_stage_status.json"
+    _write(
+        stage_status,
+        json.dumps(
+            {
+                "schema_version": "robot-sf-post-campaign-stage-status.v1",
+                "campaign": {
+                    "exit_code": 0,
+                    "soft_contract_warning": True,
+                    "status": "completed",
+                    "summary_json": str(summary),
+                    "summary_status": "loaded",
+                    "warnings": [],
+                },
+                "post_campaign_stage": {
+                    "exit_code": 5,
+                    "name": "headline_ci_rank_stability_report",
+                    "status": "report_stage_failed",
+                },
+                "job_exit_code": 5,
+            }
+        ),
+    )
+    output = tmp_path / "invalid-finalization.json"
+
+    exit_code = slurm_job_finalize.main(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--issue",
+            "5244",
+            "--job-id",
+            "13274",
+            "--job-state",
+            "COMPLETED",
+            "--expected-artifact",
+            str(summary),
+            "--post-campaign-stage-status",
+            str(stage_status),
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert exit_code == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["classification"] == "manual_decision_required"
+    assert report["post_campaign_stage_status"]["load_status"] == "invalid"
+    assert (
+        "job_exit_code must equal campaign.exit_code"
+        in report["post_campaign_stage_status"]["error"]
+    )
 
 
 def test_cli_rejects_ambiguous_artifact_sources(tmp_path: Path) -> None:

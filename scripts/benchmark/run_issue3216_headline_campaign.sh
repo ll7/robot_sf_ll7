@@ -14,8 +14,11 @@
 #
 # Honesty boundary (docs/maintainer_values.md): this payload cannot
 # self-certify paper-grade. The report harness classifies the bundle
-# (paper_grade | nominal | diagnostic | blocked_until_run), but emitted
-# numbers must not be presented as paper-grade without claim-card review.
+# (paper_grade | nominal | diagnostic | completed_needs_claim_review |
+# blocked_until_run), but emitted numbers must not be presented as paper-grade
+# without claim-card review. blocked_until_run is reserved for input with no
+# countable cells; completed_needs_claim_review means the evidence was measured
+# and analyzed but awaits claim-card review.
 #
 # Usage:
 # scripts/benchmark/run_issue3216_headline_campaign.sh [--preflight-only] [--campaign-id ID] [--output-root DIR]

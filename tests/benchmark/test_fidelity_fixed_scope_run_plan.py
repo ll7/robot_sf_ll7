@@ -127,6 +127,18 @@ def test_unresolvable_scenario_scope_blocks_plan_fail_closed(tmp_path: Path) -> 
         campaign_runner.ensure_fixed_scope_launchable(plan)
 
 
+def test_malformed_scenario_entry_blocks_before_loader_can_skip_it(tmp_path: Path) -> None:
+    """A mixed malformed/valid manifest cannot silently shrink the fixed scope."""
+    scenario_manifest = tmp_path / "mixed.yaml"
+    scenario_manifest.write_text(
+        "scenarios:\n  - null\n  - name: kept\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(campaign_runner.ScenarioScopeResolutionError, match="not a mapping"):
+        campaign_runner.resolve_fixed_scope_scenarios(scenario_manifest)
+
+
 def test_run_cells_carry_resolved_algorithm_and_scope_axes() -> None:
     """Each cell exposes the resolved catalog algorithm, axis, variant, and seed."""
     config = _config()

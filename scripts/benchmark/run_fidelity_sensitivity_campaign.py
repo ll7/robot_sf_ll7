@@ -145,6 +145,80 @@ def _scenario_ids(scenarios: Sequence[Mapping[str, Any]], *, source: pathlib.Pat
     return identifiers
 
 
+def _validate_raw_scenario_entries(data: Any, *, source: pathlib.Path) -> None:
+    """Reject non-mapping entries before the canonical loader can skip them."""
+    if isinstance(data, Mapping):
+        if "scenarios" not in data:
+            return
+        entries = data["scenarios"]
+    elif isinstance(data, list):
+        entries = data
+    else:
+        raise ScenarioScopeResolutionError(
+            f"scenario source {_repo_rel(source)} is not a mapping or list"
+        )
+    if not isinstance(entries, list):
+        raise ScenarioScopeResolutionError(
+            f"scenario source {_repo_rel(source)} has a non-list scenarios block"
+        )
+    for index, scenario in enumerate(entries):
+        if not isinstance(scenario, Mapping):
+            raise ScenarioScopeResolutionError(
+                f"scenario {index} from {_repo_rel(source)} is not a mapping"
+            )
+
+
+def _raw_scenario_include_paths(data: Any, *, source: pathlib.Path) -> list[pathlib.Path]:
+    """Resolve raw include paths for strict structural validation."""
+    if not isinstance(data, Mapping):
+        return []
+    raw_includes = data.get("includes") or data.get("include") or data.get("scenario_files")
+    if raw_includes is None:
+        return []
+    if isinstance(raw_includes, (str, pathlib.Path)):
+        entries = [raw_includes]
+    elif isinstance(raw_includes, list):
+        entries = raw_includes
+    else:
+        raise ScenarioScopeResolutionError(
+            f"scenario source {_repo_rel(source)} has an invalid include list"
+        )
+    paths: list[pathlib.Path] = []
+    for index, include in enumerate(entries):
+        if not isinstance(include, (str, pathlib.Path)):
+            raise ScenarioScopeResolutionError(
+                f"include {index} from {_repo_rel(source)} is not a path"
+            )
+        include_path = pathlib.Path(include)
+        paths.append(include_path if include_path.is_absolute() else source.parent / include_path)
+    return paths
+
+
+def _validate_raw_scenario_manifest(
+    path: pathlib.Path, *, visited: set[pathlib.Path] | None = None
+) -> None:
+    """Recursively reject malformed raw entries in a scenario manifest tree."""
+    active_paths = visited if visited is not None else set()
+    resolved = path.resolve()
+    if resolved in active_paths:
+        raise ScenarioScopeResolutionError(
+            f"scenario include cycle detected: {_repo_rel(resolved)}"
+        )
+    active_paths.add(resolved)
+    try:
+        try:
+            data = yaml.safe_load(resolved.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as exc:
+            raise ScenarioScopeResolutionError(
+                f"cannot read scenario source {_repo_rel(resolved)}: {exc}"
+            ) from exc
+        _validate_raw_scenario_entries(data, source=resolved)
+        for include_path in _raw_scenario_include_paths(data, source=resolved):
+            _validate_raw_scenario_manifest(include_path, visited=active_paths)
+    finally:
+        active_paths.remove(resolved)
+
+
 def resolve_fixed_scope_scenarios(scenario_surface: str | pathlib.Path) -> dict[str, Any]:
     """Resolve a scenario manifest or benchmark profile to an exact runnable scope.
 
@@ -191,6 +265,7 @@ def resolve_fixed_scope_scenarios(scenario_surface: str | pathlib.Path) -> dict[
         source_kind = "benchmark_profile_scenario_matrix"
 
     try:
+        _validate_raw_scenario_manifest(resolved)
         scenarios = list(load_scenarios(resolved))
         identifiers = _scenario_ids(scenarios, source=resolved)
     except (OSError, ValueError) as exc:

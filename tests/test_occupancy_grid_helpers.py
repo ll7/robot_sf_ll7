@@ -80,6 +80,35 @@ def test_rasterize_obstacles_aggregates_out_of_bounds_debug_logs() -> None:
     assert not any("Line segment" in message for message in captured)
 
 
+def test_generate_formats_polygon_fill_loguru_message() -> None:
+    """Verify polygon rasterization diagnostics interpolate values with Loguru formatting."""
+    config = GridConfig(
+        resolution=1.0,
+        width=4.0,
+        height=4.0,
+        channels=[GridChannel.OBSTACLES],
+    )
+    grid = OccupancyGrid(config)
+    captured: list[str] = []
+    handler_id = logger.add(
+        lambda message: captured.append(message.record["message"]),
+        level="DEBUG",
+    )
+    try:
+        result = grid.generate(
+            obstacles=[],
+            pedestrians=[],
+            robot_pose=((0.0, 0.0), 0.0),
+            obstacle_polygons=[[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]],
+        )
+    finally:
+        logger.remove(handler_id)
+
+    assert np.any(result > 0)
+    assert any(message.startswith("Filled ") for message in captured)
+    assert not any("%s" in message for message in captured)
+
+
 def test_metadata_observation_converts_values() -> None:
     """Ensure metadata is exposed as numpy arrays with expected keys."""
     config = GridConfig(resolution=1.0, width=2.0, height=2.0, channels=[GridChannel.OBSTACLES])

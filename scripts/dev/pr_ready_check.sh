@@ -18,8 +18,8 @@ Environment variables:
   PR_READY_FINAL      Legacy compatibility flag: "1", "true", "yes", or "on"
                       for final mode; "0", "false", "no", "off" for interim.
                       Ignored when PR_READY_MODE is set.
-  PR_READY_SKIP_PREFLIGHT  Set to "1" to skip the cheap preflight check for
-                      test-collection dependencies (duckdb, pyarrow).
+  PR_READY_SKIP_PREFLIGHT  Set to "1" to skip cheap preflight checks for
+                      test-collection dependencies and the bundled fast-pysf API.
   PR_READY_PR_BODY_FILE  Optional markdown PR body. When set, readiness checks
                       that deferred work has a linked issue or explicit NA.
   PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES
@@ -228,6 +228,7 @@ fi
 
 if [[ "$pr_ready_final" == "1" ]]; then
   preflight_check_test_deps
+  preflight_check_fast_pysf
 fi
 
 resolve_base_ref

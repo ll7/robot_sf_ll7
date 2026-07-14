@@ -173,7 +173,11 @@ For the current scoped seven-planner paper release, use the tracked publication 
 - `docs/benchmark_release_0_0_2_reproduction.md` - Dedicated copy-paste procedure for reproducing release 0.0.2 results
 
 > [!NOTE]
-> **Release 0.0.2 Note**: The annotated tag `0.0.2` tree references the generic `paper_experiment_matrix_v1_release_v0_1.yaml` manifest. The actual scoped manifest (`configs/benchmarks/releases/paper_experiment_matrix_7planners_v1_release_v0_0_2_scoped.yaml`) and the parity test logic live on the `main` branch, not in the tag tree. To reproduce release 0.0.2, follow the dedicated [Release 0.0.2 Reproduction Note](benchmark_release_0_0_2_reproduction.md).
+> **Release 0.0.2 tooling boundary**: The immutable tag `0.0.2` does not contain the checksum
+> manifest, verifier, cold-start report entry point, scoped manifest, or parity test logic. Use a
+> tooling checkout at tag `0.0.3` or a newer `main` commit, then follow the dedicated [Release
+> 0.0.2 Reproduction Note](benchmark_release_0_0_2_reproduction.md). A checksum pass verifies the
+> published archive and embedded artifacts; it is not an independent numeric subset replay.
 
 
 Durable endpoints:

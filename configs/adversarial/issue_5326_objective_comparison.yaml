@@ -42,3 +42,4 @@ example_command: >
   --seed 1101 --seed 2202 --seed 3303
   --output-dir output/adversarial/issue_5326_objective_comparison
   --out-json output/adversarial/issue_5326_objective_comparison/report.json
+  --out-md output/adversarial/issue_5326_objective_comparison/comparison_table.md

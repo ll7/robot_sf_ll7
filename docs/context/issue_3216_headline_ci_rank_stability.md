@@ -59,10 +59,13 @@ References the real canonical configs with verified sha256:
 
 S20 (`paper_eval_s20`) and the launch-only S30 schedule (`paper_eval_s30`) are available via #1554.
 Job 13274 completed the S20 campaign with 8,640 episodes; the verified harvest is now analyzed and
-preserved under `docs/context/evidence/issue_5247_job_13274_rank_stability/`. The generated report
-remains conservatively classified `blocked_until_run`, and its decision packet says
-`ready_for_table_review_no_claim_promotion` / `needs_review`: empirical execution is complete, but
-claim review and the S30 decision are not.
+preserved under `docs/context/evidence/issue_5247_job_13274_rank_stability/`. The preserved report
+was generated before the classifier repair in [PR #5643](https://github.com/ll7/robot_sf_ll7/pull/5643)
+and intentionally retains its historical `blocked_until_run` value; it is not a newly generated
+classification. Rerunning the repaired harness on counted, rank-identifiable S20+ evidence yields
+`completed_needs_claim_review`. Its decision packet remains
+`ready_for_table_review_no_claim_promotion` / `needs_review`: claim review and the S30 decision are
+still open.
 
 The portable launcher `scripts/benchmark/run_issue3216_headline_campaign.sh`
 keeps campaign execution and post-campaign reporting as separate status lanes.

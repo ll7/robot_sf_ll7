@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
+
 from robot_sf.adversarial.attribution import attribution_from_episode_record
 from robot_sf.adversarial.bundle import write_trajectory_csv
 from robot_sf.adversarial.certification import passed_status
@@ -161,7 +163,9 @@ def _comparison_row_from_manifest(  # noqa: PLR0913
         if _is_certified_valid_failure(item)
     ]
     replayable_failures = [
-        item for _index, item in certified_valid_failures if _has_replay_paths(item)
+        item
+        for _index, item in certified_valid_failures
+        if _has_replay_paths(item, manifest_path=manifest_path)
     ]
     valid_objectives = [
         float(item["objective_value"]) for item in candidates if _is_valid_scored_candidate(item)
@@ -247,11 +251,18 @@ def _is_valid_scored_candidate(item: Any) -> bool:
     return True
 
 
-def _has_replay_paths(item: dict[str, Any]) -> bool:
+def _has_replay_paths(item: dict[str, Any], *, manifest_path: Path) -> bool:
     """Return whether manifest paths needed for local replay inspection exist."""
     for key in ("scenario_yaml_path", "episode_record_path", "trajectory_csv_path", "bundle_path"):
         raw_path = item.get(key)
-        if not raw_path or not Path(str(raw_path)).exists():
+        if not raw_path:
+            return False
+        path = Path(str(raw_path))
+        if path.is_absolute():
+            candidates = (path,)
+        else:
+            candidates = (manifest_path.parent / path, Path.cwd() / path)
+        if not any(candidate.exists() for candidate in candidates):
             return False
     return True
 
@@ -269,6 +280,271 @@ def _candidate_mode(item: Any) -> str | None:
         if str(value).lower() in {"fallback", "degraded"}:
             return str(value).lower()
     return None
+
+
+def build_comparison_payload(
+    *,
+    rows: Sequence[SamplerComparisonRow],
+    objectives: Sequence[str],
+    budgets: Sequence[int],
+    seeds: Sequence[int],
+    claim_scope: str = "not_paper_facing_benchmark_evidence",
+    report_status: str = "diagnostic_local_nominal",
+    held_out_status: str = "not_evaluated_narrow_archive",
+) -> dict[str, Any]:
+    """Build the durable Package-B comparison report payload from result rows.
+
+    The payload preserves the existing report-gate contract: every sampler/budget/seed
+    cell appears exactly once, held-out yield stays null, and the claim scope stays
+    diagnostic. The resulting mapping can be written directly and validated by
+    ``validate_package_b_report``.
+    """
+    return {
+        "schema_version": "adversarial-sampler-comparison.v3",
+        "report_status": report_status,
+        "claim_scope": claim_scope,
+        "objectives": list(objectives),
+        "budget_grid": list(budgets),
+        "seeds": list(seeds),
+        "package_b_notes": {
+            "learned_failure_proposal_issue_2921": "stretch_out_of_scope",
+            "held_out_family_yield": held_out_status,
+        },
+        "rows": [asdict(r) for r in rows],
+    }
+
+
+def _resolve_manifest_path(value: Any, *, repo_root: Path, field: str) -> Path:
+    """Resolve a required repository-relative manifest path."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Package-B manifest {field} must be a non-empty path")
+    path = Path(value)
+    return path if path.is_absolute() else repo_root / path
+
+
+def _manifest_int_tuple(payload: dict[str, Any], key: str) -> tuple[int, ...]:
+    """Load a non-empty integer list from a Package-B manifest."""
+    value = payload.get(key)
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(isinstance(item, bool) or not isinstance(item, int) for item in value)
+    ):
+        raise ValueError(f"Package-B manifest {key} must be a non-empty integer list")
+    return tuple(int(item) for item in value)
+
+
+def load_package_b_manifest(
+    manifest_path: Path,
+    *,
+    repo_root: Path | None = None,
+) -> tuple[SearchConfig, tuple[str, ...], tuple[int, ...], tuple[int, ...]]:
+    """Load a Package-B manifest and derive the runner configuration.
+
+    Returns:
+        A base ``SearchConfig`` scoped to the first objective/budget/seed, the
+        sampler names, the budget grid, and the repeated seeds declared by the
+        manifest. All repository-relative paths are resolved against ``repo_root``
+        (or the current working directory when it is omitted).
+    """
+    root = (repo_root or Path.cwd()).resolve()
+    manifest_path = (
+        manifest_path if manifest_path.is_absolute() else root / manifest_path
+    ).resolve()
+    payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Package-B manifest payload must be a mapping")
+    base_config = payload.get("base_config")
+    if not isinstance(base_config, dict):
+        raise ValueError("Package-B manifest base_config must be a mapping")
+    output_artifacts = payload.get("output_artifacts")
+    if not isinstance(output_artifacts, dict):
+        raise ValueError("Package-B manifest output_artifacts must be a mapping")
+    output_dir = _resolve_manifest_path(
+        output_artifacts.get("output_dir"),
+        repo_root=root,
+        field="output_artifacts.output_dir",
+    )
+
+    def _path(key: str) -> Path:
+        return _resolve_manifest_path(
+            base_config.get(key),
+            repo_root=root,
+            field=f"base_config.{key}",
+        )
+
+    policy = base_config.get("policy")
+    objective = base_config.get("objective")
+    if not isinstance(policy, str) or not policy.strip():
+        raise ValueError("Package-B manifest base_config.policy must be a non-empty string")
+    if not isinstance(objective, str) or not objective.strip():
+        raise ValueError("Package-B manifest base_config.objective must be a non-empty string")
+
+    budgets = _manifest_int_tuple(payload, "budget_grid")
+    seeds = _manifest_int_tuple(payload, "repeated_seeds")
+    samplers_raw = payload.get("samplers")
+    if (
+        not isinstance(samplers_raw, list)
+        or not samplers_raw
+        or any(not isinstance(item, str) or not item.strip() for item in samplers_raw)
+    ):
+        raise ValueError("Package-B manifest samplers must be a non-empty string list")
+    samplers = tuple(str(item) for item in samplers_raw)
+
+    config = SearchConfig.from_files(
+        policy=policy,
+        scenario_template=_path("scenario_template"),
+        search_space=_path("search_space"),
+        objective=objective,
+        output_dir=output_dir,
+        budget=budgets[0],
+        seed=seeds[0],
+    )
+    return config, samplers, budgets, seeds
+
+
+def render_durable_comparison_table(
+    *,
+    report_path: Path | None,
+    rows: Sequence[SamplerComparisonRow],
+    objectives: Sequence[str],
+    budget_grid: Sequence[int],
+    seeds: Sequence[int],
+) -> str:
+    """Render the issue #5326 durable comparison table (exclusions, failures, stop-rule).
+
+    The table is diagnostic-tier only: it never asserts a benchmark claim and
+    fails closed when any row shows fallback/degraded execution or is missing
+    the required objective columns. The signed ``temporal_robustness`` rows are
+    annotated with the per-property violation count read from their
+    ``robustness_report.json`` sidecar; baseline objectives carry none.
+    """
+    required_objectives = set(objectives)
+    observed_objectives = {row.objective for row in rows}
+    missing_objectives = sorted(required_objectives - observed_objectives)
+
+    degraded_rows = [
+        row for row in rows if row.fallback_candidate_count or row.degraded_candidate_count
+    ]
+    any_degraded = bool(degraded_rows)
+
+    header_cols = [
+        "objective",
+        "sampler",
+        "budget",
+        "seed",
+        "best_valid_objective",
+        "certified_valid_failures",
+        "replayable_valid_failures",
+        "replay_success_rate",
+        "invalid_candidate_rate",
+        "signed_property_violations",
+        "held_out_family_status",
+        "fallback/degraded",
+    ]
+    lines: list[str] = []
+    lines.append("## Issue #5326 durable objective-comparison table (diagnostic tier)\n")
+    lines.append(
+        "> Claim scope: not paper-facing benchmark evidence. Synthesized on the"
+        " `--synthetic` CPU path; full matched-budget certification/replay/"
+        "independent-seed confirmation requires a SLURM-capable worker (out of"
+        " cheap-lane scope).\n"
+    )
+    lines.append("| " + " | ".join(header_cols) + " |")
+    lines.append("| " + " | ".join("---" for _ in header_cols) + " |")
+    for row in rows:
+        signed_violations = _read_signed_property_violations(
+            bundle_path=Path(row.best_bundle_path) if row.best_bundle_path else None,
+            objective=row.objective,
+        )
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    row.objective,
+                    row.sampler,
+                    str(row.budget),
+                    str(row.seed),
+                    _fmt_opt(row.best_valid_objective),
+                    str(row.certified_valid_failure_count),
+                    str(row.replayable_valid_failure_count),
+                    _fmt_opt(row.replay_success_rate),
+                    f"{row.invalid_candidate_rate:.3f}",
+                    str(signed_violations) if signed_violations is not None else "-",
+                    row.held_out_family_status,
+                    (
+                        f"fb={row.fallback_candidate_count},dg={row.degraded_candidate_count}"
+                        if (row.fallback_candidate_count or row.degraded_candidate_count)
+                        else "none"
+                    ),
+                ]
+            )
+            + " |"
+        )
+
+    lines.append("")
+    lines.append("### Stop-rule decision")
+    lines.append("")
+    if any_degraded:
+        decision = (
+            "**STOP / fail closed.** One or more comparison rows report"
+            " fallback/degraded candidate execution; those rows are excluded from any"
+            " success interpretation and cannot serve as matched-budget evidence."
+        )
+    elif missing_objectives:
+        decision = (
+            "**NARROW / incomplete.** Required objective(s) missing from the comparison:"
+            f" {', '.join(missing_objectives)}. Cannot discriminate objective lift until all"
+            " objectives are present under matched budgets."
+        )
+    else:
+        decision = (
+            "**DIRECTION NARROWED (diagnostic).** Both objectives compared under matched"
+            " CPU-synthetic budgets with no degraded execution. This is a contract/structure"
+            " check only; it does not constitute benchmark evidence for the signed-objective"
+            " hypothesis (requires SLURM campaign with certification/replay/independent-seed"
+            " confirmation)."
+        )
+    lines.append(decision)
+
+    lines.append("")
+    lines.append("### Exclusions and caveats")
+    lines.append("")
+    lines.extend(
+        (
+            "- learned failure proposal #2921: stretch/out of scope",
+            "- held-out-family yield: not evaluated (narrow archive caveat)",
+            "- paper-facing success claims: forbidden at this tier",
+            "- campaign evidence: requires SLURM-capable worker",
+        )
+    )
+    lines.append(
+        f"- report_status: diagnostic_local_nominal; schema"
+        f" adversarial-sampler-comparison.v3; budgets={list(budget_grid)};"
+        f" seeds={list(seeds)}"
+    )
+    if report_path is not None:
+        lines.append(f"- source report: {report_path.as_posix()}")
+    return "\n".join(lines) + "\n"
+
+
+def _read_signed_property_violations(*, bundle_path: Path | None, objective: str) -> int | None:
+    """Return the per-property violation count for a signed-objective row sidecar."""
+    if objective != "temporal_robustness" or bundle_path is None:
+        return None
+    sidecar = bundle_path / "robustness_report.json"
+    if not sidecar.exists():
+        return None
+    payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    properties = payload.get("properties") if isinstance(payload, dict) else None
+    if not isinstance(properties, list):
+        return None
+    return sum(1 for prop in properties if prop.get("violated"))
+
+
+def _fmt_opt(value: float | None) -> str:
+    """Format an optional float for the markdown table."""
+    return f"{value:.4f}" if value is not None else "-"
 
 
 def _synthetic_evaluator(
@@ -331,7 +607,28 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "Defaults to worst_case_snqi."
         ),
     )
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Output root for non-manifest runs; the manifest output_artifacts path takes precedence.",
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Package-B manifest (adversarial-package-b-comparison.v1) whose budget grid, "
+            "repeated seeds, samplers, and output root drive the comparison. Overrides "
+            "--package-b-budget-grid, --seed, --sampler, and --output-dir."
+        ),
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=Path.cwd(),
+        help="Repository root used to resolve manifest-relative paths.",
+    )
     parser.add_argument(
         "--budget",
         type=int,
@@ -368,51 +665,89 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Use a deterministic synthetic evaluator instead of running benchmark episodes.",
     )
     parser.add_argument("--out-json", type=Path, default=None)
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--out-md",
+        type=Path,
+        default=None,
+        help=(
+            "Write the durable issue #5326 comparison table (markdown) with exclusions,"
+            " failures, and the stop-rule decision."
+        ),
+    )
+    args = parser.parse_args(argv)
+    if args.manifest is None and args.output_dir is None:
+        parser.error("--output-dir is required unless --manifest is supplied")
+    return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the sampler comparison CLI."""
     args = parse_args(argv)
-    objectives = args.objectives or ["worst_case_snqi"]
-    config = SearchConfig.from_files(
-        policy=args.policy,
-        scenario_template=args.scenario_template,
-        search_space=args.search_space,
-        objective=objectives[0],
-        output_dir=args.output_dir,
-        budget=(args.budget or [8])[0],
-        seed=(args.seed or [123])[0],
-    )
-    budgets = (16, 32, 64) if args.package_b_budget_grid and args.budget is None else args.budget
-    seeds = args.seed or [123]
+    if args.manifest is not None:
+        repo_root = args.repo_root.resolve()
+        config, samplers, budgets, seeds = load_package_b_manifest(
+            args.manifest,
+            repo_root=repo_root,
+        )
+        output_dir = config.output_dir
+        objectives = [config.objective]
+        out_json = (
+            args.out_json
+            if args.out_json is None or args.out_json.is_absolute()
+            else repo_root / args.out_json
+        )
+    else:
+        objectives = args.objectives or ["worst_case_snqi"]
+        output_dir = args.output_dir
+        config = SearchConfig.from_files(
+            policy=args.policy,
+            scenario_template=args.scenario_template,
+            search_space=args.search_space,
+            objective=objectives[0],
+            output_dir=output_dir,
+            budget=(args.budget or [8])[0],
+            seed=(args.seed or [123])[0],
+        )
+        budgets = (
+            (16, 32, 64) if args.package_b_budget_grid and args.budget is None else args.budget
+        )
+        seeds = args.seed or [123]
+        samplers = args.samplers or ("random", "coordinate", "optuna")
+        out_json = args.out_json
+
     rows = run_sampler_comparison(
         config=config,
-        sampler_names=tuple(args.samplers or ("random", "coordinate", "optuna")),
+        sampler_names=tuple(samplers),
         objective_names=objectives,
         synthetic=bool(args.synthetic),
         budgets=budgets,
         seeds=seeds,
     )
-    payload = {
-        "schema_version": "adversarial-sampler-comparison.v3",
-        "report_status": "diagnostic_local_nominal",
-        "claim_scope": "not_paper_facing_benchmark_evidence",
-        "objectives": objectives,
-        "budget_grid": list(budgets or [config.budget]),
-        "seeds": list(seeds),
-        "package_b_notes": {
-            "learned_failure_proposal_issue_2921": "stretch_out_of_scope",
-            "held_out_family_yield": "not_evaluated_narrow_archive",
-        },
-        "rows": [asdict(r) for r in rows],
-    }
-    if args.out_json is not None:
-        args.out_json.parent.mkdir(parents=True, exist_ok=True)
-        args.out_json.write_text(
+    payload = build_comparison_payload(
+        rows=rows,
+        objectives=objectives,
+        budgets=budgets,
+        seeds=seeds,
+    )
+    if out_json is not None:
+        out_json.parent.mkdir(parents=True, exist_ok=True)
+        out_json.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+    if args.out_md is not None:
+        out_md = (
+            args.out_md if args.out_md.is_absolute() else (args.repo_root.resolve() / args.out_md)
+        )
+        out_md.parent.mkdir(parents=True, exist_ok=True)
+        table_md = render_durable_comparison_table(
+            report_path=out_json,
+            rows=rows,
+            objectives=objectives,
+            budget_grid=budgets,
+            seeds=seeds,
+        )
+        out_md.write_text(table_md, encoding="utf-8")
     print(json.dumps(payload, sort_keys=True))
     return 0
 

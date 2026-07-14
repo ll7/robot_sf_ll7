@@ -310,7 +310,7 @@ def _build_step_info(meta: dict[str, Any]) -> dict[str, Any]:
         Dictionary containing step, meta, collision, success, and is_success flags.
         Success is defined strictly as full route completion.
     """
-
+    meta.pop("action_space", None)
     collision = bool(
         meta.get("is_pedestrian_collision")
         or meta.get("is_obstacle_collision")

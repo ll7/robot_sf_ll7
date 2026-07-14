@@ -1636,6 +1636,25 @@ run never counts as green or red. Only PRs that fix the breakage (title-prefixed
 the cure and must land. Reviewing a PR while main is red is fine — only the
 merge is held.
 
+For automated gates, emit the machine-readable signal instead of parsing the
+human line (issue #5571). The `--json` flag prints the `main_ci_is_green.v1`
+schema and still exits 0 (green) / 1 (not green), so the gate contract is
+satisfied without text scraping:
+
+```bash
+uv run python scripts/dev/main_ci_is_green.py --json
+# -> {"schema_version": "main_ci_is_green.v1", "is_green": true, "status": "green",
+#     "repo": "ll7/robot_sf_ll7", "workflow": "CI",
+#     "deciding_run": {"databaseId": ..., "conclusion": "success", "status": "completed",
+#                      "headSha": "...", "createdAt": "..."}}
+```
+
+`status` is one of `green` / `red` / `stale`. A `stale` verdict (no decisive
+completed run in the window) still fails closed to not green, but is reported
+distinctly so the gate can hold for a *fresh run* rather than treat it as a main
+regression. The `--quiet` flag suppresses the human line; the existing
+exit-code contract is unchanged.
+
 ## CI Performance Monitoring
 The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 

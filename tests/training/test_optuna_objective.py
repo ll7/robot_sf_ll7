@@ -53,7 +53,8 @@ def test_objective_from_series_auc_mode_is_numpy2x_compatible():
     """
     import numpy as np
 
-    assert hasattr(np, "trapezoid"), "test assumes a NumPy version with np.trapezoid"
+    if not hasattr(np, "trapezoid"):
+        pytest.skip("test assumes a NumPy version with np.trapezoid")
     # Importing the module and using the AUC mode must not raise under NumPy 2.x.
     series = [(100, 1.0), (200, 3.0), (300, 5.0)]
     assert objective_from_series(series, mode="auc", window=3) == pytest.approx(3.0)

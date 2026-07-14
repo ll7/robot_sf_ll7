@@ -8,6 +8,37 @@ This page covers the ETH BIWI Walking Pedestrians data (`eth`, `hotel`) and the 
 
 This documentation does not add dataset bytes, benchmark scenarios, prediction-comparability results, or paper/dissertation claims. The repository includes a license-safe parser for staged `obsmat.txt` and normalized four-column `.txt` tracks; the registry entry remains acquisition and provenance metadata only, and a locally staged dataset is not benchmark evidence.
 
+## Provenance-Gated Replay Seed
+
+Plain-language summary: a staged track set can now produce diagnostic pedestrian replay inputs, but the track files do not reconstruct the original scene or its obstacles.
+
+Use `load_provenance_validated_track_set` when a realism scorecard must be tied to a compact registry provenance manifest, then pass the parsed set to `build_track_reconstruction_plan` or `run_realism_validation_from_staged_dataset`:
+
+```python
+from robot_sf.benchmark.pedestrian_realism_validation import (
+    RealismStagedDatasetReference,
+    build_track_reconstruction_plan,
+    run_realism_validation_from_staged_dataset,
+)
+from robot_sf.data.external.eth_ucy_trajectories import load_provenance_validated_track_set
+
+tracks = load_provenance_validated_track_set(
+    "eth",
+    provenance_manifest="output/external_data/manifests/eth-ucy.provenance.json",
+)
+replay_plan = build_track_reconstruction_plan(tracks)
+# Supply sim_positions/sim_velocities or rmse_pairs from a simulator run for metric values.
+scorecard = run_realism_validation_from_staged_dataset(
+    dataset_id="eth-ucy/eth",
+    dataset=RealismStagedDatasetReference(
+        split="eth",
+        provenance_manifest="output/external_data/manifests/eth-ucy.provenance.json",
+    ),
+)
+```
+
+The plan exposes existing `SinglePedestrianDefinition` replay seeds, padded observed-position bounds, and a conservative entry/exit flow summary. A non-empty plan is always `partial`: ETH/UCY trajectory files do not provide static scene geometry, obstacle semantics, or a scene-faithful benchmark map. Missing or incomplete provenance produces a `not_available` scorecard; it is never success evidence. Re-run the registry staging/provenance commands when the local bytes change because the loader checks manifest readiness but does not rehash the local tree.
+
 ## Sources And Citations
 
 Use the official source first when it is reachable:
@@ -146,4 +177,4 @@ The real-data path skips with `external dataset not staged` when no local ETH/UC
 
 ## Claim Boundary
 
-`eth-ucy` registry `ready` means only that a local copy matched the documented file/layout contract and provenance fields. It does not mean Robot SF has a validated ETH/UCY loader, shape-contract tests, benchmark scenarios, prediction-comparability evidence, or permission to redistribute the data.
+`eth-ucy` registry `ready` means only that a local copy matched the documented file/layout contract and provenance fields. It does not mean Robot SF has a scene-faithful reconstruction, calibrated realism threshold, benchmark or prediction-comparability evidence, or permission to redistribute the data.

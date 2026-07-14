@@ -320,9 +320,15 @@ class MPPISocialPlannerAdapter(OccupancyAwarePlannerMixin):
                 rel_speed_sq = np.sum(rel_vel * rel_vel, axis=2)  # (samples, peds)
                 rel_dot = -np.sum(rel_pos * rel_vel, axis=2)  # (samples, peds)
                 valid = rel_speed_sq > 1e-6
-                # Where valid, compute ttc; else 0
-                ttc_vals = np.where(
-                    valid, np.where(rel_dot > 0, rel_dot / rel_speed_sq, -1.0), -1.0
+                # Where valid and approaching, compute ttc; else -1.0.
+                # Use np.divide(where=...) so invalid divisions are never evaluated,
+                # avoiding the eager-divide RuntimeWarning from the nested np.where.
+                ttc_vals = np.full_like(rel_dot, -1.0)
+                np.divide(
+                    rel_dot,
+                    rel_speed_sq,
+                    where=valid & (rel_dot > 0),
+                    out=ttc_vals,
                 )
                 # Take min positive TTC per sample
                 pos_ttc = np.where((ttc_vals > 0), ttc_vals, float("inf"))

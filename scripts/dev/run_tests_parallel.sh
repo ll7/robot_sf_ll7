@@ -394,10 +394,17 @@ if [[ "$pytest_exit" -ne 0 ]]; then
   if [[ "$serial_fallback" == "1" ]]; then
     printf '\n[pr_ready_check] PR_READY_SERIAL_FALLBACK=1: rerunning serially to separate env crash from real failures.\n' >&2
     serial_log="$(mktemp "${TMPDIR:-/tmp}/pytest_serial.XXXXXX.log")"
-    ROBOT_SF_PYTEST_WORKERS_OVERRIDE=1 \
-      PYTEST_NUM_WORKERS=1 \
-      uv run pytest -n 1 --dist "$dist_mode" "${cmd[@]:3}" >"$serial_log" 2>&1
+    # ``cmd`` starts with ``uv run pytest -n <workers> --dist <mode>``. Keep
+    # the wrapper-added pytest options, but do not copy the original worker
+    # flags after ``-n 1``; pytest would otherwise use the later worker value.
+    serial_cmd=(uv run pytest -n 1 --dist "$dist_mode")
+    if [[ ${#cmd[@]} -gt 7 ]]; then
+      serial_cmd+=("${cmd[@]:7}")
+    fi
+    set +e
+    PYTEST_NUM_WORKERS=1 "${serial_cmd[@]}" >"$serial_log" 2>&1
     serial_exit=$?
+    set -e
     cat "$serial_log" >&2
     uv run python "$SCRIPT_DIR/diagnose_xdist_crash.py" \
       --log-file "$serial_log" \

@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   episode runs. This closes a launcher integration gap only: no campaign, fallback/degraded row,
   safety-metric result, or paper/dissertation claim is produced by this change.
 
+* **Issue #5097 successor-release collision-consumer audit.** A fail-closed, CPU-only verifier now
+  checks signed publication bundles without extraction, reconciling typed exact collision events
+  with component/total counts, binary success, and the canonical SNQI collision term. The tracked
+  release 0.0.3 report verifies all 20,160 public rows and records release-wide inconsistencies as
+  explicit caveats; it is diagnostic metric-integrity evidence, not release-wide benchmark,
+  planner-ranking, SNQI-validity, or paper-facing evidence.
+
 * **issue #3207 collision-envelope / physical-footprint clearance-semantics diagnostic.** New
   `robot_sf/benchmark/clearance_semantics.py` (`footprint-clearance-semantics.v1`) formalizes the
   distinct clearance quantities that reported traces conflate — center-to-center distance,
@@ -265,7 +272,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/fixtures/benchmark/scenario_flakiness_issue_4978/real_campaign_episodes.jsonl`, plus the
   committed `scenario_flakiness.v1` report the audit produces from it
   (`real_campaign_flakiness_report.json`). This delivers the *real-campaign application* that PRs
-  #5069 and #5115 deferred: the audit now has regression-protected evidence that it surfaces real
+  Issue #5069 and Issue #5115 deferred: the audit now has regression-protected evidence that it surfaces real
   per-cell outcome instability — 7 of 20 assessable cells flagged knife-edge (35%), including a
   perfect coin-flip cell (`classic_doorway_medium`/`ppo`, stability 0.50 across 20 seeds). Exact-repeat
   determinism is reported as `null` (unknown) because each seed ran once; asserting it needs a

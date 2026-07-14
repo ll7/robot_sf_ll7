@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5596, 2026-07-14) - NEEDS-REVIEW -->
+
 # Issue #5596 — Blind-corner zero-success diagnostic
 
 Diagnostic-only analysis requested by

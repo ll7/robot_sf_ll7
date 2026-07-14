@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -43,15 +44,19 @@ from robot_sf.data.external.eth_ucy import (
     EthUcySplitPath,
     require_available,
 )
+from scripts.tools.manage_external_data import (
+    DEFAULT_MANIFEST_DIR,
+    check_provenance_manifest,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    from pathlib import Path
 
 __all__ = [
     "ETH_BIWI_OBSMAT_FRAME_PERIOD_S",
     "EthUcyTrack",
     "EthUcyTrackSet",
+    "load_provenance_validated_track_set",
     "load_split_tracks",
     "load_track_set",
 ]
@@ -222,6 +227,49 @@ def load_track_set(
         f"Unknown ETH/UCY split '{split}'. Documented splits: "
         f"{', '.join(sorted({p.split for p in dataset.splits}))}. See {ACQUISITION_DOC}."
     )
+
+
+def load_provenance_validated_track_set(
+    split: str,
+    *,
+    root: Path | str | None = None,
+    provenance_manifest: Path | str | None = None,
+    frame_period_s: float = ETH_BIWI_OBSMAT_FRAME_PERIOD_S,
+) -> EthUcyTrackSet:
+    """Load one split only after its external-data manifest passes readiness checks.
+
+    The manifest check validates source, license, aggregate checksum, sample-file checksum,
+    and required-path metadata through the canonical external-data registry. It does not
+    rehash the local tree here; callers that need live checksum verification should rerun
+    ``manage_external_data.py stage`` or ``provenance-check`` as appropriate.
+
+    Args:
+        split: Canonical ETH/UCY split id.
+        root: Explicit staged dataset root, or ``None`` for the shared registry path.
+        provenance_manifest: Compact provenance manifest. When omitted, use the standard
+            ``output/external_data/manifests/eth-ucy.provenance.json`` path.
+        frame_period_s: Frame period used to derive sample times.
+
+    Raises:
+        EthUcyDataError: If the manifest is missing/incomplete or the staged data cannot be
+            parsed under the existing shape contract.
+
+    Returns:
+        Parsed per-pedestrian tracks for the requested split.
+    """
+
+    manifest_path = (
+        Path(provenance_manifest).expanduser()
+        if provenance_manifest is not None
+        else DEFAULT_MANIFEST_DIR / f"{ETH_UCY_ASSET_ID}.provenance.json"
+    )
+    report = check_provenance_manifest(ETH_UCY_ASSET_ID, manifest_path)
+    if not report["ok"]:
+        raise EthUcyDataError(
+            f"{ETH_UCY_ASSET_ID} provenance is not ready ({report['status']}): "
+            f"{report.get('action', 'complete the provenance manifest')}. See {ACQUISITION_DOC}."
+        )
+    return load_track_set(split, root=root, frame_period_s=frame_period_s)
 
 
 def _parse_obsmat(

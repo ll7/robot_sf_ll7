@@ -98,11 +98,11 @@ def test_torch_213_python312_uses_c_level_determinism_setter(monkeypatch):
     calls: list[tuple[bool, bool]] = []
 
     class FakeC:
-        def _set_deterministic_algorithms(self, enabled: bool, *, warn_only: bool = False):
+        def _set_deterministic_algorithms(self, enabled: bool, warn_only: bool = False):
             calls.append((enabled, warn_only))
 
     class FakeTorch:
-        __version__ = "2.13.0+cpu"
+        __version__ = "2.13.0rc1"
         _C = FakeC()
 
         @staticmethod

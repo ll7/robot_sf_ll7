@@ -350,21 +350,43 @@ _GOAL_TOPOLOGIES = ["point", "swap", "circulate"]
 
 
 def _gen_param_combos():
-    """Yield (density, flow, obstacle, speed_var, goal_topology) combos.
+    """Return materialized (density, flow, obstacle, speed_var, goal_topology) combos.
 
     We generate the full cross-product (3x4x3x2x3 = 216) deliberately:
     the generator is pure Python + numpy and each invocation is < 1 ms.
+
+    The sequence is materialized as a list (not a generator) because pytest 10
+    deprecates passing a non-Collection iterable to parametrize
+    (PytestRemovedIn10Warning). See issue #5597.
     """
+    combos = []
     for d in _DENSITIES:
         for f in _FLOWS:
             for o in _OBSTACLES:
                 for s in _SPEED_VARS:
                     for g in _GOAL_TOPOLOGIES:
-                        yield pytest.param(d, f, o, s, g, id=f"{d}_{f}_{o}_{s}_{g}")
+                        combos.append(pytest.param(d, f, o, s, g, id=f"{d}_{f}_{o}_{s}_{g}"))
+    return combos
 
 
 _DENSITY_EXPECTED = {"low": 10, "med": 25, "high": 40}
 _OBS_EXPECTED = {"open": 0, "bottleneck": 2, "maze": 3}
+
+
+def test_param_combos_are_materialized_collection():
+    """Regression guard for issue #5597.
+
+    pytest 10 deprecates passing a non-Collection (e.g. a generator) to
+    ``parametrize`` (PytestRemovedIn10Warning). The combos feeding
+    ``test_scenario_structural_invariants`` must stay materialized as a list/tuple
+    so collection does not emit that warning. This test fails if the source is
+    ever reverted to a lazy generator.
+    """
+    combos = _gen_param_combos()
+    assert isinstance(combos, (list, tuple)), (
+        f"param combos must be a materialized list/tuple, got {type(combos).__name__}"
+    )
+    assert len(combos) == 216, f"expected 216 combos, got {len(combos)}"
 
 
 @pytest.mark.parametrize("density,flow,obstacle,speed_var,goal_topology", _gen_param_combos())

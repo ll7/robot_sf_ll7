@@ -1,3 +1,4 @@
+<!-- AI-GENERATED: diagnostic-only benchmark evidence; NEEDS-REVIEW: maintainer verification before reuse. -->
 # Headline 7x7 CI + Rank-Stability Report (#3216)
 
 - **Classification**: `blocked_until_run`

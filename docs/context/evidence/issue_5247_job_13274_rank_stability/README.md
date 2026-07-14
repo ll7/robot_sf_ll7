@@ -1,3 +1,4 @@
+<!-- AI-GENERATED: diagnostic-only benchmark evidence; NEEDS-REVIEW: maintainer verification before reuse. -->
 # Job 13274 Headline Confidence-Interval and Rank-Stability Evidence
 
 This bundle preserves the completed job 13274 analysis needed to review which headline planner

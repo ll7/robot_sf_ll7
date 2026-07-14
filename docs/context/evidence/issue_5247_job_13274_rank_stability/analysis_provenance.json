@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "claim_boundary": "The complete harvested episode set is analyzed without rerunning a campaign. The runner produces constraints-first success rank stability for review but does not promote a planner-ranking claim. SNQI rank claims remain blocked because the source campaign records a warn-level SNQI contract failure.",
   "evidence_status": "diagnostic-only",
   "input_sha256": {

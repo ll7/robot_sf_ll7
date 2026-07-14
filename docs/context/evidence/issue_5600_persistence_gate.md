@@ -2,8 +2,10 @@
 # Issue #5600 — Persistence Promotion Gate (compact evidence)
 
 Status: implemented + wired (CPU-only, no campaigns). Evidence tier: schema +
-fail-closed unit contract + real pipeline-artifact conformance. No benchmark,
-metric, model-provenance, or paper-facing claim.
+fail-closed unit contract + real pipeline-artifact conformance. An explicit
+replay-results fixture is required for a promotion verdict; CPU-only mode alone
+cannot establish exact replay. No benchmark, metric, model-provenance, or
+paper-facing claim.
 
 ## What changed (slice 1: PR #5606)
 
@@ -43,23 +45,27 @@ Files (all under allowed paths):
 
 - `scripts/tools/evaluate_pipeline_persistence_gate.py` — **new, committed** wiring CLI.
   Loads a pipeline `run_manifest.json` (or a single candidate entry + episodes JSONL),
-  derives `exact_replay` from the trace, evaluates `critical_event_reproduced` from the
-  catalog entry's criticality block, and runs the preregistered perturbation grid in
-  CPU-only mode (timestamp shift + position interpolation). Emits one
-  `generated_scenario_persistence.v1` JSON per candidate plus a promote/reject summary.
+  validates trace identity against catalog provenance, consumes per-candidate
+  `replay-results` for exact replay/event/cell evidence, and otherwise runs only the
+  preregistered CPU perturbation grid (timestamp shift + position interpolation).
+  Emits one `generated_scenario_persistence.v1` JSON per candidate plus a
+  promote/reject summary. Missing traces, incomplete frozen config, and missing
+  precomputed cells fail closed.
 - `tests/benchmark/test_pipeline_persistence_gate_wiring.py` — **new**. Runs the real
   `run_generation_pipeline` with a deterministic fake batch runner, then wires the
   produced catalog + episodes through the tool and asserts one **promote** and one
-  **reject** verdict, both schema-valid. No simulations: the fake runner supplies the
-  step traces, satisfying the CPU-only constraint.
+  **reject** verdict, both schema-valid. No simulations: the fake runner and explicit
+  per-candidate replay fixture supply deterministic step traces and cell verdicts.
 
 The tool also accepts `--replay-results PATH` to skip CPU-only heuristics and consume
-pre-computed replay/perturbation verdicts from a simulation-capable runner (CARLA),
-preserving the generated-hypothesis boundary.
+per-candidate pre-computed replay/perturbation verdicts from a simulation-capable
+runner (CARLA), preserving the generated-hypothesis boundary. Without this input,
+`exact_replay` is `unknown` and promotion is rejected.
 
 ## The three statuses stay separate
 
-- `exact_replay`: byte/config-equivalent replay of the source episode (digest match).
+- `exact_replay`: identity and normalized simulation-step payload match from an
+  independent replay result (digest match).
 - `critical_event_reproduced`: event of `event_type` recurs under the source planner
   within declared time/location tolerances.
 - `perturbation_persistence`: the event survives a preregistered timing/speed grid.
@@ -70,7 +76,8 @@ when all three required statuses are `pass` and there are no missing cells.
 ## Conformance evidence (published, real pipeline artifact)
 
 The wiring test (`test_pipeline_persistence_gate_wiring.py`) executes the actual
-generation pipeline and produces two records from a real catalog + episode-trace pair:
+generation pipeline and produces two records from a real catalog + episode-trace pair,
+using a deterministic per-candidate replay fixture (not a simulator):
 
 - Candidate A (near-static robot/pedestrian pair): `exact_replay=pass`,
   `critical_event_reproduced=pass`, `perturbation_persistence` rate = 1.0 →
@@ -108,7 +115,8 @@ uv run python scripts/tools/validate_generated_scenario_persistence.py --help
 uv run python scripts/tools/evaluate_pipeline_persistence_gate.py \
   --manifest <run_manifest.json> \
   --config configs/analysis/issue_5600_persistence_gate.yaml \
-  --output <output_dir> --commit-hash <h> --config-hash <c>
+  --output <output_dir> --replay-results <replay_results.json> \
+  --commit-hash <h> --config-hash <c>
 # PROMOTE <output_dir>/generated-....persistence.json :: all three independent status checks passed
 # REJECT <output_dir>/generated-....persistence.json :: perturbation_cell:...:fail ...
 # Summary: 1 promoted, 1 rejected, 2 total
@@ -118,11 +126,12 @@ git diff --check   # clean
 ## Stop-rule note
 
 The gate is now wired through a real pipeline run and emits promote/reject evidence.
-The CPU-only perturbation mode proves the wiring end-to-end but does not substitute
-for a real simulator replay; production use should pass `--replay-results` from a
+The CPU-only perturbation mode proves the perturbation wiring but does not substitute
+for an independent replay; production use must pass `--replay-results` from a
 CARLA-capable runner. The negative-conformance path (promote none) is inherent: any
-`fail`/`unknown` required status or missing cell fails closed. No threshold loosening
-is possible because ranges are frozen.
+`fail`/`unknown` required status, missing trace, incomplete config, or missing cell
+fails closed. No threshold loosening is possible because the grid and promotion
+threshold are validated from the frozen config.
 
 ## Claim boundary
 

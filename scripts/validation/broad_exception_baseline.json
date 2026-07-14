@@ -3,6 +3,7 @@
     "by_path": {
       "robot_sf/benchmark/camera_ready/campaign.py": 1,
       "robot_sf/benchmark/camera_ready/resource_lifecycle.py": 2,
+      "robot_sf/benchmark/candidate_trace_resolution.py": 1,
       "robot_sf/benchmark/doctor.py": 1,
       "robot_sf/benchmark/forecast_lane_inventory.py": 1,
       "robot_sf/benchmark/helper_catalog.py": 2,
@@ -133,6 +134,15 @@
       "lineno": 394,
       "path": "robot_sf/benchmark/camera_ready/resource_lifecycle.py",
       "source": "except Exception:  # noqa: BLE001 - cleanup must never mask the original error"
+    },
+    {
+      "col_offset": 4,
+      "context": "load_campaign_result_store",
+      "fingerprint": "be56e321c978a733",
+      "handler": "Exception",
+      "lineno": 144,
+      "path": "robot_sf/benchmark/candidate_trace_resolution.py",
+      "source": "except Exception as exc:"
     },
     {
       "col_offset": 4,

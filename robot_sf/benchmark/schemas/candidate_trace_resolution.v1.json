@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/candidate_trace_resolution.v1.json",
+  "title": "Candidate-to-trace resolution manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "issue",
+    "generated_at_utc",
+    "source_manifest_hash",
+    "determinism",
+    "summary",
+    "rows"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "candidate_trace_resolution.v1"
+    },
+    "issue": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generated_at_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_manifest_hash": {
+      "type": "string",
+      "minLength": 1,
+      "description": "SHA-256 of the input candidate manifest bytes, so re-runs are byte-identical on the same input."
+    },
+    "determinism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "tool_version"],
+      "properties": {
+        "policy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n_candidates",
+        "n_resolved",
+        "n_trace_missing",
+        "n_schema_mismatch",
+        "n_provenance_incomplete"
+      ],
+      "properties": {
+        "n_candidates": {"type": "integer", "minimum": 0},
+        "n_resolved": {"type": "integer", "minimum": 0},
+        "n_trace_missing": {"type": "integer", "minimum": 0},
+        "n_schema_mismatch": {"type": "integer", "minimum": 0},
+        "n_provenance_incomplete": {"type": "integer", "minimum": 0}
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/resolution_row"}
+    }
+  },
+  "$defs": {
+    "resolution_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "source_manifest_hash",
+        "resolution_status",
+        "reason_code"
+      ],
+      "properties": {
+        "candidate_id": {"type": "string", "minLength": 1},
+        "source_manifest_hash": {"type": "string", "minLength": 1},
+        "campaign_id": {"type": ["string", "null"]},
+        "campaign_row_reference": {"type": ["string", "null"]},
+        "artifact_uri": {
+          "type": ["string", "null"],
+          "description": "Campaign-declared trace artifact URI (before resolution/validation)."
+        },
+        "scenario_id": {"type": ["string", "null"]},
+        "planner_id": {"type": ["string", "null"]},
+        "seed": {"type": ["integer", "null"]},
+        "config_hash": {"type": ["string", "null"]},
+        "episode_id": {"type": ["string", "null"]},
+        "trace_artifact_uri": {"type": ["string", "null"]},
+        "trace_content_hash": {"type": ["string", "null"]},
+        "trace_schema_version": {"type": ["string", "null"]},
+        "resolution_status": {
+          "enum": ["resolved", "trace-missing", "schema-mismatch", "provenance-incomplete"]
+        },
+        "reason_code": {"type": "string", "minLength": 1},
+        "predicate_rows_available": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["predicate_id", "schema_version"],
+            "properties": {
+              "predicate_id": {"type": "string", "minLength": 1},
+              "schema_version": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "critical_intervals_available": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["available", "reference"],
+          "properties": {
+            "available": {"type": "boolean"},
+            "reference": {"type": ["string", "null"]}
+          }
+        },
+        "exact_repeat_determinism": {
+          "type": ["string", "null"],
+          "description": "State of exact-repeat determinism knowledge, where known."
+        }
+      }
+    }
+  }
+}

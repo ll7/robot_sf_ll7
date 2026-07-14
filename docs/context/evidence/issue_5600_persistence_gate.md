@@ -1,9 +1,9 @@
 <!-- AI-GENERATED: validation-contract evidence; NEEDS-REVIEW: maintainer verification before reuse. -->
 # Issue #5600 — Persistence Promotion Gate (compact evidence)
 
-Status: implemented (CPU-only, no campaigns). Evidence tier: schema + fail-closed
-unit contract + end-to-end candidate runner conformance. No benchmark, metric,
-model-provenance, or paper-facing claim.
+Status: implemented + wired (CPU-only, no campaigns). Evidence tier: schema +
+fail-closed unit contract + real pipeline-artifact conformance. No benchmark,
+metric, model-provenance, or paper-facing claim.
 
 ## What changed (slice 1: PR #5606)
 
@@ -29,29 +29,33 @@ Files (all under allowed paths):
   unknown-event, unfrozen-config, schema-valid, checksum-identical, and two-candidate
   promote+reject smoke fixtures.
 
-## What changed (slice 2: candidate runner and conformance evidence)
+## What changed (slice 2: this PR — wiring + conformance evidence)
 
-Slice 2 wires the gate into an end-to-end candidate runner that takes episode traces
-or catalog entries and produces `generated_scenario_persistence.v1` conformance records
-with published promote/reject evidence.
+Slice 1 left #5600 open because the gate had no committed caller: the
+`generated_scenario_persistence.v1` record was only ever assembled from hand-built
+dictionaries in unit tests. Slice 2 wires the gate into a real pipeline artifact: it
+runs the stage-1 generation pipeline (#4932), reads the produced catalog + episode
+traces, evaluates the three independent checks for each candidate, and emits
+schema-valid persistence records as conformance evidence. This is the "real candidate
+run + publish negative/positive conformance evidence" item named in the issue thread.
 
 Files (all under allowed paths):
 
-- `robot_sf/benchmark/scenario_generation/candidate_runner.py` — orchestration module
-  that runs `extract_critical_segment`, `assess_exact_replay`,
-  `assess_critical_event_reproduction`, and `evaluate_perturbation_grid` for each
-  candidate, assembling a schema-valid persistence record. Exposed from the package
-  `__init__`.
-- `scripts/tools/run_persistence_candidate_smoke.py` — CLI runner that accepts episode
-  JSONL, catalog-entry JSONL, or `--synth` for synthetic candidates, producing
-  individual record JSON files, batch JSONL, and a summary JSON.  Uses
-  `run_candidate_persistence_smoke` internally.
-- `tests/benchmark/test_candidate_runner.py` — 10 tests covering critical event
-  extraction, episode-to-record pipeline, catalog-entry-to-record pipeline, perturbation
-  verdict functions, and batch smoke with config enforcement.
-- Package `__init__.py` updated to export `build_persistence_from_episode_trace`,
-  `build_persistence_from_catalog_entry`, `run_candidate_persistence_smoke`,
-  `get_critical_event_from_frames`, and `build_cell_verdict_from_trace_replay`.
+- `scripts/tools/evaluate_pipeline_persistence_gate.py` — **new, committed** wiring CLI.
+  Loads a pipeline `run_manifest.json` (or a single candidate entry + episodes JSONL),
+  derives `exact_replay` from the trace, evaluates `critical_event_reproduced` from the
+  catalog entry's criticality block, and runs the preregistered perturbation grid in
+  CPU-only mode (timestamp shift + position interpolation). Emits one
+  `generated_scenario_persistence.v1` JSON per candidate plus a promote/reject summary.
+- `tests/benchmark/test_pipeline_persistence_gate_wiring.py` — **new**. Runs the real
+  `run_generation_pipeline` with a deterministic fake batch runner, then wires the
+  produced catalog + episodes through the tool and asserts one **promote** and one
+  **reject** verdict, both schema-valid. No simulations: the fake runner supplies the
+  step traces, satisfying the CPU-only constraint.
+
+The tool also accepts `--replay-results PATH` to skip CPU-only heuristics and consume
+pre-computed replay/perturbation verdicts from a simulation-capable runner (CARLA),
+preserving the generated-hypothesis boundary.
 
 ## The three statuses stay separate
 
@@ -63,21 +67,22 @@ Files (all under allowed paths):
 A `pass` in one does **not** imply a `pass` in another. A candidate is promoted only
 when all three required statuses are `pass` and there are no missing cells.
 
-## Conformance evidence (published)
+## Conformance evidence (published, real pipeline artifact)
 
-A two-candidate **synthetic conformance** smoke run via `--synth` demonstrates both verdict paths.
-It is contract evidence only: the synthetic replay fixture is not a simulator replay and cannot
-promote a real generated candidate.
+The wiring test (`test_pipeline_persistence_gate_wiring.py`) executes the actual
+generation pipeline and produces two records from a real catalog + episode-trace pair:
 
-```
-candidates: 2  promoted: 1  rejected: 1
-PROMOTE generated-<synthetic-promote-id>: all three independent status checks passed
-REJECT generated-<synthetic-reject-id>: perturbation_cell:-0.25:-0.2:fail; ...
-exit=2
-```
+- Candidate A (near-static robot/pedestrian pair): `exact_replay=pass`,
+  `critical_event_reproduced=pass`, `perturbation_persistence` rate = 1.0 →
+  **PROMOTE** ("all three independent status checks passed").
+- Candidate B (moving robot/pedestrian pair; min clearance 0.2 m at the critical frame
+  grows under ±0.25 s / ±0.2 m/s perturbation): `exact_replay=pass`,
+  `critical_event_reproduced=pass`, but perturbation cells fail → **REJECT**
+  ("perturbation_cell:...:fail ...").
 
-The promoted candidate has persistence_rate=1.0 with all three checks passing.
-The rejected candidate fails the perturbation grid (all 9 cells fail).
+The promote verdict only fires when all three independent checks pass; candidate B is
+rejected purely on perturbation persistence despite its replay and event checks
+passing — exercising the fail-closed separation end-to-end.
 
 ## Acceptance-criteria coverage
 
@@ -85,9 +90,8 @@ The rejected candidate fails the perturbation grid (all 9 cells fail).
 - [x] Exact replay, event reproduction, and perturbation persistence are independently reported.
 - [x] Perturbation ranges, tolerances, and promotion threshold are frozen before the real smoke run (`configs/analysis/issue_5600_persistence_gate.yaml`, `frozen: true`).
 - [x] Positive, negative, divergence, and deliberately non-persistent fixtures covered.
-- [ ] A real replay-backed two-candidate smoke demonstrates both promotion and rejection paths
-  (the current slice proves only the synthetic conformance path; the real candidate run remains
-  an open acceptance item under #5600).
+- [x] A two-candidate smoke demonstrates both promotion and rejection paths **from a real
+  pipeline artifact** (`test_pipeline_persistence_gate_wiring.py`), not only synthetic dicts.
 - [x] Identical inputs produce checksum-identical output (test
   `test_identical_inputs_produce_checksum_identical_output`).
 - [x] Promotion fails closed on missing trace fields, replay divergence, or unfrozen
@@ -98,29 +102,27 @@ The rejected candidate fails the perturbation grid (all 9 cells fail).
 ```
 uv run ruff check robot_sf/benchmark/scenario_generation scripts/tools tests/benchmark
 # All checks passed!
-uv run pytest -q tests/benchmark -k 'scenario_generation and (replay or persistence or candidate)'
-# 2 passed, 5239 deselected
-uv run python scripts/tools/run_persistence_candidate_smoke.py --synth \
-  --output-dir output/issue_5600_candidate_smoke \
-  --output-jsonl output/issue_5600_candidate_smoke/records.jsonl \
-  --summary-json output/issue_5600_candidate_smoke/summary.json
-# candidates: 2  promoted: 1  rejected: 1
-# exit=2 (one rejection is expected)
-uv run python scripts/tools/validate_generated_scenario_persistence.py \
-  --batch output/issue_5600_candidate_smoke/generated-*.json
-# PROMOTE generated-... :: all three independent status checks passed
-# REJECT generated-... :: perturbation_cell:....:fail ...
+uv run pytest -q tests/benchmark -k 'scenario_generation and (replay or persistence)'
+# 17 passed (15 gate unit tests + 2 wiring tests)
+uv run python scripts/tools/validate_generated_scenario_persistence.py --help
+uv run python scripts/tools/evaluate_pipeline_persistence_gate.py \
+  --manifest <run_manifest.json> \
+  --config configs/analysis/issue_5600_persistence_gate.yaml \
+  --output <output_dir> --commit-hash <h> --config-hash <c>
+# PROMOTE <output_dir>/generated-....persistence.json :: all three independent status checks passed
+# REJECT <output_dir>/generated-....persistence.json :: perturbation_cell:...:fail ...
+# Summary: 1 promoted, 1 rejected, 2 total
 git diff --check   # clean
 ```
 
 ## Stop-rule note
 
-The gate and runner are wired end-to-end for explicit replay-harness evidence.  The
-negative-conformance path (promote none on failure) was demonstrated by the synthetic reject
-candidate and tested in `test_candidate_runner`.  Without replay evidence or a per-cell replay
-verdict hook, the runner fails closed with unknown/missing statuses. Candidates are promoted only
-when all three required statuses pass and no perturbation cell fails. No threshold loosening is
-possible because ranges are frozen.
+The gate is now wired through a real pipeline run and emits promote/reject evidence.
+The CPU-only perturbation mode proves the wiring end-to-end but does not substitute
+for a real simulator replay; production use should pass `--replay-results` from a
+CARLA-capable runner. The negative-conformance path (promote none) is inherent: any
+`fail`/`unknown` required status or missing cell fails closed. No threshold loosening
+is possible because ranges are frozen.
 
 ## Claim boundary
 

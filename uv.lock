@@ -5243,11 +5243,11 @@ requires-dist = [
     { name = "seaborn", marker = "extra == 'analysis'", specifier = ">=0.13.2" },
     { name = "seaborn", marker = "extra == 'viz'", specifier = ">=0.13.2" },
     { name = "shapely", specifier = ">=2.1.2" },
-    { name = "stable-baselines3", marker = "extra == 'training'", specifier = ">=2.4.0" },
+    { name = "stable-baselines3", marker = "extra == 'training'", specifier = ">=2.9.0" },
     { name = "svgelements", specifier = ">=1.9.6" },
     { name = "tensorboard", marker = "extra == 'training'", specifier = ">=2.21.0" },
     { name = "tensorflow", marker = "extra == 'sacadrl'", specifier = ">=2.15.0" },
-    { name = "torch", marker = "extra == 'training'", specifier = ">=2.5.1" },
+    { name = "torch", marker = "extra == 'training'", specifier = ">=2.8.0" },
     { name = "torch", extras = ["cuda"], marker = "extra == 'gpu'", specifier = ">=2.5.1" },
     { name = "tqdm", marker = "extra == 'progress'", specifier = ">=4.68.3" },
     { name = "wandb", marker = "extra == 'training'", specifier = ">=0.28.0" },
@@ -6124,20 +6124,18 @@ wheels = [
 
 [[package]]
 name = "stable-baselines3"
-version = "2.7.1"
+version = "2.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle" },
     { name = "gymnasium", version = "0.29.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'group-8-robot-sf-imitation'" },
     { name = "gymnasium", version = "1.1.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-8-robot-sf-rllib' or extra != 'group-8-robot-sf-imitation'" },
-    { name = "matplotlib" },
     { name = "numpy" },
-    { name = "pandas" },
     { name = "torch" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c9/42/f284c28272422262a99cdf35ecd2e283fded2f75327e6d5e82a9f6d6fe62/stable_baselines3-2.7.1.tar.gz", hash = "sha256:cd90d12d9ee0d9584053f12215c1682b313be4e3a8d8007739319799c3d2c071", size = 220719, upload-time = "2025-12-05T11:22:03.691Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/89/f8/9c1901a42e55b21b9e9559a720cb33dffdeb4c4215b1dfd10d63224b19c0/stable_baselines3-2.9.0.tar.gz", hash = "sha256:92b46c6099a0e8f99163ff09e26729e4d0a68b33dc8598626ca13ade3c0b3a61", size = 221345, upload-time = "2026-06-15T17:00:30.713Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/cc/a3038d3833f329dcd03b2dce8b778e4b41044caff88b48429473b8629623/stable_baselines3-2.7.1-py3-none-any.whl", hash = "sha256:b017e76dfe5ca0ce6eabb29e79c42e8c7e125d5862bfcd43ce04ec19732348d0", size = 188039, upload-time = "2025-12-05T11:22:00.819Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/70/d18c8278223d4928378c4af822b66d3c87e19e73bcb011e05e2f0b43f4e5/stable_baselines3-2.9.0-py3-none-any.whl", hash = "sha256:95f39a473dce081d1abe31acaf7cee446dcf223dcd74093d6ea460bc37e2e748", size = 187606, upload-time = "2026-06-15T17:00:29.331Z" },
 ]
 
 [[package]]

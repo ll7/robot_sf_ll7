@@ -76,7 +76,7 @@ the section is present and well-formed:
 
 ```bash
 python scripts/validation/check_preregistration_inference_contract.py \
-  configs/benchmarks/my_preregistration.yaml
+  configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml
 ```
 
 ## Decision rule examples by estimand

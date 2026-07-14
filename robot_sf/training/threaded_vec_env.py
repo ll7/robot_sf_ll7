@@ -13,6 +13,7 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from pysocialforce.forces import social_force_gil_releasing_context
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from robot_sf.sensor.range_sensor import LidarBatchCoordinator, lidar_batch_context
@@ -158,7 +159,8 @@ class ThreadedVecEnv(DummyVecEnv):
         """
         coordinator = self._lidar_batch_coordinator
         if coordinator is None:
-            return env.step(action)
+            with social_force_gil_releasing_context():
+                return env.step(action)
         try:
             with lidar_batch_context(coordinator, env_idx):
                 return env.step(action)

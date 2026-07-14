@@ -56,6 +56,67 @@ factorial_arms:
 # seed sets so the only difference between arms is the factorial toggles.
 scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
 scenario_matrix_sha256: d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5
+inference_contract:
+  resampling_unit:
+    method: "scenario-clustered hierarchical bootstrap"
+    rationale: >-
+      Treat scenarios as the outer resampling unit so that the factorial main effects
+      and interaction effect reflect uncertainty about generalization to unseen
+      scenarios, not only stochastic noise on the fixed scenarios. The paired seed
+      budget ensures that each scenario-seed pair has four complete arm rows, and
+      hierarchical aggregation uses scenario-level means before bootstrap resampling.
+    bootstrap_confidence: 0.95
+    resampling_order: "scenario → seed → episode"
+
+  inference_population:
+    type: "sampled_population"
+    rationale: >-
+      The factorial campaign is intended to assess whether prediction and constraint
+      handling produce effects that generalize beyond the current scenario set.
+      Treating scenarios as a sample from a broader population ensures the CIs
+      capture between-scenario variability, which is the stronger and more
+      conservative inference target consistent with the #5351 hierarchical paired
+      analysis dependency.
+
+  estimand:
+    type: "paired_delta"
+    description: >-
+      The three preregistered contrasts (A main effect, B main effect, AB interaction)
+      are each computed as paired episode-level deltas. Factor A delta is the mean
+      difference between A-ON and A-OFF arms (averaged over B). Factor B delta is
+      the mean difference between B-ON and B-OFF arms (averaged over A). The
+      interaction delta is (A1-B1 minus A0-B1) minus (A1-B0 minus A0-B0).
+
+  decision_rule:
+    rule: >-
+      CI-excludes-zero for each preregistered contrast on the primary metric, with
+      Holm-Bonferroni adjustment across the three contrasts.
+    threshold: >-
+      Each contrast is evaluated at adjusted alpha (Holm procedure over k=3 tests).
+      A contrast passes if its adjusted 95% CI excludes zero. A null or CI-straddling
+      result is a binding outcome: it forces claim narrowing and does not authorize
+      re-running with new seeds, re-tuning weights, or adding arms. The B-OFF
+      functionality check must pass before any contrast is evaluated.
+
+  primary_metrics:
+    metrics:
+      - collision_free_completion
+      - near_miss_exposure_normalized
+      - censored_time_to_goal
+    ordered_by_importance: true
+
+  multiplicity_handling:
+    strategy: >-
+      Holm-Bonferroni adjustment across the three preregistered contrasts to control
+      family-wise error rate at alpha=0.05. The three contrasts are treated as equally
+      important a priori; the Holm procedure steps down through ordered p-values to
+      maintain power while controlling FWER.
+    rationale: >-
+      Three contrasts (A main, B main, AB interaction) at nominal alpha=0.05 would
+      inflate family-wise error to ~14% without adjustment. Holm-Bonferroni is
+      uniformly more powerful than Bonferroni while providing the same FWER control.
+    adjustment_method: "holm_bonferroni"
+
 seed_policy:
   mode: seed-set
   seed_set: paper_eval_s30

@@ -305,6 +305,28 @@ def test_confirmation_gate_rejects_manifest_and_evidence_shape_drift(tmp_path: P
     assert any("evidence must be a list" in error for error in gate.errors)
 
 
+def test_confirmation_gate_rejects_untrusted_artifact_paths(tmp_path: Path) -> None:
+    """Traversal, symlink, and directory references cannot satisfy artifact checks."""
+    report, rows = _source_report(tmp_path)
+    sidecar = _confirmation_sidecar(report, rows)
+    outside = tmp_path.parent / "outside-replay.json"
+    outside.write_text("{}\n", encoding="utf-8")
+    symlink = report.parent / "linked-replay.json"
+    symlink.symlink_to(outside)
+
+    for reference in ("../outside-replay.json", "linked-replay.json", "."):
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        payload["rows"][0]["evidence"][0]["replay"]["artifact_path"] = reference
+        sidecar.write_text(json.dumps(payload), encoding="utf-8")
+
+        gate = validate_package_b_confirmation(report, sidecar)
+
+        assert gate.ready is False
+        assert any("replay.artifact_path does not resolve" in error for error in gate.errors)
+
+    assert symlink.is_symlink()
+
+
 def test_confirmation_gate_rejects_stage_and_metric_drift(tmp_path: Path) -> None:
     """Each confirmation stage and derived time metric is independently fail-closed."""
     report, rows = _source_report(tmp_path)

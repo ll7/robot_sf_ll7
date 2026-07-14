@@ -262,6 +262,7 @@ def _validate_confirmation_row(
         return None
     if key in observed_keys:
         errors.append(f"rows[{row_index}] duplicates matrix cell {key!r}")
+        return None
     observed_keys.add(key)
     base_row = base_rows.get(key)
     if base_row is None:
@@ -807,15 +808,50 @@ def _resolve_existing_path(
     if not isinstance(raw_path, str) or not raw_path.strip():
         return None
     path = Path(raw_path)
-    candidates = [path] if path.is_absolute() else []
-    if artifact_root is not None and not path.is_absolute():
-        candidates.append(artifact_root / path)
-    if not path.is_absolute():
-        candidates.extend((Path.cwd() / path, report_path.parent / path))
+    trusted_roots = _trusted_search_roots(report_path, artifact_root)
+    candidates = [path] if path.is_absolute() else [root / path for root in trusted_roots]
     for candidate in candidates:
-        if candidate.is_file():
-            return candidate
+        resolved = _safe_existing_file(candidate, trusted_roots)
+        if resolved is not None:
+            return resolved
     return None
+
+
+def _trusted_search_roots(report_path: Path, artifact_root: Path | None) -> tuple[Path, ...]:
+    """Return resolved roots allowed for user-supplied artifact references."""
+    roots: list[Path] = []
+    for root in (artifact_root, Path.cwd(), report_path.parent):
+        if root is None:
+            continue
+        try:
+            resolved = root.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if resolved not in roots:
+            roots.append(resolved)
+    return tuple(roots)
+
+
+def _safe_existing_file(candidate: Path, trusted_roots: tuple[Path, ...]) -> Path | None:
+    """Resolve a candidate only when it is a regular non-symlink file in a trusted root.
+
+    Returns:
+        The resolved file path, or ``None`` when the candidate is unsafe/unavailable.
+    """
+    try:
+        current = candidate
+        while current != current.parent:
+            if current.is_symlink():
+                return None
+            current = current.parent
+        resolved = candidate.resolve(strict=False)
+    except (OSError, RuntimeError):
+        return None
+    if not resolved.is_file():
+        return None
+    if not any(resolved.is_relative_to(root) for root in trusted_roots):
+        return None
+    return resolved
 
 
 def _load_mapping(path: Path) -> tuple[dict[str, Any], list[str]]:

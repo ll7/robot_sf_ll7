@@ -14,10 +14,11 @@ targeted tests.
 preserving Stable-Baselines3's `VecEnv` result, auto-reset, and terminal-observation behavior. Use it
 only when each environment is safe to step concurrently in one process. It avoids subprocess
 serialization, but it does not provide process isolation and does not by itself establish a rollout
-throughput improvement. The compiled LiDAR raycast and postprocessing sections release the Python
-global interpreter lock during execution; the surrounding environment step remains ordinary Python.
-The default `worker_mode: auto` remains unchanged and chooses subprocess workers when more than one
-environment is requested.
+throughput improvement. During plain `threaded` steps, the social-force calculation selects an
+output-identical compiled dispatcher that releases the Python global interpreter lock; calls outside
+that worker context retain the established dispatcher. The compiled LiDAR raycast and postprocessing
+sections also release the lock during execution. The default `worker_mode: auto` remains unchanged
+and chooses subprocess workers when more than one environment is requested.
 
 Select the mode explicitly in a primary PPO config:
 
@@ -59,6 +60,8 @@ worker computes dynamic-object raycasts independently, submits its static-obstac
 while the coordinator pads obstacle rows and invokes the batch kernel once. Participating
 rows must share one ray count and array dtypes, and each worker must reach the same number of LiDAR
 calls per step. Incompatible or incomplete batches fail closed; reset-time scans remain scalar.
+This coordinated mode retains the established social-force dispatcher rather than combining two
+independent scheduling changes.
 
 A batch of one calls the scalar `raycast_obstacles` kernel directly, and primary PPO training
 resolves the one-environment worker mode to `DummyVecEnv` before constructing a coordinator.

@@ -13,7 +13,9 @@ simulation including:
 
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from math import atan2, exp
 from typing import Protocol
 
@@ -34,6 +36,21 @@ from pysocialforce.scene import Line2D, PedState, Point2D
 logging.getLogger("numba").setLevel(logging.WARNING)
 
 Force = Callable[[], np.ndarray]
+
+_release_gil_for_social_force: ContextVar[bool] = ContextVar(
+    "release_gil_for_social_force",
+    default=False,
+)
+
+
+@contextmanager
+def social_force_gil_releasing_context() -> Iterator[None]:
+    """Select the GIL-releasing social-force kernel within the current context."""
+    token = _release_gil_for_social_force.set(True)
+    try:
+        yield
+    finally:
+        _release_gil_for_social_force.reset(token)
 
 
 class SimEntitiesProvider(Protocol):
@@ -189,7 +206,10 @@ class SocialForce:
         """
         ped_positions = self.peds.pos()
         ped_velocities = self.peds.vel()
-        forces = social_force(
+        kernel = (
+            _social_force_gil_releasing if _release_gil_for_social_force.get() else social_force
+        )
+        forces = kernel(
             ped_positions,
             ped_velocities,
             self.config.activation_threshold,
@@ -259,6 +279,9 @@ def social_force(
 
     # Return the array containing social forces for all pedestrians
     return forces
+
+
+_social_force_gil_releasing = njit(fastmath=True, nogil=True)(social_force.py_func)
 
 
 @njit(fastmath=True)

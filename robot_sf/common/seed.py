@@ -78,7 +78,10 @@ def _set_torch_deterministic_algorithms(torch_module: Any, deterministic: bool) 
         c_setter = getattr(c_module, "_set_deterministic_algorithms", None)
         if c_setter is None:
             return False
-        c_setter(bool(deterministic), False)
+        # Torch 2.13.0's C-level setter takes only the enabled flag; passing
+        # the public wrapper's extra warn_only positional argument raises
+        # TypeError and would silently leave determinism unset (see issue #5556).
+        c_setter(bool(deterministic))
         return True
 
     public_setter(bool(deterministic))

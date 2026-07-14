@@ -36,9 +36,11 @@ The blocker is now the real one, not a missing-input artifact:
 
 ## Reproduction
 
+Run this command from the repository root so its repo-relative inputs resolve:
+
 ```bash
 uv run python scripts/validation/check_issue_5248_salvaged_trace_rerun.py \
-  --campaign-root /home/luttkule/git/robot_sf_ll7/output/issue4206-13334-harvest/issue4206_trace_capable_h600_rerun_20260704 \
+  --campaign-root output/issue4206-13334-harvest/issue4206_trace_capable_h600_rerun_20260704 \
   --job-id 13334 \
   --expected-total-episodes 6480 \
   --preregistration-config \

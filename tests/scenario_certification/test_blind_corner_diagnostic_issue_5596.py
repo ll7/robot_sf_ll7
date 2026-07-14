@@ -161,6 +161,7 @@ def test_issue_5596_report_scopes_to_issue_5596_and_blind_corner(tmp_path: Path)
     )
 
     assert report["schema_version"] == ISSUE_5596_DIAGNOSTIC_SCHEMA
+    assert report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
     assert report["issue"] == "5596"
     assert report["scenario_id"] == ISSUE_5596_BLIND_CORNER_SCENARIO_ID
     assert report["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"

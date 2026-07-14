@@ -81,6 +81,7 @@ BLOCKED = "blocked"
 # Issue #5596 — blind-corner zero-success diagnostic constants.
 ISSUE_5596_BLIND_CORNER_SCENARIO_ID = "francis2023_blind_corner"
 ISSUE_5596_DIAGNOSTIC_SCHEMA = "issue_5596_blind_corner_diagnostic.v1"
+ISSUE_5596_REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
 ROUTE_FOLLOW_ALGO = "route_follow"
 
 # A cell is "geometrically feasible" only when the certifier finds an inflated
@@ -1451,6 +1452,7 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0915
     }
 
     return {
+        "review_marker": ISSUE_5596_REVIEW_MARKER,
         "schema_version": ISSUE_5596_DIAGNOSTIC_SCHEMA,
         "issue": "5596",
         "scenario_id": ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
@@ -1478,6 +1480,7 @@ __all__ = [
     "INFEASIBLE_BY_CONSTRUCTION",
     "ISSUE_5596_BLIND_CORNER_SCENARIO_ID",
     "ISSUE_5596_DIAGNOSTIC_SCHEMA",
+    "ISSUE_5596_REVIEW_MARKER",
     "PLANNER_LIMITED",
     "ROUTE_FOLLOW_ALGO",
     "TIME_TRUNCATED",

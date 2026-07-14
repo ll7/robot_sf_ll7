@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-13
+updated_at: 2026-07-14
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,14 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_5097_release_0_0_3_collision_consumer_audit/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5097_release_0_0_3_collision_consumer_audit/summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/collision_causality_online_risk_scenario_discovery_2026-07-12.md
   status: proposal
   freshness: dated

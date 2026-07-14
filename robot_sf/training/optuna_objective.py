@@ -106,7 +106,7 @@ def objective_from_series(
         span = float(x[-1] - x[0])
         if span <= 0:
             return float(np.mean(y))
-        trapz_compat = getattr(np, "trapezoid", np.trapz)
+        trapz_compat = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
         area = float(trapz_compat(y, x))
         return area / span
     if mode == "best_checkpoint":

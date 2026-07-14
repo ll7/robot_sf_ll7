@@ -3,6 +3,7 @@
     "by_path": {
       "robot_sf/benchmark/camera_ready/campaign.py": 1,
       "robot_sf/benchmark/camera_ready/resource_lifecycle.py": 2,
+      "robot_sf/benchmark/candidate_trace_resolution.py": 1,
       "robot_sf/benchmark/doctor.py": 1,
       "robot_sf/benchmark/forecast_lane_inventory.py": 1,
       "robot_sf/benchmark/helper_catalog.py": 2,
@@ -11,6 +12,7 @@
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner_env.py": 1,
       "robot_sf/benchmark/runner.py": 7,
+      "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/snqi/cli.py": 3,
       "robot_sf/benchmark/snqi/compute.py": 1,
       "robot_sf/benchmark/trace_predicate_export.py": 1,
@@ -133,6 +135,15 @@
       "lineno": 394,
       "path": "robot_sf/benchmark/camera_ready/resource_lifecycle.py",
       "source": "except Exception:  # noqa: BLE001 - cleanup must never mask the original error"
+    },
+    {
+      "col_offset": 4,
+      "context": "load_campaign_result_store",
+      "fingerprint": "be56e321c978a733",
+      "handler": "Exception",
+      "lineno": 144,
+      "path": "robot_sf/benchmark/candidate_trace_resolution.py",
+      "source": "except Exception as exc:"
     },
     {
       "col_offset": 4,
@@ -295,6 +306,15 @@
       "lineno": 1747,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
+    },
+    {
+      "col_offset": 4,
+      "context": "validate_selection_manifest",
+      "fingerprint": "2850e96f4494686e",
+      "handler": "Exception",
+      "lineno": 1044,
+      "path": "robot_sf/benchmark/scenario_generation/portfolio_selector.py",
+      "source": "except Exception as exc:"
     },
     {
       "col_offset": 4,

@@ -275,6 +275,7 @@ def test_success_requires_route_success_without_collision() -> None:
                 runtime_binding="baseline",
             ),
             planner_name="goal_seek",
+            planner_group="default_social_force",
             seed=111,
             horizon=5,
         )
@@ -284,6 +285,7 @@ def test_success_requires_route_success_without_collision() -> None:
 
     assert row["route_success"] is True
     assert row["success"] is False
+    assert row["planner_group"] == "default_social_force"
     assert row["metrics"]["success_rate"] == 0.0
 
 

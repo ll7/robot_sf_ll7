@@ -19,9 +19,12 @@ from robot_sf.benchmark.pedestrian_realism_validation import (
     REALISM_CLAIM_BOUNDARY,
     REALISM_SCORECARD_SCHEMA_VERSION,
     RealismCrowdInputs,
+    RealismEntryExitFlow,
     RealismMetricConfig,
     RealismScorecard,
+    RealismStagedDatasetReference,
     RealismTrackPair,
+    build_track_reconstruction_plan,
     fundamental_diagram_comparison,
     lane_formation_comparison,
     lane_formation_score_curve,
@@ -29,6 +32,7 @@ from robot_sf.benchmark.pedestrian_realism_validation import (
     render_scorecard_markdown,
     resample_track,
     run_realism_validation,
+    run_realism_validation_from_staged_dataset,
     run_realism_validation_from_track_set,
     speed_density_points,
     trajectory_rmse,
@@ -37,11 +41,13 @@ from robot_sf.benchmark.pedestrian_realism_validation import (
 from robot_sf.data.external import eth_ucy
 from robot_sf.data.external.eth_ucy_trajectories import (
     ETH_BIWI_OBSMAT_FRAME_PERIOD_S,
+    EthUcyTrack,
     EthUcyTrackSet,
     load_split_tracks,
     load_track_set,
     track_set_summary,
 )
+from scripts.tools import manage_external_data
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -288,6 +294,8 @@ def test_run_realism_validation_synthetic_end_to_end() -> None:
     )
 
     assert scorecard.status == "ok"
+    assert scorecard.to_dict()["evidence_status"] == "diagnostic-only"
+    assert scorecard.to_dict()["reconstruction"] is None
     rmse = scorecard.metrics["trajectory_rmse"]
     assert rmse["pair_count"] == 1
     assert rmse["rmse_m"]["mean"] == pytest.approx(0.0, abs=1e-9)
@@ -343,6 +351,114 @@ def test_run_realism_validation_from_track_set_not_staged_fail_closed() -> None:
     )
 
 
+def test_track_reconstruction_plan_is_partial_and_content_light() -> None:
+    """Trajectory seeds expose flow directions without implying scene geometry."""
+
+    times = np.asarray([0.0, 0.4, 0.8])
+    track_set = EthUcyTrackSet(
+        asset_id="eth-ucy",
+        group="eth",
+        split="eth",
+        format="obsmat",
+        docs_path="docs/datasets/eth-ucy.md",
+        tracks=(
+            EthUcyTrack(
+                pedestrian_id=1,
+                time_s=times,
+                positions=np.asarray([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]),
+            ),
+            EthUcyTrack(
+                pedestrian_id=2,
+                time_s=times + 0.4,
+                positions=np.asarray([[3.0, 1.0], [2.0, 1.0], [1.0, 1.0]]),
+            ),
+        ),
+        skipped_formats=(),
+        frame_period_s=0.4,
+    )
+
+    plan = build_track_reconstruction_plan(track_set)
+
+    assert plan.status == "partial"
+    assert plan.geometry_status == "trajectory_bounds_only"
+    assert plan.scene_bounds_m == ((-1.0, -1.0), (4.0, 2.0))
+    assert plan.flow_axis == "x"
+    assert plan.flow_direction_counts == {
+        "positive": 1,
+        "negative": 1,
+        "stationary": 0,
+        "off_axis": 0,
+    }
+    assert [ped.id for ped in plan.pedestrians] == ["eth_p1", "eth_p2"]
+    assert plan.pedestrians[0].start == (0.0, 0.0)
+    assert plan.pedestrians[0].trajectory == [(1.0, 0.0), (2.0, 0.0)]
+    assert plan.pedestrians[1].start_delay_s == pytest.approx(0.4)
+    assert plan.pedestrians[1].metadata["entry_delay_s"] == pytest.approx(0.4)
+    assert plan.timing_status == "entry_delay_only"
+    assert all(isinstance(flow, RealismEntryExitFlow) for flow in plan.entry_exit_flows)
+    first_flow, second_flow = plan.entry_exit_flows
+    assert first_flow.pedestrian_id == 1
+    assert first_flow.entry_position == (0.0, 0.0)
+    assert first_flow.exit_position == (2.0, 0.0)
+    assert first_flow.flow_direction == "positive"
+    assert first_flow.entry_time_s == pytest.approx(0.0)
+    assert first_flow.exit_time_s == pytest.approx(0.8)
+    assert second_flow.pedestrian_id == 2
+    assert second_flow.entry_position == (3.0, 1.0)
+    assert second_flow.exit_position == (1.0, 1.0)
+    assert second_flow.flow_direction == "negative"
+    assert second_flow.entry_time_s == pytest.approx(0.4)
+    assert second_flow.exit_time_s == pytest.approx(1.2)
+    assert second_flow.to_dict()["observed_duration_s"] == pytest.approx(0.8)
+    assert "static scene geometry" in plan.blockers[0].lower()
+    assert "per-waypoint timestamps" in plan.blockers[1]
+    summary = plan.summary_dict()
+    assert summary["schema_version"] == "pedestrian_realism_validation.reconstruction.v1"
+    assert summary["entry_exit_flow_count"] == 2
+    assert summary["timing_status"] == "entry_delay_only"
+    assert summary["entry_exit_time_span_s"]["first_entry_time_s"] == pytest.approx(0.0)
+    assert summary["entry_exit_time_span_s"]["last_exit_time_s"] == pytest.approx(1.2)
+    assert "positions" not in summary
+    assert "trajectory" not in summary
+
+
+def test_empty_track_reconstruction_plan_is_not_available() -> None:
+    """A missing track set yields a fail-closed reconstruction decision packet."""
+
+    plan = build_track_reconstruction_plan(None, dataset_id="eth-ucy/eth")
+
+    assert plan.status == "not_available"
+    assert plan.scene_bounds_m is None
+    assert plan.pedestrians == ()
+    assert plan.timing_status == "unavailable"
+    assert plan.summary_dict()["entry_exit_flow_count"] == 0
+    assert any("stage the dataset" in blocker.lower() for blocker in plan.blockers)
+
+
+def test_track_reconstruction_rejects_non_monotonic_times() -> None:
+    """Timed replay must fail closed when a source track has invalid sample ordering."""
+
+    track_set = EthUcyTrackSet(
+        asset_id="eth-ucy",
+        group="eth",
+        split="eth",
+        format="obsmat",
+        docs_path="docs/datasets/eth-ucy.md",
+        tracks=(
+            EthUcyTrack(
+                pedestrian_id=1,
+                time_s=np.asarray([0.0, 0.4, 0.2]),
+                positions=np.asarray([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]),
+            ),
+        ),
+        skipped_formats=(),
+        frame_period_s=0.4,
+    )
+
+    with pytest.raises(ValueError, match="strictly increasing"):
+        build_track_reconstruction_plan(track_set)
+
+
 def test_scorecard_writer_emits_schema_files(tmp_path: Path) -> None:
     """The writer emits scorecard.json and scorecard.md with the schema version."""
 
@@ -357,8 +473,10 @@ def test_scorecard_writer_emits_schema_files(tmp_path: Path) -> None:
     payload = json.loads(paths["summary_json"].read_text(encoding="utf-8"))
     assert payload["schema_version"] == REALISM_SCORECARD_SCHEMA_VERSION
     assert payload["claim_boundary"] == REALISM_CLAIM_BOUNDARY
+    assert payload["evidence_status"] == "diagnostic-only"
     md = paths["scorecard_md"].read_text(encoding="utf-8")
     assert "Pedestrian Realism Scorecard" in md
+    assert "evidence status: `diagnostic-only`" in md
     assert "Trajectory RMSE" in md
 
 
@@ -458,6 +576,62 @@ def test_parse_vsp_split_is_skipped_not_failed(tmp_path: Path) -> None:
 
     assert track_set.tracks == ()
     assert track_set.skipped_formats == ("vsp",)
+
+
+def test_provenance_gated_scorecard_fails_closed_without_manifest(tmp_path: Path) -> None:
+    """A staged-looking layout without registry provenance is not scorecard evidence."""
+
+    _stage_dataset(tmp_path / "eth-ucy")
+    scorecard = run_realism_validation_from_staged_dataset(
+        dataset_id="eth-ucy/eth",
+        dataset=RealismStagedDatasetReference(
+            split="eth",
+            root=tmp_path / "eth-ucy",
+            provenance_manifest=tmp_path / "missing.provenance.json",
+        ),
+    )
+
+    assert scorecard.status == "not_available"
+    assert scorecard.to_dict()["evidence_status"] == "not_available"
+    assert scorecard.to_dict()["reconstruction"]["status"] == "not_available"
+    assert "provenance-gated" in scorecard.reference_source
+    assert any("not success evidence" in note.lower() for note in scorecard.notes)
+
+
+def test_provenance_gated_scorecard_uses_registry_manifest(tmp_path: Path) -> None:
+    """A registry-ready synthetic staging reaches the real-reference metric path."""
+
+    source_root = tmp_path / "eth-ucy"
+    _stage_dataset(source_root)
+    (source_root / "README.md").write_text("Synthetic staging note.\n", encoding="utf-8")
+    manifest_path = tmp_path / "eth-ucy.provenance.json"
+    manage_external_data.stage_asset(
+        "eth-ucy",
+        source_path=source_root,
+        manifest_out=manifest_path,
+    )
+    track_set = load_track_set("eth", root=source_root)
+    real_positions, real_velocities = _gridded_real(track_set)
+
+    scorecard = run_realism_validation_from_staged_dataset(
+        dataset_id="eth-ucy/eth",
+        dataset=RealismStagedDatasetReference(
+            split="eth",
+            root=source_root,
+            provenance_manifest=manifest_path,
+        ),
+        sim_positions=real_positions,
+        sim_velocities=real_velocities,
+    )
+
+    assert scorecard.status == "ok"
+    assert scorecard.to_dict()["evidence_status"] == "diagnostic-only"
+    assert scorecard.to_dict()["reconstruction"]["status"] == "partial"
+    assert scorecard.to_dict()["reconstruction"]["timing_status"] == "entry_delay_only"
+    assert scorecard.to_dict()["reconstruction"]["entry_exit_flow_count"] == 2
+    assert scorecard.metrics["fundamental_diagram_comparison"]["status"] == "ok"
+    assert any("provenance manifest passed" in note for note in scorecard.notes)
+    assert any("replay seed plan status: partial" in note for note in scorecard.notes)
 
 
 def test_track_parser_rejects_ragged_rows_fail_closed(tmp_path: Path) -> None:

@@ -1,8 +1,9 @@
 # Issue #3216 — Headline 7x7 CI + Rank-Stability Report Harness
 
-**Status**: local report harness + small-seed smoke + SLURM launch packet.
-The paper-grade run is SLURM and out of local scope. This harness never
-self-certifies paper-grade.
+**Status**: the verified S20 job 13274 analysis is preserved as diagnostic-only evidence.
+It reports per-cell confidence intervals (CIs) and constraints-first rank stability, while
+claim-card/domain review and the S30 decision remain. This harness never self-certifies
+paper-grade evidence.
 
 ## What this delivers
 
@@ -12,9 +13,10 @@ support**: per-cell confidence intervals and a **rank-stability** statistic
 (bootstrap rank distribution / Kendall-tau + rank-flip rate across seed
 resamples), so close rankings / safety deltas are reported with uncertainty.
 
-The local deliverable is the **report harness that consumes headline-comparison
-rows**, a **small-seed smoke** proving it runs and classifies conservatively,
-and the **SLURM launch packet** for the increased-seed-budget run.
+The local deliverable includes the **report harness that consumes headline-comparison rows**, a
+**small-seed smoke** proving it runs and classifies conservatively, the **SLURM launch packet** for
+the increased-seed-budget run, and the durable
+[job 13274 result bundle](evidence/issue_5247_job_13274_rank_stability/README.md).
 
 ### Harness
 
@@ -51,9 +53,12 @@ References the real canonical configs with verified sha256:
 - `seed_sets_v1.yaml`, `classic_interactions_francis2023.yaml`,
   `scenario_horizons_h500.yaml`
 
-S20 (`paper_eval_s20`) and the launch-only S30 schedule (`paper_eval_s30`) are
-available via #1554. No S20/S30 campaign rows exist yet, so the report remains
-blocked until the SLURM run produces durable rows.
+S20 (`paper_eval_s20`) and the launch-only S30 schedule (`paper_eval_s30`) are available via #1554.
+Job 13274 completed the S20 campaign with 8,640 episodes; the verified harvest is now analyzed and
+preserved under `docs/context/evidence/issue_5247_job_13274_rank_stability/`. The generated report
+remains conservatively classified `blocked_until_run`, and its decision packet says
+`ready_for_table_review_no_claim_promotion` / `needs_review`: empirical execution is complete, but
+claim review and the S30 decision are not.
 
 The portable launcher `scripts/benchmark/run_issue3216_headline_campaign.sh`
 keeps campaign execution and post-campaign reporting as separate status lanes.
@@ -90,9 +95,10 @@ No second bootstrap / rank / Kendall implementation was added.
 
 ## Claim boundary
 
-Per-cell CIs and rank-stability are reported with explicit fail-closed cell
-status. This harness makes **no paper-grade or planner-ranking claim** on its
-own: the paper-grade 7x7 headline run requires the increased seed budget
-(S20/S30 via #1554) and is SLURM. On insufficient seed budget the result is
-classified `blocked_until_run` or `diagnostic`. Do not fabricate paper-grade
-numbers; do not make significance claims from S10/S3.
+Per-cell CIs and rank stability are reported with explicit fail-closed cell status. The verified
+S20 analysis counted 315 cells, excluded none, and found that 235 of 280 adjacent success-rank
+comparisons remain `not_statistically_distinguishable_budget`; 32 of 35 scenarios show some
+resampled rank movement. This harness makes **no paper-grade or planner-ranking claim** on its own.
+SNQI ranking is invalid because rank-alignment Spearman was `-0.2`, below the `0.3` fail threshold.
+Do not promote the result before claim-card/domain review, and do not make significance claims from
+S10/S3 evidence.

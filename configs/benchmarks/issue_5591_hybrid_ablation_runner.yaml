@@ -1,0 +1,70 @@
+# Runner config for issue #5591 — hybrid portfolio structure ablation roster.
+#
+# Reuses the SAME scenario matrix (classic_interactions_francis2023) and the
+# SAME `eval` seed set as the mechanism cross-cut
+# (configs/benchmarks/paper_experiment_matrix_v1_hybrid_portfolio_compare.yaml)
+# so the ablation arms are directly comparable arm-for-arm. Only the hybrid
+# portfolio algo config is swapped per arm via the issue_5591 roster; this file
+# keeps every horizon/seed/kinematics/export setting matched to the cross-cut.
+#
+# Launch one arm at a time, e.g.:
+#   uv run python scripts/tools/run_camera_ready_benchmark.py \
+#     --config configs/benchmarks/issue_5591_hybrid_ablation_runner.yaml \
+#     --planner-key hybrid_minus_static_escape --campaign-id issue5591-hybrid-ablation
+name: issue_5591_hybrid_ablation_runner
+paper_facing: false
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+workers: 2
+horizon: 100
+dt: 0.1
+record_forces: true
+resume: true
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+
+kinematics_matrix:
+  - differential_drive
+
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: true
+repository_url: https://github.com/ll7/robot_sf_ll7
+
+# Single arm substitution point. The campaign orchestrator iterates these keys
+# from configs/analysis/issue_5591_hybrid_ablation_roster.yaml; each arm uses
+# its matching ablation algo config (reference = hybrid_full).
+planners:
+  - key: hybrid_full
+    algo: hybrid_portfolio
+    planner_group: experimental
+    algo_config: configs/algos/hybrid_portfolio_ablation_hybrid_full.yaml
+    benchmark_profile: experimental
+  - key: hybrid_minus_static_escape
+    algo: hybrid_portfolio
+    planner_group: experimental
+    algo_config: configs/algos/hybrid_portfolio_ablation_hybrid_minus_static_escape.yaml
+    benchmark_profile: experimental
+  - key: hybrid_minus_hard_guard
+    algo: hybrid_portfolio
+    planner_group: experimental
+    algo_config: configs/algos/hybrid_portfolio_ablation_hybrid_minus_hard_guard.yaml
+    benchmark_profile: experimental
+  - key: hybrid_minus_adaptive_switching
+    algo: hybrid_portfolio
+    planner_group: experimental
+    algo_config: configs/algos/hybrid_portfolio_ablation_hybrid_minus_adaptive_switching.yaml
+    benchmark_profile: experimental
+  - key: hybrid_minus_all_three
+    algo: hybrid_portfolio
+    planner_group: experimental
+    algo_config: configs/algos/hybrid_portfolio_ablation_hybrid_minus_all_three.yaml
+    benchmark_profile: experimental

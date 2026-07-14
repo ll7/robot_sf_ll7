@@ -14,7 +14,7 @@ import json
 import shlex
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -25,6 +25,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
 )
 from robot_sf.benchmark.fallback_policy import campaign_exit_code
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
+from scripts.tools.record_post_campaign_stage_status import build_stage_status
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -200,7 +201,41 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(json.dumps(result, indent=2))
     if args.mode == "preflight" and result.get("status") != "orca_preflight_failed":
         return 0
-    return campaign_exit_code(result)
+    exit_code = campaign_exit_code(result)
+    # Issue #5244: emit the post-campaign stage-status envelope so downstream
+    # schedulers/ledgers can classify a completed campaign whose report/analysis
+    # stage fails as a separate lane (job_exit_code follows the campaign lane and
+    # must not be remapped by a nonzero reporting stage). The campaign exit code is
+    # preserved regardless of whether the envelope was written.
+    _record_stage_status(result, exit_code)
+    return exit_code
+
+
+def _record_stage_status(result: dict[str, Any], exit_code: int) -> None:
+    """Best-effort emit of the post-campaign stage-status envelope.
+
+    A completed campaign with a failed reporting stage must still exit 0 here; the
+    envelope simply records the separate report lane. Any failure to write the
+    envelope is logged but never changes the campaign exit code.
+    """
+    campaign_root = result.get("campaign_root") if isinstance(result, dict) else None
+    summary_json = result.get("summary_json") if isinstance(result, dict) else None
+    if not campaign_root or not summary_json:
+        return
+    stage_status_path = Path(campaign_root) / "reports" / "post_campaign_stage_status.json"
+    try:
+        payload = build_stage_status(
+            campaign_summary_path=Path(summary_json),
+            campaign_exit_code=exit_code,
+            stage_name="camera_ready_campaign",
+            stage_exit_code=exit_code,
+        )
+        stage_status_path.parent.mkdir(parents=True, exist_ok=True)
+        stage_status_path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    except (OSError, ValueError, TypeError) as exc:
+        logger.warning("post-campaign stage status not recorded: {}", exc)
 
 
 if __name__ == "__main__":

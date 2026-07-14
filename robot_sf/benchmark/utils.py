@@ -16,6 +16,7 @@ import json
 import math
 import os
 import subprocess
+from numbers import Integral, Real
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -40,6 +41,32 @@ def normalize_track_field(raw: str | None, *, field_name: str) -> str | None:
     if not value:
         raise ValueError(f"{field_name} cannot be empty.")
     return value
+
+
+def coerce_optional_id(value: Any) -> int | None:
+    """Normalize an optional integer identifier without truncating invalid values.
+
+    Returns:
+        An integer identifier, or ``None`` for absent, non-integral, non-finite,
+        or otherwise malformed input. Boolean values are rejected even though
+        Python treats them as integers.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, Integral):
+        return int(value)
+    if isinstance(value, Real):
+        numeric = float(value)
+        return int(numeric) if math.isfinite(numeric) and numeric.is_integer() else None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped or not stripped.lstrip("+-").isdigit():
+            return None
+        try:
+            return int(stripped)
+        except ValueError:
+            return None
+    return None
 
 
 def build_track_metadata_block(

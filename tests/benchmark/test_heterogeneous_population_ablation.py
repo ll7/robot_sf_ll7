@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import robot_sf.benchmark.heterogeneous_population_ablation as harness_module
 from robot_sf.benchmark.heterogeneous_population_ablation import (
     EPISODE_CONTROL_TRACE_PATH,
     HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
@@ -23,7 +24,10 @@ from robot_sf.benchmark.heterogeneous_population_ablation import (
     build_mean_matched_population_pair,
     build_per_archetype_ablation_report,
 )
-from robot_sf.benchmark.heterogeneous_population_ablation_runner import run_manifest_row
+from robot_sf.benchmark.heterogeneous_population_ablation_runner import (
+    build_episode_scenario,
+    run_manifest_row,
+)
 from robot_sf.benchmark.pedestrian_control_trace import PEDESTRIAN_CONTROL_TRACE_LABELS_KEY
 
 _REPO_ROOT = Path(__file__).parents[2]
@@ -663,6 +667,10 @@ def test_report_cli_stops_before_analysis_when_integration_readiness_is_blocked(
 _REPO_HARNESS_CONFIG_PATH = (
     Path(__file__).parents[2] / "configs/benchmarks/issue_3574_mean_matched_harness_smoke.yaml"
 )
+_MATRIX_HARNESS_CONFIG_PATH = (
+    Path(__file__).parents[2]
+    / "configs/benchmarks/issue_5504_mean_matched_harness_scenario_matrix_smoke.yaml"
+)
 
 
 def _load_repo_harness_config() -> dict[str, object]:
@@ -711,6 +719,167 @@ def test_repo_harness_config_manifest_includes_near_field_exposure_metric() -> N
         "near_field_clearance_threshold_m" in key
         for key in first_row["expected_episode_output_keys"]
     )
+
+
+def test_matrix_harness_derives_per_cell_maps_and_densities() -> None:
+    """Canonical scenario matrices contribute each cell's map and pedestrian density."""
+
+    config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
+    manifest = build_mean_matched_harness_manifest(
+        config,
+        config_path=str(_MATRIX_HARNESS_CONFIG_PATH),
+    )
+
+    assert manifest["scenario_matrix"] == (
+        "configs/scenarios/sets/issue_5504_mean_matched_two_geometry_smoke.yaml"
+    )
+    assert manifest["scenario_matrix_derivation"]["population_size"] == 4
+    assert {row["scenario_id"] for row in manifest["scenario_rows"]} == {
+        "classic_cross_trap_low",
+        "classic_head_on_corridor_low",
+    }
+    rows_by_scenario = {}
+    for row in manifest["manifest_rows"]:
+        rows_by_scenario.setdefault(row["scenario_id"], []).append(row)
+        assert row["map_file"].startswith("maps/svg_maps/")
+        assert row["map_file"] in {
+            "maps/svg_maps/classic_crossing.svg",
+            "maps/svg_maps/classic_head_on_corridor.svg",
+        }
+    assert {row["density"] for row in rows_by_scenario["classic_cross_trap_low"]} == {0.02}
+    assert {row["density"] for row in rows_by_scenario["classic_head_on_corridor_low"]} == {0.02}
+    assert {build_episode_scenario(row)["map_file"] for row in manifest["manifest_rows"]} == {
+        str((_REPO_ROOT / "maps/svg_maps/classic_crossing.svg").resolve()),
+        str((_REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg").resolve()),
+    }
+
+
+def test_matrix_harness_requires_explicit_population_derivation() -> None:
+    """Matrix ingestion fails closed instead of inventing population parameters."""
+
+    config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
+    config.pop("scenario_matrix_derivation")
+
+    with pytest.raises(ValueError, match="scenario_matrix_derivation"):
+        build_mean_matched_harness_manifest(
+            config,
+            config_path=str(_MATRIX_HARNESS_CONFIG_PATH),
+        )
+
+
+def test_matrix_harness_rejects_malformed_raw_entries_before_loader_can_skip_them(
+    tmp_path: Path,
+) -> None:
+    """A malformed matrix entry cannot silently shrink the configured scenario set."""
+
+    config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
+    map_file = str((_REPO_ROOT / "maps/svg_maps/classic_crossing.svg").resolve())
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    None,
+                    {
+                        "name": "kept",
+                        "map_file": map_file,
+                        "simulation_config": {"ped_density": 0.02},
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config["scenario_matrix"] = str(matrix_path)
+
+    with pytest.raises(ValueError, match=r"scenarios\[0\] must be mapping"):
+        build_mean_matched_harness_manifest(
+            config,
+            config_path=str(_MATRIX_HARNESS_CONFIG_PATH),
+        )
+
+
+@pytest.mark.parametrize(
+    ("missing_field", "error_match"),
+    [("map_file", "map_file"), ("ped_density", "ped_density")],
+)
+def test_matrix_harness_rejects_missing_cell_inputs(
+    tmp_path: Path, missing_field: str, error_match: str
+) -> None:
+    """Matrix ingestion fails closed instead of inheriting map or density defaults."""
+
+    config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
+    matrix_path = tmp_path / "matrix.yaml"
+    cell = {
+        "name": "matrix_cell",
+        "map_file": str((_REPO_ROOT / "maps/svg_maps/classic_crossing.svg").resolve()),
+        "simulation_config": {"ped_density": 0.02},
+    }
+    if missing_field == "map_file":
+        cell.pop("map_file")
+    else:
+        cell["simulation_config"].pop("ped_density")
+    matrix_path.write_text(
+        yaml.safe_dump({"scenarios": [cell]}),
+        encoding="utf-8",
+    )
+    config["scenario_matrix"] = str(matrix_path)
+
+    with pytest.raises(ValueError, match=error_match):
+        build_mean_matched_harness_manifest(config, config_path=str(_MATRIX_HARNESS_CONFIG_PATH))
+
+
+@pytest.mark.parametrize(
+    ("case", "error_match"),
+    [
+        ("duplicate", "duplicate scenario id"),
+        ("conflicting_density", "conflicting ped_density"),
+        ("unresolved_map", "does not resolve to a file"),
+        ("negative_density", "finite and >= 0"),
+    ],
+)
+def test_matrix_harness_rejects_ambiguous_or_invalid_cells(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+    error_match: str,
+) -> None:
+    """Matrix identity, map, and density conflicts remain explicit blockers."""
+
+    config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text("scenarios: []\n", encoding="utf-8")
+    map_file = str((_REPO_ROOT / "maps/svg_maps/classic_crossing.svg").resolve())
+    cell = {
+        "name": "matrix_cell",
+        "map_file": map_file,
+        "simulation_config": {"ped_density": 0.02},
+    }
+    cells = [dict(cell)]
+    if case == "duplicate":
+        cells.append(dict(cell))
+    elif case == "conflicting_density":
+        cells[0]["ped_density"] = 0.01
+    elif case == "unresolved_map":
+        cells[0]["map_file"] = str(tmp_path / "missing.svg")
+    else:
+        cells[0]["simulation_config"] = {"ped_density": -0.01}
+    config["scenario_matrix"] = str(matrix_path)
+    monkeypatch.setattr(harness_module, "load_scenarios", lambda _path: cells)
+
+    with pytest.raises(ValueError, match=error_match):
+        build_mean_matched_harness_manifest(config, config_path=str(_MATRIX_HARNESS_CONFIG_PATH))
+
+
+def test_inline_harness_manifest_preserves_legacy_row_shape() -> None:
+    """Legacy inline cells remain byte-compatible by omitting additive map fields."""
+
+    manifest = build_mean_matched_harness_manifest(_manifest_config())
+
+    assert "scenario_matrix" not in manifest
+    assert "scenario_matrix_derivation" not in manifest
+    assert all("map_file" not in row for row in manifest["manifest_rows"])
+    assert all("map_file" not in row for row in manifest["scenario_rows"])
 
 
 def _single_cell_manifest_config() -> dict[str, object]:
@@ -762,6 +931,34 @@ def _run_single_cell_records(tmp_path: Path) -> tuple[dict[str, object], list[di
         for row in manifest_rows
     ]
     return manifest, records
+
+
+@pytest.mark.slow
+def test_matrix_harness_runs_each_geometry_end_to_end(tmp_path: Path) -> None:
+    """Two matrix cells execute on their own maps through the production runner."""
+
+    config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
+    manifest = build_mean_matched_harness_manifest(
+        config,
+        config_path=str(_MATRIX_HARNESS_CONFIG_PATH),
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    rows = manifest["manifest_rows"]
+    assert isinstance(rows, list)
+
+    records = [run_manifest_row(row, scenario_path=manifest_path, horizon=20) for row in rows]
+
+    assert {record["scenario_id"] for record in records} == {
+        "classic_cross_trap_low",
+        "classic_head_on_corridor_low",
+    }
+    for row, record in zip(rows, records, strict=True):
+        expected_map = str((_REPO_ROOT / row["map_file"]).resolve())
+        assert record["scenario_params"]["map_file"] == expected_map
+        assert record["scenario_params"]["simulation_config"]["ped_density"] == pytest.approx(
+            row["density"]
+        )
 
 
 @pytest.mark.slow

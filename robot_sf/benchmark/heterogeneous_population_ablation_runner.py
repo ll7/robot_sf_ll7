@@ -38,7 +38,7 @@ DEFAULT_MAX_EPISODE_STEPS = 600
 def build_episode_scenario(
     row: dict[str, Any],
     *,
-    map_path: Path | str,
+    map_path: Path | str | None = None,
     max_episode_steps: int = DEFAULT_MAX_EPISODE_STEPS,
     archetype_speed_factors: dict[str, float] | None = None,
     archetype_seed: int = DEFAULT_ARCHETYPE_SEED,
@@ -54,9 +54,10 @@ def build_episode_scenario(
 
     arm_population = row["arm_population"]
     population_size = sum(arm_population["counts"].values())
+    resolved_map_path = _resolve_row_map_path(row, fallback_map_path=map_path)
     return {
         "name": row["scenario_id"],
-        "map_file": str(Path(map_path).resolve()),
+        "map_file": str(resolved_map_path),
         "simulation_config": {
             "max_episode_steps": int(max_episode_steps),
             "ped_density": float(row["density"]),
@@ -79,7 +80,7 @@ def build_episode_scenario(
 def run_manifest_row(
     row: dict[str, Any],
     *,
-    map_path: Path | str,
+    map_path: Path | str | None = None,
     scenario_path: Path,
     horizon: int = DEFAULT_MAX_EPISODE_STEPS,
     dt: float = 0.1,
@@ -134,6 +135,32 @@ def run_manifest_row(
     scenario_params["response_law_fraction"] = response_law_fraction
 
     return record
+
+
+def _resolve_row_map_path(row: dict[str, Any], *, fallback_map_path: Path | str | None) -> Path:
+    """Resolve a row-owned map, retaining explicit fallback support for legacy inline rows.
+
+    Returns:
+        Existing absolute map path selected from the row or explicit fallback.
+    """
+
+    raw_map_path = row.get("map_file", fallback_map_path)
+    if raw_map_path is None:
+        raise ValueError(
+            "manifest row has no map_file; matrix-derived manifests must carry a per-row map "
+            "and legacy inline rows require an explicit map_path"
+        )
+    map_path = Path(raw_map_path).expanduser()
+    if map_path.is_absolute():
+        candidates = [map_path]
+    else:
+        repo_root = Path(__file__).resolve().parents[2]
+        candidates = [Path.cwd() / map_path, repo_root / map_path]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    searched = ", ".join(str(candidate.resolve()) for candidate in candidates)
+    raise ValueError(f"manifest row map_file does not resolve to a file; searched: {searched}")
 
 
 __all__ = [

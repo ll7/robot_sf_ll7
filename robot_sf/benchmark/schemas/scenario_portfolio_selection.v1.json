@@ -1,0 +1,392 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/robot-sf/scenario_portfolio_selection.v1.json",
+  "title": "RobotSF Scenario Portfolio Selection Manifest (v1)",
+  "description": "A versioned, deterministic record of archive-to-portfolio selection using separate descriptors, Pareto filtering, and max-min coverage diversity. No hidden weighted sum is permitted for the final selection decision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "archive_hashes",
+    "selection_timestamp_utc",
+    "config",
+    "eligible_inventory",
+    "descriptor_records",
+    "pareto_analysis",
+    "selection_sequence",
+    "exclusion_ledger",
+    "sensitivity_report",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "scenario_portfolio_selection.v1"
+    },
+    "manifest_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9_.:-]+$"
+    },
+    "selection_timestamp_utc": {
+      "type": "string",
+      "minLength": 1
+    },
+    "archive_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config_commit", "archive_path", "archive_hash"],
+      "properties": {
+        "config_commit": {"type": "string"},
+        "archive_path": {"type": "string", "minLength": 1},
+        "archive_hash": {"type": "string", "minLength": 1},
+        "persistence_manifest_ref": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": {"type": "string"},
+            "hash": {"type": "string"},
+            "schema_version": {"type": "string"}
+          }
+        },
+        "notes": {"type": "string"}
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "coverage_quotas",
+        "descriptor_normalization",
+        "pareto_directions",
+        "max_portfolio_size",
+        "preregistered_rules"
+      ],
+      "properties": {
+        "coverage_quotas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min_per_topology", "min_per_interaction_class", "max_from_same_generator"],
+          "properties": {
+            "min_per_topology": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 1
+            },
+            "min_per_interaction_class": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 1
+            },
+            "max_from_same_generator": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 5
+            }
+          }
+        },
+        "descriptor_normalization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method"],
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": ["min_max", "z_score", "none"]
+            },
+            "descriptor_overrides": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "method": {"type": "string", "enum": ["min_max", "z_score", "none"]}
+                }
+              }
+            }
+          }
+        },
+        "pareto_directions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["criticality_severity", "diversity", "interaction_complexity", "failure_signature_distinctness"],
+          "properties": {
+            "criticality_severity": {
+              "type": "string",
+              "enum": ["maximize", "minimize"],
+              "description": "Higher severity (e.g., lower TTC) is treated as maximize or minimize depending on objective framing"
+            },
+            "diversity": {
+              "type": "string",
+              "enum": ["maximize", "minimize"]
+            },
+            "interaction_complexity": {
+              "type": "string",
+              "enum": ["maximize", "minimize"]
+            },
+            "failure_signature_distinctness": {
+              "type": "string",
+              "enum": ["maximize", "minimize"]
+            }
+          }
+        },
+        "max_portfolio_size": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "preregistered_rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["rule_id", "description"],
+            "properties": {
+              "rule_id": {"type": "string", "minLength": 1},
+              "description": {"type": "string", "minLength": 1},
+              "target_descriptor": {"type": "string"},
+              "min_value": {"type": "number"},
+              "max_value": {"type": "number"}
+            }
+          }
+        }
+      }
+    },
+    "eligible_inventory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidate_id", "persistence_status", "source", "eligible"],
+        "properties": {
+          "candidate_id": {"type": "string", "minLength": 1},
+          "persistence_status": {
+            "type": "string",
+            "enum": ["persistent", "non_persistent", "unknown", "not_evaluated"]
+          },
+          "source": {"type": "string", "minLength": 1},
+          "eligible": {"type": "boolean"},
+          "ineligibility_reason": {"type": "string"}
+        }
+      }
+    },
+    "descriptor_records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidate_id", "criticality", "replay_persistence", "topology", "actor_interaction", "mechanism_signature", "descriptor_provenance"],
+        "properties": {
+          "candidate_id": {"type": "string", "minLength": 1},
+          "criticality": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "min_clearance_m": {"type": ["number", "null"]},
+              "ttc_min_s": {"type": ["number", "null"]},
+              "collision_count": {"type": ["integer", "null"]},
+              "near_miss_count": {"type": ["integer", "null"]},
+              "severity_score": {"type": ["number", "null"]},
+              "unavailable_fields": {
+                "type": "array",
+                "items": {"type": "string"}
+              }
+            }
+          },
+          "replay_persistence": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["persistent", "non_persistent", "unknown", "not_evaluated", "replay_validated", "loads_only", "not_representable_yet"]
+              },
+              "exact_replay_pass": {"type": ["boolean", "null"]},
+              "event_reproduced": {"type": ["boolean", "null"]},
+              "perturbation_persistent": {"type": ["boolean", "null"]},
+              "unavailable_fields": {
+                "type": "array",
+                "items": {"type": "string"}
+              }
+            }
+          },
+          "topology": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "map_family": {"type": "string"},
+              "map_type": {"type": "string"},
+              "geometry_label": {"type": "string"},
+              "unavailable_fields": {
+                "type": "array",
+                "items": {"type": "string"}
+              }
+            }
+          },
+          "actor_interaction": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "pedestrian_count": {"type": ["integer", "null"]},
+              "interaction_class": {"type": "string"},
+              "complexity_score": {"type": ["number", "null"]},
+              "unavailable_fields": {
+                "type": "array",
+                "items": {"type": "string"}
+              }
+            }
+          },
+          "mechanism_signature": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "critical_signal": {"type": "string"},
+              "failure_mode": {"type": "string"},
+              "mechanism_label": {"type": "string"},
+              "unavailable_fields": {
+                "type": "array",
+                "items": {"type": "string"}
+              }
+            }
+          },
+          "descriptor_provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source_entry_hash", "extracted_from"],
+            "properties": {
+              "source_entry_hash": {"type": "string", "minLength": 1},
+              "extracted_from": {
+                "type": "string",
+                "enum": ["generated_scenario_candidate.v1", "generated_scenario_catalog_entry.v1", "generated_scenario_persistence.v1", "synthetic_fixture", "external"]
+              },
+              "inferred": {"type": "boolean"},
+              "inference_rule": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "pareto_analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["front_size", "dominated_count", "pareto_front", "dominance_reasons"],
+      "properties": {
+        "front_size": {"type": "integer", "minimum": 0},
+        "dominated_count": {"type": "integer", "minimum": 0},
+        "pareto_front": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "dominance_reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": ["dominated_by", "reasons"],
+            "properties": {
+              "dominated_by": {"type": "array", "items": {"type": "string"}},
+              "reasons": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        }
+      }
+    },
+    "selection_sequence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["selection_order", "candidate_id", "selection_criterion"],
+        "properties": {
+          "selection_order": {"type": "integer", "minimum": 1},
+          "candidate_id": {"type": "string", "minLength": 1},
+          "selection_criterion": {
+            "type": "string",
+            "enum": ["max_min_coverage", "quota_satisfaction", "quota_remainder", "fallback"]
+          },
+          "min_distance_to_selected": {"type": ["number", "null"]},
+          "coverage_contribution": {
+            "type": "object",
+            "properties": {
+              "topology": {"type": "string"},
+              "interaction_class": {"type": "string"},
+              "mechanism": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "exclusion_ledger": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["candidate_id", "excluded", "reason"],
+        "properties": {
+          "candidate_id": {"type": "string", "minLength": 1},
+          "excluded": {"type": "boolean"},
+          "reason": {
+            "type": "string",
+            "enum": [
+              "ineligible_persistence",
+              "dominated_pareto",
+              "not_selected_coverage",
+              "duplicate",
+              "missing_descriptor",
+              "quota_exhausted",
+              "max_portfolio_size_reached",
+              "preregistered_rule"
+            ]
+          },
+          "detail": {"type": "string"}
+        }
+      }
+    },
+    "sensitivity_report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stable_selections", "unstable_candidates", "descriptor_alternatives", "summary"],
+      "properties": {
+        "stable_selections": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "unstable_candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "candidate_id": {"type": "string"},
+              "selected_under": {"type": "array", "items": {"type": "string"}},
+              "not_selected_under": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "descriptor_alternatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "variant_label": {"type": "string"},
+              "changes": {"type": "string"},
+              "selected_ids": {"type": "array", "items": {"type": "string"}}
+            }
+          }
+        },
+        "summary": {
+          "type": "string"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_issue", "selector_version", "claim_boundary"],
+      "properties": {
+        "source_issue": {"const": "#5601"},
+        "selector_version": {"type": "string", "minLength": 1},
+        "claim_boundary": {"const": "portfolio selection from certified archive; not planner comparison evidence"},
+        "notes": {"type": "string"}
+      }
+    }
+  }
+}

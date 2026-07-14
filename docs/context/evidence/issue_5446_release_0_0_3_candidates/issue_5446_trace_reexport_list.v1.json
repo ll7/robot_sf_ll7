@@ -1,0 +1,918 @@
+{
+  "schema_version": "issue_5446_trace_reexport_list.v1",
+  "issue": "#5446 -> #5447",
+  "claim_boundary": "Targeted trace re-export request list only. Derived from the Pareto-selected candidates' embedded raw per-seed outcomes because the #5615 resolver, as shipped, cannot resolve per-seed episodes from a cell-level candidate (see README).",
+  "source_candidate_manifest_hash": {
+    "n_rows": 20160,
+    "n_eligible_cells": 96,
+    "n_excluded_rows": 17280,
+    "n_candidates": 50,
+    "n_seed_flip_candidates": 45,
+    "n_planner_upset_candidates": 5,
+    "n_selected": 2
+  },
+  "n_tuples": 90,
+  "n_episode_id_found": 90,
+  "tuples": [
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "111",
+      "episode_id": "classic_doorway_medium--111--fc6264c7e2bbbaf3",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "112",
+      "episode_id": "classic_doorway_medium--112--641d62627d7447f7",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "113",
+      "episode_id": "classic_doorway_medium--113--13f31b8f7ebea33e",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "114",
+      "episode_id": "classic_doorway_medium--114--dc05f120552fcd07",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "115",
+      "episode_id": "classic_doorway_medium--115--981ba8469d3b7094",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "116",
+      "episode_id": "classic_doorway_medium--116--904c96d7aefa3f39",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "117",
+      "episode_id": "classic_doorway_medium--117--5010ebb7e7eac743",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "118",
+      "episode_id": "classic_doorway_medium--118--f4a85eafdb3393b3",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "119",
+      "episode_id": "classic_doorway_medium--119--e0d307e51b481fdc",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "120",
+      "episode_id": "classic_doorway_medium--120--1261f381e49483b5",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "121",
+      "episode_id": "classic_doorway_medium--121--d4fb1d04a17558d6",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "122",
+      "episode_id": "classic_doorway_medium--122--8bea3088256fe6c2",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "123",
+      "episode_id": "classic_doorway_medium--123--49ea3c3084fc8c54",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "124",
+      "episode_id": "classic_doorway_medium--124--8f2ec1846c2382c0",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "125",
+      "episode_id": "classic_doorway_medium--125--77056d6d54f98629",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "126",
+      "episode_id": "classic_doorway_medium--126--c2d21627d1e2492e",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "127",
+      "episode_id": "classic_doorway_medium--127--6179ae538ced4f4d",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "128",
+      "episode_id": "classic_doorway_medium--128--0788d86011c3392b",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "129",
+      "episode_id": "classic_doorway_medium--129--915ed2756f2aa7c6",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "130",
+      "episode_id": "classic_doorway_medium--130--3e733fcbc7e58c17",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "131",
+      "episode_id": "classic_doorway_medium--131--031be7e120acb98b",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "132",
+      "episode_id": "classic_doorway_medium--132--541e54bba5302ff0",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "133",
+      "episode_id": "classic_doorway_medium--133--7d4d238562d83ae2",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "134",
+      "episode_id": "classic_doorway_medium--134--1f718502760329c8",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "135",
+      "episode_id": "classic_doorway_medium--135--c095d3f793de0e86",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "136",
+      "episode_id": "classic_doorway_medium--136--c2930eaa228f4e23",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "137",
+      "episode_id": "classic_doorway_medium--137--26879b594bdecc5d",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "138",
+      "episode_id": "classic_doorway_medium--138--568fede970423ab8",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "139",
+      "episode_id": "classic_doorway_medium--139--82dfd39de8111b19",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "seed": "140",
+      "episode_id": "classic_doorway_medium--140--4c3994054e23d04d",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "seed_flip::classic_doorway_medium::ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "111",
+      "episode_id": "classic_realworld_double_bottleneck_high--111--fb588846ea29cb6f",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "112",
+      "episode_id": "classic_realworld_double_bottleneck_high--112--52afd643fa2b5830",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "113",
+      "episode_id": "classic_realworld_double_bottleneck_high--113--867b59c322aa4c56",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "114",
+      "episode_id": "classic_realworld_double_bottleneck_high--114--208464acf9783edb",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "115",
+      "episode_id": "classic_realworld_double_bottleneck_high--115--84abe54cab92f089",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "116",
+      "episode_id": "classic_realworld_double_bottleneck_high--116--d436c70b9aa7bd39",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "117",
+      "episode_id": "classic_realworld_double_bottleneck_high--117--537c7a53157ff7d1",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "118",
+      "episode_id": "classic_realworld_double_bottleneck_high--118--3c0f9c93de0d1d95",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "119",
+      "episode_id": "classic_realworld_double_bottleneck_high--119--d9cc73933065183e",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "120",
+      "episode_id": "classic_realworld_double_bottleneck_high--120--faf99e4804e4cadc",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "121",
+      "episode_id": "classic_realworld_double_bottleneck_high--121--be156bd2181ecb17",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "122",
+      "episode_id": "classic_realworld_double_bottleneck_high--122--65c6aea2910a67bc",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "123",
+      "episode_id": "classic_realworld_double_bottleneck_high--123--f5c9ba905a6cf5c1",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "124",
+      "episode_id": "classic_realworld_double_bottleneck_high--124--540a855ca6ac0862",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "125",
+      "episode_id": "classic_realworld_double_bottleneck_high--125--6881a7fb87e82814",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "126",
+      "episode_id": "classic_realworld_double_bottleneck_high--126--d61a7ab39231288a",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "127",
+      "episode_id": "classic_realworld_double_bottleneck_high--127--1342291e75640e30",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "128",
+      "episode_id": "classic_realworld_double_bottleneck_high--128--cd74a715a76b1f5b",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "129",
+      "episode_id": "classic_realworld_double_bottleneck_high--129--44f6471de437516a",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "130",
+      "episode_id": "classic_realworld_double_bottleneck_high--130--bee4091941f83847",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "131",
+      "episode_id": "classic_realworld_double_bottleneck_high--131--9bdefe01045d90cd",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "132",
+      "episode_id": "classic_realworld_double_bottleneck_high--132--c563b451ff6cbe21",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "133",
+      "episode_id": "classic_realworld_double_bottleneck_high--133--1154d50cb532e89e",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "134",
+      "episode_id": "classic_realworld_double_bottleneck_high--134--f904ed25546b15b3",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "135",
+      "episode_id": "classic_realworld_double_bottleneck_high--135--da8936d958e5f416",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "136",
+      "episode_id": "classic_realworld_double_bottleneck_high--136--91935792bca3a957",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "137",
+      "episode_id": "classic_realworld_double_bottleneck_high--137--74f74d91f82a6694",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "138",
+      "episode_id": "classic_realworld_double_bottleneck_high--138--9d44898430658df2",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "139",
+      "episode_id": "classic_realworld_double_bottleneck_high--139--0baac47f6aebf09f",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "seed": "140",
+      "episode_id": "classic_realworld_double_bottleneck_high--140--ea8590c18dc7e687",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "111",
+      "episode_id": "classic_realworld_double_bottleneck_high--111--544918024132112f",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "112",
+      "episode_id": "classic_realworld_double_bottleneck_high--112--918ab0bba4180f7c",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "113",
+      "episode_id": "classic_realworld_double_bottleneck_high--113--4c110dfbef928d9a",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "114",
+      "episode_id": "classic_realworld_double_bottleneck_high--114--7257b6de1c00a2aa",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "115",
+      "episode_id": "classic_realworld_double_bottleneck_high--115--654a1e4684edb9ed",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "116",
+      "episode_id": "classic_realworld_double_bottleneck_high--116--32a74cd163bc2190",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "117",
+      "episode_id": "classic_realworld_double_bottleneck_high--117--fc5d7a8c967b578d",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "118",
+      "episode_id": "classic_realworld_double_bottleneck_high--118--35c0d1a6f2eb3e9b",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "119",
+      "episode_id": "classic_realworld_double_bottleneck_high--119--18664c1d796fed9c",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "120",
+      "episode_id": "classic_realworld_double_bottleneck_high--120--6f621b7b1b20300c",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "121",
+      "episode_id": "classic_realworld_double_bottleneck_high--121--b13bdec5c074ad77",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "122",
+      "episode_id": "classic_realworld_double_bottleneck_high--122--4654fd2ff7c90273",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "123",
+      "episode_id": "classic_realworld_double_bottleneck_high--123--358367ddf7b710d4",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "124",
+      "episode_id": "classic_realworld_double_bottleneck_high--124--022107bb10aeafcb",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "125",
+      "episode_id": "classic_realworld_double_bottleneck_high--125--6d9073de4575e2b4",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "126",
+      "episode_id": "classic_realworld_double_bottleneck_high--126--4335e724dc734e3f",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "127",
+      "episode_id": "classic_realworld_double_bottleneck_high--127--72afa353978e7f9b",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "128",
+      "episode_id": "classic_realworld_double_bottleneck_high--128--7f755c203e298458",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "129",
+      "episode_id": "classic_realworld_double_bottleneck_high--129--3dfe1d1bd7f4e614",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "130",
+      "episode_id": "classic_realworld_double_bottleneck_high--130--446a30a170fb81c3",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "131",
+      "episode_id": "classic_realworld_double_bottleneck_high--131--9b723cbadcde4700",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "132",
+      "episode_id": "classic_realworld_double_bottleneck_high--132--cf5762e68cd4c627",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "133",
+      "episode_id": "classic_realworld_double_bottleneck_high--133--988a99eeb9310b20",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "134",
+      "episode_id": "classic_realworld_double_bottleneck_high--134--dd976d57cc4a6ca3",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "135",
+      "episode_id": "classic_realworld_double_bottleneck_high--135--4e53c0e5aae35b87",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "136",
+      "episode_id": "classic_realworld_double_bottleneck_high--136--d1b485d87da3bdf8",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "137",
+      "episode_id": "classic_realworld_double_bottleneck_high--137--0f4e2ba84c22e929",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "138",
+      "episode_id": "classic_realworld_double_bottleneck_high--138--8c4d86f14250a26f",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "139",
+      "episode_id": "classic_realworld_double_bottleneck_high--139--d21513682e8266d8",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    },
+    {
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "ppo",
+      "seed": "140",
+      "episode_id": "classic_realworld_double_bottleneck_high--140--938d8cd860002689",
+      "episode_id_status": "found",
+      "requested_by_candidates": [
+        "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo"
+      ]
+    }
+  ]
+}

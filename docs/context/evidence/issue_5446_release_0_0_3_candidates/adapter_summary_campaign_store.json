@@ -1,0 +1,25 @@
+{
+  "execution_mode_counts": {
+    "adapter": 15840,
+    "mixed": 1440,
+    "native": 2880
+  },
+  "n_arms": 14,
+  "n_rows_total": 20160,
+  "per_arm_row_counts": {
+    "goal__differential_drive": 1440,
+    "guarded_ppo__differential_drive": 1440,
+    "hybrid_rule_v3_fast_progress_static_escape__differential_drive": 1440,
+    "hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive": 1440,
+    "orca__differential_drive": 1440,
+    "ppo__differential_drive": 1440,
+    "prediction_planner__differential_drive": 1440,
+    "predictive_mppi__differential_drive": 1440,
+    "risk_dwa__differential_drive": 1440,
+    "sacadrl__differential_drive": 1440,
+    "scenario_adaptive_hybrid_orca_v1__differential_drive": 1440,
+    "scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive": 1440,
+    "social_force__differential_drive": 1440,
+    "socnav_sampling__differential_drive": 1440
+  }
+}

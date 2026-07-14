@@ -42,7 +42,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
+from robot_sf.benchmark.map_runner_env import build_env_config
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
+from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.scenario_certification.feasibility_diagnostics import (
     DIAGNOSTIC_CLAIM_BOUNDARY,
     SOLVABLE_ROUTE_CLASSES,
@@ -1106,17 +1110,21 @@ def _completion_margin_to_dict(margin: CompletionMargin) -> dict[str, Any]:
 def make_route_follow_episode_runner(
     config: FeasibilityOracleConfig,
 ) -> EpisodeRunner:
-    """Build the fail-closed placeholder for the route-follow intervention.
+    """Build the stateful route-follow intervention runner (issue #5636).
 
-    The canonical map runner does not currently support injecting waypoint goals while
-    carrying the robot pose across sub-episodes. Returning a blocked record avoids
-    presenting reset-per-waypoint episodes as a continuous intervention.
+    The runner drives the robot along the certifier's inflated A* path in a
+    **single continuous episode**, targeting each waypoint in sequence. The robot
+    pose and remaining horizon are preserved across the whole route: there is no
+    per-waypoint episode reset, so progress and elapsed steps accumulate naturally.
+    This is the stateful adapter the fail-closed placeholder in #5596 lacked, and it
+    prevents a reset-per-waypoint run from being misread as continuous route-follow
+    evidence.
 
     Args:
-        config: Oracle configuration (scenario path for certifier resolution).
+        config: Oracle configuration (scenario path for certifier/route resolution).
 
     Returns:
-        An episode runner that reports the unavailable intervention as blocked.
+        An episode runner that executes one stateful waypoint-to-waypoint rollout.
     """
 
     def _route_follow_runner(
@@ -1125,39 +1133,152 @@ def make_route_follow_episode_runner(
         horizon: int | None,
         algo: str,
     ) -> Mapping[str, Any]:
-        """Report that a stateful route-follow rollout is not yet available.
+        """Execute one stateful route-follow rollout along the certified A* path.
 
         Returns:
             Episode record with route completion flags and route-follow metadata.
         """
-        # The canonical map runner currently has no supported contract for injecting a
-        # waypoint goal and carrying the robot pose into the next sub-episode. Returning a
-        # blocked record is safer than presenting reset-per-waypoint episodes as a continuous
-        # intervention. Issue #5636 tracks the stateful adapter required to enable this lane.
-        return {
-            "algo": ROUTE_FOLLOW_ALGO,
-            "route_complete": None,
-            "steps": None,
-            "status": "blocked",
-            "termination_reason": "route_follow_intervention_unavailable",
-            "route_follow_blocker": (
-                "canonical map runner lacks waypoint-goal and pose-continuation support; see #5636"
-            ),
-        }
+        waypoints = _get_certified_route_waypoints(scenario, scenario_path=config.scenario_path)
+        if not waypoints or len(waypoints) < 2:
+            # Without a certified route there is nothing to follow; report blocked.
+            return {
+                "algo": ROUTE_FOLLOW_ALGO,
+                "route_complete": None,
+                "steps": None,
+                "status": "blocked",
+                "termination_reason": "route_follow_no_certified_path",
+                "route_follow_blocker": "certifier produced no A* path to follow",
+            }
 
-        del scenario, seed, horizon, algo
-        return {
-            "algo": ROUTE_FOLLOW_ALGO,
-            "route_complete": None,
-            "steps": None,
-            "status": "blocked",
-            "termination_reason": "route_follow_intervention_unavailable",
-            "route_follow_blocker": (
-                "canonical map runner lacks waypoint-goal and pose-continuation support; see #5636"
-            ),
-        }
+        actor_free = make_actor_free_scenario(scenario)
+        try:
+            env_config = build_env_config(actor_free, scenario_path=config.scenario_path)
+            if horizon is not None:
+                env_config.sim_config.max_episode_steps = int(horizon)
+            env = make_robot_env(config=env_config, seed=int(seed), debug=False)
+        except Exception as exc:  # noqa: BLE001 - diagnostic lane must fail closed.
+            return {
+                "algo": ROUTE_FOLLOW_ALGO,
+                "route_complete": None,
+                "steps": None,
+                "status": "blocked",
+                "termination_reason": "route_follow_env_init_error",
+                "route_follow_blocker": str(exc),
+            }
+
+        try:
+            obs, _ = env.reset(seed=int(seed))
+            del obs
+            sim = env.simulator
+            navs = getattr(sim, "robot_navs", None)
+            if not navs:
+                return {
+                    "algo": ROUTE_FOLLOW_ALGO,
+                    "route_complete": None,
+                    "steps": None,
+                    "status": "blocked",
+                    "termination_reason": "route_follow_no_navigator",
+                    "route_follow_blocker": "scenario simulator exposes no robot navigator",
+                }
+
+            # Re-target the navigator at the certified route. `current_waypoint` is a
+            # live property of the navigator, so mutating it each step steers the robot
+            # without resetting its pose or consuming the remaining horizon.
+            nav = navs[0]
+            target_waypoints = [tuple(float(c) for c in wp) for wp in waypoints]
+            nav.waypoints = list(target_waypoints)
+            nav.waypoint_id = 0
+            nav.reached_waypoint = False
+
+            max_steps = (
+                int(env_config.sim_config.max_episode_steps) if horizon is None else int(horizon)
+            )
+            result = _run_stateful_route_follow_rollout(env, nav, max_steps)
+            route_complete = result["route_complete"]
+            status = "passed" if route_complete else "failed"
+            return {
+                "algo": ROUTE_FOLLOW_ALGO,
+                "route_complete": route_complete,
+                "steps": result["steps_used"],
+                "status": status,
+                "termination_reason": result["termination_reason"],
+                "collision_seen": result["collision_seen"],
+                "robot_final_position": result["final_pos"],
+                "waypoint_count": len(target_waypoints),
+                "stateful": True,
+                "route_follow_provenance": (
+                    "single continuous episode; pose + remaining horizon preserved "
+                    "across certified waypoints (issue #5636)"
+                ),
+                "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+            }
+        finally:
+            close_fn = getattr(env, "close", None)
+            if callable(close_fn):
+                close_fn()
 
     return _route_follow_runner
+
+
+def _run_stateful_route_follow_rollout(
+    env: Any,
+    nav: Any,
+    max_steps: int,
+) -> dict[str, Any]:
+    """Drive the robot along ``nav.waypoints`` in one continuous episode.
+
+    The navigator's ``current_waypoint`` is advanced live as each waypoint is reached,
+    so the robot pose and remaining horizon are preserved across the whole route.
+
+    Returns:
+        Mapping with ``route_complete``, ``steps_used``, ``termination_reason``,
+        ``collision_seen``, and ``final_pos``.
+    """
+    steps_used = 0
+    final_pos: tuple[float, float] | None = None
+    termination_reason = "max_steps"
+    collision_seen = False
+    for _step_idx in range(max_steps):
+        robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+        # Advance to the next waypoint once the current one is reached, so the robot
+        # keeps following the certified path rather than stalling.
+        if nav.reached_waypoint and nav.waypoint_id < len(nav.waypoints) - 1:
+            nav.waypoint_id += 1
+        goal = np.asarray(nav.current_waypoint, dtype=float)
+        action = _simple_route_follow_policy(robot_pos, goal)
+        _obs, _reward, terminated, truncated, info = env.step(action)
+        steps_used += 1
+        final_pos = (float(robot_pos[0]), float(robot_pos[1]))
+        if bool(terminated) or bool(truncated):
+            if nav.reached_destination:
+                termination_reason = "route_follow_reached_destination"
+            elif bool(info.get("collision", False)):
+                termination_reason = "collision"
+                collision_seen = True
+            else:
+                termination_reason = "max_steps"
+            break
+    return {
+        "route_complete": bool(nav.reached_destination),
+        "steps_used": steps_used,
+        "termination_reason": termination_reason,
+        "collision_seen": collision_seen,
+        "final_pos": list(final_pos) if final_pos is not None else None,
+    }
+
+
+def _simple_route_follow_policy(robot_pos: np.ndarray, goal: np.ndarray) -> np.ndarray:
+    """Goal-seeking velocity command toward ``goal`` (same kinematics as the ``goal`` algo).
+
+    Returns:
+        A 2D velocity command driving the robot straight at the current waypoint.
+    """
+    direction = goal - robot_pos
+    dist = float(np.linalg.norm(direction))
+    if dist < 1e-6:
+        return np.zeros(2, dtype=float)
+    speed = 1.0
+    return direction / dist * speed
 
 
 def _get_certified_route_waypoints(
@@ -1250,7 +1371,7 @@ def _replan_astar_path(
     return [(float(x), float(y)) for x, y in path]
 
 
-def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0915
+def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path,
     *,
     envelope_radii_m: tuple[float, ...] = (1.0, 0.5),
@@ -1319,7 +1440,9 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0915
     )
     runner = episode_runner or _default_actor_free_runner(config)
     certify = certifier or _default_certifier
-    route_runner = make_route_follow_episode_runner(config)
+    route_runner = (
+        episode_runner if episode_runner is not None else make_route_follow_episode_runner(config)
+    )
 
     nominal_radius = radii[0]
     seed = _scenario_rollout_seed(blind_corner, override=None)
@@ -1341,28 +1464,41 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0915
         horizon = _scenario_horizon(env_scenario)
         try:
             record = route_runner(env_scenario, seed, horizon, ROUTE_FOLLOW_ALGO)
-            completed = (
-                True
-                if record.get("route_complete") is True
-                or (record.get("outcome") or {}).get("route_complete") is True
-                else None
-                if record.get("route_complete") is None and record.get("status") == "blocked"
-                else False
-            )
+            is_stateful = record.get("stateful") is True
+            if not is_stateful:
+                completed = None
+                status = "blocked"
+                blocker_msg = (
+                    record.get("route_follow_blocker") or "route-follow runner is not stateful"
+                )
+            else:
+                completed = (
+                    True
+                    if record.get("route_complete") is True
+                    or (record.get("outcome") or {}).get("route_complete") is True
+                    else None
+                    if record.get("route_complete") is None and record.get("status") == "blocked"
+                    else False
+                )
+                status = (
+                    "passed" if completed is True else "blocked" if completed is None else "failed"
+                )
+                blocker_msg = record.get("route_follow_blocker")
+
             route_follow_results.append(
                 {
                     "envelope_radius_m": radius,
                     "feasible": completed,
                     "termination_reason": record.get("termination_reason"),
                     "steps": record.get("steps"),
-                    "status": (
-                        "passed"
-                        if completed is True
-                        else "blocked"
-                        if completed is None
-                        else "failed"
-                    ),
-                    "blocker": record.get("route_follow_blocker"),
+                    "status": status,
+                    "blocker": blocker_msg,
+                    "stateful": record.get("stateful"),
+                    "waypoint_count": record.get("waypoint_count"),
+                    "collision_seen": record.get("collision_seen"),
+                    "robot_final_position": record.get("robot_final_position"),
+                    "route_follow_provenance": record.get("route_follow_provenance"),
+                    "claim_boundary": record.get("claim_boundary") or DIAGNOSTIC_CLAIM_BOUNDARY,
                 }
             )
         except Exception as exc:  # noqa: BLE001

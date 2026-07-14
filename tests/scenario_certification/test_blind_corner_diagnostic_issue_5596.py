@@ -127,19 +127,74 @@ def _manifest(tmp_path: Path, scenario: dict[str, Any]) -> Path:
     return path
 
 
-def test_route_follow_runner_uses_route_follow_algo_key() -> None:
-    """The intervention runner builder returns a callable and uses the route_follow algo key."""
+@pytest.mark.slow
+def test_route_follow_runner_stateful_contract_on_real_scenario(tmp_path: Path) -> None:
+    """The stateful runner drives one continuous episode over the certified route.
+
+    It must report ``stateful=True`` (pose + remaining horizon preserved across
+    waypoints) rather than the fail-closed blocked placeholder, and it must not
+    present a reset-per-waypoint run as continuous route-follow evidence. Marked slow
+    because it builds the simulator for a real route-follow rollout.
+    """
+    pytest.importorskip("robot_sf.benchmark.map_runner")
+    manifest = _manifest(tmp_path, _scenario(max_episode_steps=400))
+    scenario = {
+        "name": "francis2023_blind_corner",
+        "simulation_config": {"max_episode_steps": 400, "ped_density": 0.0},
+        "robot_config": {},
+        "metadata": {"archetype": "blind_corner"},
+        "seeds": [219],
+    }
+    env_scenario = feasibility_oracle.make_envelope_scenario(scenario, envelope_radius_m=1.0)
     config = feasibility_oracle.FeasibilityOracleConfig(
-        scenario_path=_REPO_ROOT / "configs/scenarios/francis2023.yaml",
+        scenario_path=manifest,
         envelope_radii_m=(1.0, 0.5),
     )
     runner = make_route_follow_episode_runner(config)
-    record = runner({}, 219, 400, ROUTE_FOLLOW_ALGO)
+    record = runner(env_scenario, 219, 400, ROUTE_FOLLOW_ALGO)
     assert callable(runner)
     assert ROUTE_FOLLOW_ALGO == "route_follow"
     assert record["algo"] == ROUTE_FOLLOW_ALGO
-    assert record["status"] == "blocked"
-    assert record["route_complete"] is None
+    # The lane is now stateful: it either follows the route or reports a real failure.
+    assert record.get("stateful") is True
+    assert record["status"] in ("passed", "failed", "blocked")
+    assert record.get("route_follow_provenance") is not None
+
+
+def test_route_follow_report_rejects_reset_per_waypoint_as_continuous(tmp_path: Path) -> None:
+    """A reset-per-waypoint runner must NOT be reported as a continuous intervention.
+
+    The fail-closed contract (issue #5636) requires that a runner which restarts the
+    episode at every waypoint cannot be surfaced as ``stateful`` continuous route-follow
+    evidence. The diagnostic report must therefore reject (mark non-stateful) any
+    route-follow result that does not preserve pose/horizon across the certified route.
+    """
+
+    def reset_per_waypoint_runner(_s, _seed, _horizon, _algo):
+        # Mimics the pre-#5636 bug: resets the episode at every waypoint and beelines at
+        # the goal, producing a falsely green result because each sub-episode starts at
+        # the original spawn.
+        return {
+            "algo": ROUTE_FOLLOW_ALGO,
+            "route_complete": True,
+            "steps": 5,
+            "status": "passed",
+            "stateful": False,
+        }
+
+    manifest = _manifest(tmp_path, _scenario())
+    report = build_issue_5596_blind_corner_diagnostic(
+        manifest,
+        envelope_radii_m=(1.0, 0.5),
+        episode_runner=reset_per_waypoint_runner,
+        certifier=lambda _s, _p: _certificate(VALID),
+    )
+    results = report["route_follow_intervention_verdict"]["results"]
+    for result in results:
+        # The diagnostic must not present a non-stateful (reset-per-waypoint) runner as
+        # continuous route-follow evidence: it is blocked, never passed.
+        assert result["stateful"] is not True
+        assert result["status"] != "passed"
 
 
 def test_issue_5596_report_scopes_to_issue_5596_and_blind_corner(tmp_path: Path) -> None:
@@ -196,14 +251,16 @@ def test_issue_5596_report_requires_reduced_radius_after_nominal(tmp_path: Path)
 def test_issue_5596_mechanism_blocks_when_route_intervention_is_unavailable(
     tmp_path: Path,
 ) -> None:
-    """An unavailable route-follow lane cannot support a route-geometry conclusion."""
+    """An unavailable (blocked) route-follow lane cannot support a route-geometry conclusion."""
     manifest = _manifest(tmp_path, _scenario())
 
     def runner(_s, _seed, _horizon, _algo):
         return {
-            "steps": 100,
-            "outcome": {"route_complete": False},
-            "termination_reason": "collision",
+            "algo": ROUTE_FOLLOW_ALGO,
+            "route_complete": None,
+            "steps": None,
+            "status": "blocked",
+            "stateful": None,
         }
 
     report = build_issue_5596_blind_corner_diagnostic(
@@ -223,14 +280,16 @@ def test_issue_5596_mechanism_blocks_when_route_intervention_is_unavailable(
 def test_issue_5596_mechanism_does_not_promote_unavailable_intervention(
     tmp_path: Path,
 ) -> None:
-    """The diagnostic remains unresolved when the intervention lane is unavailable."""
+    """The diagnostic remains unresolved when the intervention lane is blocked."""
     manifest = _manifest(tmp_path, _scenario())
 
     def runner(_scenario, _seed, _horizon, _algo):
         return {
-            "steps": 100,
-            "outcome": {"route_complete": False},
-            "termination_reason": "collision",
+            "algo": ROUTE_FOLLOW_ALGO,
+            "route_complete": None,
+            "steps": None,
+            "status": "blocked",
+            "stateful": None,
         }
 
     report = build_issue_5596_blind_corner_diagnostic(

@@ -767,6 +767,38 @@ def test_matrix_harness_requires_explicit_population_derivation() -> None:
         )
 
 
+def test_matrix_harness_rejects_malformed_raw_entries_before_loader_can_skip_them(
+    tmp_path: Path,
+) -> None:
+    """A malformed matrix entry cannot silently shrink the configured scenario set."""
+
+    config = yaml.safe_load(_MATRIX_HARNESS_CONFIG_PATH.read_text(encoding="utf-8"))
+    map_file = str((_REPO_ROOT / "maps/svg_maps/classic_crossing.svg").resolve())
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(
+        yaml.safe_dump(
+            {
+                "scenarios": [
+                    None,
+                    {
+                        "name": "kept",
+                        "map_file": map_file,
+                        "simulation_config": {"ped_density": 0.02},
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config["scenario_matrix"] = str(matrix_path)
+
+    with pytest.raises(ValueError, match=r"scenarios\[0\] must be mapping"):
+        build_mean_matched_harness_manifest(
+            config,
+            config_path=str(_MATRIX_HARNESS_CONFIG_PATH),
+        )
+
+
 @pytest.mark.parametrize(
     ("missing_field", "error_match"),
     [("map_file", "map_file"), ("ped_density", "ped_density")],

@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from robot_sf.benchmark.heterogeneous_population_metrics import (
     assess_control_trace_readiness,
     per_archetype_metrics_from_control_trace,
@@ -231,6 +233,7 @@ def _resolve_harness_scenarios(
         config_path=config_path,
         field_name="scenario_matrix",
     )
+    _validate_raw_scenario_matrix(matrix_path)
     matrix_scenarios = load_scenarios(matrix_path)
     if not matrix_scenarios:
         raise ValueError(f"scenario_matrix produced no scenarios: {matrix_path}")
@@ -260,6 +263,88 @@ def _resolve_harness_scenarios(
         "scenario_matrix": _portable_path(matrix_path),
         "scenario_matrix_derivation": dict(derivation),
     }
+
+
+def _validate_raw_scenario_matrix(path: Path) -> None:
+    """Reject malformed raw entries before the canonical loader can skip them."""
+
+    _validate_raw_scenario_file(path, visited=set())
+
+
+def _validate_raw_scenario_file(path: Path, *, visited: set[Path]) -> None:
+    """Validate scenario-entry shapes across one matrix file and its includes."""
+
+    resolved = path.resolve()
+    if resolved in visited:
+        raise ValueError(f"scenario_matrix include cycle detected at: {resolved}")
+    visited.add(resolved)
+    try:
+        scenarios, includes = _load_raw_scenario_file(resolved)
+        for index, scenario in enumerate(scenarios):
+            if not isinstance(scenario, Mapping):
+                raise ValueError(f"scenario_matrix scenarios[{index}] must be mapping: {resolved}")
+        for include in includes:
+            if not include.is_file():
+                raise ValueError(f"scenario_matrix include does not resolve to a file: {include}")
+            _validate_raw_scenario_file(include, visited=visited)
+    finally:
+        visited.remove(resolved)
+
+
+def _load_raw_scenario_file(path: Path) -> tuple[list[Any], list[Path]]:
+    """Load raw scenario entries and include paths without normalizing entries.
+
+    Returns:
+        Raw scenario entries and resolved include paths in configured order.
+    """
+
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"scenario_matrix could not read {path}: {exc}") from exc
+
+    if isinstance(data, Mapping):
+        raw_scenarios = data.get("scenarios")
+        if raw_scenarios is None:
+            scenarios: list[Any] = []
+        elif isinstance(raw_scenarios, list):
+            scenarios = raw_scenarios
+        else:
+            raise ValueError(f"scenario_matrix scenarios must be a list: {path}")
+        includes = _raw_scenario_include_paths(
+            data.get("includes") or data.get("include") or data.get("scenario_files"),
+            source=path,
+        )
+        return scenarios, includes
+    if isinstance(data, list):
+        return data, []
+    raise ValueError(f"scenario_matrix must contain a mapping or list: {path}")
+
+
+def _raw_scenario_include_paths(raw_includes: Any, *, source: Path) -> list[Path]:
+    """Normalize raw include references for structural validation.
+
+    Returns:
+        Resolved include paths in their configured order.
+    """
+
+    if raw_includes is None:
+        return []
+    if isinstance(raw_includes, (str, Path)):
+        entries = [raw_includes]
+    elif isinstance(raw_includes, list):
+        entries = raw_includes
+    else:
+        raise ValueError(f"scenario_matrix includes must be a list or string: {source}")
+    paths: list[Path] = []
+    for entry in entries:
+        if not isinstance(entry, (str, Path)):
+            raise ValueError(f"scenario_matrix include must be a path: {source}")
+        candidate = Path(entry).expanduser()
+        if not candidate.is_absolute():
+            candidate = source.parent / candidate
+        paths.append(candidate.resolve())
+    return paths
 
 
 def _resolve_input_path(

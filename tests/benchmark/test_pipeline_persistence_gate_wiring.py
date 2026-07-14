@@ -298,3 +298,150 @@ def test_cpu_only_mode_does_not_claim_exact_replay() -> None:
         replay_error=None,
     )
     assert block["status"] == "unknown"
+
+
+def test_precomputed_replay_validation_errors(tmp_path: Path) -> None:
+    """The persistence gate must raise ValueError on duplicate, extra, missing, or malformed cells."""
+
+    # 1. Run generation pipeline once to produce valid catalog and episodes
+    config_path = tmp_path / "config.yaml"
+    output_root = tmp_path / "output"
+    config_path.write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": "data-driven-scenario-generation.v1",
+                "seed": 4932,
+                "source_scenarios": "unused-source.yaml",
+                "episode_budget": 2,
+                "sampler": {
+                    "type": "monte_carlo",
+                    "robot_start_goal_policy": "sampled_map_route_pairs",
+                    "pedestrian_policy": "sampled_map_routes_and_population",
+                    "obstacle_policy": "disabled_for_mvp",
+                },
+                "runner": {"algo": "goal", "horizon": 3, "dt": 1.0},
+                "extraction": {"pre_margin_s": 1.0, "post_margin_s": 1.0},
+                "deduplication": {"distance_threshold": 0.0},
+                "output_root": output_root.as_posix(),
+                "claim_boundary": "generated scenario hypotheses only",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    from scripts.tools.evaluate_pipeline_persistence_gate import (
+        evaluate_pipeline_candidates,
+    )
+
+    run_generation_pipeline(
+        config_path,
+        scenario_loader=lambda _path: _source_scenarios(),
+        batch_runner=_fake_batch_runner,
+        replay_config_builder=lambda *_args, **_kwargs: object(),
+    )
+
+    # Resolve paths
+    catalog_path = output_root / "generated_catalog.yaml"
+    entries = yaml.safe_load(catalog_path.read_text(encoding="utf-8"))["entries"]
+    assert len(entries) == 2
+
+    # Find the scenario IDs to construct replay_results
+    entry = entries[0]
+
+    episodes_path = output_root / "episodes.jsonl"
+    episodes = [
+        json.loads(line)
+        for line in episodes_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    episodes_by_id = {episode["episode_id"]: episode for episode in episodes}
+
+    # Construct the valid replay results structure for entries[0]
+    episode = episodes_by_id[entry["source_episode"]["episode_id"]]
+
+    # timing_offsets_s: [-0.25, 0.0, 0.25]
+    # speed_deltas_m_s: [-0.2, 0.0, 0.2]
+    # Total 9 cells.
+    valid_cells = [
+        {
+            "timing_offset_s": timing_offset_s,
+            "speed_delta_m_s": speed_delta_m_s,
+            "verdict": "pass",
+            "reason": "deterministic replay fixture",
+        }
+        for timing_offset_s in (-0.25, 0.0, 0.25)
+        for speed_delta_m_s in (-0.2, 0.0, 0.2)
+    ]
+
+    valid_replay_info = {
+        "episode": {
+            "episode_id": episode["episode_id"],
+            "source_seed": episode["seed"],
+            "source_map": entry["source_episode"]["source_map"],
+            "steps": episode["algorithm_metadata"]["simulation_step_trace"]["steps"],
+        },
+        "cells": valid_cells,
+        "missing_cell_reasons": [],
+    }
+
+    # We evaluate just for candidate_path pointing to a single candidate (entries[0])
+    candidate_path = tmp_path / "candidate.yaml"
+    candidate_path.write_text(yaml.safe_dump(entry), encoding="utf-8")
+
+    # Helper to run validation and assert failure
+    def assert_validation_fails(replay_results_data: dict[str, Any], match_err: str) -> None:
+        replay_results_path = tmp_path / "replay_results.json"
+        replay_results_path.write_text(json.dumps(replay_results_data), encoding="utf-8")
+        with pytest.raises(ValueError, match=match_err):
+            evaluate_pipeline_candidates(
+                manifest_path=None,
+                candidate_path=candidate_path,
+                episodes_path=episodes_path,
+                config_path=REPO_ROOT / _PERSISTENCE_CONFIG,
+                output_dir=tmp_path / "records",
+                replay_results_path=replay_results_path,
+                commit_hash="deadbee",
+                config_hash="c0ffee",
+            )
+
+    # 2. Test missing cells (partial grid)
+    partial_cells = valid_cells[:-1]
+    assert_validation_fails(
+        {entry["scenario_id"]: {**valid_replay_info, "cells": partial_cells}},
+        "missing cells for coordinates",
+    )
+
+    # 3. Test extra/unregistered cells
+    extra_cell = {"timing_offset_s": 1.0, "speed_delta_m_s": 0.0, "verdict": "pass", "reason": "ok"}
+    assert_validation_fails(
+        {entry["scenario_id"]: {**valid_replay_info, "cells": valid_cells + [extra_cell]}},
+        "extra/unregistered cells",
+    )
+
+    # 4. Test duplicate cells
+    duplicate_cell = valid_cells[0].copy()
+    assert_validation_fails(
+        {entry["scenario_id"]: {**valid_replay_info, "cells": valid_cells + [duplicate_cell]}},
+        "duplicate cells for coordinates",
+    )
+
+    # 5. Test malformed cell (missing required keys)
+    malformed_cell = {"timing_offset_s": 0.0, "speed_delta_m_s": 0.0}  # missing verdict
+    assert_validation_fails(
+        {entry["scenario_id"]: {**valid_replay_info, "cells": valid_cells[:-1] + [malformed_cell]}},
+        "missing required keys",
+    )
+
+    # 6. Test explicitly missing cells (non-empty missing_cell_reasons)
+    explicit_missing_reasons = [
+        {"timing_offset_s": 0.0, "speed_delta_m_s": 0.0, "reason": "timeout"}
+    ]
+    assert_validation_fails(
+        {
+            entry["scenario_id"]: {
+                **valid_replay_info,
+                "missing_cell_reasons": explicit_missing_reasons,
+            }
+        },
+        "explicitly missing cell reasons",
+    )

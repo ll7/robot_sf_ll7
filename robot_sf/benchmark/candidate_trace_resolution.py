@@ -35,6 +35,7 @@ import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -50,6 +51,7 @@ from robot_sf.analysis_workbench.trace_failure_predicates import (
     extract_trace_failure_predicates,
 )
 from robot_sf.benchmark.critical_intervals import extract_critical_intervals, load_config
+from robot_sf.benchmark.utils import coerce_optional_id
 from scripts.tools.campaign_result_store import read_parquet_frame
 
 #: Schema tag for the emitted resolution manifest.
@@ -87,6 +89,18 @@ class CampaignResultStore:
 
     study_id: str
     episodes: dict[str, dict[str, Any]]
+
+
+def _coerce_optional_text(value: Any) -> str | None:
+    """Normalize a nullable identifier while preserving missingness.
+
+    Returns:
+        A stripped identifier, or ``None`` when the value is absent or blank.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _episode_key(
@@ -148,27 +162,31 @@ def load_campaign_result_store(store_dir: Path) -> CampaignResultStore:
 
     by_key: dict[str, dict[str, Any]] = {}
     for row in episodes.to_dict(orient="records"):
-        key = _episode_key(
-            str(row.get("scenario_id")),
-            str(row.get("planner")),
-            int(row.get("seed")) if row.get("seed") is not None else None,
-            str(row.get("episode_id")),
-        )
+        scenario_id = _coerce_optional_text(row.get("scenario_id"))
+        planner = _coerce_optional_text(row.get("planner"))
+        episode_id = _coerce_optional_text(row.get("episode_id"))
+        run_id = _coerce_optional_text(row.get("run_id"))
+        seed = coerce_optional_id(row.get("seed"))
+        if (
+            scenario_id is None
+            or planner is None
+            or episode_id is None
+            or run_id is None
+            or seed is None
+        ):
+            continue
+        key = _episode_key(scenario_id, planner, seed, episode_id)
         by_key[key] = {
-            "run_id": row.get("run_id"),
-            "episode_id": row.get("episode_id"),
-            "planner": row.get("planner"),
-            "scenario_id": row.get("scenario_id"),
+            "run_id": run_id,
+            "episode_id": episode_id,
+            "planner": planner,
+            "scenario_id": scenario_id,
             "scenario_family": row.get("scenario_family"),
-            "seed": row.get("seed"),
+            "seed": seed,
             "row_status": row.get("row_status"),
             "artifact_uri": row.get("artifact_uri"),
             "artifact_sha256": row.get("artifact_sha256"),
         }
-    return CampaignResultStore(
-        study_id=str(summary.get("study_id", "unknown")),
-        episodes=by_key,
-    )
     return CampaignResultStore(
         study_id=str(summary.get("study_id", "unknown")),
         episodes=by_key,
@@ -190,8 +208,8 @@ def resolve_candidate_to_episode(
         ``scenario_id``, ``planner_id``, ``seed``, ``config_hash``,
         ``episode_id``, ``resolution_status`` (provisionally), and ``reason_code``.
     """
-    scenario_id = candidate.get("scenario_id")
-    planner = candidate.get("planner")
+    scenario_id = _coerce_optional_text(candidate.get("scenario_id"))
+    planner = _coerce_optional_text(candidate.get("planner"))
 
     # Candidates from the #5446 miner carry provenance via their cell metadata;
     # the miner records scenario_id and planner directly, and reproducibility
@@ -199,12 +217,9 @@ def resolve_candidate_to_episode(
     # or episode id we do not invent one. The miner may serialize seed as a
     # string, so normalize to int to match the campaign store key.
     raw_seed = candidate.get("seed")
-    try:
-        seed = int(raw_seed) if raw_seed is not None else None
-    except (TypeError, ValueError):
-        seed = None
-    episode_id = candidate.get("episode_id")
-    config_hash = candidate.get("config_hash")
+    seed = coerce_optional_id(raw_seed)
+    episode_id = _coerce_optional_text(candidate.get("episode_id"))
+    config_hash = _coerce_optional_text(candidate.get("config_hash"))
 
     missing_core = [
         field
@@ -231,6 +246,13 @@ def resolve_candidate_to_episode(
             **base,
             "resolution_status": "provenance-incomplete",
             "reason_code": "missing_candidate_provenance:" + ",".join(missing_core),
+        }
+
+    if raw_seed is not None and seed is None:
+        return {
+            **base,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": "invalid_candidate_provenance:seed",
         }
 
     if store is None:
@@ -395,6 +417,7 @@ def resolve_trace_signals(
             "critical_intervals_available": critical_intervals_available,
         }
 
+    trace = None
     try:
         trace = load_simulation_trace_export(Path(trace_path))
     except (OSError, SimulationTraceExportValidationError):
@@ -410,13 +433,14 @@ def resolve_trace_signals(
         ]
 
     if critical_interval_config is not None:
-        try:
-            trace2 = load_simulation_trace_export(Path(trace_path))
-            cfg = load_config(config_dict=dict(critical_interval_config))
-            intervals = extract_critical_intervals(trace2.to_dict(), cfg)
-            available = any(iv.status == "available" for iv in intervals)
-        except (OSError, SimulationTraceExportValidationError, ValueError):
-            available = False
+        available = False
+        if trace is not None:
+            try:
+                cfg = load_config(config_dict=dict(critical_interval_config))
+                intervals = extract_critical_intervals(trace.to_dict(), cfg)
+                available = any(iv.status == "available" for iv in intervals)
+            except (OSError, SimulationTraceExportValidationError, ValueError):
+                pass
         critical_intervals_available = {
             "available": available,
             "reference": f"critical-intervals.v1:{'enabled' if available else 'none'}",
@@ -603,14 +627,23 @@ def _merge_statuses(*statuses: str) -> ResolutionStatus:
     return worst  # type: ignore[return-value]
 
 
+@lru_cache(maxsize=1)
+def _load_resolution_schema() -> dict[str, Any]:
+    """Load the published resolver schema once per process.
+
+    Returns:
+        The parsed JSON Schema mapping.
+    """
+    return json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))
+
+
 def validate_candidate_trace_resolution(manifest: Mapping[str, Any]) -> dict[str, Any]:
     """Validate a resolution manifest against its published JSON Schema.
 
     Returns:
         A dict with ``ok`` (bool) and ``errors`` (list of strings).
     """
-    schema = json.loads(SCHEMA_FILE.read_text(encoding="utf-8"))
-    validator = Draft202012Validator(schema)
+    validator = Draft202012Validator(_load_resolution_schema())
     errors = [
         f"{json_pointer(error.absolute_path)}: {error.message}"
         for error in sorted(validator.iter_errors(manifest), key=lambda e: list(e.absolute_path))

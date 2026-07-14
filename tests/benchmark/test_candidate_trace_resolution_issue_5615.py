@@ -20,13 +20,17 @@ from pathlib import Path
 
 import pytest
 
+import robot_sf.benchmark.candidate_trace_resolution as candidate_trace_resolution_module
 from robot_sf.benchmark.candidate_trace_resolution import (
     SCHEMA_VERSION,
     CandidateTraceResolutionError,
+    load_campaign_result_store,
+    resolve_candidate_to_episode,
     resolve_candidate_trace_resolution,
     validate_candidate_trace_resolution,
 )
 from robot_sf.benchmark.seed_flip_mining import mine_seed_flip_inversion_candidates
+from robot_sf.benchmark.utils import coerce_optional_id
 from scripts.tools.campaign_result_store import write_result_store
 
 _FIXTURE_ROOT = Path(__file__).resolve().parent / "fixtures" / "benchmark" / "issue_5615"
@@ -113,6 +117,66 @@ def _schema_mismatch_trace(tmp_path: Path) -> Path:
     # Missing required top-level fields -> schema mismatch.
     bad.write_text(json.dumps({"trace_id": "bad"}), encoding="utf-8")
     return bad
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, None),
+        (0, 0),
+        (" 111 ", 111),
+        (111.0, 111),
+        ("", None),
+        (111.5, None),
+        (float("nan"), None),
+        (float("inf"), None),
+        (True, None),
+    ],
+)
+def test_candidate_trace_resolution_optional_id_coercion(
+    value: object, expected: int | None
+) -> None:
+    """Optional identifiers preserve valid falsy values and reject malformed input."""
+    assert coerce_optional_id(value) == expected
+
+
+def test_campaign_result_store_ignores_rows_with_null_required_identifiers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing store identifiers must not become literal ``None`` key components."""
+    store_dir = tmp_path / "campaign_store"
+    store_dir.mkdir()
+    (store_dir / "summary.json").write_text('{"study_id": "study-5615"}', encoding="utf-8")
+    (store_dir / "episodes.parquet").touch()
+
+    class _Frame:
+        def to_dict(self, *, orient: str) -> list[dict[str, object]]:
+            assert orient == "records"
+            return [
+                {
+                    "run_id": "run-bad",
+                    "scenario_id": None,
+                    "planner": "planner",
+                    "episode_id": "episode",
+                    "seed": 111,
+                    "artifact_uri": "trace.json",
+                }
+            ]
+
+    monkeypatch.setattr(candidate_trace_resolution_module, "read_parquet_frame", lambda _: _Frame())
+    store = load_campaign_result_store(store_dir)
+
+    assert store.episodes == {}
+    result = resolve_candidate_to_episode(
+        {
+            "scenario_id": "None",
+            "planner": "planner",
+            "episode_id": "episode",
+            "seed": 111,
+        },
+        store,
+    )
+    assert result["resolution_status"] == "provenance-incomplete"
 
 
 def test_candidate_trace_resolution_resolved_joins_trace_and_signals() -> None:

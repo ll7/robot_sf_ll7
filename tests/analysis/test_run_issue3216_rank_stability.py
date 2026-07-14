@@ -103,6 +103,21 @@ def test_verified_harvest_runner_writes_reproducible_provenance(tmp_path: Path) 
     assert second.returncode == 0, second.stderr
     second_payload = json.loads((output / "analysis_provenance.json").read_text())
     assert second_payload["output_sha256"] == first_hashes
+    assert second_payload["schema_version"] == "issue_5247_verified_harvest_rank_stability.v2"
+    assert second_payload["ranking"] == {
+        "profile": "constraints_first",
+        "rank_metric": "success",
+        "snqi_rank_limitation": (
+            "SNQI contract status=fail with snqi_contract.enforcement=warn; failed check(s): "
+            "rank_alignment_spearman=0.2 (below fail threshold 0.3)"
+        ),
+        "snqi_rank_status": "blocked_invalid_metric",
+    }
+    result = json.loads((output / "result.json").read_text())
+    assert result["inputs"]["rank_profile"] == "constraints_first"
+    assert result["inputs"]["rank_metric"] == "success"
+    assert result["inputs"]["invalid_rank_metric_reason"] is None
+    assert {claim["decision"] for claim in result["adjacent_rank_claims"]} == {"diagnostic_only"}
     failure = second_payload["snqi_contract_failure"]
     assert failure["campaign_finished_at_utc"] == "2026-06-30T12:34:56+00:00"
     assert failure["enforcement"] == "warn"

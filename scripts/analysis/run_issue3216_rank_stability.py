@@ -2,9 +2,10 @@
 """Analyze verified #3216 campaign artifacts without starting a new campaign.
 
 The runner accepts explicit local paths so harvest location and host routing stay
-out of version control.  It verifies the harvest-completion marker, captures the
-soft SNQI (Social Navigation Quality Index) contract failure that limits claims,
-and delegates all CI and rank-stability statistics to the canonical #3216 CLI.
+out of version control.  It verifies the harvest-completion marker, ranks with
+the constraints-first profile, captures the soft SNQI (Social Navigation Quality
+Index) contract failure that limits claims, and delegates all confidence-interval
+and rank-stability statistics to the canonical #3216 CLI.
 """
 
 from __future__ import annotations
@@ -197,10 +198,8 @@ def run(args: argparse.Namespace) -> int:
         str(_BUILDER),
         "--campaign",
         str(args.campaign_root),
-        "--rank-metric",
-        "snqi",
-        "--invalid-rank-metric-reason",
-        _failure_reason(failure),
+        "--rank-profile",
+        "constraints_first",
         "--expected-planners-from-config",
         str(args.planner_config),
         "--bootstrap-samples",
@@ -217,13 +216,20 @@ def run(args: argparse.Namespace) -> int:
         return completed.returncode
 
     provenance = {
-        "schema_version": "issue_5247_verified_harvest_rank_stability.v1",
+        "schema_version": "issue_5247_verified_harvest_rank_stability.v2",
         "evidence_status": "diagnostic-only",
         "claim_boundary": (
             "The complete harvested episode set is analyzed without rerunning a campaign. "
-            "SNQI rank claims remain blocked because the source campaign records a warn-level "
-            "SNQI contract failure."
+            "The runner produces constraints-first success rank stability for review but does "
+            "not promote a planner-ranking claim. SNQI rank claims remain blocked because the "
+            "source campaign records a warn-level SNQI contract failure."
         ),
+        "ranking": {
+            "profile": "constraints_first",
+            "rank_metric": "success",
+            "snqi_rank_status": "blocked_invalid_metric",
+            "snqi_rank_limitation": _failure_reason(failure),
+        },
         "input_sha256": {
             "campaign_summary.json": _sha256(summary_path),
             "snqi_diagnostics.json": _sha256(diagnostics_path),

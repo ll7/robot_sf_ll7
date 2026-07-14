@@ -36,11 +36,15 @@ the increased-seed-budget run, and the durable
   resampling (`kendall_tau_mean`, `kendall_tau_min`, `rank_flip_rate`,
   `top1_stable`).
 - Emits `result.json` + `report.md` and classifies the result
-  `paper_grade | nominal | diagnostic | blocked_until_run`. **Insufficient seed
-  budget (S10 or fewer) is never paper-grade**: it emits `diagnostic`; an all-
-  excluded input emits `blocked_until_run`. Even at S20+ per cell the harness
-  emits `blocked_until_run` because paper-grade promotion requires the actual
-  predeclared S20/S30 SLURM run (#1554) plus claim-card review. Captures git HEAD.
+  `paper_grade | nominal | diagnostic | completed_needs_claim_review |
+  blocked_until_run`. **Insufficient seed budget (S10 or fewer) is never
+  paper-grade**: it emits `diagnostic`. An all-excluded (no countable cells)
+  input emits `blocked_until_run`. Even at S20+ per cell the harness emits
+  `completed_needs_claim_review` (not `blocked_until_run`) because
+  `blocked_until_run` means the campaign has not produced countable evidence;
+  at S20+ the evidence was measured and analyzed, so paper-grade promotion
+  merely requires the predeclared S20/S30 SLURM run (#1554) plus claim-card
+  review. Captures git HEAD.
 
 ### Launch packet
 

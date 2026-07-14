@@ -23,7 +23,11 @@ bootstrap / rank / Kendall logic:
 It is analysis tooling. It makes NO benchmark or paper-grade claim by itself:
 the paper-grade 7x7 headline run needs the increased seed budget (S20/S30 via
 #1554) and is SLURM. On insufficient seed budget the harness classifies the
-result ``blocked_until_run`` or ``diagnostic`` and never claims ``paper_grade``.
+result ``diagnostic`` or ``completed_needs_claim_review`` and never claims
+``paper_grade``. ``blocked_until_run`` is reserved for input that has not been
+executed (no countable cells); measured evidence that only awaits claim-card
+review is ``completed_needs_claim_review`` so the report never reads as missing
+execution.
 
 Coordination:
 
@@ -106,7 +110,8 @@ CLAIM_BOUNDARY = (
     "fail-closed cell status. This harness makes NO paper-grade or planner-ranking "
     "claim on its own: the paper-grade 7x7 headline run requires the increased "
     "seed budget (S20/S30 via #1554) and is SLURM. On insufficient seed budget the "
-    "result is classified blocked_until_run or diagnostic."
+    "result is classified diagnostic or completed_needs_claim_review. "
+    "blocked_until_run is used only when no countable cells exist."
 )
 
 
@@ -955,23 +960,49 @@ def build_adjacent_rank_claims(
     return claims
 
 
+# Classification values. ``blocked_until_run`` is reserved for input that has
+# NOT been executed (no countable cells). Measured evidence that still needs
+# domain-aware review before any claim promotion uses ``completed_needs_claim_review``
+# so the report never reads as "missing execution".
+CLASSIFICATIONS = frozenset(
+    {
+        "paper_grade",
+        "nominal",
+        "diagnostic",
+        "completed_needs_claim_review",
+        "blocked_until_run",
+    }
+)
+
+
 def classify(
     cells: Sequence[CellResult],
     rank_stability: Sequence[ScenarioRankStability],
 ) -> tuple[str, str]:
     """Classify the overall result with fail-closed seed-budget gating.
 
+    Execution state is kept distinct from claim readiness:
+
+    - ``blocked_until_run`` means the input was NOT executed (no countable
+      cells) — the campaign must run before any statistics exist.
+    - ``completed_needs_claim_review`` means the evidence was measured and
+      analyzed, but paper-grade promotion still requires the predeclared
+      S20/S30 SLURM headline run (#1554) and claim-card review. The campaign
+      ran; this is not a "missing execution" state.
+    - ``diagnostic`` means the measured seed budget is below the nominal
+      threshold and CIs/rank-stability are diagnostic only.
+
     Returns:
-        Tuple of (classification, rationale). Classification is one of
-        ``paper_grade``, ``nominal``, ``diagnostic``, ``blocked_until_run``.
+        Tuple of (classification, rationale).
     """
     counted = [cell for cell in cells if cell.counted]
     if not counted:
         return (
             "blocked_until_run",
             "No fail-closed-clean cells; all cells were degraded/fallback/"
-            "not_available or otherwise non-success. Run the S20/S30 headline "
-            "campaign (#1554) to populate countable cells.",
+            "not_available or otherwise non-success. The headline campaign has "
+            "not produced countable evidence; run the S20/S30 run (#1554) to "
+            "populate countable cells.",
         )
     min_seeds = min(cell.seed_count for cell in counted)
     max_seeds = max(cell.seed_count for cell in counted)
@@ -979,12 +1010,16 @@ def classify(
     if min_seeds >= PAPER_GRADE_MIN_SEEDS and identifiable_scenarios:
         # Even at S20+, paper-grade promotion is gated on the run being the
         # actual SLURM headline campaign; this harness never self-certifies.
+        # The evidence was executed and analyzed, so it is NOT "blocked until
+        # run" — it is completed and awaiting claim review.
         return (
-            "blocked_until_run",
+            "completed_needs_claim_review",
             f"Per-cell seed budget reaches paper-grade threshold "
-            f"(min_seeds={min_seeds} >= {PAPER_GRADE_MIN_SEEDS}), but paper-grade "
-            "promotion requires the predeclared S20/S30 SLURM headline run (#1554) "
-            "and claim-card review. This local harness emits the statistics only.",
+            f"(min_seeds={min_seeds} >= {PAPER_GRADE_MIN_SEEDS}) and the evidence "
+            "was measured and analyzed, but paper-grade promotion still requires "
+            "the predeclared S20/S30 SLURM headline run (#1554) and claim-card "
+            "review. This local harness emits the statistics only; it does not "
+            "self-certify paper-grade.",
         )
     if min_seeds < NOMINAL_MIN_SEEDS:
         return (
@@ -1566,7 +1601,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "Build per-cell CI + rank-stability report for the 7x7 headline "
             "planner comparison (#3216). Reuses canonical seed_variance, "
             "fidelity_rank_stability, and canonical_table_export owners. Emits "
-            "blocked_until_run/diagnostic on insufficient seed budget; never "
+            "blocked_until_run when no countable cells exist, else "
+            "completed_needs_claim_review or diagnostic; never "
             "self-certifies paper-grade."
         )
     )

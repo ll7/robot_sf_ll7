@@ -28,14 +28,21 @@ def _fast_deepcopy_info(obj: Any) -> Any:
     """A highly optimized deep copy helper for environment info dicts.
 
     Avoids the slow introspection overhead of standard ``copy.deepcopy``.
+
+    Returns:
+        A recursively isolated copy of the supported container values.
+        Unsupported values use ``deepcopy`` to preserve the previous helper's
+        isolation contract.
     """
     if isinstance(obj, dict):
         return {k: _fast_deepcopy_info(v) for k, v in obj.items()}
     if isinstance(obj, list):
         return [_fast_deepcopy_info(x) for x in obj]
+    if type(obj) is tuple:
+        return tuple(_fast_deepcopy_info(x) for x in obj)
     if isinstance(obj, np.ndarray):
         return obj.copy()
-    return obj
+    return deepcopy(obj)
 
 
 class ThreadedVecEnv(DummyVecEnv):

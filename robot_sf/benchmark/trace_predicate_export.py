@@ -1,639 +1,442 @@
 """Trace-level predicate export lane (issue #5593).
 
-Provides a versioned, queryable export format that joins ``surrogate_events``
-predicate fields with scenario / planner / seed / run metadata.  Downstream
-consumers (reports, external analyses) pull the full set of emitted predicate
-values per episode without re-deriving them from raw per-step traces.
+In-sim trace-level safety-predicate producers already exist and are fixture-tested
+(``robot_sf/benchmark/safety_predicates.py``). What this module adds is a **dedicated
+export lane**: a versioned, queryable artifact that lets downstream consumers pull the
+full set of emitted predicate values per episode/scenario/planner without re-deriving
+them from raw per-step traces or writing a one-off analysis script each time.
 
-Schema versioning follows the existing convention: breaking changes bump
-``trace_predicate_export.vN``.
+The lane reads a completed campaign's trace bundles (``episodes.jsonl`` records that
+already carry a ``safety_predicates`` block and an ``event_ledger``) and emits:
+
+* a structured **export** (JSON-lines, one row per episode) joining each predicate
+  record with scenario/planner/seed/run metadata;
+* a **manifest** listing which predicate types are present, their schema versions,
+  and every episode with a missing or degraded predicate field;
+* a **coverage report** enumerating, per release, exported-vs-motivated predicates so a
+  reviewer can check in one place whether a given predicate was actually *measured* for
+  the release they are citing.
+
+The export **fails closed** on missing/degraded required fields: it never silently
+substitutes defaults. A missing predicate record or a degraded ``status`` is recorded in
+the manifest and surfaced in the export as an explicit gap marker, consistent with the
+existing ``missing trace fields fail closed`` rule in the predeclared-matrix contract.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
-from collections.abc import Mapping, Sequence
-from copy import deepcopy
-from dataclasses import asdict, dataclass, field
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from robot_sf.benchmark.event_ledger import ensure_event_ledger
+from robot_sf.benchmark.identity.hash_utils import read_jsonl as _read_jsonl
 from robot_sf.benchmark.safety_predicates import (
     LATE_EVASIVE_PREDICATE_SCHEMA,
     OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
     OSCILLATORY_PREDICATE_SCHEMA,
 )
 
-# ---------------------------------------------------------------------------
-# Schema constant
-# ---------------------------------------------------------------------------
-TRACE_PREDICATE_EXPORT_SCHEMA = "trace_predicate_export.v1"
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
 
-# Canonical set of motivated predicate families.  A predicate appears here
-# when its producer exists in ``safety_predicates.py`` and can emit a versioned
-# record into an episode's ``surrogate_events`` block.
-MOTIVATED_PREDICATE_FAMILIES: tuple[str, ...] = (
-    "near_miss",
-    "clearance_breach",
-    "ttc_breach",
-    "oscillation",
-    "late_evasive",
-    "occlusion_near_miss",
+TRACE_PREDICATE_EXPORT_SCHEMA_VERSION = "trace_predicate_export.v1"
+TRACE_PREDICATE_MANIFEST_SCHEMA_VERSION = "trace_predicate_manifest.v1"
+TRACE_PREDICATE_COVERAGE_SCHEMA_VERSION = "trace_predicate_coverage.v1"
+
+# Predicates motivated by the taxonomy and produced by the shipped producers in
+# robot_sf/benchmark/safety_predicates.py. ``record_key`` is the key under which the
+# producer record appears in an episode's ``safety_predicates`` block.
+MOTIVATED_TRACE_PREDICATES: tuple[dict[str, str], ...] = (
+    {
+        "predicate": "oscillatory_control",
+        "record_key": "oscillatory_control_predicate",
+        "schema_version": OSCILLATORY_PREDICATE_SCHEMA,
+    },
+    {
+        "predicate": "late_evasive",
+        "record_key": "late_evasive_predicate",
+        "schema_version": LATE_EVASIVE_PREDICATE_SCHEMA,
+    },
+    {
+        "predicate": "occlusion_near_miss",
+        "record_key": "occlusion_near_miss_predicate",
+        "schema_version": OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
+    },
 )
 
-# Canonical predicate producer schemas keyed by family name.
-PREDICATE_SCHEMA_BY_FAMILY: dict[str, str] = {
-    "oscillation": OSCILLATORY_PREDICATE_SCHEMA,
-    "late_evasive": LATE_EVASIVE_PREDICATE_SCHEMA,
-    "occlusion_near_miss": OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
-    # near_miss, clearance_breach, ttc_breach are metric-derived and do not have
-    # a dedicated producer schema; they remain in MOTIVATED_PREDICATE_FAMILIES
-    # but export as metric-derived booleans.
-}
+EXPORT_STATUS_EXPORTED = "exported"
+EXPORT_STATUS_MISSING = "missing"
+EXPORT_STATUS_DEGRADED = "degraded"
+
+# Degraded statuses a present predicate record may legitimately carry (fail closed:
+# surfaced in the manifest, never silently treated as a clean measurement).
+DEGRADED_PREDICATE_STATUSES = frozenset({"not_applicable", "unavailable"})
 
 
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
-@dataclass(frozen=True, slots=True)
-class PredicateExportRecord:
-    """One exportable predicate row for a single episode.
-
-    Attributes:
-        scenario_id: Scenario identifier.
-        concrete_case_id: Optional concrete case within the scenario.
-        seed: Random seed for this episode.
-        planner: Planner / algorithm identifier.
-        episode_id: Episode identifier.
-        schema_version: The trace-predicate-export schema version.
-        surrogate_events: Full surrogate event booleans.
-        predicate_records: Per-family predicate records (includes schema version,
-            raw fields, thresholds, and classification booleans).
-        degraded_fields: Fields present but flagged as ``unavailable`` or
-            ``not_applicable``.
-        missing_fields: Motivated predicates that are absent from the ledger.
-        software_commit: Git commit SHA, if available.
-    """
-
-    scenario_id: str
-    seed: int
-    planner: str
-    episode_id: str
-    schema_version: str
-    surrogate_events: dict[str, bool]
-    predicate_records: dict[str, dict[str, Any]]
-    degraded_fields: list[str] = field(default_factory=list)
-    missing_fields: list[str] = field(default_factory=list)
-    software_commit: str | None = None
-    concrete_case_id: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable dict."""
-        return asdict(self)
+class TracePredicateExportError(ValueError):
+    """Raised when the export contract cannot be satisfied for an input bundle."""
 
 
-@dataclass(frozen=True, slots=True)
-class ExportManifest:
-    """Machine-checkable manifest for a predicate export batch.
+def _episode_metadata(record: Mapping[str, Any], *, run_id: str | None) -> dict[str, Any]:
+    """Return the scenario/planner/seed/run metadata for one episode record."""
 
-    Declares which predicate types are present, their schema versions,
-    and any episodes with missing or degraded fields.
-
-    Attributes:
-        schema_version: Export manifest schema version.
-        export_schema: The trace predicate export schema version used.
-        predicate_types: Predicate families present in the export.
-        predicate_schema_versions: Mapping from family to producer schema version.
-        episode_count: Number of episodes in the export.
-        episodes_with_missing: Episodes missing at least one motivated predicate.
-        episodes_with_degraded: Episodes with degraded fields.
-        checksum_sha256: SHA-256 of the deterministically-sorted export JSONL.
-    """
-
-    schema_version: str
-    export_schema: str
-    predicate_types: list[str]
-    predicate_schema_versions: dict[str, str]
-    episode_count: int
-    episodes_with_missing: int
-    episodes_with_degraded: int
-    checksum_sha256: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable dict."""
-        return asdict(self)
-
-
-@dataclass(frozen=True, slots=True)
-class CoverageReportRow:
-    """One row in the predicate coverage report.
-
-    Attributes:
-        predicate_family: Name of the motivated predicate.
-        exported: Whether the predicate appears in at least one record.
-        schema_version: Producer schema version (or ``"metric_derived"``).
-        episodes_exported: Count of episodes that export this predicate.
-        episodes_degraded: Count of episodes with degraded evidence.
-        episodes_missing: Count of episodes missing this predicate.
-    """
-
-    predicate_family: str
-    exported: bool
-    schema_version: str
-    episodes_exported: int
-    episodes_degraded: int
-    episodes_missing: int
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serializable dict."""
-        return asdict(self)
-
-
-# ---------------------------------------------------------------------------
-# Core export functions
-# ---------------------------------------------------------------------------
-def _extract_predicate_records(
-    surrogate_events: Mapping[str, Any],
-) -> tuple[dict[str, bool], dict[str, dict[str, Any]], list[str], set[str]]:
-    """Pull boolean flags, predicate records, degraded fields, and exported
-    producer families from surrogate events.
-
-    The event ledger always carries ``False`` boolean defaults for all motivated
-    predicates (from :class:`SurrogateEvents`).  Only predicates that have a
-    corresponding producer record (e.g. ``oscillatory_control_predicate``) were
-    actually produced for this episode.  The returned ``exported_producer`` set
-    distinguishes producer-derived booleans from metric-derived defaults.
-
-    Returns:
-        Tuple of (boolean flags, predicate records, degraded field names,
-        set of families with producer records).
-    """
-    flags: dict[str, bool] = {}
-    records: dict[str, dict[str, Any]] = {}
-    degraded: list[str] = []
-    exported_producer: set[str] = set()
-
-    for family in MOTIVATED_PREDICATE_FAMILIES:
-        if family in surrogate_events:
-            flags[family] = bool(surrogate_events[family])
-
-    # Predicate records use keys like "oscillatory_control_predicate",
-    # "late_evasive_predicate", "occlusion_near_miss_predicate".
-    predicate_key_map = {
-        "oscillatory_control_predicate": "oscillation",
-        "late_evasive_predicate": "late_evasive",
-        "occlusion_near_miss_predicate": "occlusion_near_miss",
+    return {
+        "scenario_id": str(record.get("scenario_id") or "unknown"),
+        "seed": int(record.get("seed") or 0),
+        "planner_id": str(
+            record.get("algo") or record.get("planner") or record.get("planner_id") or "unknown"
+        ),
+        "run_id": run_id or "unknown_run",
+        "episode_id": str(record.get("episode_id") or "unknown_episode"),
+        "software_commit": (
+            str(record["git_hash"]) if record.get("git_hash") is not None else None
+        ),
     }
 
-    for pred_key, family in predicate_key_map.items():
-        pred_data = surrogate_events.get(pred_key)
-        if not isinstance(pred_data, Mapping):
-            continue
-        records[family] = dict(pred_data)
-        exported_producer.add(family)
-        # Check for degraded evidence
-        status = pred_data.get("status")
-        if status in ("unavailable", "not_applicable"):
-            degraded.append(family)
 
-    return flags, records, degraded, exported_producer
+def _export_predicate_block(
+    metadata: Mapping[str, Any],
+    record_key: str,
+    schema_version: str,
+    safety_predicates: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return one predicate block for an episode, failing closed on gaps."""
+
+    predicate_record = safety_predicates.get(record_key)
+    if not isinstance(predicate_record, Mapping):
+        return {
+            **metadata,
+            "predicate": record_key.removesuffix("_predicate"),
+            "schema_version": schema_version,
+            "export_status": EXPORT_STATUS_MISSING,
+            "reason": "predicate_record_absent",
+        }
+
+    status = predicate_record.get("status")
+    export_status = (
+        EXPORT_STATUS_DEGRADED if status in DEGRADED_PREDICATE_STATUSES else EXPORT_STATUS_EXPORTED
+    )
+    block: dict[str, Any] = {
+        **metadata,
+        "predicate": predicate_record.get("predicate", record_key.removesuffix("_predicate")),
+        "schema_version": predicate_record.get("schema_version", schema_version),
+        "export_status": export_status,
+        "fields": predicate_record.get("fields", {}),
+        "thresholds": predicate_record.get("thresholds", {}),
+    }
+    # Preserve the diagnostic boolean and any fail-closed status reason.
+    for flag in ("oscillation", "late_evasive", "occlusion_near_miss"):
+        if flag in predicate_record:
+            block[flag] = predicate_record[flag]
+    if status is not None:
+        block["status"] = status
+        block["status_reason"] = predicate_record.get("status_reason")
+    return block
 
 
-def build_predicate_export_record(
-    record: Mapping[str, Any],
+def build_trace_predicate_export(
+    episodes: Sequence[Mapping[str, Any]],
     *,
-    predicate_families: Sequence[str] | None = None,
-) -> PredicateExportRecord:
-    """Extract one exportable predicate record from an episode record.
-
-    If the episode record lacks an ``event_ledger``, one is built from the
-    available metrics and safety predicates (see ``build_event_ledger``).
+    run_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Build the structured per-episode predicate export rows.
 
     Args:
-        record: Episode record dict (must contain scenario_id, seed, algo/planner).
-        predicate_families: Optional override for motivated predicate families.
-            Defaults to ``MOTIVATED_PREDICATE_FAMILIES``.
+        episodes: Campaign episode records carrying a ``safety_predicates`` block.
+        run_id: Optional run identifier (e.g. planner__kinematics dir name).
 
     Returns:
-        :class:`PredicateExportRecord` for the episode.
-
-    Raises:
-        ValueError: When required fields are missing from the event ledger.
+        List of export rows, one per episode, deterministically ordered by
+        (run_id, scenario_id, seed, episode_id). Each row carries the episode metadata
+        plus one block per motivated predicate; missing or degraded predicates are
+        emitted as explicit gap markers rather than dropped.
     """
-    predicate_families = (
-        tuple(predicate_families)
-        if predicate_families is not None
-        else MOTIVATED_PREDICATE_FAMILIES
-    )
-    ledger = record.get("event_ledger")
 
-    # Ensure ledger exists
-    if not isinstance(ledger, Mapping) or not ledger.get("schema_version"):
-        # Build ledger in-place from the record
-        record_copy = deepcopy(dict(record))
-        ledger_result = ensure_event_ledger(record_copy)
-        ledger = ledger_result if isinstance(ledger_result, Mapping) else {}
-        record = record_copy
-
-    surrogate = ledger.get("surrogate_events")
-    if not isinstance(surrogate, Mapping):
-        surrogate = {}
-
-    flags, predicate_records, degraded, exported_producer = _extract_predicate_records(surrogate)
-
-    # Determine missing predicates: a family is missing when no producer record
-    # was emitted for it.  The event ledger always sets ``False`` defaults for all
-    # motivated predicates, so checking ``family not in flags`` alone would never
-    # fire.  Instead we check whether a detailed producer record exists.
-    missing = [
-        family
-        for family in predicate_families
-        if family not in exported_producer and family not in predicate_records
-    ]
-
-    return PredicateExportRecord(
-        scenario_id=str(ledger.get("scenario_id") or record.get("scenario_id") or "unknown"),
-        seed=int(ledger.get("seed") or record.get("seed", 0)),
-        planner=str(
-            ledger.get("planner") or record.get("algo") or record.get("planner") or "unknown"
-        ),
-        episode_id=str(record.get("episode_id") or "unknown"),
-        schema_version=TRACE_PREDICATE_EXPORT_SCHEMA,
-        surrogate_events=flags,
-        predicate_records=predicate_records,
-        degraded_fields=sorted(degraded),
-        missing_fields=sorted(missing),
-        software_commit=ledger.get("software_commit"),
-        concrete_case_id=ledger.get("concrete_case_id"),
-    )
-
-
-def build_predicate_export_batch(
-    records: Sequence[Mapping[str, Any]],
-    *,
-    predicate_families: Sequence[str] | None = None,
-) -> list[PredicateExportRecord]:
-    """Build export records for a batch of episode records.
-
-    Fails closed: if any record cannot produce a valid export row, a
-    ``ValueError`` is raised with the failing episode_id.
-
-    Args:
-        records: Iterable of episode record dicts.
-        predicate_families: Optional override for motivated predicate families.
-
-    Returns:
-        List of :class:`PredicateExportRecord` instances.
-    """
-    results: list[PredicateExportRecord] = []
-    for i, rec in enumerate(records):
-        ep_id = rec.get("episode_id") or f"index-{i}"
-        try:
-            results.append(
-                build_predicate_export_record(rec, predicate_families=predicate_families)
+    rows: list[dict[str, Any]] = []
+    for record in episodes:
+        if not isinstance(record, Mapping):
+            raise TracePredicateExportError("each episode record must be a mapping")
+        metadata = _episode_metadata(record, run_id=run_id)
+        safety_predicates = record.get("safety_predicates")
+        safety_predicates = safety_predicates if isinstance(safety_predicates, Mapping) else {}
+        row: dict[str, Any] = {
+            "scenario_id": metadata["scenario_id"],
+            "seed": metadata["seed"],
+            "planner_id": metadata["planner_id"],
+            "run_id": metadata["run_id"],
+            "episode_id": metadata["episode_id"],
+            "software_commit": metadata["software_commit"],
+            "predicates": {},
+        }
+        for spec in MOTIVATED_TRACE_PREDICATES:
+            block = _export_predicate_block(
+                metadata, spec["record_key"], spec["schema_version"], safety_predicates
             )
-        except Exception as e:
-            raise ValueError(f"Failed to export predicates for episode {ep_id}: {e}") from e
-    return results
+            row["predicates"][spec["predicate"]] = block
+        rows.append(row)
 
-
-# ---------------------------------------------------------------------------
-# Serialization
-# ---------------------------------------------------------------------------
-def serialize_export_records(
-    records: Sequence[PredicateExportRecord],
-) -> str:
-    """Serialize export records to deterministic JSONL.
-
-    Uses sorted keys and deterministic float formatting to ensure byte-identical
-    output for the same input.
-
-    Args:
-        records: Export records to serialize.
-
-    Returns:
-        JSONL string (newline-terminated).
-    """
-
-    def _default(obj: Any) -> Any:
-        if isinstance(obj, (set, frozenset)):
-            return sorted(obj)
-        return str(obj)
-
-    lines: list[str] = []
-    for rec in records:
-        lines.append(json.dumps(rec.to_dict(), sort_keys=True, default=_default))
-    return "\n".join(lines) + "\n" if lines else "\n"
-
-
-def compute_export_checksum(records: Sequence[PredicateExportRecord]) -> str:
-    """Compute SHA-256 checksum of the deterministic JSONL export.
-
-    Args:
-        records: Export records to checksum.
-
-    Returns:
-        Hex-encoded SHA-256 digest.
-    """
-    content = serialize_export_records(records)
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
-
-
-# ---------------------------------------------------------------------------
-# Manifest
-# ---------------------------------------------------------------------------
-def build_export_manifest(
-    records: Sequence[PredicateExportRecord],
-) -> ExportManifest:
-    """Build a machine-checkable manifest for the export batch.
-
-    Args:
-        records: Export records to manifest.
-
-    Returns:
-        :class:`ExportManifest` describing predicate coverage in the batch.
-    """
-    predicate_types: set[str] = set()
-    schema_versions: dict[str, str] = {}
-    missing_count = 0
-    degraded_count = 0
-
-    for rec in records:
-        # Booleans from surrogate events
-        for family in rec.surrogate_events:
-            predicate_types.add(family)
-        # Detailed records
-        for family in rec.predicate_records:
-            predicate_types.add(family)
-            schema_ver = rec.predicate_records[family].get("schema_version")
-            if schema_ver:
-                schema_versions[family] = schema_ver
-
-        if rec.missing_fields:
-            missing_count += 1
-        if rec.degraded_fields:
-            degraded_count += 1
-
-    manifest = ExportManifest(
-        schema_version="trace_predicate_manifest.v1",
-        export_schema=TRACE_PREDICATE_EXPORT_SCHEMA,
-        predicate_types=sorted(predicate_types),
-        predicate_schema_versions=schema_versions,
-        episode_count=len(records),
-        episodes_with_missing=missing_count,
-        episodes_with_degraded=degraded_count,
-    )
-
-    # Attach checksum
-    checksum = compute_export_checksum(records) if records else None
-    manifest = ExportManifest(
-        schema_version=manifest.schema_version,
-        export_schema=manifest.export_schema,
-        predicate_types=manifest.predicate_types,
-        predicate_schema_versions=manifest.predicate_schema_versions,
-        episode_count=manifest.episode_count,
-        episodes_with_missing=manifest.episodes_with_missing,
-        episodes_with_degraded=manifest.episodes_with_degraded,
-        checksum_sha256=checksum,
-    )
-    return manifest
-
-
-# ---------------------------------------------------------------------------
-# Coverage report
-# ---------------------------------------------------------------------------
-def build_coverage_report(
-    records: Sequence[PredicateExportRecord],
-    *,
-    predicate_families: Sequence[str] | None = None,
-) -> list[CoverageReportRow]:
-    """Build a predicate coverage report for the export batch.
-
-    Answers "is this predicate measured or just discussed" by enumerating
-    exported versus motivated-but-not-exported predicates.
-
-    Args:
-        records: Export records to analyze.
-        predicate_families: Motivated predicate families to check.
-
-    Returns:
-        List of :class:`CoverageReportRow` instances, one per motivated predicate.
-    """
-    predicate_families = (
-        tuple(predicate_families)
-        if predicate_families is not None
-        else MOTIVATED_PREDICATE_FAMILIES
-    )
-
-    for family in predicate_families:
-        # Verify tuple contains valid family names
-        pass  # Just ensures no empty-argument errors
-
-    rows: list[CoverageReportRow] = []
-    for family in predicate_families:
-        exported = 0
-        degraded = 0
-        missing = 0
-        for rec in records:
-            if family in rec.missing_fields:
-                missing += 1
-            elif family in rec.degraded_fields:
-                degraded += 1
-                exported += 1
-            elif family in rec.surrogate_events or family in rec.predicate_records:
-                exported += 1
-            else:
-                missing += 1
-
-        schema_ver = PREDICATE_SCHEMA_BY_FAMILY.get(family, "metric_derived")
-        rows.append(
-            CoverageReportRow(
-                predicate_family=family,
-                exported=exported > 0,
-                schema_version=schema_ver,
-                episodes_exported=exported,
-                episodes_degraded=degraded,
-                episodes_missing=missing,
-            )
-        )
-
+    rows.sort(key=lambda r: (r["run_id"], r["scenario_id"], str(r["seed"]), r["episode_id"]))
     return rows
 
 
-def format_coverage_report_md(
-    rows: list[CoverageReportRow],
+def build_trace_predicate_manifest(
     *,
-    total_episodes: int | None = None,
-) -> str:
-    """Format a coverage report as a Markdown table.
+    export_rows: Sequence[Mapping[str, Any]],
+    sources: Sequence[str],
+    release: str,
+) -> dict[str, Any]:
+    """Build the export manifest listing predicate presence and every gap.
 
     Args:
-        rows: Coverage report rows.
-        total_episodes: Optional total episode count for header context.
+        export_rows: Rows produced by :func:`build_trace_predicate_export`.
+        sources: Campaign bundle source paths that were read.
+        release: Release/run label this export was produced for.
 
     Returns:
-        Markdown table string.
+        Manifest with per-predicate presence counts, every missing/degraded gap, and an
+        overall ``complete`` flag that is ``False`` whenever any gap exists.
     """
-    header_lines = []
-    if total_episodes is not None:
-        header_lines.append(f"## Predicate Coverage Report ({total_episodes} episodes)\n")
 
-    header_lines.append(
-        "| Predicate | Exported | Schema Version | Episodes Exported | "
-        "Episodes Degraded | Episodes Missing |"
+    predicate_types: list[dict[str, Any]] = []
+    gaps: list[dict[str, Any]] = []
+    for spec in MOTIVATED_TRACE_PREDICATES:
+        predicate = spec["predicate"]
+        present = 0
+        degraded = 0
+        for row in export_rows:
+            block = row["predicates"][predicate]
+            if block["export_status"] == EXPORT_STATUS_EXPORTED:
+                present += 1
+            elif block["export_status"] == EXPORT_STATUS_DEGRADED:
+                degraded += 1
+                gaps.append(
+                    {
+                        "scenario_id": row["scenario_id"],
+                        "seed": row["seed"],
+                        "planner_id": row["planner_id"],
+                        "run_id": row["run_id"],
+                        "episode_id": row["episode_id"],
+                        "predicate": predicate,
+                        "export_status": EXPORT_STATUS_DEGRADED,
+                        "status": block.get("status"),
+                        "status_reason": block.get("status_reason"),
+                    }
+                )
+            else:
+                gaps.append(
+                    {
+                        "scenario_id": row["scenario_id"],
+                        "seed": row["seed"],
+                        "planner_id": row["planner_id"],
+                        "run_id": row["run_id"],
+                        "episode_id": row["episode_id"],
+                        "predicate": predicate,
+                        "export_status": EXPORT_STATUS_MISSING,
+                        "reason": block.get("reason"),
+                    }
+                )
+        predicate_types.append(
+            {
+                "predicate": predicate,
+                "record_key": spec["record_key"],
+                "schema_version": spec["schema_version"],
+                "episodes_present": present,
+                "episodes_degraded": degraded,
+                "export_status": EXPORT_STATUS_EXPORTED if present else EXPORT_STATUS_MISSING,
+            }
+        )
+
+    return {
+        "schema_version": TRACE_PREDICATE_MANIFEST_SCHEMA_VERSION,
+        "export_schema_version": TRACE_PREDICATE_EXPORT_SCHEMA_VERSION,
+        "release": release,
+        "sources": list(sources),
+        "episode_count": len(export_rows),
+        "predicate_types": predicate_types,
+        "gaps": gaps,
+        "complete": len(gaps) == 0,
+    }
+
+
+def build_trace_predicate_coverage_report(
+    *,
+    manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Build the coverage report: exported-vs-motivated predicates for a release.
+
+    Args:
+        manifest: Manifest produced by :func:`build_trace_predicate_manifest`.
+
+    Returns:
+        Coverage report enumerating which motivated predicates were actually exported
+        versus motivated-but-not-exported, so a reviewer can verify in one place whether
+        a predicate was *measured* for the cited release.
+    """
+
+    motivated = [spec["predicate"] for spec in MOTIVATED_TRACE_PREDICATES]
+    predicate_types = manifest["predicate_types"]
+    by_predicate = {entry["predicate"]: entry for entry in predicate_types}
+
+    exported: list[str] = []
+    motivated_not_exported: list[str] = []
+    per_predicate: dict[str, Any] = {}
+    for predicate in motivated:
+        entry = by_predicate.get(predicate)
+        if entry is None or entry["episodes_present"] == 0:
+            motivated_not_exported.append(predicate)
+            per_predicate[predicate] = {
+                "export_status": EXPORT_STATUS_MISSING,
+                "episodes_present": 0,
+                "episodes_degraded": 0,
+            }
+        else:
+            exported.append(predicate)
+            per_predicate[predicate] = {
+                "export_status": EXPORT_STATUS_EXPORTED,
+                "episodes_present": entry["episodes_present"],
+                "episodes_degraded": entry["episodes_degraded"],
+            }
+
+    return {
+        "schema_version": TRACE_PREDICATE_COVERAGE_SCHEMA_VERSION,
+        "release": manifest["release"],
+        "motivated_predicates": motivated,
+        "exported_predicates": sorted(exported),
+        "motivated_not_exported": sorted(motivated_not_exported),
+        "per_predicate": per_predicate,
+        "summary": {
+            "motivated_count": len(motivated),
+            "exported_count": len(exported),
+            "motivated_not_exported_count": len(motivated_not_exported),
+        },
+    }
+
+
+def export_trace_predicates_from_bundle(
+    bundle_paths: Iterable[Path],
+    *,
+    release: str,
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any], list[str]]:
+    """Read campaign trace bundles and produce export, manifest, and coverage.
+
+    Args:
+        bundle_paths: One or more ``episodes.jsonl`` paths (one per campaign run).
+        release: Release/run label for the manifest and coverage report.
+
+    Returns:
+        Tuple of (export_rows, manifest, coverage_report, failed_sources). A source that
+        cannot be read is recorded in ``failed_sources`` rather than aborting the whole
+        export (the gap is surfaced, not hidden).
+    """
+
+    export_rows: list[dict[str, Any]] = []
+    sources: list[str] = []
+    failed_sources: list[str] = []
+    for path in bundle_paths:
+        path = Path(path)
+        try:
+            episodes = _read_jsonl(path)
+        except (OSError, ValueError) as exc:
+            failed_sources.append(f"{path}: {exc}")
+            continue
+        run_id = path.parent.name or path.stem
+        export_rows.extend(build_trace_predicate_export(episodes, run_id=run_id))
+        sources.append(str(path))
+
+    if not export_rows and not failed_sources:
+        raise TracePredicateExportError("no episode records found in any provided bundle")
+
+    manifest = build_trace_predicate_manifest(
+        export_rows=export_rows, sources=sources, release=release
     )
-    header_lines.append("| --- | --- | --- | --- | --- | --- |")
-
-    for row in rows:
-        header_lines.append(
-            f"| {row.predicate_family} | {'yes' if row.exported else 'no'} | "
-            f"{row.schema_version} | {row.episodes_exported} | {row.episodes_degraded} | "
-            f"{row.episodes_missing} |"
-        )
-
-    return "\n".join(header_lines) + "\n"
+    coverage = build_trace_predicate_coverage_report(manifest=manifest)
+    return export_rows, manifest, coverage, failed_sources
 
 
-# ---------------------------------------------------------------------------
-# Validation
-# ---------------------------------------------------------------------------
-def validate_export_record(record: Mapping[str, Any]) -> list[str]:
-    """Validate a trace predicate export record against the v1 contract.
-
-    Args:
-        record: Dict representation of a PredicateExportRecord.
+def validate_trace_predicate_export(payload: Mapping[str, Any]) -> list[str]:
+    """Validate a single decoded export row against the contract.
 
     Returns:
-        List of violation messages. Empty list means valid.
+        List of violation messages; empty when the row is contract-conformant.
     """
+
     violations: list[str] = []
-
-    if record.get("schema_version") != TRACE_PREDICATE_EXPORT_SCHEMA:
-        violations.append(
-            f"schema_version must be {TRACE_PREDICATE_EXPORT_SCHEMA!r}, "
-            f"got {record.get('schema_version')!r}"
-        )
-
-    for key in ("scenario_id", "seed", "planner", "episode_id"):
-        if key not in record:
-            violations.append(f"missing required field: {key!r}")
-
-    surrogate = record.get("surrogate_events")
-    if not isinstance(surrogate, Mapping):
-        violations.append("surrogate_events must be a mapping")
-    else:
-        for k, v in surrogate.items():
-            if not isinstance(v, bool):
-                violations.append(f"surrogate_events.{k} must be boolean, got {type(v).__name__}")
-
-    predicate_records = record.get("predicate_records")
-    if not isinstance(predicate_records, Mapping):
-        violations.append("predicate_records must be a mapping")
-
-    for field_name in ("degraded_fields", "missing_fields"):
-        val = record.get(field_name)
-        if not isinstance(val, list):
-            violations.append(f"{field_name} must be a list")
-
+    for required in ("scenario_id", "seed", "planner_id", "episode_id", "predicates"):
+        if required not in payload:
+            violations.append(f"export row missing required field: {required}")
+    predicates = payload.get("predicates")
+    if not isinstance(predicates, Mapping):
+        violations.append("export row 'predicates' must be a mapping")
+        return violations
+    for spec in MOTIVATED_TRACE_PREDICATES:
+        predicate = spec["predicate"]
+        block = predicates.get(predicate)
+        if not isinstance(block, Mapping):
+            violations.append(f"missing predicate block: {predicate}")
+            continue
+        status = block.get("export_status")
+        if status not in (EXPORT_STATUS_EXPORTED, EXPORT_STATUS_DEGRADED, EXPORT_STATUS_MISSING):
+            violations.append(f"predicate {predicate} has invalid export_status: {status!r}")
+        if status == EXPORT_STATUS_MISSING and block.get("reason") is None:
+            violations.append(f"missing predicate {predicate} must carry a reason")
+        if status == EXPORT_STATUS_DEGRADED and block.get("status") is None:
+            violations.append(f"degraded predicate {predicate} must carry a status")
     return violations
 
 
-def validate_export_batch(records: Sequence[Mapping[str, Any]]) -> list[str]:
-    """Validate a batch of export records.
-
-    Args:
-        records: Dict representations of PredicateExportRecords.
-
-    Returns:
-        List of violation messages keyed by index.
-    """
-    all_violations: list[str] = []
-    for i, rec in enumerate(records):
-        violations = validate_export_record(rec)
-        if violations:
-            ep_id = rec.get("episode_id") or f"index-{i}"
-            for v in violations:
-                all_violations.append(f"[{ep_id}] {v}")
-    return all_violations
-
-
-# ---------------------------------------------------------------------------
-# File I/O helpers
-# ---------------------------------------------------------------------------
-def export_to_jsonl(
-    records: Sequence[PredicateExportRecord],
-    output_path: str | Path,
-) -> str:
-    """Write export records to a JSONL file.
-
-    Args:
-        records: Export records to write.
-        output_path: Destination file path.
-
-    Returns:
-        SHA-256 checksum of the written content.
-    """
-    path = Path(output_path)
-    content = serialize_export_records(records)
-    path.write_text(content, encoding="utf-8")
-    return hashlib.sha256(content.encode("utf-8")).hexdigest()
-
-
-def write_manifest(
-    manifest: ExportManifest,
-    output_path: str | Path,
-) -> None:
-    """Write an export manifest to a JSON file.
-
-    Args:
-        manifest: Manifest to write.
-        output_path: Destination file path.
-    """
-    path = Path(output_path)
-    content = json.dumps(manifest.to_dict(), indent=2, sort_keys=True)
-    path.write_text(content + "\n", encoding="utf-8")
-
-
-def write_coverage_report(
-    rows: list[CoverageReportRow],
-    output_path: str | Path,
+def write_trace_predicate_export(
     *,
-    total_episodes: int | None = None,
-) -> None:
-    """Write a coverage report to a Markdown file.
+    export_rows: Sequence[Mapping[str, Any]],
+    manifest: Mapping[str, Any],
+    coverage: Mapping[str, Any],
+    export_jsonl: Path,
+    manifest_json: Path,
+    coverage_json: Path,
+) -> tuple[Path, Path, Path]:
+    """Write the export (JSON-lines), manifest, and coverage report to disk.
 
-    Args:
-        rows: Coverage report rows.
-        output_path: Destination file path.
-        total_episodes: Optional total episode count.
+    The export is written with sorted JSON per line and rows in deterministic order, so
+    the same input bundle yields a byte-identical file.
+
+    Returns:
+        Tuple of (export_jsonl, manifest_json, coverage_json) paths actually written.
     """
-    path = Path(output_path)
-    content = format_coverage_report_md(rows, total_episodes=total_episodes)
-    path.write_text(content, encoding="utf-8")
+
+    export_jsonl = Path(export_jsonl)
+    manifest_json = Path(manifest_json)
+    coverage_json = Path(coverage_json)
+    export_jsonl.parent.mkdir(parents=True, exist_ok=True)
+    manifest_json.parent.mkdir(parents=True, exist_ok=True)
+    coverage_json.parent.mkdir(parents=True, exist_ok=True)
+
+    with export_jsonl.open("w", encoding="utf-8") as handle:
+        for row in export_rows:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+
+    manifest_json.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    coverage_json.write_text(
+        json.dumps(coverage, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return export_jsonl, manifest_json, coverage_json
 
 
 __all__ = [
-    "LATE_EVASIVE_PREDICATE_SCHEMA",
-    "MOTIVATED_PREDICATE_FAMILIES",
-    "OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA",
-    "OSCILLATORY_PREDICATE_SCHEMA",
-    "PREDICATE_SCHEMA_BY_FAMILY",
-    "TRACE_PREDICATE_EXPORT_SCHEMA",
-    "CoverageReportRow",
-    "ExportManifest",
-    "PredicateExportRecord",
-    "build_coverage_report",
-    "build_export_manifest",
-    "build_predicate_export_batch",
-    "build_predicate_export_record",
-    "compute_export_checksum",
-    "export_to_jsonl",
-    "format_coverage_report_md",
-    "serialize_export_records",
-    "validate_export_batch",
-    "validate_export_record",
-    "write_coverage_report",
-    "write_manifest",
+    "DEGRADED_PREDICATE_STATUSES",
+    "EXPORT_STATUS_DEGRADED",
+    "EXPORT_STATUS_EXPORTED",
+    "EXPORT_STATUS_MISSING",
+    "MOTIVATED_TRACE_PREDICATES",
+    "TRACE_PREDICATE_COVERAGE_SCHEMA_VERSION",
+    "TRACE_PREDICATE_EXPORT_SCHEMA_VERSION",
+    "TRACE_PREDICATE_MANIFEST_SCHEMA_VERSION",
+    "TracePredicateExportError",
+    "build_trace_predicate_coverage_report",
+    "build_trace_predicate_export",
+    "build_trace_predicate_manifest",
+    "export_trace_predicates_from_bundle",
+    "validate_trace_predicate_export",
+    "write_trace_predicate_export",
 ]

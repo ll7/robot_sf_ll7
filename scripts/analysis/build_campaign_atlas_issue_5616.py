@@ -140,6 +140,7 @@ def _build(out_dir: Path, rows: list[EpisodeInventoryRow], args: argparse.Namesp
         render_html=args.render_html,
         command="build_campaign_atlas_issue_5616.py",
         commit=args.commit or "unknown",
+        source_inventory=Path(args.inventory),
     )
 
 

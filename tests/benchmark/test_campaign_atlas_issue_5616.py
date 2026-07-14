@@ -10,8 +10,10 @@ Covers:
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from robot_sf.benchmark.campaign_atlas import (
@@ -21,6 +23,8 @@ from robot_sf.benchmark.campaign_atlas import (
     EpisodeInventoryRow,
     PredicateInterval,
     TrajectoryPoint,
+    _align_trajectories,
+    _compute_ensemble_geometry,
     build_atlas_summary,
     build_campaign_atlas,
     check_atlas_parity,
@@ -33,6 +37,12 @@ FAMILY_B = "famB"
 PLANNER_X = "orca"
 PLANNER_Y = "ppo"
 ANCHOR = "near_miss_start"
+FIXTURE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "benchmark"
+    / "campaign_atlas_issue_5616_inventory.jsonl"
+)
 
 
 def _row(
@@ -74,6 +84,15 @@ def _eligible_rows() -> list[EpisodeInventoryRow]:
         _row("a3", PLANNER_Y, FAMILY_A, 4, "success"),
         _row("b0", PLANNER_X, FAMILY_B, 5, "timeout"),
     ]
+
+
+def test_versioned_inventory_fixture_loads() -> None:
+    """The representative CLI fixture is resolved from the test file location."""
+    from scripts.analysis.build_campaign_atlas_issue_5616 import load_inventory
+
+    rows = load_inventory(FIXTURE_PATH)
+    assert len(rows) == 4
+    assert {row.planner for row in rows} == {PLANNER_X, PLANNER_Y}
 
 
 class TestAtlasEligibleCells:
@@ -135,29 +154,52 @@ class TestAtlasEligibleCells:
         )
         assert cell.exemplar_episode_ids == ("a0",)
 
+    def test_configured_empty_cells_are_retained(self) -> None:
+        """Configured but unobserved families and planners remain explicit N/A cells."""
+        summary = build_atlas_summary(
+            _eligible_rows(),
+            config=AtlasConfig(
+                campaign_id="c1",
+                eligible_scenario_families=(FAMILY_A, "missing_family"),
+                eligible_planners=(PLANNER_X, "missing_planner"),
+            ),
+        )
+        cell_keys = {(cell.scenario_family, cell.planner) for cell in summary.cells}
+        assert cell_keys == {
+            (FAMILY_A, PLANNER_X),
+            (FAMILY_A, "missing_planner"),
+            ("missing_family", PLANNER_X),
+            ("missing_family", "missing_planner"),
+        }
+        assert all(
+            not cell.eligible
+            for cell in summary.cells
+            if cell.scenario_family == "missing_family" or cell.planner == "missing_planner"
+        )
+
 
 class TestEnsembleContext:
     """Ensemble view refuses to render without a shared event anchor."""
 
-    def test_ensemble_context_renders_when_anchor_shared(self) -> None:
+    def test_ensemble_context_renders_when_anchor_shared(self, tmp_path: Path) -> None:
         """When every episode shares the anchor, the view renders with a medoid."""
         rows = [
             _row("e0", PLANNER_X, FAMILY_A, 1, "collision"),
             _row("e1", PLANNER_X, FAMILY_A, 2, "collision"),
         ]
-        result = render_ensemble_context_view(rows, anchor=ANCHOR, out=Path("__unused__.svg"))
+        result = render_ensemble_context_view(rows, anchor=ANCHOR, out=tmp_path / "shared.svg")
         assert isinstance(result, EnsembleResult)
         assert result.status == "rendered"
         assert result.medoid_episode_id is not None
         assert set(result.aligned_episode_ids) == {"e0", "e1"}
 
-    def test_ensemble_context_event_anchor_missing_refuses(self) -> None:
+    def test_ensemble_context_event_anchor_missing_refuses(self, tmp_path: Path) -> None:
         """When one episode lacks the anchor, the view is explicitly unavailable."""
         rows = [
             _row("e0", PLANNER_X, FAMILY_A, 1, "collision", with_anchor=True),
             _row("e1", PLANNER_X, FAMILY_A, 2, "collision", with_anchor=False),
         ]
-        result = render_ensemble_context_view(rows, anchor=ANCHOR, out=Path("__unused__.svg"))
+        result = render_ensemble_context_view(rows, anchor=ANCHOR, out=tmp_path / "missing.svg")
         assert result.status == "unavailable"
         assert result.reason is not None
         assert "e1" in result.reason
@@ -173,15 +215,80 @@ class TestEnsembleContext:
         assert out.exists()
         assert "unavailable" in out.read_text(encoding="utf-8")
 
-    def test_ensemble_context_quantile_band_does_not_span_unaligned(self) -> None:
+    def test_ensemble_context_quantile_band_does_not_span_unaligned(self, tmp_path: Path) -> None:
         """Alignment is on event-relative time, so trajectory *t* values vary per episode."""
         rows = [
             _row("e0", PLANNER_X, FAMILY_A, 1, "collision", traj_len=12),
             _row("e1", PLANNER_X, FAMILY_A, 2, "collision", traj_len=12),
         ]
-        result = render_ensemble_context_view(rows, anchor=ANCHOR, out=Path("__unused__.svg"))
+        result = render_ensemble_context_view(rows, anchor=ANCHOR, out=tmp_path / "unequal.svg")
         assert result.status == "rendered"
         assert result is not None
+
+    def test_ensemble_context_refuses_disjoint_event_relative_ranges(self, tmp_path: Path) -> None:
+        """No fabricated interpolation is allowed when the shared interval is empty."""
+        rows = [
+            replace(
+                _row("e0", PLANNER_X, FAMILY_A, 1, "collision"),
+                trajectory=(TrajectoryPoint(0.0, 0.0, 0.0), TrajectoryPoint(1.0, 1.0, 0.0)),
+                event_anchors={ANCHOR: 0.0},
+            ),
+            replace(
+                _row("e1", PLANNER_X, FAMILY_A, 2, "collision"),
+                trajectory=(TrajectoryPoint(2.0, 2.0, 0.0), TrajectoryPoint(3.0, 3.0, 0.0)),
+                event_anchors={ANCHOR: 0.0},
+            ),
+        ]
+        result = render_ensemble_context_view(rows, anchor=ANCHOR, out=tmp_path / "disjoint.svg")
+        assert result.status == "unavailable"
+        assert result.reason is not None
+        assert "common event-relative time interval" in result.reason
+
+    def test_ensemble_context_rejects_malformed_trajectory(self, tmp_path: Path) -> None:
+        """Non-increasing trajectory timestamps fail closed before interpolation."""
+        row = replace(
+            _row("bad", PLANNER_X, FAMILY_A, 1, "collision"),
+            trajectory=(TrajectoryPoint(0.0, 0.0, 0.0), TrajectoryPoint(0.0, 1.0, 0.0)),
+        )
+        result = render_ensemble_context_view(
+            [row, _row("ok", PLANNER_X, FAMILY_A, 2, "success")],
+            anchor=ANCHOR,
+            out=tmp_path / "bad.svg",
+        )
+        assert result.status == "unavailable"
+        assert result.reason is not None
+        assert "strictly increasing" in result.reason
+
+    def test_ensemble_geometry_returns_observed_medoid_path(self) -> None:
+        """The medoid path is one episode, not the coordinate-wise median center."""
+        rows = [
+            replace(
+                _row("e0", PLANNER_X, FAMILY_A, 1, "collision"),
+                trajectory=tuple(TrajectoryPoint(float(k), float(k), 0.0) for k in range(10)),
+            ),
+            replace(
+                _row("e1", PLANNER_X, FAMILY_A, 2, "collision"),
+                trajectory=tuple(TrajectoryPoint(float(k), float(k), 10.0) for k in range(10)),
+            ),
+        ]
+        aligned = _align_trajectories(rows, anchor=ANCHOR)
+        time_grid, _median_path, _band, medoid_id, _outliers, medoid_path = (
+            _compute_ensemble_geometry(aligned)
+        )
+        assert medoid_id == "e0"
+        expected_y = np.interp(time_grid, [-5.0, 4.0], [0.0, 0.0])
+        assert np.allclose(medoid_path[:, 1], expected_y)
+
+    def test_ensemble_pdf_output_is_pdf(self, tmp_path: Path) -> None:
+        """A requested PDF is not an SVG payload with a PDF suffix."""
+        rows = [
+            _row("e0", PLANNER_X, FAMILY_A, 1, "collision"),
+            _row("e1", PLANNER_X, FAMILY_A, 2, "collision"),
+        ]
+        out = tmp_path / "ensemble.pdf"
+        result = render_ensemble_context_view(rows, anchor=ANCHOR, out=out)
+        assert result.status == "rendered"
+        assert out.read_bytes().startswith(b"%PDF")
 
 
 class TestAtlasHtmlParity:
@@ -244,6 +351,54 @@ class TestAtlasHtmlParity:
                 sort_keys=True,
             ),
             encoding="utf-8",
+        )
+        with pytest.raises(AtlasParityError):
+            check_atlas_parity(html_path, summary_path)
+
+    def test_atlas_html_render_data_parity_fails_closed(self, tmp_path: Path) -> None:
+        """A mutation of the exploration renderer payload is detected."""
+        rows = _eligible_rows()
+        summary = build_atlas_summary(rows, config=AtlasConfig(campaign_id="c1"))
+        html_path = render_html_atlas_exploration(summary, tmp_path / "atlas.html")
+        summary_path = tmp_path / "summary.json"
+        summary_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "campaign_atlas.v1",
+                    "campaign_id": summary.campaign_id,
+                    "scenario_families": list(summary.scenario_families),
+                    "planners": list(summary.planners),
+                    "event_anchor": summary.event_anchor,
+                    "selection_manifest_hash": summary.selection_manifest_hash,
+                    "metric_definitions": dict(summary.metric_definitions),
+                    "cells": [
+                        {
+                            "scenario_family": cell.scenario_family,
+                            "planner": cell.planner,
+                            "eligible": cell.eligible,
+                            "ineligible_reason": cell.ineligible_reason,
+                            "n_total": cell.n_total,
+                            "outcome_counts": dict(cell.outcome_counts),
+                            "outcome_ci": {
+                                key: list(value) for key, value in cell.outcome_ci.items()
+                            },
+                            "exemplar_episode_ids": list(cell.exemplar_episode_ids),
+                        }
+                        for cell in summary.cells
+                    ],
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        html = html_path.read_text(encoding="utf-8")
+        tag = '<script id="campaign-atlas-render-data" type="application/json">'
+        prefix, remainder = html.split(tag, 1)
+        payload_text, suffix = remainder.split("</script>", 1)
+        payload = json.loads(payload_text)
+        payload["cells"][0]["n_total"] += 1
+        html_path.write_text(
+            prefix + tag + json.dumps(payload) + "</script>" + suffix, encoding="utf-8"
         )
         with pytest.raises(AtlasParityError):
             check_atlas_parity(html_path, summary_path)
@@ -336,13 +491,17 @@ class TestAtlasManifestBinding:
             selection_manifest_hash="deadbeef",
             ensemble_anchor=ANCHOR,
             render_html=False,
-            commit="abc123",
+            commit="abc1234",
         )
         assert result.catalog_path is not None
         catalog = yaml.safe_load(result.catalog_path.read_text(encoding="utf-8"))
-        provenance = catalog["provenance"]
+        provenance = json.loads(
+            (tmp_path / "campaign_atlas_provenance.json").read_text(encoding="utf-8")
+        )
         assert provenance["campaign_id"] == "c1"
         assert provenance["selection_manifest_hash"] == "deadbeef"
+        assert provenance["event_anchor"] == ANCHOR
+        assert len(provenance["seed_inventory"]) == len(rows)
         assert provenance["event_detector_version"]
         assert provenance["renderer_version"] == "matplotlib"
         for artifact in catalog["artifacts"]:

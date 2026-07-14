@@ -31,6 +31,7 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
+from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -204,13 +205,18 @@ def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _save_svg(figure: plt.Figure, out: Path) -> None:
-    """Save a matplotlib figure to SVG with the embedded timestamp stripped.
+def _save_figure(figure: plt.Figure, out: Path) -> None:
+    """Save a matplotlib figure in its requested format.
 
     Matplotlib injects a ``<dc:date>`` creation timestamp into SVG metadata,
     which breaks byte-identical determinism. We render to SVG text, remove the
-    date element, then write the stable bytes.
+    date element, then write the stable bytes. PDF output is written through
+    Matplotlib's PDF backend rather than being mislabeled SVG XML.
     """
+    if out.suffix.lower() == ".pdf":
+        figure.savefig(out, format="pdf", bbox_inches="tight", metadata={"CreationDate": None})
+        return
+
     import io  # noqa: PLC0415 (local import keeps module import-light)
 
     buffer = io.StringIO()
@@ -250,6 +256,17 @@ class AtlasConfig:
     eligible_scenario_families: tuple[str, ...] | None = None
     eligible_planners: tuple[str, ...] | None = None
 
+    def __post_init__(self) -> None:
+        """Reject configuration that could silently mark every cell eligible."""
+        if self.min_cell_size < 1:
+            raise CampaignAtlasError("min_cell_size must be at least 1")
+        for field_name, values in (
+            ("eligible_scenario_families", self.eligible_scenario_families),
+            ("eligible_planners", self.eligible_planners),
+        ):
+            if values is not None and any(not value for value in values):
+                raise CampaignAtlasError(f"{field_name} cannot contain empty labels")
+
 
 def _cell_key(scenario_family: str, planner: str) -> str:
     """Return a deterministic cell key string."""
@@ -279,12 +296,16 @@ def build_atlas_summary(
     for row in rows:
         grouped.setdefault(_cell_key(row.scenario_family, row.planner), []).append(row)
 
-    scenario_families = sorted({row.scenario_family for row in rows})
-    planners = sorted({row.planner for row in rows})
-    if config.eligible_scenario_families is not None:
-        scenario_families = [f for f in scenario_families if f in config.eligible_scenario_families]
-    if config.eligible_planners is not None:
-        planners = [p for p in planners if p in config.eligible_planners]
+    scenario_families = (
+        sorted(set(config.eligible_scenario_families))
+        if config.eligible_scenario_families is not None
+        else sorted({row.scenario_family for row in rows})
+    )
+    planners = (
+        sorted(set(config.eligible_planners))
+        if config.eligible_planners is not None
+        else sorted({row.planner for row in rows})
+    )
 
     cells: list[AtlasCellSummary] = []
     for scenario_family in scenario_families:
@@ -374,7 +395,7 @@ def render_atlas_figure(summary: AtlasSummary, out: Path) -> Path:
                 )
         figure.suptitle(f"Campaign atlas — {summary.campaign_id}", fontsize=13)
         figure.tight_layout(rect=(0, 0, 1, 0.96))
-        _save_svg(figure, out)
+        _save_figure(figure, out)
         plt.close(figure)
     return out
 
@@ -502,6 +523,8 @@ def render_ensemble_context_view(
     Returns:
         ``EnsembleResult`` with status and the output path (always written).
     """
+    if not anchor:
+        raise CampaignAtlasError("ensemble anchor must be a non-empty name")
     out = Path(out)
     if out.suffix.lower() not in {".svg", ".pdf"}:
         out = out.with_suffix(".svg")
@@ -518,14 +541,14 @@ def render_ensemble_context_view(
         exemplar_episode_ids=(),
     )
 
-    missing = [row.episode_id for row in cell_rows if anchor not in row.event_anchors]
-    if missing:
+    invalid_rows = _validate_ensemble_rows(cell_rows, anchor=anchor)
+    if invalid_rows:
         return _render_ensemble_unavailable(
             cell,
             anchor,
             out,
-            reason=f"no shared event anchor '{anchor}' for episodes: {', '.join(sorted(missing))}",
-            missing=sorted(missing),
+            reason="invalid ensemble input: " + "; ".join(invalid_rows),
+            missing=[],
         )
 
     aligned = _align_trajectories(cell_rows, anchor=anchor)
@@ -538,9 +561,17 @@ def render_ensemble_context_view(
             missing=[],
         )
 
-    time_grid, median_path, band_radius, medoid_id, outlier_ids = _compute_ensemble_geometry(
-        aligned
-    )
+    try:
+        (
+            time_grid,
+            median_path,
+            band_radius,
+            medoid_id,
+            outlier_ids,
+            medoid_path,
+        ) = _compute_ensemble_geometry(aligned)
+    except CampaignAtlasError as exc:
+        return _render_ensemble_unavailable(cell, anchor, out, reason=str(exc), missing=[])
     _draw_ensemble_figure(
         out,
         cell,
@@ -549,6 +580,7 @@ def render_ensemble_context_view(
         median_path,
         band_radius,
         medoid_id,
+        medoid_path,
         outlier_ids,
         aligned,
     )
@@ -564,12 +596,60 @@ def render_ensemble_context_view(
     )
 
 
+def _validate_ensemble_rows(cell_rows: Sequence[EpisodeInventoryRow], *, anchor: str) -> list[str]:
+    """Return deterministic validation errors for event-aligned input rows."""
+    errors: list[str] = []
+    episode_ids = [row.episode_id for row in cell_rows]
+    duplicate_ids = sorted(
+        episode_id for episode_id, count in Counter(episode_ids).items() if count > 1
+    )
+    if duplicate_ids:
+        errors.append(f"duplicate episode ids: {', '.join(duplicate_ids)}")
+
+    for row in sorted(cell_rows, key=lambda item: item.episode_id):
+        row_errors = _validate_ensemble_row(row, anchor=anchor)
+        if row_errors:
+            errors.append(f"{row.episode_id}: {', '.join(row_errors)}")
+    return errors
+
+
+def _validate_ensemble_row(row: EpisodeInventoryRow, *, anchor: str) -> list[str]:
+    """Return validation errors for one event-aligned inventory row."""
+    errors: list[str] = []
+    if anchor not in row.event_anchors:
+        errors.append(f"missing anchor '{anchor}'")
+    elif not math.isfinite(row.event_anchors[anchor]):
+        errors.append(f"anchor '{anchor}' is non-finite")
+
+    if len(row.trajectory) < 2:
+        errors.append("trajectory needs at least two points")
+    else:
+        times = [point.t for point in row.trajectory]
+        if any(
+            not math.isfinite(value)
+            for point in row.trajectory
+            for value in (point.t, point.x, point.y)
+        ):
+            errors.append("trajectory contains non-finite values")
+        elif any(next_time <= current_time for current_time, next_time in pairwise(times)):
+            errors.append("trajectory times must be strictly increasing")
+
+    for interval in row.predicate_timeline:
+        if not all(math.isfinite(value) for value in (interval.t_start, interval.t_end)):
+            errors.append("predicate timeline contains non-finite values")
+            break
+        if interval.t_end < interval.t_start:
+            errors.append("predicate timeline has a reversed interval")
+            break
+    return errors
+
+
 def _align_trajectories(
     cell_rows: Sequence[EpisodeInventoryRow], *, anchor: str
 ) -> list[tuple[EpisodeInventoryRow, list[tuple[float, float, float]]]]:
     """Return ``(row, [(t_rel, x, y), ...])`` for rows sharing *anchor*."""
     aligned: list[tuple[EpisodeInventoryRow, list[tuple[float, float, float]]]] = []
-    for row in cell_rows:
+    for row in sorted(cell_rows, key=lambda item: item.episode_id):
         anchor_time = row.event_anchors[anchor]
         points = [(point.t - anchor_time, point.x, point.y) for point in row.trajectory]
         aligned.append((row, points))
@@ -584,6 +664,7 @@ def _compute_ensemble_geometry(
     np.ndarray,
     str | None,
     set[str],
+    np.ndarray,
 ]:
     """Compute time grid, medoid path, quantile band radius, medoid id, outliers.
 
@@ -591,8 +672,12 @@ def _compute_ensemble_geometry(
     they never span semantically unaligned episodes. Outliers are episodes whose
     per-time distance from the median path exceeds the median + 1.5*IQR band.
     """
-    t_min = min(points[0][0] for _, points in aligned)
-    t_max = max(points[-1][0] for _, points in aligned)
+    t_min = max(points[0][0] for _, points in aligned)
+    t_max = min(points[-1][0] for _, points in aligned)
+    if t_max <= t_min:
+        raise CampaignAtlasError(
+            "no common event-relative time interval exists across the aligned episodes"
+        )
     time_grid = np.linspace(t_min, t_max, 120)
     xs = np.zeros((len(aligned), len(time_grid)))
     ys = np.zeros((len(aligned), len(time_grid)))
@@ -609,17 +694,23 @@ def _compute_ensemble_geometry(
     band_radius = band_median + 1.5 * (q3 - q1)
 
     medoid_id: str | None = None
-    best_mean = math.inf
+    medoid_index: int | None = None
+    best_key: tuple[float, str] | None = None
     outlier_ids: set[str] = set()
     for i, (row, _) in enumerate(aligned):
         mean_dist = float(np.mean(distances[i]))
-        if mean_dist < best_mean:
-            best_mean = mean_dist
+        candidate_key = (mean_dist, row.episode_id)
+        if best_key is None or candidate_key < best_key:
+            best_key = candidate_key
             medoid_id = row.episode_id
+            medoid_index = i
         if float(np.max(distances[i])) > float(np.max(band_radius)):
             outlier_ids.add(row.episode_id)
     median_path = np.column_stack((median_x, median_y))
-    return time_grid, median_path, band_radius, medoid_id, outlier_ids
+    if medoid_index is None:
+        raise CampaignAtlasError("could not select an observed medoid trajectory")
+    medoid_path = np.column_stack((xs[medoid_index], ys[medoid_index]))
+    return time_grid, median_path, band_radius, medoid_id, outlier_ids, medoid_path
 
 
 def _draw_ensemble_figure(
@@ -630,6 +721,7 @@ def _draw_ensemble_figure(
     median_path: np.ndarray,
     band_radius: np.ndarray,
     medoid_id: str | None,
+    medoid_path: np.ndarray,
     outlier_ids: set[str],
     aligned: list[tuple[EpisodeInventoryRow, list[tuple[float, float, float]]]],
 ) -> None:
@@ -665,8 +757,8 @@ def _draw_ensemble_figure(
         # Medoid path bold.
         if medoid_id is not None:
             ax_map.plot(
-                median_path[:, 0],
-                median_path[:, 1],
+                medoid_path[:, 0],
+                medoid_path[:, 1],
                 color="#009E73",
                 linewidth=2.2,
                 zorder=4,
@@ -704,7 +796,7 @@ def _draw_ensemble_figure(
         ax_strip.set_title("planner-state / predicate sequence", fontsize=9)
 
         figure.tight_layout()
-        _save_svg(figure, out)
+        _save_figure(figure, out)
         plt.close(figure)
 
 
@@ -747,7 +839,7 @@ def _render_ensemble_unavailable(
             fontsize=10,
         )
         figure.tight_layout()
-        _save_svg(figure, out)
+        _save_figure(figure, out)
         plt.close(figure)
     return EnsembleResult(
         cell=cell,
@@ -808,41 +900,45 @@ def render_html_atlas_exploration(summary: AtlasSummary, out: Path) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     parity = _summary_parity_dict(summary)
 
+    cells = parity["cells"]
     try:
         import altair as alt  # noqa: PLC0415, F401  (optional exploration-only dependency)
 
-        body = _render_altair_html(summary)
+        body = _render_altair_html(cells)
     except ImportError:
-        body = _render_table_html(summary)
+        body = _render_table_html(cells)
 
     embedded = json.dumps(parity, sort_keys=True, indent=2)
+    rendered_data = json.dumps({"cells": cells}, sort_keys=True, indent=2)
     html = (
         '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         f"<title>Campaign atlas (exploration) — {summary.campaign_id}</title>\n"
         "</head>\n<body>\n"
         '<script id="campaign-atlas-summary" type="application/json">\n'
         f"{embedded}\n</script>\n"
+        '<script id="campaign-atlas-render-data" type="application/json">\n'
+        f"{rendered_data}\n</script>\n"
         f"{body}\n</body>\n</html>\n"
     )
     out.write_text(html, encoding="utf-8")
     return out
 
 
-def _render_table_html(summary: AtlasSummary) -> str:
+def _render_table_html(cells: Sequence[dict[str, Any]]) -> str:
     """Return a plain HTML table fallback for the exploration atlas."""
     rows_html = []
-    for cell in summary.cells:
+    for cell in cells:
         outcomes = ", ".join(
-            f"{label}={count}" for label, count in sorted(cell.outcome_counts.items())
+            f"{label}={count}" for label, count in sorted(cell["outcome_counts"].items())
         )
         rows_html.append(
             "<tr>"
-            f"<td>{cell.scenario_family}</td>"
-            f"<td>{cell.planner}</td>"
-            f"<td>{'yes' if cell.eligible else 'no'}</td>"
-            f"<td>{cell.n_total}</td>"
+            f"<td>{cell['scenario_family']}</td>"
+            f"<td>{cell['planner']}</td>"
+            f"<td>{'yes' if cell['eligible'] else 'no'}</td>"
+            f"<td>{cell['n_total']}</td>"
             f"<td>{outcomes}</td>"
-            f"<td>{', '.join(cell.exemplar_episode_ids)}</td>"
+            f"<td>{', '.join(cell['exemplar_episode_ids'])}</td>"
             "</tr>"
         )
     return (
@@ -854,19 +950,16 @@ def _render_table_html(summary: AtlasSummary) -> str:
     )
 
 
-def _render_altair_html(summary: AtlasSummary) -> str:
+def _render_altair_html(cells: Sequence[dict[str, Any]]) -> str:
     """Return an Altair/Vega-Lite HTML block for the exploration atlas."""
     import altair as alt  # noqa: PLC0415
 
     data = [
         {
-            "scenario_family": cell.scenario_family,
-            "planner": cell.planner,
-            "n_total": cell.n_total,
-            "eligible": cell.eligible,
-            "exemplars": len(cell.exemplar_episode_ids),
+            **cell,
+            "exemplars": len(cell["exemplar_episode_ids"]),
         }
-        for cell in summary.cells
+        for cell in cells
     ]
     chart = (
         alt.Chart(alt.Data(values=data))
@@ -882,7 +975,7 @@ def _render_altair_html(summary: AtlasSummary) -> str:
 
 
 def check_atlas_parity(html_path: Path, summary_path: Path) -> None:
-    """Fail closed if the HTML exploration atlas disagrees with the static summary.
+    """Fail closed if the HTML exploration data disagrees with the static summary.
 
     Raises:
         AtlasParityError: When the embedded HTML summary does not match the
@@ -897,6 +990,14 @@ def check_atlas_parity(html_path: Path, summary_path: Path) -> None:
     if match is None:
         raise AtlasParityError("HTML atlas is missing the embedded summary block")
     html_summary = json.loads(match.group(1))
+    render_match = re.search(
+        r"<script id=\"campaign-atlas-render-data\" type=\"application/json\">(.*?)</script>",
+        html_text,
+        re.DOTALL,
+    )
+    if render_match is None:
+        raise AtlasParityError("HTML atlas is missing the rendered-data block")
+    render_data = json.loads(render_match.group(1))
     static_summary = json.loads(Path(summary_path).read_text(encoding="utf-8"))
 
     if html_summary != static_summary:
@@ -909,6 +1010,9 @@ def check_atlas_parity(html_path: Path, summary_path: Path) -> None:
             "HTML exploration atlas disagrees with static atlas summary on fields: "
             + ", ".join(sorted(diff_fields))
         )
+
+    if render_data.get("cells") != static_summary.get("cells"):
+        raise AtlasParityError("HTML exploration data disagrees with static atlas cell data")
 
 
 # ---------------------------------------------------------------------------
@@ -937,6 +1041,7 @@ def build_campaign_atlas(
     render_html: bool = False,
     command: str = "",
     commit: str = "",
+    source_inventory: Path | None = None,
 ) -> AtlasBuildResult:
     """Build the campaign atlas plus per-cell ensemble views and a manifest.
 
@@ -953,15 +1058,15 @@ def build_campaign_atlas(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     summary = build_atlas_summary(rows, config=config, exemplar_episode_ids=exemplar_episode_ids)
-    if selection_manifest_hash:
+    if selection_manifest_hash or ensemble_anchor is not None:
         summary = AtlasSummary(
             campaign_id=summary.campaign_id,
             scenario_families=summary.scenario_families,
             planners=summary.planners,
             cells=summary.cells,
             metric_definitions=summary.metric_definitions,
-            event_anchor=summary.event_anchor,
-            selection_manifest_hash=selection_manifest_hash,
+            event_anchor=ensemble_anchor,
+            selection_manifest_hash=selection_manifest_hash or summary.selection_manifest_hash,
         )
 
     atlas_svg = render_atlas_figure(summary, out_dir / "campaign_atlas.svg")
@@ -974,7 +1079,12 @@ def build_campaign_atlas(
     ensemble_views: list[EnsembleResult] = []
     if ensemble_anchor is not None:
         cells = _group_rows_by_cell(rows)
+        eligible_cells = {
+            (cell.scenario_family, cell.planner) for cell in summary.cells if cell.eligible
+        }
         for (scenario_family, planner), cell_rows in sorted(cells.items()):
+            if (scenario_family, planner) not in eligible_cells:
+                continue
             result = render_ensemble_context_view(
                 cell_rows,
                 anchor=ensemble_anchor,
@@ -988,9 +1098,11 @@ def build_campaign_atlas(
     catalog_path = _write_atlas_catalog(
         out_dir,
         summary,
+        rows=rows,
         atlas_svg=atlas_svg,
         atlas_summary_json=atlas_summary_json,
         ensemble_views=tuple(ensemble_views),
+        source_inventory=source_inventory,
         command=command,
         commit=commit,
     )
@@ -1016,6 +1128,8 @@ def _write_atlas_catalog(
     out_dir: Path,
     summary: AtlasSummary,
     *,
+    rows: Sequence[EpisodeInventoryRow],
+    source_inventory: Path | None,
     atlas_svg: Path,
     atlas_summary_json: Path,
     ensemble_views: tuple[EnsembleResult, ...],
@@ -1027,22 +1141,85 @@ def _write_atlas_catalog(
         ARTIFACT_CATALOG_SCHEMA_VERSION,
     )
 
+    seed_inventory = [
+        {
+            "episode_id": row.episode_id,
+            "scenario_id": row.scenario_id,
+            "scenario_family": row.scenario_family,
+            "planner": row.planner,
+            "seed": row.seed,
+        }
+        for row in sorted(
+            rows,
+            key=lambda item: (
+                item.scenario_family,
+                item.planner,
+                item.scenario_id,
+                item.seed,
+                item.episode_id,
+            ),
+        )
+    ]
+    provenance = {
+        "campaign_id": summary.campaign_id,
+        "scenario_families": list(summary.scenario_families),
+        "planners": list(summary.planners),
+        "seed_inventory": seed_inventory,
+        "event_anchor": summary.event_anchor,
+        "event_detector_version": EVENT_DETECTOR_VERSION,
+        "renderer_version": RENDERER_VERSION,
+        "style_version": STYLE_VERSION,
+        "selection_manifest_hash": summary.selection_manifest_hash,
+        "metric_definitions": dict(summary.metric_definitions),
+    }
+    provenance_path = out_dir / "campaign_atlas_provenance.json"
+    provenance_path.write_text(json.dumps(provenance, sort_keys=True, indent=2), encoding="utf-8")
+    caption_path = out_dir / "campaign_atlas_caption.md"
+    caption_path.write_text(
+        "# Campaign atlas figures\n\n"
+        f"Campaign: `{summary.campaign_id}`.\n\n"
+        "Claim boundary: diagnostic tooling output only; these figures are not benchmark-success "
+        "or paper-facing evidence. Outcome labels and event anchors are consumed from the "
+        "versioned campaign inventory.\n\n"
+        f"Event anchor: `{summary.event_anchor or 'not requested'}`.\n",
+        encoding="utf-8",
+    )
+
+    source_files = [
+        {
+            "path": atlas_summary_json.name,
+            "sha256": _sha256_file(atlas_summary_json),
+        },
+        {
+            "path": provenance_path.name,
+            "sha256": _sha256_file(provenance_path),
+        },
+    ]
+    if source_inventory is not None:
+        source_inventory = Path(source_inventory)
+        if not source_inventory.is_file():
+            raise CampaignAtlasError(f"source inventory does not exist: {source_inventory}")
+        source_files.append(
+            {
+                "path": source_inventory.as_posix(),
+                "sha256": _sha256_file(source_inventory),
+            }
+        )
+
     artifacts: list[dict[str, Any]] = [
         {
             "artifact_id": "campaign_atlas",
             "artifact_kind": "figure",
             "source_kind": "campaign_inventory",
-            "source_files": [
-                {
-                    "path": atlas_summary_json.name,
-                    "sha256": _sha256_file(atlas_summary_json),
-                }
-            ],
+            "source_files": source_files,
             "outputs": {"svg": {"path": atlas_svg.name, "sha256": _sha256_file(atlas_svg)}},
             "generation_command": command,
             "generation_commit": commit,
             "claim_boundary": "diagnostic_only",
-            "caption_file": None,
+            "caption_file": {
+                "path": caption_path.name,
+                "sha256": _sha256_file(caption_path),
+            },
         }
     ]
     for view in ensemble_views:
@@ -1053,12 +1230,7 @@ def _write_atlas_catalog(
                 "artifact_id": f"ensemble_{view.cell.scenario_family}_{view.cell.planner}",
                 "artifact_kind": "figure",
                 "source_kind": "campaign_inventory",
-                "source_files": [
-                    {
-                        "path": atlas_summary_json.name,
-                        "sha256": _sha256_file(atlas_summary_json),
-                    }
-                ],
+                "source_files": source_files,
                 "outputs": {
                     "svg": {
                         "path": view.output_path.name,
@@ -1068,23 +1240,16 @@ def _write_atlas_catalog(
                 "generation_command": command,
                 "generation_commit": commit,
                 "claim_boundary": "diagnostic_only",
-                "caption_file": None,
+                "caption_file": {
+                    "path": caption_path.name,
+                    "sha256": _sha256_file(caption_path),
+                },
             }
         )
 
     catalog = {
         "schema_version": ARTIFACT_CATALOG_SCHEMA_VERSION,
         "catalog_id": f"campaign_atlas_{summary.campaign_id}",
-        "provenance": {
-            "campaign_id": summary.campaign_id,
-            "scenario_families": list(summary.scenario_families),
-            "planners": list(summary.planners),
-            "event_detector_version": EVENT_DETECTOR_VERSION,
-            "renderer_version": RENDERER_VERSION,
-            "style_version": STYLE_VERSION,
-            "selection_manifest_hash": summary.selection_manifest_hash,
-            "metric_definitions": dict(summary.metric_definitions),
-        },
         "artifacts": artifacts,
     }
     catalog_path = out_dir / "campaign_atlas_catalog.yaml"

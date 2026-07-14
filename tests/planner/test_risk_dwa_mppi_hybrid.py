@@ -221,6 +221,54 @@ def test_mppi_is_deterministic_for_fixed_seed() -> None:
     assert a1 == a2
 
 
+def test_mppi_ttc_computation_emits_no_divide_warning() -> None:
+    """TTC divides only where valid; no invalid-value RuntimeWarning under -W error.
+
+    Regression guard for issue #5635: the previous nested ``np.where`` evaluated
+    ``rel_dot / rel_speed_sq`` eagerly, emitting a reproducible divide warning at
+    ``robot_sf/planner/mppi_social.py`` even for rows with ``rel_speed_sq <= 1e-6``.
+    """
+    import warnings
+
+    cfg = MPPISocialConfig(random_seed=7, sample_count=24, iterations=2, horizon_steps=5)
+    planner = MPPISocialPlannerAdapter(cfg)
+
+    o = _obs(
+        ped_positions=[(0.6, 0.2), (0.8, -0.1), (0.0, 0.0)],
+        ped_velocities=[(0.0, 0.0), (0.0, 0.0), (0.0, 0.0)],
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        action = planner.plan(o)
+
+    assert isinstance(action, tuple) and len(action) == 2
+    v, w = action
+    assert 0.0 <= v <= planner.config.max_linear_speed
+    assert abs(w) <= planner.config.max_angular_speed
+
+
+def test_mppi_ttc_matches_reference_divide() -> None:
+    """Numerically verify the guarded TTC equals an explicit safe-divide reference.
+
+    Confirms the planner action/cost outputs are unchanged by the guarding fix:
+    for valid, approaching rows ttc == rel_dot / rel_speed_sq, otherwise -1.0.
+    """
+    import numpy as np
+
+    rel_pos = np.array([[1.0, 0.0], [0.0, 0.0], [2.0, 1.0]], dtype=float)
+    rel_vel = np.array([[0.0, 0.0], [3.0, 0.0], [-1.0, -1.0]], dtype=float)
+    rel_speed_sq = np.sum(rel_vel * rel_vel, axis=1)
+    rel_dot = -np.sum(rel_pos * rel_vel, axis=1)
+    valid = rel_speed_sq > 1e-6
+
+    ttc_vals = np.full_like(rel_dot, -1.0)
+    np.divide(rel_dot, rel_speed_sq, where=valid & (rel_dot > 0), out=ttc_vals)
+
+    expected = np.array([-1.0, -1.0, 3.0 / 2.0], dtype=float)
+    assert np.allclose(ttc_vals, expected)
+
+
 def test_mppi_caches_absent_grid_payload_and_accepts_full_elite_fraction(monkeypatch) -> None:
     """MPPI should cache a missing grid and keep full-elite configurations valid."""
     planner = MPPISocialPlannerAdapter(

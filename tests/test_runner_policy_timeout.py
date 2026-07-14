@@ -8,6 +8,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from loguru import logger
 
 from robot_sf import baselines
 from robot_sf.benchmark import runner
@@ -24,6 +25,21 @@ class _SlowPlanner:
         return {"vx": 1.0, "vy": 0.0}
 
     def get_metadata(self) -> dict[str, Any]:
+        return {"algorithm": "random", "status": "ok", "seed": self.seed}
+
+
+class _FailingPlanner:
+    """Planner stub whose worker step raises a diagnostic error."""
+
+    def __init__(self, _config: dict[str, Any], *, seed: int) -> None:
+        self.seed = seed
+
+    def step(self, _obs: Any) -> dict[str, float]:
+        """Raise the worker error that the parent policy wrapper logs."""
+        raise ValueError("bad worker observation")
+
+    def get_metadata(self) -> dict[str, Any]:
+        """Return baseline metadata for the failing planner."""
         return {"algorithm": "random", "status": "ok", "seed": self.seed}
 
 
@@ -89,6 +105,37 @@ def test_planner_step_timeout_fails_fast_and_reports_metadata(
     assert timeout_metadata["step_timeout_s"] == 0.05
     assert timeout_metadata["step_timeouts"] == 1
     assert timeout_metadata["fallback_actions"] == 1
+
+
+@pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")
+def test_planner_step_error_logs_exception_details(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Worker errors should retain their exception text in the Loguru warning."""
+    monkeypatch.setitem(baselines.BASELINES, "random", _FailingPlanner)
+    captured: list[str] = []
+    handler = logger.add(
+        lambda message: captured.append(message.record["message"]), level="WARNING"
+    )
+    try:
+        policy, metadata = runner._create_robot_policy("random", None, seed=123)
+        velocity = policy(
+            np.array([0.0, 0.0]),
+            np.array([0.0, 0.0]),
+            np.array([1.0, 0.0]),
+            np.empty((0, 2)),
+            0.1,
+        )
+    finally:
+        logger.remove(handler)
+        if "policy" in locals():
+            policy.close()
+
+    assert velocity == pytest.approx(np.array([0.0, 0.0]))
+    assert metadata["status"] == "policy_step_error_fallback"
+    assert any(
+        "Planner step failed unexpectedly: Planner step failed in worker" in message
+        and "bad worker observation" in message
+        for message in captured
+    )
 
 
 @pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")

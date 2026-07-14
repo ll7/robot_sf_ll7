@@ -114,6 +114,7 @@ def test_export_publication_bundle_writes_manifest_checksums_and_archive(tmp_pat
         if line.strip()
     ]
     assert len(checksum_lines) == result.file_count
+    assert all("  payload/" in line for line in checksum_lines)
 
     with tarfile.open(result.archive_path, "r:gz") as handle:
         names = handle.getnames()

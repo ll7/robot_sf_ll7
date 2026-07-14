@@ -463,3 +463,137 @@ class TestOrcaRvo2PreflightCli:
         exit_code = orca_preflight_cli.main(["--config", str(config_path)])
 
         assert exit_code == 1
+
+
+class TestPostCampaignStageStatusEnvelope:
+    """Issue #5244 production-boundary regression for the camera-ready launcher.
+
+    The canonical Python launcher must emit the
+    ``robot-sf-post-campaign-stage-status.v1`` envelope at the real dispatch
+    boundary so downstream schedulers/ledgers can separate a completed campaign
+    from a failed reporting stage. The campaign exit code must be preserved.
+    """
+
+    def test_launcher_emits_stage_status_envelope_for_completed_campaign(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+    ) -> None:
+        """A completed campaign must write the envelope and keep exit 0."""
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text("name: test\n", encoding="utf-8")
+        sentinel_cfg = object()
+        summary_path = tmp_path / "cid" / "reports" / "campaign_summary.json"
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(
+            json.dumps({"soft_contract_warning": True, "warnings": ["SNQI warn"]}),
+            encoding="utf-8",
+        )
+        campaign_root = tmp_path / "cid"
+
+        def _fake_load_campaign_config(path: Path):
+            assert path == config_path
+            return sentinel_cfg
+
+        def _fake_run_campaign(cfg, **kwargs):
+            assert cfg is sentinel_cfg
+            return {
+                "campaign_id": "cid",
+                "campaign_root": str(campaign_root),
+                "summary_json": str(summary_path),
+                "benchmark_success": True,
+                "status": "benchmark_success",
+                "campaign_execution_status": "completed",
+                "evidence_status": "valid",
+                "soft_contract_warning": True,
+                "row_status_summary": {
+                    "successful_evidence_rows": 1,
+                    "accepted_unavailable_rows": 0,
+                    "unexpected_failed_rows": 0,
+                    "fallback_or_degraded_rows": 0,
+                },
+                "successful_runs": 1,
+                "accepted_unavailable_runs": 0,
+                "unexpected_failed_runs": 0,
+                "non_success_runs": 0,
+                "total_runs": 1,
+            }
+
+        monkeypatch.setattr(
+            run_camera_ready_benchmark, "load_campaign_config", _fake_load_campaign_config
+        )
+        monkeypatch.setattr(run_camera_ready_benchmark, "run_campaign", _fake_run_campaign)
+        monkeypatch.setattr(
+            run_camera_ready_benchmark,
+            "prepare_campaign_preflight",
+            lambda *a, **kw: (_ for _ in ()).throw(AssertionError("unreachable")),
+        )
+
+        exit_code = run_camera_ready_benchmark.main(["--config", str(config_path)])
+
+        assert exit_code == 0
+        envelope = campaign_root / "reports" / "post_campaign_stage_status.json"
+        assert envelope.is_file()
+        payload = json.loads(envelope.read_text(encoding="utf-8"))
+        assert payload["schema_version"] == "robot-sf-post-campaign-stage-status.v1"
+        assert payload["campaign"]["exit_code"] == 0
+        assert payload["campaign"]["status"] == "completed"
+        assert payload["campaign"]["soft_contract_warning"] is True
+        assert payload["job_exit_code"] == 0
+        assert payload["post_campaign_stage"]["status"] == "completed"
+        assert payload["post_campaign_stage"]["exit_code"] == 0
+        assert payload["post_campaign_stage"]["name"] == "camera_ready_campaign"
+
+    def test_launcher_preserves_nonzero_exit_when_campaign_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A non-success campaign must still exit nonzero and record the lane."""
+        config_path = tmp_path / "config.yaml"
+        config_path.write_text("name: test\n", encoding="utf-8")
+        sentinel_cfg = object()
+        summary_path = tmp_path / "cid" / "reports" / "campaign_summary.json"
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text("{}", encoding="utf-8")
+        campaign_root = tmp_path / "cid"
+
+        def _fake_load_campaign_config(path: Path):
+            assert path == config_path
+            return sentinel_cfg
+
+        def _fake_run_campaign(cfg, **kwargs):
+            assert cfg is sentinel_cfg
+            return {
+                "campaign_id": "cid",
+                "campaign_root": str(campaign_root),
+                "summary_json": str(summary_path),
+                "benchmark_success": False,
+                "status": "failed",
+                "campaign_execution_status": "failed",
+                "evidence_status": "invalid",
+                "row_status_summary": {
+                    "successful_evidence_rows": 0,
+                    "accepted_unavailable_rows": 0,
+                    "unexpected_failed_rows": 1,
+                    "fallback_or_degraded_rows": 0,
+                },
+            }
+
+        monkeypatch.setattr(
+            run_camera_ready_benchmark, "load_campaign_config", _fake_load_campaign_config
+        )
+        monkeypatch.setattr(run_camera_ready_benchmark, "run_campaign", _fake_run_campaign)
+        monkeypatch.setattr(
+            run_camera_ready_benchmark,
+            "prepare_campaign_preflight",
+            lambda *a, **kw: (_ for _ in ()).throw(AssertionError("unreachable")),
+        )
+
+        exit_code = run_camera_ready_benchmark.main(["--config", str(config_path)])
+
+        assert exit_code == 2
+        payload = json.loads(
+            (campaign_root / "reports" / "post_campaign_stage_status.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert payload["campaign"]["exit_code"] == 2
+        assert payload["campaign"]["status"] == "failed"
+        assert payload["job_exit_code"] == 2

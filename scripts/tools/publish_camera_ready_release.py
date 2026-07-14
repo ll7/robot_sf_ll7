@@ -12,6 +12,9 @@ from typing import TYPE_CHECKING
 from loguru import logger
 
 from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.benchmark.release_publication_contract import (
+    validate_release_publication_contract,
+)
 from robot_sf.common.artifact_paths import get_repository_root
 
 if TYPE_CHECKING:
@@ -61,7 +64,9 @@ def _resolve_publication_path(publication: dict[str, object], key: str, repo_roo
     return repo_root / raw_value
 
 
-def _validate_prerequisites(campaign_root: Path) -> tuple[Path, Path, Path, dict[str, object]]:
+def _validate_prerequisites(
+    campaign_root: Path, *, expected_release_tag: str
+) -> tuple[Path, Path, Path, dict[str, object]]:
     """Validate campaign publication artifacts and return core paths plus campaign summary."""
     summary_path = campaign_root / "reports" / "campaign_summary.json"
     if not summary_path.exists():
@@ -91,6 +96,15 @@ def _validate_prerequisites(campaign_root: Path) -> tuple[Path, Path, Path, dict
     ]
     if not checksum_lines:
         raise ValueError(f"Checksums file is empty: {checksums_path}")
+
+    contract = validate_release_publication_contract(
+        campaign_root,
+        manifest_path.parent,
+        expected_release_tag=expected_release_tag,
+    )
+    if contract["status"] != "pass":
+        blockers = "\n".join(f"- {item}" for item in contract["blockers"])
+        raise ValueError(f"Release publication contract blocked:\n{blockers}")
 
     return archive_path, checksums_path, manifest_path, summary
 
@@ -146,7 +160,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     campaign_root = args.campaign_root.resolve()
-    archive_path, checksums_path, manifest_path, summary = _validate_prerequisites(campaign_root)
+    archive_path, checksums_path, manifest_path, summary = _validate_prerequisites(
+        campaign_root, expected_release_tag=str(args.tag)
+    )
     payload = _build_release_payload(
         campaign_root=campaign_root,
         repo=str(args.repo),

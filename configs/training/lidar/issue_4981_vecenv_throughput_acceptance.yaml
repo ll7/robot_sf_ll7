@@ -1,0 +1,40 @@
+schema: issue_4981_vecenv_throughput_acceptance_profile.v1
+issue: 4981
+
+# This is the reversible definition of "sufficiently long standard-config measurement" used by
+# the issue acceptance runner. It is intentionally 100x longer than the comparator's 100-step
+# diagnostic default while remaining a bounded local CPU workload.
+standard_workload:
+  config_path: configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml
+  num_envs: 4
+  modes:
+    - dummy
+    - subproc
+    - threaded
+    - threaded_lidar_batch
+  repetitions: 5
+  base_seed: 4981
+  warmup_steps: 1000
+  measure_steps: 10000
+
+acceptance:
+  source_schema: vecenv_throughput_comparator.v2
+  source_claim_boundary: diagnostic_only_not_benchmark_evidence
+  baseline_mode: dummy
+  baseline_num_envs: 1
+  candidate_modes:
+    - threaded
+    - threaded_lidar_batch
+  speedup_statistic: median_transitions_per_second_ratio
+  minimum_speedup_exclusive: 3.0
+
+required_pytest_nodes:
+  - tests/sensor/test_batched_lidar_kernel.py::test_single_environment_batch_uses_bit_identical_scalar_fallback
+  - tests/training/test_train_expert_ppo_contract.py::test_resolve_worker_mode_accepts_threaded_and_keeps_single_env_fallback
+  - tests/training/test_train_expert_ppo_contract.py::test_threaded_lidar_batch_mode_uses_dummy_single_environment_fallback
+  - tests/training/test_threaded_vec_env.py::test_threaded_vec_env_batches_real_lidar_without_changing_observations
+
+claim_boundary: >-
+  Host-specific CPU implementation-performance acceptance for issue #4981 only; this does not
+  establish training quality, navigation-benchmark performance, cross-host speedup, GPU speedup,
+  or any paper/dissertation claim.

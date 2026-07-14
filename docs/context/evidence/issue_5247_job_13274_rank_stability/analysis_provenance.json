@@ -1,0 +1,34 @@
+{
+  "claim_boundary": "The complete harvested episode set is analyzed without rerunning a campaign. The runner produces constraints-first success rank stability for review but does not promote a planner-ranking claim. SNQI rank claims remain blocked because the source campaign records a warn-level SNQI contract failure.",
+  "evidence_status": "diagnostic-only",
+  "input_sha256": {
+    "campaign_summary.json": "65ba53f5abd6b4eba55ab08600a00fc8d00315b4a308fd67cc7b789bc7d45237",
+    "seed_episode_rows.csv": "0457d1333619ea52f8050b7f6aa2e711be39d1b2c62740912613ca1608ec1edb",
+    "snqi_diagnostics.json": "ec6377bb79ccedee2eb0dae1724a6286241eef6070ef5bae9dfbb56c50615054"
+  },
+  "output_sha256": {
+    "report.md": "d9fe051d53300409f7ebbdb3211a35700f8e0f2671ce2908f6fbcf87af0acfe0",
+    "result.json": "4e9c9a44d86190f19bd3735693aa2b8a504ba9a1ff6575ad041bd8b9ab580ce2"
+  },
+  "ranking": {
+    "profile": "constraints_first",
+    "rank_metric": "success",
+    "snqi_rank_limitation": "SNQI contract status=fail with snqi_contract.enforcement=warn; failed check(s): rank_alignment_spearman=-0.2 (below fail threshold 0.3)",
+    "snqi_rank_status": "blocked_invalid_metric"
+  },
+  "schema_version": "issue_5247_verified_harvest_rank_stability.v2",
+  "snqi_contract_failure": {
+    "campaign_finished_at_utc": "2026-07-03T08:50:10.164307Z",
+    "contract_status": "fail",
+    "enforcement": "warn",
+    "failed_checks": [
+      {
+        "check": "rank_alignment_spearman",
+        "direction": "below",
+        "fail_threshold": 0.3,
+        "value": -0.19999999999999998
+      }
+    ],
+    "warning": "SNQI contract status=fail with snqi_contract.enforcement=warn; campaign marked with soft contract warning."
+  }
+}

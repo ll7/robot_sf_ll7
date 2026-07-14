@@ -3532,6 +3532,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5247_job_13274_rank_stability
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4017_constrained_rl/README.md
   status: evidence
   freshness: evidence

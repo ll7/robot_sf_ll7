@@ -316,6 +316,38 @@ fi
 "$SCRIPT_DIR/check_docstring_todos_ratchet.sh"
 uv run python "$SCRIPT_DIR/../validation/check_broad_exceptions.py"
 
+# Orphan guard for issue #5594: the readiness command must leave no worktree-owned
+# pytest worker behind. A leaked planner-step worker (or any pytest descendant) that
+# outlives the controller and its parents becomes reparented to PID 1 while still
+# holding host resources; that orphans the shared host. We scan for reparented
+# (parent PID 1) pytest processes whose cwd/cmdline ties them to this worktree.
+check_no_orphaned_pytest_workers() {
+  local worktree_root
+  worktree_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  local orphaned=0
+  local pid ppid cmdline cwd_link
+  for proc_dir in /proc/[0-9]*; do
+    pid="${proc_dir#/proc/}"
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    ppid=$(awk '{print $4}' "/proc/$pid/stat" 2>/dev/null) || continue
+    [[ "$ppid" == "1" ]] || continue
+    cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null) || continue
+    [[ "$cmdline" == *"pytest"* ]] || continue
+    cwd_link=$(readlink "/proc/$pid/cwd" 2>/dev/null) || continue
+    if [[ "$cwd_link" == "$worktree_root"* || "$cmdline" == *"$worktree_root"* ]]; then
+      printf 'Orphaned pytest worker still attached to this worktree: PID %s (cwd=%s cmdline=%s)\n' \
+        "$pid" "$cwd_link" "$cmdline" >&2
+      orphaned=1
+    fi
+  done
+  if (( orphaned )); then
+    printf 'Readiness left an orphaned pytest worker on the shared host (issue #5594).\n' >&2
+    printf 'Terminate the listed PID(s) and fix the leaking test/worker before reporting success.\n' >&2
+    return 1
+  fi
+  return 0
+}
+
 freshness_args=(write --base-ref "$BASE_REF")
 if [[ "$pr_ready_final" == "1" ]]; then
   freshness_args+=(--require-clean-tree)
@@ -325,3 +357,8 @@ elif [[ "$(worktree_state)" != "clean" ]]; then
   printf 'Use PR_READY_MODE=final BASE_REF=%q %q for final committed-HEAD PR proof.\n' "$BASE_REF" "$0" >&2
 fi
 uv run python "$SCRIPT_DIR/pr_ready_freshness.py" "${freshness_args[@]}"
+
+# Final orphan guard (issue #5594): after all lanes exit, assert no worktree-owned
+# pytest worker survived the controller. A leaked planner-step worker reparented to
+# PID 1 would otherwise sit orphaned on the shared host.
+check_no_orphaned_pytest_workers

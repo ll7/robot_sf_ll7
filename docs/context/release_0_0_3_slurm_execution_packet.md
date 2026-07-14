@@ -97,8 +97,10 @@ guarded_ppo, predictive_mppi, risk_dwa
 ```
 
 ```bash
+SPLIT_DIR=output/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended  # generated at plan time (gitignored)
+ARM=<planner_key>
 uv run python scripts/tools/run_camera_ready_benchmark.py \
-  --config output/benchmarks/splits/paper_experiment_matrix_v2_h600_s30_extended/paper_experiment_matrix_v2_h600_s30_extended__arm_<key>.yaml \
+  --config "$SPLIT_DIR/paper_experiment_matrix_v2_h600_s30_extended__arm_${ARM}.yaml" \
   --output-root output/benchmarks/release_v0_0_3_arms \
   --campaign-id release_0_0_3_h600_s30__arm_<key> \
   --mode run --skip-publication-bundle

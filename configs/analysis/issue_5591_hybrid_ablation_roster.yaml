@@ -1,0 +1,89 @@
+schema_version: issue_5591_hybrid_ablation_roster.v1
+issue: 5591
+parent_issue: 5591
+title: >-
+  Structural-component ablation roster for the hybrid portfolio planner
+  (causal test of which sub-component carries the safety benefit).
+status: config_and_runner_ready
+claim_scope: controlled_ablation_delta_from_hybrid_full
+# This config reuses the existing fixed scenario/seed set from the mechanism
+# cross-cut (paper_experiment_matrix_v1_hybrid_portfolio_compare) so the
+# ablation arms are directly comparable arm-for-arm. No new scenario generation.
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+seed_policy:
+  mode: seed-set
+  seed_set: eval
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+# Sanity-floor arm (hybrid_minus_all_three) removes every structural knob and
+# is intentionally NOT a single-knob delta; it is the collapse floor only.
+reference_arm: hybrid_full
+arms:
+  - key: hybrid_full
+    algo_config: configs/algos/hybrid_portfolio_ablation_hybrid_full.yaml
+    role: reference
+    structural_knobs: {}  # shipped config, unchanged
+  - key: hybrid_minus_static_escape
+    algo_config: configs/algos/hybrid_portfolio_ablation_hybrid_minus_static_escape.yaml
+    role: ablation
+    single_knob:
+      knob: progress_escape_enabled
+      scope: [risk_dwa, mppi_social]
+      value: false
+      rationale: >-
+        Knock out the progress/static-clearance escape maneuver that overrides
+        the nominal rollout when progress stalls near an obstacle.
+  - key: hybrid_minus_hard_guard
+    algo_config: configs/algos/hybrid_portfolio_ablation_hybrid_minus_hard_guard.yaml
+    role: ablation
+    single_knob:
+      knob: fallback_on_exception
+      scope: [hybrid]
+      value: false
+      rationale: >-
+        Knock out the hard-guard fallback so planner-head exceptions propagate
+        instead of being caught and routed to ORCA.
+  - key: hybrid_minus_adaptive_switching
+    algo_config: configs/algos/hybrid_portfolio_ablation_hybrid_minus_adaptive_switching.yaml
+    role: ablation
+    single_knob:
+      knob: adaptive_switching_enabled
+      scope: [hybrid]
+      value: false
+      rationale: >-
+        Disable risk-regime switching so the arm is pinned to its initial head
+        (risk_dwa) and behaves as a single-head planner with the other
+        components intact.
+  - key: hybrid_minus_all_three
+    algo_config: configs/algos/hybrid_portfolio_ablation_hybrid_minus_all_three.yaml
+    role: sanity_floor
+    structural_knobs:
+      - knob: progress_escape_enabled
+        scope: [risk_dwa, mppi_social]
+        value: false
+      - knob: fallback_on_exception
+        scope: [hybrid]
+        value: false
+      - knob: adaptive_switching_enabled
+        scope: [hybrid]
+        value: false
+    rationale: >-
+      Optional collapse floor: every structural mechanism removed at once.
+      Used only to confirm safety collapses relative to hybrid_full.
+runner:
+  # Use the standard camera-ready benchmark harness, same as the mechanism
+  # cross-cut, with planner_group=experimental and one arm per invocation.
+  command_template: >-
+    uv run python scripts/tools/run_camera_ready_benchmark.py
+    --config configs/benchmarks/issue_5591_hybrid_ablation_runner.yaml
+    --planner-key {arm_key}
+    --campaign-id issue5591-hybrid-ablation
+  evidence_discipline:
+    - SHA256SUMS
+    - source_commit
+    - config_paths
+    - seed_list
+  report: delta_table_not_ranking
+  # Fail-closed: degraded/fallback runs are reported in the denominator, never
+  # silently dropped. If a knockout arm crashes at a materially different rate
+  # than hybrid_full, that delta is reported explicitly.
+  degraded_runs_policy: report_in_denominator

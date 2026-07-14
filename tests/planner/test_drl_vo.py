@@ -172,21 +172,31 @@ def test_drl_vo_predict_passes_deterministic_flag() -> None:
 
 
 def test_drl_vo_runner_integration_policy() -> None:
-    """The benchmark runner should be able to instantiate and execute a DRL-VO policy."""
-    policy_fn, metadata = _create_robot_policy("drl_vo", None, seed=1)
-    assert callable(policy_fn)
-    assert metadata["algorithm"] == "drl_vo"
+    """The benchmark runner should be able to instantiate and execute a DRL-VO policy.
 
-    velocity = policy_fn(
-        np.array([0.0, 0.0], dtype=float),
-        np.array([0.0, 0.0], dtype=float),
-        np.array([2.0, 0.0], dtype=float),
-        np.zeros((0, 2), dtype=float),
-        0.1,
-    )
-    assert isinstance(velocity, np.ndarray)
-    assert velocity.shape == (2,)
-    assert velocity[0] >= 0.0
+    The policy spawns a forked planner-step worker (Unix-stream pipe); closing it
+    reaps that worker so the readiness runner leaves no orphaned pytest-xdist child
+    behind (issue #5594).
+    """
+    policy_fn, metadata = _create_robot_policy("drl_vo", None, seed=1)
+    try:
+        assert callable(policy_fn)
+        assert metadata["algorithm"] == "drl_vo"
+
+        velocity = policy_fn(
+            np.array([0.0, 0.0], dtype=float),
+            np.array([0.0, 0.0], dtype=float),
+            np.array([2.0, 0.0], dtype=float),
+            np.zeros((0, 2), dtype=float),
+            0.1,
+        )
+        assert isinstance(velocity, np.ndarray)
+        assert velocity.shape == (2,)
+        assert velocity[0] >= 0.0
+    finally:
+        runner_close = getattr(policy_fn, "close", None)
+        if callable(runner_close):
+            runner_close()
 
 
 def test_drl_vo_missing_model_path_falls_back(tmp_path) -> None:

@@ -1,0 +1,65 @@
+{
+  "benchmark_promotion": false,
+  "claim_boundary": "Diagnostic-only reconciliation of exact per-episode collision outcomes with collision counts, the binary-success collision gate, and the canonical SNQI collision term. A pass is not release-wide benchmark success, planner-ranking evidence, SNQI contract validity, or a paper claim.",
+  "counts": {
+    "arms": 14,
+    "exact_collision_rows": 9022,
+    "goal_and_timeout_rows": 1,
+    "rows": 20160,
+    "rows_per_arm": {
+      "goal__differential_drive": 1440,
+      "guarded_ppo__differential_drive": 1440,
+      "hybrid_rule_v3_fast_progress_static_escape__differential_drive": 1440,
+      "hybrid_rule_v3_fast_progress_static_escape_continuous__differential_drive": 1440,
+      "orca__differential_drive": 1440,
+      "ppo__differential_drive": 1440,
+      "prediction_planner__differential_drive": 1440,
+      "predictive_mppi__differential_drive": 1440,
+      "risk_dwa__differential_drive": 1440,
+      "sacadrl__differential_drive": 1440,
+      "scenario_adaptive_hybrid_orca_v1__differential_drive": 1440,
+      "scenario_adaptive_hybrid_orca_v2_collision_guard__differential_drive": 1440,
+      "social_force__differential_drive": 1440,
+      "socnav_sampling__differential_drive": 1440
+    },
+    "snqi_recomputed_rows": 20160,
+    "success_rows": 9247,
+    "unique_episode_identities": 20160
+  },
+  "diagnostic_only": true,
+  "evidence_grade": "diagnostic-only",
+  "integrity": {
+    "outer_bundle_sha256_matches": true,
+    "signed_payload_files": 87,
+    "snqi_baseline_sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a",
+    "snqi_weights_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2",
+    "verified_payload_files": 87
+  },
+  "paper_facing": false,
+  "provenance": {
+    "episode_software_commits": {
+      "a307ef276d701f8d14dead1aa0513f44ee97c0b0": 20160
+    },
+    "publication_repository_commit": "e2ac534c9d6bb750346b1e0724638c91306e410a"
+  },
+  "release_wide_warnings": [
+    "release/release_result.json disagrees with the rebuilt campaign summary for: status, evidence_status, total_episodes, successful_runs",
+    "episode-ledger software commits do not equal the publication manifest/tag commit",
+    "campaign SNQI contract status is 'fail'; this audit proves only collision-term consumption",
+    "1 non-collision row(s) record both goal_reached and timeout; the bundle lacks reached_goal_step/horizon inputs needed to recompute that separate success-timing condition",
+    "publication metadata retains unresolved URL/DOI placeholders"
+  ],
+  "result_classification": "collision_consumer_reconciled",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "release_collision_consumer_reconciliation.v1",
+  "source": {
+    "bundle_name": "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final_publication_bundle.tar.gz",
+    "bundle_sha256": "3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7",
+    "release_asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/0.0.3/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final_publication_bundle.tar.gz",
+    "release_tag": "0.0.3"
+  },
+  "status": "pass",
+  "violation_count": 0,
+  "violation_counts": {},
+  "violations": []
+}

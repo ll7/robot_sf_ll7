@@ -382,7 +382,9 @@ def test_cli_honors_frozen_config_and_emits_valid_jsonl(tmp_path: Path) -> None:
     """The CLI applies the selected config and writes one JSON object per JSONL line."""
 
     repository_root = Path(__file__).resolve().parents[2]
-    source_config_path = repository_root / "configs" / "analysis" / "issue_5600_persistence_gate.yaml"
+    source_config_path = (
+        repository_root / "configs" / "analysis" / "issue_5600_persistence_gate.yaml"
+    )
     config_payload = yaml.safe_load(source_config_path.read_text(encoding="utf-8"))
     config_payload["config_id"] = "test-custom-persistence-gate"
     config_payload["perturbation"] = {

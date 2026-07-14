@@ -233,8 +233,8 @@ def _assess_replayed_event(
             not_observed_reason=None,
         )
     try:
-        replayed_event_time_s, _clearance_m, replayed_event_location = get_critical_event_from_frames(
-            replayed_frames
+        replayed_event_time_s, _clearance_m, replayed_event_location = (
+            get_critical_event_from_frames(replayed_frames)
         )
     except (KeyError, TypeError, ValueError) as exc:
         return assess_critical_event_reproduction(
@@ -399,7 +399,8 @@ def build_cell_verdict_from_trace_replay(  # noqa: C901
             else:
                 adjusted_position = list(position)
             location_delta = min(
-                math.dist(source_position, adjusted_position) for source_position in source_positions
+                math.dist(source_position, adjusted_position)
+                for source_position in source_positions
             )
             if best_location_delta is None or location_delta < best_location_delta:
                 best_location_delta = location_delta

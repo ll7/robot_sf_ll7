@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -101,3 +102,64 @@ def test_packet_rejects_excluded_geometry(monkeypatch) -> None:
         "classic_station_platform_medium",
         "classic_merging_low",
     ]
+
+
+def test_metadata_only_mode_skips_geometry_certification(monkeypatch) -> None:
+    """Metadata-only validation must not invoke the geometry certifier."""
+
+    def fail_certify(*_args, **_kwargs):
+        raise AssertionError("geometry certification must not run in metadata-only mode")
+
+    monkeypatch.setattr(checker, "certify_scenario_file", fail_certify)
+
+    result = checker.validate_packet(checker.load_packet(PACKET), certify_geometry=False)
+
+    assert result["status"] == "metadata_only"
+    assert result["geometry_certified"] is False
+    assert result["blocked_rows"] == []
+    assert result["scenario_count"] == 4
+    assert all(row["gate"] == "metadata_only" for row in result["certification"])
+    assert all(row["benchmark_eligibility"] == "not_certified" for row in result["certification"])
+
+
+def test_missing_source_preflights_before_certification(monkeypatch) -> None:
+    """A missing scenario source fails closed before geometry certification runs."""
+
+    def fail_certify(*_args, **_kwargs):
+        raise AssertionError("preflight must fail before geometry certification runs")
+
+    monkeypatch.setattr(checker, "certify_scenario_file", fail_certify)
+
+    packet = checker.load_packet(PACKET)
+    packet["scenario_contract"]["selected_rows"][0]["source_path"] = (
+        "configs/scenarios/archetypes/does_not_exist.yaml"
+    )
+
+    with pytest.raises(checker.PacketError, match="source missing"):
+        checker.validate_packet(packet)
+
+
+def test_metadata_only_reports_missing_source(monkeypatch) -> None:
+    """Metadata-only mode still fails closed on a missing source path."""
+
+    def fail_certify(*_args, **_kwargs):
+        raise AssertionError("geometry certification must not run in metadata-only mode")
+
+    monkeypatch.setattr(checker, "certify_scenario_file", fail_certify)
+
+    packet = checker.load_packet(PACKET)
+    packet["scenario_contract"]["selected_rows"][0]["source_path"] = (
+        "configs/scenarios/archetypes/does_not_exist.yaml"
+    )
+
+    with pytest.raises(checker.PacketError, match="source missing"):
+        checker.validate_packet(packet, certify_geometry=False)
+
+
+def test_cli_metadata_only_returns_success_without_geometry_logs(capsys) -> None:
+    """The --metadata-only CLI path exits 0 and emits the metadata_only status."""
+    exit_code = checker.main(["--metadata-only", "--json"])
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["status"] == "metadata_only"
+    assert payload["geometry_certified"] is False

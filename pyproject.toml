@@ -51,7 +51,7 @@ dependencies = [
 
 [project.optional-dependencies]
 gpu = [
-    "torch[cuda]>=2.5.1",
+    "torch[cuda]>=2.13.0",
 ]
 training = [
     "stable-baselines3>=2.4.0",

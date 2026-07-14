@@ -1622,22 +1622,24 @@ CI mapping to local tasks and CLI:
 
 Workflow location: `.github/workflows/ci.yml`.
 
-### Red-main merge hold
+### Main CI signal and staleness-aware merge policy
 
-When `main` CI is red, do not merge unrelated PRs onto it. A merge that lands
-while the required check is already failing hides its own new breakage under
-the existing red, so recovery cost compounds with every merge in the window
-(three such incidents on 2026-07-11/12). The deterministic green/red signal is:
+A red `main` signal is advisory, not a blanket merge hold. Prioritize PRs that
+explicitly repair the breakage (`fix(ci): unbreak main` or `unbreak-main`). For
+other PRs, inspect whether their changed files overlap the suspected breakage;
+hold only an overlapping PR. A clean, up-to-date PR with its own green checks
+may merge while an unrelated main failure is being repaired.
+
+The deterministic main signal is:
 
 ```bash
 uv run python scripts/dev/main_ci_is_green.py   # exit 0 green, 1 not-green
 ```
 
-It decides from the most recent **completed** CI run on `main` — an in-progress
-run never counts as green or red. Only PRs that fix the breakage (title-prefixed
-`fix(ci): unbreak main` or labeled `unbreak-main`) may merge while red; they are
-the cure and must land. Reviewing a PR while main is red is fine — only the
-merge is held.
+It decides from the most recent **completed** CI run on `main`; an in-progress,
+cancelled, or timed-out run is `stale`, not `red`. Reviewing a PR while main is
+red is fine, and only the suspected-file overlap or per-PR staleness check can
+hold an otherwise green PR.
 
 For automated gates, emit the machine-readable signal instead of parsing the
 human line (issue #5571). The `--json` flag prints the `main_ci_is_green.v1`

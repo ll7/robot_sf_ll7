@@ -130,6 +130,8 @@ def test_detect_workflow_run_base_sha_uses_branch_and_pr_base_metadata() -> None
         result = _detect_workflow_run_base_sha("owner/repo", "42")
 
     assert result == "ci_base_sha"
+    head_args = mock_gh.call_args_list[0].args[0]
+    assert head_args[:5] == ["pr", "view", "42", "--repo", "owner/repo"]
     actions_args = mock_gh.call_args_list[1].args[0]
     assert "branch=feature/x" in actions_args
     assert "event=pull_request" in actions_args

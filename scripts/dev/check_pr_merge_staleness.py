@@ -61,9 +61,9 @@ def _get_main_sha(repo: str) -> str | None:
     return sha if sha else None
 
 
-def _fetch_pr_head_metadata(pr_number: str) -> tuple[str | None, str | None]:
+def _fetch_pr_head_metadata(pr_number: str, *, repo: str) -> tuple[str | None, str | None]:
     """Return ``(head_branch, head_sha)`` for a PR, or ``(None, None)``."""
-    result = _gh(["pr", "view", pr_number, "--json", "headRefName,headRefOid"])
+    result = _gh(["pr", "view", pr_number, "--repo", repo, "--json", "headRefName,headRefOid"])
     if result.returncode != 0:
         return None, None
     payload, _ = _parse_json(result.stdout)
@@ -143,7 +143,7 @@ def _detect_workflow_run_base_sha(repo: str, pr_number: str) -> str | None:
     synthetic merge commit: the run API reports the source-branch head there.
     """
     try:
-        head_branch, head_sha = _fetch_pr_head_metadata(pr_number)
+        head_branch, head_sha = _fetch_pr_head_metadata(pr_number, repo=repo)
         if head_branch is None or head_sha is None:
             return None
         workflow_runs = _fetch_workflow_runs(repo, head_branch)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -19,12 +20,14 @@ sys.path.insert(0, str(_REPO_ROOT))
 from scripts.validation.run_vecenv_worker_mode_throughput import (  # noqa: E402
     _build_env_fns,
     _build_vec_env,
+    _configure_comparator_logging,
     _env_factory_kwargs,
     _env_overrides,
     _EnvFactory,
     _measure_mode,
     _resolve_num_envs,
     _sha256_file,
+    _silence_third_party_loggers,
     main,
 )
 
@@ -528,3 +531,158 @@ def test_main_rejects_invalid_measurement_parameters(tmp_path, capsys, flag, val
 
     assert rc == 1
     assert expected in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# Compact output contract (issue #5613)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not _SMOKE_CONFIG.exists(),
+    reason="smoke config not found",
+)
+def test_default_output_is_compact(tmp_path, capsys):
+    """By default the comparator keeps stdout/stderr compact (no DEBUG chatter)."""
+    out = tmp_path / "result.json"
+    with patch(
+        "scripts.validation.run_vecenv_worker_mode_throughput._build_vec_env",
+        side_effect=_patch_build_vec_env,
+    ):
+        rc = main(
+            [
+                "--config",
+                str(_SMOKE_CONFIG),
+                "--modes",
+                "dummy",
+                "threaded",
+                "--num-envs",
+                "2",
+                "--warmup-steps",
+                "1",
+                "--measure-steps",
+                "2",
+                "--output",
+                str(out),
+            ]
+        )
+    assert rc == 0
+
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
+
+    # Progress + result table still present.
+    assert "VecEnv throughput comparator" in captured.err
+    assert "mode" in captured.out and "speedup" in captured.out
+
+    # Loguru DEBUG lines from the env stack must be suppressed by default.
+    assert "robot_sf.nav.svg_map_parser" not in combined
+    assert "robot_sf.gym_env.environment_factory" not in combined
+
+
+@pytest.mark.skipif(
+    not _SMOKE_CONFIG.exists(),
+    reason="smoke config not found",
+)
+def test_verbose_restores_debug_diagnostics(tmp_path, capsys):
+    """--verbose must surface the env-stack DEBUG records that compact mode hides."""
+    from loguru import logger
+
+    def _emit_debug_build(mode, env_fns):
+        # Mimic what the real env stack emits through Loguru DEBUG.
+        logger.debug("Converting SVG map ...")
+        return _FakeVecEnv(env_fns)
+
+    out = tmp_path / "result.json"
+    with patch(
+        "scripts.validation.run_vecenv_worker_mode_throughput._build_vec_env",
+        side_effect=_emit_debug_build,
+    ):
+        rc = main(
+            [
+                "--config",
+                str(_SMOKE_CONFIG),
+                "--modes",
+                "dummy",
+                "--num-envs",
+                "2",
+                "--warmup-steps",
+                "0",
+                "--measure-steps",
+                "1",
+                "--verbose",
+                "--output",
+                str(out),
+            ]
+        )
+    assert rc == 0
+    assert "Converting SVG map" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(
+    not _SMOKE_CONFIG.exists(),
+    reason="smoke config not found",
+)
+def test_default_suppresses_debug_diagnostics(tmp_path, capsys):
+    """Compact default mode must not echo the env-stack DEBUG records to stderr."""
+    from loguru import logger
+
+    def _emit_debug_build(mode, env_fns):
+        logger.debug("Converting SVG map ...")
+        return _FakeVecEnv(env_fns)
+
+    out = tmp_path / "result.json"
+    with patch(
+        "scripts.validation.run_vecenv_worker_mode_throughput._build_vec_env",
+        side_effect=_emit_debug_build,
+    ):
+        rc = main(
+            [
+                "--config",
+                str(_SMOKE_CONFIG),
+                "--modes",
+                "dummy",
+                "--num-envs",
+                "2",
+                "--warmup-steps",
+                "0",
+                "--measure-steps",
+                "1",
+                "--output",
+                str(out),
+            ]
+        )
+    assert rc == 0
+    assert "Converting SVG map" not in capsys.readouterr().err
+
+
+def test_log_path_keeps_terminal_compact_and_writes_debug(tmp_path, capsys):
+    """--log-path writes DEBUG to a file while the terminal stays compact."""
+    from loguru import logger
+
+    log_file = tmp_path / "debug.log"
+    _configure_comparator_logging(verbose=False, log_path=str(log_file))
+
+    logger.debug("Converting SVG map ...")
+    logger.info("progress line")
+
+    terminal = capsys.readouterr()
+    # Terminal compact: DEBUG line not echoed, INFO progress still visible.
+    assert "Converting SVG map" not in terminal.err, terminal.err
+    assert "progress line" in terminal.err, terminal.err
+    assert log_file.read_text().count("Converting SVG map") == 1
+
+
+def test_silence_third_party_loggers_compact_sets_tf_l2(monkeypatch):
+    """Compact mode pins TF/third-party logging quiet so the terminal stays compact."""
+    monkeypatch.delitem(os.environ, "TF_CPP_MIN_LOG_LEVEL", raising=False)
+    _silence_third_party_loggers(verbose=False)
+    assert os.environ["TF_CPP_MIN_LOG_LEVEL"] == "2"
+    assert os.environ.get("PYGAME_HIDE_SUPPORT_PROMPT")
+
+
+def test_silence_third_party_loggers_verbose_sets_tf_l0(monkeypatch):
+    """Verbose mode opens TF logging back up for full diagnostics."""
+    monkeypatch.delitem(os.environ, "TF_CPP_MIN_LOG_LEVEL", raising=False)
+    _silence_third_party_loggers(verbose=True)
+    assert os.environ["TF_CPP_MIN_LOG_LEVEL"] == "0"

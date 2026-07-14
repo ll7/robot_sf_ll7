@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import dataclasses
 import json
 import sys
 import types
@@ -55,6 +56,7 @@ from robot_sf.nav.obstacle import Obstacle
 from robot_sf.ped_npc.ped_population import populate_single_pedestrians
 from scripts.tools.compare_adversarial_samplers import (
     _comparison_row_from_manifest,
+    render_durable_comparison_table,
     run_sampler_comparison,
 )
 
@@ -1652,6 +1654,77 @@ def test_issue_5326_objective_comparison_contract(tmp_path: Path) -> None:
         assert row.fallback_candidate_count == 0
         assert row.degraded_candidate_count == 0
         assert row.held_out_family_status == "not_evaluated_narrow_archive"
+
+
+def test_issue_5326_durable_comparison_table(tmp_path: Path) -> None:
+    """Issue #5326 durable table must record both objectives, failures, and a stop-rule.
+
+    The renderer is the missing durable-report DoD item: it must expose both
+    objectives, annotate the signed objective with its per-property violation
+    count from the robustness sidecar while the baseline shows none, fail closed
+    on any degraded row, and emit a non-benchmark stop-rule decision.
+    """
+    config = _config(tmp_path, workers=1)
+
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=("random", "random"),
+        objective_names=("worst_case_snqi", "temporal_robustness"),
+        synthetic=True,
+    )
+
+    table_md = render_durable_comparison_table(
+        report_path=None,
+        rows=rows,
+        objectives=("worst_case_snqi", "temporal_robustness"),
+        budget_grid=(8,),
+        seeds=(1101,),
+    )
+
+    assert "worst_case_snqi" in table_md
+    assert "temporal_robustness" in table_md
+    assert "Stop-rule decision" in table_md
+    assert "not paper-facing benchmark evidence" in table_md
+    assert "signed_property_violations" in table_md
+
+    by_objective = {(row.objective, row.sampler): row for row in rows}
+    signed_row = by_objective[("temporal_robustness", "random")]
+    signed_bundle = Path(str(signed_row.best_bundle_path))
+    sidecar = json.loads((signed_bundle / "robustness_report.json").read_text(encoding="utf-8"))
+    expected_violations = sum(1 for p in sidecar["properties"] if p["violated"])
+
+    signed_line = next(ln for ln in table_md.splitlines() if ln.startswith("| temporal_robustness"))
+    assert f"| {expected_violations} |" in signed_line
+    baseline_line = next(ln for ln in table_md.splitlines() if ln.startswith("| worst_case_snqi"))
+    assert "| - |" in baseline_line
+
+    assert "fallback/degraded" in table_md
+    assert "**STOP / fail closed**" not in table_md
+
+
+def test_issue_5326_durable_table_fails_closed_on_degraded(tmp_path: Path) -> None:
+    """The durable table must stop/fail closed when any row is fallback/degraded."""
+    config = _config(tmp_path, workers=1)
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=("random", "random"),
+        objective_names=("worst_case_snqi", "temporal_robustness"),
+        synthetic=True,
+    )
+    degraded_rows = [
+        dataclasses.replace(row, fallback_candidate_count=1)
+        if row.objective == "worst_case_snqi"
+        else row
+        for row in rows
+    ]
+    table_md = render_durable_comparison_table(
+        report_path=None,
+        rows=degraded_rows,
+        objectives=("worst_case_snqi", "temporal_robustness"),
+        budget_grid=(8,),
+        seeds=(1101,),
+    )
+    assert "**STOP / fail closed" in table_md
 
 
 def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Path) -> None:

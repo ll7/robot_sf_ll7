@@ -16,6 +16,13 @@ from typing import Any
 SCHEMA_VERSION = "robot-sf-post-campaign-stage-status.v1"
 
 
+def _coerce_exit_code(value: Any, *, field_name: str) -> int:
+    """Return a validated shell exit code from a serialized status field."""
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 255:
+        raise ValueError(f"{field_name} must be an integer between 0 and 255")
+    return value
+
+
 def _load_campaign_summary(path: Path) -> tuple[dict[str, Any] | None, str]:
     """Load a campaign summary and return its machine-readable load status."""
     if not path.is_file():
@@ -78,6 +85,72 @@ def build_stage_status(
             "and validated."
         ),
     }
+
+
+def _validate_stage_status_payload(payload: object) -> dict[str, Any]:
+    """Validate the structural and exit-lane invariants of a status payload."""
+    if not isinstance(payload, dict):
+        raise ValueError("status envelope must be a JSON object")
+    if payload.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError(
+            f"status envelope schema_version must be {SCHEMA_VERSION!r}, "
+            f"found {payload.get('schema_version')!r}"
+        )
+
+    campaign = payload.get("campaign")
+    stage = payload.get("post_campaign_stage")
+    if not isinstance(campaign, dict) or not isinstance(stage, dict):
+        raise ValueError("status envelope must contain campaign and post_campaign_stage objects")
+
+    campaign_exit_code = _coerce_exit_code(
+        campaign.get("exit_code"), field_name="campaign.exit_code"
+    )
+    stage_exit_code = _coerce_exit_code(
+        stage.get("exit_code"), field_name="post_campaign_stage.exit_code"
+    )
+    job_exit_code = _coerce_exit_code(payload.get("job_exit_code"), field_name="job_exit_code")
+    if job_exit_code != campaign_exit_code:
+        raise ValueError(
+            "job_exit_code must equal campaign.exit_code; downstream stages must not remap it"
+        )
+
+    expected_campaign_status = "completed" if campaign_exit_code == 0 else "failed"
+    if campaign.get("status") != expected_campaign_status:
+        raise ValueError(
+            f"campaign.status must be {expected_campaign_status!r} for exit code "
+            f"{campaign_exit_code}"
+        )
+    expected_stage_status = "completed" if stage_exit_code == 0 else "report_stage_failed"
+    if stage.get("status") != expected_stage_status:
+        raise ValueError(
+            f"post_campaign_stage.status must be {expected_stage_status!r} for exit code "
+            f"{stage_exit_code}"
+        )
+    if not isinstance(stage.get("name"), str) or not stage["name"].strip():
+        raise ValueError("post_campaign_stage.name must be a non-empty string")
+    if not isinstance(campaign.get("soft_contract_warning"), bool):
+        raise ValueError("campaign.soft_contract_warning must be boolean")
+    if not isinstance(campaign.get("warnings"), list):
+        raise ValueError("campaign.warnings must be a list")
+    return payload
+
+
+def load_stage_status(path: Path) -> dict[str, Any]:
+    """Load and validate a serialized post-campaign status envelope.
+
+    Downstream schedulers and ledgers must reject a malformed envelope rather than
+    guessing whether a nonzero report-stage exit replaced the campaign exit.  The
+    producer and consumer therefore share this small structural validator.
+    """
+    if not path.exists():
+        raise FileNotFoundError(path)
+    if not path.is_file():
+        raise ValueError(f"status envelope is not a file: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"could not read status envelope {path}: {exc}") from exc
+    return _validate_stage_status_payload(payload)
 
 
 def _exit_code(value: str) -> int:

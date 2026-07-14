@@ -144,14 +144,38 @@ def test_s20_preflight_stays_no_claim_but_allows_table_review() -> None:
         campaign="issue3216_s20_fixture",
     )
 
-    assert report["classification"] == "blocked_until_run"
+    assert report["classification"] == "completed_needs_claim_review"
     assert "claim-card review" in report["classification_rationale"]
+    assert "not been executed" not in report["classification_rationale"]
     assert report["decision_packet"]["manuscript_table_status"] == (
         "ready_for_table_review_no_claim_promotion"
     )
     assert report["decision_packet"]["s30_decision_status"] == "not_required_by_local_preflight"
     assert {claim["decision"] for claim in report["adjacent_rank_claims"]} == {"ci_separable"}
     assert report["decision_packet"]["constraints_first_metric_gaps"] == []
+
+
+def test_verified_completed_s20_never_renders_blocked_until_run() -> None:
+    """A verified completed S20 campaign must not read as 'missing execution'.
+
+    Regression for issue #5607: the report must separate execution state
+    (the campaign ran) from claim readiness (claim-card review still pending).
+    A completed, analyzed S20 result classifies ``completed_needs_claim_review``,
+    never ``blocked_until_run``.
+    """
+    report = build_report(
+        _stable_s20_rows(),
+        ReportConfig(bootstrap_samples=32, resamples=16),
+        campaign="issue3216_s20_fixture",
+    )
+
+    assert report["classification"] != "blocked_until_run"
+    assert report["classification"] == "completed_needs_claim_review"
+    assert report["inputs"]["counted_cells"] > 0
+    assert report["inputs"]["excluded_cells"] == 0
+    assert "not executed" not in report["classification_rationale"]
+    # The remaining blocker is explicitly claim review, not missing execution.
+    assert "claim-card review" in report["classification_rationale"]
 
 
 def test_expected_headline_grid_missing_cell_blocks_packet() -> None:

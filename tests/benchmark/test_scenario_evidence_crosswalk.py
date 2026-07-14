@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from robot_sf.benchmark.scenario_evidence_crosswalk import (
     validate_scenario_evidence_crosswalk,
     write_scenario_evidence_crosswalk,
 )
+from scripts.tools.export_scenario_evidence_crosswalk import load_scenario_matrix
 
 
 def _scenario(
@@ -177,8 +179,44 @@ def test_broken_artifact_reference_fails_closed() -> None:
             scenarios,
             source="fixture.yaml",
             evidence_catalog=evidence_catalog,
-            artifact_root=Path("/tmp/robot_sf_cw_artifacts"),
+            artifact_root=Path(__file__).resolve().parents[2] / "does-not-exist",
         )
+
+
+def test_unsafe_artifact_reference_is_structured_and_regular_file_only(tmp_path: Path) -> None:
+    """Traversal, symlinks, and directories cannot enter the trusted artifact root."""
+    artifact_root = tmp_path / "artifacts"
+    artifact_root.mkdir()
+    (artifact_root / "episode.json").write_text("{}", encoding="utf-8")
+    (artifact_root / "subdir").mkdir()
+    (artifact_root / "subdir" / "episode.json").write_text("{}", encoding="utf-8")
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    symlink = artifact_root / "symlink.json"
+    symlink.symlink_to(outside)
+
+    for reference in ("../outside.json", str(outside), "symlink.json", "subdir"):
+        evidence_catalog = {
+            "doorway_low": {"eligibility": "eligible", "trace_ids": [reference]}
+        }
+        with pytest.raises(
+            ScenarioEvidenceCrosswalkError,
+            match="unreadable_episode_artifact",
+        ):
+            build_scenario_evidence_crosswalk(
+                [_scenario("doorway_low")],
+                source="fixture.yaml",
+                evidence_catalog=evidence_catalog,
+                artifact_root=artifact_root,
+            )
+
+
+def test_seed_coercion_accepts_only_strict_integers() -> None:
+    """Boolean, float, and string seed values are not silently coerced."""
+    crosswalk = build_scenario_evidence_crosswalk(
+        [_scenario("doorway_low", seeds=[1, True, 2.0, "3", 4])], source="fixture.yaml"
+    )
+    assert crosswalk["rows"][0]["seeds"] == [1, 4]
 
 
 def test_duplicate_scenario_ids_are_rejected() -> None:
@@ -237,6 +275,35 @@ def test_writers_emit_json_markdown_csv(tmp_path: Path) -> None:
     csv_text = csv_path.read_text(encoding="utf-8")
     assert "doorway_low" in csv_text
     assert "collision;near_miss" in csv_text
+
+
+def test_csv_preserves_generated_and_case_capsule_ids(tmp_path: Path) -> None:
+    """CSV output must retain all evidence-id fields in the versioned schema."""
+    crosswalk = build_scenario_evidence_crosswalk(
+        [_scenario("doorway_low")],
+        source="fixture.yaml",
+        evidence_catalog={
+            "doorway_low": {
+                "eligibility": "eligible",
+                "trace_ids": [],
+                "generated_candidate_ids": ["candidate_1"],
+                "case_capsule_ids": ["capsule_1"],
+            }
+        },
+    )
+    csv_path = tmp_path / "cw.csv"
+    write_scenario_evidence_crosswalk(crosswalk, csv_path=csv_path)
+    rows = list(csv.DictReader(csv_path.read_text(encoding="utf-8").splitlines()))
+    assert rows[0]["generated_candidate_ids"] == "candidate_1"
+    assert rows[0]["case_capsule_ids"] == "capsule_1"
+
+
+def test_exporter_rejects_scalar_single_document(tmp_path: Path) -> None:
+    """The exporter must reject a scalar YAML document before scenario loading."""
+    matrix = tmp_path / "scalar.yaml"
+    matrix.write_text("just-a-scalar\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="mapping or list"):
+        load_scenario_matrix(matrix)
 
 
 def test_markdown_labels_geometry_as_descriptive_not_causal() -> None:

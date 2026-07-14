@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from robot_sf.benchmark.scenario_evidence_crosswalk import (
@@ -51,7 +52,9 @@ def load_scenario_matrix(path: str | Path) -> list[dict]:
         raise ValueError(f"Scenario matrix '{scenario_path}' is empty.")
     if len(raw_docs) > 1:
         invalid_docs = [
-            index for index, scenario in enumerate(docs) if not isinstance(scenario, dict)
+            index
+            for index, scenario in enumerate(raw_docs)
+            if scenario is not None and not isinstance(scenario, Mapping)
         ]
         if invalid_docs:
             raise ValueError(
@@ -59,6 +62,48 @@ def load_scenario_matrix(path: str | Path) -> list[dict]:
                 f"{invalid_docs}"
             )
         return [dict(scenario) for scenario in docs]
+    return _load_single_document(scenario_path, docs[0])
+
+
+def _is_abstract_scenario(scenario: Mapping[str, object]) -> bool:
+    """Return whether an entry has no manifest/map-loader identity fields."""
+    return not any(key in scenario for key in ("name", "scenario_id", "map_file", "map_id"))
+
+
+def _load_single_document(scenario_path: Path, single_doc: object) -> list[dict]:
+    """Load one parsed YAML document without reparsing direct abstract matrices."""
+    if isinstance(single_doc, list):
+        if not single_doc or any(not isinstance(scenario, Mapping) for scenario in single_doc):
+            raise ValueError(
+                f"Scenario matrix '{scenario_path}' single-document lists must contain mappings."
+            )
+        if all(_is_abstract_scenario(scenario) for scenario in single_doc):
+            return [dict(scenario) for scenario in single_doc]
+    elif isinstance(single_doc, Mapping) and "scenarios" in single_doc:
+        manifest_keys = frozenset(
+            {
+                "includes",
+                "include",
+                "scenario_files",
+                "select_scenarios",
+                "scenario_overrides",
+                "scenario_overrides_by_name",
+                "map_search_paths",
+            }
+        )
+        scenario_entries = single_doc["scenarios"]
+        if (
+            not manifest_keys & single_doc.keys()
+            and isinstance(scenario_entries, list)
+            and scenario_entries
+            and all(isinstance(scenario, Mapping) for scenario in scenario_entries)
+            and all(_is_abstract_scenario(scenario) for scenario in scenario_entries)
+        ):
+            return [dict(scenario) for scenario in scenario_entries]
+    elif not isinstance(single_doc, Mapping):
+        raise ValueError(
+            f"Scenario matrix '{scenario_path}' single YAML document must be a mapping or list."
+        )
     return [dict(scenario) for scenario in load_scenarios(scenario_path, base_dir=scenario_path)]
 
 

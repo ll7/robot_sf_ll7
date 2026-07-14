@@ -53,6 +53,7 @@ PREDICATE_EXPORT_SCHEMA_VERSION = "trace_predicate_export.v1"
 
 EXCLUSION_REASON_PREDICATE_UNAVAILABLE = "predicate_export_unavailable"
 EXCLUSION_REASON_NO_EVIDENCE_BUNDLE = "no_evidence_bundle_provided"
+EXCLUSION_REASON_UNREADABLE_EPISODE_ARTIFACT = "unreadable_episode_artifact"
 
 SCHEMA_FILE = Path(__file__).with_name("schemas") / "scenario_evidence_crosswalk.v1.json"
 
@@ -190,11 +191,18 @@ def _source_config_hash(scenario: Mapping[str, Any]) -> str:
     return _config_hash(dict(scenario))
 
 
+def _strict_int(value: Any) -> int | None:
+    """Return an integer seed only when the input is exactly an integer."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
 def _seeds(scenario: Mapping[str, Any]) -> list[int]:
     """Return the deterministic seed list for a scenario."""
     raw = scenario.get("seeds")
     if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes)):
-        seeds = [int(s) for s in raw if isinstance(s, (int, float))]
+        seeds = [seed for value in raw if (seed := _strict_int(value)) is not None]
         if seeds:
             return seeds
     return []
@@ -405,14 +413,69 @@ def _resolve_evidence_ids(
         resolved[field] = [str(v) for v in values]
 
     if artifact_root is not None:
+        trusted_root = _trusted_artifact_root(scenario_id, artifact_root)
         for field, ids in resolved.items():
             for ref in ids:
-                if not (artifact_root / ref).exists():
-                    raise ScenarioEvidenceCrosswalkError(
-                        f"scenario {scenario_id}: {field} references missing artifact {ref!r} "
-                        f"(broken artifact reference)"
-                    )
+                _validate_artifact_reference(
+                    scenario_id,
+                    field,
+                    ref,
+                    artifact_root=artifact_root,
+                    trusted_root=trusted_root,
+                )
     return resolved
+
+
+def _trusted_artifact_root(scenario_id: str, artifact_root: Path) -> Path:
+    """Resolve the trusted artifact root or raise a structured blocker.
+
+    Returns:
+        The resolved trusted artifact root.
+    """
+    try:
+        return artifact_root.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ScenarioEvidenceCrosswalkError(
+            f"scenario {scenario_id}: {EXCLUSION_REASON_UNREADABLE_EPISODE_ARTIFACT} "
+            f"(broken artifact reference): trusted root {str(artifact_root)!r} is unreadable"
+        ) from exc
+
+
+def _validate_artifact_reference(
+    scenario_id: str,
+    field: str,
+    ref: str,
+    *,
+    artifact_root: Path,
+    trusted_root: Path,
+) -> None:
+    """Reject unsafe artifact references before they can be consumed."""
+    ref_path = Path(ref)
+    reason: str | None = None
+    if ref_path.is_absolute() or ".." in ref_path.parts:
+        reason = "absolute or parent traversal"
+    else:
+        candidate = artifact_root / ref_path
+        current = artifact_root
+        try:
+            for part in ref_path.parts:
+                current /= part
+                if current.is_symlink():
+                    reason = "symlink component"
+                    break
+            resolved_candidate = candidate.resolve(strict=False)
+        except (OSError, RuntimeError):
+            reason = reason or "path resolution failed"
+        else:
+            if reason is None and not resolved_candidate.is_relative_to(trusted_root):
+                reason = "outside trusted root"
+            if reason is None and not resolved_candidate.is_file():
+                reason = "not a regular file"
+    if reason is not None:
+        raise ScenarioEvidenceCrosswalkError(
+            f"scenario {scenario_id}: {EXCLUSION_REASON_UNREADABLE_EPISODE_ARTIFACT} "
+            f"(broken artifact reference) for {field} {ref!r}: {reason}"
+        )
 
 
 def build_scenario_evidence_crosswalk(
@@ -699,6 +762,8 @@ def write_scenario_evidence_crosswalk(
                     "validated_mechanism",
                     "trace_ids",
                     "replay_ids",
+                    "generated_candidate_ids",
+                    "case_capsule_ids",
                 ]
             )
             for row in crosswalk.get("rows", []) or []:
@@ -719,6 +784,8 @@ def write_scenario_evidence_crosswalk(
                         evidence.get("validated_mechanism") or "",
                         ";".join(evidence.get("trace_ids", []) or []),
                         ";".join(evidence.get("replay_ids", []) or []),
+                        ";".join(evidence.get("generated_candidate_ids", []) or []),
+                        ";".join(evidence.get("case_capsule_ids", []) or []),
                     ]
                 )
 

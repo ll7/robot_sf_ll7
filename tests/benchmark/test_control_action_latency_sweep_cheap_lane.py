@@ -82,23 +82,21 @@ def test_runner_executes_real_latency_axis_episodes(cheap_lane_runner: object) -
         assert row.get("availability_status", "available") == "available"
 
 
-def test_runner_filters_non_native_planner_request(cheap_lane_runner: object) -> None:
-    """A request for a planner outside the CPU-native set must be dropped before execution.
+def test_runner_rejects_non_native_planner_request(cheap_lane_runner: object) -> None:
+    """A request for a planner outside the CPU-native set must fail before execution.
 
     The cheap-lane slice restricts execution to dependency-free planners; a
-    non-native planner such as ``orca`` must never be silently run.
+    non-native planner such as ``orca`` must never be silently dropped or run.
     """
     config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
-    rows = cheap_lane_runner.run_sweep(
-        config=config,
-        scenario_path=SCENARIO_SET,
-        planner_names=["orca", "goal_seek"],
-        horizon=20,
-        seeds=[101],
-    )
-    executed_planners = {str(row.get("planner")) for row in rows}
-    assert "orca" not in executed_planners
-    assert executed_planners == {"goal_seek"}
+    with pytest.raises(ValueError, match="unsupported planner request"):
+        cheap_lane_runner.run_sweep(
+            config=config,
+            scenario_path=SCENARIO_SET,
+            planner_names=["orca", "goal_seek"],
+            horizon=20,
+            seeds=[101],
+        )
 
 
 def test_promoter_accepts_cheap_lane_rows(cheap_lane_runner: object, tmp_path: Path) -> None:

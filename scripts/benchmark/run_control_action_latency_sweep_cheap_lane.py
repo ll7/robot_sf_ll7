@@ -93,16 +93,23 @@ def run_sweep(
 ) -> list[dict[str, Any]]:
     """Execute real latency-axis episodes for each native planner and seed.
 
-    Only dependency-free native planners are executed; any planner name outside
-    ``NATIVE_CPU_PLANNERS`` is dropped so the cheap-lane slice never silently runs
-    a planner that needs the native ORCA/hybrid runtime or Slurm capacity.
+    Only dependency-free native planners are accepted. Any planner name outside
+    ``NATIVE_CPU_PLANNERS`` is rejected so the cheap-lane slice fails closed rather
+    than silently narrowing a requested campaign that needs the native ORCA/hybrid
+    runtime or Slurm capacity.
     """
     runner = _load_campaign_runner()
     variants = _latency_variants(config)
     scenarios = list(runner.load_scenarios(scenario_path))
     if not scenarios:
         raise ValueError(f"scenario set produced no scenarios: {scenario_path}")
-    planner_names = [p for p in planner_names if p in NATIVE_CPU_PLANNERS]
+    planner_names = list(planner_names)
+    unsupported = sorted({planner for planner in planner_names if planner not in NATIVE_CPU_PLANNERS})
+    if unsupported:
+        raise ValueError(
+            "unsupported planner request for cheap-lane CPU slice: "
+            f"{unsupported}; allowed={list(NATIVE_CPU_PLANNERS)}"
+        )
     if not planner_names:
         raise ValueError(
             "no dependency-free native planner requested; cheap-lane slice runs only "
@@ -156,12 +163,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     scenario_path = REPO_ROOT / args.scenario_set
 
-    planner_names = [p for p in args.planners if p in NATIVE_CPU_PLANNERS]
-    if not planner_names:
-        raise SystemExit(
-            "no dependency-free native planner requested; cheap-lane slice runs only "
-            f"{NATIVE_CPU_PLANNERS}"
-        )
+    planner_names = list(args.planners)
 
     # Scenario-set seeds unless overridden on the CLI.
     scenario_seeds = []

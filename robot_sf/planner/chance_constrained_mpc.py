@@ -95,8 +95,13 @@ class ChanceConstrainedMPCConfig(PredictionMPCConfig):
     """Configuration for the experimental GMM chance-constrained MPC arm."""
 
     predictor_backend: str = "multimodal_gmm"
-    chance_constraint_formulation: Literal["marginal", "joint_horizon"] = "marginal"
+    chance_constraint_formulation: Literal["marginal", "joint_horizon", "cvar_tail"] = "marginal"
     max_collision_risk: float = 0.05
+    # Conditional Value-at-Risk confidence for the cvar_tail tail-risk formulation
+    # (issue #5307 Arm 4). The constraint bounds the expected collision risk in
+    # the worst (1 - cvar_alpha) fraction of the GMM forecast mass, instead of
+    # the Boole-union bound used by joint_horizon. Must lie in (0, 1).
+    cvar_alpha: float = 0.9
     radial_quadrature_order: int = 6
     angular_quadrature_order: int = 16
     # Surrogate-only knob (#5307 successor slice). Number of Gaussian modes the
@@ -109,10 +114,17 @@ class ChanceConstrainedMPCConfig(PredictionMPCConfig):
         """Reject ambiguous risk settings and incompatible envelope composition."""
 
         super().__post_init__()
-        if self.chance_constraint_formulation not in {"marginal", "joint_horizon"}:
-            raise ValueError("chance_constraint_formulation must be 'marginal' or 'joint_horizon'")
+        if self.chance_constraint_formulation not in {"marginal", "joint_horizon", "cvar_tail"}:
+            raise ValueError(
+                "chance_constraint_formulation must be 'marginal', 'joint_horizon', or 'cvar_tail'"
+            )
         if not 0.0 < float(self.max_collision_risk) < 1.0:
             raise ValueError("max_collision_risk must be in (0, 1)")
+        if (
+            self.chance_constraint_formulation == "cvar_tail"
+            and not 0.0 < float(self.cvar_alpha) < 1.0
+        ):
+            raise ValueError("cvar_alpha must be in (0, 1) for the cvar_tail formulation")
         if int(self.radial_quadrature_order) < 2 or int(self.angular_quadrature_order) < 4:
             raise ValueError("quadrature orders must be at least 2 radial and 4 angular")
         if self.allow_predictor_fallback:
@@ -221,9 +233,53 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         alpha = float(self.chance_config.max_collision_risk)
         if self.chance_config.chance_constraint_formulation == "marginal":
             return alpha - risks.reshape(-1)
+        if self.chance_config.chance_constraint_formulation == "cvar_tail":
+            # Conditional Value-at-Risk (tail-risk) formulation. Each
+            # pedestrian-timestep pair carries a marginal collision-risk
+            # estimate; the risk is the expected collision probability over the
+            # worst (1 - cvar_alpha) tail of those per-cell risks. The single
+            # non-linear constraint bounds that tail expectation by alpha, so the
+            # planner limits the *average* collision risk exactly where it is
+            # highest. This is a direct alternative to the Boole-union
+            # joint_horizon bound (issue #5307 Arm 4) and does not require a
+            # cross-time covariance model.
+            return np.asarray([alpha - self._cvar_tail_risk(risks.reshape(-1))], dtype=float)
         # Boole's inequality bounds P(any collision over people and time) by the
         # sum of marginal probabilities without assuming cross-time independence.
         return np.asarray([alpha - float(np.sum(risks))], dtype=float)
+
+    def _cvar_tail_risk(self, cell_risks: np.ndarray) -> float:
+        """Return the CVaR of per-cell collision risks above the ``cvar_alpha`` quantile.
+
+        Let ``r`` be the per-pedestrian-per-timestep marginal collision-risk
+        estimates.  The Value-at-Risk at confidence ``alpha = cvar_alpha`` is the
+        ``alpha``-quantile ``q`` of ``r``; the Conditional Value-at-Risk is the
+        mean of the risks that exceed ``q`` (the worst ``1 - alpha`` tail).  When
+        fewer than two cells exist, or ``alpha`` is extreme, the definition
+        degenerates to the ordinary mean, which keeps the constraint finite and
+        the solver well-posed.
+
+        Args:
+            cell_risks: Flat array of per-cell marginal collision-risk estimates
+                in ``[0, 1]``.
+
+        Returns:
+            The CVaR tail-risk scalar in ``[0, 1]``.
+        """
+
+        risks = np.asarray(cell_risks, dtype=float).reshape(-1)
+        if risks.size == 0:
+            return 0.0
+        alpha = float(self.chance_config.cvar_alpha)
+        if risks.size == 1 or not 0.0 < alpha < 1.0:
+            return float(np.mean(risks))
+        # Linear-interpolation quantile so the VaR boundary is well defined even
+        # when no cell risk falls exactly on the probability level.
+        quantile = np.quantile(risks, alpha)
+        tail = risks[risks >= quantile]
+        if tail.size == 0:
+            return float(quantile)
+        return float(np.mean(tail))
 
     def _marginal_collision_risks(
         self,
@@ -315,6 +371,11 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
                     "angular_order": self.chance_config.angular_quadrature_order,
                     "joint_bound": "Boole_union_bound"
                     if self.chance_config.chance_constraint_formulation == "joint_horizon"
+                    else "cvar_tail_risk"
+                    if self.chance_config.chance_constraint_formulation == "cvar_tail"
+                    else None,
+                    "cvar_alpha": self.chance_config.cvar_alpha
+                    if self.chance_config.chance_constraint_formulation == "cvar_tail"
                     else None,
                     "constraint_count": self._last_constraint_count,
                     "forecast_source": forecast.source if forecast else "not_run",
@@ -364,6 +425,7 @@ def build_chance_constrained_mpc_config(
         "pedestrian_uncertainty_alpha_mps": float,
         "chance_constraint_formulation": str,
         "max_collision_risk": float,
+        "cvar_alpha": float,
         "radial_quadrature_order": int,
         "angular_quadrature_order": int,
         "gmm_mode_count": int,

@@ -1,5 +1,8 @@
 """Unit tests for scripts/ci/pr_contract_check.py."""
 
+# evidence-writer-exempt: these tests intentionally write temporary evidence-path fixtures,
+# including malformed files, to exercise the PR contract and writer-guard behavior.
+
 from __future__ import annotations
 
 import json

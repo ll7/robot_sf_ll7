@@ -28,7 +28,6 @@ if TYPE_CHECKING:
 
 COMMIT_RE = re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{40}(?![0-9a-fA-F])")
 FULL_SHA1_RE = re.compile(r"^[0-9a-fA-F]{40}$")
-FULL_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 SYNTHETIC_COMMIT_RE = re.compile(r"^[0-9a-fA-F]{40,}[^0-9a-fA-F]")
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 MARKDOWN_CAMPAIGN_RE = re.compile(r"\bcampaign_id\s*[:=]\s*`?([A-Za-z0-9_.-]+)`?")
@@ -236,7 +235,7 @@ def _synthetic_commit_findings(display_path: Path, value: Any) -> list[dict[str,
             if not isinstance(item, str):
                 continue
             stripped = item.strip()
-            if FULL_SHA1_RE.fullmatch(stripped) or FULL_SHA256_RE.fullmatch(stripped):
+            if FULL_SHA1_RE.fullmatch(stripped) or SHA256_RE.fullmatch(stripped):
                 continue
             if SYNTHETIC_COMMIT_RE.match(stripped):
                 findings.append(

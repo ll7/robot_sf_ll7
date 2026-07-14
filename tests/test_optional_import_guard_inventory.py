@@ -31,6 +31,7 @@ import json
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -309,12 +310,7 @@ class TestOptionalImportGuardInventory:
         import importlib.util
         import sys
 
-        generator_path = (
-            Path(__file__).parent.parent
-            / "scripts"
-            / "dev"
-            / "generate_optional_import_snapshot.py"
-        )
+        generator_path = REPO_ROOT / "scripts" / "dev" / "generate_optional_import_snapshot.py"
         if not generator_path.exists():
             raise FileNotFoundError(f"Generator script not found at {generator_path}")
 
@@ -386,12 +382,9 @@ class TestOptionalImportGuardInventory:
 
         Validates fail-closed behavior when the generator is absent. See issue #5558.
         """
-        nonexistent_path = Path("/nonexistent/generate_optional_import_snapshot.py")
-        assert not nonexistent_path.exists()
-
-        with pytest.raises(FileNotFoundError, match="Generator script not found"):
-            if not nonexistent_path.exists():
-                raise FileNotFoundError(f"Generator script not found at {nonexistent_path}")
+        with patch.object(Path, "exists", return_value=False):
+            with pytest.raises(FileNotFoundError, match="Generator script not found"):
+                self.test_snapshot_notes_match_generator_notes()
 
     def test_generator_missing_notes_fails_loudly(self) -> None:
         """A generator without NOTES should produce a clear pytest.fail message.
@@ -400,26 +393,20 @@ class TestOptionalImportGuardInventory:
         """
         import importlib.util
         import sys
+        from types import ModuleType, SimpleNamespace
 
-        generator_path = (
-            Path(__file__).parent.parent
-            / "scripts"
-            / "dev"
-            / "generate_optional_import_snapshot.py"
-        )
-        spec = importlib.util.spec_from_file_location("_generator_test_missing", generator_path)
-        assert spec is not None and spec.loader is not None
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        try:
-            spec.loader.exec_module(module)
-            # Ensure NOTES exists (it should in the real generator)
-            assert hasattr(module, "NOTES"), (
-                "The real generator must have a NOTES attribute; "
-                "this test only validates the fail-closed path"
-            )
-        finally:
-            sys.modules.pop(spec.name, None)
+        module_name = "_generator_test_missing"
+        fake_spec = SimpleNamespace(name=module_name, loader=MagicMock())
+        fake_module = ModuleType(module_name)
+
+        with (
+            patch.object(importlib.util, "spec_from_file_location", return_value=fake_spec),
+            patch.object(importlib.util, "module_from_spec", return_value=fake_module),
+            pytest.raises(pytest.fail.Exception, match="missing the 'NOTES' dictionary"),
+        ):
+            self.test_snapshot_notes_match_generator_notes()
+
+        assert module_name not in sys.modules
 
 
 class TestTryImportHelper:

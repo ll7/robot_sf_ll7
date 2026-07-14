@@ -212,9 +212,11 @@ def test_paper_grade_seed_budget_still_blocked_until_slurm_run():
         _cell_row("merging", "worst", {"snqi": small}),
     ]
     report = _report(rows)
-    # Never self-certifies paper_grade; promotion requires the SLURM run.
-    assert report["classification"] == "blocked_until_run"
+    # Measured S20+ evidence is NOT "blocked until run" — it was executed and
+    # analyzed. Promotion to paper-grade requires the SLURM run plus review.
+    assert report["classification"] == "completed_needs_claim_review"
     assert "S20/S30" in report["classification_rationale"]
+    assert "not executed" not in report["classification_rationale"]
 
 
 def test_report_records_canonical_owners_and_git_head():

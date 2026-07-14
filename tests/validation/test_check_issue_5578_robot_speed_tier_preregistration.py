@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import yaml
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 from scripts.validation.check_issue_5578_robot_speed_tier_preregistration import (
     DEFAULT_CONFIG,
     EXPECTED_SEEDS,
+    _scenario_ids,
     load_preregistration,
     validate_preregistration,
 )
@@ -70,4 +74,30 @@ def test_checker_validates_declared_scenario_sources() -> None:
     payload["scenario_contract"]["selected_scenarios"][0]["source_path"] = "missing.yaml"
 
     with pytest.raises(ValueError, match="missing scenario source"):
+        validate_preregistration(payload)
+
+
+def test_scenario_ids_ignore_null_names(tmp_path: Path) -> None:
+    """A null source-row name must not become the literal scenario ID ``None``."""
+    source = tmp_path / "scenarios.yaml"
+    source.write_text("scenarios:\n  - name:\n  - name: valid_scenario\n", encoding="utf-8")
+
+    assert _scenario_ids(source) == {"valid_scenario"}
+
+
+def test_checker_requires_non_empty_string_planner_ids() -> None:
+    """Roster identity fields must not accept null or coerced planner IDs."""
+    payload = _payload()
+    payload["planner_roster"]["arms"][0]["planner_id"] = None
+
+    with pytest.raises(ValueError, match="planner_id must be a non-empty string"):
+        validate_preregistration(payload)
+
+
+def test_checker_requires_list_typed_per_tier_summary() -> None:
+    """Malformed summary types must fail before set comparison can raise a TypeError."""
+    payload = _payload()
+    payload["result_contract"]["required_per_tier_summary"] = "collision_rate"
+
+    with pytest.raises(ValueError, match="required_per_tier_summary must be a list"):
         validate_preregistration(payload)

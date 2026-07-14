@@ -82,7 +82,11 @@ def _scenario_ids(path: Path) -> set[str]:
     payload = yaml.safe_load(path.read_text(encoding="utf-8"))
     scenarios = _mapping(payload, str(path)).get("scenarios")
     _require(isinstance(scenarios, list), f"{path} must declare a scenarios list")
-    return {str(row.get("name")) for row in scenarios if isinstance(row, dict)}
+    return {
+        str(row["name"])
+        for row in scenarios
+        if isinstance(row, dict) and row.get("name") is not None
+    }
 
 
 def load_preregistration(config_path: str | Path = DEFAULT_CONFIG) -> dict[str, Any]:
@@ -220,16 +224,25 @@ def _validate_roster(payload: dict[str, Any]) -> None:
     roster = _mapping(payload.get("planner_roster"), "planner_roster")
     arms = roster.get("arms")
     _require(isinstance(arms, list) and len(arms) == 4, "exactly four planner arms are required")
-    planner_ids = {str(_mapping(arm, "planner arm").get("planner_id")) for arm in arms}
-    _require(planner_ids == EXPECTED_PLANNERS, "planner roster drifted")
+    planner_ids: set[str] = set()
     for arm_value in arms:
         arm = _mapping(arm_value, "planner arm")
+        planner_id = arm.get("planner_id")
+        _require(
+            isinstance(planner_id, str) and planner_id, "planner_id must be a non-empty string"
+        )
+        planner_ids.add(planner_id)
         config_path_value = arm.get("config_path")
         if config_path_value is not None:
             _require(
-                isinstance(config_path_value, str) and (REPO_ROOT / config_path_value).is_file(),
+                isinstance(config_path_value, str) and config_path_value,
+                "planner config_path must be a non-empty string when provided",
+            )
+            _require(
+                (REPO_ROOT / config_path_value).is_file(),
                 f"missing planner config: {config_path_value}",
             )
+    _require(planner_ids == EXPECTED_PLANNERS, "planner roster drifted")
 
 
 def _validate_inference(payload: dict[str, Any]) -> None:
@@ -278,8 +291,14 @@ def _validate_outputs(payload: dict[str, Any]) -> None:
         "speed x scenario cell count must be 18",
     )
     _require(result_contract.get("expected_cell_count") == 2160, "full cell count must be 2160")
+    summary = result_contract.get("required_per_tier_summary")
+    _require(isinstance(summary, list), "required_per_tier_summary must be a list")
     _require(
-        set(result_contract.get("required_per_tier_summary", []))
+        len(summary) == 5 and all(isinstance(item, str) and item for item in summary),
+        "per-tier output contract incomplete",
+    )
+    _require(
+        set(summary)
         == {
             "success_rate",
             "collision_rate",

@@ -129,3 +129,12 @@ def test_promoter_accepts_cheap_lane_rows(cheap_lane_runner: object, tmp_path: P
     written = promoter.write_latency_evidence(packet, evidence_dir)
     assert (evidence_dir / "summary.json") in written
     assert (evidence_dir / "manifest.sha256") in written
+    summary_text = (evidence_dir / "summary.json").read_text(encoding="utf-8")
+    readme_text = (evidence_dir / "README.md").read_text(encoding="utf-8")
+    csv_text = (evidence_dir / "per_cell_metrics.csv").read_text(encoding="utf-8")
+    manifest_text = (evidence_dir / "manifest.sha256").read_text(encoding="utf-8")
+    assert "AI-GENERATED" in summary_text and "NEEDS-REVIEW" in summary_text
+    assert "AI-GENERATED" in readme_text and "NEEDS-REVIEW" in readme_text
+    assert "AI-GENERATED" in csv_text and "NEEDS-REVIEW" in csv_text
+    assert "# distance_convention: surface_clearance" in csv_text
+    assert "AI-GENERATED" in manifest_text and "NEEDS-REVIEW" in manifest_text

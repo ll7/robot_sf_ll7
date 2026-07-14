@@ -99,7 +99,7 @@ The rejected candidate fails the perturbation grid (all 9 cells fail).
 uv run ruff check robot_sf/benchmark/scenario_generation scripts/tools tests/benchmark
 # All checks passed!
 uv run pytest -q tests/benchmark -k 'scenario_generation and (replay or persistence or candidate)'
-# 25 passed
+# 2 passed, 5239 deselected
 uv run python scripts/tools/run_persistence_candidate_smoke.py --synth \
   --output-dir output/issue_5600_candidate_smoke \
   --output-jsonl output/issue_5600_candidate_smoke/records.jsonl \

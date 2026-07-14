@@ -16,6 +16,8 @@ Use `load_provenance_validated_track_set` when a realism scorecard must be tied 
 
 ```python
 from robot_sf.benchmark.pedestrian_realism_validation import (
+    RealismObstacle,
+    RealismSceneGeometry,
     RealismStagedDatasetReference,
     build_track_reconstruction_plan,
     run_realism_validation_from_staged_dataset,
@@ -40,14 +42,36 @@ scorecard = run_realism_validation_from_staged_dataset(
 The plan exposes existing `SinglePedestrianDefinition` replay seeds, padded observed-position
 bounds, and a conservative entry/exit flow summary. Each replay seed preserves its relative entry
 time as `start_delay_s` and carries the observed entry/exit record in `plan.entry_exit_flows`; the
-waypoint list still does not preserve per-waypoint timestamps.
+waypoint list still does not preserve per-waypoint timestamps. A trusted scene adapter can supply
+validated bounds and polygonal static obstacles:
 
-A non-empty plan is always `partial`: ETH/UCY trajectory files do not provide static scene
-geometry, obstacle semantics, or a scene-faithful benchmark map. Missing or incomplete provenance
-produces a `not_available` scorecard; it is never success evidence. Scorecard JSON separates metric
-availability (`status`) from the evidence boundary (`evidence_status`) and includes a content-light
-`reconstruction` readiness summary. Re-run the registry staging/provenance commands when the local
-bytes change because the loader checks manifest readiness but does not rehash the local tree.
+```python
+scene_geometry = RealismSceneGeometry(
+    bounds_m=((-1.0, -1.0), (20.0, 20.0)),
+    obstacles=(
+        RealismObstacle(
+            obstacle_id="wall-1",
+            polygon_m=((4.0, 4.0), (6.0, 4.0), (6.0, 5.0), (4.0, 5.0)),
+        ),
+    ),
+    source="maintainer-provided scene adapter",
+)
+replay_plan = build_track_reconstruction_plan(tracks, scene_geometry=scene_geometry)
+```
+
+`RealismObstacle` currently supports the explicit `static_blocking` semantic only. The builder
+fails closed if observed samples leave the supplied bounds or intersect an obstacle, and reports
+`geometry_status: scene_geometry_validated` without exporting geometry coordinates in the summary.
+This removes the geometry blocker from the replay-input contract, but the plan remains `partial`
+until an adapter preserves per-waypoint timing and a simulator trace is available.
+
+A non-empty plan without a scene adapter remains `partial` with `trajectory_bounds_only` geometry:
+ETH/UCY trajectory files do not provide static scene geometry, obstacle semantics, or a
+scene-faithful benchmark map. Missing or incomplete provenance produces a `not_available` scorecard;
+it is never success evidence. Scorecard JSON separates metric availability (`status`) from the
+evidence boundary (`evidence_status`) and includes a content-light `reconstruction` readiness
+summary. Re-run the registry staging/provenance commands when the local bytes change because the
+loader checks manifest readiness but does not rehash the local tree.
 
 ## Sources And Citations
 

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from loguru import logger
 
 import robot_sf.nav.occupancy_grid as og
+from robot_sf.nav import occupancy_grid_rasterization as rasterization
 from robot_sf.nav.occupancy_grid import (
     GridChannel,
     GridConfig,
@@ -47,6 +49,35 @@ def test_bresenham_line_includes_endpoints() -> None:
     assert cells[0] == (0, 0)
     assert cells[-1] == (2, 1)
     assert len(cells) >= 3
+
+
+def test_rasterize_obstacles_aggregates_out_of_bounds_debug_logs() -> None:
+    """Verify out-of-bounds obstacle logs are emitted once per batch, not once per segment."""
+    config = GridConfig(
+        resolution=1.0,
+        width=4.0,
+        height=4.0,
+        channels=[GridChannel.OBSTACLES],
+    )
+    grid = np.zeros((config.grid_height, config.grid_width), dtype=config.dtype)
+    obstacles = [
+        ((-3.0, -3.0), (-2.0, -2.0)),
+        ((5.0, 5.0), (6.0, 6.0)),
+        ((1.0, 1.0), (2.0, 2.0)),
+    ]
+    captured: list[str] = []
+    handler_id = logger.add(
+        lambda message: captured.append(message.record["message"]),
+        level="DEBUG",
+    )
+    try:
+        count = rasterization.rasterize_obstacles(obstacles, grid, config)
+    finally:
+        logger.remove(handler_id)
+
+    assert count == 1
+    assert captured.count("Skipped 2/3 obstacle segments outside grid bounds") == 1
+    assert not any("Line segment" in message for message in captured)
 
 
 def test_metadata_observation_converts_values() -> None:

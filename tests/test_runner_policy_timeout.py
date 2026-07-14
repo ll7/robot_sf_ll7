@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 import time
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 
 import numpy as np
@@ -41,6 +42,50 @@ class _FailingPlanner:
     def get_metadata(self) -> dict[str, Any]:
         """Return baseline metadata for the failing planner."""
         return {"algorithm": "random", "status": "ok", "seed": self.seed}
+
+
+class _TransientPlanner:
+    """Planner stub used to exercise ORCA's one-step recovery budget."""
+
+    def __init__(self, _config: dict[str, Any], *, seed: int) -> None:
+        self.seed = seed
+
+    def step(self, _obs: Any) -> dict[str, float]:
+        """The fake step process supplies the transient failure in this test."""
+        return {"vx": 1.0, "vy": 0.0}
+
+    def get_metadata(self) -> dict[str, Any]:
+        """Return ORCA metadata so the planner-specific retry is enabled."""
+        return {"algorithm": "orca", "status": "ok", "seed": self.seed}
+
+
+class _TransientStepProcess:
+    """Step-process stand-in that recovers after one transient worker error."""
+
+    def __init__(self, _planner: Any, *, timeout_s: float) -> None:
+        self.timeout_s = timeout_s
+        self.calls = 0
+
+    def step(self, _obs: Any) -> dict[str, float]:
+        """Fail once, then return a native ORCA-shaped action."""
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("planner step worker exited without returning an action")
+        return {"vx": 1.0, "vy": 0.0}
+
+    def close(self) -> None:
+        """Match the production step-process close contract."""
+
+
+class _TransientTimeoutStepProcess(_TransientStepProcess):
+    """Step-process stand-in that recovers after one transient timeout."""
+
+    def step(self, _obs: Any) -> dict[str, float]:
+        """Fail once with the production timeout exception, then recover."""
+        self.calls += 1
+        if self.calls == 1:
+            raise FuturesTimeoutError()
+        return {"vx": 1.0, "vy": 0.0}
 
 
 class _EOFConn:
@@ -136,6 +181,41 @@ def test_planner_step_error_logs_exception_details(monkeypatch: pytest.MonkeyPat
         and "bad worker observation" in message
         for message in captured
     )
+
+
+@pytest.mark.parametrize(
+    ("process_cls", "failure_counter"),
+    [
+        (_TransientStepProcess, "worker_errors"),
+        (_TransientTimeoutStepProcess, "step_timeouts"),
+    ],
+)
+def test_orca_retries_one_transient_worker_failure_before_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    process_cls: type[_TransientStepProcess],
+    failure_counter: str,
+) -> None:
+    """A transient ORCA worker failure gets one recovery attempt."""
+    monkeypatch.setitem(baselines.BASELINES, "orca", _TransientPlanner)
+    monkeypatch.setattr(runner, "_PlannerStepProcess", process_cls)
+    policy, metadata = runner._create_robot_policy("orca", None, seed=123)
+
+    try:
+        velocity = policy(
+            np.array([0.0, 0.0]),
+            np.array([0.0, 0.0]),
+            np.array([1.0, 0.0]),
+            np.empty((0, 2)),
+            0.1,
+        )
+    finally:
+        policy.close()  # type: ignore[attr-defined]
+
+    assert velocity == pytest.approx(np.array([1.0, 0.0]))
+    assert metadata["status"] == "ok"
+    assert metadata["policy_step_timeout"][failure_counter] == 1
+    assert metadata["policy_step_timeout"]["step_retries"] == 1
+    assert metadata["policy_step_timeout"]["fallback_actions"] == 0
 
 
 @pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")

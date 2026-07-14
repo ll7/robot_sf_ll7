@@ -277,6 +277,8 @@ def _build_observation(
 
 # Safety/robustness defaults for any baseline policy
 POLICY_STEP_TIMEOUT_SECS: float = 0.2  # step(obs) time budget; fallback to zero action on timeout
+# Native ORCA may transiently lose its forked worker; keep one retry before degrading.
+ORCA_TRANSIENT_STEP_RETRIES: int = 1
 FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
 
 
@@ -725,8 +727,10 @@ def _create_robot_policy(  # noqa: C901, PLR0915
         "step_timeout_s": POLICY_STEP_TIMEOUT_SECS,
         "step_timeouts": 0,
         "worker_errors": 0,
+        "step_retries": 0,
         "fallback_actions": 0,
     }
+    retry_budget = ORCA_TRANSIENT_STEP_RETRIES if algo == "orca" else 0
     step_runner: _PlannerStepProcess | None
     try:
         step_runner = _PlannerStepProcess(planner, timeout_s=POLICY_STEP_TIMEOUT_SECS)
@@ -760,24 +764,50 @@ def _create_robot_policy(  # noqa: C901, PLR0915
             ped_radius=ped_radius,
         )
 
-        try:
-            if step_runner is None:
-                raise RuntimeError("policy step isolation unavailable")
-            action = step_runner.step(obs)
-        except FuturesTimeoutError:
-            timeout_metadata["step_timeouts"] += 1
-            timeout_metadata["fallback_actions"] += 1
-            metadata["status"] = "policy_step_timeout_fallback"
-            metadata["fallback_reason"] = "policy_step_timeout"
-            action = {"vx": 0.0, "vy": 0.0}
-        except (RuntimeError, TypeError, ValueError) as exc:
-            timeout_metadata["worker_errors"] += 1
-            timeout_metadata["fallback_actions"] += 1
-            metadata["status"] = "policy_step_error_fallback"
-            metadata["fallback_reason"] = "policy_step_error"
-            timeout_metadata["last_error"] = str(exc)
-            logger.opt(exception=True).warning("Planner step failed unexpectedly: {}", exc)
-            action = {"vx": 0.0, "vy": 0.0}
+        retries = 0
+        while True:
+            try:
+                if step_runner is None:
+                    raise RuntimeError("policy step isolation unavailable")
+                action = step_runner.step(obs)
+                break
+            except FuturesTimeoutError:
+                timeout_metadata["step_timeouts"] += 1
+                if retries < retry_budget:
+                    retries += 1
+                    timeout_metadata["step_retries"] += 1
+                    logger.warning(
+                        "Retrying {} planner step after transient worker timeout ({}/{}).",
+                        algo,
+                        retries,
+                        retry_budget,
+                    )
+                    continue
+                timeout_metadata["fallback_actions"] += 1
+                metadata["status"] = "policy_step_timeout_fallback"
+                metadata["fallback_reason"] = "policy_step_timeout"
+                action = {"vx": 0.0, "vy": 0.0}
+                break
+            except (RuntimeError, TypeError, ValueError) as exc:
+                timeout_metadata["worker_errors"] += 1
+                timeout_metadata["last_error"] = str(exc)
+                if retries < retry_budget and isinstance(exc, RuntimeError):
+                    retries += 1
+                    timeout_metadata["step_retries"] += 1
+                    logger.warning(
+                        "Retrying {} planner step after transient worker error ({}/{}): {}",
+                        algo,
+                        retries,
+                        retry_budget,
+                        exc,
+                    )
+                    continue
+                timeout_metadata["fallback_actions"] += 1
+                metadata["status"] = "policy_step_error_fallback"
+                metadata["fallback_reason"] = "policy_step_error"
+                logger.opt(exception=True).warning("Planner step failed unexpectedly: {}", exc)
+                action = {"vx": 0.0, "vy": 0.0}
+                break
 
         # Convert action to velocity (handle both action spaces)
         return _action_to_velocity(action, robot_pos, robot_vel, robot_goal)

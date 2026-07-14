@@ -7,10 +7,16 @@ with both promotion and rejection verdicts.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
-from typing import TYPE_CHECKING, Any
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
 
 import pytest
+import yaml
 
 from robot_sf.benchmark.scenario_generation.candidate_runner import (
     build_cell_verdict_from_trace_replay,
@@ -25,9 +31,6 @@ from robot_sf.benchmark.scenario_generation.persistence_gate import (
     REQUIRED_STATUSES,
     validate_persistence_record,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 _COMMIT_HASHES = {"code": "test-commit", "config": "test-config"}
 _CONFIG = {"config_id": "test-runner", "frozen": True}
@@ -91,6 +94,21 @@ def _build_parallel_episode(
     )
 
 
+def _all_pass_cell_verdict(**_: Any) -> dict[str, str]:
+    """Return explicit replay-harness evidence for one perturbation cell."""
+
+    return {"verdict": PASS, "reason": "test replay harness reproduced the event"}
+
+
+def _replay_evidence_for_episode(episode: dict[str, Any]) -> dict[str, Any]:
+    """Build explicit identity, trace, and cell evidence for a test replay."""
+
+    return {
+        "replayed_episode": episode,
+        "cell_verdict_fn": _all_pass_cell_verdict,
+    }
+
+
 class TestCriticalEventFromFrames:
     """get_critical_event_from_frames tests."""
 
@@ -146,6 +164,24 @@ class TestBuildPersistenceFromEpisode:
         validate_persistence_record(record)
         assert record["promotion"]["required_statuses"] == list(REQUIRED_STATUSES)
 
+    def test_missing_replay_evidence_fails_closed(self) -> None:
+        episode = _build_episode(
+            episode_id="ep-no-replay",
+            seed=3,
+            source_map="maps/test.svg",
+            robot_positions=[[0.0, 0.0], [0.0, 0.0]],
+            ped_positions=[[[1.0, 0.0]], [[1.0, 0.0]]],
+        )
+        record = build_persistence_from_episode_trace(
+            episode=episode,
+            config=_CONFIG,
+            commit_hashes=_COMMIT_HASHES,
+        )
+        assert record["exact_replay"]["status"] == "unknown"
+        assert record["critical_event_reproduced"]["status"] == "unknown"
+        assert len(record["perturbation_persistence"]["missing_cell_reasons"]) == 9
+        assert record["promotion"]["verdict"] == "reject"
+
     def test_record_exactly_passes_when_all_checks_pass(self) -> None:
         episode = _build_episode(
             episode_id="ep-pass",
@@ -162,6 +198,8 @@ class TestBuildPersistenceFromEpisode:
             episode=episode,
             config=_CONFIG,
             commit_hashes=_COMMIT_HASHES,
+            replayed_episode=episode,
+            cell_verdict_fn=_all_pass_cell_verdict,
         )
         validate_persistence_record(record)
         assert record["exact_replay"]["status"] == PASS
@@ -181,6 +219,7 @@ class TestBuildPersistenceFromEpisode:
             config=_CONFIG,
             commit_hashes=_COMMIT_HASHES,
             output_root=tmp_path,
+            replay_evidence_fn=_replay_evidence_for_episode,
         )
         assert len(results) == 1
         validate_persistence_record(results[0])
@@ -253,6 +292,9 @@ class TestBuildPersistenceFromCatalogEntry:
             catalog_entry=entry,
             config=_CONFIG,
             commit_hashes=_COMMIT_HASHES,
+            replayed_episode=entry["source_episode"],
+            replayed_frames=entry["segment"]["trace_frames"],
+            cell_verdict_fn=_all_pass_cell_verdict,
         )
         assert record["schema_version"] == PERSISTENCE_SCHEMA_VERSION
         assert record["scenario_id"] == "catalog-entry-001"
@@ -334,6 +376,50 @@ class TestBatchSmokeRunner:
     def test_empty_candidates_returns_empty(self) -> None:
         results = run_candidate_persistence_smoke(candidates=[])
         assert results == []
+
+
+def test_cli_honors_frozen_config_and_emits_valid_jsonl(tmp_path: Path) -> None:
+    """The CLI applies the selected config and writes one JSON object per JSONL line."""
+
+    repository_root = Path(__file__).resolve().parents[2]
+    source_config_path = repository_root / "configs" / "analysis" / "issue_5600_persistence_gate.yaml"
+    config_payload = yaml.safe_load(source_config_path.read_text(encoding="utf-8"))
+    config_payload["config_id"] = "test-custom-persistence-gate"
+    config_payload["perturbation"] = {
+        "timing_offsets_s": [0.0],
+        "speed_deltas_m_s": [0.0],
+    }
+    config_path = tmp_path / "custom_gate.yaml"
+    config_path.write_text(yaml.safe_dump(config_payload), encoding="utf-8")
+    output_jsonl = tmp_path / "records.jsonl"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(repository_root / "scripts/tools/run_persistence_candidate_smoke.py"),
+            "--synth",
+            "--config",
+            str(config_path),
+            "--output-jsonl",
+            str(output_jsonl),
+        ],
+        cwd=repository_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    rows = [json.loads(line) for line in output_jsonl.read_text(encoding="utf-8").splitlines()]
+    assert [row["promotion"]["verdict"] for row in rows] == ["promote", "reject"]
+    expected_config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    assert all(row["config"]["config_id"] == "test-custom-persistence-gate" for row in rows)
+    assert all(row["config"]["config_hash"] == expected_config_hash for row in rows)
+    assert all(
+        row["perturbation_persistence"]["grid"]
+        == {"timing_offsets_s": [0.0], "speed_deltas_m_s": [0.0]}
+        for row in rows
+    )
 
 
 def scenario_id_matches(record: dict[str, Any], expected_id: str) -> bool:

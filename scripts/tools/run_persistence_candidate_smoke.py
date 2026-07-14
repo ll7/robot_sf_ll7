@@ -27,19 +27,21 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from robot_sf.benchmark.scenario_generation.candidate_runner import (
     run_candidate_persistence_smoke,
 )
 
-_DEFAULT_CONFIG = {
-    "config_id": "issue-5600-persistence-gate",
-    "frozen": True,
-}
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_CONFIG_PATH = _REPO_ROOT / "configs" / "analysis" / "issue_5600_persistence_gate.yaml"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -80,7 +82,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         default=None,
-        help="YAML config path. Defaults to the issue-5600 frozen config.",
+        help=f"YAML config path (default: {_DEFAULT_CONFIG_PATH}).",
     )
     parser.add_argument(
         "--summary",
@@ -91,20 +93,98 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _load_gate_config(path: Path | None) -> tuple[dict[str, Any], dict[str, Any]]:  # noqa: C901
+    """Load and validate the frozen gate config used by the runner."""
+
+    config_path = path or _DEFAULT_CONFIG_PATH
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"config must contain a mapping: {config_path}")
+    if raw.get("frozen") is not True:
+        raise ValueError("config.frozen must be true")
+    config_id = raw.get("config_id")
+    if not isinstance(config_id, str) or not config_id.strip():
+        raise ValueError("config.config_id must be a non-empty string")
+
+    perturbation = raw.get("perturbation")
+    critical_event = raw.get("critical_event")
+    promotion = raw.get("promotion")
+    if not isinstance(perturbation, dict) or not isinstance(critical_event, dict):
+        raise ValueError("config must define perturbation and critical_event mappings")
+    if not isinstance(promotion, dict):
+        raise ValueError("config must define a promotion mapping")
+    try:
+        min_persistence_rate = float(promotion["min_persistence_rate"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("promotion.min_persistence_rate must be numeric") from exc
+    if min_persistence_rate != 1.0:
+        raise ValueError("only min_persistence_rate=1.0 is supported by the fail-closed gate")
+
+    grid = {
+        "timing_offsets_s": perturbation.get("timing_offsets_s"),
+        "speed_deltas_m_s": perturbation.get("speed_deltas_m_s"),
+    }
+    for name, values in grid.items():
+        if not isinstance(values, list) or not values:
+            raise ValueError(f"config.perturbation.{name} must be a non-empty list")
+
+    try:
+        time_tolerance_s = float(critical_event["time_tolerance_s"])
+        location_tolerance_m = float(critical_event["location_tolerance_m"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("critical event tolerances must be numeric") from exc
+    if time_tolerance_s < 0.0 or location_tolerance_m < 0.0:
+        raise ValueError("critical event tolerances must be non-negative")
+
+    config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()
+    config_record = {
+        "config_id": config_id,
+        "frozen": True,
+        "config_hash": config_hash,
+    }
+    gate_parameters = {
+        "perturbation_grid": grid,
+        "event_time_tolerance_s": time_tolerance_s,
+        "event_location_tolerance_m": location_tolerance_m,
+    }
+    return config_record, gate_parameters
+
+
+def _git_commit() -> str:
+    """Return the checked-out commit for output provenance."""
+
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=_REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        raise RuntimeError("unable to resolve the repository commit for provenance")
+    return result.stdout.strip()
+
+
 def _load_candidates_from_paths(paths: list[Path]) -> list[dict[str, Any]]:
     """Load candidates from JSONL or JSON file paths."""
     candidates: list[dict[str, Any]] = []
     for path in paths:
         text = path.read_text(encoding="utf-8")
-        for line_number, line in enumerate(text.splitlines(), start=1):
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            record = json.loads(line)
+        try:
+            parsed: Any = json.loads(text)
+            records = parsed if isinstance(parsed, list) else [parsed]
+        except json.JSONDecodeError:
+            records = []
+            for line in text.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                records.append(json.loads(line))
+        for record in records:
             if isinstance(record, dict):
                 candidates.append(record)
             elif isinstance(record, list):
-                candidates.extend(record)
+                candidates.extend(item for item in record if isinstance(item, dict))
     return candidates
 
 
@@ -169,9 +249,21 @@ def _build_trace(
     return steps
 
 
-def _print_summary(stdout_text: str) -> None:
-    """Print summary to stderr."""
-    print(stdout_text, file=sys.stderr)
+def _synthetic_replay_evidence(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Return explicit replay fixtures for the synthetic conformance smoke only."""
+
+    expected_verdict = "pass" if candidate.get("episode_id") == "synth-promote-001" else "fail"
+
+    def cell_verdict_fn(**_: Any) -> dict[str, str]:
+        return {
+            "verdict": expected_verdict,
+            "reason": "synthetic conformance fixture; no simulator replay claim",
+        }
+
+    return {
+        "replayed_episode": candidate,
+        "cell_verdict_fn": cell_verdict_fn,
+    }
 
 
 if __name__ == "__main__":
@@ -190,12 +282,18 @@ if __name__ == "__main__":
         sys.exit(2)
 
     try:
+        config, gate_parameters = _load_gate_config(args.config)
         results = run_candidate_persistence_smoke(
             candidates=candidates,
-            config=_DEFAULT_CONFIG,
+            config=config,
+            commit_hashes={"code": _git_commit(), "config": config["config_hash"]},
+            event_time_tolerance_s=gate_parameters["event_time_tolerance_s"],
+            event_location_tolerance_m=gate_parameters["event_location_tolerance_m"],
+            perturbation_grid=gate_parameters["perturbation_grid"],
+            replay_evidence_fn=_synthetic_replay_evidence if args.synth else None,
             output_root=args.output_dir,
         )
-    except (ValueError, RuntimeError) as exc:
+    except (OSError, RuntimeError, ValueError, yaml.YAMLError) as exc:
         print(f"error: persistence smoke failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
@@ -215,12 +313,14 @@ if __name__ == "__main__":
     )
 
     if args.output_jsonl:
+        args.output_jsonl.parent.mkdir(parents=True, exist_ok=True)
         args.output_jsonl.write_text(
-            "\n".join(json.dumps(r, sort_keys=True, indent=2) + "\n" for r in results),
+            "".join(json.dumps(r, sort_keys=True, separators=(",", ":")) + "\n" for r in results),
             encoding="utf-8",
         )
 
     if args.summary_json:
+        args.summary_json.parent.mkdir(parents=True, exist_ok=True)
         summary = {
             "schema_version": "persistence-smoke-summary.v1",
             "total_candidates": len(results),

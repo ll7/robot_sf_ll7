@@ -65,12 +65,14 @@ when all three required statuses are `pass` and there are no missing cells.
 
 ## Conformance evidence (published)
 
-A two-candidate smoke run via `--synth` demonstrates both verdict paths:
+A two-candidate **synthetic conformance** smoke run via `--synth` demonstrates both verdict paths.
+It is contract evidence only: the synthetic replay fixture is not a simulator replay and cannot
+promote a real generated candidate.
 
 ```
 candidates: 2  promoted: 1  rejected: 1
-PROMOTE generated-54390a9cf13d98e4: all three independent status checks passed
-REJECT generated-0d1ab5599bea6d7e: perturbation_cell:-0.25:-0.2:fail; ...
+PROMOTE generated-<synthetic-promote-id>: all three independent status checks passed
+REJECT generated-<synthetic-reject-id>: perturbation_cell:-0.25:-0.2:fail; ...
 exit=2
 ```
 
@@ -83,9 +85,9 @@ The rejected candidate fails the perturbation grid (all 9 cells fail).
 - [x] Exact replay, event reproduction, and perturbation persistence are independently reported.
 - [x] Perturbation ranges, tolerances, and promotion threshold are frozen before the real smoke run (`configs/analysis/issue_5600_persistence_gate.yaml`, `frozen: true`).
 - [x] Positive, negative, divergence, and deliberately non-persistent fixtures covered.
-- [x] A real two-candidate smoke demonstrates both promotion and rejection paths
-  (candidate runner + CLI; validated by both `test_candidate_runner` and
-  `test_scenario_persistence_gate`).
+- [ ] A real replay-backed two-candidate smoke demonstrates both promotion and rejection paths
+  (the current slice proves only the synthetic conformance path; the real candidate run remains
+  an open acceptance item under #5600).
 - [x] Identical inputs produce checksum-identical output (test
   `test_identical_inputs_produce_checksum_identical_output`).
 - [x] Promotion fails closed on missing trace fields, replay divergence, or unfrozen
@@ -98,10 +100,14 @@ uv run ruff check robot_sf/benchmark/scenario_generation scripts/tools tests/ben
 # All checks passed!
 uv run pytest -q tests/benchmark -k 'scenario_generation and (replay or persistence or candidate)'
 # 25 passed
-uv run python scripts/tools/run_persistence_candidate_smoke.py --synth
+uv run python scripts/tools/run_persistence_candidate_smoke.py --synth \
+  --output-dir output/issue_5600_candidate_smoke \
+  --output-jsonl output/issue_5600_candidate_smoke/records.jsonl \
+  --summary-json output/issue_5600_candidate_smoke/summary.json
 # candidates: 2  promoted: 1  rejected: 1
 # exit=2 (one rejection is expected)
-uv run python scripts/tools/validate_generated_scenario_persistence.py --batch output/*.json
+uv run python scripts/tools/validate_generated_scenario_persistence.py \
+  --batch output/issue_5600_candidate_smoke/generated-*.json
 # PROMOTE generated-... :: all three independent status checks passed
 # REJECT generated-... :: perturbation_cell:....:fail ...
 git diff --check   # clean
@@ -109,11 +115,12 @@ git diff --check   # clean
 
 ## Stop-rule note
 
-The gate and runner are wired end-to-end.  The negative-conformance path
-(promote none on failure) was demonstrated by the synthetic reject candidate
-and tested in `test_candidate_runner`.  Candidates are promoted only when
-all three required statuses pass and no perturbation cell fails. No threshold
-loosening is possible because ranges are frozen.
+The gate and runner are wired end-to-end for explicit replay-harness evidence.  The
+negative-conformance path (promote none on failure) was demonstrated by the synthetic reject
+candidate and tested in `test_candidate_runner`.  Without replay evidence or a per-cell replay
+verdict hook, the runner fails closed with unknown/missing statuses. Candidates are promoted only
+when all three required statuses pass and no perturbation cell fails. No threshold loosening is
+possible because ranges are frozen.
 
 ## Claim boundary
 

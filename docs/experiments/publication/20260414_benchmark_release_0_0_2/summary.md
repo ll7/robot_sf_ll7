@@ -15,6 +15,11 @@ documented in
 > [!TIP]
 > For instructions on reproducing and verifying release 0.0.2, see the dedicated [Release 0.0.2 Reproduction Note](../../../benchmark_release_0_0_2_reproduction.md).
 
+The `0.0.2` release tag is immutable and does not carry the later reproduction tooling. Start the
+verification from tooling tag `0.0.3` or a newer `main` checkout, while keeping the downloaded
+bundle pinned to release `0.0.2`. Checksum verification confirms the archive and embedded artifact
+hashes only; an independent numeric subset replay remains a separate requirement.
+
 
 ## Public Endpoints
 

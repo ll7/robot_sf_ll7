@@ -31,7 +31,8 @@ jobs:
           # error and the contract check mis-flags modified evidence files as new
           # (issue #5464). Fetch the base branch so origin/<base> resolves locally.
           git fetch --no-tags --depth=1 origin \
-            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+            "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}" \
+            || echo "::warning::Failed to fetch base ref '${BASE_REF}'; contract check will use authoritative added-files list"
 
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python

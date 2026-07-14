@@ -90,8 +90,8 @@
         "event_type": {"type": "string", "minLength": 1},
         "time_tolerance_s": {"type": "number", "minimum": 0},
         "location_tolerance_m": {"type": "number", "minimum": 0},
-        "observed_time_delta_s": {"type": "number", "minimum": 0},
-        "observed_location_delta_m": {"type": "number", "minimum": 0}
+        "observed_time_delta_s": {"type": ["number", "null"], "minimum": 0},
+        "observed_location_delta_m": {"type": ["number", "null"], "minimum": 0}
       }
     },
     "perturbation_persistence": {

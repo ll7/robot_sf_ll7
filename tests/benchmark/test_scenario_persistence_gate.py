@@ -151,6 +151,21 @@ def test_replay_divergence_blocks_promotion() -> None:
     assert "digest mismatch" in block["divergence_reason"]
 
 
+def test_exact_replay_requires_source_and_replayed_identity_fields() -> None:
+    """Missing episode identity keys cannot hash-match and pass exact replay."""
+    source_missing = dict(_SOURCE_EPISODE)
+    source_missing.pop("episode_id")
+    source_block = assess_exact_replay(source_missing, replayed_episode=dict(source_missing))
+    assert source_block["status"] == FAIL
+    assert "source episode missing required fields" in source_block["divergence_reason"]
+
+    replay_missing = dict(_SOURCE_EPISODE)
+    replay_missing.pop("source_map")
+    replay_block = assess_exact_replay(_SOURCE_EPISODE, replayed_episode=replay_missing)
+    assert replay_block["status"] == FAIL
+    assert "replayed episode missing required fields" in replay_block["divergence_reason"]
+
+
 def test_critical_event_non_reproduction_blocks_promotion() -> None:
     """A source event that does not recur under the source planner fails closed."""
 
@@ -297,6 +312,19 @@ def test_unknown_critical_event_blocks_promotion() -> None:
     )
     assert record["critical_event_reproduced"]["status"] == FAIL
     assert record["promotion"]["verdict"] == "reject"
+
+
+def test_unobserved_event_deltas_are_json_null_not_nan() -> None:
+    """Unobserved events use standards-compliant JSON null deltas."""
+    block = assess_critical_event_reproduction(
+        event_type="min_clearance",
+        source_event_time_s=1.0,
+        source_event_location=[2.0, 0.0],
+        not_observed_reason="event not observed in replay",
+    )
+    assert block["observed_time_delta_s"] is None
+    assert block["observed_location_delta_m"] is None
+    json.dumps(block, allow_nan=False)
 
 
 def test_unfrozen_config_fails_closed() -> None:

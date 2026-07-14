@@ -33,6 +33,8 @@ PERSISTENCE_SCHEMA_VERSION = "generated_scenario_persistence.v1"
 _SCHEMA_PATH = (
     Path(__file__).resolve().parents[1] / "schemas" / "generated_scenario_persistence.v1.json"
 )
+_SCHEMA_VALIDATOR: Draft202012Validator | None = None
+_REQUIRED_EPISODE_FIELDS = ("episode_id", "source_seed", "source_map")
 
 PASS = "pass"
 FAIL = "fail"
@@ -60,8 +62,11 @@ def _stable_digest(payload: Any) -> str:
 
 
 def _verify_schema(record: Mapping[str, Any]) -> None:
+    global _SCHEMA_VALIDATOR
+    if _SCHEMA_VALIDATOR is None:
+        _SCHEMA_VALIDATOR = Draft202012Validator(load_persistence_schema())
     errors = sorted(
-        Draft202012Validator(load_persistence_schema()).iter_errors(dict(record)),
+        _SCHEMA_VALIDATOR.iter_errors(dict(record)),
         key=lambda error: list(error.absolute_path),
     )
     if errors:
@@ -226,13 +231,14 @@ def assess_exact_replay(
         An ``exact_replay`` block with status, divergence_reason, and digest.
     """
 
-    source_digest = _stable_digest(
-        {
-            "episode_id": source_episode.get("episode_id"),
-            "source_seed": source_episode.get("source_seed"),
-            "source_map": source_episode.get("source_map"),
+    source_missing = _missing_episode_fields(source_episode)
+    source_digest = _episode_digest(source_episode)
+    if source_missing:
+        return {
+            "status": FAIL,
+            "divergence_reason": f"source episode missing required fields: {source_missing}",
+            "replay_digest": source_digest,
         }
-    )
     if replayed_episode is None:
         status = UNKNOWN if replay_error is None else FAIL
         reason = replay_error or "replay not executed"
@@ -241,13 +247,14 @@ def assess_exact_replay(
             "divergence_reason": reason,
             "replay_digest": source_digest,
         }
-    replay_digest = _stable_digest(
-        {
-            "episode_id": replayed_episode.get("episode_id"),
-            "source_seed": replayed_episode.get("source_seed"),
-            "source_map": replayed_episode.get("source_map"),
+    replay_missing = _missing_episode_fields(replayed_episode)
+    replay_digest = _episode_digest(replayed_episode)
+    if replay_missing:
+        return {
+            "status": FAIL,
+            "divergence_reason": f"replayed episode missing required fields: {replay_missing}",
+            "replay_digest": source_digest,
         }
-    )
     if replay_digest != source_digest:
         return {
             "status": FAIL,
@@ -261,6 +268,26 @@ def assess_exact_replay(
         "divergence_reason": "byte/config-equivalent replay matched source episode",
         "replay_digest": source_digest,
     }
+
+
+def _missing_episode_fields(episode: Mapping[str, Any]) -> list[str]:
+    """Return required episode identity fields that are absent or empty."""
+    return [
+        field
+        for field in _REQUIRED_EPISODE_FIELDS
+        if field not in episode
+        or episode[field] is None
+        or (isinstance(episode[field], str) and not episode[field].strip())
+    ]
+
+
+def _episode_digest(episode: Mapping[str, Any]) -> str:
+    """Digest only the exact-replay identity fields.
+
+    Returns:
+        The deterministic identity digest.
+    """
+    return _stable_digest({field: episode.get(field) for field in _REQUIRED_EPISODE_FIELDS})
 
 
 def assess_critical_event_reproduction(
@@ -290,8 +317,8 @@ def assess_critical_event_reproduction(
             "event_type": event_type,
             "time_tolerance_s": float(time_tolerance_s),
             "location_tolerance_m": float(location_tolerance_m),
-            "observed_time_delta_s": float("nan"),
-            "observed_location_delta_m": float("nan"),
+            "observed_time_delta_s": None,
+            "observed_location_delta_m": None,
         }
 
     time_delta = abs(float(replayed_event_time_s) - float(source_event_time_s))

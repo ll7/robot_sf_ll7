@@ -14,6 +14,7 @@ import pytest
 
 from scripts.dev import main_ci_is_green
 from scripts.dev.main_ci_is_green import (
+    build_signal,
     classify,
     decide,
     fetch_runs,
@@ -183,3 +184,86 @@ def test_gh_oserror_becomes_a_failed_process(monkeypatch: pytest.MonkeyPatch) ->
 
     assert proc.returncode == 127
     assert "not executable" in proc.stderr
+
+
+def test_build_signal_green_schema() -> None:
+    """build_signal encodes a green decisive run with the machine-readable schema."""
+    runs = [_run(3, "completed", "success", "2026-07-12T12:00:00Z")]
+    is_green, run = decide(runs)
+    signal = build_signal(is_green, run)
+
+    assert signal["schema_version"] == "main_ci_is_green.v1"
+    assert signal["is_green"] is True
+    assert signal["status"] == "green"
+    assert signal["deciding_run"]["databaseId"] == 3
+    assert signal["deciding_run"]["conclusion"] == "success"
+    assert signal["deciding_run"]["status"] == "completed"
+
+
+def test_build_signal_red_schema() -> None:
+    """build_signal encodes a red decisive run; is_green False, status red."""
+    runs = [_run(2, "completed", "failure", "2026-07-12T12:00:00Z")]
+    is_green, run = decide(runs)
+    signal = build_signal(is_green, run)
+
+    assert signal["is_green"] is False
+    assert signal["status"] == "red"
+    assert signal["deciding_run"]["conclusion"] == "failure"
+
+
+def test_build_signal_stale_when_no_deciding_run() -> None:
+    """A stale-only window yields status=stale, deciding_run=None, is_green False."""
+    is_green, run = decide([_run(1, "completed", "cancelled", "2026-07-12T12:00:00Z")])
+    signal = build_signal(is_green, run)
+
+    assert is_green is False
+    assert signal["is_green"] is False
+    assert signal["status"] == "stale"
+    assert signal["deciding_run"] is None
+
+
+def test_json_output_matches_schema_and_exit_code(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    """The --json CLI path emits valid schema JSON and preserves the exit code.
+
+    This is the exact gate contract from issue #5571 that previously failed with
+    an argparse error: ``uv run python scripts/dev/main_ci_is_green.py --json``.
+    """
+    import json as _json
+
+    sample = [_run(7, "completed", "success", "2026-07-12T12:00:00Z")]
+    monkeypatch.setattr(main_ci_is_green, "fetch_runs", lambda *a, **k: sample)
+    monkeypatch.setattr(main_ci_is_green.sys, "argv", ["main_ci_is_green.py", "--json"])
+
+    rc = main_ci_is_green.main()
+
+    captured = capsys.readouterr()
+    payload = _json.loads(captured.out)
+    assert rc == 0
+    assert payload["is_green"] is True
+    assert payload["status"] == "green"
+    assert payload["schema_version"] == "main_ci_is_green.v1"
+    assert payload["deciding_run"]["databaseId"] == 7
+
+
+def test_json_fetch_failure_is_machine_readable_stale(
+    monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """A fetch failure under --json still exits 1 but emits a stale JSON signal."""
+    import json as _json
+
+    monkeypatch.setattr(
+        main_ci_is_green,
+        "fetch_runs",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("gh run list failed: boom")),
+    )
+    monkeypatch.setattr(main_ci_is_green.sys, "argv", ["main_ci_is_green.py", "--json"])
+
+    rc = main_ci_is_green.main()
+    captured = capsys.readouterr()
+    payload = _json.loads(captured.out)
+
+    assert rc == 1
+    assert payload["status"] == "stale"
+    assert payload["is_green"] is False
+    assert payload["deciding_run"] is None
+    assert "error" in payload

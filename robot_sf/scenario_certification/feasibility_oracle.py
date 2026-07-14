@@ -42,7 +42,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
+from robot_sf.benchmark.map_runner_env import build_env_config
+from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
+from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.robot.differential_drive import DifferentialDriveRobot
+from robot_sf.robot.holonomic_drive import HolonomicDriveRobot
 from robot_sf.scenario_certification.feasibility_diagnostics import (
     DIAGNOSTIC_CLAIM_BOUNDARY,
     SOLVABLE_ROUTE_CLASSES,
@@ -78,6 +85,12 @@ FEASIBLE = "feasible"
 PLANNER_LIMITED = "planner_limited"
 BLOCKED = "blocked"
 
+# Issue #5596 — blind-corner zero-success diagnostic constants.
+ISSUE_5596_BLIND_CORNER_SCENARIO_ID = "francis2023_blind_corner"
+ISSUE_5596_DIAGNOSTIC_SCHEMA = "issue_5596_blind_corner_diagnostic.v1"
+ISSUE_5596_REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
+ROUTE_FOLLOW_ALGO = "route_follow"
+
 # A cell is "geometrically feasible" only when the certifier finds an inflated
 # collision-free path AND the route is not kinodynamically excluded.
 _GEOMETRIC_INFEASIBLE_STATUSES = frozenset({GEOMETRICALLY_INFEASIBLE, KINODYNAMICALLY_INFEASIBLE})
@@ -108,8 +121,8 @@ class FeasibilityOracleConfig:
         """Validate envelope radii and rollout parameters."""
         if not self.envelope_radii_m:
             raise ValueError("envelope_radii_m must contain at least one radius")
-        if any(not (r > 0.0) for r in self.envelope_radii_m):
-            raise ValueError("envelope_radii_m must all be positive and non-zero")
+        if any(not math.isfinite(float(r)) or float(r) <= 0.0 for r in self.envelope_radii_m):
+            raise ValueError("envelope_radii_m must all be finite, positive, and non-zero")
         if len({round(r, 6) for r in self.envelope_radii_m}) != len(self.envelope_radii_m):
             raise ValueError("envelope_radii_m must not contain duplicates")
 
@@ -239,8 +252,8 @@ def make_envelope_scenario(
     Returns:
         Deep-copied scenario with ``robot_config.radius`` overridden.
     """
-    if not (envelope_radius_m > 0.0):
-        raise ValueError("envelope_radius_m must be positive and non-zero")
+    if not math.isfinite(float(envelope_radius_m)) or envelope_radius_m <= 0.0:
+        raise ValueError("envelope_radius_m must be finite, positive, and non-zero")
     mutated = deepcopy(dict(scenario))
     robot_cfg = dict(mutated.get("robot_config") or {})
     robot_cfg["radius"] = float(envelope_radius_m)
@@ -409,6 +422,8 @@ def build_issue_5574_feasibility_report(  # noqa: C901
         raise ValueError("envelope_radii_m must contain a nominal and reduced radius")
     if radii[0] != max(radii):
         raise ValueError("envelope_radii_m must place the nominal radius first")
+    if any(not math.isfinite(radius) or radius <= 0.0 for radius in radii):
+        raise ValueError("envelope_radii_m must contain only finite, positive radii")
     if any(radius >= radii[0] for radius in radii[1:]):
         raise ValueError("envelope_radii_m reduced probes must be smaller than nominal")
 
@@ -984,14 +999,20 @@ def _scenario_rollout_seed(scenario: Mapping[str, Any], *, override: int | None)
         Seed from the explicit override, scenario manifest, or stable default.
     """
     if override is not None:
-        return int(override)
+        parsed_override = _optional_int(override)
+        if parsed_override is None:
+            raise ValueError("rollout seed override must be a finite integer")
+        return parsed_override
     raw_seeds = scenario.get("seeds")
     if isinstance(raw_seeds, Sequence) and not isinstance(raw_seeds, (str, bytes)):
+        saw_invalid_seed = False
         for value in raw_seeds:
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                continue
+            parsed_seed = _optional_int(value)
+            if parsed_seed is not None:
+                return parsed_seed
+            saw_invalid_seed = True
+        if saw_invalid_seed:
+            raise ValueError("scenario seeds must contain a finite integer")
     return DEFAULT_ROLLOUT_SEED
 
 
@@ -1018,10 +1039,8 @@ def _scenario_horizon(scenario: Mapping[str, Any]) -> int | None:
     value = sim_cfg.get("max_episode_steps")
     if value is None:
         return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+    parsed = _optional_int(value)
+    return parsed if parsed is not None and parsed > 0 else None
 
 
 def _optional_float(value: Any) -> float | None:
@@ -1037,23 +1056,27 @@ def _optional_float(value: Any) -> float | None:
         result = float(value)
     except (TypeError, ValueError):
         return None
-    if math.isnan(result):
+    if not math.isfinite(result):
         return None
     return result
 
 
 def _optional_int(value: Any) -> int | None:
-    """Coerce a value to int, returning ``None`` when not numeric.
+    """Coerce a finite integral value to int, returning ``None`` otherwise.
 
     Returns:
-        int | None: Parsed integer, or ``None`` when the value is absent or non-numeric.
+        int | None: Parsed integer, or ``None`` when the value is absent, non-integral,
+            non-finite, or non-numeric.
     """
-    if value is None:
+    if value is None or isinstance(value, bool):
         return None
     try:
-        return int(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(parsed) or not parsed.is_integer():
+        return None
+    return int(parsed)
 
 
 def _geometric_margin_to_dict(margin: GeometricMargin) -> dict[str, Any]:
@@ -1083,6 +1106,630 @@ def _completion_margin_to_dict(margin: CompletionMargin) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Issue #5596 — blind-corner zero-success diagnostic
+# ---------------------------------------------------------------------------
+
+
+def make_route_follow_episode_runner(
+    config: FeasibilityOracleConfig,
+) -> EpisodeRunner:
+    """Build the stateful route-follow intervention runner (issue #5636).
+
+    The runner drives the robot along the certifier's inflated A* path in a
+    **single continuous episode**, targeting each waypoint in sequence. The robot
+    pose and remaining horizon are preserved across the whole route: there is no
+    per-waypoint episode reset, so progress and elapsed steps accumulate naturally.
+    This is the stateful adapter the fail-closed placeholder in #5596 lacked, and it
+    prevents a reset-per-waypoint run from being misread as continuous route-follow
+    evidence.
+
+    Args:
+        config: Oracle configuration (scenario path for certifier/route resolution).
+
+    Returns:
+        An episode runner that executes one stateful waypoint-to-waypoint rollout.
+    """
+
+    def _route_follow_runner(
+        scenario: Mapping[str, Any],
+        seed: int,
+        horizon: int | None,
+        algo: str,
+    ) -> Mapping[str, Any]:
+        """Execute one stateful route-follow rollout along the certified A* path.
+
+        Returns:
+            Episode record with route completion flags and route-follow metadata.
+        """
+        waypoints = _get_certified_route_waypoints(scenario, scenario_path=config.scenario_path)
+        if not waypoints or len(waypoints) < 2:
+            # Without a certified route there is nothing to follow; report blocked.
+            return {
+                "algo": ROUTE_FOLLOW_ALGO,
+                "route_complete": None,
+                "steps": None,
+                "status": "blocked",
+                "termination_reason": "route_follow_no_certified_path",
+                "route_follow_blocker": "certifier produced no A* path to follow",
+            }
+
+        actor_free = make_actor_free_scenario(scenario)
+        try:
+            env_config = build_env_config(actor_free, scenario_path=config.scenario_path)
+            if horizon is not None:
+                env_config.sim_config.max_episode_steps = int(horizon)
+            env = make_robot_env(config=env_config, seed=int(seed), debug=False)
+        except Exception as exc:  # noqa: BLE001 - diagnostic lane must fail closed.
+            return {
+                "algo": ROUTE_FOLLOW_ALGO,
+                "route_complete": None,
+                "steps": None,
+                "status": "blocked",
+                "termination_reason": "route_follow_env_init_error",
+                "route_follow_blocker": str(exc),
+            }
+
+        try:
+            obs, _ = env.reset(seed=int(seed))
+            del obs
+            sim = env.simulator
+            navs = getattr(sim, "robot_navs", None)
+            if not navs:
+                return {
+                    "algo": ROUTE_FOLLOW_ALGO,
+                    "route_complete": None,
+                    "steps": None,
+                    "status": "blocked",
+                    "termination_reason": "route_follow_no_navigator",
+                    "route_follow_blocker": "scenario simulator exposes no robot navigator",
+                }
+
+            # Re-target the navigator at the certified route. `current_waypoint` is a
+            # live property of the navigator, so mutating it each step steers the robot
+            # without resetting its pose or consuming the remaining horizon.
+            nav = navs[0]
+            target_waypoints = [tuple(float(c) for c in wp) for wp in waypoints]
+            nav.waypoints = list(target_waypoints)
+            nav.waypoint_id = 0
+            nav.reached_waypoint = False
+
+            command_mode = _route_follow_command_mode(sim.robots[0])
+            if command_mode is None:
+                return {
+                    "algo": ROUTE_FOLLOW_ALGO,
+                    "route_complete": None,
+                    "steps": None,
+                    "status": "blocked",
+                    "termination_reason": "route_follow_unsupported_robot_model",
+                    "route_follow_blocker": (
+                        "stateful route-follow has no validated command adapter for "
+                        f"{type(sim.robots[0]).__name__}"
+                    ),
+                    "stateful": False,
+                    "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+                }
+
+            max_steps = (
+                int(env_config.sim_config.max_episode_steps) if horizon is None else int(horizon)
+            )
+            result = _run_stateful_route_follow_rollout(env, nav, max_steps)
+            route_complete = result["route_complete"]
+            status = result.get("status") or ("passed" if route_complete else "failed")
+            return {
+                "algo": ROUTE_FOLLOW_ALGO,
+                "route_complete": None if status == "blocked" else route_complete,
+                "steps": result["steps_used"],
+                "status": status,
+                "termination_reason": result["termination_reason"],
+                "collision_seen": result["collision_seen"],
+                "robot_final_position": result["final_pos"],
+                "waypoint_count": len(target_waypoints),
+                "stateful": result.get("stateful", True),
+                "route_follow_blocker": result.get("blocker"),
+                "route_follow_provenance": (
+                    "single continuous episode; pose + remaining horizon preserved "
+                    "across certified waypoints (issue #5636)"
+                    if result.get("stateful", True)
+                    else None
+                ),
+                "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+            }
+        finally:
+            close_fn = getattr(env, "close", None)
+            if callable(close_fn):
+                close_fn()
+
+    return _route_follow_runner
+
+
+def _run_stateful_route_follow_rollout(
+    env: Any,
+    nav: Any,
+    max_steps: int,
+) -> dict[str, Any]:
+    """Drive the robot along ``nav.waypoints`` in one continuous episode.
+
+    The navigator's ``current_waypoint`` is advanced live as each waypoint is reached,
+    so the robot pose and remaining horizon are preserved across the whole route.
+
+    Returns:
+        Mapping with ``route_complete``, ``steps_used``, ``termination_reason``,
+        ``collision_seen``, and ``final_pos``.
+    """
+    steps_used = 0
+    final_pos: tuple[float, float] | None = None
+    termination_reason = "max_steps"
+    collision_seen = False
+    robot = env.simulator.robots[0]
+    try:
+        step_dt = float(env.simulator.config.time_per_step_in_secs)
+    except (AttributeError, TypeError, ValueError):
+        return {
+            "route_complete": None,
+            "steps_used": steps_used,
+            "termination_reason": "route_follow_invalid_step_dt",
+            "collision_seen": collision_seen,
+            "final_pos": final_pos,
+            "status": "blocked",
+            "stateful": False,
+            "blocker": "simulator time_per_step_in_secs is unavailable or invalid",
+        }
+    if not math.isfinite(step_dt) or step_dt <= 0.0 or max_steps <= 0:
+        return {
+            "route_complete": None,
+            "steps_used": steps_used,
+            "termination_reason": "route_follow_invalid_horizon_or_step_dt",
+            "collision_seen": collision_seen,
+            "final_pos": final_pos,
+            "status": "blocked",
+            "stateful": False,
+            "blocker": "route-follow requires a positive horizon and simulation timestep",
+        }
+    for _step_idx in range(max_steps):
+        robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+        goal = np.asarray(nav.current_waypoint, dtype=float)
+        action = _route_follow_action(robot, robot_pos, goal, step_dt)
+        if action is None:
+            return {
+                "route_complete": None,
+                "steps_used": steps_used,
+                "termination_reason": "route_follow_action_adapter_unavailable",
+                "collision_seen": collision_seen,
+                "final_pos": final_pos,
+                "status": "blocked",
+                "stateful": False,
+                "blocker": (f"no validated route-follow action adapter for {type(robot).__name__}"),
+            }
+        _obs, _reward, terminated, truncated, info = env.step(action)
+        steps_used += 1
+        post_step_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+        final_pos = (float(post_step_pos[0]), float(post_step_pos[1]))
+        if bool(terminated) or bool(truncated):
+            if nav.reached_destination:
+                termination_reason = "route_follow_reached_destination"
+            elif bool(info.get("collision", False)):
+                termination_reason = "collision"
+                collision_seen = True
+            else:
+                termination_reason = "max_steps"
+            break
+    return {
+        "route_complete": bool(nav.reached_destination),
+        "steps_used": steps_used,
+        "termination_reason": termination_reason,
+        "collision_seen": collision_seen,
+        "final_pos": list(final_pos) if final_pos is not None else None,
+        "status": "passed" if nav.reached_destination else "failed",
+        "stateful": True,
+    }
+
+
+def _route_follow_command_mode(robot: Any) -> str | None:
+    """Return the validated action contract supported by a robot model.
+
+    The default differential-drive environment consumes acceleration commands, while
+    holonomic environments can consume either Cartesian velocity or unicycle velocity
+    commands. Bicycle-drive actions require a steering adapter and are intentionally
+    blocked until one is validated for this diagnostic.
+
+    Returns:
+        Name of the supported command contract, or ``None`` when unsupported.
+    """
+    if isinstance(robot, DifferentialDriveRobot):
+        return "differential_acceleration"
+    if isinstance(robot, HolonomicDriveRobot):
+        return f"holonomic_{robot.config.command_mode}"
+    return None
+
+
+def _route_follow_action(
+    robot: Any,
+    robot_pos: np.ndarray,
+    goal: np.ndarray,
+    step_dt: float,
+) -> np.ndarray | None:
+    """Build a bounded action using the active robot's actual command semantics.
+
+    Returns:
+        A two-component action, or ``None`` when no validated adapter exists.
+    """
+    direction = goal - robot_pos
+    dist = float(np.linalg.norm(direction))
+    if not math.isfinite(step_dt) or step_dt <= 0.0 or not math.isfinite(dist):
+        return None
+    command_mode = _route_follow_command_mode(robot)
+    if command_mode is None:
+        return None
+    if dist < 1e-6:
+        return np.zeros(2, dtype=float)
+
+    if isinstance(robot, HolonomicDriveRobot):
+        speed = min(float(robot.config.max_speed), dist / step_dt)
+        if robot.config.command_mode == "vx_vy":
+            return np.asarray(direction / dist * speed, dtype=np.float32)
+        heading = float(robot.pose[1])
+        target_heading = math.atan2(float(direction[1]), float(direction[0]))
+        heading_error = math.atan2(
+            math.sin(target_heading - heading), math.cos(target_heading - heading)
+        )
+        forward_speed = speed if abs(heading_error) <= math.pi / 2.0 else 0.0
+        angular_speed = float(
+            np.clip(
+                2.0 * heading_error,
+                -float(robot.config.max_angular_speed),
+                float(robot.config.max_angular_speed),
+            )
+        )
+        return np.asarray([forward_speed, angular_speed], dtype=np.float32)
+
+    if isinstance(robot, DifferentialDriveRobot):
+        heading = float(robot.pose[1])
+        target_heading = math.atan2(float(direction[1]), float(direction[0]))
+        heading_error = math.atan2(
+            math.sin(target_heading - heading), math.cos(target_heading - heading)
+        )
+        target_speed = min(float(robot.config.max_linear_speed), dist / step_dt)
+        if abs(heading_error) > math.pi / 2.0 and not robot.config.allow_backwards:
+            target_speed = 0.0
+        target_angular_speed = float(
+            np.clip(
+                2.0 * heading_error,
+                -float(robot.config.max_angular_speed),
+                float(robot.config.max_angular_speed),
+            )
+        )
+        current_linear_speed, current_angular_speed = robot.current_speed
+        linear_accel = (target_speed - float(current_linear_speed)) / step_dt
+        angular_accel = (target_angular_speed - float(current_angular_speed)) / step_dt
+        return np.asarray(
+            [
+                np.clip(
+                    linear_accel,
+                    -float(robot.config.max_linear_decel),
+                    float(robot.config.max_linear_accel),
+                ),
+                np.clip(
+                    angular_accel,
+                    -float(robot.config.max_angular_accel),
+                    float(robot.config.max_angular_accel),
+                ),
+            ],
+            dtype=np.float32,
+        )
+
+    return None
+
+
+def _get_certified_route_waypoints(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path,
+) -> list[tuple[float, float]]:
+    """Extract the A* planned path waypoints from the route certificate.
+
+    Returns:
+        List of (x, y) waypoints from the certifier's inflated A* path, or an empty
+        list when the route cannot be planned.
+    """
+    try:
+        config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_path)
+        certificate = _default_certifier(scenario, scenario_path)
+    except Exception:  # noqa: BLE001
+        return []
+
+    for route_cert in certificate.route_certificates or []:
+        planned_info = (route_cert.checks or {}).get("planner")
+        if planned_info and route_cert.checks.get("inflated_collision_free_path"):
+            map_name = route_cert.checks.get("map_name")
+            robot_radius = float(getattr(config.robot_config, "radius", DEFAULT_ROBOT_RADIUS))
+            for candidate_map_name, map_def in config.map_pool.map_defs.items():
+                if map_name is not None and candidate_map_name != map_name:
+                    continue
+                for route in getattr(map_def, "robot_routes", []):
+                    route_id = route.source_label or f"robot_route_{route.spawn_id}_{route.goal_id}"
+                    if (
+                        route_id != route_cert.route_id
+                        or int(route.spawn_id) != int(route_cert.spawn_id)
+                        or int(route.goal_id) != int(route_cert.goal_id)
+                        or len(route.waypoints) < 2
+                    ):
+                        continue
+                    return _replan_astar_path(
+                        map_def,
+                        start=tuple(float(c) for c in route.waypoints[0]),
+                        goal=tuple(float(c) for c in route.waypoints[-1]),
+                        robot_radius=robot_radius,
+                    )
+    return []
+
+
+def _replan_astar_path(
+    map_def: Any,
+    *,
+    start: tuple[float, float],
+    goal: tuple[float, float],
+    robot_radius: float,
+) -> list[tuple[float, float]]:
+    """Re-plan the inflated A* path for the scenario to extract waypoints.
+
+    Returns:
+        List of (x, y) waypoints, or empty list on failure.
+    """
+    from robot_sf.planner.classic_global_planner import (  # noqa: PLC0415
+        ClassicGlobalPlanner,
+        ClassicPlannerConfig,
+    )
+
+    planner_config = ClassicPlannerConfig(
+        cells_per_meter=2.0,
+        inflate_radius_meters=robot_radius,
+        algorithm="a_star",
+    )
+    planner = ClassicGlobalPlanner(map_def, planner_config)
+    try:
+        path, _info = planner.plan(start, goal, algorithm="a_star", allow_inflation_fallback=False)
+    except Exception:  # noqa: BLE001
+        return []
+
+    if not path:
+        return []
+
+    return [(float(x), float(y)) for x, y in path]
+
+
+def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
+    manifest_path: Path,
+    *,
+    envelope_radii_m: tuple[float, ...] = (1.0, 0.5),
+    episode_runner: EpisodeRunner | None = None,
+    certifier: Callable[[Mapping[str, Any], Path], ScenarioCertificate] | None = None,
+) -> dict[str, Any]:
+    """Build the issue #5596 blind-corner zero-success diagnostic report.
+
+    Runs three analyses to discriminate the competing explanations for why
+    ``francis2023_blind_corner`` stays zero-success for the scripted traversal:
+
+    1. **Oracle lane**: planner-free goal script at each envelope radius (existing
+       ``run_envelope_sensitivity_sweep``).
+    2. **Route-follow intervention lane**: a ``route_follow`` runner that drives the
+       certifier's A* path waypoint-to-waypoint, isolating route geometry from
+       controller strategy.
+    3. **Clearance comparison**: straight-line goal beeline vs certified-route
+       obstacle clearance for each radius.
+
+    The mechanism classification distinguishes whether the zero-success is caused by:
+    explanation #1 (scripted controller incomplete), #2 (route geometry or config),
+    or #3 (scenario/map runtime interpretation drift).
+
+    Args:
+        manifest_path: Path to the scenario manifest YAML containing the blind-corner
+            scenario cell.
+        envelope_radii_m: Envelope radii to probe. Must have the nominal radius first
+            (largest) and at least one reduced radius.
+        episode_runner: Optional injected episode runner. Defaults to the canonical
+            actor-free map episode rollout.
+        certifier: Optional injected route certifier. Defaults to ``certify_scenario``.
+
+    Returns:
+        Versioned diagnostic report with oracle verdict, route-follow intervention,
+        clearance comparison, and mechanism classification.
+
+    Raises:
+        FileNotFoundError: When the manifest path does not exist.
+        ValueError: When the blind-corner scenario is missing from the manifest or
+            envelope radii are not ordered nominal-first.
+    """
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"Scenario manifest file not found: {manifest_path}")
+
+    radii = tuple(float(r) for r in envelope_radii_m)
+    if len(radii) < 2:
+        raise ValueError("envelope_radii_m must contain at least two radii")
+    if radii[0] != max(radii):
+        raise ValueError("envelope_radii_m must place the nominal radius first")
+
+    scenarios = load_scenarios(manifest_path)
+    blind_corner = None
+    for s in scenarios:
+        if _scenario_id(s).lower() == ISSUE_5596_BLIND_CORNER_SCENARIO_ID.lower():
+            blind_corner = dict(s)
+            break
+    if blind_corner is None:
+        raise ValueError(
+            f"Scenario '{ISSUE_5596_BLIND_CORNER_SCENARIO_ID}' missing from manifest "
+            f"{manifest_path}"
+        )
+
+    config = FeasibilityOracleConfig(
+        scenario_path=manifest_path,
+        envelope_radii_m=radii,
+    )
+    runner = episode_runner or _default_actor_free_runner(config)
+    certify = certifier or _default_certifier
+    route_runner = (
+        episode_runner if episode_runner is not None else make_route_follow_episode_runner(config)
+    )
+
+    nominal_radius = radii[0]
+    seed = _scenario_rollout_seed(blind_corner, override=None)
+
+    # 1. Oracle verdict (existing feasibility sweep).
+    envelope_verdict = run_envelope_sensitivity_sweep(
+        blind_corner,
+        config=config,
+        episode_runner=runner,
+        certifier=certify,
+    )
+    oracle_dict = envelope_sensitivity_verdict_to_dict(envelope_verdict)
+    oracle_dict["issue"] = "5596"
+
+    # 2. Route-follow intervention.
+    route_follow_results: list[dict[str, Any]] = []
+    for radius in radii:
+        env_scenario = make_envelope_scenario(blind_corner, envelope_radius_m=radius)
+        horizon = _scenario_horizon(env_scenario)
+        try:
+            record = route_runner(env_scenario, seed, horizon, ROUTE_FOLLOW_ALGO)
+            is_stateful = record.get("stateful") is True
+            if not is_stateful:
+                completed = None
+                status = "blocked"
+                blocker_msg = (
+                    record.get("route_follow_blocker") or "route-follow runner is not stateful"
+                )
+            else:
+                completed = (
+                    True
+                    if record.get("route_complete") is True
+                    or (record.get("outcome") or {}).get("route_complete") is True
+                    else None
+                    if record.get("route_complete") is None and record.get("status") == "blocked"
+                    else False
+                )
+                status = (
+                    "passed" if completed is True else "blocked" if completed is None else "failed"
+                )
+                blocker_msg = record.get("route_follow_blocker")
+
+            route_follow_results.append(
+                {
+                    "envelope_radius_m": radius,
+                    "feasible": completed,
+                    "termination_reason": record.get("termination_reason"),
+                    "steps": record.get("steps"),
+                    "status": status,
+                    "blocker": blocker_msg,
+                    "stateful": record.get("stateful"),
+                    "waypoint_count": record.get("waypoint_count"),
+                    "collision_seen": record.get("collision_seen"),
+                    "robot_final_position": record.get("robot_final_position"),
+                    "route_follow_provenance": record.get("route_follow_provenance"),
+                    "claim_boundary": record.get("claim_boundary") or DIAGNOSTIC_CLAIM_BOUNDARY,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            route_follow_results.append(
+                {
+                    "envelope_radius_m": radius,
+                    "feasible": None,
+                    "termination_reason": str(exc),
+                    "steps": None,
+                    "status": "blocked",
+                }
+            )
+
+    route_follow_nominal = route_follow_results[0]
+    route_follow_verdict = {
+        "issue": "5596",
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+        "scenario_id": ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
+        "nominal_radius_m": nominal_radius,
+        "results": route_follow_results,
+    }
+
+    # 3. Straight-line vs certified-route clearance.
+    clearance_comparison: list[dict[str, Any]] = []
+    for radius in radii:
+        env_scenario = make_envelope_scenario(blind_corner, envelope_radius_m=radius)
+        try:
+            certificate = certify(env_scenario, manifest_path)
+            route_checks = _aggregate_route_checks(certificate)
+            min_clearance = _optional_float(route_checks.get("minimum_static_clearance_m"))
+            shortest_path = _optional_float(route_checks.get("shortest_path_length_m"))
+            inflated_path = route_checks.get("inflated_collision_free_path", None)
+
+            # Straight-line clearance (from authored route line to obstacles - minus radius).
+            straight_line_clearance = min_clearance  # The certifier measures the authored line.
+
+            clearance_comparison.append(
+                {
+                    "envelope_radius_m": radius,
+                    "straight_line_clearance_m": straight_line_clearance,
+                    "certified_route_clearance_m": min_clearance,
+                    "shortest_path_length_m": shortest_path,
+                    "inflated_collision_free_path": inflated_path,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            clearance_comparison.append(
+                {
+                    "envelope_radius_m": radius,
+                    "straight_line_clearance_m": None,
+                    "certified_route_clearance_m": None,
+                    "shortest_path_length_m": None,
+                    "inflated_collision_free_path": None,
+                    "blocker": str(exc),
+                }
+            )
+
+    # 4. Mechanism classification.
+    oracle_nominal = oracle_dict["nominal_verdict"]
+    oracle_nominal_feasible = oracle_nominal.get("feasible") is True
+    route_follow_feasible = route_follow_nominal.get("feasible")
+
+    # When route-follow succeeds but goal script fails -> explanation #1 (controller).
+    # When both fail -> explanation #2 (route geometry or config).
+    explanation_1 = not oracle_nominal_feasible and route_follow_feasible is True
+    explanation_2 = not oracle_nominal_feasible and route_follow_feasible is False
+
+    if explanation_1:
+        supported = "scripted_controller_corner_cut"
+    elif explanation_2:
+        supported = "route_geometry_or_config_cause"
+    elif route_follow_feasible is None:
+        supported = "route_follow_intervention_blocked"
+    else:
+        supported = "nominal_oracle_feasible_no_anomaly"
+
+    mechanism = {
+        "explanation_1_scripted_controller_incomplete": explanation_1,
+        "explanation_2_route_geometry_or_config_cause": explanation_2,
+        "explanation_3_scenario_runtime_drift": None,  # Not established in this diagnostic.
+        "supported_explanation": supported,
+        "oracle_nominal_feasible": oracle_nominal_feasible,
+        "route_follow_intervention_feasible": route_follow_feasible,
+        "route_follow_intervention_status": route_follow_nominal.get("status"),
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+    }
+
+    return {
+        "schema_version": ISSUE_5596_DIAGNOSTIC_SCHEMA,
+        "review_marker": ISSUE_5596_REVIEW_MARKER,
+        "source_commit": _git_hash_fallback(),
+        "issue": "5596",
+        "scenario_id": ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+        "manifest_path": manifest_path.as_posix(),
+        "envelope_radii_m": list(radii),
+        "rollout_seed": seed,
+        "oracle_verdict": oracle_dict,
+        "route_follow_intervention_verdict": route_follow_verdict,
+        "straight_line_vs_route_clearance": clearance_comparison,
+        "mechanism": mechanism,
+    }
+
+
 __all__ = [
     "BLOCKED",
     "CAMPAIGN_FEASIBILITY_ANNOTATION_SCHEMA",
@@ -1094,7 +1741,11 @@ __all__ = [
     "FEASIBILITY_ORACLE_SCHEMA",
     "FEASIBLE",
     "INFEASIBLE_BY_CONSTRUCTION",
+    "ISSUE_5596_BLIND_CORNER_SCENARIO_ID",
+    "ISSUE_5596_DIAGNOSTIC_SCHEMA",
+    "ISSUE_5596_REVIEW_MARKER",
     "PLANNER_LIMITED",
+    "ROUTE_FOLLOW_ALGO",
     "TIME_TRUNCATED",
     "CompletionMargin",
     "EnvelopeSensitivityVerdict",
@@ -1103,9 +1754,11 @@ __all__ = [
     "GeometricMargin",
     "annotate_zero_completion_cells",
     "build_issue_5574_feasibility_report",
+    "build_issue_5596_blind_corner_diagnostic",
     "envelope_sensitivity_verdict_to_dict",
     "feasibility_verdict_to_dict",
     "make_envelope_scenario",
+    "make_route_follow_episode_runner",
     "run_envelope_sensitivity_sweep",
     "run_feasibility_oracle",
 ]

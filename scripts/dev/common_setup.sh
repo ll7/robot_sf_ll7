@@ -70,3 +70,17 @@ PY
     exit 2
   fi
 }
+
+# The threaded rollout path imports a context manager added to the vendored
+# fast-pysf package.  A stale force-included install otherwise fails during
+# pytest collection with an opaque ImportError (issue #5665).
+preflight_check_fast_pysf() {
+  if [ "${PR_READY_SKIP_PREFLIGHT:-0}" = "1" ]; then
+    return 0
+  fi
+  if ! uv run python "$REPO_ROOT/scripts/dev/check_fast_pysf_runtime.py"; then
+    printf 'Final PR readiness cannot collect the core suite with this PySocialForce environment.\n' >&2
+    printf 'Run `uv sync --all-extras --reinstall-package robot-sf` in this worktree, then rerun readiness.\n' >&2
+    exit 2
+  fi
+}

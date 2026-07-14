@@ -1,12 +1,24 @@
 # Reproducing Release 0.0.2
 
-This document provides step-by-step instructions to reproduce the canonical paper handoff results for benchmark release `0.0.2`.
+This document provides step-by-step instructions to verify and reproduce the canonical paper
+handoff results for benchmark release `0.0.2`.
+
+## Tooling checkout requirement
+
+The immutable `0.0.2` tag contains the released source and bundle pointer, but it does not contain
+the checksum manifest, checksum verifier, cold-start report entry point, or scoped replay config.
+Use a separate tooling checkout at `0.0.3` or a newer `main` commit. `0.0.3` is the minimum
+documented tooling version because it contains all of those paths.
+
+Do not run the verifier from a checkout of tag `0.0.2` and interpret a missing-file error as a
+release failure. The release artifact remains `0.0.2`; only the reproduction tooling comes from
+`0.0.3` or `main`.
 
 ## Overview and Key Differences
 
 - **Release Tag (`0.0.2`)**: Points to commit `cbeaca610` (three commits earlier than the campaign completion). This commit has the core simulation logic and code representation.
 - **Campaign Commit (`f7ebdcae2375d085e925213197a75a386e26a79c`)**: Contains the final generated publication manifest, checksums, and the scoped release manifest that exists outside the tag `0.0.2` tree.
-- **Parity Test**: The regeneration parity test (`tests/benchmark/test_paper_results_handoff.py::test_canonical_handoff_matches_durable_release_campaign_table`) lives on `main` (not in the tag tree). Therefore, reproduction must be run from a fresh clone of `main` using the downloaded release `0.0.2` bundle.
+- **Parity Test**: The regeneration parity test (`tests/benchmark/test_paper_results_handoff.py::test_canonical_handoff_matches_durable_release_campaign_table`) lives in the tooling checkout (minimum `0.0.3`, or `main`), not in the tag tree. Therefore, reproduction must use the `0.0.2` bundle with a `0.0.3`/`main` tooling checkout.
 
 > [!NOTE]
 > This reproduction procedure does not modify the immutable release artifact on GitHub or Zenodo.
@@ -21,14 +33,19 @@ The exact scoped release manifest is located at:
 - **Archive Name**: `paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz`
 - **Expected SHA-256**: `64e8510ab7ba934103c709907f66a783c7b3dd2dd58aa4bd725e762da2734d90`
 
-## Fresh Clone Reproduction Commands
+## Fresh Clone Checksum Verification
 
-Run the following commands from a fresh checkout of the `main` branch to download the bundle, verify its checksum, and run the regeneration parity test:
+Run the following commands from a fresh checkout of the `0.0.3` tooling tag (or `main`) to
+download the bundle and verify its checksum:
 
 ```bash
-# Clone the repository and navigate to the root
-git clone https://github.com/ll7/robot_sf_ll7.git
-cd robot_sf_ll7
+# Clone the minimum supported tooling checkout and navigate to the root
+git clone --branch 0.0.3 https://github.com/ll7/robot_sf_ll7.git robot_sf_ll7-repro
+cd robot_sf_ll7-repro
+
+# For current tooling, use the default branch instead:
+# git clone https://github.com/ll7/robot_sf_ll7.git robot_sf_ll7-repro
+# cd robot_sf_ll7-repro
 
 # Setup the virtual environment and sync dependencies
 uv sync --all-extras
@@ -41,6 +58,22 @@ gh release download 0.0.2 \
 
 # Verify the SHA-256 checksum of the downloaded bundle
 sha256sum output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz
+
+# Verify the bundle and its embedded checksums against the tracked manifest
+uv run python scripts/repro/verify_release_checksums.py --tag 0.0.2
+```
+
+The checksum command establishes that the published archive and its embedded artifacts match the
+tracked release manifest. It does not establish an independent numeric replay of the benchmark
+subset. That replay remains a separate required step and must use the release's pre-registered
+subset contract; do not promote checksum-only output to a numeric reproduction claim.
+
+## Optional parity check
+
+After checksum verification, the regeneration parity test can be run from the same tooling
+checkout with the downloaded bundle:
+
+```bash
 
 # Run the regeneration parity test
 ROBOT_SF_PAPER_HANDOFF_BUNDLE=output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_release_v0_0_2_20260414_134316_publication_bundle.tar.gz \

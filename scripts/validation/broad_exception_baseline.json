@@ -15,6 +15,7 @@
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/snqi/cli.py": 3,
       "robot_sf/benchmark/snqi/compute.py": 1,
+      "robot_sf/benchmark/trace_predicate_export.py": 1,
       "scripts/analysis/amv_timeout_trace_analyzer.py": 1,
       "scripts/analysis/build_signalized_crossing_failure_pack_issue_2754.py": 2,
       "scripts/analysis/calibrate_scenario_priors_from_traces_issue_2726.py": 2,
@@ -350,6 +351,15 @@
       "lineno": 314,
       "path": "robot_sf/benchmark/snqi/compute.py",
       "source": "except Exception:"
+    },
+    {
+      "col_offset": 8,
+      "context": "build_predicate_export_batch",
+      "fingerprint": "d0801da088f7cd4a",
+      "handler": "Exception",
+      "lineno": 296,
+      "path": "robot_sf/benchmark/trace_predicate_export.py",
+      "source": "except Exception as e:"
     },
     {
       "col_offset": 4,

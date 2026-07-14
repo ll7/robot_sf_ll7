@@ -140,6 +140,19 @@ def test_preflight_cli_exit_codes(tmp_path: Path) -> None:
     assert preflight_cli.main(["--bundle-dir", str(bundle_dir)]) == 1
 
 
+def test_preflight_cli_reports_malformed_inputs_without_traceback(tmp_path: Path) -> None:
+    """Malformed JSON/checksums must remain structured fail-closed CLI failures."""
+    bundle_dir = _build_bundle(tmp_path)
+    (bundle_dir / "checksums.sha256").write_text("not-a-checksum\n", encoding="utf-8")
+    assert preflight_cli.main(["--bundle-dir", str(bundle_dir)]) == 1
+
+    bundle_dir = _build_bundle(tmp_path / "malformed-json")
+    (bundle_dir / "payload" / "release" / "release_result.json").write_text(
+        "{not-json}\n", encoding="utf-8"
+    )
+    assert preflight_cli.main(["--bundle-dir", str(bundle_dir)]) == 1
+
+
 def test_preflight_fails_on_result_summary_disagreement(tmp_path: Path) -> None:
     """Disagreement between release_result and campaign_summary must fail closed."""
     bundle_dir = _build_bundle(tmp_path)
@@ -178,6 +191,18 @@ def test_preflight_fails_on_checksum_relative_to_root(tmp_path: Path) -> None:
         verify_publication_bundle_preflight(bundle_dir)
 
 
+def test_preflight_fails_when_manifest_digest_disagrees_with_checksums(tmp_path: Path) -> None:
+    """Manifest SHA-256 values must agree with the signed checksum file."""
+    bundle_dir = _build_bundle(tmp_path)
+    manifest_path = bundle_dir / "publication_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"][0]["sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(PublicationPreflightError, match="manifest sha256 disagrees"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
 def test_preflight_fails_on_commit_mismatch_without_explanation(tmp_path: Path) -> None:
     """Episode software_commit != publication commit must fail without an explanation."""
     bundle_dir = _build_bundle(tmp_path, publication_commit="abc123")
@@ -192,7 +217,7 @@ def test_preflight_fails_on_commit_mismatch_without_explanation(tmp_path: Path) 
 
 
 def test_preflight_allows_commit_mismatch_with_explanation(tmp_path: Path) -> None:
-    """An explicit runtime-diff explanation downgrades the commit mismatch to a warning."""
+    """Structured commit reconciliation downgrades a documented mismatch to a warning."""
     bundle_dir = _build_bundle(tmp_path, publication_commit="abc123")
     episodes = bundle_dir / "payload" / "runs" / "orca__holonomic" / "episodes.jsonl"
     episodes.write_text(
@@ -201,15 +226,54 @@ def test_preflight_allows_commit_mismatch_with_explanation(tmp_path: Path) -> No
     )
     manifest_path = bundle_dir / "publication_manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["publication_runtime_diff_explanation"] = (
-        "Episodes were produced by an earlier runtime commit; the publication commit "
-        "carries a reporting-only fix that does not change episode outputs."
-    )
+    manifest.setdefault("provenance", {})["commit_reconciliation"] = {
+        "status": "explained",
+        "publication_commit": "abc123",
+        "runtime_commits": ["deadbeef"],
+        "explanation": (
+            "Episodes were produced by an earlier runtime commit; the publication commit "
+            "carries a reporting-only fix that does not change episode outputs."
+        ),
+    }
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     report = verify_publication_bundle_preflight(bundle_dir)
     assert report["status"] == "pass"
-    assert any("runtime-diff explanation" in w for w in report["warnings"])
+    assert any("structured provenance.commit_reconciliation" in w for w in report["warnings"])
+
+
+def test_preflight_rejects_unstructured_commit_reconciliation(tmp_path: Path) -> None:
+    """A top-level prose string cannot waive a runtime/publication mismatch."""
+    bundle_dir = _build_bundle(tmp_path, publication_commit="abc123")
+    episodes = bundle_dir / "payload" / "runs" / "orca__holonomic" / "episodes.jsonl"
+    episodes.write_text(
+        json.dumps({"episode_id": "ep-1", "event_ledger": {"software_commit": "deadbeef"}}) + "\n",
+        encoding="utf-8",
+    )
+    manifest_path = bundle_dir / "publication_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["publication_runtime_diff_explanation"] = "prose-only waiver"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(
+        PublicationPreflightError, match="structured provenance.commit_reconciliation"
+    ):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_rejects_malformed_episode_rows(tmp_path: Path) -> None:
+    """Malformed rows or missing episode-ledger commits must not be silently ignored."""
+    bundle_dir = _build_bundle(tmp_path)
+    episodes = bundle_dir / "payload" / "runs" / "orca__holonomic" / "episodes.jsonl"
+    episodes.write_text("{not-json}\n", encoding="utf-8")
+    with pytest.raises(PublicationPreflightError, match="invalid JSON"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+    bundle_dir = _build_bundle(tmp_path / "missing-ledger")
+    episodes = bundle_dir / "payload" / "runs" / "orca__holonomic" / "episodes.jsonl"
+    episodes.write_text(json.dumps({"episode_id": "ep-1"}) + "\n", encoding="utf-8")
+    with pytest.raises(PublicationPreflightError, match="event_ledger"):
+        verify_publication_bundle_preflight(bundle_dir)
 
 
 def test_preflight_fails_on_placeholder_channels(tmp_path: Path) -> None:

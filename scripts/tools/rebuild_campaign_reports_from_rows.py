@@ -303,6 +303,15 @@ def _run_publication_preflight(bundle_dir: Path) -> None:
     verify_publication_bundle_preflight(resolved)
 
 
+def _record_publication_payload(campaign_root: Path, publication_payload: dict[str, Any]) -> None:
+    """Record the exported bundle descriptor in the campaign summary and report."""
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = _read_json(summary_path)
+    summary["publication_bundle"] = publication_payload
+    _write_json(summary_path, summary)
+    write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
+
+
 def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     """Run the reconstruction entrypoint and return a POSIX exit code."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
@@ -392,34 +401,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     release_benchmark_success = bool(run_payload.get("benchmark_success")) and not missing
     result["release_benchmark_success"] = release_benchmark_success
     if release_benchmark_success:
-        try:
-            publication_payload = _build_publication_payload(
-                campaign_root=campaign_root,
-                release_tag=manifest.release_tag,
-                doi=manifest.doi,
-                repository_url=manifest.repository_url,
-            )
-            _run_publication_preflight(Path(publication_payload["bundle_dir"]))
-        except PublicationPreflightError as exc:
-            result["publication_bundle"] = None
-            result["publication_preflight_status"] = "fail"
-            result["publication_preflight_violations"] = [str(exc)]
-            release_benchmark_success = False
-            result["release_status"] = "publication_preflight_failed"
-            result["release_status_reason"] = (
-                "publication bundle failed the final self-consistency preflight"
-            )
-            result["release_exit_code"] = 2
-            _write_json(release_dir / "release_result.json", result)
-            print(json.dumps(result, indent=2))
-            return 2
-        result["publication_bundle"] = publication_payload
-
-        summary_path = campaign_root / "reports" / "campaign_summary.json"
-        summary = _read_json(summary_path)
-        summary["publication_bundle"] = publication_payload
-        _write_json(summary_path, summary)
-        write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
+        publication_payload = _build_publication_payload(
+            campaign_root=campaign_root,
+            release_tag=manifest.release_tag,
+            doi=manifest.doi,
+            repository_url=manifest.repository_url,
+        )
     else:
         result["publication_bundle"] = None
 
@@ -444,7 +431,46 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     result["release_exit_code"] = (
         0 if release_benchmark_success else (2 if missing else int(run_payload.get("exit_code", 2)))
     )
-    _write_json(release_dir / "release_result.json", result)
+
+    if release_benchmark_success:
+        try:
+            # Write final release metadata into the source campaign before the final export.
+            # Repeat until the descriptor is stable so the bundle and release result agree.
+            for _ in range(5):
+                result["publication_bundle"] = publication_payload
+                _record_publication_payload(campaign_root, publication_payload)
+                _write_json(release_dir / "release_result.json", result)
+                refreshed_payload = _build_publication_payload(
+                    campaign_root=campaign_root,
+                    release_tag=manifest.release_tag,
+                    doi=manifest.doi,
+                    repository_url=manifest.repository_url,
+                )
+                if refreshed_payload == publication_payload:
+                    publication_payload = refreshed_payload
+                    break
+                publication_payload = refreshed_payload
+            else:
+                raise PublicationPreflightError(
+                    "publication bundle descriptor did not stabilize after final metadata write"
+                )
+            result["publication_bundle"] = publication_payload
+            _run_publication_preflight(Path(publication_payload["bundle_dir"]))
+        except PublicationPreflightError as exc:
+            result["publication_bundle"] = None
+            result["publication_preflight_status"] = "fail"
+            result["publication_preflight_violations"] = [str(exc)]
+            result["release_benchmark_success"] = False
+            result["release_status"] = "publication_preflight_failed"
+            result["release_status_reason"] = (
+                "publication bundle failed the final self-consistency preflight"
+            )
+            result["release_exit_code"] = 2
+            _write_json(release_dir / "release_result.json", result)
+            print(json.dumps(result, indent=2))
+            return 2
+    else:
+        _write_json(release_dir / "release_result.json", result)
 
     print(json.dumps(result, indent=2))
     return int(result["release_exit_code"])

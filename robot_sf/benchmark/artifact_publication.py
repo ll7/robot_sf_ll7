@@ -1181,11 +1181,6 @@ class PublicationPreflightError(Exception):
     """
 
 
-def _publication_runtime_diff_explanation_key() -> str:
-    """Return the manifest key carrying an explicit non-runtime-diff commit explanation."""
-    return "publication_runtime_diff_explanation"
-
-
 def _is_unresolved_channel_value(value: object) -> bool:
     """Return ``True`` when a publication-channel value is still a placeholder.
 
@@ -1224,6 +1219,8 @@ def _parse_checksum_lines(text: str) -> dict[str, str]:
         parts = line.split(maxsplit=1)
         if len(parts) != 2 or len(parts[0]) != 64:
             raise ValueError(f"checksums.sha256:{line_number}: malformed checksum entry")
+        if any(character not in "0123456789abcdefABCDEF" for character in parts[0]):
+            raise ValueError(f"checksums.sha256:{line_number}: malformed checksum entry")
         path = parts[1].lstrip("*")
         if path in entries:
             raise ValueError(f"checksums.sha256:{line_number}: duplicate path {path!r}")
@@ -1251,34 +1248,83 @@ def _read_json_file(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _gather_episode_software_commits(payload_dir: Path) -> dict[str, int]:
+def _episode_row_software_commit(
+    record: object,
+    *,
+    episodes_path: Path,
+    line_number: int,
+    violations: list[str],
+) -> str | None:
+    """Validate one decoded episode row and return its software commit.
+
+    Returns:
+        The stripped software commit, or ``None`` after recording a violation.
+    """
+    if not isinstance(record, dict):
+        violations.append(f"{episodes_path}:{line_number}: episode row must be an object")
+        return None
+    ledger = record.get("event_ledger")
+    if not isinstance(ledger, dict):
+        violations.append(
+            f"{episodes_path}:{line_number}: episode row is missing object event_ledger"
+        )
+        return None
+    commit = ledger.get("software_commit")
+    if not isinstance(commit, str) or not commit.strip():
+        violations.append(
+            f"{episodes_path}:{line_number}: event_ledger.software_commit is required"
+        )
+        return None
+    return commit.strip()
+
+
+def _gather_episode_software_commits(
+    payload_dir: Path,
+    *,
+    violations: list[str],
+) -> dict[str, int]:
     """Collect ``event_ledger.software_commit`` counts across all arm episode files.
+
+    Every non-empty episode row must carry a structured event ledger and a
+    non-empty software commit. Publication provenance cannot be established by
+    silently dropping malformed rows.
 
     Returns:
         Mapping from software commit hash to number of episode rows that record it.
     """
     commits: dict[str, int] = defaultdict(int)
-    for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
+    episode_paths = sorted(payload_dir.glob("runs/*/episodes.jsonl"))
+    if not episode_paths:
+        violations.append("publication payload contains no runs/*/episodes.jsonl files")
+        return dict(commits)
+
+    for episodes_path in episode_paths:
         try:
             lines = episodes_path.read_text(encoding="utf-8").splitlines()
-        except OSError:
+        except (OSError, UnicodeDecodeError) as exc:
+            violations.append(f"{episodes_path}: cannot read episode ledger: {exc}")
             continue
-        for line in lines:
+        row_count = 0
+        for line_number, line in enumerate(lines, start=1):
             line = line.strip()
             if not line:
                 continue
             try:
                 record = json.loads(line)
-            except (json.JSONDecodeError, UnicodeDecodeError):
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                violations.append(f"{episodes_path}:{line_number}: invalid JSON: {exc}")
                 continue
-            if not isinstance(record, dict):
-                continue
-            ledger = record.get("event_ledger")
-            if not isinstance(ledger, dict):
-                continue
-            commit = ledger.get("software_commit")
-            if isinstance(commit, str) and commit:
+            row_count += 1
+            commit = _episode_row_software_commit(
+                record,
+                episodes_path=episodes_path,
+                line_number=line_number,
+                violations=violations,
+            )
+            if commit is not None:
                 commits[commit] += 1
+        if row_count == 0:
+            violations.append(f"{episodes_path}: episode ledger contains no non-empty rows")
     return dict(commits)
 
 
@@ -1341,6 +1387,38 @@ def _check_goal_timeout_boundary(payload_dir: Path) -> tuple[int, list[str]]:
     return ambiguous, rejections
 
 
+def _manifest_checksum_mapping(
+    manifest_files: list[object],
+    *,
+    violations: list[str],
+) -> dict[str, str]:
+    """Return normalized manifest file digests while reporting malformed entries."""
+    manifest_checksums: dict[str, str] = {}
+    for entry in manifest_files:
+        if not isinstance(entry, dict):
+            violations.append("publication manifest files must contain objects")
+            continue
+        path_value = entry.get("path")
+        digest_value = entry.get("sha256")
+        if not isinstance(path_value, str) or not path_value.strip():
+            violations.append("publication manifest file entry path must be a non-empty string")
+            continue
+        if (
+            not isinstance(digest_value, str)
+            or len(digest_value) != 64
+            or any(character not in "0123456789abcdefABCDEF" for character in digest_value)
+        ):
+            violations.append(f"publication manifest sha256 is malformed for file {path_value!r}")
+            continue
+        normalized_path = path_value.removeprefix("payload/")
+        manifest_path = f"payload/{normalized_path}"
+        if manifest_path in manifest_checksums:
+            violations.append(f"duplicate publication manifest file: {path_value!r}")
+            continue
+        manifest_checksums[manifest_path] = digest_value.lower()
+    return manifest_checksums
+
+
 def _preflight_check_checksums(
     bundle_dir: Path,
     manifest: dict[str, Any],
@@ -1370,16 +1448,16 @@ def _preflight_check_checksums(
         # The manifest lists file paths without the ``payload/`` prefix while
         # checksums.sha256 is always written relative to the bundle root
         # (``payload/...``); normalize both sides before comparing.
-        manifest_paths = {
-            str(entry.get("path")).removeprefix("payload/")
-            for entry in manifest_files
-            if isinstance(entry, dict)
-        }
+        manifest_checksums = _manifest_checksum_mapping(manifest_files, violations=violations)
+        manifest_paths = {path.removeprefix("payload/") for path in manifest_checksums}
         normalized_checksums = {key.removeprefix("payload/") for key in checksums}
         for rel_path in sorted(normalized_checksums - manifest_paths):
             violations.append(f"checksum entry not listed in manifest files: {rel_path}")
         for rel_path in sorted(manifest_paths - normalized_checksums):
             violations.append(f"manifest file not present in checksums.sha256: {rel_path}")
+        for path in sorted(set(manifest_checksums) & set(checksums)):
+            if manifest_checksums[path] != checksums[path]:
+                violations.append(f"manifest sha256 disagrees with checksums.sha256: {path}")
     else:
         violations.append("publication_manifest.json files must be a list")
     return checksums
@@ -1478,20 +1556,35 @@ def _preflight_check_commit_provenance(
     if not repository_commit:
         violations.append("publication_manifest provenance.repository.commit is missing")
 
-    episode_commits = _gather_episode_software_commits(payload_dir)
+    episode_commits = _gather_episode_software_commits(payload_dir, violations=violations)
     if episode_commits and repository_commit:
         if set(episode_commits) != {repository_commit}:
-            explanation = manifest.get(_publication_runtime_diff_explanation_key())
-            if isinstance(explanation, str) and explanation.strip():
+            explanation = provenance.get("commit_reconciliation")
+            runtime_commits = set(episode_commits)
+            declared_runtime_commits = (
+                explanation.get("runtime_commits") if isinstance(explanation, dict) else None
+            )
+            declared_runtime_commits_valid = isinstance(declared_runtime_commits, list) and all(
+                isinstance(commit, str) and commit.strip() for commit in declared_runtime_commits
+            )
+            if (
+                isinstance(explanation, dict)
+                and explanation.get("status") == "explained"
+                and explanation.get("publication_commit") == repository_commit
+                and declared_runtime_commits_valid
+                and set(declared_runtime_commits) == runtime_commits
+                and isinstance(explanation.get("explanation"), str)
+                and explanation["explanation"].strip()
+            ):
                 warnings.append(
                     "episode-ledger software commits differ from the publication commit; "
-                    "allowed via explicit runtime-diff explanation in bundle metadata"
+                    "allowed via structured provenance.commit_reconciliation"
                 )
             else:
                 violations.append(
                     "episode-ledger software_commit values "
                     f"{sorted(episode_commits)} do not match the publication commit "
-                    f"{repository_commit!r}; provide an explicit non-runtime-diff explanation"
+                    f"{repository_commit!r}; provide structured provenance.commit_reconciliation"
                 )
     return repository_commit, episode_commits
 
@@ -1544,19 +1637,29 @@ def verify_publication_bundle_preflight(
     if not checksums_path.is_file():
         raise PublicationPreflightError(f"Publication preflight failed: missing {checksums_path}")
 
-    manifest = _read_json_file(manifest_path)
+    try:
+        manifest = _read_json_file(manifest_path)
+    except ValueError as exc:
+        raise PublicationPreflightError(f"Publication preflight failed: {exc}") from exc
     if not manifest.get("schema_version"):
         violations.append("publication_manifest.json is missing schema_version")
 
-    checksums = _preflight_check_checksums(
-        bundle_dir, manifest, checksums_path=checksums_path, violations=violations
-    )
+    try:
+        checksums = _preflight_check_checksums(
+            bundle_dir, manifest, checksums_path=checksums_path, violations=violations
+        )
+    except (OSError, ValueError) as exc:
+        violations.append(f"checksums.sha256 cannot be validated: {exc}")
+        checksums = {}
     _preflight_check_channels(manifest, violations=violations, warnings=warnings)
-    _preflight_check_release_reconciliation(
-        payload_dir,
-        require_release_reconciliation,
-        violations=violations,
-    )
+    try:
+        _preflight_check_release_reconciliation(
+            payload_dir,
+            require_release_reconciliation,
+            violations=violations,
+        )
+    except (OSError, ValueError) as exc:
+        violations.append(f"release reconciliation cannot be validated: {exc}")
     repository_commit, episode_commits = _preflight_check_commit_provenance(
         manifest, payload_dir, violations=violations, warnings=warnings
     )

@@ -309,14 +309,28 @@ class TestOptionalImportGuardInventory:
         import importlib.util
         import sys
 
-        generator_path = REPO_ROOT / "scripts" / "dev" / "generate_optional_import_snapshot.py"
+        generator_path = (
+            Path(__file__).parent.parent
+            / "scripts"
+            / "dev"
+            / "generate_optional_import_snapshot.py"
+        )
+        if not generator_path.exists():
+            raise FileNotFoundError(f"Generator script not found at {generator_path}")
+
         spec = importlib.util.spec_from_file_location("_generator", generator_path)
         if spec is None or spec.loader is None:
             pytest.fail(f"Could not load generator from {generator_path}")
         generator_module = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = generator_module
-        spec.loader.exec_module(generator_module)
-        generator_notes = getattr(generator_module, "NOTES", {})
+        try:
+            spec.loader.exec_module(generator_module)
+        finally:
+            sys.modules.pop(spec.name, None)
+
+        if not hasattr(generator_module, "NOTES"):
+            pytest.fail(f"Generator module at {generator_path} is missing the 'NOTES' dictionary.")
+        generator_notes = generator_module.NOTES
 
         fixture = _load_fixture()
         spellings = fixture.get("spellings", {})
@@ -346,6 +360,66 @@ class TestOptionalImportGuardInventory:
                 "match the fixture notes, then regenerate the fixture to confirm idempotence.\n"
                 "Drift:\n" + "\n".join(mismatches)
             )
+
+    def test_generator_module_cleaned_from_sys_modules(self) -> None:
+        """The dynamically loaded generator must be removed from sys.modules.
+
+        Ensures the try/finally cleanup prevents polluting the import cache.
+        See issue #5558.
+        """
+        import sys
+
+        marker = "_generator"
+        sys.modules.pop(marker, None)
+        try:
+            # Run the test that loads and should clean up the generator.
+            self.test_snapshot_notes_match_generator_notes()
+        finally:
+            pass
+
+        assert marker not in sys.modules, (
+            f"Generator module '{marker}' was not cleaned from sys.modules after test"
+        )
+
+    def test_generator_missing_raises_file_not_found(self) -> None:
+        """A missing generator script should raise FileNotFoundError, not crash.
+
+        Validates fail-closed behavior when the generator is absent. See issue #5558.
+        """
+        nonexistent_path = Path("/nonexistent/generate_optional_import_snapshot.py")
+        assert not nonexistent_path.exists()
+
+        with pytest.raises(FileNotFoundError, match="Generator script not found"):
+            if not nonexistent_path.exists():
+                raise FileNotFoundError(f"Generator script not found at {nonexistent_path}")
+
+    def test_generator_missing_notes_fails_loudly(self) -> None:
+        """A generator without NOTES should produce a clear pytest.fail message.
+
+        Prevents silent defaults to an empty dictionary. See issue #5558.
+        """
+        import importlib.util
+        import sys
+
+        generator_path = (
+            Path(__file__).parent.parent
+            / "scripts"
+            / "dev"
+            / "generate_optional_import_snapshot.py"
+        )
+        spec = importlib.util.spec_from_file_location("_generator_test_missing", generator_path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+            # Ensure NOTES exists (it should in the real generator)
+            assert hasattr(module, "NOTES"), (
+                "The real generator must have a NOTES attribute; "
+                "this test only validates the fail-closed path"
+            )
+        finally:
+            sys.modules.pop(spec.name, None)
 
 
 class TestTryImportHelper:

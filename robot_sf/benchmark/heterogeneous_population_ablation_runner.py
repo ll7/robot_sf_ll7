@@ -15,9 +15,14 @@ is produced on the harness path, not by a parallel test-only reconstruction.
 
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 from typing import Any
 
+from robot_sf.benchmark.heterogeneous_population_ablation import (
+    PopulationMixNotRealizableError,
+    build_runtime_population_control_trace_labels,
+)
 from robot_sf.benchmark.map_runner import _build_policy
 from robot_sf.benchmark.map_runner_episode import run_map_episode
 
@@ -105,21 +110,34 @@ def run_manifest_row(
         map_path=map_path,
         max_episode_steps=horizon if max_episode_steps is None else max_episode_steps,
     )
-
-    record = run_map_episode(
-        scenario=scenario,
-        seed=int(row["seed"]),
-        horizon=horizon,
-        dt=dt,
-        record_forces=True,
-        snqi_weights=None,
-        snqi_baseline=None,
-        algo=row["planner"],
-        scenario_path=scenario_path,
-        record_planner_decision_trace=False,
-        record_simulation_step_trace=True,
-        policy_builder=_build_policy,
+    runtime_label_builder = (
+        partial(
+            build_runtime_population_control_trace_labels,
+            row["arm_population"],
+            archetype_seed=DEFAULT_ARCHETYPE_SEED,
+        )
+        if row.get("map_file") is not None
+        else None
     )
+
+    try:
+        record = run_map_episode(
+            scenario=scenario,
+            seed=int(row["seed"]),
+            horizon=horizon,
+            dt=dt,
+            record_forces=True,
+            snqi_weights=None,
+            snqi_baseline=None,
+            algo=row["planner"],
+            scenario_path=scenario_path,
+            record_planner_decision_trace=False,
+            record_simulation_step_trace=True,
+            pedestrian_control_trace_label_builder=runtime_label_builder,
+            policy_builder=_build_policy,
+        )
+    except PopulationMixNotRealizableError as exc:
+        return _population_mix_disposition(row, scenario=scenario, reason=str(exc))
 
     record["population_arm"] = row["population_arm"]
     record["planner"] = row["planner"]
@@ -135,6 +153,46 @@ def run_manifest_row(
     scenario_params["response_law_fraction"] = response_law_fraction
 
     return record
+
+
+def _population_mix_disposition(
+    row: dict[str, Any], *, scenario: dict[str, Any], reason: str
+) -> dict[str, Any]:
+    """Build a row-scoped fail-closed record for an unrealizable population mix.
+
+    Returns:
+        A JSON-serializable disposition record retaining the campaign row keys.
+    """
+
+    response_law_fraction_value = row.get("response_law_fraction")
+    response_law_fraction = float(
+        0.0 if response_law_fraction_value is None else response_law_fraction_value
+    )
+    scenario_params = {
+        "name": scenario["name"],
+        "map_file": scenario["map_file"],
+        "simulation_config": dict(scenario["simulation_config"]),
+        "scenario_id": row["scenario_id"],
+        "planner": row["planner"],
+        "seed": int(row["seed"]),
+        "population_arm": row["population_arm"],
+        "response_law_fraction": response_law_fraction,
+    }
+    return {
+        "schema_version": "mean_matched_harness_row_disposition.v1",
+        "status": "disposed",
+        "disposition": "population_mix_not_realizable",
+        "disposition_reason": reason,
+        "scenario_id": row["scenario_id"],
+        "planner": row["planner"],
+        "seed": int(row["seed"]),
+        "population_arm": row["population_arm"],
+        "response_law_fraction": response_law_fraction,
+        "scenario_params": scenario_params,
+        "algorithm_metadata": {
+            "pedestrian_control_trace": {"status": "not_available", "reason": reason}
+        },
+    }
 
 
 def _resolve_row_map_path(row: dict[str, Any], *, fallback_map_path: Path | str | None) -> Path:

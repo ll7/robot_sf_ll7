@@ -1,0 +1,22 @@
+# Durable implementation state for issue #5416; transient queue routing is excluded.
+issue: 5416
+parent_issue: 5306
+state_surface: sipp_four_geometry_preregistration
+entries:
+  - recorded_at_utc: "2026-07-14T02:08:10Z"
+    status: preregistration_contract_implemented__geometry_gate_pending_native_campaign
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/5416"
+      predecessor_issue: 5413
+    new_capability: >-
+      Versioned four-geometry SIPP preregistration with exact five-planner roster, paired
+      seeds, scenario_cert.v1 gate, visible exclusions, and durable artifact requirements.
+    evidence_tier: diagnostic_only_launch_packet
+    acceptance_evidence:
+      packet: configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml
+      checker: scripts/validation/check_issue_5416_sipp_four_geometry_packet.py
+      docs: docs/context/issue_5416_sipp_four_geometry_preregistration.md
+    closure_boundary: >-
+      Native five-seed outcome matrix, paired analysis, and any later decision remain open;
+      this state does not promote planner, safety, liveness, benchmark, or paper claims.
+    out_of_scope: [full benchmark campaign, Slurm or GPU submission, paper claims]

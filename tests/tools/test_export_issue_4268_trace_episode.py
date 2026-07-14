@@ -113,6 +113,7 @@ def test_csv_and_checksum_outputs_are_stable(tmp_path: Path) -> None:
     exporter._write_sha256sums(tmp_path)
 
     with csv_path.open(newline="", encoding="utf-8") as handle:
+        assert handle.readline() == "# AI-GENERATED NEEDS-REVIEW\n"
         rows = list(csv.DictReader(handle))
 
     assert rows[0]["step"] == "0"

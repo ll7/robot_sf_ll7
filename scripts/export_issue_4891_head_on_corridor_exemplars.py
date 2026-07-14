@@ -26,6 +26,7 @@ from robot_sf.evidence.writers import (
     write_distance_series_csv,
     write_json,
     write_sha256sums,
+    write_text,
 )
 
 # Back-compat alias for the shared helper (kept for the module-attribute tests).
@@ -428,7 +429,7 @@ benchmark campaign, not a Slurm or GPU result, and not a statistical comparison.
 
 <!-- /AI-GENERATED -->
 """
-    (output_dir / "README.md").write_text(readme, encoding="utf-8")
+    write_text(output_dir / "README.md", readme)
 
 
 def write_selection_report(
@@ -506,9 +507,7 @@ def write_selection_report(
         ]
     )
 
-    (output_dir / "SELECTION_REPORT.md").write_text(
-        "\n".join(report_lines) + "\n", encoding="utf-8"
-    )
+    write_text(output_dir / "SELECTION_REPORT.md", "\n".join(report_lines) + "\n")
 
 
 def _process_planner(

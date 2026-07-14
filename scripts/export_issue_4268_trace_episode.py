@@ -9,8 +9,6 @@ not benchmark evidence.
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
 import json
 import math
 import subprocess
@@ -24,6 +22,15 @@ from robot_sf.benchmark.map_runner import _run_map_episode
 from robot_sf.evidence.distance_convention import (
     DISTANCE_CONVENTION_FIELD,
     DistanceConvention,
+)
+from robot_sf.evidence.writers import (
+    extract_marker_date,
+    sha256_file,
+    write_csv,
+    write_distance_series_csv,
+    write_json,
+    write_sha256sums,
+    write_text,
 )
 
 DEFAULT_OUTPUT_DIR = Path("docs/context/evidence/issue_4253_trace_episode_2026-07")
@@ -69,16 +76,6 @@ def _git_commit() -> str:
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
     return result.stdout.strip()
-
-
-def sha256_file(path: Path) -> str:
-    """Compute a SHA-256 hex digest for ``path``."""
-
-    hasher = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 16), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
 
 
 def _min_distance(
@@ -187,14 +184,8 @@ def derive_trace_rows(record: dict[str, Any]) -> TraceRows:
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Write CSV rows with stable column ordering."""
-
-    if not rows:
-        raise ValueError(f"cannot write empty CSV: {path}")
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(rows)
+    """Compatibility wrapper around the shared CSV evidence writer."""
+    write_csv(path, rows)
 
 
 def _write_distance_csv(
@@ -203,24 +194,18 @@ def _write_distance_csv(
     *,
     convention: DistanceConvention,
 ) -> None:
-    """Write a distance-like series CSV with an explicit convention header.
-
-    Issue #5141: distance-like series must declare their convention so a
-    center-to-center value is not misread as surface clearance.
-    """
-    if not rows:
-        raise ValueError(f"cannot write empty CSV: {path}")
-    with path.open("w", newline="", encoding="utf-8") as handle:
-        handle.write(f"# {DISTANCE_CONVENTION_FIELD}: {convention.value}\n")
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
-        writer.writeheader()
-        writer.writerows(rows)
+    """Compatibility wrapper around the shared distance-series writer."""
+    write_distance_series_csv(path, rows, convention=convention)
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    """Write deterministic JSON."""
+    """Compatibility wrapper around the shared JSON evidence writer."""
+    write_json(path, payload)
 
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+def _write_sha256sums(output_dir: Path) -> None:
+    """Compatibility wrapper around the shared checksum writer."""
+    write_sha256sums(output_dir)
 
 
 def write_bundle(
@@ -291,16 +276,16 @@ def write_bundle(
         "derived_rows": derived.trace_rows,
     }
 
-    _write_json(output_dir / "metadata.json", metadata)
-    _write_json(output_dir / "trace_series.json", trace_payload)
-    _write_csv(output_dir / "trace_timeseries.csv", derived.trace_rows)
-    _write_distance_csv(
+    write_json(output_dir / "metadata.json", metadata)
+    write_json(output_dir / "trace_series.json", trace_payload)
+    write_csv(output_dir / "trace_timeseries.csv", derived.trace_rows)
+    write_distance_series_csv(
         output_dir / "min_distance_series.csv",
         derived.min_distance_rows,
         convention=DistanceConvention.CENTER_CENTER,
     )
     _write_readme(output_dir, metadata)
-    _write_sha256sums(output_dir)
+    write_sha256sums(output_dir)
     return metadata
 
 
@@ -346,28 +331,12 @@ This bundle is `analysis_workbench_only` style evidence for one illustrative epi
 used as a trace-level worked example input only. It is not a full benchmark campaign, not a Slurm or
 GPU result, and not a statistical comparison.
 """
-    (output_dir / "README.md").write_text(readme, encoding="utf-8")
-
-
-def _write_sha256sums(output_dir: Path) -> None:
-    """Write SHA256SUMS for all generated bundle files except itself."""
-
-    files = sorted(
-        path for path in output_dir.iterdir() if path.is_file() and path.name != "SHA256SUMS"
+    write_text(
+        output_dir / "README.md",
+        readme,
+        issue_ref="robot_sf#4268",
+        marker_date=extract_marker_date(metadata),
     )
-    # Use repository-relative paths so the docs-evidence-integrity checker resolves
-    # each entry against this bundle rather than a same-named repo-root file (e.g. README.md).
-    # Fall back to the bare filename when the bundle lives outside the repo (e.g. test tmpdirs).
-    lines = [f"{sha256_file(path)}  {_manifest_label(path)}" for path in files]
-    (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _manifest_label(path: Path) -> str:
-    """Return the SHA256SUMS entry label for a bundle file (repo-relative when possible)."""
-    try:
-        return path.resolve().relative_to(_repo_root()).as_posix()
-    except ValueError:
-        return path.name
 
 
 def _build_parser() -> argparse.ArgumentParser:

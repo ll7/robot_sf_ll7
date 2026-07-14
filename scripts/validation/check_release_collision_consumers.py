@@ -60,7 +60,7 @@ def _parse_checksum_manifest(data: bytes) -> dict[str, str]:
     entries: dict[str, str] = {}
     for line_number, raw_line in enumerate(data.decode("utf-8").splitlines(), start=1):
         line = raw_line.strip()
-        if not line:
+        if not line or line.startswith("#"):
             continue
         parts = line.split(maxsplit=1)
         if len(parts) != 2 or len(parts[0]) != 64:
@@ -436,7 +436,8 @@ def audit_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     if handle is None:
                         state.add("archive_read", f"cannot read archive member {member.name!r}")
                         continue
-                    logical_path = PurePosixPath(*path.parts[1:]).as_posix()
+                    logical_path_parts = path.parts[1:]
+                    logical_path = PurePosixPath(*logical_path_parts).as_posix()
                     if logical_path == "checksums.sha256":
                         try:
                             checksums = _parse_checksum_manifest(handle.read())
@@ -451,11 +452,11 @@ def audit_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
                         except ValueError as exc:
                             state.add("metadata_json", str(exc))
                         continue
-                    if not logical_path.startswith("payload/"):
+                    if not logical_path_parts or logical_path_parts[0] != "payload":
                         _sha256_stream(handle)
                         continue
 
-                    payload_path = logical_path.removeprefix("payload/")
+                    payload_path = PurePosixPath(*logical_path_parts[1:]).as_posix()
                     episode_match = _EPISODE_PATH.fullmatch(payload_path)
                     selected_json = payload_path in {
                         "release/release_manifest.resolved.json",

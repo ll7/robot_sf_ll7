@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-* **issue #5097 successor-release collision-consumer audit.** A fail-closed, CPU-only verifier now
+* **Issue #5097 successor-release collision-consumer audit.** A fail-closed, CPU-only verifier now
   checks signed publication bundles without extraction, reconciling typed exact collision events
   with component/total counts, binary success, and the canonical SNQI collision term. The tracked
   release 0.0.3 report verifies all 20,160 public rows and records release-wide inconsistencies as
@@ -265,7 +265,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/fixtures/benchmark/scenario_flakiness_issue_4978/real_campaign_episodes.jsonl`, plus the
   committed `scenario_flakiness.v1` report the audit produces from it
   (`real_campaign_flakiness_report.json`). This delivers the *real-campaign application* that PRs
-  #5069 and #5115 deferred: the audit now has regression-protected evidence that it surfaces real
+  Issue #5069 and Issue #5115 deferred: the audit now has regression-protected evidence that it surfaces real
   per-cell outcome instability — 7 of 20 assessable cells flagged knife-edge (35%), including a
   perfect coin-flip cell (`classic_doorway_medium`/`ppo`, stability 0.50 across 20 seeds). Exact-repeat
   determinism is reported as `null` (unknown) because each seed ran once; asserting it needs a

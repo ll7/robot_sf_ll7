@@ -36,6 +36,7 @@ sys.modules[_SPEC.name] = _MODULE
 _SPEC.loader.exec_module(_MODULE)
 
 audit_bundle = _MODULE.audit_bundle
+parse_checksum_manifest = _MODULE._parse_checksum_manifest
 
 
 def _sha256(data: bytes) -> str:
@@ -205,14 +206,27 @@ def test_valid_bundle_reconciles_success_and_snqi(tmp_path: Path) -> None:
     assert report["counts"]["snqi_recomputed_rows"] == 2
 
 
+def test_checksum_manifest_ignores_trimmed_comments() -> None:
+    """Checksum manifests may contain the repository's comment-line marker."""
+    digest = "a" * 64
+
+    parsed = parse_checksum_manifest(
+        f"  # generated manifest\n\n{digest}  payload/file.json\n".encode()
+    )
+
+    assert parsed == {"payload/file.json": digest}
+
+
 def test_collision_marked_success_fails_closed(tmp_path: Path) -> None:
     """An exact collision cannot remain a successful episode."""
 
     def mark_collision_success(rows: list[dict[str, Any]]) -> None:
         collision_row = rows[1]
-        collision_row["metrics"]["success"] = True
-        collision_row["metrics"]["snqi"] = snqi(
-            collision_row["metrics"],
+        metrics = collision_row["metrics"]
+        assert {"success", "snqi"}.issubset(metrics)
+        metrics["success"] = True
+        metrics["snqi"] = snqi(
+            metrics,
             load_weight_mapping(WEIGHTS_PATH),
             load_baseline_mapping(BASELINE_PATH),
         )
@@ -264,6 +278,11 @@ def test_exact_collision_count_disagreement_fails_closed(tmp_path: Path) -> None
 
     def zero_collision_count(rows: list[dict[str, Any]]) -> None:
         collision_metrics = rows[1]["metrics"]
+        assert {
+            "collisions",
+            "total_collision_count",
+            "ped_collision_count",
+        }.issubset(collision_metrics)
         collision_metrics["collisions"] = 0
         collision_metrics["total_collision_count"] = 0
         collision_metrics["ped_collision_count"] = 0

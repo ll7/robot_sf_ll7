@@ -17,7 +17,10 @@ pure decision function filters defensively on top so the rule is unit-tested.
 
 Exit code: 0 == green (latest completed CI run on main concluded ``success``),
 1 == not green (red, or no completed run to judge from). Prints the run id and
-conclusion it decided from.
+conclusion it decided from. The ``--json`` flag emits the machine-readable
+main-signal schema (``main_ci_is_green.v1``) with the same green/red/stale
+classification the gate contract consumes, so the gate need not parse the
+human line.
 """
 
 from __future__ import annotations
@@ -112,6 +115,43 @@ def decide(runs: list[Any]) -> tuple[bool, dict[str, Any] | None]:
     return classify(run.get("conclusion")) == "green", run
 
 
+# The main-signal schema consumed by the red-main merge-hold gate (issue #5571).
+# ``status`` is one of green / red / stale, matching :func:`classify`; a stale
+# verdict (no decisive completed run in the window) still fails closed to not
+# green but is reported distinctly so the gate can hold for a *fresh run* rather
+# than treat it as a main regression.
+SIGNAL_SCHEMA_VERSION = "main_ci_is_green.v1"
+
+
+def build_signal(
+    is_green: bool,
+    run: dict[str, Any] | None,
+    repo: str = DEFAULT_REPO,
+    workflow: str = DEFAULT_WORKFLOW,
+) -> dict[str, Any]:
+    """Build the machine-readable main-signal payload (the ``--json`` contract)."""
+    if run is None:
+        status = "stale"
+        deciding_run = None
+    else:
+        status = classify(run.get("conclusion"))
+        deciding_run = {
+            "databaseId": run.get("databaseId"),
+            "conclusion": run.get("conclusion"),
+            "status": run.get("status"),
+            "headSha": run.get("headSha"),
+            "createdAt": run.get("createdAt"),
+        }
+    return {
+        "schema_version": SIGNAL_SCHEMA_VERSION,
+        "is_green": is_green,
+        "status": status,
+        "repo": repo,
+        "workflow": workflow,
+        "deciding_run": deciding_run,
+    }
+
+
 def fetch_runs(
     repo: str = DEFAULT_REPO, workflow: str = DEFAULT_WORKFLOW, limit: int = 5
 ) -> list[dict[str, Any]]:
@@ -143,12 +183,24 @@ def fetch_runs(
 
 
 def main() -> int:
-    """CLI entry: exit 0 if main CI is green, 1 otherwise."""
+    """CLI entry: exit 0 if main CI is green, 1 otherwise.
+
+    Default and ``--quiet`` modes print the human-readable line (and use the
+    exit code) so the gate's existing human fallback keeps working. ``--json``
+    emits the machine-readable main-signal schema (issue #5571) and still exits
+    0/1, so the gate contract can be satisfied without parsing text.
+    """
     ap = argparse.ArgumentParser(description="Is main CI green (latest completed run)?")
     ap.add_argument("--repo", default=DEFAULT_REPO)
     ap.add_argument("--workflow", default=DEFAULT_WORKFLOW)
     ap.add_argument("--limit", type=int, default=5)
     ap.add_argument("--quiet", action="store_true", help="suppress the human line")
+    ap.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="emit the machine-readable main-signal JSON (green/red/stale schema)",
+    )
     args = ap.parse_args()
 
     try:
@@ -156,12 +208,30 @@ def main() -> int:
     except (RuntimeError, json.JSONDecodeError) as exc:
         # Fail closed: an unreadable signal is treated as NOT green so a merge
         # hold errs toward holding, never toward merging on unknown state.
+        if args.as_json:
+            # A stale schema_version + is_green=false lets the gate fail closed
+            # without a traceback; the human UNKNOWN line still goes to stderr.
+            print(
+                json.dumps(
+                    {
+                        "schema_version": SIGNAL_SCHEMA_VERSION,
+                        "is_green": False,
+                        "status": "stale",
+                        "repo": args.repo,
+                        "workflow": args.workflow,
+                        "deciding_run": None,
+                        "error": f"fetch failed: {exc}",
+                    }
+                )
+            )
         if not args.quiet:
             print(f"main CI status UNKNOWN ({exc}) -> treated as not-green", file=sys.stderr)
         return 1
 
     is_green, run = decide(runs)
-    if not args.quiet:
+    if args.as_json:
+        print(json.dumps(build_signal(is_green, run, args.repo, args.workflow)))
+    elif not args.quiet:
         if run is None:
             print("main CI: no completed run found -> not green")
         else:

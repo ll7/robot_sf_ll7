@@ -8,9 +8,13 @@ comparisons remain uncertain at the available seed budget.
 
 **Evidence status: diagnostic-only.** The verified 8,640-episode S20 campaign was analyzed with no
 fallback or degraded cells admitted, but this bundle does not promote a planner ranking, benchmark
-conclusion, paper claim, or dissertation claim. The constraints-first result remains subject to
-claim-card/domain review and the S30 decision. Social Navigation Quality Index (SNQI) ranks are
+conclusion, paper claim, or dissertation claim. The integrated claim card records the reversible
+S30 disposition: defer it for the dissertation draft and escalate only for a specific strict
+ordering claim or explicit reviewer request. Social Navigation Quality Index (SNQI) ranks are
 `blocked_invalid_metric` because the source campaign failed its warning-level SNQI contract.
+
+See [`claim_decision.md`](claim_decision.md) for the blockers, conditional next action, and the
+distinction between the preserved harness packet (`needs_review`) and the recorded S30 disposition.
 
 ## Provenance
 
@@ -61,6 +65,11 @@ misleading state name. The decision packet's two reasons for `needs_review` are
 `adjacent_rank_ci_overlap_requires_claim_downgrade_or_more_data` and
 `rank_resampling_instability_present`.
 
+The separate integration disposition is `deferred_for_dissertation_draft`, following the
+repository S30 ruling. It does not rewrite the historical result packet or imply that S30 data
+exists; S30 remains a predeclared escalation if a strict ordering claim or reviewer request makes
+the additional seed budget necessary.
+
 The exact SNQI failure is `rank_alignment_spearman=-0.2`, below the `0.3` fail threshold, under
 `snqi_contract.enforcement=warn`. SNQI therefore remains explanatory only and cannot support an
 adjacent-rank claim.
@@ -71,5 +80,7 @@ adjacent-rank claim.
   adjacent-claim result.
 - `report.md` is the generated human-readable rendering of the same result.
 - `analysis_provenance.json` records the input/output hashes and exact SNQI failure.
+- `claim_decision.md` records the claim boundary, S30 disposition, blockers, and conditional next
+  empirical action without promoting the result.
 - Raw episode rows, the harvest log, and the 204 MiB harvested campaign tree remain ignored local
   artifacts and are not copied into Git.

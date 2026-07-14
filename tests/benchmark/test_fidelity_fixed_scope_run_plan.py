@@ -427,6 +427,34 @@ def test_execute_runs_one_batch_per_bound_cell_with_correct_inputs() -> None:
     assert len(set(seen)) == len(bound)
 
 
+def test_fixed_scope_runner_forwards_planner_group_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fixed-scope rows carry the planner group needed by strict promotion."""
+    config = _config()
+    bindings = campaign_runner.bind_fixed_scope_run_plan(_plan(), config)
+    binding = next(
+        binding for binding in bindings if binding.cell.planner_group == "default_social_force"
+    )
+    seen: dict[str, object] = {}
+
+    def _fake_run_episode(*args: object, **kwargs: object) -> dict[str, object]:
+        del args
+        seen.update(kwargs)
+        return {"planner_group": kwargs["planner_group"]}
+
+    monkeypatch.setattr(campaign_runner, "run_episode", _fake_run_episode)
+    runner = campaign_runner._default_fixed_scope_cell_runner(
+        scenarios=[{"name": "scenario"}],
+        scenario_path=Path("scenario.yaml"),
+        horizon=1,
+    )
+
+    rows = runner(binding)
+    assert rows == [{"planner_group": "default_social_force"}]
+    assert seen["planner_group"] == "default_social_force"
+
+
 def test_fixed_scope_execute_cli_fails_closed_and_writes_no_rows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

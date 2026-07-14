@@ -40,11 +40,12 @@ import numpy as np
 from robot_sf.data.external.eth_ucy import (
     ACQUISITION_DOC,
     ETH_UCY_ASSET_ID,
+    ETH_UCY_PROVENANCE_REQUIRED_PATH_GROUPS,
     EthUcyDataError,
     EthUcySplitPath,
     require_available,
 )
-from scripts.tools.manage_external_data import (
+from robot_sf.data.external.provenance import (
     DEFAULT_MANIFEST_DIR,
     check_provenance_manifest,
 )
@@ -263,7 +264,11 @@ def load_provenance_validated_track_set(
         if provenance_manifest is not None
         else DEFAULT_MANIFEST_DIR / f"{ETH_UCY_ASSET_ID}.provenance.json"
     )
-    report = check_provenance_manifest(ETH_UCY_ASSET_ID, manifest_path)
+    report = check_provenance_manifest(
+        ETH_UCY_ASSET_ID,
+        manifest_path,
+        required_path_groups=ETH_UCY_PROVENANCE_REQUIRED_PATH_GROUPS,
+    )
     if not report["ok"]:
         raise EthUcyDataError(
             f"{ETH_UCY_ASSET_ID} provenance is not ready ({report['status']}): "

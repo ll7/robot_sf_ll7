@@ -56,6 +56,14 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5596_blind_corner_diagnostic/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5596_blind_corner_diagnostic/blind_corner_diagnostic.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5600_persistence_gate.md
   status: evidence
   freshness: evidence
@@ -3653,6 +3661,18 @@ entries:
   freshness: evidence
   area: benchmark_evidence
   legacy_dirty_evidence: true
+- path: docs/context/evidence/issue_5034_control_action_latency_sweep_plan_2026-07-14/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5034_control_action_latency_sweep_plan_2026-07-14/fixed_scope_plan_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5034_control_action_latency_sweep_plan_2026-07-14/manifest.sha256
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4302_snqi_provenance_terminality_2026-07-04.md
   status: evidence
   freshness: evidence

@@ -36,11 +36,15 @@ the increased-seed-budget run, and the durable
   resampling (`kendall_tau_mean`, `kendall_tau_min`, `rank_flip_rate`,
   `top1_stable`).
 - Emits `result.json` + `report.md` and classifies the result
-  `paper_grade | nominal | diagnostic | blocked_until_run`. **Insufficient seed
-  budget (S10 or fewer) is never paper-grade**: it emits `diagnostic`; an all-
-  excluded input emits `blocked_until_run`. Even at S20+ per cell the harness
-  emits `blocked_until_run` because paper-grade promotion requires the actual
-  predeclared S20/S30 SLURM run (#1554) plus claim-card review. Captures git HEAD.
+  `paper_grade | nominal | diagnostic | completed_needs_claim_review |
+  blocked_until_run`. **Insufficient seed budget (S10 or fewer) is never
+  paper-grade**: it emits `diagnostic`. An all-excluded (no countable cells)
+  input emits `blocked_until_run`. Even at S20+ per cell the harness emits
+  `completed_needs_claim_review` (not `blocked_until_run`) because
+  `blocked_until_run` means the campaign has not produced countable evidence;
+  at S20+ the evidence was measured and analyzed, so paper-grade promotion
+  merely requires the predeclared S20/S30 SLURM run (#1554) plus claim-card
+  review. Captures git HEAD.
 
 ### Launch packet
 
@@ -68,6 +72,13 @@ fails, while the report is marked `report_stage_failed` and remains unavailable
 for benchmark claims. Hard campaign failures remain nonzero and skip reporting.
 This prevents a missing report dependency or artifact from relabeling completed
 planner rows as a failed campaign without hiding the reporting blocker.
+
+The downstream finalizer can consume the same envelope with
+`scripts/tools/slurm_job_finalize.py --post-campaign-stage-status`. It validates that the job
+exit code still matches the campaign lane, records the campaign/report/job exit lanes, and
+returns a completed campaign as successful when only reporting failed while keeping the run
+outside benchmark evidence. Missing, malformed, or mismatched envelopes fail closed for manual
+decision rather than guessing which downstream exit code to trust.
 
 ## Reuse of canonical owners (no reinvention)
 

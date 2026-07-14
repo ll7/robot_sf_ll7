@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5352, 2026-07-14) - NEEDS-REVIEW -->
+
 # Issue #5352 — Independent cold-start reproduction evidence (release 0.0.2)
 
 This directory holds **real, executed** evidence for issue #5352, produced by a
@@ -60,3 +62,5 @@ the `0.0.2` tag or documented in `docs/benchmark_release_0_0_2_reproduction.md`.
 - The numeric subset reproduction (criterion: exact-hash vs near-exact tolerance
   per the manifest `reproducibility_contract`) still requires a clean-machine run
   and was intentionally limited to `--checksums-only` here to stay CPU-cheap.
+
+<!-- /AI-GENERATED -->

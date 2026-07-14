@@ -719,6 +719,13 @@ class TestIssue5352ReleaseBundleVerificationEvidence:
         assert (ISSUE_5352_EVIDENCE / "checksum_verification_report.json").is_file()
         assert (ISSUE_5352_EVIDENCE / "cold_start_reproduction_report.json").is_file()
 
+    def test_new_evidence_files_have_review_markers(self) -> None:
+        readme = (ISSUE_5352_EVIDENCE / "README.md").read_text(encoding="utf-8")
+        checksum_report = _read_json(ISSUE_5352_EVIDENCE / "checksum_verification_report.json")
+        assert "AI-GENERATED" in readme
+        assert "NEEDS-REVIEW" in readme
+        assert checksum_report["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+
     def test_verification_report_passes_against_published_bundle(self) -> None:
         report = _read_json(ISSUE_5352_EVIDENCE / "checksum_verification_report.json")
         assert report["schema"] == "release-checksum-verification.v1"

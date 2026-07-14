@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from robot_sf.benchmark.scenario_evidence_crosswalk import (
     write_scenario_evidence_crosswalk,
 )
 from scripts.tools.export_scenario_evidence_crosswalk import load_scenario_matrix
+from scripts.tools.export_scenario_evidence_crosswalk import main as export_main
 
 
 def _scenario(
@@ -304,6 +306,18 @@ def test_exporter_rejects_scalar_single_document(tmp_path: Path) -> None:
     matrix.write_text("just-a-scalar\n", encoding="utf-8")
     with pytest.raises(ValueError, match="mapping or list"):
         load_scenario_matrix(matrix)
+
+
+def test_exporter_reports_input_errors_without_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """CLI input failures use the clean error path and nonzero status."""
+    matrix = tmp_path / "scalar.yaml"
+    matrix.write_text("just-a-scalar\n", encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["export_scenario_evidence_crosswalk.py", str(matrix)])
+
+    assert export_main() == 1
+    assert "Crosswalk export failed:" in capsys.readouterr().err
 
 
 def test_markdown_labels_geometry_as_descriptive_not_causal() -> None:

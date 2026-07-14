@@ -29,6 +29,7 @@ from pathlib import Path
 
 from robot_sf.benchmark.scenario_evidence_crosswalk import (
     SCHEMA_VERSION,
+    ScenarioEvidenceCrosswalkError,
     build_scenario_evidence_crosswalk,
     validate_scenario_evidence_crosswalk,
     write_scenario_evidence_crosswalk,
@@ -148,33 +149,37 @@ def main() -> int:
     """Run the crosswalk export and write artifacts."""
     args = parse_args()
 
-    scenarios = load_scenario_matrix(args.matrix)
-    predicate_export = _load_json(args.predicate_export)
-    evidence_catalog = _load_json(args.evidence_catalog)
-    artifact_root = Path(args.artifact_root) if args.artifact_root else None
+    try:
+        scenarios = load_scenario_matrix(args.matrix)
+        predicate_export = _load_json(args.predicate_export)
+        evidence_catalog = _load_json(args.evidence_catalog)
+        artifact_root = Path(args.artifact_root) if args.artifact_root else None
 
-    crosswalk = build_scenario_evidence_crosswalk(
-        scenarios,
-        source=str(args.matrix),
-        predicate_export=predicate_export,
-        evidence_catalog=evidence_catalog,
-        artifact_root=artifact_root,
-    )
+        crosswalk = build_scenario_evidence_crosswalk(
+            scenarios,
+            source=str(args.matrix),
+            predicate_export=predicate_export,
+            evidence_catalog=evidence_catalog,
+            artifact_root=artifact_root,
+        )
 
-    if not args.no_validate:
-        errors = validate_scenario_evidence_crosswalk(crosswalk)
-        if errors:
-            print("Crosswalk validation failed:", file=sys.stderr)
-            for error in errors:
-                print(f"  - {error}", file=sys.stderr)
-            return 1
+        if not args.no_validate:
+            errors = validate_scenario_evidence_crosswalk(crosswalk)
+            if errors:
+                print("Crosswalk validation failed:", file=sys.stderr)
+                for error in errors:
+                    print(f"  - {error}", file=sys.stderr)
+                return 1
 
-    write_scenario_evidence_crosswalk(
-        crosswalk,
-        json_path=args.output_json,
-        markdown_path=args.output_markdown,
-        csv_path=args.output_csv,
-    )
+        write_scenario_evidence_crosswalk(
+            crosswalk,
+            json_path=args.output_json,
+            markdown_path=args.output_markdown,
+            csv_path=args.output_csv,
+        )
+    except (ScenarioEvidenceCrosswalkError, ValueError, OSError) as exc:
+        print(f"Crosswalk export failed: {exc}", file=sys.stderr)
+        return 1
 
     summary = crosswalk["summary"]
     print(

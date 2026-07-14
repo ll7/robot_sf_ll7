@@ -44,6 +44,21 @@ def test_objective_from_series_best_checkpoint_mode_returns_none():
     assert objective_from_series(series, mode="episodic_snqi", window=3) is None
 
 
+def test_objective_from_series_auc_mode_is_numpy2x_compatible():
+    """AUC reducer must not eagerly reference np.trapz (removed in NumPy 2.x).
+
+    Regression guard for the eager default-argument ``getattr(np, 'trapezoid', np.trapz)``
+    bug: that form evaluates ``np.trapz`` before ``getattr`` runs, raising
+    ``AttributeError`` on NumPy 2.x even when ``np.trapezoid`` exists.
+    """
+    import numpy as np
+
+    assert hasattr(np, "trapezoid"), "test assumes a NumPy version with np.trapezoid"
+    # Importing the module and using the AUC mode must not raise under NumPy 2.x.
+    series = [(100, 1.0), (200, 3.0), (300, 5.0)]
+    assert objective_from_series(series, mode="auc", window=3) == pytest.approx(3.0)
+
+
 def test_episodic_metric_from_records_uses_full_episode_values() -> None:
     """Episodic reducer should average episode-level values, not checkpoint means."""
     records = [

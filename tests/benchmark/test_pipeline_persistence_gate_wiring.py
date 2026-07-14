@@ -15,6 +15,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.scenario_generation.persistence_gate import validate_persistence_record
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
 _PERSISTENCE_CONFIG = "configs/analysis/issue_5600_persistence_gate.yaml"
 _FROZEN_CONFIG_ID = "issue-5600-persistence-gate"
 
@@ -114,6 +116,7 @@ def _fake_batch_runner(
                 "episode_id": trace["episode_id"],
                 "scenario_id": scenario["name"],
                 "seed": scenario["seeds"][0],
+                "scenario_params": {"map_file": trace["source_map"]},
                 "status": "failure",
                 "termination_reason": "timeout",
                 "metrics": {},
@@ -171,12 +174,46 @@ def _run_wiring(tmp_path: Path) -> list[dict[str, Any]]:
         batch_runner=_fake_batch_runner,
         replay_config_builder=lambda *_args, **_kwargs: object(),
     )
+    episodes = [
+        json.loads(line)
+        for line in (output_root / "episodes.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    entries = yaml.safe_load((output_root / "generated_catalog.yaml").read_text(encoding="utf-8"))[
+        "entries"
+    ]
+    episodes_by_id = {episode["episode_id"]: episode for episode in episodes}
+    replay_results: dict[str, Any] = {}
+    for index, entry in enumerate(entries):
+        episode = episodes_by_id[entry["source_episode"]["episode_id"]]
+        replay_results[entry["scenario_id"]] = {
+            "episode": {
+                "episode_id": episode["episode_id"],
+                "source_seed": episode["seed"],
+                "source_map": entry["source_episode"]["source_map"],
+                "steps": episode["algorithm_metadata"]["simulation_step_trace"]["steps"],
+            },
+            "cells": [
+                {
+                    "timing_offset_s": timing_offset_s,
+                    "speed_delta_m_s": speed_delta_m_s,
+                    "verdict": "pass" if index == 0 else "fail",
+                    "reason": "deterministic replay fixture",
+                }
+                for timing_offset_s in (-0.25, 0.0, 0.25)
+                for speed_delta_m_s in (-0.2, 0.0, 0.2)
+            ],
+            "missing_cell_reasons": [],
+        }
+    replay_results_path = tmp_path / "replay_results.json"
+    replay_results_path.write_text(json.dumps(replay_results), encoding="utf-8")
     records = evaluate_pipeline_candidates(
         manifest_path=output_root / "run_manifest.json",
         candidate_path=None,
         episodes_path=None,
-        config_path=Path(_PERSISTENCE_CONFIG),
+        config_path=REPO_ROOT / _PERSISTENCE_CONFIG,
         output_dir=tmp_path / "records",
+        replay_results_path=replay_results_path,
         commit_hash="deadbee",
         config_hash="c0ffee",
     )
@@ -223,3 +260,41 @@ def test_wiring_emits_schema_valid_evidence_records(tmp_path: Path) -> None:
         assert record["config"]["config_id"] == _FROZEN_CONFIG_ID
         assert record["commit_hashes"] == {"code": "deadbee", "config": "c0ffee"}
         validate_persistence_record(record)
+
+
+def test_cpu_speed_delta_uses_frame_duration_not_timing_offset() -> None:
+    """Timing sign must not change the physical duration of a speed perturbation."""
+
+    from scripts.tools.evaluate_pipeline_persistence_gate import _CpuCellVerdict
+
+    evaluator = _CpuCellVerdict(
+        original_steps=[
+            {"time_s": 0.0, "robot": {"position": [0.0, 0.0]}, "pedestrians": []},
+            {"time_s": 1.0, "robot": {"position": [1.0, 0.0]}, "pedestrians": []},
+        ],
+        original_critical_value=None,
+        event_type="min_clearance",
+    )
+
+    for timing_offset_s in (-0.25, 0.25):
+        shifted = evaluator._shift_steps(timing_offset_s, 0.2)
+        assert shifted[-1]["robot"]["position"] == pytest.approx([1.2, 0.0])
+
+
+def test_cpu_only_mode_does_not_claim_exact_replay() -> None:
+    """Without independent replay input, exact replay remains unknown."""
+
+    from scripts.tools.evaluate_pipeline_persistence_gate import _assess_exact_replay
+
+    source = {
+        "episode_id": "episode-1",
+        "source_seed": 7,
+        "source_map": "maps/svg_maps/classic_crossing.svg",
+    }
+    block = _assess_exact_replay(
+        source,
+        source_trace={**source, "seed": 7, "steps": []},
+        replayed_episode=None,
+        replay_error=None,
+    )
+    assert block["status"] == "unknown"

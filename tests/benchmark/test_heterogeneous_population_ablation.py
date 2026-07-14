@@ -6,6 +6,7 @@ import json
 import math
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -312,9 +313,15 @@ def test_mean_matched_harness_manifest_attributes_rows_by_pairing_keys() -> None
 
 
 def test_mean_matched_harness_manifest_expands_response_law_fraction_sweep() -> None:
-    """Each configured response fraction creates fixed-density paired rows."""
+    """Each configured response fraction creates fixed-density paired rows.
+
+    Uses the campaign-standard ``population_size=12`` (issue #5666) so every declared
+    fraction is realizable: at N=4 the 0.1 fraction rounds ``non_reactive`` to zero,
+    which the build-time realizability guard now rejects (issue #5666 acceptance #4).
+    """
 
     config = _manifest_config()
+    config["scenarios"][0]["population_size"] = 12
     config["response_law_fractions"] = [0.0, 0.1, 0.25, 0.5, 1.0]
     manifest = build_mean_matched_harness_manifest(config)
 
@@ -346,7 +353,7 @@ def test_mean_matched_harness_manifest_expands_response_law_fraction_sweep() -> 
                 assert {record["response_law"] for record in population["records"]} == {
                     "non_reactive"
                 }
-            assert len(population[PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]) == 4
+            assert len(population[PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]) == 12
 
 
 @pytest.mark.parametrize("fractions", [[], [0.1, 0.1], [-0.1], [1.1], [True]])
@@ -1004,7 +1011,15 @@ def test_matrix_harness_runs_each_geometry_end_to_end(tmp_path: Path) -> None:
 
 @pytest.mark.slow
 def test_matrix_harness_aligns_trace_labels_to_each_density_population(tmp_path: Path) -> None:
-    """Different-density cells label and trace every pedestrian actually instantiated."""
+    """Every density cell instantiates the *declared* population, not a density-derived one.
+
+    Issue #5666: ``population_size`` is forced onto the simulator via
+    ``force_population_size``, so two cells that differ only in ``ped_density`` must
+    both instantiate *exactly* the declared 12 pedestrians.  The prior behavior --
+    where density drove the count and the two cells produced different populations --
+    is the uncontrolled-variable bug this fixes; the trace labels must align to the
+    forced count in every cell.
+    """
 
     matrix_path = tmp_path / "two_density_matrix.yaml"
     matrix_path.write_text(
@@ -1053,52 +1068,98 @@ def test_matrix_harness_aligns_trace_labels_to_each_density_population(tmp_path:
                 assert "clearance_m" in step
                 assert "near_field_exposure_s" in step
 
-    assert all(len(counts) == 1 for counts in counts_by_scenario.values())
-    assert len({next(iter(counts)) for counts in counts_by_scenario.values()}) == 2
+    declared_population_size = config["scenario_matrix_derivation"]["population_size"]
+    # Issue #5666: both density cells must instantiate EXACTLY the declared
+    # population_size, not a per-density count.  The population is forced, so the
+    # two cells no longer differ in instantiated count.
+    assert all(counts == {declared_population_size} for counts in counts_by_scenario.values())
+    assert {next(iter(counts)) for counts in counts_by_scenario.values()} == {
+        declared_population_size
+    }
 
 
 @pytest.mark.slow
-def test_unrealizable_runtime_mix_records_row_disposition_and_continues(tmp_path: Path) -> None:
-    """A too-small instantiated population blocks only its row with an explicit reason."""
+def test_small_map_low_density_forces_declared_population_and_realizes_mix(
+    tmp_path: Path,
+) -> None:
+    """A small, low-density cell instantiates the declared population and mix (issue #5666 #3).
 
-    config = _single_cell_manifest_config()
-    scenario = config["scenarios"][0]
-    assert isinstance(scenario, dict)
-    scenario["density"] = 0.0
-    scenario["map_file"] = str(_CLASSIC_CROSSING_MAP)
+    Previously a small map at low ``ped_density`` instantiated ~1 pedestrian (whatever
+    ``ped_density * map_area`` yielded), so the declared 3/6/3 archetype split and the
+    response-law fractions were unrealizable and the readiness gate blocked the row.
+    With ``population_size`` wired to ``force_population_size`` (issue #5666 #1), the
+    cell must instantiate *exactly* 12 pedestrians and realize the 3/6/3 archetype
+    split plus every response-law fraction, even though ``ped_density`` alone would
+    spawn far fewer.  The declared-vs-actual count must also be recorded (issue #5666 #3).
+    """
+
+    config = {
+        "trace_metric_keys": ["clearance_m", "near_field_exposure_s"],
+        "planners": [{"key": "goal", "algo": "goal"}],
+        "seeds": [101],
+        "response_law_fractions": [0.0, 0.1, 0.25, 0.5],
+        "scenarios": [
+            {
+                "id": "small_map_low_density",
+                "density": 0.02,
+                "population_size": 12,
+                "archetype_seed": 3574,
+                "response_law_seed": 3574,
+                "pedestrian_control_trace_near_field_clearance_m": 1.0,
+                "map_file": str(_CLASSIC_CROSSING_MAP),
+                "composition": {"cautious": 0.25, "standard": 0.5, "hurried": 0.25},
+                "archetypes": {
+                    "cautious": {"desired_speed_factor": 0.7, "radius_m": 0.35},
+                    "standard": {"desired_speed_factor": 1.0, "radius_m": 0.3},
+                    "hurried": {"desired_speed_factor": 1.4, "radius_m": 0.25},
+                },
+            }
+        ],
+    }
     manifest = build_mean_matched_harness_manifest(config)
     manifest_path = tmp_path / "manifest.json"
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
-    disposition = run_manifest_row(
-        manifest["manifest_rows"][0],
-        scenario_path=manifest_path,
-        horizon=1,
-    )
-
-    assert disposition["status"] == "disposed"
-    assert disposition["disposition"] == "population_mix_not_realizable"
-    assert "instantiated pedestrian count" in disposition["disposition_reason"]
-    assert disposition["scenario_id"] == manifest["manifest_rows"][0]["scenario_id"]
-    assert disposition["population_arm"] == "heterogeneous"
-    assert disposition["algorithm_metadata"]["pedestrian_control_trace"] == {
-        "status": "not_available",
-        "reason": disposition["disposition_reason"],
+    heterogeneous_rows = [
+        row for row in manifest["manifest_rows"] if row["population_arm"] == "heterogeneous"
+    ]
+    assert {row["response_law_fraction"] for row in heterogeneous_rows} == {
+        0.0,
+        0.1,
+        0.25,
+        0.5,
     }
-    readiness = assess_mean_matched_episode_records(manifest, [disposition])
-    assert any(
-        "row disposition population_mix_not_realizable" in blocker
-        for blocker in readiness["blockers"]
-    )
 
-    scenario["density"] = 0.02
-    viable_manifest = build_mean_matched_harness_manifest(config)
-    viable = run_manifest_row(
-        viable_manifest["manifest_rows"][0],
-        scenario_path=manifest_path,
-        horizon=1,
-    )
-    assert "disposition" not in viable
+    expected_response_law_counts = {
+        0.0: {"reactive": 12},
+        0.1: {"reactive": 11, "non_reactive": 1},
+        0.25: {"reactive": 9, "non_reactive": 3},
+        0.5: {"reactive": 6, "non_reactive": 6},
+    }
+
+    for row in heterogeneous_rows:
+        record = run_manifest_row(row, scenario_path=manifest_path, horizon=1)
+        assert "disposition" not in record, record
+        trace = record["algorithm_metadata"]["pedestrian_control_trace"]
+        assert trace["pedestrian_count"] == 12, (
+            f"response_law_fraction={row['response_law_fraction']}: small low-density map "
+            f"instantiated {trace['pedestrian_count']} pedestrians, expected the forced 12 "
+            "(issue #5666 #1: population_size must override ped_density x area)"
+        )
+        # Declared-vs-actual recorded for triage (issue #5666 #3).
+        sim_cfg = record["scenario_params"]["simulation_config"]
+        assert sim_cfg["population_size"] == 12
+        assert sim_cfg["declared_population_size"] == 12
+        assert sim_cfg["instantiated_population_size"] == 12
+
+        labels = record["scenario_params"][PEDESTRIAN_CONTROL_TRACE_LABELS_KEY]
+        assert len(labels) == 12
+        archetype_counts = Counter(label["archetype"] for label in labels)
+        assert archetype_counts == {"cautious": 3, "standard": 6, "hurried": 3}
+        response_law_counts = Counter(label["response_law"] for label in labels)
+        assert (
+            dict(response_law_counts) == expected_response_law_counts[row["response_law_fraction"]]
+        )
 
 
 @pytest.mark.slow
@@ -1166,3 +1227,109 @@ def test_harness_emission_readiness_fails_closed_when_trace_dropped(tmp_path: Pa
         f"{EPISODE_CONTROL_TRACE_PATH} missing or not mapping" in blocker
         for blocker in readiness["blockers"]
     )
+
+
+# ---------------------------------------------------------------------------
+# Issue #5666 acceptance regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_manifest_build_fails_fast_when_population_too_small_for_response_law_fraction() -> None:
+    """Manifest build rejects N=1 + response_law_fraction=0.1 at build time (issue #5666 #4).
+
+    At N=1, 0.1×1 = 0.1 rounds to 0 non-reactive pedestrians, so the declared
+    response-law mix is unrealizable.  The manifest builder must raise
+    ``PopulationMixNotRealizableError`` immediately — in seconds — without
+    proceeding to the episode runner, naming the offending cell.
+
+    Uses a single-archetype composition (standard: 1.0) so the archetype realiz-
+    ability check passes at N=1, isolating the response-law fraction failure path.
+    """
+    from robot_sf.benchmark.heterogeneous_population_ablation import PopulationMixNotRealizableError
+
+    config = _manifest_config()
+    # Use a single archetype so the archetype check passes at N=1.
+    config["scenarios"][0]["population_size"] = 1  # type: ignore[index]
+    config["scenarios"][0]["composition"] = {"standard": 1.0}  # type: ignore[index]
+    config["scenarios"][0]["archetypes"] = {  # type: ignore[index]
+        "standard": {"desired_speed_factor": 1.0, "radius_m": 0.3},
+    }
+    # fraction=0.1 → {reactive:0.9, non_reactive:0.1}; at N=1 non_reactive rounds to 0.
+    config["response_law_fractions"] = [0.1]
+
+    with pytest.raises(
+        PopulationMixNotRealizableError,
+        match=r"response_law_fraction=0\.1.*population_size 1",
+    ):
+        build_mean_matched_harness_manifest(config)
+
+
+def test_manifest_build_passes_when_population_realizes_all_fractions() -> None:
+    """Manifest build succeeds for N=12 where all declared fractions are realizable (issue #5666).
+
+    N=12 is the campaign-standard value.  The fractions 0.0, 0.1, 0.25, 0.5 all
+    produce non-zero category counts at N=12, so no build-time rejection should occur.
+    """
+    config = _manifest_config()
+    config["scenarios"][0]["population_size"] = 12  # type: ignore[index]
+    config["response_law_fractions"] = [0.0, 0.1, 0.25, 0.5]
+
+    manifest = build_mean_matched_harness_manifest(config)
+    assert manifest["status"] in {"pending_runtime_capture", "ready"}
+    assert not any("response_law" in b for b in manifest["blockers"])
+
+
+def test_build_episode_scenario_wires_population_size_into_simulation_config() -> None:
+    """``build_episode_scenario`` carries ``population_size`` in ``simulation_config`` (issue #5666 #1).
+
+    ``sim_config.population_size`` → ``force_population_size`` in the simulator
+    (``robot_sf/sim/simulator.py:268``).  The row must carry that key so the
+    scenario-loader override path sets it on the env config and the simulator
+    enforces it as an exact count rather than letting ``ped_density × area`` win.
+    """
+    pair = build_mean_matched_population_pair(
+        population_size=12,
+        composition={"cautious": 0.25, "standard": 0.5, "hurried": 0.25},
+        archetypes=_archetypes(),
+        seed=3574,
+    )
+    row = {
+        "scenario_id": "test_cell",
+        "density": 0.02,
+        "arm_population": pair["arms"]["heterogeneous"],
+        "map_file": str(_CLASSIC_CROSSING_MAP),
+    }
+
+    scenario = build_episode_scenario(row)
+
+    sim_cfg = scenario["simulation_config"]
+    assert "population_size" in sim_cfg, (
+        "simulation_config must carry 'population_size' so the scenario-loader wires it "
+        "to sim_config.population_size → force_population_size (issue #5666 #1)"
+    )
+    expected_pop = sum(pair["arms"]["heterogeneous"]["counts"].values())
+    assert sim_cfg["population_size"] == expected_pop, (
+        f"population_size should equal the declared arm total ({expected_pop}), "
+        f"got {sim_cfg['population_size']}"
+    )
+
+
+def test_manifest_build_rejects_archetype_mix_unrealizable_at_small_population() -> None:
+    """Build-time rejection for an archetype category that rounds to zero (issue #5666 #4).
+
+    A scenario with population_size=1 and composition {cautious:0.25, standard:0.5,
+    hurried:0.25} cannot allocate a non-zero count to the cautious or hurried archetypes
+    (0.25 * 1 = 0.25 → 0).  The manifest builder must reject this at build time.
+    """
+    from robot_sf.benchmark.heterogeneous_population_ablation import PopulationMixNotRealizableError
+
+    config = _manifest_config()
+    config["scenarios"][0]["population_size"] = 1  # type: ignore[index]
+    # No response_law_fractions so only the archetype check fires.
+    config.pop("response_law_fractions", None)
+
+    with pytest.raises(
+        PopulationMixNotRealizableError,
+        match=r"population_size 1 cannot realize archetype mix",
+    ):
+        build_mean_matched_harness_manifest(config)

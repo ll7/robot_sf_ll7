@@ -152,6 +152,7 @@ def _load_fixture() -> dict[str, object]:
 class TestOptionalImportGuardInventory:
     """Characterization ratchet over optional-import guards in ``robot_sf/``."""
 
+    @pytest.mark.base_sensitive
     def test_collector_preserves_dotted_exception_names(self) -> None:
         """A qualified broad exception must not be collapsed into ImportError."""
         tree = ast.parse(
@@ -164,6 +165,7 @@ class TestOptionalImportGuardInventory:
 
         assert _caught_type_names(handler) == ["ImportError", "native_loader.LoadError"]
 
+    @pytest.mark.base_sensitive
     def test_no_new_unblessed_spelling_and_no_count_growth(self) -> None:
         """The inventory must stay within the blessed snapshot envelope.
 
@@ -236,6 +238,7 @@ class TestOptionalImportGuardInventory:
                 msg += "\n\nShrink opportunities (not failures):\n" + "\n".join(shrink_notes)
             pytest.fail(msg)
 
+    @pytest.mark.base_sensitive
     def test_no_first_party_import_wrapped_in_broad_catch(self) -> None:
         """Regression guard for issue #5287.
 
@@ -264,6 +267,7 @@ class TestOptionalImportGuardInventory:
             + "\n    ".join(str(x) for x in observed["ImportError+OSError+RuntimeError"]["samples"])
         )
 
+    @pytest.mark.base_sensitive
     def test_snapshot_matches_collector_output(self) -> None:
         """The committed counts must equal what the collector reports today.
 
@@ -297,6 +301,7 @@ class TestOptionalImportGuardInventory:
                 "Delta (snapshot_ceiling -> observed_count):\n" + "\n".join(mismatches)
             )
 
+    @pytest.mark.base_sensitive
     def test_snapshot_notes_match_generator_notes(self) -> None:
         """Each committed note must equal the generator's NOTES value for that key.
 

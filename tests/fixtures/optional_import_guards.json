@@ -6,17 +6,18 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 106,
+  "total_guards": 109,
   "spellings": {
     "AttributeError+ImportError": {
-      "count_ceiling": 2,
-      "has_as_count": 1,
+      "count_ceiling": 3,
+      "has_as_count": 2,
       "pragma_no_cover_count": 0,
       "blessed": true,
       "note": "Blessed broad catch: compiled-backend entry point may raise AttributeError when a native wheel component is absent.",
       "samples": [
         "robot_sf/baselines/sicnav.py:376",
-        "robot_sf/planner/socnav.py:776"
+        "robot_sf/benchmark/latency_stress.py:790",
+        "robot_sf/planner/socnav.py:804"
       ]
     },
     "AttributeError+ImportError+IndexError+KeyError+OSError+RuntimeError+TypeError+ValueError": {
@@ -46,7 +47,7 @@
       "blessed": true,
       "note": "Blessed broad catch: defensive best-effort boundary. Very broad; do not extend further without strong justification.",
       "samples": [
-        "robot_sf/planner/socnav.py:641"
+        "robot_sf/planner/socnav.py:669"
       ]
     },
     "AttributeError+ImportError+OSError": {
@@ -91,7 +92,7 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 74,
+      "count_ceiling": 76,
       "has_as_count": 15,
       "pragma_no_cover_count": 25,
       "blessed": true,
@@ -135,6 +136,8 @@
         "robot_sf/benchmark/full_classic/visual_deps.py:58",
         "robot_sf/benchmark/full_classic/visuals.py:49",
         "robot_sf/benchmark/helper_catalog.py:73",
+        "robot_sf/benchmark/latency_stress.py:646",
+        "robot_sf/benchmark/latency_stress.py:658",
         "robot_sf/benchmark/live_forecast_replay_gate.py:954",
         "robot_sf/benchmark/near_miss_determinism.py:394",
         "robot_sf/benchmark/plots.py:28",
@@ -159,12 +162,12 @@
         "robot_sf/planner/ompl_geometric_adapter.py:193",
         "robot_sf/planner/ompl_smoke.py:42",
         "robot_sf/planner/ompl_smoke.py:252",
-        "robot_sf/planner/socnav.py:31",
-        "robot_sf/planner/socnav.py:36",
-        "robot_sf/planner/socnav.py:41",
-        "robot_sf/planner/socnav.py:46",
-        "robot_sf/planner/socnav.py:66",
-        "robot_sf/planner/socnav.py:3512",
+        "robot_sf/planner/socnav.py:30",
+        "robot_sf/planner/socnav.py:35",
+        "robot_sf/planner/socnav.py:40",
+        "robot_sf/planner/socnav.py:45",
+        "robot_sf/planner/socnav.py:65",
+        "robot_sf/planner/socnav.py:3025",
         "robot_sf/planner/theta_star_v2.py:33",
         "robot_sf/render/sim_view.py:33",
         "robot_sf/sim/registry.py:145",

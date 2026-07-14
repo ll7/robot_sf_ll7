@@ -45,6 +45,20 @@ Verify:
 - required campaign artifacts exist
 - publication bundle archive, manifest, and checksums exist
 
+From the extracted bundle root, verify the payload checksums with:
+
+```bash
+sha256sum -c checksums.sha256
+```
+
+The publication preflight also requires `release_result.json` and the rebuilt
+`campaign_summary.json` to agree on status, validity, and cardinality. If episode
+runtime commits differ from the publication commit, record
+`provenance.commit_reconciliation` with the runtime commit list, publication
+commit, and a plain-language explanation. Goal-reached plus timeout rows require
+`provenance.goal_timeout_boundary` with timing evidence or an explicit exclusion
+note.
+
 ## Publication
 
 Upload the generated bundle using:

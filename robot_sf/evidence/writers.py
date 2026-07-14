@@ -118,6 +118,33 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+def write_text(
+    path: Path,
+    content: str,
+    *,
+    issue_ref: str | None = None,
+    marker_date: str | None = None,
+) -> None:
+    """Write marked Markdown/text evidence.
+
+    Callers may provide ``issue_ref`` to have the shared writer prepend the
+    canonical HTML marker. Existing generated text may omit ``issue_ref`` only
+    when it already starts with an AI-GENERATED / NEEDS-REVIEW marker. This
+    keeps marker ownership in one module while preserving pinned marker dates
+    and byte-stable reruns.
+    """
+    if issue_ref is not None:
+        marker = review_marker(issue_ref, marker_date=marker_date)
+        if not content.startswith(marker):
+            content = f"{marker}\n{content}"
+    elif not (
+        content.startswith(("<!-- AI-GENERATED", "# AI-GENERATED"))
+        and "NEEDS-REVIEW" in content.splitlines()[0]
+    ):
+        raise ValueError(f"generated evidence text must start with an AI-GENERATED marker: {path}")
+    path.write_text(content, encoding="utf-8")
+
+
 def write_distance_series_csv(
     path: Path,
     rows: list[dict[str, Any]],

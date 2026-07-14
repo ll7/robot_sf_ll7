@@ -13,6 +13,7 @@ from robot_sf.evidence.writers import (
     write_csv,
     write_json,
     write_sha256sums,
+    write_text,
 )
 
 if TYPE_CHECKING:
@@ -131,3 +132,29 @@ class TestWriteSha256sums:
         sha_file = tmp_path / "SHA256SUMS"
         content = sha_file.read_text(encoding="utf-8")
         assert "SHA256SUMS" not in content.split("\n", 1)[1]
+
+
+class TestWriteText:
+    """Test marker enforcement for Markdown/text evidence."""
+
+    def test_prepends_issue_marker(self, tmp_path: Path) -> None:
+        path = tmp_path / "README.md"
+        write_text(path, "# Report\n", issue_ref="robot_sf#4921", marker_date="2026-07-14")
+        assert path.read_text(encoding="utf-8") == (
+            "<!-- AI-GENERATED (robot_sf#4921, 2026-07-14) - NEEDS-REVIEW -->\n# Report\n"
+        )
+
+    def test_rejects_unmarked_text_without_issue(self, tmp_path: Path) -> None:
+        path = tmp_path / "README.md"
+        try:
+            write_text(path, "# Report\n")
+        except ValueError as exc:
+            assert "AI-GENERATED" in str(exc)
+        else:
+            raise AssertionError("unmarked evidence text should be rejected")
+
+    def test_preserves_existing_pinned_marker(self, tmp_path: Path) -> None:
+        path = tmp_path / "README.md"
+        content = "<!-- AI-GENERATED (robot_sf#4921, 2026-07-14) - NEEDS-REVIEW -->\n# Report\n"
+        write_text(path, content)
+        assert path.read_text(encoding="utf-8") == content

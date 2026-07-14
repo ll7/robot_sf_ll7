@@ -135,6 +135,24 @@ class TestCheckConfigAbsPaths:
         assert result["status"] == "pass"
         assert "nothing to check" in result["message"].lower()
 
+    def test_issue_5248_evidence_readme_uses_repo_relative_paths(self):
+        """The issue-5248 blocked receipt keeps its reproduction path repo-relative.
+
+        Regression guard for friction issue #5678: a tracked ``--campaign-root`` in
+        this evidence README previously baked an absolute home-dir path, which made
+        the ``--all`` baseline check fail on an unchanged pre-existing violation.
+        """
+        readme = (
+            Path("docs/context/evidence")
+            / "issue_5248_salvaged_h600_registration_2026-07"
+            / "README.md"
+        )
+        if not readme.is_file():
+            pytest.skip(f"{readme} not present in this checkout")
+        content = readme.read_text(encoding="utf-8")
+        assert "/home/" not in content
+        assert "--campaign-root output/" in content
+
     def test_repo_baseline_is_clean(self, monkeypatch):
         """The tracked configs/ + docs/context/evidence/ tree must pass ``--all``.
 

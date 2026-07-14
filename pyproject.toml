@@ -54,7 +54,7 @@ gpu = [
     "torch[cuda]>=2.5.1",
 ]
 training = [
-    "stable-baselines3>=2.4.0",
+    "stable-baselines3>=2.9.0",
     "torch>=2.5.1",
     "scikit-learn>=1.9.0",
     "optuna>=4.9.0",

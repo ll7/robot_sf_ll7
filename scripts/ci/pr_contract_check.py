@@ -29,6 +29,9 @@ from robot_sf.evidence.distance_convention import (  # noqa: E402
     has_distance_like_columns,
     is_distance_like_filename,
 )
+from scripts.ci.check_evidence_writer_usage import (  # noqa: E402
+    check_changed_files as check_evidence_writer_usage,
+)
 
 # Match keywords followed by #N or a GitHub issue URL
 CLOSING_PATTERN = re.compile(
@@ -530,7 +533,7 @@ def run_all_checks(
     pr_number: str | None,
     added_files: set[str] | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
-    """Run all 6 contract checks."""
+    """Run all 7 contract checks."""
     blockers = []
     warnings = []
     infos = []
@@ -551,11 +554,14 @@ def run_all_checks(
     evidence_blockers = check_evidence_tree_hygiene(changed_files, base_ref, added_files)
     blockers.extend(evidence_blockers)
 
-    # 5. Successor discipline
+    # 5. Evidence writer adoption
+    blockers.extend(check_evidence_writer_usage(changed_files, base_ref))
+
+    # 6. Successor discipline
     successor_warnings = check_successor_discipline(title, body, repo)
     warnings.extend(successor_warnings)
 
-    # 6. Worker-lane provenance
+    # 7. Worker-lane provenance
     lane_info, _ = check_worker_lane_provenance(body, pr_number, repo)
     infos.append(lane_info)
 
@@ -586,12 +592,15 @@ def build_comment_body(
         f"| 4. Evidence hygiene | {get_status_str(any('evidence' in b.lower() for b in blockers))} | Checks markers and provenance fields |"
     )
     rows.append(
-        f"| 5. Successor discipline | {get_status_str(any('successor' in w.lower() for w in warnings), is_blocker=False)} | Require successor statement on multi-PR issues |"
+        f"| 5. Evidence writer usage | {get_status_str(any('evidence-writer' in b.lower() for b in blockers))} | Require the shared marked writer path |"
+    )
+    rows.append(
+        f"| 6. Successor discipline | {get_status_str(any('successor' in w.lower() for w in warnings), is_blocker=False)} | Require successor statement on multi-PR issues |"
     )
 
     lane_detected = "Added 'cheap-lane' label" in "".join(infos)
     rows.append(
-        f"| 6. Worker-lane label | {'🏷️ cheap-lane' if lane_detected else '⚪ None'} | Label PRs from cheap worker lane |"
+        f"| 7. Worker-lane label | {'🏷️ cheap-lane' if lane_detected else '⚪ None'} | Label PRs from cheap worker lane |"
     )
 
     comment = [

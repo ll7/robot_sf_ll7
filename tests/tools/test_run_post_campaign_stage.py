@@ -15,9 +15,56 @@ from pathlib import Path
 
 import pytest
 
-from scripts.tools import run_post_campaign_stage
+from scripts.tools import run_post_campaign_stage, slurm_job_finalize
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# The only public SNQI tool that emits job-13274's observed exit 5
+# (EXIT_OPTIONAL_DEPS_MISSING, e.g. matplotlib missing on a compute node). Driven
+# here as a real post-campaign step at the production boundary.
+SNQI_SENSITIVITY_ANALYSIS = REPO_ROOT / "scripts" / "snqi_sensitivity_analysis.py"
+
+
+def _write_minimal_snqi_fixtures(base: Path) -> Path:
+    """Write a minimal, self-consistent SNQI sensitivity-analysis fixture set.
+
+    Returns the episode JSONL path; weights/baseline paths are derived alongside it.
+    """
+    (base / "reports").mkdir(parents=True, exist_ok=True)
+    episodes = base / "episodes.jsonl"
+    episodes.write_text(
+        json.dumps(
+            {
+                "planner_key": "static",
+                "metrics": {
+                    "collision_rate": 0.1,
+                    "ttc_violation_rate": 0.2,
+                    "path_deviation": 0.3,
+                    "comfort_jerk": 0.4,
+                    "energy_efficiency": 0.5,
+                    "progress_smoothness": 0.6,
+                    "waiting_time": 0.7,
+                    "goal_deviation": 0.8,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    fields = [
+        "collision_rate",
+        "ttc_violation_rate",
+        "path_deviation",
+        "comfort_jerk",
+        "energy_efficiency",
+        "progress_smoothness",
+        "waiting_time",
+        "goal_deviation",
+    ]
+    baseline = {f: {"mean": 0.1 + 0.1 * i, "std": 0.01} for i, f in enumerate(fields)}
+    (base / "baseline.json").write_text(json.dumps({"static": baseline}), encoding="utf-8")
+    (base / "weights.json").write_text(json.dumps(dict.fromkeys(fields, 1.0)), encoding="utf-8")
+    return episodes
 
 
 class TestPostCampaignStageRunner:
@@ -131,6 +178,87 @@ class TestPostCampaignStageRunner:
         payload = json.loads(output.read_text(encoding="utf-8"))
         assert payload["job_exit_code"] == 0
         assert payload["post_campaign_stage"]["exit_code"] == 5
+
+    def test_real_snqi_analysis_stage_through_production_boundary(self, tmp_path: Path) -> None:
+        """The real ``snqi_sensitivity_analysis.py`` post-campaign step must run through
+        ``run_post_campaign_stage`` (the job-13274 exit-5 candidate tool) and preserve the
+        completed campaign's exit 0 all the way to ``slurm_job_finalize``.
+
+        Prior slices only exercised synthetic ``exit 5`` bash scripts; this drives the
+        actual public SNQI tool at the production dispatch/serialization boundary so a
+        completed ``enforcement=warn`` campaign cannot be relabeled by a downstream
+        analysis step.
+        """
+        campaign_root = tmp_path / "campaign"
+        summary = campaign_root / "reports" / "campaign_summary.json"
+        summary.parent.mkdir(parents=True, exist_ok=True)
+        summary.write_text(
+            json.dumps({"soft_contract_warning": True, "warnings": ["SNQI warn"]}),
+            encoding="utf-8",
+        )
+        episodes = _write_minimal_snqi_fixtures(tmp_path)
+        envelope_path = tmp_path / "stage_status.json"
+        snqi_out = tmp_path / "snqi_out"
+
+        primitive_exit = run_post_campaign_stage.main(
+            [
+                "--campaign-summary",
+                str(summary),
+                "--campaign-exit-code",
+                "0",
+                "--stage-name",
+                "snqi_sensitivity_analysis",
+                "--output",
+                str(envelope_path),
+                "--stage-command",
+                sys.executable,
+                str(SNQI_SENSITIVITY_ANALYSIS),
+                "--episodes",
+                str(episodes),
+                "--baseline",
+                str(tmp_path / "baseline.json"),
+                "--weights",
+                str(tmp_path / "weights.json"),
+                "--output",
+                str(snqi_out),
+                "--skip-visualizations",
+            ]
+        )
+        assert primitive_exit == 0
+
+        payload = json.loads(envelope_path.read_text(encoding="utf-8"))
+        assert payload["campaign"]["exit_code"] == 0
+        assert payload["campaign"]["soft_contract_warning"] is True
+        assert payload["job_exit_code"] == 0
+        assert payload["post_campaign_stage"]["exit_code"] == 0
+        assert payload["post_campaign_stage"]["name"] == "snqi_sensitivity_analysis"
+        # The real tool wrote its own artifacts (proof it actually ran).
+        assert (snqi_out / "sensitivity_analysis_results.json").is_file()
+
+        finalize_output = tmp_path / "finalize.json"
+        finalize_exit = slurm_job_finalize.main(
+            [
+                "--issue",
+                "5244",
+                "--job-id",
+                "13274",
+                "--job-state",
+                "COMPLETED",
+                "--expected-artifact",
+                str(envelope_path),
+                "--post-campaign-stage-status",
+                str(envelope_path),
+                "--output",
+                str(finalize_output),
+            ]
+        )
+        report = json.loads(finalize_output.read_text(encoding="utf-8"))
+        assert finalize_exit == 0
+        assert report["classification"] == "success"
+        lanes = report["exit_code_lanes"]
+        assert lanes["campaign"]["exit_code"] == 0
+        assert lanes["job_exit_code"] == 0
+        assert lanes["post_campaign_stage"]["exit_code"] == 0
 
 
 if __name__ == "__main__":

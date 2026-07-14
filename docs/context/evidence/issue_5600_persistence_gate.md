@@ -1,3 +1,4 @@
+<!-- AI-GENERATED: validation-contract evidence; NEEDS-REVIEW: maintainer verification before reuse. -->
 # Issue #5600 — Persistence Promotion Gate (compact evidence)
 
 Status: implemented (CPU-only, no campaigns). Evidence tier: schema + fail-closed

@@ -106,6 +106,66 @@ outcomes:
     collision-free completion or materially reduces deadlock. Runtime improvement alone
     does not qualify; five seeds are a diagnostic evidence slice, not a record claim.
 
+inference_contract:
+  resampling_unit:
+    method: "seed-block bootstrap (four fixed scenarios × five seeds)"
+    rationale: >-
+      The four failure-geometry scenarios are a curated fixed benchmark suite; the
+      inference target is seed/stochastic uncertainty only, not generalization to
+      unseen scenarios. The scenario_order_frozen and same_scenario_seed_set_across_planners
+      constraints in the scenario_contract pairing ensure the bootstrap resamples seeds.
+    bootstrap_confidence: 0.95
+    resampling_order: "seed"
+
+  inference_population:
+    type: "fixed_suite"
+    rationale: >-
+      The four scenarios (head-on corridor, doorway, station platform, merging)
+      are a deliberately chosen fixed test suite for the SIPP four-geometry evidence
+      question. We quantify stochastic/seed uncertainty only; these scenarios ARE the
+      benchmark for this slice.
+
+  estimand:
+    type: "paired_delta"
+    description: >-
+      Paired per-episode delta between the candidate planner (sipp_lattice) and the
+      strongest comparator on each geometry, aggregated with seed-block bootstrap
+      intervals. The advancement rule compares the paired improvement on
+      collision-free success and deadlock, conditioned on no collision regression.
+
+  decision_rule:
+    rule: >-
+      Paired-delta CI-excludes-zero: the 95% bootstrap CI for the candidate vs
+      comparator paired delta on collision-free success must be positive, and the
+      paired delta on collision rate must not be positive (no regression).
+    threshold: >-
+      "No collision regression" means the candidate's collision rate 95% upper bound
+      is at or below the comparator's collision rate 95% lower bound. "Improves
+      collision-free completion" means the 95% CI lower bound for the success gap
+      exceeds zero. "Materially reduces deadlock" means the 95% CI lower bound for
+      the deadlock gap exceeds 5 percentage points.
+
+  primary_metrics:
+    metrics:
+      - collision_free_success_rate
+      - pedestrian_and_static_collision_count_rate
+      - deadlock_timeout_max_steps_rate
+    ordered_by_importance: true
+
+  multiplicity_handling:
+    strategy: >-
+      The advancement rule is a conjunctive gate (no regression AND improvement), not
+      a family of independent hypothesis tests. No multiplicity correction is applied
+      because the three metrics are treated as a conjunction: advancing requires all
+      three conditions to hold, and the candidate fails to advance if any single
+      condition is not met.
+    rationale: >-
+      Multiplicity correction (e.g. Holm-Bonferroni) would protect against any
+      single metric achieving significance by chance under independent tests. But
+      the advancement rule is conjunctive: all three must pass, so the probability of
+      a spurious joint advance under the null is bounded by the single-test rate
+      (conservative union bound). Correcting further would over-penalize.
+
 row_policy:
   successful_evidence_values: [successful_evidence]
   eligible_execution_modes: [native]
@@ -133,9 +193,10 @@ validation:
     - uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --json
     - uv run pytest -q tests/validation/test_check_issue_5416_sipp_four_geometry_packet.py
     - uv run pytest -q tests/planner/test_sipp_lattice.py tests/benchmark/test_sipp_lattice_policy_builder.py
+    - uv run python scripts/validation/check_preregistration_inference_contract.py --json configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml
   future_smoke: >-
-    Run one selected-row seed-111 native experimental map-runner smoke with horizon 500,
-    dt 0.1, and workers 1 after the geometry gate passes; write only to ignored output/.
+     Run one selected-row seed-111 native experimental map-runner smoke with horizon 500,
+     dt 0.1, and workers 1 after the geometry gate passes; write only to ignored output/.
   campaign_execution_allowed_in_this_pr: false
 
 readiness_decision:

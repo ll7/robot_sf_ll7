@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 import yaml
 
 from robot_sf.benchmark.adversarial_package_b_confirmation import (
@@ -24,6 +26,7 @@ from scripts.tools.run_adversarial_package_b import main as run_package_b_main
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SHIPPED_MANIFEST = REPO_ROOT / "configs/adversarial/issue_3079_package_b_budget_matched.yaml"
+ISSUE_5326_MANIFEST = REPO_ROOT / "configs/adversarial/issue_5326_objective_comparison.yaml"
 
 
 def _copy_pipeline_fixture(tmp_path: Path) -> Path:
@@ -45,13 +48,13 @@ def _copy_pipeline_fixture(tmp_path: Path) -> Path:
 
 def test_manifest_drives_27_cell_budget_matched_run(tmp_path: Path) -> None:
     """The committed manifest produces exactly the 27-cell Package-B matrix."""
-    config, samplers, budgets, seeds = load_package_b_manifest(SHIPPED_MANIFEST)
+    config, objectives, samplers, budgets, seeds = load_package_b_manifest(SHIPPED_MANIFEST)
     config = replace(config, output_dir=tmp_path / "comparison")
     report_json = tmp_path / "report.json"
     rows = run_sampler_comparison(
         config=config,
         sampler_names=samplers,
-        objective_names=(config.objective,),
+        objective_names=objectives,
         synthetic=True,
         budgets=budgets,
         seeds=seeds,
@@ -59,7 +62,7 @@ def test_manifest_drives_27_cell_budget_matched_run(tmp_path: Path) -> None:
 
     payload = build_comparison_payload(
         rows=rows,
-        objectives=(config.objective,),
+        objectives=objectives,
         budgets=budgets,
         seeds=seeds,
     )
@@ -103,13 +106,13 @@ def test_package_b_pipeline_produces_artifacts_and_passes_gates(tmp_path: Path) 
 
 def test_confirmation_sidecar_is_censored_and_artifact_bound(tmp_path: Path) -> None:
     """The confirmation sidecar marks every cell censored and binds to the report sha."""
-    config, samplers, budgets, seeds = load_package_b_manifest(SHIPPED_MANIFEST)
+    config, objectives, samplers, budgets, seeds = load_package_b_manifest(SHIPPED_MANIFEST)
     config = replace(config, output_dir=tmp_path / "comparison")
     report_json = tmp_path / "report.json"
     rows = run_sampler_comparison(
         config=config,
         sampler_names=samplers,
-        objective_names=(config.objective,),
+        objective_names=objectives,
         synthetic=True,
         budgets=budgets,
         seeds=seeds,
@@ -118,7 +121,7 @@ def test_confirmation_sidecar_is_censored_and_artifact_bound(tmp_path: Path) -> 
         json.dumps(
             build_comparison_payload(
                 rows=rows,
-                objectives=(config.objective,),
+                objectives=objectives,
                 budgets=budgets,
                 seeds=seeds,
             ),
@@ -145,7 +148,7 @@ def test_confirmation_sidecar_is_censored_and_artifact_bound(tmp_path: Path) -> 
 def test_manifest_paths_resolve_against_explicit_repo_root(tmp_path: Path, monkeypatch) -> None:
     """Manifest paths stay valid when the caller's working directory differs."""
     monkeypatch.chdir(tmp_path)
-    config, _samplers, _budgets, _seeds = load_package_b_manifest(
+    config, _objectives, _samplers, _budgets, _seeds = load_package_b_manifest(
         SHIPPED_MANIFEST,
         repo_root=REPO_ROOT,
     )
@@ -157,12 +160,12 @@ def test_manifest_paths_resolve_against_explicit_repo_root(tmp_path: Path, monke
 
 def test_synthetic_run_preserves_adversarial_candidate_state_fixture(tmp_path: Path) -> None:
     """Synthetic artifacts retain the candidate state used by the adversarial search."""
-    config, _samplers, _budgets, _seeds = load_package_b_manifest(SHIPPED_MANIFEST)
+    config, objectives, _samplers, _budgets, _seeds = load_package_b_manifest(SHIPPED_MANIFEST)
     config = replace(config, output_dir=tmp_path / "comparison")
     rows = run_sampler_comparison(
         config=config,
         sampler_names=("random",),
-        objective_names=(config.objective,),
+        objective_names=objectives,
         synthetic=True,
         budgets=(16,),
         seeds=(1101,),
@@ -184,3 +187,63 @@ def test_committed_manifest_preflights_before_run() -> None:
     """The shipped manifest passes the fail-closed preflight used by the pipeline."""
     result = preflight_package_b_manifest(SHIPPED_MANIFEST, repo_root=REPO_ROOT)
     assert result.ready is True
+
+
+def test_issue_5326_manifest_loads_both_objectives() -> None:
+    """Issue #5326 manifest honors its top-level objectives list (temporal_robustness + baseline).
+
+    The committed config declares a two-objective comparison; the loader must surface both
+    objectives so the signed robustness objective is actually compared against the baseline
+    ``worst_case_snqi``. A single-objective manifest must still load for backward compatibility.
+    """
+    config, objectives, samplers, budgets, seeds = load_package_b_manifest(
+        ISSUE_5326_MANIFEST, repo_root=REPO_ROOT
+    )
+    assert set(objectives) == {"worst_case_snqi", "temporal_robustness"}
+    assert "temporal_robustness" in config.objective or config.objective in objectives
+    assert samplers == ("random", "coordinate", "optuna")
+    assert budgets == (16, 32, 64)
+    assert seeds == (1101, 2202, 3303)
+
+
+def test_issue_5326_manifest_drives_multi_objective_synthetic_run(tmp_path: Path) -> None:
+    """The issue #5326 manifest produces rows for both objectives under matched budgets."""
+    config, objectives, samplers, budgets, seeds = load_package_b_manifest(
+        ISSUE_5326_MANIFEST, repo_root=REPO_ROOT
+    )
+    config = replace(config, output_dir=tmp_path / "comparison")
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=samplers,
+        objective_names=objectives,
+        synthetic=True,
+        budgets=budgets,
+        seeds=seeds,
+    )
+    observed = {row.objective for row in rows}
+    assert observed == set(objectives)
+    # 2 objectives x 3 samplers x 3 budgets x 3 seeds == 54 diagnostic cells.
+    assert len(rows) == 54
+    for row in rows:
+        assert Path(row.manifest_path).exists()
+        assert row.best_valid_objective is not None
+
+
+def test_3079_manifest_still_single_objective_backward_compatible() -> None:
+    """The issue #3079 manifest (base_config.objective only) still loads one objective."""
+    config, objectives, _samplers, _budgets, _seeds = load_package_b_manifest(
+        SHIPPED_MANIFEST, repo_root=REPO_ROOT
+    )
+    assert objectives == ("worst_case_snqi",)
+    assert config.objective == "worst_case_snqi"
+
+
+def test_manifest_with_duplicate_objectives_is_rejected(tmp_path: Path) -> None:
+    """A manifest declaring duplicate objectives must fail closed, not collapse a cell."""
+    source = yaml.safe_load(ISSUE_5326_MANIFEST.read_text(encoding="utf-8"))
+    duped = copy.deepcopy(source)
+    duped["objectives"] = ["worst_case_snqi", "worst_case_snqi"]
+    manifest_path = tmp_path / "dup_objectives.yaml"
+    manifest_path.write_text(yaml.safe_dump(duped), encoding="utf-8")
+    with pytest.raises(ValueError, match="must not contain duplicates"):
+        load_package_b_manifest(manifest_path, repo_root=REPO_ROOT)

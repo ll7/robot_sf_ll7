@@ -19,12 +19,15 @@ import pytest
 from robot_sf.benchmark.campaign_atlas import (
     AtlasConfig,
     AtlasParityError,
+    CampaignAtlasError,
     EnsembleResult,
     EpisodeInventoryRow,
     PredicateInterval,
     TrajectoryPoint,
     _align_trajectories,
     _compute_ensemble_geometry,
+    _path_normals,
+    _render_table_html,
     build_atlas_summary,
     build_campaign_atlas,
     check_atlas_parity,
@@ -93,6 +96,29 @@ def test_versioned_inventory_fixture_loads() -> None:
     rows = load_inventory(FIXTURE_PATH)
     assert len(rows) == 4
     assert {row.planner for row in rows} == {PLANNER_X, PLANNER_Y}
+
+
+def test_selection_manifest_rejects_malformed_entries(tmp_path: Path) -> None:
+    """Malformed selected entries fail closed instead of shrinking the exemplar set."""
+    from scripts.analysis.build_campaign_atlas_issue_5616 import load_selection_manifest
+
+    manifest = tmp_path / "selection.json"
+    manifest.write_text(
+        json.dumps({"selected": [{"episode_id": "ok"}, "not-a-selection"]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="malformed 'selected' entries"):
+        load_selection_manifest(manifest)
+
+
+def test_generation_command_records_cli_arguments() -> None:
+    """Catalog provenance records the actual CLI options used for a build."""
+    from scripts.analysis.build_campaign_atlas_issue_5616 import _generation_command
+
+    command = _generation_command(["--inventory", "inventory file.jsonl", "--render-html"])
+    assert command == (
+        "build_campaign_atlas_issue_5616.py --inventory 'inventory file.jsonl' --render-html"
+    )
 
 
 class TestAtlasEligibleCells:
@@ -176,6 +202,11 @@ class TestAtlasEligibleCells:
             for cell in summary.cells
             if cell.scenario_family == "missing_family" or cell.planner == "missing_planner"
         )
+
+    def test_empty_campaign_fails_closed(self) -> None:
+        """An unconfigured empty campaign cannot produce a blank successful atlas."""
+        with pytest.raises(CampaignAtlasError, match="at least one scenario family"):
+            build_atlas_summary([], config=AtlasConfig(campaign_id="empty"))
 
 
 class TestEnsembleContext:
@@ -279,6 +310,38 @@ class TestEnsembleContext:
         expected_y = np.interp(time_grid, [-5.0, 4.0], [0.0, 0.0])
         assert np.allclose(medoid_path[:, 1], expected_y)
 
+    def test_ensemble_geometry_marks_local_band_outlier(self) -> None:
+        """Outlier detection compares each episode against the band at each timestep."""
+        aligned = [
+            (
+                _row("base", PLANNER_X, FAMILY_A, 1, "success"),
+                [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0)],
+            ),
+            (
+                _row("global", PLANNER_X, FAMILY_A, 2, "success"),
+                [(0.0, 0.0, 0.0), (1.0, 0.0, 10.0), (2.0, 0.0, 0.0)],
+            ),
+            (
+                _row("local", PLANNER_X, FAMILY_A, 3, "success"),
+                [(0.0, 0.0, 3.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0)],
+            ),
+            (
+                _row("zero", PLANNER_X, FAMILY_A, 4, "success"),
+                [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0)],
+            ),
+        ]
+        _time_grid, _median, _band, _medoid, outliers, _medoid_path = _compute_ensemble_geometry(
+            aligned
+        )
+        assert {"global", "local"}.issubset(outliers)
+
+    def test_path_normals_are_perpendicular_to_diagonal_path(self) -> None:
+        """Quantile bands use unit normals rather than a fixed diagonal offset."""
+        path = np.column_stack((np.linspace(0.0, 1.0, 5), np.linspace(0.0, 1.0, 5)))
+        normals = _path_normals(path)
+        assert np.allclose(np.linalg.norm(normals, axis=1), 1.0)
+        assert np.allclose(normals[:, 0] + normals[:, 1], 0.0)
+
     def test_ensemble_pdf_output_is_pdf(self, tmp_path: Path) -> None:
         """A requested PDF is not an SVG payload with a PDF suffix."""
         rows = [
@@ -293,6 +356,26 @@ class TestEnsembleContext:
 
 class TestAtlasHtmlParity:
     """Parity check between HTML exploration atlas and static output."""
+
+    def test_fallback_html_escapes_inventory_values(self) -> None:
+        """Inventory values cannot inject markup into the fallback table."""
+        html = _render_table_html(
+            [
+                {
+                    "scenario_family": '<img src=x onerror="alert(1)">',
+                    "planner": "planner & one",
+                    "eligible": True,
+                    "n_total": 1,
+                    "outcome_counts": {"<script>": 1},
+                    "exemplar_episode_ids": ("episode<&",),
+                }
+            ]
+        )
+        assert "<img" not in html
+        assert "<script>" not in html
+        assert "&lt;img" in html
+        assert "planner &amp; one" in html
+        assert "episode&lt;&amp;" in html
 
     def test_atlas_html_parity_passes_on_matching_summary(self, tmp_path: Path) -> None:
         """When the HTML summary matches the static summary, parity passes."""
@@ -503,7 +586,7 @@ class TestAtlasManifestBinding:
         assert provenance["event_anchor"] == ANCHOR
         assert len(provenance["seed_inventory"]) == len(rows)
         assert provenance["event_detector_version"]
-        assert provenance["renderer_version"] == "matplotlib"
+        assert provenance["renderer_version"].startswith("matplotlib==")
         for artifact in catalog["artifacts"]:
             for out_ref in artifact["outputs"].values():
                 assert len(out_ref["sha256"]) == 64

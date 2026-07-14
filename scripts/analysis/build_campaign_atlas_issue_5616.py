@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 import tempfile
 from pathlib import Path
@@ -97,7 +98,20 @@ def load_selection_manifest(path: Path) -> tuple[list[str], str]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(payload, dict):
         selected = payload.get("selected", [])
-        episode_ids = [str(item["episode_id"]) for item in selected if isinstance(item, dict)]
+        if not isinstance(selected, list):
+            raise ValueError("selection manifest 'selected' must be a list")
+        malformed = [
+            item
+            for item in selected
+            if not isinstance(item, dict)
+            or not isinstance(item.get("episode_id"), str)
+            or not item["episode_id"].strip()
+        ]
+        if malformed:
+            raise ValueError(
+                f"selection manifest has {len(malformed)} malformed 'selected' entries"
+            )
+        episode_ids = [item["episode_id"] for item in selected]
         manifest_hash = str(payload.get("source_sha256", "") or _sha_text(path))
     else:
         episode_ids = [str(item) for item in payload]
@@ -114,7 +128,13 @@ def _sha_text(path: Path) -> str:
     return h.hexdigest()
 
 
-def _build(out_dir: Path, rows: list[EpisodeInventoryRow], args: argparse.Namespace) -> None:
+def _build(
+    out_dir: Path,
+    rows: list[EpisodeInventoryRow],
+    args: argparse.Namespace,
+    *,
+    command: str = "build_campaign_atlas_issue_5616.py",
+) -> None:
     """Run the atlas build into *out_dir*."""
     exemplar_ids: list[str] = []
     selection_hash = ""
@@ -138,7 +158,7 @@ def _build(out_dir: Path, rows: list[EpisodeInventoryRow], args: argparse.Namesp
         selection_manifest_hash=selection_hash,
         ensemble_anchor=args.ensemble_anchor,
         render_html=args.render_html,
-        command="build_campaign_atlas_issue_5616.py",
+        command=command,
         commit=args.commit or "unknown",
         source_inventory=Path(args.inventory),
     )
@@ -156,7 +176,12 @@ def _hash_tree(directory: Path) -> str:
     return h.hexdigest()
 
 
-def check_determinism(rows: list[EpisodeInventoryRow], args: argparse.Namespace) -> bool:
+def check_determinism(
+    rows: list[EpisodeInventoryRow],
+    args: argparse.Namespace,
+    *,
+    command: str = "build_campaign_atlas_issue_5616.py",
+) -> bool:
     """Rebuild into two temp dirs and assert hash-stable output.
 
     Returns:
@@ -165,8 +190,8 @@ def check_determinism(rows: list[EpisodeInventoryRow], args: argparse.Namespace)
     with tempfile.TemporaryDirectory() as first_tmp, tempfile.TemporaryDirectory() as second_tmp:
         first = Path(first_tmp) / "a"
         second = Path(second_tmp) / "b"
-        _build(first, rows, args)
-        _build(second, rows, args)
+        _build(first, rows, args, command=command)
+        _build(second, rows, args, command=command)
         return _hash_tree(first) == _hash_tree(second)
 
 
@@ -238,13 +263,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _generation_command(argv: list[str] | None) -> str:
+    """Return the shell-escaped invocation used to generate the catalog."""
+    command_args = sys.argv[1:] if argv is None else argv
+    return shlex.join(["build_campaign_atlas_issue_5616.py", *command_args])
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the campaign atlas CLI and return a shell-friendly exit code."""
     args = build_arg_parser().parse_args(argv)
+    command = _generation_command(argv)
     rows = load_inventory(Path(args.inventory))
 
     if args.check_determinism:
-        ok = check_determinism(rows, args)
+        ok = check_determinism(rows, args, command=command)
         print(f"determinism check: {'PASS' if ok else 'FAIL'}")
         return 0 if ok else 2
 
@@ -252,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
         print("--out-dir is required unless --check-determinism is given", file=sys.stderr)
         return 2
 
-    _build(Path(args.out_dir), rows, args)
+    _build(Path(args.out_dir), rows, args, command=command)
     print(f"campaign atlas written to {args.out_dir}")
     return 0
 

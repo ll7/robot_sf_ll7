@@ -31,6 +31,7 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
+from html import escape as html_escape
 from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -50,7 +51,7 @@ from robot_sf.common.optional_import import try_import
 
 CAMPAIGN_ATLAS_SCHEMA_VERSION = "campaign_atlas.v1"
 EVENT_DETECTOR_VERSION = EPISODE_EVENT_LEDGER_SCHEMA_VERSION
-RENDERER_VERSION = "matplotlib"
+RENDERER_VERSION = f"matplotlib=={matplotlib.__version__}"
 STYLE_VERSION = "publication_style.v1"
 
 # Colorblind-safe outcome palette (Wong 2011 inspired) with line-style redundancy.
@@ -307,6 +308,10 @@ def build_atlas_summary(
         if config.eligible_planners is not None
         else sorted({row.planner for row in rows})
     )
+    if not scenario_families or not planners:
+        raise CampaignAtlasError(
+            "campaign atlas requires at least one scenario family and one planner"
+        )
 
     cells: list[AtlasCellSummary] = []
     for scenario_family in scenario_families:
@@ -705,13 +710,37 @@ def _compute_ensemble_geometry(
             best_key = candidate_key
             medoid_id = row.episode_id
             medoid_index = i
-        if float(np.max(distances[i])) > float(np.max(band_radius)):
+        if bool(np.any(distances[i] > band_radius)):
             outlier_ids.add(row.episode_id)
     median_path = np.column_stack((median_x, median_y))
     if medoid_index is None:
         raise CampaignAtlasError("could not select an observed medoid trajectory")
     medoid_path = np.column_stack((xs[medoid_index], ys[medoid_index]))
     return time_grid, median_path, band_radius, medoid_id, outlier_ids, medoid_path
+
+
+def _path_normals(path: np.ndarray) -> np.ndarray:
+    """Return unit normals along a two-dimensional path.
+
+    A stationary median point has no uniquely defined tangent. In that case a
+    deterministic horizontal tangent fallback keeps the rendered band finite
+    without changing the distance radius.
+    """
+    path = np.asarray(path, dtype=float)
+    if path.ndim != 2 or path.shape[1] != 2 or path.shape[0] < 2:
+        raise CampaignAtlasError("path normals require at least two 2-D points")
+    tangent = np.gradient(path, axis=0)
+    tangent_norm = np.linalg.norm(tangent, axis=1)
+    unit_tangent = np.zeros_like(tangent)
+    valid = tangent_norm > np.finfo(float).eps
+    np.divide(
+        tangent,
+        tangent_norm[:, None],
+        out=unit_tangent,
+        where=valid[:, None],
+    )
+    unit_tangent[~valid] = np.array([1.0, 0.0])
+    return np.column_stack((-unit_tangent[:, 1], unit_tangent[:, 0]))
 
 
 def _draw_ensemble_figure(
@@ -736,8 +765,9 @@ def _draw_ensemble_figure(
             squeeze=True,
         )
         # Quantile band as a translucent tube around the median path.
-        outer = median_path + np.column_stack((band_radius, band_radius)) * np.array([1.0, 1.0])
-        lower = median_path - np.column_stack((band_radius, band_radius)) * np.array([1.0, 1.0])
+        normals = _path_normals(median_path)
+        outer = median_path + normals * band_radius[:, None]
+        lower = median_path - normals * band_radius[:, None]
         band_poly = np.vstack([outer, lower[::-1]])
         ax_map.add_patch(
             Polygon(band_poly, closed=True, facecolor="#56B4E9", alpha=0.18, edgecolor="none")
@@ -929,16 +959,17 @@ def _render_table_html(cells: Sequence[dict[str, Any]]) -> str:
     rows_html = []
     for cell in cells:
         outcomes = ", ".join(
-            f"{label}={count}" for label, count in sorted(cell["outcome_counts"].items())
+            f"{html_escape(str(label))}={html_escape(str(count))}"
+            for label, count in sorted(cell["outcome_counts"].items())
         )
         rows_html.append(
             "<tr>"
-            f"<td>{cell['scenario_family']}</td>"
-            f"<td>{cell['planner']}</td>"
-            f"<td>{'yes' if cell['eligible'] else 'no'}</td>"
-            f"<td>{cell['n_total']}</td>"
+            f"<td>{html_escape(str(cell['scenario_family']))}</td>"
+            f"<td>{html_escape(str(cell['planner']))}</td>"
+            f"<td>{html_escape('yes' if cell['eligible'] else 'no')}</td>"
+            f"<td>{html_escape(str(cell['n_total']))}</td>"
             f"<td>{outcomes}</td>"
-            f"<td>{', '.join(cell['exemplar_episode_ids'])}</td>"
+            f"<td>{', '.join(html_escape(str(item)) for item in cell['exemplar_episode_ids'])}</td>"
             "</tr>"
         )
     return (

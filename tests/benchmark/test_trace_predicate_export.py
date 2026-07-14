@@ -161,6 +161,17 @@ class TestBuildExport:
         with pytest.raises(TracePredicateExportError, match="scenario_id"):
             build_trace_predicate_export([record])
 
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        (("scenario_id", 0), ("algo", False), ("episode_id", {"id": "ep-001"})),
+    )
+    def test_malformed_episode_identity_fails_closed(self, field: str, value: Any) -> None:
+        """Required query identity must not be fabricated by stringifying bad values."""
+        record = _record_with_all_predicates()
+        record[field] = value
+        with pytest.raises(TracePredicateExportError, match="must be a non-empty string"):
+            build_trace_predicate_export([record])
+
     def test_malformed_predicate_record_fails_closed(self) -> None:
         """Malformed producer payloads must not be promoted as exported evidence."""
         record = _record_with_all_predicates()

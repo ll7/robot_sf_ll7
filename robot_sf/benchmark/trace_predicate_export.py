@@ -95,12 +95,16 @@ def _episode_metadata(record: Mapping[str, Any], *, run_id: str | None) -> dict[
     """Return the scenario/planner/seed/run metadata for one episode record."""
 
     def required_text(keys: tuple[str, ...], label: str) -> str:
+        saw_value = False
         for key in keys:
             value = record.get(key)
-            if isinstance(value, str):
-                value = value.strip()
-            if value not in (None, ""):
-                return str(value)
+            if value is None:
+                continue
+            saw_value = True
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        if saw_value:
+            raise TracePredicateExportError(f"episode field {label} must be a non-empty string")
         raise TracePredicateExportError(f"missing required episode field: {label}")
 
     seed = record.get("seed")

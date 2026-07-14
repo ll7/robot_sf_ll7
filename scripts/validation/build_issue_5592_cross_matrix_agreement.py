@@ -20,6 +20,7 @@ import argparse
 import csv
 import hashlib
 import json
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -60,6 +61,9 @@ REQUIRED_COLUMNS = [
     "agreement_status",
     "caveat",
 ]
+EXPECTED_RANKS = frozenset(range(1, len(STRUCTURAL_CLASS_ORDER) + 1))
+ROSTER_SIGNATURE_COLUMN = "roster_signature"
+RANKING_INPUT_COLUMNS = frozenset({"structural_class", "rank", ROSTER_SIGNATURE_COLUMN})
 
 
 class BuildError(ValueError):
@@ -86,24 +90,80 @@ def _public_path(path: Path) -> str:
         return path.name
 
 
-def _read_ranking_csv(path: Path) -> dict[str, int]:
+def _roster_signature(packet: Mapping[str, Any]) -> str:
+    """Return the deterministic signature of the preregistered planner roster."""
+    roster = packet.get("planner_roster")
+    if not isinstance(roster, dict):
+        raise BuildError("packet.planner_roster must be a mapping")
+    structural_classes = roster.get("structural_classes")
+    if not isinstance(structural_classes, dict):
+        raise BuildError("packet.planner_roster.structural_classes must be a mapping")
+    if set(structural_classes) != set(STRUCTURAL_CLASS_ORDER):
+        raise BuildError("packet planner roster structural classes mismatch")
+
+    canonical: dict[str, list[str]] = {}
+    planners: list[str] = []
+    for structural_class in STRUCTURAL_CLASS_ORDER:
+        class_planners = structural_classes.get(structural_class)
+        if not isinstance(class_planners, list) or not class_planners:
+            raise BuildError(f"planner roster for {structural_class!r} must be a non-empty list")
+        normalized = [str(planner).strip() for planner in class_planners]
+        if any(not planner for planner in normalized):
+            raise BuildError(f"planner roster for {structural_class!r} contains an empty planner")
+        canonical[structural_class] = normalized
+        planners.extend(normalized)
+    if len(planners) != len(set(planners)):
+        raise BuildError("packet planner roster contains duplicate planner keys")
+    serialized = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _read_ranking_csv(path: Path, *, expected_roster_signature: str) -> dict[str, int]:
     """Load a single-matrix structural-class ranking from a CSV.
 
-    The CSV must carry ``structural_class`` and ``rank`` columns. Returns a map
-    from structural class to integer rank.
+    The CSV must carry ``structural_class``, ``rank``, and the roster signature
+    generated from the pre-registration. Returns a complete map from structural
+    class to a unique integer rank in ``1..4``.
     """
     with path.open("r", encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle))
+        reader = csv.DictReader(handle)
+        fieldnames = set(reader.fieldnames or ())
+        missing_columns = RANKING_INPUT_COLUMNS - fieldnames
+        if missing_columns:
+            raise BuildError(
+                f"ranking input {path} missing required columns: {sorted(missing_columns)}"
+            )
+        rows = list(reader)
     ranking: dict[str, int] = {}
-    for row in rows:
+    for row_number, row in enumerate(rows, start=2):
+        roster_signature = (row.get(ROSTER_SIGNATURE_COLUMN) or "").strip()
+        if roster_signature != expected_roster_signature:
+            raise BuildError(
+                f"ranking input {path} row {row_number} has an incompatible planner roster"
+            )
         klass = (row.get("structural_class") or row.get("class") or "").strip()
         rank_raw = row.get("rank")
         if not klass or rank_raw is None or str(rank_raw).strip() == "":
-            continue
+            raise BuildError(f"ranking input {path} row {row_number} is missing class or rank")
+        if klass in ranking:
+            raise BuildError(f"duplicate structural class {klass!r} in {path}")
         try:
-            ranking[klass] = int(float(str(rank_raw).strip()))
+            rank = int(str(rank_raw).strip())
         except (TypeError, ValueError) as exc:
-            raise BuildError(f"invalid rank for {klass!r} in {path}: {rank_raw!r}") from exc
+            raise BuildError(f"invalid integer rank for {klass!r} in {path}: {rank_raw!r}") from exc
+        if rank <= 0:
+            raise BuildError(f"rank for {klass!r} in {path} must be positive")
+        ranking[klass] = rank
+    expected_classes = set(STRUCTURAL_CLASS_ORDER)
+    if set(ranking) != expected_classes:
+        missing = sorted(expected_classes - set(ranking))
+        extra = sorted(set(ranking) - expected_classes)
+        raise BuildError(
+            f"ranking input {path} must contain exactly the four structural classes; "
+            f"missing={missing}, extra={extra}"
+        )
+    if set(ranking.values()) != EXPECTED_RANKS:
+        raise BuildError(f"ranking input {path} must contain a unique rank permutation 1..4")
     return ranking
 
 
@@ -111,7 +171,7 @@ def _load_packet(packet_path: Path) -> dict[str, Any]:
     packet = _load_yaml(packet_path)
     if packet.get("schema_version") != SCHEMA_VERSION:
         raise BuildError("packet schema_version mismatch")
-    if int(packet.get("issue", 0)) != 5592:
+    if packet.get("issue") != 5592:
         raise BuildError("packet.issue must be 5592")
     if packet.get("status") != "pre_registered":
         raise BuildError("packet.status must be pre_registered")
@@ -127,8 +187,46 @@ def _validate_comparison_contract(packet: Mapping[str, Any]) -> None:
     required = comparison.get("required_columns")
     if not isinstance(required, list) or set(REQUIRED_COLUMNS) - set(required):
         raise BuildError("comparison required_columns mismatch")
+    if comparison.get("rank_unit") != "structural_class":
+        raise BuildError("comparison rank_unit must be structural_class")
+    if comparison.get("metric") != "constraints_first_structural_rank":
+        raise BuildError("comparison metric mismatch")
+    allowed_statuses = comparison.get("allowed_agreement_statuses")
+    if (
+        not isinstance(allowed_statuses, list)
+        or set(allowed_statuses) != ALLOWED_AGREEMENT_STATUSES
+    ):
+        raise BuildError("comparison allowed_agreement_statuses mismatch")
     if comparison.get("must_emit_disagreement_rows") is not True:
         raise BuildError("comparison must_emit_disagreement_rows must be true")
+
+
+def _git_head() -> str | None:
+    """Return the current full Git commit, or ``None`` outside a Git checkout."""
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        ).strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _source_commit(output_dir: Path) -> str:
+    """Resolve required source provenance from an explicit file or Git HEAD."""
+    commit_path = output_dir / "SOURCE_COMMIT"
+    try:
+        source_commit = (
+            commit_path.read_text(encoding="utf-8").strip() if commit_path.exists() else ""
+        )
+    except OSError as exc:
+        raise BuildError(f"cannot read source provenance file {commit_path}") from exc
+    source_commit = source_commit or (_git_head() or "")
+    if not source_commit or source_commit == "unknown":
+        raise BuildError("source commit provenance is required and could not be recorded")
+    return source_commit
 
 
 def _classify_agreement(
@@ -217,6 +315,10 @@ structural-class ordering is compared independently on the reference `classic_in
 matrix and on the candidate atomic-topology matrix, then reported side by side. The two
 matrices are never merged into one ranking.
 
+Each supplied ranking CSV must include `structural_class`, `rank`, and a
+`roster_signature` matching the preregistered 12-planner roster. Ranks must be a complete
+`1..4` permutation; malformed or incomparable inputs fail closed.
+
 `cross_matrix_agreement.csv` is the primary output. Each row carries the candidate
 (atomic-topology) rank, the reference (classic_interactions) rank, the rank delta, and an
 explicit agreement_status (`agreement`, `disagreement`, or a `blocked_*` status). Disagreement
@@ -240,12 +342,25 @@ def build_packet(
     """Build the issue #5592 cross-matrix agreement evidence packet."""
     packet = _load_packet(packet_path)
     _validate_comparison_contract(packet)
+    roster_signature = _roster_signature(packet)
 
-    reference_present = reference_ranking_path is not None and reference_ranking_path.exists()
-    candidate_present = candidate_ranking_path is not None and candidate_ranking_path.exists()
+    for ranking_path in (reference_ranking_path, candidate_ranking_path):
+        if ranking_path is not None and ranking_path.exists() and not ranking_path.is_file():
+            raise BuildError(f"ranking input is not a file: {ranking_path}")
 
-    reference_ranking = _read_ranking_csv(reference_ranking_path) if reference_present else None
-    candidate_ranking = _read_ranking_csv(candidate_ranking_path) if candidate_present else None
+    reference_present = reference_ranking_path is not None and reference_ranking_path.is_file()
+    candidate_present = candidate_ranking_path is not None and candidate_ranking_path.is_file()
+
+    reference_ranking = (
+        _read_ranking_csv(reference_ranking_path, expected_roster_signature=roster_signature)
+        if reference_present
+        else None
+    )
+    candidate_ranking = (
+        _read_ranking_csv(candidate_ranking_path, expected_roster_signature=roster_signature)
+        if candidate_present
+        else None
+    )
 
     rows = _build_rows(reference_ranking, candidate_ranking)
 
@@ -265,6 +380,7 @@ def build_packet(
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    source_commit = _source_commit(output_dir)
     _write_csv(output_dir / PRIMARY_OUTPUT, rows, REQUIRED_COLUMNS)
 
     agreement_statuses = {str(row["agreement_status"]) for row in rows}
@@ -279,11 +395,6 @@ def build_packet(
         # assert the generator is capable of emitting them by construction above.
         pass
 
-    source_commit = "unknown"
-    commit_path = output_dir / "SOURCE_COMMIT"
-    if commit_path.exists():
-        source_commit = commit_path.read_text(encoding="utf-8").strip()
-
     metadata = {
         "schema_version": REPORT_SCHEMA_VERSION,
         "status": status,
@@ -296,6 +407,7 @@ def build_packet(
         "agreement_statuses": sorted(agreement_statuses),
         "disagreement_row_count": len(disagreement_rows),
         "source_commit": source_commit,
+        "roster_signature": roster_signature,
         "claim_boundary": "Cross-matrix transfer evidence for one additional geometry "
         "distribution only; not a general-purpose generalization guarantee.",
         "next_action": next_action,

@@ -9,6 +9,7 @@ from scripts.validation import build_issue_5592_cross_matrix_agreement as builde
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKET = REPO_ROOT / "configs/benchmarks/issue_5592_cross_matrix_preregistration.yaml"
+ROSTER_SIGNATURE = builder._roster_signature(builder._load_packet(PACKET))
 PRIMARY_OUTPUT = "cross_matrix_agreement.csv"
 REQUIRED_COLUMNS = [
     "matrix",
@@ -20,18 +21,18 @@ REQUIRED_COLUMNS = [
     "caveat",
 ]
 
-REFERENCE_RANKING = """structural_class,rank
-constraint_first_hybrid,1
-learned_policy,2
-predictive,3
-baseline_reactive,4
+REFERENCE_RANKING = f"""structural_class,rank,roster_signature
+constraint_first_hybrid,1,{ROSTER_SIGNATURE}
+learned_policy,2,{ROSTER_SIGNATURE}
+predictive,3,{ROSTER_SIGNATURE}
+baseline_reactive,4,{ROSTER_SIGNATURE}
 """
 
-CANDIDATE_RANKING = """structural_class,rank
-constraint_first_hybrid,1
-learned_policy,3
-predictive,2
-baseline_reactive,4
+CANDIDATE_RANKING = f"""structural_class,rank,roster_signature
+constraint_first_hybrid,1,{ROSTER_SIGNATURE}
+learned_policy,3,{ROSTER_SIGNATURE}
+predictive,2,{ROSTER_SIGNATURE}
+baseline_reactive,4,{ROSTER_SIGNATURE}
 """
 
 
@@ -100,6 +101,48 @@ def test_ready_emits_real_agreement_and_disagreement(tmp_path: Path) -> None:
     assert by_class["constraint_first_hybrid"][5] == "agreement"
 
 
+def test_rejects_incomplete_or_invalid_ranking(tmp_path: Path) -> None:
+    """A present file must contain a complete, unique structural ranking."""
+    incomplete = _write_ranking(
+        tmp_path,
+        "incomplete.csv",
+        f"structural_class,rank,roster_signature\nconstraint_first_hybrid,1,{ROSTER_SIGNATURE}\n",
+    )
+    try:
+        builder.build_packet(
+            packet_path=PACKET,
+            reference_ranking_path=incomplete,
+            candidate_ranking_path=incomplete,
+            output_dir=tmp_path / "out",
+            generated_at="2026-07-14T00:00:00+00:00",
+        )
+    except builder.BuildError as exc:
+        assert "exactly the four structural classes" in str(exc)
+    else:
+        raise AssertionError("incomplete ranking must fail closed")
+
+
+def test_rejects_incomparable_planner_roster(tmp_path: Path) -> None:
+    """Rankings from a different preregistered roster cannot be compared."""
+    incompatible = _write_ranking(
+        tmp_path,
+        "incompatible.csv",
+        CANDIDATE_RANKING.replace(ROSTER_SIGNATURE, "0" * 64),
+    )
+    try:
+        builder.build_packet(
+            packet_path=PACKET,
+            reference_ranking_path=incompatible,
+            candidate_ranking_path=incompatible,
+            output_dir=tmp_path / "out",
+            generated_at="2026-07-14T00:00:00+00:00",
+        )
+    except builder.BuildError as exc:
+        assert "incompatible planner roster" in str(exc)
+    else:
+        raise AssertionError("incomparable roster must fail closed")
+
+
 def test_artifact_set_is_complete_and_checksummed(tmp_path: Path) -> None:
     """The durable evidence contract requires README, metadata, csv, and SHA256SUMS."""
     out = tmp_path / "out"
@@ -116,4 +159,7 @@ def test_artifact_set_is_complete_and_checksummed(tmp_path: Path) -> None:
     # Every durable artifact except SHA256SUMS is represented in the checksum file.
     assert PRIMARY_OUTPUT in sums
     assert "metadata.json" in sums
-    assert json.loads((out / "metadata.json").read_text(encoding="utf-8"))["issue"] == 5592
+    metadata = json.loads((out / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["issue"] == 5592
+    assert metadata["source_commit"] not in ("", "unknown")
+    assert metadata["roster_signature"] == ROSTER_SIGNATURE

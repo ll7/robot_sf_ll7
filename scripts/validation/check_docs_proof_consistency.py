@@ -59,6 +59,23 @@ _OUTPUT_PATH_RE = re.compile(
     r"(?<!\w)(?:output/[^\s`'\"<>)\]}]+|/home/[^\s`'\"<>)\]}]*/output/[^\s`'\"<>)\]}]+|/Users/[^\s`'\"<>)\]}]*/output/[^\s`'\"<>)\]}]+)"
 )
 _TEXT_EVIDENCE_SUFFIXES = {".md", ".json", ".yaml", ".yml", ".txt"}
+# Declarative contract output fields name a *future* runner output location
+# (a runtime contract spec), not a durable artifact pointer.  Evidence files
+# that carry these fields are not claiming the ignored output/ file is durable,
+# so they must be exempt from the ignored-output-pointer rejection.  See issue
+# #5627 — the fidelity fixed-scope plan embeds
+# ``post_run_contract_specs[].output_path`` for a not-yet-run campaign.
+_CONTRACT_OUTPUT_KEYS = frozenset(
+    {
+        "output_path",
+        "output_dir",
+        "expected_output_path",
+        "declarative_output_path",
+        "contract_output_path",
+        "report_path",
+        "run_plan_output_path",
+    }
+)
 _VALIDATION_SKIP_RE = re.compile(r"\bno validation commands were run\b", re.IGNORECASE)
 _COMMAND_HINT_RE = re.compile(
     r"(`[^`\n]*(?:uv run|pytest|ruff|scripts/dev/|python )[^`\n]*`|```(?:bash|sh)?[\s\S]*?(?:uv run|pytest|ruff|scripts/dev/|python )[\s\S]*?```)",
@@ -284,6 +301,46 @@ def _context_index_link_diagnostics(
     return diagnostics
 
 
+def _redact_contract_output_paths(node: object) -> None:
+    """Recursively blank string values of declarative contract output keys.
+
+    Walks ``dict``/``list`` nodes and clears any string value whose key is in
+    :data:`_CONTRACT_OUTPUT_KEYS`, so downstream regex scans see only real
+    artifact pointers, not future runner output contract locations.
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if isinstance(key, str) and key in _CONTRACT_OUTPUT_KEYS and isinstance(value, str):
+                node[key] = ""
+            elif isinstance(value, (dict, list)):
+                _redact_contract_output_paths(value)
+    elif isinstance(node, list):
+        for item in node:
+            if isinstance(item, (dict, list)):
+                _redact_contract_output_paths(item)
+
+
+def _json_without_contract_output_paths(text: str) -> str:
+    """Return JSON text with declarative contract output fields redacted.
+
+    Evidence files may embed a runner's post-run contract spec that names a
+    *future* output location (for example ``post_run_contract_specs[].output_path``
+    pointing at ``output/fidelity_sensitivity/<campaign>/rank_identifiability.json``).
+    That value is a runtime contract, not a durable artifact pointer, so it must
+    not trip the ignored-output rejection (issue #5627).  We redact the string
+    values of known contract output keys so the regex sees only real artifact
+    pointers.  Non-JSON or unparseable input is returned unchanged.
+    """
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        return text
+    if not isinstance(data, dict):
+        return text
+    _redact_contract_output_paths(data)
+    return json.dumps(data)
+
+
 def _evidence_path_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     """Flag durable-evidence files that contain local absolute paths or output pointers."""
     diagnostics: list[Diagnostic] = []
@@ -291,6 +348,8 @@ def _evidence_path_diagnostics(path: Path, text: str) -> list[Diagnostic]:
         return diagnostics
 
     scan_text = _strip_fenced_code_blocks(text) if path.suffix == ".md" else text
+    if path.suffix == ".json":
+        scan_text = _json_without_contract_output_paths(scan_text)
 
     if _ABSOLUTE_LOCAL_PATH_RE.search(scan_text):
         diagnostics.append(
@@ -438,6 +497,8 @@ def _catalog_entry_evidence_diagnostics(
     except UnicodeDecodeError:
         return []
     scan_text = _strip_fenced_code_blocks(text) if path.suffix == ".md" else text
+    if path.suffix == ".json":
+        scan_text = _json_without_contract_output_paths(scan_text)
     diagnostics: list[Diagnostic] = []
     if _OUTPUT_PATH_RE.search(scan_text):
         diagnostics.append(

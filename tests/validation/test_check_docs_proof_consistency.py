@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 from pathlib import Path
 
@@ -848,6 +849,139 @@ entries:
     )
 
     assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_catalog_evidence_declarative_contract_output_path_is_allowed(tmp_path: Path) -> None:
+    """Declarative contract output fields must not trip the ignored-output rejection.
+
+    Regression for issue #5627: a fidelity fixed-scope run plan embeds
+    ``post_run_contract_specs[].output_path`` naming a *future* runner output
+    location. That value is a runtime contract spec, not a durable artifact
+    pointer, so it must not be flagged as ignored-output evidence.
+    """
+    repo_root = tmp_path
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+    evidence = repo_root / "docs/context/evidence/fixed_scope_plan.json"
+    evidence.write_text(
+        json.dumps(
+            {
+                "issue": 5034,
+                "post_run_contract_specs": [
+                    {
+                        "id": "runtime_rank_identifiability_recheck",
+                        "output_path": (
+                            "output/fidelity_sensitivity/<campaign>/rank_identifiability.json"
+                        ),
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        """
+version: 1
+entries:
+  - path: docs/context/evidence/fixed_scope_plan.json
+    status: evidence
+    freshness: evidence
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+    )
+
+    assert diagnostics == [], diagnostics
+
+
+def test_catalog_evidence_real_output_pointer_still_rejected_with_contract_field(
+    tmp_path: Path,
+) -> None:
+    """Real artifact pointers are still flagged even when a contract field coexists.
+
+    Regression for issue #5627: the contract-field exemption must not suppress
+    genuine ignored-output evidence in the same file.
+    """
+    repo_root = tmp_path
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+    evidence = repo_root / "docs/context/evidence/mixed_plan.json"
+    evidence.write_text(
+        json.dumps(
+            {
+                "post_run_contract_specs": [
+                    {
+                        "output_path": (
+                            "output/fidelity_sensitivity/<campaign>/rank_identifiability.json"
+                        )
+                    }
+                ],
+                "artifact_pointer": "output/local/real_run.json",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        """
+version: 1
+entries:
+  - path: docs/context/evidence/mixed_plan.json
+    status: evidence
+    freshness: evidence
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+    )
+
+    assert any("ignored output/ artifacts" in d.message for d in diagnostics), diagnostics
+
+
+def test_evidence_file_declarative_contract_output_path_is_allowed(tmp_path: Path) -> None:
+    """Standalone evidence files with a declarative contract output field pass.
+
+    Mirrors the catalog-evidence exemption for the diff-scoped evidence-file
+    check (issue #5627).
+    """
+    repo_root = tmp_path
+    (repo_root / "docs/context/evidence").mkdir(parents=True)
+    (repo_root / "docs/context/README.md").write_text(
+        "# Context Notes Workflow\n", encoding="utf-8"
+    )
+    evidence = repo_root / "docs/context/evidence/fixed_scope_plan.json"
+    evidence.write_text(
+        json.dumps(
+            {
+                "post_run_contract_specs": [
+                    {
+                        "output_path": (
+                            "output/fidelity_sensitivity/<campaign>/rank_identifiability.json"
+                        )
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("docs/context/evidence/fixed_scope_plan.json"))],
+        repo_root=repo_root,
+    )
+
+    assert diagnostics == [], diagnostics
 
 
 def test_context_catalog_accepts_explicit_legacy_dirty_evidence(tmp_path: Path) -> None:

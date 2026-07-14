@@ -25,6 +25,15 @@ Expected Output:
 Limitations:
     - The robot/goal are overlaid as a schematic ego agent; only the pedestrians
       are advanced by pysocialforce. No HUD/title text is baked into the figure.
+
+Figure-quality note:
+    - The legend's "Velocity" swatch is a small FancyArrow proxy (via a custom
+      HandlerPatch) so it carries the same arrowhead as the velocity arrows drawn
+      on the pedestrians, instead of a plain line.
+    - The dashed green robot-to-goal vector has its own legend entry.
+    - The plot keeps metric axes (x/y in metres) and drops the separate scale
+      bar, since the axes already make the spatial scale explicit and the two
+      were redundant.
 """
 
 from __future__ import annotations
@@ -33,6 +42,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.legend_handler import HandlerPatch
 from matplotlib.patches import Circle, FancyArrow
 from pysocialforce import Simulator
 
@@ -101,19 +111,37 @@ def add_velocity_quiver(ax, positions: np.ndarray, velocities: np.ndarray) -> No
         )
 
 
-def add_scale_bar(ax, x0: float, y0: float, length_m: float = 2.0) -> None:
-    """Draw a horizontal scale bar of ``length_m`` metres with a label."""
-    ax.plot([x0, x0 + length_m], [y0, y0], color="black", lw=2.5, solid_capstyle="butt", zorder=6)
-    for xt in (x0, x0 + length_m):
-        ax.plot([xt, xt], [y0 - 0.12, y0 + 0.12], color="black", lw=2.5, zorder=6)
-    ax.text(
-        x0 + length_m / 2,
-        y0 + 0.28,
-        f"{length_m:.0f} m",
-        ha="center",
-        va="bottom",
-        fontsize=9,
-    )
+class _FancyArrowLegendHandler(HandlerPatch):
+    """Draw a small FancyArrow proxy for legend entries.
+
+    Used so the "Velocity" legend swatch carries the same arrowhead as the
+    velocity arrows drawn on the pedestrians, instead of a plain line segment.
+    """
+
+    def create_artists(
+        self,
+        legend,
+        orig_handle,
+        xdescent,
+        ydescent,
+        width,
+        height,
+        fontsize,
+        trans,
+    ):
+        arrow = FancyArrow(
+            -xdescent,
+            -ydescent + 0.5 * height,
+            width,
+            0,
+            width=0.10 * height,
+            head_width=0.55 * height,
+            head_length=0.4 * width,
+            length_includes_head=True,
+            color=orig_handle.get_facecolor(),
+        )
+        arrow.set_transform(trans)
+        return [arrow]
 
 
 def main() -> None:
@@ -197,9 +225,16 @@ def main() -> None:
         ),
     )
 
-    add_scale_bar(ax, x0=0.6, y0=0.3, length_m=2.0)
+    # Scale bar intentionally omitted: the metric axes (x/y in metres) already
+    # make the spatial scale explicit, so a separate scale bar is redundant.
 
     # Compact legend identifying the agent classes.
+    velocity_proxy = FancyArrow(
+        0, 0, 1, 0, width=0.01, facecolor="black", edgecolor="none", label="Velocity (0.7 s)"
+    )
+    goal_vector_handle = plt.Line2D(
+        [], [], ls="--", color=GOAL_COLOR, lw=1.2, label="Robot goal vector"
+    )
     handles = [
         plt.Line2D(
             [],
@@ -215,10 +250,17 @@ def main() -> None:
         plt.Line2D(
             [], [], marker="*", ls="", mfc=GOAL_COLOR, mec=GOAL_COLOR, ms=12, label="Robot goal"
         ),
-        plt.Line2D([], [], color="black", lw=2, label="Velocity (0.7 s)"),
+        goal_vector_handle,
+        velocity_proxy,
         plt.Line2D([], [], color=OBSTACLE_COLOR, lw=5, label="Wall / obstacle"),
     ]
-    ax.legend(handles=handles, loc="upper left", framealpha=0.9, borderaxespad=0.4)
+    ax.legend(
+        handles=handles,
+        loc="upper left",
+        framealpha=0.9,
+        borderaxespad=0.4,
+        handler_map={FancyArrow: _FancyArrowLegendHandler()},
+    )
 
     ax.set_xlabel("x [m]")
     ax.set_ylabel("y [m]")

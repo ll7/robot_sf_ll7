@@ -1,0 +1,35 @@
+schema_version: mean_matched_heterogeneity_harness.config.v1
+issue: 5504
+claim_boundary: harness_only_no_ablation_result
+trace_metric_keys:
+  - clearance_m
+  - near_field_exposure_s
+planners:
+  - key: goal
+    algo: goal
+seeds:
+  - 101
+# Response-law fraction and paired-arm are the only harness treatment axes.
+response_law_fractions:
+  - 0.0
+scenario_matrix: configs/scenarios/sets/issue_5504_mean_matched_two_geometry_smoke.yaml
+# Every matrix cell supplies only map_file + ped_density. This fixed derivation
+# block makes the population mapping explicit and reproducible.
+scenario_matrix_derivation:
+  population_size: 4
+  archetype_seed: 3574
+  response_law_seed: 3574
+  composition:
+    cautious: 0.25
+    standard: 0.5
+    hurried: 0.25
+  archetypes:
+    cautious:
+      desired_speed_factor: 0.7
+      radius_m: 0.35
+    standard:
+      desired_speed_factor: 1.0
+      radius_m: 0.3
+    hurried:
+      desired_speed_factor: 1.4
+      radius_m: 0.25

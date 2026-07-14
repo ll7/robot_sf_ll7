@@ -244,20 +244,26 @@ def test_ready_queue_skills_use_issue_thread_rest_fallback() -> None:
 def test_ready_queue_skills_reject_stale_evidence_after_an_exact_merged_fix() -> None:
     """Ready-queue admission must distinguish an exact merged fix from loose similarity.
 
-    Issue #5172: #5145 was auto-admitted from a pre-fix `PosixPath` serialization failure even
-    though PR #4958 had already replaced the failing call, restored the subprocess-boundary
-    contract, and added regression proof. The admission-capable skill surfaces therefore need all
-    three anchors before they skip work: the failure signature, named symbol, and failing file/line
-    checked against current main and a merged PR.
+    Issue #5172 / #5541: #5145 was auto-admitted from a pre-fix `PosixPath` serialization failure
+    even though PR #4958 had already replaced the failing call; and #5480 was dispatched after PR
+    #5486 merged under #5482 (not #5480), so an issue-number-only merged-PR search missed the exact
+    covering fix. The admission-capable skill surfaces therefore need to revalidate by named symbol,
+    failing test, and error signature against current main, and map merge commits back to the
+    covering PR through the commit-to-pulls API so a fix filed under a different issue number is
+    still found.
     """
 
     required_fragments = (
         "Exact merged-fix stale-evidence guard",
         "recently merged PR titles and bodies",
+        "commit-to-pulls API",
+        "issue-number references alone",
         "failure signature, named symbol, and failing file/line",
         "`origin/main` history and code",
         "covered_by_pr",
         "#5145 / PR #4958",
+        "#5480 / PR #5486",
+        "test_run_batch_sequential_worker_failure_logs_warning",
     )
     for skill_name in MERGED_FIX_GUARD_SKILLS:
         skill_path = SKILL_DIR / skill_name / "SKILL.md"

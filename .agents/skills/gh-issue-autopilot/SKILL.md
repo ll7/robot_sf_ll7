@@ -56,14 +56,26 @@ unless the user explicitly chooses a stacked-PR route.
 
 ### Exact merged-fix stale-evidence guard
 
-Before auto-admitting a ready candidate, search recently merged PR titles and bodies, then verify
-the candidate's failure signature, named symbol, and failing file/line against current
-`origin/main` history and code. Classify the issue as `covered_by_pr` and stop before claim or
-branch only when an exact merged fix implements the stated boundary and its regression proof covers
-the reported failure. Record the covering PR rather than treating a loose keyword, a change in the
-same file, or historical failure output alone as duplicate evidence. The #5145 / PR #4958
-`PosixPath` serialization regression is the required fixture: it was stale because current main
-already replaced `json.dumps(asdict(arm_params))` with the tested subprocess-boundary serializer.
+Before auto-admitting a ready candidate, revalidate it against current `origin/main` history using
+the issue's named symbol, failing test, and error signature — not issue-number references alone.
+Search recently merged PR titles and bodies, and when a fix is named only by issue number, map its
+merge commits back to the covering PR through the commit-to-pulls API so a fix filed under a
+different issue number is still found. Then verify the candidate's failure signature, named symbol,
+and failing file/line against current `origin/main` history and code. Classify the issue as
+`covered_by_pr` and stop before claim or branch only when an exact merged fix implements the stated
+boundary and its regression proof covers the reported failure. Record the covering PR rather than
+treating a loose keyword, a change in the same file, or historical failure output alone as duplicate
+evidence.
+
+Two regression fixtures are required:
+- #5145 / PR #4958 `PosixPath` serialization: stale because current main already replaced
+  `json.dumps(asdict(arm_params))` with the tested subprocess-boundary serializer.
+- #5480 / PR #5486 `_run_batch_sequential` 3-tuple return: #5480 was dispatched after PR #5486
+  merged under #5482 (not #5480), so an issue-number-only merged-PR search missed it; the covering
+  PR is found only by mapping the named failing test
+  `test_run_batch_sequential_worker_failure_logs_warning` and its
+  `too many values to unpack (expected 2)` signature to current `origin/main`, and the expected
+  outcome is `covered/stale` with PR #5486 linked and no implementation worker admitted.
 
 Delegated queue-scout output is only route evidence until verified by the main agent in the target
 repository. Before using a scout recommendation to select, claim, or branch for an issue, run:

@@ -362,6 +362,10 @@ def _build_provenance(run_dir: Path) -> dict[str, Any]:  # noqa: C901
                     for key in ("remote", "branch", "commit")
                     if repo.get(key) is not None
                 }
+            for field in ("commit_reconciliation", "goal_timeout_boundary"):
+                value = run_meta_payload.get(field)
+                if isinstance(value, dict):
+                    provenance[field] = value
             matrix_path = run_meta_payload.get("matrix_path")
             if isinstance(matrix_path, str) and matrix_path:
                 matrix_candidate = Path(matrix_path)
@@ -1119,7 +1123,9 @@ def export_publication_bundle(  # noqa: PLR0913
 
     entries = sorted(entries, key=lambda entry: entry.path)
     checksums_path = bundle_dir / "checksums.sha256"
-    checksums_payload = "".join(f"{entry.sha256}  {entry.path}\n" for entry in entries)
+    # The checksum manifest lives at the bundle root. Keep every target
+    # root-relative so ``sha256sum -c checksums.sha256`` works from that root.
+    checksums_payload = "".join(f"{entry.sha256}  payload/{entry.path}\n" for entry in entries)
     checksums_path.write_text(checksums_payload, encoding="utf-8")
 
     manifest_payload = {

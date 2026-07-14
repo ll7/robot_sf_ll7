@@ -1,15 +1,21 @@
 """Unit tests for scripts/ci/pr_contract_check.py."""
 
+# evidence-writer-exempt: these tests intentionally write temporary evidence-path fixtures,
+# including malformed files, to exercise the PR contract and writer-guard behavior.
+
 from __future__ import annotations
 
 import json
+import re
 import subprocess
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from scripts.ci import pr_contract_check
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_find_closed_issues() -> None:
@@ -392,3 +398,27 @@ def test_regression_last_20_merged_prs() -> None:
             title, body, changed_files, "ll7/robot_sf_ll7", "origin/main", None
         )
         assert not blockers, f"PR #{number} ('{title}') triggered false blockers: {blockers}"
+
+
+class TestWorkflowFetchFallback:
+    """Validate the PR contract-check workflow tolerates fetch failure.
+
+    See issue #5558: the git fetch step must fall back gracefully instead of
+    hard-stopping the entire contract check job.
+    """
+
+    def test_workflow_contains_fetch_fallback(self) -> None:
+        """The workflow must include a fallback for the git fetch step."""
+        workflow_path = ROOT / ".github" / "workflows" / "pr-contract-check.yml"
+        content = workflow_path.read_text(encoding="utf-8")
+
+        # The fetch step must include a fallback pattern: `git fetch ... || echo`
+        # that prevents the job from stopping on fetch failure.
+        fallback_pattern = re.compile(r"git fetch.*\|\|.*echo.*::warning::", re.DOTALL)
+        match = fallback_pattern.search(content)
+        assert match is not None, (
+            "The 'Fetch base ref' step in pr-contract-check.yml must tolerate "
+            "fetch failure with a fallback pattern (git fetch ... || echo). "
+            "Without this, a network error or deleted base branch hard-stops the "
+            "entire contract check job. See issue #5558."
+        )

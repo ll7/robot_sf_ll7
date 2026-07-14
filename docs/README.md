@@ -232,7 +232,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue #750 Paper Results Handoff](./context/issue_750_paper_results_handoff.md)** - Deterministic paper-facing JSON/CSV handoff contract for frozen benchmark bundles with CI metadata and provenance fields
 * **[Benchmark Release 0.0.2 Execution Log](./context/benchmark_release_0_0_2_2026-04-13.md)** - All-planners release manifest/config decisions, tmux execution path, assumptions, and follow-up publish steps
 * **[Benchmark Release 0.0.2 Publication Snapshot](./experiments/publication/20260414_benchmark_release_0_0_2/summary.md)** - Durable scoped seven-planner release pointer with DOI, archive checksum, embedded manifest/checksum/SNQI paths, and fresh-checkout recovery command
-* **[Benchmark Release 0.0.2 Reproduction Note](./benchmark_release_0_0_2_reproduction.md)** - Dedicated copy-paste procedure for reproducing release 0.0.2 results from a fresh clone of main using the downloaded release archive and running the regeneration parity test
+* **[Benchmark Release 0.0.2 Reproduction Note](./benchmark_release_0_0_2_reproduction.md)** - Dedicated copy-paste procedure using the immutable 0.0.2 release archive with the minimum supported 0.0.3 or current main reproduction tooling
 * **[Issue #1062 Paper Evidence Archive Pointer](./context/issue_1062_paper_evidence_archive.md)** - Paper evidence archive recovery note for the scoped `0.0.2` bundle without committing raw benchmark outputs
 
 * **[Issue #435 Map Coverage Flow](./context/issue_435_map_coverage_flow.md)** - Parent flow state for map coverage, SocNavBench import, and map-quality child issues

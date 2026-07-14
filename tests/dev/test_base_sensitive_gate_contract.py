@@ -203,8 +203,12 @@ module.TestOptionalImportGuardInventory().test_no_new_unblessed_spelling_and_no_
         Creates a new Python file with an unblessed guard, verifies the
         base_sensitive subset catches it, then cleans up.
         """
-        # Create a test file with a new optional-import guard
-        test_file = REPO_ROOT / "robot_sf" / "_test_gate_spelling_check.py"
+        # Create a test file with a new optional-import guard.
+        # The file name starts with "test_" so it matches the coverage omit
+        # glob ("*/test_*") in pyproject.toml and is not tracked by coverage;
+        # this avoids the "Couldn't parse" CoverageWarning emitted when the
+        # file is created and removed while xdist reports coverage. See #5673.
+        test_file = REPO_ROOT / "robot_sf" / "test_gate_spelling_check_dynamic.py"
         guard_code = '"""Module to test gate detection of new import guards."""\n\n'
         guard_code += "from __future__ import annotations\n\n"
         guard_code += "try:\n"

@@ -23,6 +23,9 @@ keeping the established `DummyVecEnv`, `SubprocVecEnv`, and scalar LiDAR paths u
   dispatch. The coordinator selects it only for the explicit `threaded_lidar_batch` mode.
 - The compiled LiDAR raycast and postprocessing entry points release the Python global interpreter
   lock while executing, so independent scalar threaded scans can make progress concurrently.
+- Plain `threaded` steps select an output-identical social-force dispatcher that releases the Python
+  global interpreter lock. The selection is scoped to each worker step; default PySocialForce calls
+  and the separately coordinated `threaded_lidar_batch` mode retain the established dispatcher.
 - A one-environment LiDAR batch calls the existing `raycast_obstacles` kernel directly, preserving
   its output bit for bit.
 

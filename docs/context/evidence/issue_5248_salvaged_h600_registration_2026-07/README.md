@@ -1,39 +1,58 @@
-<!-- AI-GENERATED (robot_sf#5248, 2026-07-11) - NEEDS-REVIEW -->
+<!-- AI-GENERATED (robot_sf#5248, 2026-07-14) - NEEDS-REVIEW -->
 # Salvaged h600 harvest registration
 
-Evidence status: `diagnostic-only`; registration is
-`blocked_campaign_registration` because the declared compact campaign summary and episode-row
-inputs were unavailable in this execution environment.
+Evidence status: `diagnostic-only`; registration is `blocked_campaign_registration`.
 
-This packet records the fail-closed receipt for the salvaged trace-capable h600 rerun associated
-with job 13334. The checker expected 6,480 episodes and a completed campaign execution status, but
-it could not read either `reports/campaign_summary.json` or `reports/seed_episode_rows.csv` from the
-declared harvest root. It therefore did not inspect trace-label coverage or authorize the issue
-#4206 mechanism cross-cut.
+This packet replaces the placeholder blocked receipt from #5277. That earlier receipt was blocked
+only because the verified job-13334 harvest was absent from the execution host. This slice runs the
+same fail-closed checker (#5256) on `imech156-u`, where the salvaged harvest is present and
+verified, and preserves the real receipt.
 
-The job was salvaged after the exit-code conflation fixed by #5240. That provenance does not
-override the missing-input blockers and does not promote this packet to benchmark, planner,
-paper, or dissertation evidence.
+## What the checker actually observed
+
+The campaign source artifacts are present and structurally valid:
+
+- `reports/campaign_summary.json` read; `campaign.total_episodes == 6480` and
+  `campaign.campaign_execution_status == "completed"`.
+- `reports/seed_episode_rows.csv` read; exactly 6,480 data rows.
+- Both source files are recorded with SHA-256 sums in `registration.json`.
+
+The job was salvaged after the exit-code conflation fixed by #5240; the completed 6,480-episode
+result confirms the FAILED mislabel was spurious. That provenance does **not** promote this packet
+to benchmark, planner, paper, or dissertation evidence.
+
+## Why registration stays blocked
+
+The blocker is now the real one, not a missing-input artifact:
+
+- All 6,480 episode rows carry `mechanism_label == "unknown"`,
+  `mechanism_confidence == "unknown"`, `mechanism_evidence_mode == "unknown"`, and an empty
+  `mechanism_evidence_uri`.
+- Trace-verified labeled fraction is `0.000`, below the preregistered minimum `0.500`.
+- This matches the root cause PR #4341 proved for the predecessor runs (jobs 13268 / 13273): the
+  episode rows predate the trace-capable exporter (#4301), so the campaign completed but never
+  captured trace-verified failure-mechanism labels. The preregistration contract's
+  `all_not_derivable_output_is_success: false` clause requires this to fail closed.
 
 ## Reproduction
 
 ```bash
 uv run python scripts/validation/check_issue_5248_salvaged_trace_rerun.py \
-  --campaign-root output/issue4206-13334-harvest \
+  --campaign-root /home/luttkule/git/robot_sf_ll7/output/issue4206-13334-harvest/issue4206_trace_capable_h600_rerun_20260704 \
   --job-id 13334 \
   --expected-total-episodes 6480 \
   --preregistration-config \
     configs/benchmarks/issue_4206_trace_capable_h600_rerun_preregistration.yaml \
   --output-dir docs/context/evidence/issue_5248_salvaged_h600_registration_2026-07 \
-  --generated-at 2026-07-11T05:16:28Z
+  --generated-at 2026-07-14T175754Z
 ```
 
-Expected result for this packet: exit code `2` and status
-`blocked_campaign_registration`.
+Expected result: exit code `2` and status `blocked_campaign_registration` (now from the trace-label
+floor, not from missing inputs).
 
 ## Next action
 
-Run the same checker where the verified job-13334 harvest is available. Replace this blocked
-receipt only after the checker observes the campaign summary, all 6,480 episode rows, completed
-execution status, and the preregistered trace-label coverage. Do not copy raw campaign outputs into
-Git.
+Issue #4206's mechanism cross-cut cannot run against this job: its rows lack trace-verified labels.
+That gap is its own instrumentation issue (trace capture #4301 was not enabled when job 13334 ran).
+Do not substitute geometry buckets for mechanism labels (preregistration forbids it). The conditional
+#4206 cross-cut remains blocked_pending_trace_verified_labels.

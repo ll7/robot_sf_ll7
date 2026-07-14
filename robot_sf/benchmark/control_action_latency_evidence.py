@@ -61,6 +61,8 @@ from robot_sf.benchmark.control_action_latency_preflight import (
 )
 from robot_sf.benchmark.identity.hash_utils import sha256_file
 from robot_sf.errors import RobotSfError
+from robot_sf.evidence.distance_convention import DistanceConvention
+from robot_sf.evidence.writers import review_marker, review_marker_comment, review_marker_json
 
 PROMOTION_SCHEMA_VERSION = "control-action-latency-sweep-evidence-promotion.v2"
 FIXED_SCOPE_COVERAGE_CONTRACT = "control_action_latency_fixed_scope_coverage.v1"
@@ -92,9 +94,22 @@ EXCLUSION_POLICY = (
     "latency result set."
 )
 
+EVIDENCE_TIER = "targeted smoke"
+RESULT_CLASSIFICATION = "diagnostic-only"
+DISTANCE_CONVENTION = DistanceConvention.SURFACE_CLEARANCE.value
+
 
 class LatencyEvidenceError(RobotSfError, RuntimeError):
     """Raised when raw rows are not promotable as latency-sweep evidence (fail closed)."""
+
+
+def _persisted_raw_rows_path(raw_rows_path: str | Path) -> str:
+    """Return a non-durable raw-row reference suitable for tracked evidence."""
+    normalized = str(raw_rows_path).replace("\\", "/")
+    output_marker = "output/"
+    if output_marker in normalized:
+        return f"ignored_output/{normalized.split(output_marker, maxsplit=1)[1]}"
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -701,7 +716,9 @@ def build_latency_evidence(
         config_path: Repo-relative config path recorded for provenance.
         git_head: Git head recorded for provenance.
         date: ISO date string recorded for provenance.
-        raw_rows_path: Repo-relative path of the source raw row file.
+        raw_rows_path: Path of the source raw row file. When it is under the
+            ignored ``output/`` tree, the persisted packet records the explicit
+            non-durable ``ignored_output/`` reference instead.
         fixed_scope_plan: Optional serialized fixed-scope run plan. When supplied,
             exact scenario/planner-group/variant/seed coverage is required before
             the packet can be promoted.
@@ -746,6 +763,7 @@ def build_latency_evidence(
 
     result_cells = [cell for cell in cells if cell.classification == "result"]
     return {
+        "review_marker": review_marker_json(),
         "schema_version": PROMOTION_SCHEMA_VERSION,
         "issue": ISSUE,
         "parent_issue": PARENT_ISSUE,
@@ -753,8 +771,11 @@ def build_latency_evidence(
         "date": date,
         "git_head": git_head,
         "config_path": config_path,
-        "raw_rows_path": raw_rows_path,
+        "raw_rows_path": _persisted_raw_rows_path(raw_rows_path),
         "claim_boundary": CLAIM_BOUNDARY,
+        "evidence_tier": EVIDENCE_TIER,
+        "result_classification": RESULT_CLASSIFICATION,
+        "distance_convention": DISTANCE_CONVENTION,
         "exclusion_policy": EXCLUSION_POLICY,
         "preflight_decision": preflight["decision"],
         "preflight_axis_present": preflight["axis_present"],
@@ -790,6 +811,7 @@ def _format_markdown(packet: Mapping[str, Any]) -> str:
     coverage = packet["latency_coverage"]
     exclusions = packet["exclusions"]
     lines = [
+        review_marker("robot_sf#5034", marker_date=str(packet.get("date") or "") or None),
         f"# Issue #{ISSUE} Control-action-latency sweep evidence {packet.get('date') or ''}",
         "",
         "Plain-language summary: this bundle promotes raw fidelity-campaign episode rows into a "
@@ -801,6 +823,9 @@ def _format_markdown(packet: Mapping[str, Any]) -> str:
         f"- Git head: `{packet.get('git_head')}`",
         f"- Raw rows: `{packet.get('raw_rows_path')}`",
         f"- Preflight decision: `{packet['preflight_decision']}`",
+        f"- Evidence tier: `{packet['evidence_tier']}`",
+        f"- Result classification: `{packet['result_classification']}`",
+        f"- Distance convention: `{packet['distance_convention']}`",
         f"- Claim boundary: {packet['claim_boundary']}",
         "",
         "## Scope",
@@ -874,7 +899,8 @@ def write_latency_evidence(packet: Mapping[str, Any], evidence_dir: str | Path) 
 
     summary_path = out / "summary.json"
     summary_path.write_text(
-        json.dumps(packet, indent=2, sort_keys=True) + "\n",
+        json.dumps({"review_marker": review_marker_json(), **packet}, indent=2, sort_keys=True)
+        + "\n",
         encoding="utf-8",
     )
 
@@ -898,6 +924,8 @@ def write_latency_evidence(packet: Mapping[str, Any], evidence_dir: str | Path) 
         "availability_status",
     ]
     with csv_path.open("w", encoding="utf-8", newline="") as handle:
+        handle.write(review_marker_comment() + "\n")
+        handle.write(f"# distance_convention: {DISTANCE_CONVENTION}\n")
         writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         for cell in packet["per_cell_metrics"]:
@@ -932,7 +960,10 @@ def write_latency_evidence(packet: Mapping[str, Any], evidence_dir: str | Path) 
     copied = [summary_path, csv_path, readme_path]
     manifest_path = out / "manifest.sha256"
     manifest_path.write_text(
-        "\n".join(f"{sha256_file(path)}  {path.name}" for path in copied) + "\n",
+        review_marker_comment()
+        + "\n"
+        + "\n".join(f"{sha256_file(path)}  {path.name}" for path in copied)
+        + "\n",
         encoding="utf-8",
     )
     copied.append(manifest_path)

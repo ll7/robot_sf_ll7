@@ -114,3 +114,96 @@ def test_report_gate_cli_writes_payload_and_returns_fail_closed_status(tmp_path:
 
     assert main([str(report), "--output", str(output)]) == 0
     assert json.loads(output.read_text(encoding="utf-8"))["ready"] is True
+
+
+def test_report_gate_fails_closed_for_unreadable_and_non_mapping_reports(tmp_path: Path) -> None:
+    """Malformed JSON, scalar JSON, and a non-list rows field become blockers."""
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("{", encoding="utf-8")
+    assert validate_package_b_report(malformed).status == "blocked_on_report_contract"
+    assert "could not be read as JSON" in validate_package_b_report(malformed).errors[0]
+
+    scalar = tmp_path / "scalar.json"
+    scalar.write_text("[]", encoding="utf-8")
+    assert "report payload must be a mapping" in validate_package_b_report(scalar).errors
+
+    rows_not_list = _report()
+    rows_not_list["rows"] = "not-a-list"
+    rows_path = tmp_path / "rows-not-list.json"
+    rows_path.write_text(json.dumps(rows_not_list), encoding="utf-8")
+    assert "rows must be a list" in validate_package_b_report(rows_path).errors
+
+
+def test_report_gate_checks_row_shapes_arithmetic_and_rates(tmp_path: Path) -> None:
+    """Invalid row types and denominators are surfaced rather than normalized silently."""
+    payload = _report()
+    payload["seeds"] = [999]
+    rows = payload["rows"]
+    rows.extend(
+        [
+            "not-a-row",
+            {"sampler": "random"},
+            _row(sampler="unknown", budget=999, seed=999),
+            dict(rows[0]),
+        ]
+    )
+    invalid_counts = _row(sampler="random", budget=16, seed=2202)
+    for field in (
+        "num_candidates",
+        "num_valid_candidates",
+        "num_invalid_candidates",
+        "num_failed_evaluations",
+        "certified_valid_failure_count",
+        "replayable_valid_failure_count",
+        "fallback_candidate_count",
+        "degraded_candidate_count",
+    ):
+        invalid_counts[field] = "not-an-int"
+    invalid_counts["invalid_candidate_rate"] = False
+    invalid_counts["replay_success_rate"] = None
+    rows.append(invalid_counts)
+
+    bad_relationships = _row(sampler="coordinate", budget=16, seed=2202)
+    bad_relationships.update(
+        {
+            "num_candidates": 1,
+            "num_valid_candidates": 2,
+            "num_invalid_candidates": 2,
+            "num_failed_evaluations": 2,
+            "certified_valid_failure_count": 3,
+            "replayable_valid_failure_count": 4,
+            "invalid_candidate_rate": 0.5,
+            "replay_success_rate": 0.0,
+            "first_failure_iteration": 0,
+            "held_out_family_yield": 0.5,
+            "held_out_family_status": "evaluated",
+            "fallback_candidate_count": 2,
+            "degraded_candidate_count": 2,
+        }
+    )
+    rows.append(bad_relationships)
+
+    missing_replay_rate = _row(sampler="coordinate", budget=16, seed=3303)
+    missing_replay_rate["replay_success_rate"] = None
+    rows.append(missing_replay_rate)
+    zero_certified_replay_rate = _row(sampler="optuna", budget=16, seed=3303)
+    zero_certified_replay_rate.update(
+        {
+            "certified_valid_failure_count": 0,
+            "replayable_valid_failure_count": 0,
+            "replay_success_rate": 0.0,
+            "first_failure_iteration": None,
+        }
+    )
+    rows.append(zero_certified_replay_rate)
+
+    report = tmp_path / "invalid-rows.json"
+    report.write_text(json.dumps(payload), encoding="utf-8")
+
+    gate = validate_package_b_report(report)
+
+    assert gate.ready is False
+    assert gate.status == "blocked_on_report_contract"
+    assert any("duplicates matrix cell" in error for error in gate.errors)
+    assert any("replay_success_rate is missing" in error for error in gate.errors)
+    assert any("held_out_family_yield must remain null" in error for error in gate.errors)

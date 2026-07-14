@@ -136,6 +136,7 @@ def _validate_rows(
         Observed matrix keys, fallback-candidate count, and degraded-candidate count.
     """
     observed_keys: list[tuple[str, int, int]] = []
+    seen_keys: set[tuple[str, int, int]] = set()
     fallback_count = 0
     degraded_count = 0
     for index, row in enumerate(rows):
@@ -163,9 +164,11 @@ def _validate_rows(
             and not isinstance(seed, bool)
         ):
             key = (sampler, budget, seed)
-            observed_keys.append(key)
-            if observed_keys.count(key) > 1:
+            if key in seen_keys:
                 errors.append(f"rows[{index}] duplicates matrix cell {key!r}")
+            else:
+                seen_keys.add(key)
+                observed_keys.append(key)
         _validate_row(row, index=index, errors=errors)
         fallback_count += _non_negative_count(row.get("fallback_candidate_count"))
         degraded_count += _non_negative_count(row.get("degraded_candidate_count"))
@@ -295,7 +298,7 @@ def _validate_row_counts(row: dict[str, Any], *, index: int, errors: list[str]) 
         "degraded_candidate_count",
     )
     for field in count_fields:
-        if _non_negative_count(row.get(field)) != row.get(field):
+        if not _is_non_negative_count(row.get(field)):
             errors.append(f"rows[{index}].{field} must be a non-negative integer")
     return {
         "candidate": _non_negative_count(row.get("num_candidates")),
@@ -378,17 +381,17 @@ def _validate_row_boundaries(
 
 def _finite_number(value: Any) -> float | None:
     """Return a finite numeric value, excluding booleans."""
-    if isinstance(value, bool) or value is None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    try:
-        parsed = float(value)
-    except (TypeError, ValueError):
-        return None
+    parsed = float(value)
     return parsed if math.isfinite(parsed) else None
+
+
+def _is_non_negative_count(value: Any) -> bool:
+    """Return whether a value is an actual non-negative integer count."""
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _non_negative_count(value: Any) -> int:
     """Return a valid non-negative count or zero for error accumulation."""
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        return 0
-    return value
+    return value if _is_non_negative_count(value) else 0

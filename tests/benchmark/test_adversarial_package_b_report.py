@@ -89,6 +89,21 @@ def test_report_gate_excludes_fallback_rows_from_nominal_readiness(tmp_path: Pat
     assert any("fallback/degraded" in item for item in gate.blockers["new"])
 
 
+def test_report_gate_rejects_float_counts_and_numeric_string_rates(tmp_path: Path) -> None:
+    """JSON values that resemble numbers do not bypass the native-type contract."""
+    payload = _report()
+    payload["rows"][0]["fallback_candidate_count"] = 0.0
+    payload["rows"][0]["invalid_candidate_rate"] = "0.0"
+    report = tmp_path / "numeric-lookalikes.json"
+    report.write_text(json.dumps(payload), encoding="utf-8")
+
+    gate = validate_package_b_report(report)
+
+    assert gate.ready is False
+    assert any("fallback_candidate_count" in error for error in gate.errors)
+    assert any("invalid_candidate_rate must be finite" in error for error in gate.errors)
+
+
 def test_report_gate_fails_closed_for_missing_matrix_cell_and_claim_drift(tmp_path: Path) -> None:
     """Missing cells and claim promotion are hard report-contract failures."""
     payload = _report()

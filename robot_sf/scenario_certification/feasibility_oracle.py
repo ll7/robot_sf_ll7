@@ -1,6 +1,8 @@
 """Planner-free feasibility oracle per scenario cell with an envelope-sensitivity axis.
 
-Issue #5137. Several scenario cells (bottleneck, cross-trap, head-on-corridor families)
+Issue #5137 introduced the reusable single-cell contract. Issue #5574 adds a deterministic
+candidate-cell report on top of it. Several scenario cells (bottleneck, cross-trap,
+head-on-corridor families)
 show zero completion for every planner. Two mundane explanations must be ruled out per
 cell before a benchmark treats zero completion as a planner result rather than a route
 artifact: (a) geometric near-infeasibility under the deliberately conservative robot
@@ -37,7 +39,8 @@ import math
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.scenario_certification.feasibility_diagnostics import (
@@ -51,18 +54,21 @@ from robot_sf.scenario_certification.v1 import (
     ScenarioCertificate,
     certify_scenario,
 )
-from robot_sf.training.scenario_loader import build_robot_config_from_scenario
-
-if TYPE_CHECKING:
-    from pathlib import Path
+from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 FEASIBILITY_ORACLE_SCHEMA = "scenario_feasibility_oracle.v1"
 ENVELOPE_SENSITIVITY_SCHEMA = "envelope_sensitivity_axis.v1"
 CAMPAIGN_FEASIBILITY_ANNOTATION_SCHEMA = "campaign_feasibility_annotation.v1"
+ISSUE_5574_REPORT_SCHEMA = "issue_5574_feasibility_oracle_report.v1"
+DEFAULT_ISSUE_5574_SCENARIO_IDS: tuple[str, ...] = (
+    "francis2023_narrow_doorway",
+    "francis2023_blind_corner",
+)
 
 # Conservative 1.0 m robot envelope is the repo default (DEFAULT_ROBOT_RADIUS).
 # The reduced-envelope probe is the issue's suggested 0.5 m.
 DEFAULT_ENVELOPE_RADII_M: tuple[float, ...] = (DEFAULT_ROBOT_RADIUS, 0.5)
+DEFAULT_ROLLOUT_SEED = 101
 
 # Cell annotation categories for zero-completion campaign cells.
 INFEASIBLE_BY_CONSTRUCTION = "infeasible_by_construction"
@@ -96,7 +102,7 @@ class FeasibilityOracleConfig:
     scenario_path: Path
     envelope_radii_m: tuple[float, ...] = DEFAULT_ENVELOPE_RADII_M
     rollout_algo: str = "goal"
-    rollout_seed: int = 101
+    rollout_seed: int = DEFAULT_ROLLOUT_SEED
 
     def __post_init__(self) -> None:
         """Validate envelope radii and rollout parameters."""
@@ -355,6 +361,100 @@ def run_envelope_sensitivity_sweep(
     )
 
 
+def build_issue_5574_feasibility_report(
+    scenario_path: Path,
+    *,
+    scenario_ids: Sequence[str] = DEFAULT_ISSUE_5574_SCENARIO_IDS,
+    envelope_radii_m: Sequence[float] = DEFAULT_ENVELOPE_RADII_M,
+    rollout_algo: str = "goal",
+    rollout_seed: int | None = None,
+    episode_runner: EpisodeRunner | None = None,
+    certifier: Callable[[Mapping[str, Any], Path], ScenarioCertificate] | None = None,
+) -> dict[str, Any]:
+    """Run the deterministic candidate-cell report for issue #5574.
+
+    The report is intentionally small and fail-closed. It selects named scenario cells from a
+    canonical manifest, runs the existing single-cell oracle at one nominal and one or more
+    strictly smaller envelope radii, and emits only compact verdicts and margins. No planner
+    campaign rows or raw episode traces are copied into the report.
+
+    Args:
+        scenario_path: Scenario manifest containing the requested candidate cells.
+        scenario_ids: Ordered scenario names to inspect. The default is the two cells named by
+            issue #5574: the narrow doorway and blind corner Francis 2023 scenarios.
+        envelope_radii_m: Ordered radii with the nominal radius first and reduced probes after it.
+        rollout_algo: Deterministic scripted rollout algorithm passed to the existing oracle.
+        rollout_seed: Optional seed override. When omitted, the first seed in each scenario
+            manifest is used, falling back to the stable diagnostic default.
+        episode_runner: Optional injected runner for deterministic unit tests.
+        certifier: Optional injected route certifier for deterministic unit tests.
+
+    Returns:
+        Versioned diagnostic-only report with one serialized envelope verdict per cell.
+
+    Raises:
+        ValueError: If selection, envelope ordering, or manifest resolution is invalid.
+    """
+    source = Path(scenario_path)
+    requested_ids = tuple(str(value).strip() for value in scenario_ids)
+    if not requested_ids or any(not value for value in requested_ids):
+        raise ValueError("scenario_ids must contain at least one non-empty scenario id")
+    if len(set(requested_ids)) != len(requested_ids):
+        raise ValueError("scenario_ids must not contain duplicates")
+
+    radii = tuple(float(value) for value in envelope_radii_m)
+    if len(radii) < 2:
+        raise ValueError("envelope_radii_m must contain a nominal and reduced radius")
+    if radii[0] != max(radii):
+        raise ValueError("envelope_radii_m must place the nominal radius first")
+    if any(radius >= radii[0] for radius in radii[1:]):
+        raise ValueError("envelope_radii_m reduced probes must be smaller than nominal")
+
+    scenarios = load_scenarios(source)
+    by_id: dict[str, Mapping[str, Any]] = {}
+    for scenario in scenarios:
+        scenario_id = _scenario_id(scenario)
+        if scenario_id in by_id:
+            raise ValueError(f"duplicate scenario id in manifest: {scenario_id}")
+        by_id[scenario_id] = scenario
+    missing = tuple(scenario_id for scenario_id in requested_ids if scenario_id not in by_id)
+    if missing:
+        raise ValueError("requested scenario ids are missing from manifest: " + ", ".join(missing))
+
+    cells: list[dict[str, Any]] = []
+    for scenario_id in requested_ids:
+        scenario = by_id[scenario_id]
+        selected_seed = _scenario_rollout_seed(scenario, override=rollout_seed)
+        config = FeasibilityOracleConfig(
+            scenario_path=source,
+            envelope_radii_m=radii,
+            rollout_algo=rollout_algo,
+            rollout_seed=selected_seed,
+        )
+        verdict = run_envelope_sensitivity_sweep(
+            scenario,
+            config=config,
+            episode_runner=episode_runner,
+            certifier=certifier,
+        )
+        cell = envelope_sensitivity_verdict_to_dict(verdict, issue="5574")
+        cell["scenario_manifest"] = source.as_posix()
+        cell["rollout_algo"] = rollout_algo
+        cell["rollout_seed"] = selected_seed
+        cells.append(cell)
+
+    return {
+        "schema_version": ISSUE_5574_REPORT_SCHEMA,
+        "issue": "5574",
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+        "scenario_manifest": source.as_posix(),
+        "scenario_ids": list(requested_ids),
+        "envelope_radii_m": list(radii),
+        "rollout_algo": rollout_algo,
+        "cells": cells,
+    }
+
+
 def annotate_zero_completion_cells(
     per_cell_completion: Mapping[str, Mapping[str, Any]],
     envelope_verdicts: Mapping[str, EnvelopeSensitivityVerdict],
@@ -417,7 +517,11 @@ def annotate_zero_completion_cells(
     }
 
 
-def envelope_sensitivity_verdict_to_dict(verdict: EnvelopeSensitivityVerdict) -> dict[str, Any]:
+def envelope_sensitivity_verdict_to_dict(
+    verdict: EnvelopeSensitivityVerdict,
+    *,
+    issue: str = "5137",
+) -> dict[str, Any]:
     """Serialize an envelope-sensitivity verdict to JSON-safe primitives.
 
     Returns:
@@ -425,18 +529,24 @@ def envelope_sensitivity_verdict_to_dict(verdict: EnvelopeSensitivityVerdict) ->
     """
     return {
         "schema_version": ENVELOPE_SENSITIVITY_SCHEMA,
-        "issue": "5137",
+        "issue": issue,
         "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
         "scenario_id": verdict.scenario_id,
         "family_id": verdict.family_id,
         "nominal_envelope_radius_m": verdict.nominal_envelope_radius_m,
         "category": verdict.category,
-        "nominal_verdict": feasibility_verdict_to_dict(verdict.nominal_verdict),
-        "reduced_verdicts": [feasibility_verdict_to_dict(v) for v in verdict.reduced_verdicts],
+        "nominal_verdict": feasibility_verdict_to_dict(verdict.nominal_verdict, issue=issue),
+        "reduced_verdicts": [
+            feasibility_verdict_to_dict(v, issue=issue) for v in verdict.reduced_verdicts
+        ],
     }
 
 
-def feasibility_verdict_to_dict(verdict: FeasibilityVerdict) -> dict[str, Any]:
+def feasibility_verdict_to_dict(
+    verdict: FeasibilityVerdict,
+    *,
+    issue: str = "5137",
+) -> dict[str, Any]:
     """Serialize a feasibility verdict to JSON-safe primitives.
 
     Returns:
@@ -444,7 +554,7 @@ def feasibility_verdict_to_dict(verdict: FeasibilityVerdict) -> dict[str, Any]:
     """
     return {
         "schema_version": FEASIBILITY_ORACLE_SCHEMA,
-        "issue": "5137",
+        "issue": issue,
         "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
         "scenario_id": verdict.scenario_id,
         "family_id": verdict.family_id,
@@ -864,6 +974,24 @@ def _completion_rate(payload: Mapping[str, Any]) -> float | None:
     return None
 
 
+def _scenario_rollout_seed(scenario: Mapping[str, Any], *, override: int | None) -> int:
+    """Resolve one deterministic seed for a candidate-cell rollout.
+
+    Returns:
+        Seed from the explicit override, scenario manifest, or stable default.
+    """
+    if override is not None:
+        return int(override)
+    raw_seeds = scenario.get("seeds")
+    if isinstance(raw_seeds, Sequence) and not isinstance(raw_seeds, (str, bytes)):
+        for value in raw_seeds:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+    return DEFAULT_ROLLOUT_SEED
+
+
 def _scenario_id(scenario: Mapping[str, Any]) -> str:
     return str(
         scenario.get("id") or scenario.get("name") or scenario.get("scenario_id") or "unknown"
@@ -956,6 +1084,8 @@ __all__ = [
     "BLOCKED",
     "CAMPAIGN_FEASIBILITY_ANNOTATION_SCHEMA",
     "DEFAULT_ENVELOPE_RADII_M",
+    "DEFAULT_ISSUE_5574_SCENARIO_IDS",
+    "DEFAULT_ROLLOUT_SEED",
     "ENVELOPE_SENSITIVE_HARD",
     "ENVELOPE_SENSITIVITY_SCHEMA",
     "FEASIBILITY_ORACLE_SCHEMA",
@@ -969,6 +1099,7 @@ __all__ = [
     "FeasibilityVerdict",
     "GeometricMargin",
     "annotate_zero_completion_cells",
+    "build_issue_5574_feasibility_report",
     "envelope_sensitivity_verdict_to_dict",
     "feasibility_verdict_to_dict",
     "make_envelope_scenario",

@@ -40,6 +40,14 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5574_feasibility_oracle_2026-07-14/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5574_feasibility_oracle_2026-07-14/verdicts.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5412_risk_dwa_vectorization_20260713/README.md
   status: evidence
   freshness: evidence

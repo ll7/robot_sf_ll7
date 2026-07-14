@@ -29,6 +29,7 @@ from robot_sf.scenario_certification.feasibility_oracle import (
     FEASIBILITY_ORACLE_SCHEMA,
     FEASIBLE,
     INFEASIBLE_BY_CONSTRUCTION,
+    ISSUE_5574_REPORT_SCHEMA,
     PLANNER_LIMITED,
     TIME_TRUNCATED,
     CompletionMargin,
@@ -37,6 +38,7 @@ from robot_sf.scenario_certification.feasibility_oracle import (
     FeasibilityVerdict,
     GeometricMargin,
     annotate_zero_completion_cells,
+    build_issue_5574_feasibility_report,
     envelope_sensitivity_verdict_to_dict,
     feasibility_verdict_to_dict,
     make_envelope_scenario,
@@ -619,6 +621,84 @@ def test_envelope_verdict_to_dict_round_trips_category() -> None:
 def test_default_envelope_radii_match_issue_nominal_and_reduced() -> None:
     """Default envelope radii are the 1.0 m nominal and 0.5 m reduced probe from the issue."""
     assert DEFAULT_ENVELOPE_RADII_M == (1.0, 0.5)
+
+
+def test_issue_5574_report_selects_cells_and_scopes_nested_payloads(tmp_path: Path) -> None:
+    """The issue report is deterministic, ordered, and scoped to issue #5574."""
+    scenario_path = tmp_path / "candidates.yaml"
+    scenario_path.write_text(
+        """
+scenarios:
+  - name: cell_a
+    simulation_config:
+      max_episode_steps: 500
+    robot_config: {}
+    metadata:
+      archetype: narrow_doorway
+    seeds: [13]
+  - name: cell_b
+    simulation_config:
+      max_episode_steps: 500
+    robot_config: {}
+    metadata:
+      archetype: blind_corner
+    seeds: [17]
+""",
+        encoding="utf-8",
+    )
+
+    def runner(_scenario, _seed, _horizon, _algo):
+        return {"steps": 200, "outcome": {"route_complete": True}}
+
+    report = build_issue_5574_feasibility_report(
+        scenario_path,
+        scenario_ids=("cell_b", "cell_a"),
+        envelope_radii_m=(1.0, 0.5),
+        episode_runner=runner,
+        certifier=lambda _scenario, _path: _certificate(VALID),
+    )
+
+    assert report["schema_version"] == ISSUE_5574_REPORT_SCHEMA
+    assert report["issue"] == "5574"
+    assert report["scenario_ids"] == ["cell_b", "cell_a"]
+    assert [cell["scenario_id"] for cell in report["cells"]] == ["cell_b", "cell_a"]
+    assert [cell["rollout_seed"] for cell in report["cells"]] == [17, 13]
+    assert all(cell["issue"] == "5574" for cell in report["cells"])
+    assert all(cell["nominal_verdict"]["issue"] == "5574" for cell in report["cells"])
+
+
+def test_issue_5574_report_rejects_missing_candidate_cell(tmp_path: Path) -> None:
+    """A missing named candidate fails closed instead of emitting an incomplete packet."""
+    scenario_path = tmp_path / "candidates.yaml"
+    scenario_path.write_text(
+        "scenarios:\n  - name: present\n    seeds: [13]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="missing from manifest"):
+        build_issue_5574_feasibility_report(
+            scenario_path,
+            scenario_ids=("missing",),
+            envelope_radii_m=(1.0, 0.5),
+            episode_runner=lambda *_args: {"steps": 1, "outcome": {"route_complete": True}},
+            certifier=lambda _scenario, _path: _certificate(VALID),
+        )
+
+
+def test_issue_5574_report_requires_reduced_radius_after_nominal(tmp_path: Path) -> None:
+    """The batch contract rejects an ambiguous or non-reduced sensitivity axis."""
+    scenario_path = tmp_path / "candidates.yaml"
+    scenario_path.write_text(
+        "scenarios:\n  - name: present\n    seeds: [13]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="nominal radius first"):
+        build_issue_5574_feasibility_report(
+            scenario_path,
+            scenario_ids=("present",),
+            envelope_radii_m=(0.5, 1.0),
+        )
 
 
 # ---------------------------------------------------------------------------

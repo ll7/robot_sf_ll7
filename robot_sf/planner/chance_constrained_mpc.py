@@ -99,6 +99,11 @@ class ChanceConstrainedMPCConfig(PredictionMPCConfig):
     max_collision_risk: float = 0.05
     radial_quadrature_order: int = 6
     angular_quadrature_order: int = 16
+    # Surrogate-only knob (#5307 successor slice). Number of Gaussian modes the
+    # constant_velocity_gmm diagnostic provider emits per pedestrian. The real
+    # #2844 learned backend controls its own mode count; this field is inert
+    # unless predictor_backend == "constant_velocity_gmm".
+    gmm_mode_count: int = 1
 
     def __post_init__(self) -> None:
         """Reject ambiguous risk settings and incompatible envelope composition."""
@@ -149,6 +154,18 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         reset = getattr(self._multimodal_predictor, "reset", None)
         if callable(reset):
             reset()
+
+    @property
+    def claimed_risk(self) -> float:
+        """Return the per-horizon collision-risk bound the planner targets.
+
+        This is the ``max_collision_risk`` from the active chance-constraint
+        config. The realized-risk calibration routine pairs it against observed
+        collisions over rolled-out episodes to assess calibration (claimed vs.
+        observed), which is the primary measure named by issue #5307.
+        """
+
+        return float(self.chance_config.max_collision_risk)
 
     def _optimizer_constraints(self, context: _RolloutContext) -> tuple[NonlinearConstraint, ...]:
         """Build the requested marginal or joint-horizon chance constraint.
@@ -349,6 +366,7 @@ def build_chance_constrained_mpc_config(
         "max_collision_risk": float,
         "radial_quadrature_order": int,
         "angular_quadrature_order": int,
+        "gmm_mode_count": int,
         "hard_pedestrian_constraints_enabled": _parse_bool,
         "pedestrian_clearance_weight": float,
     }
@@ -379,12 +397,35 @@ def build_chance_constrained_mpc_config(
 def build_chance_constrained_mpc_adapter(
     algo_config: dict[str, Any] | None,
 ) -> ChanceConstrainedMPCPlannerAdapter:
-    """Fail closed until a #2844 provider is passed through an explicit integration path."""
+    """Build the chance-constrained MPC adapter, fail-closed by default.
+
+    The default backend (``issue_2844_k_mode_gmm``) still fails closed until the
+    learned predictor lands. The explicit ``constant_velocity_gmm`` backend
+    (issue #5307 successor slice) wires the CPU-validatable surrogate provider so
+    the control law runs end-to-end without a learned model. No constant-velocity
+    fallback is ever permitted for the real learned backend.
+
+    Returns:
+        The configured ``ChanceConstrainedMPCPlannerAdapter`` with its provider.
+    """
 
     config = build_chance_constrained_mpc_config(algo_config)
+    backend = config.predictor_backend.strip().lower()
+    if backend == "constant_velocity_gmm":
+        # Keep the surrogate provider import lazy so importing the provider module
+        # directly does not create a partially initialized circular import.
+        from robot_sf.planner.chance_constrained_mpc_provider import (  # noqa: PLC0415
+            ConstantVelocityGmmPredictor,
+        )
+
+        predictor = ConstantVelocityGmmPredictor(
+            mode_count=int(getattr(config, "gmm_mode_count", 1) or 1),
+        )
+        return ChanceConstrainedMPCPlannerAdapter(config=config, predictor=predictor)
     raise ValueError(
         "chance_constrained_mpc is unavailable: its #2844 K-mode/GMM predictor provider is not "
-        f"configured (requested backend {config.predictor_backend!r})"
+        f"configured (requested backend {config.predictor_backend!r}). Use backend "
+        "'constant_velocity_gmm' only for CPU diagnostic validation of the control law."
     )
 
 

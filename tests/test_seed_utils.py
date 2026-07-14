@@ -92,14 +92,20 @@ def test_torch_optional_behavior():
 
 
 def test_torch_213_python312_uses_c_level_determinism_setter(monkeypatch):
-    """Avoid Torch 2.13.0's Python 3.12 Dynamo/Triton import path."""
+    """Avoid Torch 2.13.0's Python 3.12 Dynamo/Triton import path.
+
+    The real Torch 2.13.0 ``_C._set_deterministic_algorithms`` builtin takes a
+    single positional ``enabled`` flag. The double mirrors that exact arity so
+    the test fails if the helper regresses to the 2-arg call that raised
+    ``TypeError`` under the actual Torch 2.13.0 graph (issue #5556).
+    """
     monkeypatch.setattr(sys, "version_info", (3, 12))
 
-    calls: list[tuple[bool, bool]] = []
+    calls: list[bool] = []
 
     class FakeC:
-        def _set_deterministic_algorithms(self, enabled: bool, warn_only: bool = False):
-            calls.append((enabled, warn_only))
+        def _set_deterministic_algorithms(self, enabled: bool):
+            calls.append(bool(enabled))
 
     class FakeTorch:
         __version__ = "2.13.0rc1"
@@ -110,7 +116,7 @@ def test_torch_213_python312_uses_c_level_determinism_setter(monkeypatch):
             pytest.fail("Torch 2.13.0 Python 3.12 guard must bypass the public wrapper")
 
     assert _set_torch_deterministic_algorithms(FakeTorch(), True)
-    assert calls == [(True, False)]
+    assert calls == [True]
 
     class MissingCSetterTorch:
         __version__ = "2.13.0"

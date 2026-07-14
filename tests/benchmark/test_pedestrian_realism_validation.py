@@ -21,6 +21,8 @@ from robot_sf.benchmark.pedestrian_realism_validation import (
     RealismCrowdInputs,
     RealismEntryExitFlow,
     RealismMetricConfig,
+    RealismObstacle,
+    RealismSceneGeometry,
     RealismScorecard,
     RealismStagedDatasetReference,
     RealismTrackPair,
@@ -422,6 +424,108 @@ def test_track_reconstruction_plan_is_partial_and_content_light() -> None:
     assert "trajectory" not in summary
 
 
+def test_scene_geometry_contract_replaces_derived_bounds_without_promoting_evidence() -> None:
+    """Validated scene bounds and obstacles remove only the geometry blocker."""
+
+    times = np.asarray([0.0, 0.4, 0.8])
+    track_set = EthUcyTrackSet(
+        asset_id="eth-ucy",
+        group="eth",
+        split="eth",
+        format="obsmat",
+        docs_path="docs/datasets/eth-ucy.md",
+        tracks=(
+            EthUcyTrack(
+                pedestrian_id=1,
+                time_s=times,
+                positions=np.asarray([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]),
+            ),
+            EthUcyTrack(
+                pedestrian_id=2,
+                time_s=times + 0.4,
+                positions=np.asarray([[3.0, 1.0], [2.0, 1.0], [1.0, 1.0]]),
+            ),
+        ),
+        skipped_formats=(),
+        frame_period_s=0.4,
+    )
+    geometry = RealismSceneGeometry(
+        bounds_m=((-1.0, -1.0), (4.0, 2.0)),
+        obstacles=(
+            RealismObstacle(
+                obstacle_id="unused-static-wall",
+                polygon_m=((-0.8, -0.8), (-0.4, -0.8), (-0.4, -0.4), (-0.8, -0.8)),
+            ),
+        ),
+        source="synthetic scene adapter",
+    )
+
+    plan = build_track_reconstruction_plan(track_set, scene_geometry=geometry)
+
+    assert plan.status == "partial"
+    assert plan.geometry_status == "scene_geometry_validated"
+    assert plan.scene_bounds_m == geometry.bounds_m
+    assert plan.scene_geometry == geometry
+    assert len(plan.blockers) == 1
+    assert "per-waypoint timestamps" in plan.blockers[0]
+    summary = plan.summary_dict()
+    assert summary["scene_geometry"] == {
+        "status": "validated",
+        "source": "synthetic scene adapter",
+        "bounds_available": True,
+        "obstacle_count": 1,
+        "obstacle_semantics": ["static_blocking"],
+    }
+    assert "positions" not in summary["scene_geometry"]
+
+
+def test_scene_geometry_rejects_invalid_obstacle_semantic_and_track_intersection() -> None:
+    """Unsupported obstacle semantics and track/obstacle intersections fail closed."""
+
+    with pytest.raises(ValueError, match="unsupported obstacle semantic"):
+        RealismObstacle(
+            obstacle_id="walkable-area",
+            polygon_m=((0.0, 0.0), (1.0, 0.0), (1.0, 1.0)),
+            semantic="walkable",
+        )
+
+    times = np.asarray([0.0, 0.4, 0.8])
+    track_set = EthUcyTrackSet(
+        asset_id="eth-ucy",
+        group="eth",
+        split="eth",
+        format="obsmat",
+        docs_path="docs/datasets/eth-ucy.md",
+        tracks=(
+            EthUcyTrack(
+                pedestrian_id=1,
+                time_s=times,
+                positions=np.asarray([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]),
+            ),
+        ),
+        skipped_formats=(),
+        frame_period_s=0.4,
+    )
+    geometry = RealismSceneGeometry(
+        bounds_m=((-1.0, -1.0), (4.0, 2.0)),
+        obstacles=(
+            RealismObstacle(
+                obstacle_id="blocking-entry",
+                polygon_m=((-0.1, -0.1), (0.1, -0.1), (0.1, 0.1), (-0.1, 0.1)),
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="intersects static obstacle"):
+        build_track_reconstruction_plan(track_set, scene_geometry=geometry)
+
+    with pytest.raises(ValueError, match="outside the supplied scene bounds"):
+        build_track_reconstruction_plan(
+            track_set,
+            scene_geometry=RealismSceneGeometry(bounds_m=((0.5, -1.0), (4.0, 2.0))),
+        )
+
+
 def test_empty_track_reconstruction_plan_is_not_available() -> None:
     """A missing track set yields a fail-closed reconstruction decision packet."""
 
@@ -612,6 +716,16 @@ def test_provenance_gated_scorecard_uses_registry_manifest(tmp_path: Path) -> No
     )
     track_set = load_track_set("eth", root=source_root)
     real_positions, real_velocities = _gridded_real(track_set)
+    scene_geometry = RealismSceneGeometry(
+        bounds_m=((-1.0, -1.0), (6.0, 7.0)),
+        obstacles=(
+            RealismObstacle(
+                obstacle_id="unused-static-wall",
+                polygon_m=((4.0, 0.0), (5.0, 0.0), (5.0, 1.0), (4.0, 1.0)),
+            ),
+        ),
+        source="synthetic staged-scene adapter",
+    )
 
     scorecard = run_realism_validation_from_staged_dataset(
         dataset_id="eth-ucy/eth",
@@ -619,6 +733,7 @@ def test_provenance_gated_scorecard_uses_registry_manifest(tmp_path: Path) -> No
             split="eth",
             root=source_root,
             provenance_manifest=manifest_path,
+            scene_geometry=scene_geometry,
         ),
         sim_positions=real_positions,
         sim_velocities=real_velocities,
@@ -627,6 +742,8 @@ def test_provenance_gated_scorecard_uses_registry_manifest(tmp_path: Path) -> No
     assert scorecard.status == "ok"
     assert scorecard.to_dict()["evidence_status"] == "diagnostic-only"
     assert scorecard.to_dict()["reconstruction"]["status"] == "partial"
+    assert scorecard.to_dict()["reconstruction"]["geometry_status"] == "scene_geometry_validated"
+    assert scorecard.to_dict()["reconstruction"]["scene_geometry"]["obstacle_count"] == 1
     assert scorecard.to_dict()["reconstruction"]["timing_status"] == "entry_delay_only"
     assert scorecard.to_dict()["reconstruction"]["entry_exit_flow_count"] == 2
     assert scorecard.metrics["fundamental_diagram_comparison"]["status"] == "ok"

@@ -15,6 +15,13 @@ from robot_sf.benchmark.scenario_generation.archive_sampler import (
     run_archive_sampling,
     sample_generated_archive,
 )
+from robot_sf.benchmark.scenario_generation.candidate_runner import (
+    build_cell_verdict_from_trace_replay,
+    build_persistence_from_catalog_entry,
+    build_persistence_from_episode_trace,
+    get_critical_event_from_frames,
+    run_candidate_persistence_smoke,
+)
 from robot_sf.benchmark.scenario_generation.catalog_schema import (
     CATALOG_ENTRY_SCHEMA_VERSION,
     GeneratedScenarioCatalogValidationError,
@@ -51,14 +58,19 @@ __all__ = [
     "apply_generated_replay_runtime",
     "assess_critical_event_reproduction",
     "assess_exact_replay",
+    "build_cell_verdict_from_trace_replay",
+    "build_persistence_from_catalog_entry",
+    "build_persistence_from_episode_trace",
     "compute_persistence_record",
     "dump_generated_scenario_yaml",
     "evaluate_perturbation_grid",
     "extract_critical_segment",
     "generated_replay_status_entry",
+    "get_critical_event_from_frames",
     "materialize_generated_scenario",
     "run_adaptive_selection",
     "run_archive_sampling",
+    "run_candidate_persistence_smoke",
     "sample_generated_archive",
     "select_generated_proposals",
     "validate_catalog_entry",

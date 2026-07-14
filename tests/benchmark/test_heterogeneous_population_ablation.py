@@ -125,6 +125,24 @@ def test_runtime_trace_labels_preserve_declared_labels_when_count_matches() -> N
     )
 
 
+@pytest.mark.parametrize("invalid_count", [True, 3.5, "3"])
+def test_runtime_trace_labels_reject_non_integer_counts(invalid_count) -> None:
+    """Runtime label materialization must not silently truncate a count."""
+
+    report = build_mean_matched_population_pair(
+        population_size=12,
+        composition={"cautious": 0.25, "standard": 0.5, "hurried": 0.25},
+        archetypes=_archetypes(),
+        seed=3574,
+    )
+
+    with pytest.raises(ValueError, match="non-negative integer"):
+        build_runtime_population_control_trace_labels(
+            report["arms"]["heterogeneous"],
+            invalid_count,
+        )
+
+
 def test_mean_matched_population_pair_rejects_unknown_archetype() -> None:
     """Unknown mixture entries fail before producing misleading arm records."""
 

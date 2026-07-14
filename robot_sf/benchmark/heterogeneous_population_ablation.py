@@ -171,7 +171,11 @@ def build_runtime_population_control_trace_labels(
         ValueError: The arm population does not carry the required label plan.
     """
 
-    if isinstance(pedestrian_count, bool) or pedestrian_count < 0:
+    if (
+        not isinstance(pedestrian_count, int)
+        or isinstance(pedestrian_count, bool)
+        or pedestrian_count < 0
+    ):
         raise ValueError("pedestrian_count must be a non-negative integer")
     population_count = int(pedestrian_count)
     composition = _runtime_population_composition(arm_population, "composition")

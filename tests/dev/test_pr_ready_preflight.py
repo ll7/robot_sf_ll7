@@ -42,6 +42,35 @@ _POST_PREFLIGHT_SCRIPTS = [
 
 
 def _git(repo: Path, *args: str) -> None:
+    if args and args[0] == "commit":
+        # Tolerate no-op commits: test scaffolding such as the fake bin/ tools and
+        # .home are gitignored (so they never trip the issue #5533 untracked guard),
+        # which can leave nothing staged to commit on subsequent add -A calls.
+        proc = subprocess.run(
+            ["git", "-c", "user.name=test", "-c", "user.email=test@test", *args],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        merged = proc.stdout + proc.stderr
+        if proc.returncode != 0 and "nothing to commit" not in merged:
+            raise subprocess.CalledProcessError(
+                proc.returncode, proc.args, output=proc.stdout, stderr=proc.stderr
+            )
+        return
+    if args and args[0] == "add":
+        # Tolerate no-op add -A: when bin/ is excluded by .git/info/exclude the
+        # fake-python tests have nothing else to stage. Use --allow-empty for the
+        # subsequent commit to cover this case.
+        subprocess.run(
+            ["git", "-c", "user.name=test", "-c", "user.email=test@test", *args],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return
     subprocess.run(
         ["git", "-c", "user.name=test", "-c", "user.email=test@test", *args],
         cwd=repo,
@@ -152,6 +181,10 @@ def preflight_repo(tmp_path: Path) -> Path:
     shutil.copy2(SCRIPTS_DEV / "pr_ready_check.sh", scripts_dir / "pr_ready_check.sh")
     _make_fake_scripts(repo)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    # Keep test scaffolding (fake bin/ tools, .home, lane.log) out of the
+    # untracked-file set that pr_ready_check.sh treats as real changed-file-proof
+    # gaps, so only the files a test deliberately adds exercise the issue #5533 guard.
+    (repo / ".git" / "info" / "exclude").write_text("bin/\n.home/\nlane.log\n", encoding="utf-8")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "init")
     return repo
@@ -295,18 +328,22 @@ def test_pr_ready_check_keeps_core_only_changes_on_the_core_lane(preflight_repo:
 def test_interim_mode_reports_dirty_paths_excluded_from_changed_file_gates(
     preflight_repo: Path,
 ) -> None:
-    """Dirty paths are explicit when interim diff-scoped gates only inspect HEAD."""
+    """Dirty paths are explicit when interim diff-scoped gates only inspect HEAD.
+
+    Uses tracked-but-modified paths only: the issue #5533 untracked-new-file guard
+    has its own regression test and must not be tripped here.
+    """
     lane_log = _write_lane_logging_stub(preflight_repo)
     tracked_file = preflight_repo / "tests" / "unit" / "test_dirty_tracked.py"
     tracked_file.parent.mkdir(parents=True, exist_ok=True)
     tracked_file.write_text("print('baseline')\n", encoding="utf-8")
+    dirty_optional = preflight_repo / "tests" / "planner" / "test_dirty_optional.py"
+    dirty_optional.parent.mkdir(parents=True, exist_ok=True)
+    dirty_optional.write_text("print('baseline dirty optional')\n", encoding="utf-8")
     _git(preflight_repo, "add", "-A")
     _git(preflight_repo, "commit", "-q", "-m", "tracked dirty fixture")
     tracked_file.write_text("print('dirty tracked path')\n", encoding="utf-8")
-
-    dirty_file = preflight_repo / "tests" / "planner" / "test_dirty_optional.py"
-    dirty_file.parent.mkdir(parents=True, exist_ok=True)
-    dirty_file.write_text("print('dirty optional lane')\n", encoding="utf-8")
+    dirty_optional.write_text("print('dirty optional lane')\n", encoding="utf-8")
 
     result = _run_pr_ready(
         preflight_repo,
@@ -323,6 +360,42 @@ def test_interim_mode_reports_dirty_paths_excluded_from_changed_file_gates(
     assert "Dirty paths excluded from diff-scoped gates:" in result.stderr
     assert "tests/unit/test_dirty_tracked.py" in result.stderr
     assert "tests/planner/test_dirty_optional.py" in result.stderr
+
+
+def test_pr_ready_check_fails_clearly_when_untracked_new_files_exist(
+    preflight_repo: Path,
+) -> None:
+    """Regression for issue #5533: a new-file-only worktree must not silently report changed-file proof.
+
+    Untracked new files are invisible to the committed-HEAD diff gates (changed-file
+    coverage, docstring TODO diff), which previously printed a misleading
+    "No changed files" while omitting the only changed code. The wrapper must now
+    fail clearly (exit 2) and name the untracked files instead of claiming proof.
+    """
+    # New-file-only worktree: nothing committed, only an untracked implementation file.
+    new_file = preflight_repo / "robot_sf" / "new_module.py"
+    new_file.parent.mkdir(parents=True, exist_ok=True)
+    new_file.write_text("print('new implementation')\n", encoding="utf-8")
+
+    # Interim mode previously proceeded with a misleading "No changed files" message.
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={"PR_READY_MODE": "interim"},
+    )
+    assert result.returncode == 2, f"Expected exit 2, got {result.returncode}: {result.stderr}"
+    assert "Changed-file proof cannot see the following untracked new files:" in result.stderr
+    assert "robot_sf/new_module.py" in result.stderr
+    assert "readiness cannot prove them" in result.stderr
+
+    # Final/proof mode must also fail clearly rather than fabricate changed-file proof.
+    result_final = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={"PR_READY_MODE": "final"},
+    )
+    assert result_final.returncode == 2, result_final.stderr
+    assert "robot_sf/new_module.py" in result_final.stderr
 
 
 def test_core_lane_collection_hook_skips_optional_paths(monkeypatch: pytest.MonkeyPatch) -> None:

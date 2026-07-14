@@ -187,6 +187,33 @@ case "$pr_ready_mode_lower" in
     ;;
 esac
 
+# Friction guard for issue #5533: untracked new files are invisible to the
+# committed-HEAD diff gates (changed-file coverage, docstring TODO diff). They
+# previously produced a misleading "No changed files vs BASE_REF" while silently
+# omitting the only changed code. Fail clearly so the wrapper never reports
+# changed-file proof it cannot produce. Staging/committing the new files lets the
+# diff-scoped gates see them; this is the intended workaround from the issue.
+# This runs before the final clean-tree guard so both modes fail with the same
+# explicit, actionable message rather than a generic "clean tree required".
+untracked_new_files=()
+while IFS= read -r untracked_path; do
+  [[ -z "$untracked_path" ]] && continue
+  untracked_new_files+=("$untracked_path")
+done < <(git ls-files --others --exclude-standard)
+
+if [[ ${#untracked_new_files[@]} -gt 0 ]]; then
+  max_untracked_paths=30
+  printf 'Changed-file proof cannot see the following untracked new files:\n' >&2
+  printf '%s\n' "${untracked_new_files[@]:0:max_untracked_paths}" >&2
+  if (( ${#untracked_new_files[@]} > max_untracked_paths )); then
+    printf '... truncated (%d more untracked files)\n' "$(( ${#untracked_new_files[@]} - max_untracked_paths ))" >&2
+  fi
+  printf 'Changed-file gates (diff vs %s) omit untracked files, so readiness cannot prove them.\n' "$BASE_REF" >&2
+  printf 'Stage/commit the new files, then rerun for changed-file proof (issue #5533).\n' >&2
+  printf 'Recorded interim readiness from a non-ignored worktree with untracked new files is not proof.\n' >&2
+  exit 2
+fi
+
 if [[ "$pr_ready_final" == "1" && "$(worktree_state)" != "clean" ]]; then
   printf 'Final PR readiness requires a clean non-ignored worktree before validation.\n' >&2
   printf 'Commit or remove local changes, or run without PR_READY_MODE=final for interim feedback.\n' >&2

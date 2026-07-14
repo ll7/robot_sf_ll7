@@ -67,7 +67,7 @@ def rasterize_line_segment(
         >>> grid = np.zeros((100, 100))
         >>> config = GridConfig(resolution=0.1, width=10.0, height=10.0)
         >>> line = ((1.0, 1.0), (9.0, 9.0))
-        >>> rasterize_line_segment(line, grid, config)
+        >>> _ = rasterize_line_segment(line, grid, config)
         >>> int(np.sum(grid > 0))  # Count occupied cells
         81
     """

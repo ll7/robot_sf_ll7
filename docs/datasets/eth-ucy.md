@@ -37,7 +37,17 @@ scorecard = run_realism_validation_from_staged_dataset(
 )
 ```
 
-The plan exposes existing `SinglePedestrianDefinition` replay seeds, padded observed-position bounds, and a conservative entry/exit flow summary. A non-empty plan is always `partial`: ETH/UCY trajectory files do not provide static scene geometry, obstacle semantics, or a scene-faithful benchmark map. Missing or incomplete provenance produces a `not_available` scorecard; it is never success evidence. Re-run the registry staging/provenance commands when the local bytes change because the loader checks manifest readiness but does not rehash the local tree.
+The plan exposes existing `SinglePedestrianDefinition` replay seeds, padded observed-position
+bounds, and a conservative entry/exit flow summary. Each replay seed preserves its relative entry
+time as `start_delay_s` and carries the observed entry/exit record in `plan.entry_exit_flows`; the
+waypoint list still does not preserve per-waypoint timestamps.
+
+A non-empty plan is always `partial`: ETH/UCY trajectory files do not provide static scene
+geometry, obstacle semantics, or a scene-faithful benchmark map. Missing or incomplete provenance
+produces a `not_available` scorecard; it is never success evidence. Scorecard JSON separates metric
+availability (`status`) from the evidence boundary (`evidence_status`) and includes a content-light
+`reconstruction` readiness summary. Re-run the registry staging/provenance commands when the local
+bytes change because the loader checks manifest readiness but does not rehash the local tree.
 
 ## Sources And Citations
 

@@ -4,6 +4,12 @@
 The checker validates the tracked preregistration and runs the repository's
 ``scenario_cert.v1`` geometry/solvability check for the four selected rows. It
 does not run planner episodes, submit compute, or interpret benchmark outcomes.
+
+Every selected scenario source path is preflighted for existence before any
+geometry certification runs, so a missing or misrouted input fails closed with a
+short diagnostic instead of a deep parser or route-planning stack trace. Pass
+``--metadata-only`` (or ``certify_geometry=False``) to validate packet structure
+and source-path existence without invoking map conversion or route planning.
 """
 
 from __future__ import annotations
@@ -99,10 +105,23 @@ def load_packet(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _preflight_source_path(row: dict[str, Any], *, root: Path) -> Path:
+    """Resolve and verify a selected scenario source path exists.
+
+    This runs before any geometry certification so a missing or misrouted input
+    fails closed with a short actionable diagnostic instead of a deep parser or
+    route-planning stack trace.
+    """
+    scenario_id = str(row.get("scenario_id"))
+    source_path = root / _repo_path(row.get("source_path"), f"{scenario_id}.source_path")
+    _require(source_path.is_file(), f"{scenario_id} source missing: {row.get('source_path')}")
+    return source_path
+
+
 def _check_certification(row: dict[str, Any], *, root: Path) -> dict[str, Any]:
     """Certify one selected scenario and return a compact gate result."""
     scenario_id = str(row.get("scenario_id"))
-    source_path = root / _repo_path(row.get("source_path"), f"{scenario_id}.source_path")
+    source_path = _preflight_source_path(row, root=root)
     certificates = certify_scenario_file(source_path, scenario_id=scenario_id)
     _require(len(certificates) == 1, f"{scenario_id} must yield exactly one certificate")
     payload = certificate_to_dict(certificates[0])
@@ -119,8 +138,52 @@ def _check_certification(row: dict[str, Any], *, root: Path) -> dict[str, Any]:
     }
 
 
-def validate_packet(packet: dict[str, Any], *, repo_root: Path | None = None) -> dict[str, Any]:
-    """Validate the preregistration and current geometry gate."""
+def _metadata_only_row(row: dict[str, Any], *, root: Path) -> dict[str, Any]:
+    """Verify a selected scenario's source exists without certifying geometry.
+
+    Returns a compact row shaped like ``_check_certification`` output but with a
+    ``not_certified`` classification/eligibility so callers cannot mistake a
+    metadata-only pass for a geometry gate result.
+    """
+    scenario_id = str(row.get("scenario_id"))
+    _preflight_source_path(row, root=root)
+    return {
+        "scenario_id": scenario_id,
+        "source_path": row["source_path"],
+        "classification": "not_certified",
+        "benchmark_eligibility": "not_certified",
+        "reasons": ["metadata_only_no_geometry_certification"],
+        "route_count": 0,
+        "gate": "metadata_only",
+    }
+
+
+def _certify_rows(
+    rows: list[dict[str, Any]], *, root: Path, certify_geometry: bool
+) -> list[dict[str, Any]]:
+    """Build per-scenario gate rows, certifying geometry unless metadata-only."""
+    if certify_geometry:
+        return [_check_certification(row, root=root) for row in rows]
+    return [_metadata_only_row(row, root=root) for row in rows]
+
+
+def validate_packet(
+    packet: dict[str, Any],
+    *,
+    repo_root: Path | None = None,
+    certify_geometry: bool = True,
+) -> dict[str, Any]:
+    """Validate the preregistration and current geometry gate.
+
+    Args:
+        packet: The tracked preregistration mapping.
+        repo_root: Repository root used to resolve repo-relative paths.
+        certify_geometry: When ``True`` (default), run the ``scenario_cert.v1``
+            geometry/solvability certifier for each selected row. When ``False``,
+            run a metadata-only pass that verifies every selected source path
+            exists without invoking map conversion or route planning, so
+            input/provenance checks stay quiet and fast.
+    """
     root = repo_root or REPO_ROOT
     _walk_for_transient_keys(packet)
     _require(packet.get("schema_version") == SCHEMA_VERSION, "schema_version mismatch")
@@ -177,9 +240,7 @@ def validate_packet(packet: dict[str, Any], *, repo_root: Path | None = None) ->
         "geometry eligibility policy mismatch",
     )
 
-    certification: list[dict[str, Any]] = []
-    for row in rows:
-        certification.append(_check_certification(row, root=root))
+    certification = _certify_rows(rows, root=root, certify_geometry=certify_geometry)
 
     roster = _mapping(packet, "planner_roster")
     planner_rows = roster.get("required")
@@ -252,12 +313,27 @@ def validate_packet(packet: dict[str, Any], *, repo_root: Path | None = None) ->
     ):
         _require(readiness_decision.get(key) is False, f"readiness_decision.{key} must be false")
 
-    blocked_rows = [row["scenario_id"] for row in certification if row["gate"] != "pass"]
+    return _build_result(
+        certification, planner_count=len(planner_rows), certify_geometry=certify_geometry
+    )
+
+
+def _build_result(
+    certification: list[dict[str, Any]], *, planner_count: int, certify_geometry: bool
+) -> dict[str, Any]:
+    """Assemble the compact validation result and derive the gate status."""
+    if certify_geometry:
+        blocked_rows = [row["scenario_id"] for row in certification if row["gate"] != "pass"]
+        status = "ready" if not blocked_rows else "blocked"
+    else:
+        blocked_rows = []
+        status = "metadata_only"
     return {
-        "status": "ready" if not blocked_rows else "blocked",
+        "status": status,
         "issue": 5416,
         "schema_version": SCHEMA_VERSION,
-        "planner_count": len(planner_rows),
+        "geometry_certified": certify_geometry,
+        "planner_count": planner_count,
         "scenario_count": len(certification),
         "certification": certification,
         "blocked_rows": blocked_rows,
@@ -270,9 +346,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet", type=Path, default=DEFAULT_PACKET)
     parser.add_argument("--json", action="store_true", dest="as_json")
+    parser.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help=(
+            "Validate packet metadata and source-path existence only; skip "
+            "geometry/solvability certification and its map-conversion logs."
+        ),
+    )
     args = parser.parse_args(argv)
     try:
-        result = validate_packet(load_packet(args.packet))
+        result = validate_packet(load_packet(args.packet), certify_geometry=not args.metadata_only)
     except (
         OSError,
         PacketError,
@@ -297,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"  {row['gate']}: {row['scenario_id']} ({row['classification']}/{row['benchmark_eligibility']})"
             )
-    return 0 if result["status"] == "ready" else 1
+    return 0 if result["status"] in {"ready", "metadata_only"} else 1
 
 
 if __name__ == "__main__":

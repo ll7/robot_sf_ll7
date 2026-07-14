@@ -1,6 +1,7 @@
 {
   "schema_version": "issue_5596_blind_corner_diagnostic.v1",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "source_commit": "81856f9658fc54ad19bae175901695be0ba94ece",
   "issue": "5596",
   "scenario_id": "francis2023_blind_corner",
   "claim_boundary": "diagnostic_only_not_benchmark_evidence",

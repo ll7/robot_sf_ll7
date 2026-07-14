@@ -4,6 +4,10 @@ Collision causality, action-conditioned online risk, and statistically defensibl
 scenario discovery research program:
 [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md).
 
+Issue #5574 planner-free feasibility oracle and collision-envelope sensitivity evidence for the
+Francis 2023 zero-success candidate cells:
+[README.md](evidence/issue_5574_feasibility_oracle_2026-07-14/README.md).
+
 Issue #5442 frozen-state counterfactual replay (locate the last avoidable control action; controlled-fixture diagnostic engine + `last_avoidable_replay.v1`; fail-closed `unknown` on nondeterministic baseline or missing feasible action set; child of #5440, forward-compatible with the #5441 report contract):
 [issue_5442_last_avoidable_replay.md](issue_5442_last_avoidable_replay.md).
 

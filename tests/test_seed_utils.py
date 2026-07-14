@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import os
 import random
+import sys
 
 import pytest
 
-from robot_sf.common.seed import _import_torch, get_seed_state_sample, set_global_seed
+import robot_sf.common.seed as seed_module
+from robot_sf.common.seed import (
+    _import_torch,
+    _set_torch_deterministic_algorithms,
+    get_seed_state_sample,
+    set_global_seed,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -33,8 +40,8 @@ def restore_torch_determinism():
     yield
 
     try:
-        if prev_algos is not None and hasattr(torch, "use_deterministic_algorithms"):
-            torch.use_deterministic_algorithms(prev_algos)
+        if prev_algos is not None:
+            _set_torch_deterministic_algorithms(torch, prev_algos)
         if prev_cudnn_det is not None:
             if prev_det_flag is not None:
                 prev_cudnn_det.deterministic = prev_det_flag
@@ -82,3 +89,71 @@ def test_torch_optional_behavior():
         assert rep.has_torch is True
     else:
         assert rep.has_torch is False
+
+
+def test_torch_213_python312_uses_c_level_determinism_setter(monkeypatch):
+    """Avoid Torch 2.13.0's Python 3.12 Dynamo/Triton import path."""
+    monkeypatch.setattr(sys, "version_info", (3, 12))
+
+    calls: list[tuple[bool, bool]] = []
+
+    class FakeC:
+        def _set_deterministic_algorithms(self, enabled: bool, warn_only: bool = False):
+            calls.append((enabled, warn_only))
+
+    class FakeTorch:
+        __version__ = "2.13.0rc1"
+        _C = FakeC()
+
+        @staticmethod
+        def use_deterministic_algorithms(_enabled: bool):
+            pytest.fail("Torch 2.13.0 Python 3.12 guard must bypass the public wrapper")
+
+    assert _set_torch_deterministic_algorithms(FakeTorch(), True)
+    assert calls == [(True, False)]
+
+    class MissingCSetterTorch:
+        __version__ = "2.13.0"
+        _C = object()
+
+        @staticmethod
+        def use_deterministic_algorithms(_enabled: bool):
+            pytest.fail("Torch 2.13.0 fallback must not call the public wrapper")
+
+    assert not _set_torch_deterministic_algorithms(MissingCSetterTorch(), False)
+
+
+def test_torch_determinism_reports_unavailable_setter(monkeypatch):
+    """Report incomplete torch determinism when no supported setter is available."""
+
+    class FakeCudnn:
+        deterministic = False
+        benchmark = True
+
+    class FakeBackends:
+        cudnn = FakeCudnn()
+
+    class FakeCuda:
+        @staticmethod
+        def is_available():
+            return False
+
+    class FakeTorch:
+        __version__ = "2.13.0+cpu"
+        _C = object()
+        backends = FakeBackends()
+        cuda = FakeCuda()
+
+        @staticmethod
+        def manual_seed(_seed: int):
+            return None
+
+    def fake_import_torch():
+        return FakeTorch()
+
+    monkeypatch.setattr(seed_module, "_import_torch", fake_import_torch)
+    report = set_global_seed(11, deterministic=True)
+
+    assert report.to_dict()["seed"] == 11
+    assert report.torch_deterministic is None
+    assert report.notes == "torch deterministic algorithm flag could not be applied"

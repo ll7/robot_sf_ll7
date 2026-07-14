@@ -3,10 +3,32 @@
 from __future__ import annotations
 
 import types
+import warnings
 
 import numpy as np
 
 from robot_sf.planner.theta_star_v2 import HighPerformanceThetaStar, _bind_fast_in_collision
+
+
+def test_fast_in_collision_emits_no_reflected_set_numba_warning():
+    """The Numba LOS path must not emit reflected-set deprecation warnings.
+
+    Issue #5598: the njit LOS previously received a reflected Python ``set`` for
+    ``free_vals``, raising NumbaPendingDeprecationWarning. The free-cell set is
+    now a typed int64 array, so exercising the bound collision check must pass
+    cleanly even when deprecation warnings are escalated to errors.
+    """
+    arr = np.zeros((3, 3), dtype=np.int8)
+    grid = DummyGrid(arr)
+    _bind_fast_in_collision(grid)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        warnings.simplefilter("error", PendingDeprecationWarning)
+        # Force the Numba (or Python) LOS path to actually run.
+        assert grid.in_collision((0, 0), (2, 2)) is False
+        grid.type_map.array[1, 1] = 1
+        assert grid.in_collision((0, 0), (2, 2)) is True
 
 
 class DummyGrid:

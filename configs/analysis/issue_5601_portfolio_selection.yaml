@@ -1,0 +1,27 @@
+schema_version: scenario-portfolio-selection.v1
+claim_boundary: generated scenario hypotheses only
+source_archive: output/issue_5601/scenario_portfolio_candidates.yaml
+output_path: output/issue_5601/scenario_portfolio_selection.v1.json
+selector:
+  type: coverage_constrained_pareto.v1
+  seed: 5601
+  pareto_axes:
+    - criticality.min_clearance_m
+    - actor_interaction.min_robot_pedestrian_distance_m
+  coverage_fields:
+    - topology.map_family
+    - topology.pedestrian_count_bucket
+    - actor_interaction.near_miss_present
+    - mechanism_signature.failure_mode
+    - criticality.criticality_bucket
+  coverage_quotas:
+    topology.map_family:
+      rule: full_cover
+    topology.pedestrian_count_bucket:
+      rule: full_cover
+    actor_interaction.near_miss_present:
+      rule: full_cover
+    mechanism_signature.failure_mode:
+      rule: full_cover
+    criticality.criticality_bucket:
+      rule: full_cover

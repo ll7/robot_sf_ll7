@@ -1,0 +1,119 @@
+# Issue #5592 pre-registration for a second geometry-distribution matrix.
+#
+# Plain-language summary: this packet freezes the atomic topology rows and the
+# paired comparison contract before any campaign run. It is not benchmark
+# evidence and does not promote the structural ranking beyond two matrices.
+schema_version: issue_5592_cross_matrix_preregistration.v1
+issue: 5592
+status: pre_registered
+benchmark_evidence: false
+
+claim_boundary: >-
+  Pre-registration and CPU contract evidence only. This is a cross-matrix
+  generalization check between two matrices: the classic-interactions matrix
+  and one atomic topology distribution. It does not establish a general-purpose
+  generalization guarantee, run a benchmark campaign, promote a planner or structural ranking,
+  or edit paper/dissertation claims.
+
+execution_boundary:
+  benchmark_campaign_run_in_this_pr: false
+  compute_submit_authorized: false
+  paper_claim_edits: false
+  metric_semantics_changes: false
+  fallback_or_degraded_success_allowed: false
+
+reference_contract:
+  scenario_matrix: configs/scenarios/classic_interactions.yaml
+  structural_ranking_source: configs/analysis/issue_4206_policy_structure_mechanism_crosscut.yaml
+  seed_schedule_source: configs/benchmarks/issue_4206_trace_capable_h600_rerun_preregistration.yaml
+  expected_scenario_count: 23
+
+candidate_contract:
+  scenario_matrix: configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml
+  selected_rows:
+    - scenario_id: corner_90_turn
+      map_id: atomic_corner_90_test
+      primary_capability: topology
+      target_failure_mode: oscillation
+    - scenario_id: u_trap_local_minimum
+      map_id: atomic_u_trap_test
+      primary_capability: topology
+      target_failure_mode: local_minima
+    - scenario_id: corridor_following
+      map_id: atomic_corridor_test
+      primary_capability: topology
+      target_failure_mode: oscillation
+  metadata_contract:
+    required_fields:
+      - map_id
+      - primary_capability
+      - target_failure_mode
+    source_document: docs/context/issue_596_atomic_scenario_matrix.md
+
+pairing_contract:
+  seeds: [20, 21, 22, 23, 24]
+  seed_count: 5
+  horizon_steps: 600
+  dt_seconds: 0.1
+  same_seed_schedule_across_matrices: true
+  same_roster_across_matrices: true
+  scenario_order_frozen: true
+  no_seed_substitution: true
+
+planner_roster:
+  structural_classes:
+    constraint_first_hybrid:
+      - scenario_adaptive_hybrid_orca_v1
+      - hybrid_rule_v3_fast_progress_static_escape
+    learned_policy:
+      - ppo
+      - guarded_ppo
+    predictive:
+      - prediction_planner
+      - prediction_mpc
+      - prediction_mpc_cbf
+    baseline_reactive:
+      - goal
+      - social_force
+      - orca
+      - socnav_sampling
+      - sacadrl
+
+comparison_contract:
+  primary_output: cross_matrix_agreement.csv
+  rank_unit: structural_class
+  metric: constraints_first_structural_rank
+  required_columns:
+    - matrix
+    - structural_class
+    - rank
+    - reference_rank
+    - rank_delta
+    - agreement_status
+    - caveat
+  allowed_agreement_statuses:
+    - agreement
+    - disagreement
+    - blocked_missing_matrix
+    - blocked_incomparable_roster
+  must_emit_disagreement_rows: true
+  interpretation: >-
+    Compare the structural ordering independently on each matrix and report
+    agreement or a rank flip. Do not merge the matrices into one ranking.
+
+artifact_contract:
+  durable_evidence_root: docs/context/evidence/issue_5592_cross_matrix
+  required_files:
+    - README.md
+    - metadata.json
+    - cross_matrix_agreement.csv
+    - SHA256SUMS
+  source_commit_required: true
+  no_worktree_output_as_durable_evidence: true
+
+readiness_decision:
+  benchmark_campaign_run: false
+  compute_submit_authorized: false
+  ranking_claim_promotion: false
+  paper_claim_edits: false
+  fallback_degraded_success_allowed: false

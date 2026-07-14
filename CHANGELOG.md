@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #5034 fixed-scope latency evidence coverage gate.** The control-action-latency evidence
+  promoter can now consume the serialized fixed-scope run plan and fail closed unless every
+  planner-group / latency-variant / seed / scenario cell appears exactly once as a native row with
+  structured latency metadata. Fixed-scope runner rows carry the planner-group identifier needed
+  for this reconciliation. This prevents partial or fallback-tainted output from being labeled as
+  the full sweep; no campaign or compute submission, metric-semantics change, or paper/dissertation
+  claim is produced by this change.
+
 * **issue #5034 fixed-scope scenario resolution.** The fidelity-sensitivity run plan now resolves
   the configured paper benchmark profile to its actual scenario matrix before launch, records all
   48 scenario identifiers and the expected 7,344 episode count, and passes that resolved source to

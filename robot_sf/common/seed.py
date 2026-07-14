@@ -73,7 +73,7 @@ def _set_torch_deterministic_algorithms(torch_module: Any, deterministic: bool) 
         return False
 
     version = str(getattr(torch_module, "__version__", "")).split("+", 1)[0]
-    if sys.version_info[:2] == (3, 12) and version.startswith("2.13.0"):
+    if sys.version_info[:2] >= (3, 12) and version.startswith("2.13.0"):
         c_module = getattr(torch_module, "_C", None)
         c_setter = getattr(c_module, "_set_deterministic_algorithms", None)
         if c_setter is None:

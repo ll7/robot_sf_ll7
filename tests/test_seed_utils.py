@@ -91,42 +91,43 @@ def test_torch_optional_behavior():
         assert rep.has_torch is False
 
 
-def test_torch_213_python312_uses_c_level_determinism_setter(monkeypatch):
-    """Avoid Torch 2.13.0's Python 3.12 Dynamo/Triton import path.
+def test_torch_213_python312_313_uses_c_level_determinism_setter(monkeypatch):
+    """Avoid Torch 2.13.0's Python 3.12/3.13 Dynamo/Triton import path.
 
     The real Torch 2.13.0 ``_C._set_deterministic_algorithms`` builtin takes a
     single positional ``enabled`` flag. The double mirrors that exact arity so
     the test fails if the helper regresses to the 2-arg call that raised
     ``TypeError`` under the actual Torch 2.13.0 graph (issue #5556).
     """
-    monkeypatch.setattr(sys, "version_info", (3, 12))
+    for py_ver in [(3, 12), (3, 13)]:
+        monkeypatch.setattr(sys, "version_info", py_ver)
 
-    calls: list[bool] = []
+        calls: list[bool] = []
 
-    class FakeC:
-        def _set_deterministic_algorithms(self, enabled: bool):
-            calls.append(bool(enabled))
+        class FakeC:
+            def _set_deterministic_algorithms(self, enabled: bool):
+                calls.append(bool(enabled))
 
-    class FakeTorch:
-        __version__ = "2.13.0rc1"
-        _C = FakeC()
+        class FakeTorch:
+            __version__ = "2.13.0rc1"
+            _C = FakeC()
 
-        @staticmethod
-        def use_deterministic_algorithms(_enabled: bool):
-            pytest.fail("Torch 2.13.0 Python 3.12 guard must bypass the public wrapper")
+            @staticmethod
+            def use_deterministic_algorithms(_enabled: bool):
+                pytest.fail(f"Torch 2.13.0 Python {py_ver} guard must bypass the public wrapper")
 
-    assert _set_torch_deterministic_algorithms(FakeTorch(), True)
-    assert calls == [True]
+        assert _set_torch_deterministic_algorithms(FakeTorch(), True)
+        assert calls == [True]
 
-    class MissingCSetterTorch:
-        __version__ = "2.13.0"
-        _C = object()
+        class MissingCSetterTorch:
+            __version__ = "2.13.0"
+            _C = object()
 
-        @staticmethod
-        def use_deterministic_algorithms(_enabled: bool):
-            pytest.fail("Torch 2.13.0 fallback must not call the public wrapper")
+            @staticmethod
+            def use_deterministic_algorithms(_enabled: bool):
+                pytest.fail("Torch 2.13.0 fallback must not call the public wrapper")
 
-    assert not _set_torch_deterministic_algorithms(MissingCSetterTorch(), False)
+        assert not _set_torch_deterministic_algorithms(MissingCSetterTorch(), False)
 
 
 def test_torch_determinism_reports_unavailable_setter(monkeypatch):

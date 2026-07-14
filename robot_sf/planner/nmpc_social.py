@@ -541,6 +541,62 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         """Return additional SLSQP constraints for subclasses."""
         return ()
 
+    def _build_context(self, observation: dict[str, Any]) -> _RolloutContext:
+        """Assemble the per-step rollout context consumed by the optimizer.
+
+        Factored out of :meth:`plan` so external harnesses (for example the
+        #5307 realized-risk calibration routine) can reuse the identical state
+        extraction and guard logic without re-implementing planner internals.
+
+        Returns:
+            The populated ``_RolloutContext`` for one planning call.
+        """
+
+        (
+            robot_pos,
+            heading,
+            speed,
+            goal,
+            ped_positions,
+            ped_velocities,
+            robot_radius,
+            ped_radius,
+        ) = self._extract_state(observation)
+        goal_delta = goal - robot_pos
+        goal_heading = float(np.arctan2(goal_delta[1], goal_delta[0]))
+        goal_heading_error = _wrap_angle(goal_heading - heading)
+        grid_payload = self._cache_grid_payload(observation)
+        speed_cap = self._speed_cap(
+            robot_pos=robot_pos,
+            goal_heading_error=goal_heading_error,
+            observation=observation,
+            grid_payload=grid_payload,
+        )
+        preferred_turn = self._preferred_avoidance_turn(
+            robot_pos=robot_pos,
+            heading=heading,
+            ped_positions=ped_positions,
+            ped_velocities=ped_velocities,
+        )
+        return _RolloutContext(
+            robot_pos=robot_pos,
+            heading=heading,
+            current_speed=speed,
+            goal=goal,
+            ped_positions=ped_positions,
+            ped_velocities=ped_velocities,
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
+            pedestrian_uncertainty_envelope_enabled=bool(
+                self.config.pedestrian_uncertainty_envelope_enabled
+            ),
+            pedestrian_uncertainty_alpha_mps=float(self.config.pedestrian_uncertainty_alpha_mps),
+            observation=observation,
+            speed_cap=speed_cap,
+            preferred_turn=preferred_turn,
+            grid_payload=grid_payload,
+        )
+
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return the first command of the locally optimized NMPC sequence."""
         self._stats["calls"] = int(self._stats.get("calls", 0)) + 1

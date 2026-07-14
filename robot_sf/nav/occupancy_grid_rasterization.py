@@ -40,7 +40,7 @@ def rasterize_line_segment(
     grid_origin_x: float = 0.0,
     grid_origin_y: float = 0.0,
     value: float = 1.0,
-) -> None:
+) -> bool:
     """Rasterize a line segment into the occupancy grid.
 
     Uses Bresenham's line algorithm for efficient discrete line drawing.
@@ -55,6 +55,9 @@ def rasterize_line_segment(
 
     Modifies:
         grid_array: Sets cells along the line to `value`
+
+    Returns:
+        Whether the line intersected the grid and was rasterized.
 
     Performance:
         O(max(|dx|, |dy|)) where dx, dy are grid cell distances
@@ -77,8 +80,7 @@ def rasterize_line_segment(
     max_y = grid_origin_y + config.height
     clipped = _clip_line_to_rect(start, end, min_x, max_x, min_y, max_y)
     if clipped is None:
-        logger.debug("Line segment {line} outside grid bounds, skipping", line=line)
-        return
+        return False
     start_clipped, end_clipped = clipped
 
     try:
@@ -89,10 +91,9 @@ def rasterize_line_segment(
         row1, col1 = world_to_grid_indices(
             end_clipped[0], end_clipped[1], config, grid_origin_x, grid_origin_y
         )
-    except ValueError as e:
+    except ValueError:
         # Endpoint outside grid bounds after clipping (should not happen but defend anyway)
-        logger.debug(f"Line endpoint outside grid after clipping: {e}")
-        return
+        return False
 
     # Bresenham's line algorithm
     cells = _bresenham_line(row0, col0, row1, col1)
@@ -101,6 +102,7 @@ def rasterize_line_segment(
     for row, col in cells:
         if 0 <= row < config.grid_height and 0 <= col < config.grid_width:
             grid_array[row, col] = max(grid_array[row, col], value)
+    return True
 
 
 def _bresenham_line(row0: int, col0: int, row1: int, col1: int) -> list[tuple[int, int]]:
@@ -287,16 +289,26 @@ def rasterize_obstacles(
         O(N * max_line_length) where N = number of obstacles
     """
     count = 0
+    skipped_out_of_bounds = 0
     for obstacle in obstacles:
         try:
-            rasterize_line_segment(
+            rasterized = rasterize_line_segment(
                 obstacle, grid_array, config, grid_origin_x, grid_origin_y, value
             )
-            count += 1
+            if rasterized:
+                count += 1
+            else:
+                skipped_out_of_bounds += 1
         except (ValueError, IndexError, TypeError) as e:
             logger.warning(f"Failed to rasterize obstacle {obstacle}: {e}")
 
-    logger.debug(f"Rasterized {count}/{len(obstacles)} obstacles")
+    logger.debug("Rasterized {}/{} obstacles", count, len(obstacles))
+    if skipped_out_of_bounds:
+        logger.debug(
+            "Skipped {}/{} obstacle segments outside grid bounds",
+            skipped_out_of_bounds,
+            len(obstacles),
+        )
     return count
 
 

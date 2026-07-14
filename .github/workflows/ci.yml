@@ -155,6 +155,28 @@ jobs:
           tests/nav tests/ped_npc tests/render tests/scenarios tests/sensor tests/sim tests/unit
           -q -m "not slow"
 
+  fast-pysf-compat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          version: "0.11.21"
+          enable-cache: true
+          prune-cache: true
+
+      - name: Validate fast-pysf standalone lock
+        run: uv lock --check --directory fast-pysf
+
   smoke-artifacts:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -296,6 +318,7 @@ jobs:
     needs:
       - fast-feedback
       - compat-matrix
+      - fast-pysf-compat
       - smoke-artifacts
       - xdist-scratch-isolation
       - wheel-smoke-install
@@ -310,6 +333,10 @@ jobs:
           fi
           if [[ "${{ needs.compat-matrix.result }}" != "success" ]]; then
             echo "compat-matrix finished with ${{ needs.compat-matrix.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.fast-pysf-compat.result }}" != "success" ]]; then
+            echo "fast-pysf-compat finished with ${{ needs.fast-pysf-compat.result }}" >&2
             exit 1
           fi
           if [[ "${{ needs.wheel-smoke-install.result }}" != "success" ]]; then

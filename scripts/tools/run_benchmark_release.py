@@ -88,6 +88,19 @@ def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str,
             "benchmark_release_manifest_path": release_provenance["manifest_path"],
             "benchmark_release_manifest_sha256": release_provenance["manifest_sha256"],
             "canonical_release_config": release_provenance["canonical_campaign_config"],
+            "release_tag": release_provenance["release_tag"],
+            "doi": release_provenance.get("doi", "10.5281/zenodo.<record-id>"),
+            "doi_url": (
+                f"https://doi.org/{release_provenance.get('doi', '10.5281/zenodo.<record-id>')}"
+            ),
+            "release_url": (
+                f"{release_provenance.get('repository_url', 'https://github.com/ll7/robot_sf_ll7').rstrip('/')}/releases/"
+                f"tag/{release_provenance['release_tag']}"
+            ),
+            "release_asset_url": (
+                f"{release_provenance.get('repository_url', 'https://github.com/ll7/robot_sf_ll7').rstrip('/')}/releases/download/"
+                f"{release_provenance['release_tag']}/{campaign_root.name}_publication_bundle.tar.gz"
+            ),
         }
     )
     _write_json(summary_path, summary)

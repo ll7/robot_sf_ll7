@@ -103,6 +103,11 @@ def _sha256_stream(handle: BinaryIO) -> str:
     return digest.hexdigest()
 
 
+def _checksum_for_payload(checksums: Mapping[str, str], payload_path: str) -> str | None:
+    """Resolve legacy payload-relative and corrected bundle-root checksum paths."""
+    return checksums.get(payload_path) or checksums.get(f"payload/{payload_path}")
+
+
 class _AuditState:
     def __init__(self) -> None:
         self.violation_counts: Counter[str] = Counter()
@@ -482,7 +487,7 @@ def audit_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     else:
                         digest = _sha256_stream(handle)
                     payload_hashes[payload_path] = digest
-                    expected_digest = checksums.get(payload_path)
+                    expected_digest = _checksum_for_payload(checksums, payload_path)
                     if expected_digest is None:
                         state.add("unsigned_payload", f"payload file is unsigned: {payload_path}")
                     elif digest != expected_digest:
@@ -492,7 +497,8 @@ def audit_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
 
     if len(roots) != 1:
         state.add("archive_root", f"expected one archive root, found {sorted(roots)!r}")
-    missing_payloads = sorted(set(checksums) - set(payload_hashes))
+    normalized_checksum_paths = {path.removeprefix("payload/") for path in checksums}
+    missing_payloads = sorted(normalized_checksum_paths - set(payload_hashes))
     for path in missing_payloads:
         state.add("missing_payload", f"signed payload file is missing: {path}")
 
@@ -508,7 +514,10 @@ def audit_bundle(  # noqa: C901, PLR0912, PLR0913, PLR0915
             for entry in published_files
             if isinstance(entry, Mapping)
         }
-        if published_hashes != checksums:
+        normalized_checksums = {
+            path.removeprefix("payload/"): digest for path, digest in checksums.items()
+        }
+        if published_hashes != normalized_checksums:
             state.add("publication_file_manifest", "publication file manifest != checksums.sha256")
     else:
         state.add("publication_file_manifest", "publication manifest files must be a list")

@@ -35,6 +35,18 @@ _CONSISTENCY_FIELDS = (
 )
 _CHECKSUM_LINE = re.compile(r"^(?P<digest>[0-9a-fA-F]{64})\s+(?P<path>\*?.+)$")
 _PLACEHOLDER_TOKENS = ("{release_tag}", "<record-id>", "<record_id>", "00000")
+_REQUIRED_NON_EMPTY_FIELDS = frozenset(
+    {
+        "publication_channels.release_tag",
+        "publication_channels.doi",
+        "publication_channels.release_url",
+        "campaign.release_tag",
+        "campaign.doi",
+        "campaign.doi_url",
+        "campaign.release_url",
+        "release_tag",
+    }
+)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -123,7 +135,15 @@ def _add_placeholder_blockers(
 ) -> None:
     """Reject unresolved DOI, release URL, and release-tag templates."""
     for field, value in values.items():
-        if not isinstance(value, str):
+        if field in _REQUIRED_NON_EMPTY_FIELDS and (
+            not isinstance(value, str) or not value.strip()
+        ):
+            blockers.append(f"publication metadata field {field} must be a non-empty string")
+            continue
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value.strip():
+            blockers.append(f"publication metadata field {field} must be a non-empty string")
             continue
         if any(token in value for token in _PLACEHOLDER_TOKENS):
             blockers.append(f"unresolved publication placeholder in {field}: {value!r}")

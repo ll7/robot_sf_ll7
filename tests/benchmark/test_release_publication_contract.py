@@ -195,6 +195,23 @@ def test_placeholder_and_manifest_shape_blocks_publication(tmp_path: Path) -> No
     assert any("files must be a list" in blocker for blocker in report["blockers"])
 
 
+def test_empty_publication_metadata_blocks(tmp_path: Path) -> None:
+    """Empty required release fields cannot masquerade as resolved metadata."""
+    campaign_root, bundle_dir = _build_fixture(tmp_path)
+    publication_path = bundle_dir / "publication_manifest.json"
+    publication = json.loads(publication_path.read_text(encoding="utf-8"))
+    publication["publication_channels"]["doi"] = "   "
+    publication["publication_channels"]["release_url"] = ""
+    _write_json(publication_path, publication)
+
+    report = validate_release_publication_contract(
+        campaign_root, bundle_dir, expected_release_tag="v1"
+    )
+
+    assert report["status"] == "blocked"
+    assert sum("must be a non-empty string" in blocker for blocker in report["blockers"]) == 2
+
+
 def test_checksum_and_commit_provenance_mismatches_block(tmp_path: Path) -> None:
     """Changed payloads and missing publication commits cannot pass the gate."""
     campaign_root, bundle_dir = _build_fixture(tmp_path)

@@ -12,6 +12,7 @@ import json
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.heterogeneous_population_metrics import (
@@ -23,6 +24,7 @@ from robot_sf.benchmark.pedestrian_control_trace import (
     build_generated_population_control_trace_labels,
 )
 from robot_sf.ped_npc.ped_archetypes import allocate_archetype_counts, assign_archetype_labels
+from robot_sf.training.scenario_loader import load_scenarios
 
 HETEROGENEOUS_POPULATION_ABLATION_SCHEMA = "heterogeneous_population_ablation_harness.v1"
 MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA = "mean_matched_heterogeneity_harness.v1"
@@ -200,6 +202,211 @@ def build_per_archetype_ablation_report(
     }
 
 
+def _resolve_harness_scenarios(
+    config: Mapping[str, Any],
+    *,
+    config_path: str | None,
+) -> tuple[Sequence[Any], dict[str, Any] | None]:
+    """Resolve inline cells or derive cells from the canonical scenario matrix.
+
+    Matrix cells intentionally contribute only their scenario identity, map, and
+    pedestrian density. The required scenario_matrix_derivation block supplies
+    the fixed population size, composition, and archetype parameters used to create
+    the paired treatment arms; this prevents a silent harness-specific population
+    default from changing the matrix contract.
+
+    Returns:
+        Tuple of normalized scenario rows and optional matrix provenance metadata.
+    """
+
+    raw_matrix_path = config.get("scenario_matrix")
+    if raw_matrix_path is None:
+        return _required_sequence(config, "scenarios"), None
+    if "scenarios" in config:
+        raise ValueError("configure either scenarios or scenario_matrix, not both")
+
+    derivation = _required_mapping(config, "scenario_matrix_derivation")
+    matrix_path = _resolve_input_path(
+        raw_matrix_path,
+        config_path=config_path,
+        field_name="scenario_matrix",
+    )
+    matrix_scenarios = load_scenarios(matrix_path)
+    if not matrix_scenarios:
+        raise ValueError(f"scenario_matrix produced no scenarios: {matrix_path}")
+
+    derived_scenarios: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for index, matrix_scenario in enumerate(matrix_scenarios):
+        if not isinstance(matrix_scenario, Mapping):
+            raise ValueError(f"scenario_matrix scenarios[{index}] must be mapping")
+        scenario_id = _matrix_scenario_id(matrix_scenario, index=index)
+        if scenario_id in seen_ids:
+            raise ValueError(f"scenario_matrix contains duplicate scenario id: {scenario_id}")
+        seen_ids.add(scenario_id)
+        map_file = _resolve_matrix_map_file(matrix_scenario, matrix_path=matrix_path, index=index)
+        density = _matrix_scenario_density(matrix_scenario, index=index)
+        derived = dict(derivation)
+        derived.update(
+            {
+                "id": scenario_id,
+                "density": density,
+                "map_file": _portable_path(map_file),
+            }
+        )
+        derived_scenarios.append(derived)
+
+    return derived_scenarios, {
+        "scenario_matrix": _portable_path(matrix_path),
+        "scenario_matrix_derivation": dict(derivation),
+    }
+
+
+def _resolve_input_path(
+    raw_path: Any,
+    *,
+    config_path: str | None,
+    field_name: str,
+) -> Path:
+    """Resolve a config path from the working tree or alongside its config file.
+
+    Returns:
+        Existing absolute path for the configured input file.
+    """
+
+    if isinstance(raw_path, bool) or not isinstance(raw_path, (str, Path)):
+        raise ValueError(f"{field_name} must be a non-empty path")
+    path = Path(raw_path).expanduser()
+    if not str(path).strip():
+        raise ValueError(f"{field_name} must be a non-empty path")
+    if path.is_absolute():
+        candidate_paths = [path]
+    else:
+        candidate_paths = [Path.cwd() / path]
+        if config_path is not None:
+            candidate_paths.append(Path(config_path).expanduser().parent / path)
+    for candidate in _unique_paths(candidate_paths):
+        if candidate.is_file():
+            return candidate.resolve()
+    searched = ", ".join(str(candidate.resolve()) for candidate in _unique_paths(candidate_paths))
+    raise ValueError(f"{field_name} does not resolve to a file; searched: {searched}")
+
+
+def _matrix_scenario_id(scenario: Mapping[str, Any], *, index: int) -> str:
+    """Return the stable name/id used to attribute one matrix cell."""
+
+    for key in ("name", "id", "scenario_id"):
+        value = scenario.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    raise ValueError(f"scenario_matrix scenarios[{index}].name/id must be non-empty")
+
+
+def _matrix_scenario_density(scenario: Mapping[str, Any], *, index: int) -> float:
+    """Read the matrix cell's declared pedestrian density without inventing one.
+
+    Returns:
+        The finite non-negative density declared by the matrix cell.
+    """
+
+    top_level = scenario.get("ped_density")
+    simulation_config = scenario.get("simulation_config")
+    nested = (
+        simulation_config.get("ped_density") if isinstance(simulation_config, Mapping) else None
+    )
+    if top_level is not None and nested is not None:
+        try:
+            if not math.isclose(float(top_level), float(nested), rel_tol=0.0, abs_tol=1e-12):
+                raise ValueError(
+                    f"scenario_matrix scenarios[{index}] has conflicting ped_density values"
+                )
+        except (TypeError, ValueError) as exc:
+            if isinstance(exc, ValueError) and "conflicting" in str(exc):
+                raise
+            raise ValueError(
+                f"scenario_matrix scenarios[{index}].ped_density must be finite numeric"
+            ) from exc
+    raw_density = nested if nested is not None else top_level
+    if raw_density is None:
+        raise ValueError(
+            f"scenario_matrix scenarios[{index}] must declare simulation_config.ped_density"
+        )
+    try:
+        density = float(raw_density)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"scenario_matrix scenarios[{index}].ped_density must be finite numeric"
+        ) from exc
+    if not math.isfinite(density) or density < 0.0:
+        raise ValueError(f"scenario_matrix scenarios[{index}].ped_density must be finite and >= 0")
+    return density
+
+
+def _resolve_matrix_map_file(
+    scenario: Mapping[str, Any],
+    *,
+    matrix_path: Path,
+    index: int,
+) -> Path:
+    """Resolve and validate a matrix cell's map reference before row creation.
+
+    Returns:
+        Existing absolute map path for the matrix cell.
+    """
+
+    raw_map_file = scenario.get("map_file")
+    if not isinstance(raw_map_file, str) or not raw_map_file.strip():
+        raise ValueError(f"scenario_matrix scenarios[{index}].map_file must be non-empty")
+    candidate = Path(raw_map_file).expanduser()
+    bases = [Path(".")] if candidate.is_absolute() else [matrix_path.parent, _repo_root()]
+    candidates = [candidate] if candidate.is_absolute() else [base / candidate for base in bases]
+    for path in _unique_paths(candidates):
+        if path.is_file():
+            return path.resolve()
+    searched = ", ".join(str(path.resolve()) for path in _unique_paths(candidates))
+    raise ValueError(
+        f"scenario_matrix scenarios[{index}].map_file does not resolve to a file; searched: {searched}"
+    )
+
+
+def _repo_root() -> Path:
+    """Return the repository root for portable map/matrix paths in generated manifests."""
+
+    return Path(__file__).resolve().parents[2]
+
+
+def _portable_path(path: Path) -> str:
+    """Prefer repository-relative paths while retaining valid external absolute paths.
+
+    Returns:
+        Portable path string for manifest serialization.
+    """
+
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(_repo_root()).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
+def _unique_paths(paths: Sequence[Path]) -> list[Path]:
+    """Preserve candidate order while removing equivalent path spellings.
+
+    Returns:
+        Candidate paths with duplicate spellings removed.
+    """
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths:
+        normalized = path.expanduser()
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        unique.append(normalized)
+    return unique
+
+
 def build_mean_matched_harness_manifest(
     config: Mapping[str, Any],
     *,
@@ -215,7 +422,7 @@ def build_mean_matched_harness_manifest(
         Versioned manifest payload with paired rows and trace-readiness diagnostics.
     """
 
-    scenarios = _required_sequence(config, "scenarios")
+    scenarios, scenario_source = _resolve_harness_scenarios(config, config_path=config_path)
     planner_rows = _planner_rows(_required_sequence(config, "planners"))
     seed_rows = _seed_rows(_required_sequence(config, "seeds"))
     metric_keys = _metric_keys(config.get("trace_metric_keys", ("clearance_m",)))
@@ -253,7 +460,7 @@ def build_mean_matched_harness_manifest(
         status = "blocked_pending_control_trace"
     else:
         status = "pending_runtime_capture"
-    return {
+    manifest = {
         "schema_version": MEAN_MATCHED_HETEROGENEITY_HARNESS_SCHEMA,
         "issue": 3574,
         "status": status,
@@ -280,6 +487,9 @@ def build_mean_matched_harness_manifest(
         "row_count": len(manifest_rows),
         "blockers": blockers,
     }
+    if scenario_source is not None:
+        manifest.update(scenario_source)
+    return manifest
 
 
 def assess_mean_matched_episode_records(
@@ -537,6 +747,7 @@ def _manifest_scenario_rows(
     density = _required_float(scenario, "density", context=f"scenarios[{scenario_index}]")
     if density < 0.0:
         raise ValueError(f"scenarios[{scenario_index}].density must be >= 0")
+    map_file = _optional_map_file(scenario, scenario_index=scenario_index)
     population_size = _required_int(
         scenario, "population_size", context=f"scenarios[{scenario_index}]"
     )
@@ -572,6 +783,8 @@ def _manifest_scenario_rows(
         "mean_matched_parameters": pair["mean_matched_parameters"],
         "trace_readiness_by_arm": trace_readiness_by_arm,
     }
+    if map_file is not None:
+        scenario_row["map_file"] = map_file
 
     manifest_rows: list[dict[str, Any]] = []
     fractions: Sequence[float | None] = response_law_fractions or (None,)
@@ -628,11 +841,24 @@ def _manifest_scenario_rows(
                         "trace_readiness": trace_readiness_by_arm[arm],
                         "arm_population": response_pair["arms"][arm],
                     }
+                    if map_file is not None:
+                        row["map_file"] = map_file
                     if response_law_fraction is not None:
                         row["response_law_fraction"] = response_law_fraction
                     manifest_rows.append(row)
 
     return scenario_row, manifest_rows, blockers
+
+
+def _optional_map_file(scenario: Mapping[str, Any], *, scenario_index: int) -> str | None:
+    """Return an explicitly configured map without changing legacy row payloads."""
+
+    if "map_file" not in scenario:
+        return None
+    value = scenario.get("map_file")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"scenarios[{scenario_index}].map_file must be non-empty")
+    return value.strip()
 
 
 def _arm_has_control_trace_labels(

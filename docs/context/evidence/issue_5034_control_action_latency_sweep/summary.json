@@ -90,6 +90,8 @@
   "config_path": "configs/research/fidelity_sensitivity_v1.yaml",
   "date": "2026-07-14",
   "depends_on_pr": "#5026",
+  "distance_convention": "surface_clearance",
+  "evidence_tier": "targeted smoke",
   "exclusion_policy": "Per the issue #691 benchmark fallback policy, any row whose execution_mode is not native/adapter or whose availability_status is not available, plus any latency-axis row missing action_latency metadata or a valid seed, is recorded as an exclusion and never contributes to the result metrics. This keeps fallback/degraded execution out of the latency result set.",
   "exclusions": {
     "excluded_row_count": 0,
@@ -97,7 +99,7 @@
     "sample_exclusions": []
   },
   "fixed_scope_coverage": null,
-  "git_head": "537deb9c4f0019135a9d0c189306cfa0eb08ffef",
+  "git_head": "9e69b82e411a9efba3dc125593fd2c550cf15589",
   "issue": 5034,
   "latency_coverage": {
     "coverage_complete": true,
@@ -777,6 +779,8 @@
     "collision_rate",
     "min_clearance"
   ],
+  "result_classification": "diagnostic-only",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "control-action-latency-sweep-evidence-promotion.v2",
   "scope": {
     "excluded_row_count": 0,

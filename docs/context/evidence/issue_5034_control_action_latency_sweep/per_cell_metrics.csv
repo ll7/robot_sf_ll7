@@ -1,3 +1,5 @@
+# AI-GENERATED NEEDS-REVIEW
+# distance_convention: surface_clearance
 planner,planner_group,latency_step,latency_ms,variant,variant_source_key,baseline_variant,seed,scenario_id,success_rate,collision_rate,min_clearance,classification,exclusion_reason,execution_mode,availability_status
 goal_seek,,0,0.0,control_action_latency__zero_step_nominal,zero_step_nominal,True,101,issue_5034_classic_crossing_homogeneous,0.0,1.0,-0.09604552918944542,result,,native,available
 goal_seek,,0,0.0,control_action_latency__zero_step_nominal,zero_step_nominal,True,102,issue_5034_classic_crossing_homogeneous,0.0,1.0,-0.018985474876801578,result,,native,available

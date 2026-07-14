@@ -1,11 +1,15 @@
+<!-- AI-GENERATED (robot_sf#5034, 2026-07-14) - NEEDS-REVIEW -->
 # Issue #5034 Control-action-latency sweep evidence 2026-07-14
 
 Plain-language summary: this bundle promotes raw fidelity-campaign episode rows into a compact control-action-latency evidence summary. It reports the 0/100/300 ms-equivalent delay cells' success, collision, and minimum-clearance metrics and excludes any fallback/degraded/non-native rows. It is not paper-facing evidence.
 
 - Schema: `control-action-latency-sweep-evidence-promotion.v2`
-- Git head: `537deb9c4f0019135a9d0c189306cfa0eb08ffef`
+- Git head: `9e69b82e411a9efba3dc125593fd2c550cf15589`
 - Raw rows: `output/fidelity_latency_raw/episode_rows.jsonl`
 - Preflight decision: `ready`
+- Evidence tier: `targeted smoke`
+- Result classification: `diagnostic-only`
+- Distance convention: `surface_clearance`
 - Claim boundary: control-action-latency metric-evidence promotion only: reads raw fidelity-campaign episode rows, isolates the control_action_latency axis, and reports action-latency metadata plus success / collision / minimum-clearance metrics per native latency cell. It runs no episode and promotes no claim beyond the declared campaign evidence tier; it is not simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence.
 
 ## Scope

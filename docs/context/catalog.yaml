@@ -56,6 +56,14 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5596_blind_corner_diagnostic/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5596_blind_corner_diagnostic/blind_corner_diagnostic.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5600_persistence_gate.md
   status: evidence
   freshness: evidence

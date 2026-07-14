@@ -62,6 +62,12 @@ diagnostics, denominator/exclusion table, paired comparison, and the explicit cl
 Raw JSONL, videos, checkpoints, and large logs stay out of Git; durable derived evidence belongs
 under `docs/context/evidence/issue_5416_sipp_four_geometry/` before any interpretation.
 
+## Paired-analysis handoff
+
+[`scripts/analysis/analyze_issue_5416_sipp_four_geometry.py`](../../scripts/analysis/analyze_issue_5416_sipp_four_geometry.py)
+consumes native JSONL plus per-planner provenance and writes summary, exclusion, and paired-comparison
+artifacts; missing/fallback rows, collision components, diagnostics, or provenance fail closed.
+
 ## Validation and exclusions
 
 ```bash

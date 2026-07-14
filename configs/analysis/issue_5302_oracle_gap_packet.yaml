@@ -146,6 +146,69 @@ metrics:
     - maximum_normalized_regret
   metric_semantics: frozen_existing_metric_layer_only
 
+inference_contract:
+  resampling_unit:
+    method: "scenario-family-clustered hierarchical bootstrap (family → cell → episode)"
+    rationale: >-
+      Treatment scenarios as the outer resampling unit (scenario family, then cell,
+      then episode) because between-scenario heterogeneity is large and the inference
+      target is generalization to unseen scenario families, not only to new seeds
+      on the same scenarios. The ceilings.uncertainty.hierarchical_bootstrap method
+      in this packet requires this structure.
+    bootstrap_confidence: 0.95
+    resampling_order: "scenario_family → scenario_cell → episode"
+
+  inference_population:
+    type: "sampled_population"
+    rationale: >-
+      The evaluation scenarios are drawn from a broader scenario population, not
+      treated as a fixed benchmark suite. The selection/evaluation split enforces
+      family-level holdout to test generalization, and the hierarchical bootstrap
+      reflects uncertainty about which families might appear in future benchmarks.
+
+  estimand:
+    type: "paired_delta_and_per_arm"
+    description: >-
+      Primary estimand: the gap between each policy-selection ceiling (fixed planner,
+      family-best, cell-best, oracle) and the best fixed planner. The gap is computed
+      as a paired episode-level delta (ceiling value minus fixed-planner value) with
+      hierarchical bootstrap intervals. Secondary estimand: per-arm per-family success
+      and collision rates, used for the marginal-gap boundary test.
+
+  decision_rule:
+    rule: >-
+      Marginal-gap boundary: if family and cell ceilings only marginally exceed the
+      fixed planner under 95% held-out hierarchical intervals, stop selector work.
+    threshold: >-
+      "Marginally exceed" means the 95% CI lower bound for the gap is within the
+      practical-equivalence band (success rate within 2 percentage points of zero).
+      "Large and stable" means the gap CI excludes the practical-equivalence band
+      entirely. The dominance-claim guard always applies: no planner may be called
+      universally best without non-inferiority lower bounds on every family.
+
+  primary_metrics:
+    metrics:
+      - collision_rate
+      - severe_intrusion_rate
+      - completion_rate
+      - tail_clearance
+    ordered_by_importance: true
+
+  multiplicity_handling:
+    strategy: >-
+      The four ceilings (best_fixed_planner, family-best, cell-best, oracle) are
+      ordered by complexity and not treated as independent tests. The primary
+      comparison is whether the family-best and cell-best gaps are large and stable
+      (not marginal). Practical-equivalence banding reduces multiplicity risk by
+      treating small gaps as inconclusive rather than calling them significant.
+    rationale: >-
+      The ceiling hierarchy is inherently nested: the cell-best ceiling is
+      guaranteed to dominate the family-best, which dominates the fixed planner.
+      Standard multiplicity correction would penalize a structure that is
+      non-parametrically ordered by construction. Practical-equivalence banding
+      controls false-positive risk without correcting for a non-independent
+      hierarchy.
+
 row_status_policy:
   successful_evidence_values: [successful_evidence]
   eligible_execution_modes: [native]
@@ -196,9 +259,10 @@ validation:
   no_submit_commands:
     - uv run python scripts/validation/check_issue_5302_oracle_gap_packet.py --json
     - uv run pytest tests/validation/test_check_issue_5302_oracle_gap_packet.py -q
+    - uv run python scripts/validation/check_preregistration_inference_contract.py --json configs/analysis/issue_5302_oracle_gap_packet.yaml
   future_analysis_command: >-
-    Reserved for the native campaign analysis follow-up under parent issue #5302;
-    no executable analysis command is introduced in this contract-only PR.
+     Reserved for the native campaign analysis follow-up under parent issue #5302;
+     no executable analysis command is introduced in this contract-only PR.
   campaign_execution_allowed_in_this_pr: false
 
 readiness_decision:

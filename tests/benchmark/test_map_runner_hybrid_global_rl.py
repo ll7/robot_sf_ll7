@@ -1,4 +1,3 @@
-# ruff: noqa: D103
 """Tests for map-runner hybrid global/RL-local policy registration."""
 
 from __future__ import annotations

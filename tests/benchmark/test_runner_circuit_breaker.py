@@ -126,6 +126,7 @@ class TestErrorSignature:
 # -- _run_batch_sequential circuit breaker tests --
 
 
+@pytest.mark.base_sensitive
 class TestSequentialCircuitBreaker:
     """Tests for the circuit breaker in _run_batch_sequential."""
 
@@ -365,6 +366,7 @@ class TestSequentialCircuitBreaker:
         assert abort_meta["projected_episodes_saved"] == 10
 
 
+@pytest.mark.base_sensitive
 def test_map_serial_circuit_breaker_aborts_identical_failures(tmp_path: Path) -> None:
     """Map-based serial arms use the same fail-closed breaker contract."""
     calls = 0

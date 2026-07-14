@@ -215,12 +215,15 @@ def _validate_default_source_contract(runs: list[RunSource]) -> None:
 
     if not _matches_default_runs(runs):
         return
-    manifest_path = Path(__file__).resolve().parents[2] / (
+    repo_root = Path(__file__).resolve().parents[2]
+    manifest_path = repo_root / (
         DEFAULT_OUTPUT_DIR / "h600_source_reports_manifest.json"
     )
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        report = validate_source_reports(manifest)
+        if not isinstance(manifest, dict):
+            raise ContractError("manifest must be a JSON object")
+        report = validate_source_reports(manifest, repo_root=repo_root)
     except (OSError, json.JSONDecodeError, ContractError) as exc:
         raise RuntimeError(f"issue #5164 source-report contract is malformed: {exc}") from exc
     if not report["downstream_export_allowed"]:
@@ -335,10 +338,13 @@ def _load_run(run: RunSource) -> dict[str, Any]:
     reports_dir = run.reports_dir
     family_path = reports_dir / "scenario_family_breakdown.csv"
     cell_path = reports_dir / "scenario_breakdown.csv"
-    if not family_path.exists():
+    seed_path = reports_dir / "seed_episode_rows.csv"
+    if not family_path.is_file():
         raise FileNotFoundError(f"missing canonical family breakdown: {_public_path(family_path)}")
-    if not cell_path.exists():
+    if not cell_path.is_file():
         raise FileNotFoundError(f"missing canonical cell breakdown: {_public_path(cell_path)}")
+    if not seed_path.is_file():
+        raise FileNotFoundError(f"missing canonical seed episode rows: {_public_path(seed_path)}")
     meta = _campaign_meta(reports_dir)
     matrix_hash = meta["scenario_matrix_hash"]
     family_rows = [
@@ -373,8 +379,8 @@ def _load_run(run: RunSource) -> dict[str, Any]:
                 "sha256": sha256_file(cell_path),
             },
             "seed_episode_rows.csv": {
-                "path": _public_path(reports_dir / "seed_episode_rows.csv"),
-                "sha256": sha256_file(reports_dir / "seed_episode_rows.csv"),
+                "path": _public_path(seed_path),
+                "sha256": sha256_file(seed_path),
             },
         },
     }
@@ -567,7 +573,7 @@ def _write_sha256sums(output_dir: Path) -> None:
     for path in sorted(output_dir.iterdir()):
         if path.name == "SHA256SUMS" or not path.is_file():
             continue
-        lines.append(f"{sha256_file(path)}  {_public_path(path)}")
+        lines.append(f"{sha256_file(path)}  {path.name}")
     (output_dir / "SHA256SUMS").write_text(
         f"# {REVIEW_MARKER}\n" + "\n".join(lines) + "\n", encoding="utf-8"
     )
@@ -624,7 +630,9 @@ def _append_readme_section(output_dir: Path, fragment: str) -> None:
     """Append the #5138 section to the bundle README (idempotent)."""
 
     readme_path = output_dir / "README.md"
-    text = readme_path.read_text(encoding="utf-8")
+    if readme_path.exists() and not readme_path.is_file():
+        raise RuntimeError(f"README path is not a regular file: {_public_path(readme_path)}")
+    text = readme_path.read_text(encoding="utf-8") if readme_path.is_file() else ""
     marker_comment = f"<!-- {REVIEW_MARKER} -->"
     if marker_comment not in text:
         text = marker_comment + "\n\n" + text.lstrip()

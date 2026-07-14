@@ -361,6 +361,7 @@ def test_source_manifest_and_sha256sums_updated_and_gate_coverage(tmp_path: Path
         if line.startswith("#"):
             continue
         digest, rel = line.split()
+        assert rel == Path(rel).name
         sums[Path(rel).name] = digest
     checksummed = [
         p for p in output_dir.iterdir() if p.is_file() and p.suffix in {".md", ".json", ".csv"}
@@ -416,4 +417,31 @@ def test_build_export_fails_closed_when_canonical_breakdown_missing(tmp_path: Pa
     # Delete one canonical family breakdown -> builder must fail closed.
     (runs[0].reports_dir / "scenario_family_breakdown.csv").unlink()
     with pytest.raises(FileNotFoundError):
+        build_export(output_dir, runs)
+
+
+def test_build_export_fails_closed_when_seed_episode_rows_missing(tmp_path: Path) -> None:
+    """A missing provenance source must fail before any digest is computed."""
+    output_dir, runs = _make_bundle(tmp_path)
+    (runs[0].reports_dir / "seed_episode_rows.csv").unlink()
+    with pytest.raises(FileNotFoundError, match="seed episode rows"):
+        build_export(output_dir, runs)
+
+
+def test_build_export_treats_missing_readme_as_empty(tmp_path: Path) -> None:
+    """The optional README is created when a bundle has no existing README."""
+    output_dir, runs = _make_bundle(tmp_path)
+    (output_dir / "README.md").unlink()
+    build_export(output_dir, runs)
+    assert "Issue #5138 per-family + per-cell h600 breakdown export" in (
+        output_dir / "README.md"
+    ).read_text(encoding="utf-8")
+
+
+def test_build_export_rejects_directory_readme(tmp_path: Path) -> None:
+    """A directory at the README path is rejected with a clear contract error."""
+    output_dir, runs = _make_bundle(tmp_path)
+    (output_dir / "README.md").unlink()
+    (output_dir / "README.md").mkdir()
+    with pytest.raises(RuntimeError, match="README path is not a regular file"):
         build_export(output_dir, runs)

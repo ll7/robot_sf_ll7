@@ -1,0 +1,83 @@
+## Issue #5034 control-action-latency sweep — cheap-lane CPU scenario slice
+#
+# Purpose:
+#   A bounded, CPU-only scenario slice used by the cheap-lane implementation worker to
+#   execute the control_action_latency axis (0/1/3 steps, i.e. 0/100/300 ms-equivalent
+#   delays) of the fidelity-sensitivity study config for the two dependency-free native
+#   planners (goal_seek, baseline_social_force). It runs REAL Robot SF simulator episodes
+#   and feeds raw rows to scripts/benchmark/promote_control_action_latency_evidence.py.
+#
+# This is NOT the full 7,344-episode fixed-scope campaign (that requires native ORCA/hybrid
+# planners and Slurm capacity). It is a conservative, reproducible CPU slice that produces a
+# genuine native latency evidence artifact rather than another readiness/decision packet.
+#
+# Canonical cheap-lane command shape:
+#   uv run python scripts/benchmark/run_control_action_latency_sweep_cheap_lane.py \
+#     --config configs/research/fidelity_sensitivity_v1.yaml \
+#     --scenario-set configs/scenarios/sets/issue_5034_latency_sweep_cpu_v1.yaml \
+#     --raw-root output/fidelity_latency_raw --horizon 80
+#   uv run python scripts/benchmark/promote_control_action_latency_evidence.py \
+#     --raw-rows output/fidelity_latency_raw/episode_rows.jsonl \
+#     --require-ready
+
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+  - name: issue_5034_classic_crossing_homogeneous
+    map_file: ../../../maps/svg_maps/classic_crossing.svg
+    simulation_config:
+      max_episode_steps: 80
+      ped_density: 0.02
+      route_spawn_distribution: spread
+      route_spawn_seed: 3206
+      max_peds_per_group: 3
+      archetype_composition:
+        standard: 1.0
+      archetype_speed_factors:
+        cautious: 0.7
+        standard: 1.0
+        hurried: 1.4
+      archetype_seed: 3206
+    robot_config: {}
+    metadata:
+      issue: 5034
+      archetype: crossing
+      archetype_condition: homogeneous_standard
+      density: low
+      evidence_tier: cheap_lane_cpu_slice
+      claim_boundary: >
+        Cheap-lane CPU slice only; runs real native episodes for the two dependency-free
+        planners on the control_action_latency axis; not the full fixed-scope campaign,
+        not the native ORCA/hybrid planner set, not paper-facing evidence.
+    seeds: [101, 102, 103]
+  - name: issue_5034_classic_crossing_mixed
+    map_file: ../../../maps/svg_maps/classic_crossing.svg
+    simulation_config:
+      max_episode_steps: 80
+      ped_density: 0.02
+      route_spawn_distribution: spread
+      route_spawn_seed: 3206
+      max_peds_per_group: 3
+      archetype_composition:
+        cautious: 0.34
+        standard: 0.33
+        hurried: 0.33
+      archetype_speed_factors:
+        cautious: 0.7
+        standard: 1.0
+        hurried: 1.4
+      archetype_seed: 3206
+    robot_config: {}
+    metadata:
+      issue: 5034
+      archetype: crossing
+      archetype_condition: mixed_balanced
+      density: low
+      evidence_tier: cheap_lane_cpu_slice
+      claim_boundary: >
+        Cheap-lane CPU slice only; runs real native episodes for the two dependency-free
+        planners on the control_action_latency axis; not the full fixed-scope campaign,
+        not the native ORCA/hybrid planner set, not paper-facing evidence.
+    seeds: [101, 102, 103]
+
+map_search_paths:
+  - ../../../maps/svg_maps

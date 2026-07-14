@@ -1,0 +1,211 @@
+# Issue #5302 fixed-planner gap and scenario-conditioned oracle analysis packet.
+#
+# Plain-language summary: this packet fixes the comparison roster, split, and
+# reporting contract needed to measure whether planner selection adds value.
+# It is a pre-registration/checker surface, not a benchmark result.
+schema_version: issue_5302_oracle_gap_analysis_packet.v1
+issue: 5302
+name: issue_5302_fixed_planner_gap_and_oracle_ceiling
+claim_boundary: >-
+  Pre-registration and analysis-contract evidence only. This packet does not
+  run a full benchmark campaign and does not submit Slurm/GPU work, promote a planner
+  ranking, or edit paper/dissertation claims. Any result remains diagnostic
+  until native rows, family-level holdouts, provenance, and the report checks
+  below pass.
+
+execution_boundary:
+  run_benchmark: false
+  compute_submit_authorized: false
+  paper_claim_edits: false
+  selector_training: false
+  fallback_or_degraded_success_allowed: false
+
+planner_roster:
+  selection_policy: >-
+    Compare exactly these five mechanism-stratified planner keys. Do not
+    silently expand to all registered keys.
+  required:
+    - planner_id: orca
+      role: baseline_reactive
+      readiness: canonical_baseline
+      config_path: null
+    - planner_id: ppo
+      role: learned_policy
+      readiness: artifact_qualified_only
+      config_path: configs/algos/ppo_v3_camera_ready.yaml
+    - planner_id: prediction_planner
+      role: predictive
+      readiness: checkpoint_qualified_only
+      config_path: configs/algos/prediction_planner_camera_ready.yaml
+    - planner_id: scenario_adaptive_hybrid_orca_v1
+      role: scenario_adaptive_hybrid_leader
+      readiness: candidate_requires_existing_provenance
+      config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+    - planner_id: prediction_mpc
+      role: predictive_mpc
+      readiness: experimental_explicit_opt_in
+      config_path: configs/algos/prediction_mpc_cv.yaml
+  gated_or_deferred:
+    - planner_id: risk_dwa
+      condition: issue_5262_zero_over_69_diagnosis_resolved
+      inclusion: do_not_include_before_condition
+    - planner_id: sipp_lattice
+      condition: state_time_lattice_candidate_lands
+      inclusion: later_follow_up_only
+
+input_contract:
+  source_kind: canonical_result_store_or_durable_campaign_bundle
+  required_row_fields:
+    - episode_id
+    - scenario_id
+    - scenario_family
+    - scenario_cell
+    - split
+    - seed
+    - planner_id
+    - row_status
+    - execution_mode
+    - config_hash
+    - repo_commit
+    - selection_score
+    - collision_rate
+    - severe_intrusion_rate
+    - completion_rate
+    - timeout_rate
+    - tail_clearance
+    - jerk
+    - pedestrian_disturbance
+    - compute_time_ms
+  split_contract:
+    allowed_values: [selection, evaluation]
+    selection_and_evaluation_family_sets_must_be_disjoint: true
+    scenario_cell_is_frozen_before_execution: true
+    same_episode_set_across_planners: true
+    required_planner_count_per_episode: 5
+  provenance:
+    required_paths:
+      - robot_sf/benchmark/algorithm_readiness.py
+      - robot_sf/benchmark/benchmark_row_claim.py
+      - robot_sf/benchmark/seed_variance.py
+      - scripts/tools/campaign_result_store.py
+      - configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml
+      - configs/benchmarks/issue_3059_research_engine_suite_v0.yaml
+
+ceilings:
+  score_source: selection_score_from_frozen_metric_layer
+  constraints:
+    - collision_rate
+    - severe_intrusion_rate
+  estimands:
+    - id: best_fixed_planner
+      selection_unit: all_selection_families
+      evaluation_unit: all_heldout_evaluation_episodes
+      attainable_online: true
+    - id: best_planner_per_scenario_family
+      selection_unit: scenario_family
+      evaluation_unit: heldout_family_episodes
+      attainable_online: conditionally
+    - id: best_planner_per_scenario_cell
+      selection_unit: scenario_cell
+      evaluation_unit: heldout_cell_episodes
+      attainable_online: conditionally
+    - id: hindsight_per_episode_oracle
+      selection_unit: episode
+      evaluation_unit: same_episode
+      attainable_online: false
+  gap_definitions:
+    family_gap: best_planner_per_scenario_family_minus_best_fixed_planner
+    cell_gap: best_planner_per_scenario_cell_minus_best_fixed_planner
+    oracle_gap: hindsight_per_episode_oracle_minus_best_fixed_planner
+  uncertainty:
+    method: hierarchical_bootstrap
+    resampling_order: scenario_family_then_scenario_cell_then_episode
+    confidence: 0.95
+    seed: 5302
+
+metrics:
+  required:
+    - collision_rate
+    - severe_intrusion_rate
+    - completion_rate
+    - timeout_rate
+    - tail_clearance
+    - worst_family_performance
+    - jerk
+    - pedestrian_disturbance
+    - compute_time_ms_p50
+    - compute_time_ms_p95
+    - compute_time_ms_p99
+  report_views:
+    - aggregate
+    - scenario_family
+    - scenario_cell
+    - failure_mechanism
+    - runtime_tail
+    - pareto_dominance_probability
+    - maximum_normalized_regret
+  metric_semantics: frozen_existing_metric_layer_only
+
+row_status_policy:
+  successful_evidence_values: [successful_evidence]
+  eligible_execution_modes: [native]
+  visible_but_ineligible_values:
+    - diagnostic_only
+    - fallback
+    - degraded
+    - not_available
+    - failed
+    - blocked
+  exclusion_rule: >-
+    Any missing provenance, non-native execution, invalid row status, duplicate
+    planner/episode key, incomplete five-planner episode, or split leakage
+    blocks the report; weak rows remain visible and never count as evidence.
+
+decision_rule:
+  marginal_gap: >-
+    If family and cell ceilings only marginally exceed the fixed planner under
+    held-out hierarchical intervals, stop selector work and invest in the
+    fixed planner.
+  large_stable_gap: >-
+    If the gap is large and stable on held-out families, open a separate issue
+    for a scenario-conditioned selector; do not train one here.
+  dominance_claim: >-
+    Never call a planner universally best. A tested-ODD dominance statement
+    requires non-inferiority lower bounds for every predeclared family.
+
+outputs:
+  local_root: output/benchmarks/issue_5302_oracle_gap
+  disposable: true
+  required_paths:
+    - reports/preflight.json
+    - reports/ceiling_summary.json
+    - reports/ceiling_summary.csv
+    - reports/family_breakdown.csv
+    - reports/cell_breakdown.csv
+    - reports/failure_mechanism_map.csv
+    - reports/runtime_tail.csv
+    - reports/pareto_dominance.json
+    - reports/normalized_regret.csv
+    - reports/bootstrap_intervals.json
+  durable_evidence:
+    path: docs/context/evidence/issue_5302_oracle_gap
+    required_before_claim: true
+  raw_artifact_policy: raw_episode_jsonl_and_large_logs_stay_out_of_git
+
+validation:
+  no_submit_commands:
+    - uv run python scripts/validation/check_issue_5302_oracle_gap_packet.py --json
+    - uv run pytest tests/validation/test_check_issue_5302_oracle_gap_packet.py -q
+  future_analysis_command: >-
+    Reserved for the native campaign analysis follow-up under parent issue #5302;
+    no executable analysis command is introduced in this contract-only PR.
+  campaign_execution_allowed_in_this_pr: false
+
+readiness_decision:
+  status: blocked_pending_native_campaign_bundle
+  benchmark_campaign_run: false
+  compute_submit_authorized: false
+  ranking_claim_promotion: false
+  selector_training: false
+  paper_claim_edits: false
+  fallback_degraded_success_allowed: false

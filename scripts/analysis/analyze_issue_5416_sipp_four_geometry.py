@@ -164,6 +164,48 @@ def _planner_id(row: Mapping[str, Any], planners: Sequence[str]) -> str | None:
     return canonical if canonical in planners else None
 
 
+def _normalized_planner_identity(value: object, planners: Sequence[str]) -> str | None:
+    """Return a roster-stable identity for a planner field or alias."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        canonical = canonical_algorithm_name(value)
+    except (TypeError, ValueError):
+        return None
+    roster_identities = {canonical_algorithm_name(planner) for planner in planners}
+    return canonical if canonical in roster_identities else None
+
+
+def _planner_identity_errors(
+    row: Mapping[str, Any], planner: str | None, planners: Sequence[str]
+) -> list[str]:
+    """Reject contradictory planner identifiers before accepting a matrix row."""
+    metadata = row.get("algorithm_metadata")
+    fields: list[tuple[str, object]] = [("planner_id", row.get("planner_id"))]
+    if isinstance(metadata, Mapping):
+        config = metadata.get("config")
+        if isinstance(config, Mapping) and "planner_variant" in config:
+            fields.append(
+                ("algorithm_metadata.config.planner_variant", config.get("planner_variant"))
+            )
+        if "algorithm" in metadata:
+            fields.append(("algorithm_metadata.algorithm", metadata.get("algorithm")))
+
+    selected = _normalized_planner_identity(planner, planners)
+    errors: list[str] = []
+    for label, value in fields:
+        if value is None:
+            continue
+        identity = _normalized_planner_identity(value, planners)
+        if identity is None:
+            errors.append(f"{label} is not in the frozen planner roster")
+        elif selected is not None and identity != selected:
+            errors.append(
+                f"planner identity conflict: {label} disagrees with selected planner {planner!r}"
+            )
+    return errors
+
+
 def _row_provenance(row: Mapping[str, Any], scenario: str, seed: int) -> list[str]:
     provenance = row.get("result_provenance")
     if not isinstance(provenance, Mapping):
@@ -249,7 +291,11 @@ def _diagnostics(row: Mapping[str, Any]) -> tuple[dict[str, Any] | None, list[st
 
 
 def _parse_row(  # noqa: C901
-    row: Mapping[str, Any], planner: str | None, scenario: str | None, seed: int | None
+    row: Mapping[str, Any],
+    planner: str | None,
+    scenario: str | None,
+    seed: int | None,
+    planners: Sequence[str],
 ) -> tuple[dict[str, Any] | None, list[str], list[str]]:
     reasons = []
     reasons.extend(
@@ -276,6 +322,7 @@ def _parse_row(  # noqa: C901
         kinematics = metadata.get("planner_kinematics")
         if not isinstance(kinematics, Mapping) or kinematics.get("execution_mode") != "native":
             reasons.append("execution_mode is not native")
+    reasons.extend(_planner_identity_errors(row, planner, planners))
     integrity = row.get("integrity")
     if not isinstance(integrity, Mapping):
         reasons.append("integrity is missing")
@@ -297,6 +344,26 @@ def _parse_row(  # noqa: C901
         reasons,
         diagnostic_errors,
     )
+
+
+def _execution_provenance_field_errors(path: Path, provenance: Mapping[str, Any]) -> list[str]:
+    """Validate the shape of required execution-provenance fields."""
+    errors = []
+    for key in MANIFEST_FIELDS:
+        value = provenance.get(key)
+        if key in {"exact_command", "cpu_route", "job_id"}:
+            valid = isinstance(value, str) and bool(value.strip())
+        elif key == "environment_manifest":
+            valid = (isinstance(value, str) and bool(value.strip())) or (
+                isinstance(value, Mapping) and bool(value)
+            )
+        elif key == "resource_request":
+            valid = isinstance(value, Mapping) and bool(value)
+        else:
+            valid = value is not None
+        if not valid:
+            errors.append(f"execution manifest {path} has missing or invalid {key}")
+    return errors
 
 
 def _manifest_errors(
@@ -326,11 +393,7 @@ def _manifest_errors(
     if not isinstance(provenance, Mapping):
         errors.append(f"execution manifest {path} is missing execution_provenance")
     else:
-        errors.extend(
-            f"execution manifest {path} is missing {key}"
-            for key in MANIFEST_FIELDS
-            if provenance.get(key) in (None, "", {})
-        )
+        errors.extend(_execution_provenance_field_errors(path, provenance))
         try:
             _number(provenance.get("wall_time_seconds"), "wall_time_seconds", minimum=0.0)
         except AnalysisError as exc:
@@ -525,7 +588,9 @@ def build_analysis(
         key = (scenario, seed, planner) if planner and scenario and seed is not None else None
         if key:
             seen[key] += 1
-        measurement, reasons, row_diagnostic_errors = _parse_row(row, planner, scenario, seed)
+        measurement, reasons, row_diagnostic_errors = _parse_row(
+            row, planner, scenario, seed, planners
+        )
         diagnostic_errors.extend(
             f"{source}: {scenario}/{seed}/{planner}: {error}" for error in row_diagnostic_errors
         )
@@ -579,6 +644,7 @@ def build_analysis(
         and not load_errors
         and not duplicates
         and not missing
+        and not exclusions
         and len(eligible) == len(expected)
     )
     outcomes_complete = matrix_complete and all(

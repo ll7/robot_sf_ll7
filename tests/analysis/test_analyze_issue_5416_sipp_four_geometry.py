@@ -109,6 +109,15 @@ def _write_bundle(
     return episodes, manifests
 
 
+def _refresh_manifest_digests(episodes: Path, manifests: list[Path]) -> None:
+    """Keep synthetic manifest hashes aligned after mutating the episode fixture."""
+    digest = hashlib.sha256(episodes.read_bytes()).hexdigest()
+    for manifest in manifests:
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["episodes_sha256"] = digest
+        manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def _analyze(tmp_path: Path, episodes: Path, manifests: tuple[Path, ...] = ()) -> dict:
     return analyzer.build_analysis(
         episode_paths=[episodes],
@@ -154,4 +163,59 @@ def test_missing_diagnostics_and_provenance_do_not_use_episode_wall_time(tmp_pat
         row.get("planner_step_runtime_median_seconds") is None
         for row in report["planner_summaries"]
         if row.get("planner_id") == "sipp_lattice"
+    )
+
+
+def test_unkeyed_extra_row_blocks_complete_report(tmp_path: Path) -> None:
+    """An invalid extra input must block interpretation even when the matrix is full."""
+    episodes, manifests = _write_bundle(tmp_path)
+    rows = [json.loads(line) for line in episodes.read_text(encoding="utf-8").splitlines()]
+    extra = _row("dwa", SCENARIOS[0], SEEDS[0])
+    extra["planner_id"] = "unexpected"
+    extra["algorithm_metadata"]["algorithm"] = "unregistered"
+    rows.append(extra)
+    episodes.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    _refresh_manifest_digests(episodes, manifests)
+
+    report = _analyze(tmp_path, episodes, tuple(manifests))
+
+    assert report["status"] == "partial"
+    assert report["advancement_rule"]["status"] == "blocked"
+    assert report["matrix"]["excluded_rows"] == 1
+    assert report["denominator_exclusions"][-1]["planner_id"] is None
+
+
+def test_conflicting_planner_identity_is_excluded(tmp_path: Path) -> None:
+    """Contradictory planner fields must not be silently attributed to one roster key."""
+    episodes, manifests = _write_bundle(tmp_path)
+    rows = [json.loads(line) for line in episodes.read_text(encoding="utf-8").splitlines()]
+    row = rows[0]
+    row["planner_id"] = "sipp_lattice"
+    row["algorithm_metadata"]["config"] = {"planner_variant": "sipp_lattice"}
+    row["algorithm_metadata"]["algorithm"] = "dwa"
+    episodes.write_text("\n".join(json.dumps(item) for item in rows) + "\n", encoding="utf-8")
+    _refresh_manifest_digests(episodes, manifests)
+
+    report = _analyze(tmp_path, episodes, tuple(manifests))
+
+    assert report["status"] == "partial"
+    assert any(
+        "planner identity conflict" in reason
+        for row in report["denominator_exclusions"]
+        for reason in row["reasons"]
+    )
+
+
+def test_invalid_manifest_field_type_blocks_provenance(tmp_path: Path) -> None:
+    """Malformed execution metadata must not satisfy the provenance gate."""
+    episodes, manifests = _write_bundle(tmp_path)
+    payload = json.loads(manifests[0].read_text(encoding="utf-8"))
+    payload["execution_provenance"]["cpu_route"] = []
+    manifests[0].write_text(json.dumps(payload), encoding="utf-8")
+
+    report = _analyze(tmp_path, episodes, tuple(manifests))
+
+    assert report["status"] == "partial"
+    assert any(
+        "cpu_route" in error and "invalid" in error for error in report["provenance"]["errors"]
     )

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -47,15 +48,19 @@ def _run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
 def _find_base_sensitive_test_files() -> list[Path]:
     """Find test files containing the base_sensitive marker."""
     matches: list[Path] = []
-    for path in REPO_ROOT.rglob("test_*.py"):
-        if path.is_dir():
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        if "base_sensitive" in text:
-            matches.append(path)
+    ignored_dirs = {".git", ".venv", "venv", "build", "dist", "__pycache__", "third_party"}
+    for root, dirs, files in os.walk(REPO_ROOT):
+        dirs[:] = [directory for directory in dirs if directory not in ignored_dirs]
+        for filename in files:
+            if not (filename.startswith("test_") and filename.endswith(".py")):
+                continue
+            path = Path(root) / filename
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if "base_sensitive" in text:
+                matches.append(path)
     return sorted(matches)
 
 
@@ -82,19 +87,36 @@ def _get_pr_changed_files(pr_number: str) -> list[str] | None:
         return None
 
 
-def _branch_is_current_with_main(branch: str, base_ref: str = "origin/main") -> bool | None:
-    """Check whether a local branch is current with base_ref (merge-base test).
+def _branch_is_current_with_main(
+    commit_or_branch: str, base_ref: str = "origin/main"
+) -> bool | None:
+    """Check whether a commit contains base_ref (merge-base test).
 
     Returns True if current, False if stale, None on error.
     """
     try:
-        # Get the merge-base between branch and main
-        mb = _run(["git", "merge-base", branch, base_ref]).stdout.strip()
-        # Get current main SHA
-        main_sha = _run(["git", "rev-parse", "--verify", base_ref]).stdout.strip()
-        return mb == main_sha
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return None
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", base_ref, commit_or_branch],
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            return True
+        if result.returncode == 1:
+            return False
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
+def _report_gate_error(overall: dict[str, Any], message: str, *, as_json: bool) -> int:
+    """Report an indeterminate gate state and return its fail-closed exit code."""
+    overall["error"] = message
+    print(f"Error: {message}", file=sys.stderr)
+    if as_json:
+        _json_dump(overall)
+    return 2
 
 
 def check_pr_touches_base_sensitive(pr_number: str) -> dict[str, Any]:
@@ -227,33 +249,49 @@ def _check_pr_gate_staleness(
     """Check PR gate staleness. Returns exit code or None to continue."""
     try:
         result = subprocess.run(
-            ["gh", "pr", "view", str(pr_number), "--json", "headRefName", "--jq", ".headRefName"],
+            ["gh", "pr", "view", str(pr_number), "--json", "headRefOid", "--jq", ".headRefOid"],
             capture_output=True,
             text=True,
             check=False,
             timeout=30,
         )
-        if result.returncode == 0:
-            branch = result.stdout.strip()
-            is_current = _branch_is_current_with_main(branch)
-            if is_current is False:
-                print(
-                    f"PR #{pr_number}: base-sensitive files changed but branch "
-                    f"'{branch}' is stale relative to origin/main.\n"
-                    f"Changed sensitive files:\n"
-                    f"  "
-                    + "\n  ".join(pr_check["changed_sensitive_files"])
-                    + "\nRun: gh pr edit <number> --base main && "
-                    "gh pr update-branch <number>",
-                    file=sys.stderr,
-                )
-                overall["stale"] = True
-                overall["branch"] = branch
-                if as_json:
-                    _json_dump(overall)
-                return 1
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
-        pass
+    except (OSError, subprocess.SubprocessError) as exc:
+        return _report_gate_error(overall, f"Could not fetch PR head SHA: {exc}", as_json=as_json)
+
+    if result.returncode != 0:
+        return _report_gate_error(
+            overall,
+            f"Could not fetch PR head SHA via gh CLI (exit code {result.returncode})",
+            as_json=as_json,
+        )
+
+    sha = result.stdout.strip()
+    if not sha:
+        return _report_gate_error(overall, "PR head SHA is empty", as_json=as_json)
+
+    is_current = _branch_is_current_with_main(sha)
+    if is_current is None:
+        return _report_gate_error(
+            overall,
+            "Could not determine whether the PR head contains origin/main",
+            as_json=as_json,
+        )
+    if is_current is False:
+        print(
+            f"PR #{pr_number}: base-sensitive files changed but commit "
+            f"'{sha[:8]}' is stale relative to origin/main.\n"
+            f"Changed sensitive files:\n"
+            f"  "
+            + "\n  ".join(pr_check["changed_sensitive_files"])
+            + "\nRun: gh pr edit <number> --base main && "
+            "gh pr update-branch <number>",
+            file=sys.stderr,
+        )
+        overall["stale"] = True
+        overall["sha"] = sha
+        if as_json:
+            _json_dump(overall)
+        return 1
     return None
 
 
@@ -272,6 +310,9 @@ def _run_subset_and_check(
         if as_json:
             _json_dump(overall)
         return 1
+    if as_json:
+        overall["gate_passed"] = True
+        _json_dump(overall)
     return 0
 
 

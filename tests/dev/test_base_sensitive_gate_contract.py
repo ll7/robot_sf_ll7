@@ -134,48 +134,68 @@ class TestSimulatedStaleBase:
 
         import json as stdlib_json
 
-        # Read the real fixture
         fixture_path = REPO_ROOT / "tests" / "fixtures" / "optional_import_guards.json"
         original = fixture_path.read_text(encoding="utf-8")
         fixture_data = stdlib_json.loads(original)
 
-        # Tamper: inflate one ceiling so a count mismatch appears
+        # Tamper: lower one ceiling so the real inventory assertion must fail.
         tampered = dict(fixture_data)
         spellings = dict(tampered.get("spellings", {}))
-        if spellings:
-            first_key = next(iter(spellings))
-            tampered_spellings = {**spellings}
-            entry = {**tampered_spellings[first_key]}
-            entry["count_ceiling"] = 9999  # Inflate to create mismatch
-            tampered_spellings[first_key] = entry
-            tampered["spellings"] = tampered_spellings
+        assert spellings, "The optional-import fixture must contain spellings."
+        first_key = next(iter(spellings))
+        tampered_spellings = {**spellings}
+        entry = {**tampered_spellings[first_key]}
+        entry["count_ceiling"] = 0
+        tampered_spellings[first_key] = entry
+        tampered["spellings"] = tampered_spellings
 
-        # Write tampered fixture
         tampered_path = tmp_path / "optional_import_guards.json"
         tampered_path.write_text(stdlib_json.dumps(tampered, indent=2), encoding="utf-8")
 
-        # Verify the tampering actually creates a mismatch
         original_data = stdlib_json.loads(original)
         original_ceiling = original_data["spellings"][first_key]["count_ceiling"]
         tampered_ceiling = tampered["spellings"][first_key]["count_ceiling"]
         assert original_ceiling != tampered_ceiling
 
-        # Now simulate running the actual test module with the tampered fixture.
-        # Since we can't easily override FIXTURE at runtime, instead verify the
-        # gate script's subset run would still pass (the real fixture is intact),
-        # while the tampered fixture would cause a real test failure.
-        #
-        # The key demonstration is: the gate's -m base_sensitive subset exercises
-        # the real fixture, so the tampered fixture would be caught if committed.
+        # Load the real inventory test and point its fixture at the tampered copy.
+        # This executes the production assertion without mutating tracked files
+        # or paying for the whole base-sensitive subset.
+        probe = """
+import importlib.util
+import sys
+from pathlib import Path
+
+module_path = Path(sys.argv[1])
+fixture_path = Path(sys.argv[2])
+spec = importlib.util.spec_from_file_location("inventory_under_test", module_path)
+if spec is None or spec.loader is None:
+    raise RuntimeError("could not load inventory test module")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+module.FIXTURE = fixture_path
+module.TestOptionalImportGuardInventory().test_no_new_unblessed_spelling_and_no_count_growth()
+"""
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", "-m", "base_sensitive", "-q"],
+            [
+                sys.executable,
+                "-c",
+                probe,
+                str(
+                    Path(__file__).resolve().parents[1] / "test_optional_import_guard_inventory.py"
+                ),
+                str(tampered_path),
+            ],
             capture_output=True,
             text=True,
             cwd=str(REPO_ROOT),
-            timeout=120,
+            timeout=30,
             check=False,
         )
-        assert result.returncode == 0, "Base-sensitive subset should pass against the real fixture"
+        output = result.stdout + result.stderr
+        assert result.returncode != 0, (
+            "Inventory assertion should fail against the tampered fixture"
+        )
+        assert "RATCHET VIOLATION" in output, output[:1000]
 
     def test_gate_catches_new_unblessed_spelling(self, tmp_path: Path) -> None:
         """Adding a new optional-import guard in robot_sf/ should fail the gate.

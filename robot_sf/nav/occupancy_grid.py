@@ -544,7 +544,7 @@ class OccupancyGrid:
                     grid_origin_y,
                     value=1.0,
                 )
-            logger.debug("Filled %s obstacle cells via polygon rasterization", filled)
+            logger.debug("Filled {} obstacle cells via polygon rasterization", filled)
 
         self._static_obstacle_layer_cache_key = cache_key
         self._static_obstacle_layer_cache = layer
@@ -713,7 +713,7 @@ class OccupancyGrid:
                                 grid_origin_y,
                                 value=1.0,
                             )
-                        logger.debug("Filled %s obstacle cells via polygon rasterization", filled)
+                        logger.debug("Filled {} obstacle cells via polygon rasterization", filled)
 
             elif channel == GridChannel.PEDESTRIANS:
                 # Rasterize pedestrians into this channel
@@ -760,7 +760,7 @@ class OccupancyGrid:
                 )
             else:
                 self._grid_data[combined_idx].fill(0)
-            logger.debug("Generated combined channel from %s indices", source_indices)
+            logger.debug("Generated combined channel from {} indices", source_indices)
 
         # Cache prepared obstacle geometries, re-preparing only when effective
         # polygon input changes (handles ego-frame transform invalidation via
@@ -1092,7 +1092,7 @@ class OccupancyGrid:
 
         surface.blit(overlay, (0, 0))
         logger.debug(
-            "Rendered occupancy grid overlay: shape=%s scale=%s alpha=%s",
+            "Rendered occupancy grid overlay: shape={} scale={} alpha={}",
             overlay.get_size(),
             scale,
             alpha,

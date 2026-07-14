@@ -106,7 +106,7 @@ criticality = [
 ]
 
 [build-system]
-requires = ["hatchling", "hatch-vcs>=0.4.0", "Cython>=3.0.0"]
+requires = ["hatchling", "hatch-vcs>=0.5.0", "Cython>=3.0.0"]
 build-backend = "hatchling.build"
 
 # --- Single-source version: git tag -> package version (hatch-vcs) ---------

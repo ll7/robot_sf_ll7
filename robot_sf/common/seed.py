@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import os
 import random
+import sys
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -48,6 +49,42 @@ def _import_torch():
         return None
 
 
+def _set_torch_deterministic_algorithms(torch_module: Any, deterministic: bool) -> bool:
+    """Set torch's deterministic-algorithm flag without the Torch 2.13.0 CI crash path.
+
+    Torch 2.13.0 on Python 3.12 imports ``torch._inductor.config`` from the public
+    ``use_deterministic_algorithms`` wrapper.  That import reaches Dynamo/Triton and can
+    segfault in the repository's test and smoke workers.  The C-level setter is already
+    loaded with torch and preserves the operation-level determinism flag without loading
+    Inductor.  Other interpreter/version combinations retain the public API path.
+
+    This changes process-global torch state. Callers must serialize it with other torch
+    determinism changes during single-process initialization.
+
+    Args:
+        torch_module: Imported torch module or a compatible test double.
+        deterministic: Whether deterministic algorithms should be enabled.
+
+    Returns:
+        bool: Whether the requested flag was applied.
+    """
+    public_setter = getattr(torch_module, "use_deterministic_algorithms", None)
+    if public_setter is None:
+        return False
+
+    version = str(getattr(torch_module, "__version__", "")).split("+", 1)[0]
+    if sys.version_info[:2] == (3, 12) and version.startswith("2.13.0"):
+        c_module = getattr(torch_module, "_C", None)
+        c_setter = getattr(c_module, "_set_deterministic_algorithms", None)
+        if c_setter is None:
+            return False
+        c_setter(bool(deterministic), False)
+        return True
+
+    public_setter(bool(deterministic))
+    return True
+
+
 def set_global_seed(seed: int, deterministic: bool = True) -> SeedReport:
     """Set global seeds for ``random``, ``numpy``, and torch (if available).
 
@@ -74,17 +111,19 @@ def set_global_seed(seed: int, deterministic: bool = True) -> SeedReport:
             if torch.cuda.is_available():
                 torch.cuda.manual_seed_all(seed)
             # Determinism flags
-            if hasattr(torch, "use_deterministic_algorithms"):
-                torch.use_deterministic_algorithms(deterministic)
+            determinism_applied = _set_torch_deterministic_algorithms(torch, deterministic)
             if hasattr(torch.backends, "cudnn"):
                 torch.backends.cudnn.deterministic = bool(deterministic)
                 # Disable CUDNN autotuner for determinism (perf tradeoff).
                 torch.backends.cudnn.benchmark = bool(not deterministic)
-                report.torch_deterministic = bool(deterministic)
+                report.torch_deterministic = bool(deterministic) if determinism_applied else None
                 report.torch_benchmark = bool(torch.backends.cudnn.benchmark)
+            if not determinism_applied:
+                report.notes = "torch deterministic algorithm flag could not be applied"
         except (
             RuntimeError,
             AttributeError,
+            TypeError,
             ValueError,
         ) as exc:  # pragma: no cover - rare platforms
             report.notes = f"torch seed partially applied: {exc}"

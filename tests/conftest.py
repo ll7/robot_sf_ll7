@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from robot_sf.common.artifact_paths import ensure_canonical_tree
+from robot_sf.common.seed import _set_torch_deterministic_algorithms
 from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
@@ -97,8 +98,7 @@ def _apply_nondeterministic(torch_module, cudnn_backend):
         cudnn_backend: TODO docstring.
     """
     try:
-        if hasattr(torch_module, "use_deterministic_algorithms"):
-            torch_module.use_deterministic_algorithms(False)
+        _set_torch_deterministic_algorithms(torch_module, False)
         if cudnn_backend is not None:
             cudnn_backend.deterministic = False  # type: ignore[attr-defined]
             cudnn_backend.benchmark = True  # type: ignore[attr-defined]
@@ -116,8 +116,8 @@ def _restore_torch_determinism(torch_module, state):
     try:
         prev_algos = state.get("algos")
         cudnn_backend = state.get("cudnn_backend")
-        if prev_algos is not None and hasattr(torch_module, "use_deterministic_algorithms"):
-            torch_module.use_deterministic_algorithms(prev_algos)
+        if prev_algos is not None:
+            _set_torch_deterministic_algorithms(torch_module, bool(prev_algos))
         if cudnn_backend is not None:
             prev_det = state.get("cudnn_det")
             prev_bench = state.get("cudnn_bench")

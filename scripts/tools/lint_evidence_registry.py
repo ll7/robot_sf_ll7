@@ -27,8 +27,11 @@ if TYPE_CHECKING:
 
 
 COMMIT_RE = re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{40}(?![0-9a-fA-F])")
+FULL_SHA1_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+SYNTHETIC_COMMIT_RE = re.compile(r"^[0-9a-fA-F]{40,}[^0-9a-fA-F]")
 SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 MARKDOWN_CAMPAIGN_RE = re.compile(r"\bcampaign_id\s*[:=]\s*`?([A-Za-z0-9_.-]+)`?")
+COMMIT_KEYS = {"commit", "producing_commit", "source_commit", "git_commit"}
 CONFIG_PATH_KEYS = {
     "config",
     "config_path",
@@ -215,6 +218,37 @@ def _file_metadata(value: Any) -> tuple[list[str], list[str], list[str]]:
     return config_paths, config_hashes, commits
 
 
+def _synthetic_commit_findings(display_path: Path, value: Any) -> list[dict[str, str]]:
+    """Reject commit fields whose value is a 40-hex SHA plus extra characters.
+
+    A synthetic commit (e.g. ``d4e17b...-reconciled-5483``) cannot be resolved
+    by ``git checkout`` and should use either a real 40-char SHA or an explicit
+    ``missing:<reason>`` placeholder instead. See issue #5558.
+    """
+    findings: list[dict[str, str]] = []
+    if isinstance(value, str):
+        return findings
+    for mapping, _ancestors in _iter_mappings(value):
+        for key, item in mapping.items():
+            if not isinstance(key, str) or key.lower() not in COMMIT_KEYS:
+                continue
+            if not isinstance(item, str):
+                continue
+            stripped = item.strip()
+            if FULL_SHA1_RE.fullmatch(stripped) or SHA256_RE.fullmatch(stripped):
+                continue
+            if SYNTHETIC_COMMIT_RE.match(stripped):
+                findings.append(
+                    _issue(
+                        display_path,
+                        "synthetic_commit",
+                        f"commit field '{key}' value {stripped!r} is a 40-hex SHA "
+                        "with extra characters; use a real SHA or missing:<reason>",
+                    )
+                )
+    return findings
+
+
 def _artifact_path(
     mapping: Mapping[str, Any], ancestors: tuple[Mapping[str, Any], ...]
 ) -> str | None:
@@ -393,13 +427,15 @@ def _lint_document(repo_root: Path, path: Path) -> _DocumentRecord:
         )
     campaign_ids = _campaign_ids(value)
     config_paths, config_hashes, commits = _file_metadata(value)
+    local_findings = _artifact_findings(repo_root, display_path, value)
+    local_findings.extend(_synthetic_commit_findings(display_path, value))
     return _DocumentRecord(
         path,
         campaign_ids,
         config_paths,
         config_hashes,
         commits,
-        _artifact_findings(repo_root, display_path, value),
+        local_findings,
     )
 
 

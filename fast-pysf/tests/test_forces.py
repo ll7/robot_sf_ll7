@@ -1,5 +1,9 @@
 """Tests for the test_forces module."""
 
+import sys
+from collections.abc import Callable
+from threading import Event, Thread
+
 import numpy as np
 import pytest
 from pysocialforce import Simulator_v2 as Simulator
@@ -7,6 +11,35 @@ from pysocialforce import forces
 from pysocialforce.config import SimulatorConfig
 from pysocialforce.map_config import MapDefinition
 from pysocialforce.ped_grouping import PedestrianGroupings, PedestrianStates
+
+
+def _assert_releases_gil(call: Callable[[], None]) -> None:
+    """Assert that ``call`` lets a ready sibling Python thread run."""
+    ready = Event()
+    start = Event()
+    progressed = Event()
+    stop = Event()
+
+    def _sibling_worker() -> None:
+        ready.set()
+        start.wait()
+        progressed.set()
+        stop.wait()
+
+    worker = Thread(target=_sibling_worker, daemon=True)
+    worker.start()
+    assert ready.wait(timeout=1.0)
+
+    previous_switch_interval = sys.getswitchinterval()
+    sys.setswitchinterval(1.0)
+    try:
+        start.set()
+        call()
+        assert progressed.is_set(), "compiled force call held the GIL for its complete runtime"
+    finally:
+        sys.setswitchinterval(previous_switch_interval)
+        stop.set()
+        worker.join(timeout=1.0)
 
 
 @pytest.fixture()
@@ -104,6 +137,49 @@ def test_social_force(generate_scene: Simulator):
             ]
         )
     )
+
+
+def test_gil_releasing_social_force_preserves_output_and_allows_parallel_steps():
+    """The opt-in kernel must be exact and let a sibling Python worker progress."""
+    num_pedestrians = 2_000
+    positions = np.column_stack(
+        (
+            np.arange(num_pedestrians, dtype=np.float64) * 0.01,
+            np.zeros(num_pedestrians, dtype=np.float64),
+        )
+    )
+    velocities = np.zeros_like(positions)
+    args = (positions, velocities, 3.0, 2, 3, 2.0, 0.35)
+    expected = forces.social_force(*args)
+    actual = forces._social_force_gil_releasing(*args)
+
+    np.testing.assert_array_equal(actual, expected)
+    _assert_releases_gil(lambda: forces._social_force_gil_releasing(*args))
+
+
+def test_social_force_context_selects_gil_releasing_kernel(generate_scene, monkeypatch):
+    """The alternate dispatcher must remain opt-in and scoped to its context."""
+    scene = generate_scene
+    calculator = forces.SocialForce(scene.config.social_force_config, scene.peds)
+    calls = {"default": 0, "gil_releasing": 0}
+
+    def _record_default(*args):
+        calls["default"] += 1
+        return np.zeros_like(args[0])
+
+    def _record_gil_releasing(*args):
+        calls["gil_releasing"] += 1
+        return np.zeros_like(args[0])
+
+    monkeypatch.setattr(forces, "social_force", _record_default)
+    monkeypatch.setattr(forces, "_social_force_gil_releasing", _record_gil_releasing)
+
+    calculator()
+    with forces.social_force_gil_releasing_context():
+        calculator()
+    calculator()
+
+    assert calls == {"default": 2, "gil_releasing": 1}
 
 
 def test_group_rep_force(generate_scene_with_groups: Simulator):

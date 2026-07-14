@@ -26,10 +26,11 @@ normalized JSON / checksums. The rollout seed is pinned (blind-corner manifest s
 - `oracle_verdict`: the existing planner-free oracle (no learned planner) driven with the
   `goal` scripted controller at the nominal and reduced envelope radii. Reported margins:
   corridor-vs-envelope width, kinematic lower-bound completion steps vs horizon.
-- `route_follow_intervention_verdict`: an opt-in **route-following** lane (registered
-  `route_follow` policy) that drives the certifier's A* route waypoint-to-waypoint
-  instead of beelining at the goal. It isolates the scripted-controller mechanism from
-  the route geometry.
+- `route_follow_intervention_verdict`: a fail-closed placeholder for the intended
+  **route-following** lane. The canonical map runner does not yet support carrying robot
+  pose and waypoint goals across sub-episodes, so this lane reports `blocked` rather than
+  pretending that reset-per-waypoint episodes are a continuous intervention. Stateful
+  adapter work is tracked in [#5636](https://github.com/ll7/robot_sf_ll7/issues/5636).
 - `straight_line_vs_route_clearance`: straight-line (goal beeline) vs certified-route
   obstacle clearance for each envelope radius.
 - `mechanism`: bounded classification of the three competing explanations from the issue.
@@ -47,14 +48,14 @@ the episode records emitted by the oracle runner.
    (nominal) / ~190 steps (reduced) — far inside the 400-step horizon. So the route is
    not horizon- or envelope-bound, and not geometrically infeasible.
 
-2. **The `goal` scripted controller collides, but so does the route-following
-   intervention.** The `goal` lane terminates with `collision` (nominal) / `terminated`
-   (reduced). The route-follow lane — which drives the *certified* A* route — also fails
-   (`terminated`). Both lanes fail at **both** radii. Therefore the zero-success outcome
-   is **not** explained by the scripted controller alone cutting the corner
-   (competing explanation #1 is **rejected**).
+2. **The route-following intervention is unavailable and therefore cannot discriminate
+   the mechanism.** The `goal` lane is diagnostic input, but the canonical map runner has
+   no supported contract for injecting waypoint goals while preserving robot pose across
+   sub-episodes. The report records `route_follow_intervention_status=blocked` at both
+   radii, so no route-follow success or failure is interpreted.
 
-3. **The certifier's own A* path clips the inner corner.** The straight goal beeline has
+3. **The certifier's own A* path clips the inner corner in the retained diagnostic trace.**
+   The straight goal beeline has
    ~0 m clearance (expected — it cuts the corner). But the **certified route** also has
    ~0 m clearance: the certifier computes `min_static_clearance_m = 1.0` on the
    *authored 4-waypoint route line* (which bends around the corner at `(27, 24.5)` and
@@ -64,13 +65,13 @@ the episode records emitted by the oracle runner.
    `inflated_collision_free_path = True` claim is geometrically inconsistent with the
    path geometry the oracle then consumes.
 
-### Mechanism verdict
+### Mechanism status
 
-Competing explanation **#2 (route geometry / planner config)** is supported: the
-blind-corner zero-success is a **certifier/planner-path artifact** — the inflated A*
-path does not honor the clearance the certifier attributes to the route line. The
-scripted controller (#1) is a contributing factor only insofar as it beelines, but the
-route-follow intervention proves the failure persists when the route is respected.
+The retained clearance trace is consistent with a **certifier/planner-path artifact** —
+the inflated A* path does not honor the clearance the certifier attributes to the route
+line — but the mechanism remains **unresolved** until the stateful route-follow adapter
+in [#5636](https://github.com/ll7/robot_sf_ll7/issues/5636) is implemented and rerun.
+The scripted-controller explanation is not promoted because the intervention is blocked.
 
 Explanation **#3 (scenario runtime / map interpretation drift)** is `not_established`:
 the run uses the same scenario manifest, robot kinematics, horizon, and map as the

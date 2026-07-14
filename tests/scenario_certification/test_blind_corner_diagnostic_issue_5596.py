@@ -134,10 +134,12 @@ def test_route_follow_runner_uses_route_follow_algo_key() -> None:
         envelope_radii_m=(1.0, 0.5),
     )
     runner = make_route_follow_episode_runner(config)
-    # The builder returns a callable; the real path is exercised by the end-to-end test.
-    # Unit isolation checks the algo key constant is defined.
+    record = runner({}, 219, 400, ROUTE_FOLLOW_ALGO)
     assert callable(runner)
     assert ROUTE_FOLLOW_ALGO == "route_follow"
+    assert record["algo"] == ROUTE_FOLLOW_ALGO
+    assert record["status"] == "blocked"
+    assert record["route_complete"] is None
 
 
 def test_issue_5596_report_scopes_to_issue_5596_and_blind_corner(tmp_path: Path) -> None:
@@ -191,10 +193,10 @@ def test_issue_5596_report_requires_reduced_radius_after_nominal(tmp_path: Path)
         )
 
 
-def test_issue_5596_mechanism_supports_route_cause_when_intervention_also_fails(
+def test_issue_5596_mechanism_blocks_when_route_intervention_is_unavailable(
     tmp_path: Path,
 ) -> None:
-    """When goal and route-follow both fail, the mechanism is route geometry (#2), not script (#1)."""
+    """An unavailable route-follow lane cannot support a route-geometry conclusion."""
     manifest = _manifest(tmp_path, _scenario())
 
     def runner(_s, _seed, _horizon, _algo):
@@ -212,23 +214,19 @@ def test_issue_5596_mechanism_supports_route_cause_when_intervention_also_fails(
     )
     mechanism = report["mechanism"]
     assert mechanism["explanation_1_scripted_controller_incomplete"] is False
-    assert mechanism["explanation_2_route_geometry_or_config_cause"] is True
+    assert mechanism["explanation_2_route_geometry_or_config_cause"] is False
     assert mechanism["oracle_nominal_feasible"] is False
-    assert mechanism["route_follow_intervention_feasible"] is False
+    assert mechanism["route_follow_intervention_feasible"] is None
+    assert mechanism["supported_explanation"] == "route_follow_intervention_blocked"
 
 
-def test_issue_5596_mechanism_supports_script_when_intervention_succeeds(tmp_path: Path) -> None:
-    """When the route-follow lane completes where goal fails, explanation #1 is supported."""
+def test_issue_5596_mechanism_does_not_promote_unavailable_intervention(
+    tmp_path: Path,
+) -> None:
+    """The diagnostic remains unresolved when the intervention lane is unavailable."""
     manifest = _manifest(tmp_path, _scenario())
 
     def runner(_scenario, _seed, _horizon, _algo):
-        # goal script collides, route-follow completes.
-        if _algo == ROUTE_FOLLOW_ALGO:
-            return {
-                "steps": 50,
-                "outcome": {"route_complete": True},
-                "termination_reason": "success",
-            }
         return {
             "steps": 100,
             "outcome": {"route_complete": False},
@@ -242,8 +240,8 @@ def test_issue_5596_mechanism_supports_script_when_intervention_succeeds(tmp_pat
         certifier=lambda _s, _p: _certificate(VALID),
     )
     mechanism = report["mechanism"]
-    assert mechanism["explanation_1_scripted_controller_incomplete"] is True
-    assert mechanism["supported_explanation"] == "scripted_controller_corner_cut"
+    assert mechanism["explanation_1_scripted_controller_incomplete"] is False
+    assert mechanism["supported_explanation"] == "route_follow_intervention_blocked"
 
 
 @pytest.mark.slow

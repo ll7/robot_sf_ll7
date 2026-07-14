@@ -113,8 +113,7 @@ def build_constant_velocity_gmm_forecast(
     speed = np.linalg.norm(velocities, axis=1)
     base_heading = np.arctan2(velocities[:, 1], velocities[:, 0] + 1e-9)
     zero_speed = speed < 1e-6
-    weights = np.zeros((count, k), dtype=float)
-    weights[:, 0] = 1.0
+    weights = np.full((count, k), 1.0 / float(k), dtype=float)
 
     for step in range(steps):
         tau = float(step + 1) * float(dt)
@@ -246,40 +245,37 @@ def _step_pedestrians(observation: dict[str, object], *, dt: float) -> None:
     peds["positions"] = positions
 
 
+def _step_robot(observation: dict[str, object], command: tuple[float, float], *, dt: float) -> None:
+    """Apply one unicycle command to the mutable calibration observation."""
+
+    robot = observation["robot"]
+    position = np.asarray(robot["position"], dtype=float)
+    heading = float(np.asarray(robot["heading"], dtype=float).reshape(-1)[0])
+    speed = max(float(command[0]), 0.0)
+    angular_speed = float(command[1])
+    next_heading = heading + angular_speed * float(dt)
+    robot["heading"] = np.asarray([next_heading], dtype=float)
+    robot["position"] = position + speed * float(dt) * np.asarray(
+        [np.cos(next_heading), np.sin(next_heading)], dtype=float
+    )
+    robot["speed"] = np.asarray([speed], dtype=float)
+
+
 def _min_robot_pedestrian_clearance(
     observation: dict[str, object], *, collision_radius_m: float
 ) -> float:
-    """Return the worst (smallest) robot/pedestrian clearance over the horizon.
+    """Return current clearance using the scenario's declared contact radius."""
 
-    The robot is integrated forward in a straight line toward the goal at the
-    capped planner speed; the pedestrian positions are advanced by the same
-    ``dt`` each step. The returned clearance is the minimum over the rollout of
-    ``distance - (robot_radius + ped_radius)``; a negative value is a contact.
-
-    Returns:
-        The minimum clearance in meters (negative means a collision occurred).
-    """
-
-    robot_pos = np.asarray(observation["robot"]["position"], dtype=float).copy()
-    goal = np.asarray(observation["goal"]["current"], dtype=float)
-    heading = float(np.asarray(observation["robot"]["heading"]).reshape(-1)[0])
-    speed = float(np.asarray(observation["robot"]["speed"]).reshape(-1)[0])
-    robot_radius = float(np.asarray(observation["robot"]["radius"]).reshape(-1)[0])
+    contact_radius = float(collision_radius_m)
+    if not np.isfinite(contact_radius) or contact_radius <= 0.0:
+        raise ValueError("collision_radius_m must be finite and > 0")
+    robot_pos = np.asarray(observation["robot"]["position"], dtype=float)
     peds = observation["pedestrians"]
     ped_positions = np.asarray(peds["positions"], dtype=float)
-    ped_radius = float(np.asarray(peds.get("radius", [0.25])).reshape(-1)[0])
     if ped_positions.size == 0:
         return float("inf")
-    robot_speed = min(max(speed, 0.0), 0.9)
-    worst = float("inf")
-    for _ in range(round(float(np.linalg.norm(goal - robot_pos)) / max(robot_speed * 0.25, 1e-3))):
-        heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
-        robot_pos = robot_pos + robot_speed * 0.25 * np.array([np.cos(heading), np.sin(heading)])
-        ped_positions = ped_positions + np.asarray(peds["velocities"], dtype=float) * 0.25
-        dists = np.linalg.norm(ped_positions - robot_pos[None, :], axis=1)
-        clearance = float(np.min(dists)) - (robot_radius + ped_radius)
-        worst = min(worst, clearance)
-    return worst
+    dists = np.linalg.norm(ped_positions - robot_pos[None, :], axis=1)
+    return float(np.min(dists)) - contact_radius
 
 
 @dataclass(frozen=True)
@@ -341,6 +337,12 @@ def realized_collision_risk_calibration(
     """
 
     scenario = scenario or CalibrationScenario()
+    planner_dt = float(getattr(getattr(planner, "config", None), "rollout_dt", scenario.dt))
+    if not np.isclose(planner_dt, float(scenario.dt)):
+        raise ValueError(
+            "CalibrationScenario.dt must match the planner rollout_dt "
+            f"({scenario.dt!r} != {planner_dt!r})"
+        )
     rng = np.random.default_rng(int(seed))
     compute_times_ms: list[float] = []
     tail_clearances: list[float] = []
@@ -362,7 +364,8 @@ def realized_collision_risk_calibration(
         episode_moved = False
         for step in range(int(scenario.steps_per_episode)):
             start_ns = time.perf_counter_ns()
-            command = planner.plan(observation)
+            raw_command = planner.plan(observation)
+            command = (float(raw_command[0]), float(raw_command[1]))
             elapsed_ms = (time.perf_counter_ns() - start_ns) / 1e6
             compute_times_ms.append(float(elapsed_ms))
             speed = float(command[0])
@@ -375,7 +378,16 @@ def realized_collision_risk_calibration(
             if tail_clearances[-1] < 0.0:
                 episode_collision = True
                 break
+            _step_robot(observation, command, dt=float(scenario.dt))
             _step_pedestrians(observation, dt=float(scenario.dt))
+            tail_clearances.append(
+                _min_robot_pedestrian_clearance(
+                    observation, collision_radius_m=scenario.collision_radius_m
+                )
+            )
+            if tail_clearances[-1] < 0.0:
+                episode_collision = True
+                break
             goal = np.asarray(observation["goal"]["current"], dtype=float)
             robot_pos = np.asarray(observation["robot"]["position"], dtype=float)
             if float(np.linalg.norm(goal - robot_pos)) <= 0.25:

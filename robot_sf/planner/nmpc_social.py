@@ -101,6 +101,18 @@ class _RolloutContext:
     grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None
 
 
+_ExtractedState = tuple[
+    np.ndarray,
+    float,
+    float,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    float,
+    float,
+]
+
+
 class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
     """Short-horizon deterministic optimizer over unicycle control sequences."""
 
@@ -541,7 +553,12 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         """Return additional SLSQP constraints for subclasses."""
         return ()
 
-    def _build_context(self, observation: dict[str, Any]) -> _RolloutContext:
+    def _build_context(
+        self,
+        observation: dict[str, Any],
+        *,
+        extracted_state: _ExtractedState | None = None,
+    ) -> _RolloutContext:
         """Assemble the per-step rollout context consumed by the optimizer.
 
         Factored out of :meth:`plan` so external harnesses (for example the
@@ -552,6 +569,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             The populated ``_RolloutContext`` for one planning call.
         """
 
+        state = extracted_state if extracted_state is not None else self._extract_state(observation)
         (
             robot_pos,
             heading,
@@ -561,7 +579,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             ped_velocities,
             robot_radius,
             ped_radius,
-        ) = self._extract_state(observation)
+        ) = state
         goal_delta = goal - robot_pos
         goal_heading = float(np.arctan2(goal_delta[1], goal_delta[0]))
         goal_heading_error = _wrap_angle(goal_heading - heading)
@@ -600,67 +618,40 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return the first command of the locally optimized NMPC sequence."""
         self._stats["calls"] = int(self._stats.get("calls", 0)) + 1
-        (
-            robot_pos,
-            heading,
-            speed,
-            goal,
-            ped_positions,
-            ped_velocities,
-            robot_radius,
-            ped_radius,
-        ) = self._extract_state(observation)
+        extracted_state = self._extract_state(observation)
+        robot_pos = extracted_state[0]
+        goal = extracted_state[3]
         goal_delta = goal - robot_pos
         goal_distance = float(np.linalg.norm(goal_delta))
         if goal_distance <= float(self.config.goal_tolerance):
             self._record_command(0.0, 0.0)
             return 0.0, 0.0
 
-        goal_heading = float(np.arctan2(goal_delta[1], goal_delta[0]))
-        goal_heading_error = _wrap_angle(goal_heading - heading)
-        grid_payload = self._cache_grid_payload(observation)
-        speed_cap = self._speed_cap(
-            robot_pos=robot_pos,
-            goal_heading_error=goal_heading_error,
-            observation=observation,
-            grid_payload=grid_payload,
+        context = self._build_context(
+            observation,
+            extracted_state=extracted_state,
         )
-        preferred_turn = self._preferred_avoidance_turn(
-            robot_pos=robot_pos,
-            heading=heading,
-            ped_positions=ped_positions,
-            ped_velocities=ped_velocities,
-        )
-        context = _RolloutContext(
-            robot_pos=robot_pos,
-            heading=heading,
-            current_speed=speed,
-            goal=goal,
-            ped_positions=ped_positions,
-            ped_velocities=ped_velocities,
-            robot_radius=robot_radius,
-            ped_radius=ped_radius,
-            pedestrian_uncertainty_envelope_enabled=bool(
-                self.config.pedestrian_uncertainty_envelope_enabled
-            ),
-            pedestrian_uncertainty_alpha_mps=float(self.config.pedestrian_uncertainty_alpha_mps),
-            observation=observation,
-            speed_cap=speed_cap,
-            preferred_turn=preferred_turn,
-            grid_payload=grid_payload,
+        goal_heading_error = _wrap_angle(
+            float(
+                np.arctan2(
+                    context.goal[1] - context.robot_pos[1],
+                    context.goal[0] - context.robot_pos[0],
+                )
+            )
+            - context.heading
         )
         x0 = self._initial_guess(
             goal_heading_error=goal_heading_error,
-            current_speed=speed,
+            current_speed=context.current_speed,
             goal_distance=goal_distance,
-            preferred_turn=preferred_turn,
-            speed_cap=speed_cap,
+            preferred_turn=context.preferred_turn,
+            speed_cap=context.speed_cap,
         )
         horizon = max(int(self.config.horizon_steps), 1)
         lower = np.empty(horizon * 2, dtype=float)
         upper = np.empty(horizon * 2, dtype=float)
         lower[0::2] = 0.0
-        upper[0::2] = float(speed_cap)
+        upper[0::2] = float(context.speed_cap)
         lower[1::2] = -float(self.config.max_angular_speed)
         upper[1::2] = float(self.config.max_angular_speed)
 
@@ -698,7 +689,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             action = np.asarray(result.x, dtype=float)
             self._last_solution = action.copy()
 
-        linear = float(np.clip(action[0], 0.0, float(speed_cap)))
+        linear = float(np.clip(action[0], 0.0, float(context.speed_cap)))
         angular = float(
             np.clip(
                 action[1],
@@ -709,11 +700,11 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         linear, angular = self._guarded_first_step_command(
             linear=linear,
             angular=angular,
-            robot_pos=robot_pos,
-            heading=heading,
-            robot_radius=robot_radius,
+            robot_pos=context.robot_pos,
+            heading=context.heading,
+            robot_radius=context.robot_radius,
             observation=observation,
-            grid_payload=grid_payload,
+            grid_payload=context.grid_payload,
         )
         self._record_command(linear, angular)
         return (linear, angular)

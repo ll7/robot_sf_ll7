@@ -151,6 +151,9 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         super().reset()
         self._last_forecast = None
         self._last_constraint_count = 0
+        reset = getattr(self._multimodal_predictor, "reset", None)
+        if callable(reset):
+            reset()
 
     @property
     def claimed_risk(self) -> float:
@@ -163,9 +166,6 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         """
 
         return float(self.chance_config.max_collision_risk)
-        reset = getattr(self._multimodal_predictor, "reset", None)
-        if callable(reset):
-            reset()
 
     def _optimizer_constraints(self, context: _RolloutContext) -> tuple[NonlinearConstraint, ...]:
         """Build the requested marginal or joint-horizon chance constraint.
@@ -412,6 +412,12 @@ def build_chance_constrained_mpc_adapter(
     config = build_chance_constrained_mpc_config(algo_config)
     backend = config.predictor_backend.strip().lower()
     if backend == "constant_velocity_gmm":
+        # Keep the surrogate provider import lazy so importing the provider module
+        # directly does not create a partially initialized circular import.
+        from robot_sf.planner.chance_constrained_mpc_provider import (  # noqa: PLC0415
+            ConstantVelocityGmmPredictor,
+        )
+
         predictor = ConstantVelocityGmmPredictor(
             mode_count=int(getattr(config, "gmm_mode_count", 1) or 1),
         )
@@ -431,10 +437,3 @@ __all__ = [
     "build_chance_constrained_mpc_adapter",
     "build_chance_constrained_mpc_config",
 ]
-
-# Imported last so the module's own dataclasses (above) are defined before the
-# provider module imports them back; this avoids the circular-import partial-init
-# error while keeping all imports at module top level (ruff PLC0415).
-from robot_sf.planner.chance_constrained_mpc_provider import (  # noqa: E402
-    ConstantVelocityGmmPredictor,
-)

@@ -11,7 +11,10 @@ self-check. No benchmark/calibration claim is made.
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -26,6 +29,7 @@ from robot_sf.planner.chance_constrained_mpc import (
 from robot_sf.planner.chance_constrained_mpc_provider import (
     CalibrationScenario,
     ConstantVelocityGmmPredictor,
+    _min_robot_pedestrian_clearance,
     build_constant_velocity_gmm_forecast,
     realized_collision_risk_calibration,
 )
@@ -66,7 +70,25 @@ def test_surrogate_forecast_satisfies_gmm_contract() -> None:
     assert forecast.covariances_world.shape == (2, 2, 6, 2, 2)
     assert forecast.mode_weights.shape == (2, 2)
     np.testing.assert_allclose(forecast.mode_weights.sum(axis=1), 1.0)
+    np.testing.assert_allclose(forecast.mode_weights, 0.5)
     assert forecast.source == "constant_velocity_gmm_surrogate"
+
+
+def test_provider_imports_before_planner_module() -> None:
+    """The concrete provider must be importable in a fresh process by itself."""
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import robot_sf.planner.chance_constrained_mpc_provider as provider; "
+            "assert provider.ConstantVelocityGmmPredictor",
+        ],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_surrogate_forecast_integrates_constant_velocity_mean() -> None:
@@ -209,3 +231,41 @@ def test_calibration_runs_end_to_end_without_pedestrians() -> None:
     # No pedestrians => every clearance is +inf, so the mean is +inf (not finite).
     assert result["mean_tail_clearance_m"] == pytest.approx(float("inf"))
     assert result["completion_rate"] >= 0.0
+
+
+def test_calibration_integrates_robot_command_and_declared_collision_radius() -> None:
+    """Calibration observes the command-integrated robot state and contact radius."""
+
+    class _AlwaysForwardPlanner:
+        claimed_risk = 0.1
+        config = SimpleNamespace(rollout_dt=0.25)
+
+        def reset(self) -> None:
+            pass
+
+        def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+            return (1.0, 0.0)
+
+        def diagnostics(self) -> dict[str, int]:
+            return {"solver_failures": 0}
+
+    result = realized_collision_risk_calibration(
+        _AlwaysForwardPlanner(),
+        CalibrationScenario(
+            num_episodes=1,
+            steps_per_episode=1,
+            dt=0.25,
+            num_pedestrians=0,
+            robot_goal_distance_m=0.2,
+        ),
+        seed=0,
+    )
+    assert result["completion_rate"] == pytest.approx(1.0)
+
+    observation = _observation(ped_positions=((0.8, 0.0),), ped_velocities=((0.0, 0.0),))
+    assert _min_robot_pedestrian_clearance(observation, collision_radius_m=0.85) == pytest.approx(
+        -0.05
+    )
+    assert _min_robot_pedestrian_clearance(observation, collision_radius_m=0.5) == pytest.approx(
+        0.3
+    )

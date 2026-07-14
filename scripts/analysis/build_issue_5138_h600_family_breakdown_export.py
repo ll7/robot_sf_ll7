@@ -216,9 +216,7 @@ def _validate_default_source_contract(runs: list[RunSource]) -> None:
     if not _matches_default_runs(runs):
         return
     repo_root = Path(__file__).resolve().parents[2]
-    manifest_path = repo_root / (
-        DEFAULT_OUTPUT_DIR / "h600_source_reports_manifest.json"
-    )
+    manifest_path = repo_root / (DEFAULT_OUTPUT_DIR / "h600_source_reports_manifest.json")
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if not isinstance(manifest, dict):

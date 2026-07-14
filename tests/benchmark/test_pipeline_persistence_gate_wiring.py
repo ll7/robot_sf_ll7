@@ -138,7 +138,11 @@ def _fake_batch_runner(
     }
 
 
-def _run_wiring(tmp_path: Path) -> list[dict[str, Any]]:
+def _run_wiring(
+    tmp_path: Path,
+    *,
+    truncate_replay_cells: bool = False,
+) -> list[dict[str, Any]]:
     config_path = tmp_path / "config.yaml"
     output_root = tmp_path / "output"
     config_path.write_text(
@@ -206,6 +210,9 @@ def _run_wiring(tmp_path: Path) -> list[dict[str, Any]]:
             "missing_cell_reasons": [],
         }
     replay_results_path = tmp_path / "replay_results.json"
+    if truncate_replay_cells:
+        first_scenario_id = entries[0]["scenario_id"]
+        replay_results[first_scenario_id]["cells"] = replay_results[first_scenario_id]["cells"][:1]
     replay_results_path.write_text(json.dumps(replay_results), encoding="utf-8")
     records = evaluate_pipeline_candidates(
         manifest_path=output_root / "run_manifest.json",
@@ -298,3 +305,10 @@ def test_cpu_only_mode_does_not_claim_exact_replay() -> None:
         replay_error=None,
     )
     assert block["status"] == "unknown"
+
+
+def test_precomputed_replay_must_cover_the_frozen_grid(tmp_path: Path) -> None:
+    """Partial precomputed cells fail instead of allowing incomplete promotion evidence."""
+
+    with pytest.raises(ValueError, match="full frozen perturbation grid"):
+        _run_wiring(tmp_path, truncate_replay_cells=True)

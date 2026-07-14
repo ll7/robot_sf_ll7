@@ -339,21 +339,30 @@ def _load_replay_info(
 ) -> tuple[dict[str, Any] | None, str | None, Mapping[str, Any]]:
     if replay_data is None:
         return None, None, {}
-    candidate_replay = replay_data.get(scenario_id) or replay_data.get(episode_id)
-    if candidate_replay is None and "cells" in replay_data:
-        if entry_count != 1:
-            raise ValueError(
-                "multi-candidate replay results must key cells by scenario_id or episode_id"
-            )
+    if scenario_id in replay_data:
+        candidate_replay = replay_data[scenario_id]
+    elif episode_id in replay_data:
+        candidate_replay = replay_data[episode_id]
+    elif "cells" in replay_data and entry_count == 1:
         candidate_replay = replay_data
-    if candidate_replay is not None and not isinstance(candidate_replay, dict):
+    else:
+        raise ValueError(
+            f"replay results are missing candidate {scenario_id!r} (episode {episode_id!r})"
+        )
+    if not isinstance(candidate_replay, dict):
         raise ValueError(f"replay result for {scenario_id} must be a JSON object")
-    replay_info = candidate_replay or {}
+    replay_info = candidate_replay
     if "error" in replay_info:
-        return None, str(replay_info["error"]), replay_info
+        raise ValueError(
+            f"replay result for {scenario_id} reports an error: {replay_info['error']}"
+        )
     replayed = replay_info.get("episode")
-    if replayed is not None and not isinstance(replayed, dict):
-        raise ValueError(f"replay episode for {scenario_id} must be a JSON object")
+    if not isinstance(replayed, dict):
+        raise ValueError(f"replay result for {scenario_id} must contain an episode object")
+    for field in ("episode_id", "source_seed", "source_map"):
+        value = replayed.get(field)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise ValueError(f"replay episode for {scenario_id} is missing {field}")
     return replayed, None, replay_info
 
 
@@ -367,15 +376,14 @@ def _evaluate_cells(
     critical_event: Mapping[str, Any],
 ) -> tuple[Any, Any]:
     if replay_data is not None:
-        if "cells" not in replay_info:
-            return [], [
-                {
-                    "timing_offset_s": float(timing_offsets[0]),
-                    "speed_delta_m_s": float(speed_deltas[0]),
-                    "reason": "precomputed replay result omitted perturbation cells",
-                }
-            ]
-        return replay_info["cells"], replay_info.get("missing_cell_reasons", [])
+        return (
+            _normalize_precomputed_cells(
+                replay_info,
+                timing_offsets=timing_offsets,
+                speed_deltas=speed_deltas,
+            ),
+            [],
+        )
     return evaluate_perturbation_grid(
         timing_offsets_s=timing_offsets,
         speed_deltas_m_s=speed_deltas,
@@ -384,6 +392,88 @@ def _evaluate_cells(
             critical_event=critical_event,
         ),
     )
+
+
+def _normalize_precomputed_cells(
+    replay_info: Mapping[str, Any],
+    *,
+    timing_offsets: Sequence[float],
+    speed_deltas: Sequence[float],
+) -> list[dict[str, Any]]:
+    """Validate and normalize one replay result's complete frozen grid."""
+
+    if "cells" not in replay_info:
+        raise ValueError("precomputed replay result omitted perturbation cells")
+    raw_cells = replay_info["cells"]
+    if not isinstance(raw_cells, list):
+        raise ValueError("precomputed replay cells must be a list")
+    missing_cell_reasons = replay_info.get("missing_cell_reasons", [])
+    if not isinstance(missing_cell_reasons, list):
+        raise ValueError("precomputed missing_cell_reasons must be a list")
+    if missing_cell_reasons:
+        raise ValueError(
+            f"precomputed replay contains missing perturbation cells: {len(missing_cell_reasons)}"
+        )
+
+    expected = {
+        (float(timing_offset_s), float(speed_delta_m_s))
+        for timing_offset_s in timing_offsets
+        for speed_delta_m_s in speed_deltas
+    }
+    normalized_cells: list[dict[str, Any]] = []
+    seen: set[tuple[float, float]] = set()
+    for index, raw_cell in enumerate(raw_cells):
+        cell, coordinate = _normalize_precomputed_cell(raw_cell, index=index, expected=expected)
+        if coordinate in seen:
+            raise ValueError(
+                f"precomputed replay contains duplicate perturbation cell {coordinate}"
+            )
+        seen.add(coordinate)
+        normalized_cells.append(cell)
+
+    missing = expected - seen
+    if missing:
+        raise ValueError(
+            "precomputed replay does not cover the full frozen perturbation grid; "
+            f"missing {len(missing)} cell(s)"
+        )
+    return normalized_cells
+
+
+def _normalize_precomputed_cell(
+    raw_cell: Any,
+    *,
+    index: int,
+    expected: set[tuple[float, float]],
+) -> tuple[dict[str, Any], tuple[float, float]]:
+    """Validate one precomputed cell and return its normalized value and coordinate."""
+
+    if not isinstance(raw_cell, dict):
+        raise ValueError(f"precomputed replay cell {index} must be an object")
+    try:
+        timing_offset_s = float(raw_cell["timing_offset_s"])
+        speed_delta_m_s = float(raw_cell["speed_delta_m_s"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"precomputed replay cell {index} is missing numeric coordinates") from exc
+    if not math.isfinite(timing_offset_s) or not math.isfinite(speed_delta_m_s):
+        raise ValueError(f"precomputed replay cell {index} has non-finite coordinates")
+    coordinate = (timing_offset_s, speed_delta_m_s)
+    if coordinate not in expected:
+        raise ValueError(
+            f"precomputed replay cell {index} has coordinate {coordinate} "
+            "outside the frozen perturbation grid"
+        )
+    verdict = raw_cell.get("verdict")
+    if verdict not in {"pass", "fail", "unknown"}:
+        raise ValueError(f"precomputed replay cell {index} has invalid verdict")
+    cell = {
+        "timing_offset_s": timing_offset_s,
+        "speed_delta_m_s": speed_delta_m_s,
+        "verdict": verdict,
+    }
+    if "reason" in raw_cell:
+        cell["reason"] = str(raw_cell["reason"])
+    return cell, coordinate
 
 
 def _assess_exact_replay(
@@ -541,6 +631,8 @@ def _normalize_perturbation_grid(raw: Any) -> dict[str, list[float]]:
             if not math.isfinite(numeric):
                 raise ValueError(f"config.perturbation.{key} must contain finite numbers")
             normalized_values.append(numeric)
+        if len(set(normalized_values)) != len(normalized_values):
+            raise ValueError(f"config.perturbation.{key} must not contain duplicate values")
         normalized[key] = normalized_values
     return normalized
 

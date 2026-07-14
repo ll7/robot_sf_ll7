@@ -45,8 +45,11 @@ from typing import Any
 import numpy as np
 
 from robot_sf.benchmark.map_runner_env import build_env_config
+from robot_sf.benchmark.utils import _git_hash_fallback
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.gym_env.environment_factory import make_robot_env
+from robot_sf.robot.differential_drive import DifferentialDriveRobot
+from robot_sf.robot.holonomic_drive import HolonomicDriveRobot
 from robot_sf.scenario_certification.feasibility_diagnostics import (
     DIAGNOSTIC_CLAIM_BOUNDARY,
     SOLVABLE_ROUTE_CLASSES,
@@ -1190,25 +1193,44 @@ def make_route_follow_episode_runner(
             nav.waypoint_id = 0
             nav.reached_waypoint = False
 
+            command_mode = _route_follow_command_mode(sim.robots[0])
+            if command_mode is None:
+                return {
+                    "algo": ROUTE_FOLLOW_ALGO,
+                    "route_complete": None,
+                    "steps": None,
+                    "status": "blocked",
+                    "termination_reason": "route_follow_unsupported_robot_model",
+                    "route_follow_blocker": (
+                        "stateful route-follow has no validated command adapter for "
+                        f"{type(sim.robots[0]).__name__}"
+                    ),
+                    "stateful": False,
+                    "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+                }
+
             max_steps = (
                 int(env_config.sim_config.max_episode_steps) if horizon is None else int(horizon)
             )
             result = _run_stateful_route_follow_rollout(env, nav, max_steps)
             route_complete = result["route_complete"]
-            status = "passed" if route_complete else "failed"
+            status = result.get("status") or ("passed" if route_complete else "failed")
             return {
                 "algo": ROUTE_FOLLOW_ALGO,
-                "route_complete": route_complete,
+                "route_complete": None if status == "blocked" else route_complete,
                 "steps": result["steps_used"],
                 "status": status,
                 "termination_reason": result["termination_reason"],
                 "collision_seen": result["collision_seen"],
                 "robot_final_position": result["final_pos"],
                 "waypoint_count": len(target_waypoints),
-                "stateful": True,
+                "stateful": result.get("stateful", True),
+                "route_follow_blocker": result.get("blocker"),
                 "route_follow_provenance": (
                     "single continuous episode; pose + remaining horizon preserved "
                     "across certified waypoints (issue #5636)"
+                    if result.get("stateful", True)
+                    else None
                 ),
                 "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
             }
@@ -1238,17 +1260,50 @@ def _run_stateful_route_follow_rollout(
     final_pos: tuple[float, float] | None = None
     termination_reason = "max_steps"
     collision_seen = False
+    robot = env.simulator.robots[0]
+    try:
+        step_dt = float(env.simulator.config.time_per_step_in_secs)
+    except (AttributeError, TypeError, ValueError):
+        return {
+            "route_complete": None,
+            "steps_used": steps_used,
+            "termination_reason": "route_follow_invalid_step_dt",
+            "collision_seen": collision_seen,
+            "final_pos": final_pos,
+            "status": "blocked",
+            "stateful": False,
+            "blocker": "simulator time_per_step_in_secs is unavailable or invalid",
+        }
+    if not math.isfinite(step_dt) or step_dt <= 0.0 or max_steps <= 0:
+        return {
+            "route_complete": None,
+            "steps_used": steps_used,
+            "termination_reason": "route_follow_invalid_horizon_or_step_dt",
+            "collision_seen": collision_seen,
+            "final_pos": final_pos,
+            "status": "blocked",
+            "stateful": False,
+            "blocker": "route-follow requires a positive horizon and simulation timestep",
+        }
     for _step_idx in range(max_steps):
         robot_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
-        # Advance to the next waypoint once the current one is reached, so the robot
-        # keeps following the certified path rather than stalling.
-        if nav.reached_waypoint and nav.waypoint_id < len(nav.waypoints) - 1:
-            nav.waypoint_id += 1
         goal = np.asarray(nav.current_waypoint, dtype=float)
-        action = _simple_route_follow_policy(robot_pos, goal)
+        action = _route_follow_action(robot, robot_pos, goal, step_dt)
+        if action is None:
+            return {
+                "route_complete": None,
+                "steps_used": steps_used,
+                "termination_reason": "route_follow_action_adapter_unavailable",
+                "collision_seen": collision_seen,
+                "final_pos": final_pos,
+                "status": "blocked",
+                "stateful": False,
+                "blocker": (f"no validated route-follow action adapter for {type(robot).__name__}"),
+            }
         _obs, _reward, terminated, truncated, info = env.step(action)
         steps_used += 1
-        final_pos = (float(robot_pos[0]), float(robot_pos[1]))
+        post_step_pos = np.asarray(env.simulator.robot_pos[0], dtype=float)
+        final_pos = (float(post_step_pos[0]), float(post_step_pos[1]))
         if bool(terminated) or bool(truncated):
             if nav.reached_destination:
                 termination_reason = "route_follow_reached_destination"
@@ -1264,21 +1319,105 @@ def _run_stateful_route_follow_rollout(
         "termination_reason": termination_reason,
         "collision_seen": collision_seen,
         "final_pos": list(final_pos) if final_pos is not None else None,
+        "status": "passed" if nav.reached_destination else "failed",
+        "stateful": True,
     }
 
 
-def _simple_route_follow_policy(robot_pos: np.ndarray, goal: np.ndarray) -> np.ndarray:
-    """Goal-seeking velocity command toward ``goal`` (same kinematics as the ``goal`` algo).
+def _route_follow_command_mode(robot: Any) -> str | None:
+    """Return the validated action contract supported by a robot model.
+
+    The default differential-drive environment consumes acceleration commands, while
+    holonomic environments can consume either Cartesian velocity or unicycle velocity
+    commands. Bicycle-drive actions require a steering adapter and are intentionally
+    blocked until one is validated for this diagnostic.
 
     Returns:
-        A 2D velocity command driving the robot straight at the current waypoint.
+        Name of the supported command contract, or ``None`` when unsupported.
+    """
+    if isinstance(robot, DifferentialDriveRobot):
+        return "differential_acceleration"
+    if isinstance(robot, HolonomicDriveRobot):
+        return f"holonomic_{robot.config.command_mode}"
+    return None
+
+
+def _route_follow_action(
+    robot: Any,
+    robot_pos: np.ndarray,
+    goal: np.ndarray,
+    step_dt: float,
+) -> np.ndarray | None:
+    """Build a bounded action using the active robot's actual command semantics.
+
+    Returns:
+        A two-component action, or ``None`` when no validated adapter exists.
     """
     direction = goal - robot_pos
     dist = float(np.linalg.norm(direction))
+    if not math.isfinite(step_dt) or step_dt <= 0.0 or not math.isfinite(dist):
+        return None
+    command_mode = _route_follow_command_mode(robot)
+    if command_mode is None:
+        return None
     if dist < 1e-6:
         return np.zeros(2, dtype=float)
-    speed = 1.0
-    return direction / dist * speed
+
+    if isinstance(robot, HolonomicDriveRobot):
+        speed = min(float(robot.config.max_speed), dist / step_dt)
+        if robot.config.command_mode == "vx_vy":
+            return np.asarray(direction / dist * speed, dtype=np.float32)
+        heading = float(robot.pose[1])
+        target_heading = math.atan2(float(direction[1]), float(direction[0]))
+        heading_error = math.atan2(
+            math.sin(target_heading - heading), math.cos(target_heading - heading)
+        )
+        forward_speed = speed if abs(heading_error) <= math.pi / 2.0 else 0.0
+        angular_speed = float(
+            np.clip(
+                2.0 * heading_error,
+                -float(robot.config.max_angular_speed),
+                float(robot.config.max_angular_speed),
+            )
+        )
+        return np.asarray([forward_speed, angular_speed], dtype=np.float32)
+
+    if isinstance(robot, DifferentialDriveRobot):
+        heading = float(robot.pose[1])
+        target_heading = math.atan2(float(direction[1]), float(direction[0]))
+        heading_error = math.atan2(
+            math.sin(target_heading - heading), math.cos(target_heading - heading)
+        )
+        target_speed = min(float(robot.config.max_linear_speed), dist / step_dt)
+        if abs(heading_error) > math.pi / 2.0 and not robot.config.allow_backwards:
+            target_speed = 0.0
+        target_angular_speed = float(
+            np.clip(
+                2.0 * heading_error,
+                -float(robot.config.max_angular_speed),
+                float(robot.config.max_angular_speed),
+            )
+        )
+        current_linear_speed, current_angular_speed = robot.current_speed
+        linear_accel = (target_speed - float(current_linear_speed)) / step_dt
+        angular_accel = (target_angular_speed - float(current_angular_speed)) / step_dt
+        return np.asarray(
+            [
+                np.clip(
+                    linear_accel,
+                    -float(robot.config.max_linear_decel),
+                    float(robot.config.max_linear_accel),
+                ),
+                np.clip(
+                    angular_accel,
+                    -float(robot.config.max_angular_accel),
+                    float(robot.config.max_angular_accel),
+                ),
+            ],
+            dtype=np.float32,
+        )
+
+    return None
 
 
 def _get_certified_route_waypoints(
@@ -1293,6 +1432,7 @@ def _get_certified_route_waypoints(
         list when the route cannot be planned.
     """
     try:
+        config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_path)
         certificate = _default_certifier(scenario, scenario_path)
     except Exception:  # noqa: BLE001
         return []
@@ -1300,24 +1440,34 @@ def _get_certified_route_waypoints(
     for route_cert in certificate.route_certificates or []:
         planned_info = (route_cert.checks or {}).get("planner")
         if planned_info and route_cert.checks.get("inflated_collision_free_path"):
-            # The A* path coordinates are stored in the route evidence or can be
-            # reconstructed from the route line. For diagnostic purposes, re-plan.
-            robot_radius = float(
-                (scenario.get("robot_config") or {}).get("radius", DEFAULT_ROBOT_RADIUS)
-            )
-            waypoints = _replan_astar_path(
-                scenario,
-                scenario_path=scenario_path,
-                robot_radius=robot_radius,
-            )
-            return waypoints
+            map_name = route_cert.checks.get("map_name")
+            robot_radius = float(getattr(config.robot_config, "radius", DEFAULT_ROBOT_RADIUS))
+            for candidate_map_name, map_def in config.map_pool.map_defs.items():
+                if map_name is not None and candidate_map_name != map_name:
+                    continue
+                for route in getattr(map_def, "robot_routes", []):
+                    route_id = route.source_label or f"robot_route_{route.spawn_id}_{route.goal_id}"
+                    if (
+                        route_id != route_cert.route_id
+                        or int(route.spawn_id) != int(route_cert.spawn_id)
+                        or int(route.goal_id) != int(route_cert.goal_id)
+                        or len(route.waypoints) < 2
+                    ):
+                        continue
+                    return _replan_astar_path(
+                        map_def,
+                        start=tuple(float(c) for c in route.waypoints[0]),
+                        goal=tuple(float(c) for c in route.waypoints[-1]),
+                        robot_radius=robot_radius,
+                    )
     return []
 
 
 def _replan_astar_path(
-    scenario: Mapping[str, Any],
+    map_def: Any,
     *,
-    scenario_path: Path,
+    start: tuple[float, float],
+    goal: tuple[float, float],
     robot_radius: float,
 ) -> list[tuple[float, float]]:
     """Re-plan the inflated A* path for the scenario to extract waypoints.
@@ -1329,30 +1479,6 @@ def _replan_astar_path(
         ClassicGlobalPlanner,
         ClassicPlannerConfig,
     )
-    from robot_sf.training.scenario_loader import (  # noqa: PLC0415
-        build_robot_config_from_scenario,
-    )
-
-    try:
-        config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_path)
-    except Exception:  # noqa: BLE001
-        return []
-
-    map_defs = list(config.map_pool.map_defs.items())
-    if not map_defs:
-        return []
-
-    map_def = map_defs[0][1]
-    routes = list(getattr(map_def, "robot_routes", []))
-    if not routes:
-        return []
-
-    route = routes[0]
-    if len(route.waypoints) < 2:
-        return []
-
-    start = tuple(float(c) for c in route.waypoints[0])
-    goal = tuple(float(c) for c in route.waypoints[-1])
 
     planner_config = ClassicPlannerConfig(
         cells_per_meter=2.0,
@@ -1588,6 +1714,8 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
 
     return {
         "schema_version": ISSUE_5596_DIAGNOSTIC_SCHEMA,
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
+        "source_commit": _git_hash_fallback(),
         "issue": "5596",
         "scenario_id": ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
         "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,

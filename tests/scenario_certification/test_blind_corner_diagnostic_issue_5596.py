@@ -16,17 +16,21 @@ the committed ``francis2023_blind_corner`` scenario (marked slow; diagnostic-onl
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import numpy as np
 import pytest
 
+from robot_sf.nav.navigation import RouteNavigator
+from robot_sf.robot.differential_drive import DifferentialDriveRobot, DifferentialDriveSettings
+from robot_sf.robot.holonomic_drive import HolonomicDriveRobot, HolonomicDriveSettings
 from robot_sf.scenario_certification import feasibility_oracle
 from robot_sf.scenario_certification.feasibility_oracle import (
     ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
     ISSUE_5596_DIAGNOSTIC_SCHEMA,
     ROUTE_FOLLOW_ALGO,
     build_issue_5596_blind_corner_diagnostic,
-    make_route_follow_episode_runner,
 )
 from robot_sf.scenario_certification.v1 import (
     CERT_SCHEMA_VERSION,
@@ -127,38 +131,54 @@ def _manifest(tmp_path: Path, scenario: dict[str, Any]) -> Path:
     return path
 
 
-@pytest.mark.slow
-def test_route_follow_runner_stateful_contract_on_real_scenario(tmp_path: Path) -> None:
-    """The stateful runner drives one continuous episode over the certified route.
-
-    It must report ``stateful=True`` (pose + remaining horizon preserved across
-    waypoints) rather than the fail-closed blocked placeholder, and it must not
-    present a reset-per-waypoint run as continuous route-follow evidence. Marked slow
-    because it builds the simulator for a real route-follow rollout.
-    """
-    pytest.importorskip("robot_sf.benchmark.map_runner")
-    manifest = _manifest(tmp_path, _scenario(max_episode_steps=400))
-    scenario = {
-        "name": "francis2023_blind_corner",
-        "simulation_config": {"max_episode_steps": 400, "ped_density": 0.0},
-        "robot_config": {},
-        "metadata": {"archetype": "blind_corner"},
-        "seeds": [219],
-    }
-    env_scenario = feasibility_oracle.make_envelope_scenario(scenario, envelope_radius_m=1.0)
-    config = feasibility_oracle.FeasibilityOracleConfig(
-        scenario_path=manifest,
-        envelope_radii_m=(1.0, 0.5),
+def test_route_follow_action_matches_default_differential_drive_contract() -> None:
+    """The default route-follow action is acceleration, not Cartesian velocity."""
+    robot = DifferentialDriveRobot(DifferentialDriveSettings())
+    action = feasibility_oracle._route_follow_action(
+        robot,
+        np.asarray((0.0, 0.0)),
+        np.asarray((1.0, 0.0)),
+        0.1,
     )
-    runner = make_route_follow_episode_runner(config)
-    record = runner(env_scenario, 219, 400, ROUTE_FOLLOW_ALGO)
-    assert callable(runner)
-    assert ROUTE_FOLLOW_ALGO == "route_follow"
-    assert record["algo"] == ROUTE_FOLLOW_ALGO
-    # The lane is now stateful: it either follows the route or reports a real failure.
-    assert record.get("stateful") is True
-    assert record["status"] in ("passed", "failed", "blocked")
-    assert record.get("route_follow_provenance") is not None
+
+    assert action is not None
+    assert action.shape == (2,)
+    assert float(action[0]) == pytest.approx(robot.config.max_linear_accel)
+    assert float(action[1]) == pytest.approx(0.0)
+    assert np.all(action <= robot.action_space.high)
+    assert np.all(action >= robot.action_space.low)
+
+
+def test_stateful_rollout_advances_each_waypoint_once() -> None:
+    """The simulator's navigator update must not be duplicated by the rollout loop."""
+
+    class _FakeSimulator:
+        def __init__(self) -> None:
+            self.config = SimpleNamespace(time_per_step_in_secs=1.0)
+            self.robots = [HolonomicDriveRobot(HolonomicDriveSettings(max_speed=1.0))]
+            self.robot_pos = np.zeros((1, 2), dtype=float)
+
+    class _FakeEnv:
+        def __init__(self) -> None:
+            self.simulator = _FakeSimulator()
+
+        def step(self, action: np.ndarray):
+            robot = self.simulator.robots[0]
+            robot.apply_action(tuple(float(value) for value in action), 1.0)
+            self.simulator.robot_pos[0] = robot.pos
+            nav.update_position(robot.pos)
+            return None, 0.0, nav.reached_destination, False, {}
+
+    nav = RouteNavigator(
+        waypoints=[(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)],
+        proximity_threshold=0.05,
+    )
+    env = _FakeEnv()
+    result = feasibility_oracle._run_stateful_route_follow_rollout(env, nav, 10)
+
+    assert result["status"] == "passed"
+    assert result["steps_used"] == 3
+    assert result["final_pos"] == pytest.approx([2.0, 0.0])
 
 
 def test_route_follow_report_rejects_reset_per_waypoint_as_continuous(tmp_path: Path) -> None:

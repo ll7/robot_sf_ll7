@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5596, 2026-07-14) - NEEDS-REVIEW -->
+
 # Issue #5596 — Blind-corner zero-success diagnostic
 
 Diagnostic-only analysis requested by
@@ -26,11 +28,11 @@ normalized JSON / checksums. The rollout seed is pinned (blind-corner manifest s
 - `oracle_verdict`: the existing planner-free oracle (no learned planner) driven with the
   `goal` scripted controller at the nominal and reduced envelope radii. Reported margins:
   corridor-vs-envelope width, kinematic lower-bound completion steps vs horizon.
-- `route_follow_intervention_verdict`: a fail-closed placeholder for the intended
-  **route-following** lane. The canonical map runner does not yet support carrying robot
-  pose and waypoint goals across sub-episodes, so this lane reports `blocked` rather than
-  pretending that reset-per-waypoint episodes are a continuous intervention. Stateful
-  adapter work is tracked in [#5636](https://github.com/ll7/robot_sf_ll7/issues/5636).
+- `route_follow_intervention_verdict`: the stateful **route-following** lane. It uses one
+  continuous actor-free episode, preserves the robot pose and remaining horizon, and
+  targets the certified route waypoints with a validated drivetrain-specific action
+  adapter. Unsupported drivetrain modes remain fail-closed as `blocked`; the adapter
+  contract is tracked by [#5636](https://github.com/ll7/robot_sf_ll7/issues/5636).
 - `straight_line_vs_route_clearance`: straight-line (goal beeline) vs certified-route
   obstacle clearance for each envelope radius.
 - `mechanism`: bounded classification of the three competing explanations from the issue.
@@ -38,8 +40,8 @@ normalized JSON / checksums. The rollout seed is pinned (blind-corner manifest s
 ## Findings (reproducible, provenance-pinned)
 
 Provenance: `scenario_manifest = configs/scenarios/francis2023.yaml`, cell
-`francis2023_blind_corner`, rollout seed 219, source commit captured by `git_hash` in
-the episode records emitted by the oracle runner.
+`francis2023_blind_corner`, rollout seed 219, and the producing source commit recorded in
+the report's top-level `source_commit` field.
 
 1. **Geometry is `hard_but_solvable`, not infeasible.** The certifier reports
    `classification = hard_but_solvable`, `benchmark_eligibility = eligible`,
@@ -48,11 +50,11 @@ the episode records emitted by the oracle runner.
    (nominal) / ~190 steps (reduced) — far inside the 400-step horizon. So the route is
    not horizon- or envelope-bound, and not geometrically infeasible.
 
-2. **The route-following intervention is unavailable and therefore cannot discriminate
-   the mechanism.** The `goal` lane is diagnostic input, but the canonical map runner has
-   no supported contract for injecting waypoint goals while preserving robot pose across
-   sub-episodes. The report records `route_follow_intervention_status=blocked` at both
-   radii, so no route-follow success or failure is interpreted.
+2. **The stateful route-following intervention reaches the certified path and fails by
+   collision.** The report records `stateful = true`, `status = failed`, and collision
+   termination after 102 steps at the nominal radius and 131 steps at the reduced radius.
+   This is diagnostic support for the route-geometry/configuration explanation; it does
+   not promote the cell to a benchmark or infeasibility claim.
 
 3. **The certifier's own A* path clips the inner corner in the retained diagnostic trace.**
    The straight goal beeline has
@@ -67,11 +69,12 @@ the episode records emitted by the oracle runner.
 
 ### Mechanism status
 
-The retained clearance trace is consistent with a **certifier/planner-path artifact** —
-the inflated A* path does not honor the clearance the certifier attributes to the route
-line — but the mechanism remains **unresolved** until the stateful route-follow adapter
-in [#5636](https://github.com/ll7/robot_sf_ll7/issues/5636) is implemented and rerun.
-The scripted-controller explanation is not promoted because the intervention is blocked.
+The retained clearance trace and the stateful route-follow collision are consistent with a
+**certifier/planner-path artifact** — the inflated A* path does not honor the clearance the
+certifier attributes to the route line. The report therefore records
+`supported_explanation = route_geometry_or_config_cause`, while keeping the result
+diagnostic-only. The scripted-controller explanation is not promoted because the
+route-follow intervention did not complete.
 
 Explanation **#3 (scenario runtime / map interpretation drift)** is `not_established`:
 the run uses the same scenario manifest, robot kinematics, horizon, and map as the
@@ -89,3 +92,5 @@ planner-path clearance check).
 
 - `blind_corner_diagnostic.json` — generated report (regenerate with the command above).
 - `README.md` — this file.
+
+<!-- /AI-GENERATED -->

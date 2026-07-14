@@ -163,7 +163,9 @@ def _comparison_row_from_manifest(  # noqa: PLR0913
         if _is_certified_valid_failure(item)
     ]
     replayable_failures = [
-        item for _index, item in certified_valid_failures if _has_replay_paths(item)
+        item
+        for _index, item in certified_valid_failures
+        if _has_replay_paths(item, manifest_path=manifest_path)
     ]
     valid_objectives = [
         float(item["objective_value"]) for item in candidates if _is_valid_scored_candidate(item)
@@ -249,11 +251,18 @@ def _is_valid_scored_candidate(item: Any) -> bool:
     return True
 
 
-def _has_replay_paths(item: dict[str, Any]) -> bool:
+def _has_replay_paths(item: dict[str, Any], *, manifest_path: Path) -> bool:
     """Return whether manifest paths needed for local replay inspection exist."""
     for key in ("scenario_yaml_path", "episode_record_path", "trajectory_csv_path", "bundle_path"):
         raw_path = item.get(key)
-        if not raw_path or not Path(str(raw_path)).exists():
+        if not raw_path:
+            return False
+        path = Path(str(raw_path))
+        if path.is_absolute():
+            candidates = (path,)
+        else:
+            candidates = (manifest_path.parent / path, Path.cwd() / path)
+        if not any(candidate.exists() for candidate in candidates):
             return False
     return True
 
@@ -305,17 +314,43 @@ def build_comparison_payload(
     }
 
 
+def _resolve_manifest_path(value: Any, *, repo_root: Path, field: str) -> Path:
+    """Resolve a required repository-relative manifest path."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Package-B manifest {field} must be a non-empty path")
+    path = Path(value)
+    return path if path.is_absolute() else repo_root / path
+
+
+def _manifest_int_tuple(payload: dict[str, Any], key: str) -> tuple[int, ...]:
+    """Load a non-empty integer list from a Package-B manifest."""
+    value = payload.get(key)
+    if (
+        not isinstance(value, list)
+        or not value
+        or any(isinstance(item, bool) or not isinstance(item, int) for item in value)
+    ):
+        raise ValueError(f"Package-B manifest {key} must be a non-empty integer list")
+    return tuple(int(item) for item in value)
+
+
 def load_package_b_manifest(
     manifest_path: Path,
+    *,
+    repo_root: Path | None = None,
 ) -> tuple[SearchConfig, tuple[str, ...], tuple[int, ...], tuple[int, ...]]:
     """Load a Package-B manifest and derive the runner configuration.
 
     Returns:
         A base ``SearchConfig`` scoped to the first objective/budget/seed, the
         sampler names, the budget grid, and the repeated seeds declared by the
-        manifest. The manifest's ``base_config`` paths are resolved relative to
-        the repository root so the command matches the committed example command.
+        manifest. All repository-relative paths are resolved against ``repo_root``
+        (or the current working directory when it is omitted).
     """
+    root = (repo_root or Path.cwd()).resolve()
+    manifest_path = (
+        manifest_path if manifest_path.is_absolute() else root / manifest_path
+    ).resolve()
     payload = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Package-B manifest payload must be a mapping")
@@ -323,30 +358,48 @@ def load_package_b_manifest(
     if not isinstance(base_config, dict):
         raise ValueError("Package-B manifest base_config must be a mapping")
     output_artifacts = payload.get("output_artifacts")
-    output_dir = (
-        Path(output_artifacts["output_dir"])
-        if isinstance(output_artifacts, dict) and output_artifacts.get("output_dir")
-        else Path("output/adversarial/issue_3079_package_b")
+    if not isinstance(output_artifacts, dict):
+        raise ValueError("Package-B manifest output_artifacts must be a mapping")
+    output_dir = _resolve_manifest_path(
+        output_artifacts.get("output_dir"),
+        repo_root=root,
+        field="output_artifacts.output_dir",
     )
 
     def _path(key: str) -> Path:
-        value = base_config.get(key)
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"Package-B manifest base_config.{key} must be a non-empty path")
-        return Path(value)
+        return _resolve_manifest_path(
+            base_config.get(key),
+            repo_root=root,
+            field=f"base_config.{key}",
+        )
+
+    policy = base_config.get("policy")
+    objective = base_config.get("objective")
+    if not isinstance(policy, str) or not policy.strip():
+        raise ValueError("Package-B manifest base_config.policy must be a non-empty string")
+    if not isinstance(objective, str) or not objective.strip():
+        raise ValueError("Package-B manifest base_config.objective must be a non-empty string")
+
+    budgets = _manifest_int_tuple(payload, "budget_grid")
+    seeds = _manifest_int_tuple(payload, "repeated_seeds")
+    samplers_raw = payload.get("samplers")
+    if (
+        not isinstance(samplers_raw, list)
+        or not samplers_raw
+        or any(not isinstance(item, str) or not item.strip() for item in samplers_raw)
+    ):
+        raise ValueError("Package-B manifest samplers must be a non-empty string list")
+    samplers = tuple(str(item) for item in samplers_raw)
 
     config = SearchConfig.from_files(
-        policy=str(base_config.get("policy", "goal")),
+        policy=policy,
         scenario_template=_path("scenario_template"),
         search_space=_path("search_space"),
-        objective=str(base_config.get("objective", "worst_case_snqi")),
+        objective=objective,
         output_dir=output_dir,
-        budget=int((payload.get("budget_grid") or [64])[0]),
-        seed=int((payload.get("repeated_seeds") or [123])[0]),
+        budget=budgets[0],
+        seed=seeds[0],
     )
-    samplers = tuple(payload.get("samplers") or ("random", "coordinate", "optuna"))
-    budgets = tuple(int(b) for b in payload.get("budget_grid") or [16, 32, 64])
-    seeds = tuple(int(s) for s in payload.get("repeated_seeds") or [1101, 2202, 3303])
     return config, samplers, budgets, seeds
 
 
@@ -410,7 +463,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "Defaults to worst_case_snqi."
         ),
     )
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Output root for non-manifest runs; the manifest output_artifacts path takes precedence.",
+    )
     parser.add_argument(
         "--manifest",
         type=Path,
@@ -420,6 +478,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "repeated seeds, samplers, and output root drive the comparison. Overrides "
             "--package-b-budget-grid, --seed, --sampler, and --output-dir."
         ),
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=Path.cwd(),
+        help="Repository root used to resolve manifest-relative paths.",
     )
     parser.add_argument(
         "--budget",
@@ -457,16 +521,28 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Use a deterministic synthetic evaluator instead of running benchmark episodes.",
     )
     parser.add_argument("--out-json", type=Path, default=None)
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.manifest is None and args.output_dir is None:
+        parser.error("--output-dir is required unless --manifest is supplied")
+    return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the sampler comparison CLI."""
     args = parse_args(argv)
     if args.manifest is not None:
-        config, samplers, budgets, seeds = load_package_b_manifest(args.manifest)
+        repo_root = args.repo_root.resolve()
+        config, samplers, budgets, seeds = load_package_b_manifest(
+            args.manifest,
+            repo_root=repo_root,
+        )
         output_dir = config.output_dir
         objectives = [config.objective]
+        out_json = (
+            args.out_json
+            if args.out_json is None or args.out_json.is_absolute()
+            else repo_root / args.out_json
+        )
     else:
         objectives = args.objectives or ["worst_case_snqi"]
         output_dir = args.output_dir
@@ -484,6 +560,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         seeds = args.seed or [123]
         samplers = args.samplers or ("random", "coordinate", "optuna")
+        out_json = args.out_json
 
     rows = run_sampler_comparison(
         config=config,
@@ -499,9 +576,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         budgets=budgets,
         seeds=seeds,
     )
-    if args.out_json is not None:
-        args.out_json.parent.mkdir(parents=True, exist_ok=True)
-        args.out_json.write_text(
+    if out_json is not None:
+        out_json.parent.mkdir(parents=True, exist_ok=True)
+        out_json.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )

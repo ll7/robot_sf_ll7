@@ -985,7 +985,6 @@ def build_package_b_confirmation_sidecar(
         if base_row is None:
             continue
         certified = int(base_row.get("certified_valid_failure_count") or 0)
-        replayable = int(base_row.get("replayable_valid_failure_count") or 0)
         confirmed = 0
         is_censored = confirmed == 0
         sidecar_rows.append(
@@ -1015,7 +1014,6 @@ def build_package_b_confirmation_sidecar(
                         report_path=report_path,
                     )
                 ],
-                "_replayable_valid_failure_count": replayable,
             }
         )
     return PackageBConfirmationSidecar(

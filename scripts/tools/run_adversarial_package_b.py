@@ -40,7 +40,7 @@ DEFAULT_MANIFEST = Path("configs/adversarial/issue_3079_package_b_budget_matched
 
 def _refine_manifest_paths(manifest_path: Path, *, repo_root: Path) -> Path:
     """Return an absolute manifest path resolved against the repository root."""
-    return manifest_path if manifest_path.is_absolute() else repo_root / manifest_path
+    return (manifest_path if manifest_path.is_absolute() else repo_root / manifest_path).resolve()
 
 
 def _run_pipeline(manifest_path: Path, *, repo_root: Path) -> dict[str, object]:
@@ -60,9 +60,6 @@ def _run_pipeline(manifest_path: Path, *, repo_root: Path) -> dict[str, object]:
         }
 
     output_artifacts = preflight.metadata.get("output_artifacts", {})
-    output_dir = repo_root / output_artifacts.get(
-        "output_dir", "output/adversarial/issue_3079_package_b"
-    )
     report_json = repo_root / output_artifacts.get(
         "report_json", "output/adversarial/issue_3079_package_b/report.json"
     )
@@ -70,20 +67,25 @@ def _run_pipeline(manifest_path: Path, *, repo_root: Path) -> dict[str, object]:
     compare_argv = [
         "--manifest",
         str(manifest_path),
+        "--repo-root",
+        str(repo_root),
         "--synthetic",
-        "--output-dir",
-        str(output_dir),
         "--out-json",
         str(report_json),
     ]
-    compare_main(compare_argv)
+    if compare_main(compare_argv) != 0:
+        raise RuntimeError("Package-B comparison runner returned a non-zero status")
 
     report_gate = validate_package_b_report(report_json)
 
     confirmation_path = report_json.parent / "confirmation.json"
     sidecar = build_package_b_confirmation_sidecar(report_json, confirmation_path=confirmation_path)
     sidecar.write()
-    confirmation_gate = validate_package_b_confirmation(report_json, confirmation_path)
+    confirmation_gate = validate_package_b_confirmation(
+        report_json,
+        confirmation_path,
+        artifact_root=repo_root,
+    )
 
     return {
         "stage": "complete",

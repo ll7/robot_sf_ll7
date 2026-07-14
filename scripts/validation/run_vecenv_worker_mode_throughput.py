@@ -20,6 +20,15 @@ Usage
         --num-envs 4 --repetitions 3 --warmup-steps 10 --measure-steps 50 \\
         --output output/vecenv_throughput.json
 
+Output verbosity
+----------------
+The comparator configures its own logging before constructing the
+environment stack so the default command stays compact: progress lines and
+the result table are printed, while TensorFlow/oneDNN/abseil C++ chatter and
+Loguru ``DEBUG`` records from the environment stack are suppressed. Pass
+``--verbose`` to restore full diagnostics to stderr, or ``--log-path PATH`` to
+write the full ``DEBUG`` log to a file while keeping the terminal compact.
+
 Output schema (``vecenv_throughput_comparator.v2``)
 ----------------------------------------------------
 ::
@@ -78,6 +87,7 @@ import contextlib
 import dataclasses
 import hashlib
 import json
+import os
 import platform
 import socket
 import statistics
@@ -86,6 +96,41 @@ import sys
 import time
 from pathlib import Path
 from typing import Any
+
+# Third-party C++ stacks (TensorFlow/oneDNN/abseil) are noisy by default; keep
+# them quiet unless the user explicitly asks for verbose diagnostics. Setting
+# this before any such import holds for the whole process.
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+
+
+def _silence_third_party_loggers(*, verbose: bool) -> None:
+    """Quiet noisy third-party Python loggers in compact mode.
+
+    Mirrors robot_sf.benchmark.cli's suppression pattern: in compact mode the
+    matplotlib/PIL/pygame/tensorflow/absl/numba loggers are pinned to ERROR so
+    only the comparator's own progress/result lines reach the terminal.
+    ``--verbose`` (without ``--log-path``) restores them.
+    """
+    import logging
+
+    os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+    if verbose:
+        # Full diagnostics requested: let third-party loggers speak too.
+        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "0"
+        return
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+    for logger_name in (
+        "matplotlib",
+        "PIL",
+        "pygame",
+        "moviepy",
+        "tensorflow",
+        "numba",
+        "OpenGL",
+    ):
+        logging.getLogger(logger_name).setLevel(logging.ERROR)
+
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
 _DEFAULT_CONFIG = _REPO_ROOT / "configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml"
@@ -100,6 +145,57 @@ _RECOVERABLE_MODE_ERRORS = (
     TypeError,
     ValueError,
 )
+
+
+# ---------------------------------------------------------------------------
+# Logging setup (comparator-owned compact output)
+# ---------------------------------------------------------------------------
+
+
+def _configure_comparator_logging(
+    *,
+    verbose: bool,
+    log_path: str | None,
+) -> None:
+    """Make comparator output compact by default, full diagnostics on request.
+
+    The environment stack (svg_map_parser, environment_factory, ...) emits
+    Loguru ``DEBUG`` records and TensorFlow/oneDNN/abseil write C++ chatter to
+    STDERR. By default we route Loguru at ``INFO`` and keep ``TF_CPP_MIN_LOG_LEVEL``
+    quiet so only progress/result lines reach the terminal. ``--verbose`` restores
+    ``DEBUG`` to stderr; ``--log-path`` writes the full ``DEBUG`` stream to a file
+    while leaving the terminal compact.
+    """
+    from loguru import logger
+
+    from robot_sf.common.logging import configure_logging
+
+    _silence_third_party_loggers(verbose=verbose and not log_path)
+
+    if log_path:
+        file_sink = Path(log_path)
+        file_sink.parent.mkdir(parents=True, exist_ok=True)
+        logger.remove()
+        logger.add(
+            str(file_sink),
+            level="DEBUG",
+            colorize=False,
+            backtrace=verbose,
+            diagnose=verbose,
+        )
+        # Terminal stays compact: INFO to stderr, full detail in the file.
+        logger.add(
+            sys.stderr,
+            level="INFO",
+            colorize=True,
+            backtrace=False,
+            diagnose=False,
+        )
+        # Verbose C++ logging is still suppressed from the terminal.
+        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+        return
+
+    configure_logging(verbose=verbose)
 
 
 # ---------------------------------------------------------------------------
@@ -445,6 +541,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="JSON output path (default: output/vecenv_throughput_<host>.json).",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help=(
+            "Emit full Loguru DEBUG diagnostics and TensorFlow/oneDNN/abseil "
+            "C++ chatter to stderr (default: compact output)."
+        ),
+    )
+    parser.add_argument(
+        "--log-path",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Write the full DEBUG log to this file while keeping the terminal "
+            "compact (implies DEBUG file logging regardless of --verbose)."
+        ),
+    )
     return parser
 
 
@@ -578,6 +691,8 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point: measure and report VecEnv worker-mode throughput."""
     parser = build_arg_parser()
     args = parser.parse_args(argv)
+
+    _configure_comparator_logging(verbose=args.verbose, log_path=args.log_path)
 
     host = socket.gethostname()
     config_path = Path(args.config).resolve()

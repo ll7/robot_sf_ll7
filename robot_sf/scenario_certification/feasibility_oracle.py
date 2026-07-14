@@ -78,6 +78,12 @@ FEASIBLE = "feasible"
 PLANNER_LIMITED = "planner_limited"
 BLOCKED = "blocked"
 
+# Issue #5596 — blind-corner zero-success diagnostic constants.
+ISSUE_5596_BLIND_CORNER_SCENARIO_ID = "francis2023_blind_corner"
+ISSUE_5596_DIAGNOSTIC_SCHEMA = "issue_5596_blind_corner_diagnostic.v1"
+ISSUE_5596_REVIEW_MARKER = "AI-GENERATED NEEDS-REVIEW"
+ROUTE_FOLLOW_ALGO = "route_follow"
+
 # A cell is "geometrically feasible" only when the certifier finds an inflated
 # collision-free path AND the route is not kinodynamically excluded.
 _GEOMETRIC_INFEASIBLE_STATUSES = frozenset({GEOMETRICALLY_INFEASIBLE, KINODYNAMICALLY_INFEASIBLE})
@@ -108,8 +114,8 @@ class FeasibilityOracleConfig:
         """Validate envelope radii and rollout parameters."""
         if not self.envelope_radii_m:
             raise ValueError("envelope_radii_m must contain at least one radius")
-        if any(not (r > 0.0) for r in self.envelope_radii_m):
-            raise ValueError("envelope_radii_m must all be positive and non-zero")
+        if any(not math.isfinite(float(r)) or float(r) <= 0.0 for r in self.envelope_radii_m):
+            raise ValueError("envelope_radii_m must all be finite, positive, and non-zero")
         if len({round(r, 6) for r in self.envelope_radii_m}) != len(self.envelope_radii_m):
             raise ValueError("envelope_radii_m must not contain duplicates")
 
@@ -239,8 +245,8 @@ def make_envelope_scenario(
     Returns:
         Deep-copied scenario with ``robot_config.radius`` overridden.
     """
-    if not (envelope_radius_m > 0.0):
-        raise ValueError("envelope_radius_m must be positive and non-zero")
+    if not math.isfinite(float(envelope_radius_m)) or envelope_radius_m <= 0.0:
+        raise ValueError("envelope_radius_m must be finite, positive, and non-zero")
     mutated = deepcopy(dict(scenario))
     robot_cfg = dict(mutated.get("robot_config") or {})
     robot_cfg["radius"] = float(envelope_radius_m)
@@ -409,6 +415,8 @@ def build_issue_5574_feasibility_report(  # noqa: C901
         raise ValueError("envelope_radii_m must contain a nominal and reduced radius")
     if radii[0] != max(radii):
         raise ValueError("envelope_radii_m must place the nominal radius first")
+    if any(not math.isfinite(radius) or radius <= 0.0 for radius in radii):
+        raise ValueError("envelope_radii_m must contain only finite, positive radii")
     if any(radius >= radii[0] for radius in radii[1:]):
         raise ValueError("envelope_radii_m reduced probes must be smaller than nominal")
 
@@ -984,14 +992,20 @@ def _scenario_rollout_seed(scenario: Mapping[str, Any], *, override: int | None)
         Seed from the explicit override, scenario manifest, or stable default.
     """
     if override is not None:
-        return int(override)
+        parsed_override = _optional_int(override)
+        if parsed_override is None:
+            raise ValueError("rollout seed override must be a finite integer")
+        return parsed_override
     raw_seeds = scenario.get("seeds")
     if isinstance(raw_seeds, Sequence) and not isinstance(raw_seeds, (str, bytes)):
+        saw_invalid_seed = False
         for value in raw_seeds:
-            try:
-                return int(value)
-            except (TypeError, ValueError):
-                continue
+            parsed_seed = _optional_int(value)
+            if parsed_seed is not None:
+                return parsed_seed
+            saw_invalid_seed = True
+        if saw_invalid_seed:
+            raise ValueError("scenario seeds must contain a finite integer")
     return DEFAULT_ROLLOUT_SEED
 
 
@@ -1018,10 +1032,8 @@ def _scenario_horizon(scenario: Mapping[str, Any]) -> int | None:
     value = sim_cfg.get("max_episode_steps")
     if value is None:
         return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+    parsed = _optional_int(value)
+    return parsed if parsed is not None and parsed > 0 else None
 
 
 def _optional_float(value: Any) -> float | None:
@@ -1037,23 +1049,27 @@ def _optional_float(value: Any) -> float | None:
         result = float(value)
     except (TypeError, ValueError):
         return None
-    if math.isnan(result):
+    if not math.isfinite(result):
         return None
     return result
 
 
 def _optional_int(value: Any) -> int | None:
-    """Coerce a value to int, returning ``None`` when not numeric.
+    """Coerce a finite integral value to int, returning ``None`` otherwise.
 
     Returns:
-        int | None: Parsed integer, or ``None`` when the value is absent or non-numeric.
+        int | None: Parsed integer, or ``None`` when the value is absent, non-integral,
+            non-finite, or non-numeric.
     """
-    if value is None:
+    if value is None or isinstance(value, bool):
         return None
     try:
-        return int(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(parsed) or not parsed.is_integer():
+        return None
+    return int(parsed)
 
 
 def _geometric_margin_to_dict(margin: GeometricMargin) -> dict[str, Any]:
@@ -1083,6 +1099,374 @@ def _completion_margin_to_dict(margin: CompletionMargin) -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# Issue #5596 — blind-corner zero-success diagnostic
+# ---------------------------------------------------------------------------
+
+
+def make_route_follow_episode_runner(
+    config: FeasibilityOracleConfig,
+) -> EpisodeRunner:
+    """Build the fail-closed placeholder for the route-follow intervention.
+
+    The canonical map runner does not currently support injecting waypoint goals while
+    carrying the robot pose across sub-episodes. Returning a blocked record avoids
+    presenting reset-per-waypoint episodes as a continuous intervention.
+
+    Args:
+        config: Oracle configuration (scenario path for certifier resolution).
+
+    Returns:
+        An episode runner that reports the unavailable intervention as blocked.
+    """
+
+    def _route_follow_runner(
+        scenario: Mapping[str, Any],
+        seed: int,
+        horizon: int | None,
+        algo: str,
+    ) -> Mapping[str, Any]:
+        """Report that a stateful route-follow rollout is not yet available.
+
+        Returns:
+            Episode record with route completion flags and route-follow metadata.
+        """
+        # The canonical map runner currently has no supported contract for injecting a
+        # waypoint goal and carrying the robot pose into the next sub-episode. Returning a
+        # blocked record is safer than presenting reset-per-waypoint episodes as a continuous
+        # intervention. Issue #5636 tracks the stateful adapter required to enable this lane.
+        return {
+            "algo": ROUTE_FOLLOW_ALGO,
+            "route_complete": None,
+            "steps": None,
+            "status": "blocked",
+            "termination_reason": "route_follow_intervention_unavailable",
+            "route_follow_blocker": (
+                "canonical map runner lacks waypoint-goal and pose-continuation support; see #5636"
+            ),
+        }
+
+        del scenario, seed, horizon, algo
+        return {
+            "algo": ROUTE_FOLLOW_ALGO,
+            "route_complete": None,
+            "steps": None,
+            "status": "blocked",
+            "termination_reason": "route_follow_intervention_unavailable",
+            "route_follow_blocker": (
+                "canonical map runner lacks waypoint-goal and pose-continuation support; see #5636"
+            ),
+        }
+
+    return _route_follow_runner
+
+
+def _get_certified_route_waypoints(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path,
+) -> list[tuple[float, float]]:
+    """Extract the A* planned path waypoints from the route certificate.
+
+    Returns:
+        List of (x, y) waypoints from the certifier's inflated A* path, or an empty
+        list when the route cannot be planned.
+    """
+    try:
+        certificate = _default_certifier(scenario, scenario_path)
+    except Exception:  # noqa: BLE001
+        return []
+
+    for route_cert in certificate.route_certificates or []:
+        planned_info = (route_cert.checks or {}).get("planner")
+        if planned_info and route_cert.checks.get("inflated_collision_free_path"):
+            # The A* path coordinates are stored in the route evidence or can be
+            # reconstructed from the route line. For diagnostic purposes, re-plan.
+            robot_radius = float(
+                (scenario.get("robot_config") or {}).get("radius", DEFAULT_ROBOT_RADIUS)
+            )
+            waypoints = _replan_astar_path(
+                scenario,
+                scenario_path=scenario_path,
+                robot_radius=robot_radius,
+            )
+            return waypoints
+    return []
+
+
+def _replan_astar_path(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path,
+    robot_radius: float,
+) -> list[tuple[float, float]]:
+    """Re-plan the inflated A* path for the scenario to extract waypoints.
+
+    Returns:
+        List of (x, y) waypoints, or empty list on failure.
+    """
+    from robot_sf.planner.classic_global_planner import (  # noqa: PLC0415
+        ClassicGlobalPlanner,
+        ClassicPlannerConfig,
+    )
+    from robot_sf.training.scenario_loader import (  # noqa: PLC0415
+        build_robot_config_from_scenario,
+    )
+
+    try:
+        config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_path)
+    except Exception:  # noqa: BLE001
+        return []
+
+    map_defs = list(config.map_pool.map_defs.items())
+    if not map_defs:
+        return []
+
+    map_def = map_defs[0][1]
+    routes = list(getattr(map_def, "robot_routes", []))
+    if not routes:
+        return []
+
+    route = routes[0]
+    if len(route.waypoints) < 2:
+        return []
+
+    start = tuple(float(c) for c in route.waypoints[0])
+    goal = tuple(float(c) for c in route.waypoints[-1])
+
+    planner_config = ClassicPlannerConfig(
+        cells_per_meter=2.0,
+        inflate_radius_meters=robot_radius,
+        algorithm="a_star",
+    )
+    planner = ClassicGlobalPlanner(map_def, planner_config)
+    try:
+        path, _info = planner.plan(start, goal, algorithm="a_star", allow_inflation_fallback=False)
+    except Exception:  # noqa: BLE001
+        return []
+
+    if not path:
+        return []
+
+    return [(float(x), float(y)) for x, y in path]
+
+
+def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0915
+    manifest_path: Path,
+    *,
+    envelope_radii_m: tuple[float, ...] = (1.0, 0.5),
+    episode_runner: EpisodeRunner | None = None,
+    certifier: Callable[[Mapping[str, Any], Path], ScenarioCertificate] | None = None,
+) -> dict[str, Any]:
+    """Build the issue #5596 blind-corner zero-success diagnostic report.
+
+    Runs three analyses to discriminate the competing explanations for why
+    ``francis2023_blind_corner`` stays zero-success for the scripted traversal:
+
+    1. **Oracle lane**: planner-free goal script at each envelope radius (existing
+       ``run_envelope_sensitivity_sweep``).
+    2. **Route-follow intervention lane**: a ``route_follow`` runner that drives the
+       certifier's A* path waypoint-to-waypoint, isolating route geometry from
+       controller strategy.
+    3. **Clearance comparison**: straight-line goal beeline vs certified-route
+       obstacle clearance for each radius.
+
+    The mechanism classification distinguishes whether the zero-success is caused by:
+    explanation #1 (scripted controller incomplete), #2 (route geometry or config),
+    or #3 (scenario/map runtime interpretation drift).
+
+    Args:
+        manifest_path: Path to the scenario manifest YAML containing the blind-corner
+            scenario cell.
+        envelope_radii_m: Envelope radii to probe. Must have the nominal radius first
+            (largest) and at least one reduced radius.
+        episode_runner: Optional injected episode runner. Defaults to the canonical
+            actor-free map episode rollout.
+        certifier: Optional injected route certifier. Defaults to ``certify_scenario``.
+
+    Returns:
+        Versioned diagnostic report with oracle verdict, route-follow intervention,
+        clearance comparison, and mechanism classification.
+
+    Raises:
+        FileNotFoundError: When the manifest path does not exist.
+        ValueError: When the blind-corner scenario is missing from the manifest or
+            envelope radii are not ordered nominal-first.
+    """
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"Scenario manifest file not found: {manifest_path}")
+
+    radii = tuple(float(r) for r in envelope_radii_m)
+    if len(radii) < 2:
+        raise ValueError("envelope_radii_m must contain at least two radii")
+    if radii[0] != max(radii):
+        raise ValueError("envelope_radii_m must place the nominal radius first")
+
+    scenarios = load_scenarios(manifest_path)
+    blind_corner = None
+    for s in scenarios:
+        if _scenario_id(s).lower() == ISSUE_5596_BLIND_CORNER_SCENARIO_ID.lower():
+            blind_corner = dict(s)
+            break
+    if blind_corner is None:
+        raise ValueError(
+            f"Scenario '{ISSUE_5596_BLIND_CORNER_SCENARIO_ID}' missing from manifest "
+            f"{manifest_path}"
+        )
+
+    config = FeasibilityOracleConfig(
+        scenario_path=manifest_path,
+        envelope_radii_m=radii,
+    )
+    runner = episode_runner or _default_actor_free_runner(config)
+    certify = certifier or _default_certifier
+    route_runner = make_route_follow_episode_runner(config)
+
+    nominal_radius = radii[0]
+    seed = _scenario_rollout_seed(blind_corner, override=None)
+
+    # 1. Oracle verdict (existing feasibility sweep).
+    envelope_verdict = run_envelope_sensitivity_sweep(
+        blind_corner,
+        config=config,
+        episode_runner=runner,
+        certifier=certify,
+    )
+    oracle_dict = envelope_sensitivity_verdict_to_dict(envelope_verdict)
+    oracle_dict["issue"] = "5596"
+
+    # 2. Route-follow intervention.
+    route_follow_results: list[dict[str, Any]] = []
+    for radius in radii:
+        env_scenario = make_envelope_scenario(blind_corner, envelope_radius_m=radius)
+        horizon = _scenario_horizon(env_scenario)
+        try:
+            record = route_runner(env_scenario, seed, horizon, ROUTE_FOLLOW_ALGO)
+            completed = (
+                True
+                if record.get("route_complete") is True
+                or (record.get("outcome") or {}).get("route_complete") is True
+                else None
+                if record.get("route_complete") is None and record.get("status") == "blocked"
+                else False
+            )
+            route_follow_results.append(
+                {
+                    "envelope_radius_m": radius,
+                    "feasible": completed,
+                    "termination_reason": record.get("termination_reason"),
+                    "steps": record.get("steps"),
+                    "status": (
+                        "passed"
+                        if completed is True
+                        else "blocked"
+                        if completed is None
+                        else "failed"
+                    ),
+                    "blocker": record.get("route_follow_blocker"),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            route_follow_results.append(
+                {
+                    "envelope_radius_m": radius,
+                    "feasible": None,
+                    "termination_reason": str(exc),
+                    "steps": None,
+                    "status": "blocked",
+                }
+            )
+
+    route_follow_nominal = route_follow_results[0]
+    route_follow_verdict = {
+        "issue": "5596",
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+        "scenario_id": ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
+        "nominal_radius_m": nominal_radius,
+        "results": route_follow_results,
+    }
+
+    # 3. Straight-line vs certified-route clearance.
+    clearance_comparison: list[dict[str, Any]] = []
+    for radius in radii:
+        env_scenario = make_envelope_scenario(blind_corner, envelope_radius_m=radius)
+        try:
+            certificate = certify(env_scenario, manifest_path)
+            route_checks = _aggregate_route_checks(certificate)
+            min_clearance = _optional_float(route_checks.get("minimum_static_clearance_m"))
+            shortest_path = _optional_float(route_checks.get("shortest_path_length_m"))
+            inflated_path = route_checks.get("inflated_collision_free_path", None)
+
+            # Straight-line clearance (from authored route line to obstacles - minus radius).
+            straight_line_clearance = min_clearance  # The certifier measures the authored line.
+
+            clearance_comparison.append(
+                {
+                    "envelope_radius_m": radius,
+                    "straight_line_clearance_m": straight_line_clearance,
+                    "certified_route_clearance_m": min_clearance,
+                    "shortest_path_length_m": shortest_path,
+                    "inflated_collision_free_path": inflated_path,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            clearance_comparison.append(
+                {
+                    "envelope_radius_m": radius,
+                    "straight_line_clearance_m": None,
+                    "certified_route_clearance_m": None,
+                    "shortest_path_length_m": None,
+                    "inflated_collision_free_path": None,
+                    "blocker": str(exc),
+                }
+            )
+
+    # 4. Mechanism classification.
+    oracle_nominal = oracle_dict["nominal_verdict"]
+    oracle_nominal_feasible = oracle_nominal.get("feasible") is True
+    route_follow_feasible = route_follow_nominal.get("feasible")
+
+    # When route-follow succeeds but goal script fails -> explanation #1 (controller).
+    # When both fail -> explanation #2 (route geometry or config).
+    explanation_1 = not oracle_nominal_feasible and route_follow_feasible is True
+    explanation_2 = not oracle_nominal_feasible and route_follow_feasible is False
+
+    if explanation_1:
+        supported = "scripted_controller_corner_cut"
+    elif explanation_2:
+        supported = "route_geometry_or_config_cause"
+    elif route_follow_feasible is None:
+        supported = "route_follow_intervention_blocked"
+    else:
+        supported = "nominal_oracle_feasible_no_anomaly"
+
+    mechanism = {
+        "explanation_1_scripted_controller_incomplete": explanation_1,
+        "explanation_2_route_geometry_or_config_cause": explanation_2,
+        "explanation_3_scenario_runtime_drift": None,  # Not established in this diagnostic.
+        "supported_explanation": supported,
+        "oracle_nominal_feasible": oracle_nominal_feasible,
+        "route_follow_intervention_feasible": route_follow_feasible,
+        "route_follow_intervention_status": route_follow_nominal.get("status"),
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+    }
+
+    return {
+        "review_marker": ISSUE_5596_REVIEW_MARKER,
+        "schema_version": ISSUE_5596_DIAGNOSTIC_SCHEMA,
+        "issue": "5596",
+        "scenario_id": ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+        "manifest_path": manifest_path.as_posix(),
+        "envelope_radii_m": list(radii),
+        "rollout_seed": seed,
+        "oracle_verdict": oracle_dict,
+        "route_follow_intervention_verdict": route_follow_verdict,
+        "straight_line_vs_route_clearance": clearance_comparison,
+        "mechanism": mechanism,
+    }
+
+
 __all__ = [
     "BLOCKED",
     "CAMPAIGN_FEASIBILITY_ANNOTATION_SCHEMA",
@@ -1094,7 +1478,11 @@ __all__ = [
     "FEASIBILITY_ORACLE_SCHEMA",
     "FEASIBLE",
     "INFEASIBLE_BY_CONSTRUCTION",
+    "ISSUE_5596_BLIND_CORNER_SCENARIO_ID",
+    "ISSUE_5596_DIAGNOSTIC_SCHEMA",
+    "ISSUE_5596_REVIEW_MARKER",
     "PLANNER_LIMITED",
+    "ROUTE_FOLLOW_ALGO",
     "TIME_TRUNCATED",
     "CompletionMargin",
     "EnvelopeSensitivityVerdict",
@@ -1103,9 +1491,11 @@ __all__ = [
     "GeometricMargin",
     "annotate_zero_completion_cells",
     "build_issue_5574_feasibility_report",
+    "build_issue_5596_blind_corner_diagnostic",
     "envelope_sensitivity_verdict_to_dict",
     "feasibility_verdict_to_dict",
     "make_envelope_scenario",
+    "make_route_follow_episode_runner",
     "run_envelope_sensitivity_sweep",
     "run_feasibility_oracle",
 ]

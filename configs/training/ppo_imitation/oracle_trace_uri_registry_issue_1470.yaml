@@ -1,44 +1,64 @@
-# Oracle-imitation trace artifact-promotion readiness packet issue #1470.
+# Recovered-original oracle-imitation trace registry for issue #1470.
 #
-# This packet records merged, small tracked trace evidence from Slurm job 12911 while
-# keeping the downstream imitation-training gate fail-closed. Only the train split has
-# a repository-tracked local mirror; validation/evaluation still need durable raw-trace
-# artifact URIs before training can consume this dataset line.
+# The private-artifact URIs are stable data-plane locators relative to an explicitly supplied
+# private artifact root. This public packet contains provenance and checksums only: no host-local
+# absolute paths and no raw trace bytes.
 #
-# Validate base packet:
+# Validate metadata without private-data access:
 #   uv run python scripts/validation/validate_oracle_trace_uri_registry.py \
 #     --config configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1470.yaml --json
-# Validate strict downstream gate (expected fail until all splits are resolvable):
+# Prove strict private-artifact readiness:
 #   uv run python scripts/validation/validate_oracle_trace_uri_registry.py \
 #     --config configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1470.yaml \
-#     --json --require-training-ready
+#     --private-artifact-root <private-artifact-root> --require-training-ready --json
 schema_version: oracle-trace-uri-registry.v1
 dataset_id: issue_1397_oracle_imitation_v1
 source_issue: 1470
 related_issues: [2441, 2655]
+private_locator_registry_sha256: fd3696e0c920dcf984765d3b2902ffe35cf36635f8fb524262d0c79eea8b37ce
 claim_boundary: >
-  Artifact-promotion readiness packet only. The train trace mirror is compact tracked
-  evidence from job 12911; not final NPZ dataset evidence, not imitation-training
-  evidence, not benchmark or paper-facing planner evidence.
+  Artifact availability, provenance, and checksum-integrity evidence only. These recovered-original
+  traces are not final NumPy dataset evidence, imitation-training quality evidence, benchmark
+  evidence, or paper-facing planner evidence.
 traces:
   - split: train
-    trace_id: train__issue1470_job12911_tracked_mirror
-    uri: artifact://robot_sf_ll7/docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/train_trace_jsonl:v1
+    trace_id: train__issue1470_job12911_recovered_original
+    source_job: 12911
+    recovery_status: recovered_original
+    uri: private-artifact://oracle-imitation/issue1470/train/job12911/oracle_imitation/issue1470_train_candidate_traces/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
     sha256: 7a5246f69b2b939e72beb07d63102592ca3f8400f1ad4c7c2c1fac63c3a80270
     retrieval_status: resolvable
-    local_mirror: docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/oracle_imitation/issue1470_train_candidate_traces/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
-    source_manifest_uri: artifact://robot_sf_ll7/docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/source_manifest:v1
+    source_manifest_uri: private-artifact://oracle-imitation/issue1470/train/job12911/oracle_imitation/issue1470_train_candidate_traces/oracle_candidate_trace_manifest.json
     source_manifest_sha256: b758394107ed72d2bcc24d52da016f00865291b7a1700bbd110c67b0f797e962
-    source_manifest_local_mirror: docs/context/evidence/issue_1470_oracle_imitation_traces_12911_2026-06-17/oracle_imitation/issue1470_train_candidate_traces/oracle_candidate_trace_manifest.json
+    checksum_inventory_uri: private-artifact://oracle-imitation/issue1470/train/job12911/checksums.sha256
+    checksum_inventory_sha256: b2b639ebdd79cbe2db3cd3f7da882075f6ae11b402e7aa4116cbf55f87d2614d
   - split: validation
-    trace_id: validation__issue1470_missing_durable_trace_uri
-    uri: wandb-artifact://robot-sf/oracle-imitation/issue1470-validation:pending
-    sha256: pending
-    retrieval_status: blocked
-    blocker: "No concrete durable validation raw-trace URI is recorded for issue #1470."
+    trace_id: validation__issue1470_job12763_recovered_original
+    source_job: 12763
+    recovery_status: recovered_original
+    uri: private-artifact://oracle-imitation/issue1470/validation/job12763/oracle_imitation/issue1470_validation_candidate_traces/validation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
+    sha256: acf378ed60b7753805123c80077dcb0a5e04e2a6696907b52fb4eaae6d0d1b72
+    retrieval_status: resolvable
+    source_manifest_uri: private-artifact://oracle-imitation/issue1470/validation/job12763/oracle_imitation/issue1470_validation_candidate_traces/oracle_candidate_trace_manifest.json
+    source_manifest_sha256: 3b83a75f1df3563a8b7e3dbd1a7d107f1ccd88758975cc7dabc9082595b3300b
+    checksum_inventory_uri: private-artifact://oracle-imitation/issue1470/validation/job12763/checksums.sha256
+    checksum_inventory_sha256: db7048ad543696fe279c92ddb1fefb7aab4a21b72eea4baa0f80f7ea4703ea8c
   - split: evaluation
-    trace_id: evaluation__issue1470_missing_durable_trace_uri
-    uri: wandb-artifact://robot-sf/oracle-imitation/issue1470-evaluation:pending
-    sha256: pending
-    retrieval_status: blocked
-    blocker: "No concrete durable evaluation raw-trace URI is recorded for issue #1470."
+    trace_id: evaluation__issue1470_job12764_recovered_original
+    source_job: 12764
+    recovery_status: recovered_original
+    uri: private-artifact://oracle-imitation/issue1470/evaluation/job12764/oracle_imitation/issue1470_evaluation_candidate_traces/evaluation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
+    sha256: 8d508b22bf8e82783cc8a01d335a6dfacd4c1b47e7a1b80ca0679f157dd83909
+    retrieval_status: resolvable
+    source_manifest_uri: private-artifact://oracle-imitation/issue1470/evaluation/job12764/oracle_imitation/issue1470_evaluation_candidate_traces/oracle_candidate_trace_manifest.json
+    source_manifest_sha256: be1a5fc178b29df77c7a33d82135430dba69327ee6fd92f6b7e5ba8ce467de22
+    checksum_inventory_uri: private-artifact://oracle-imitation/issue1470/evaluation/job12764/checksums.sha256
+    checksum_inventory_sha256: 49b8fa41c012ba6feacbbdc604df8ff28dc98154f2dcc17efdd4e18e0b4448dc
+retained_duplicate_runs:
+  - split: evaluation
+    source_job: 12765
+    purpose: duplicate-run provenance; not the canonical evaluation registry entry
+    uri: private-artifact://oracle-imitation/issue1470/evaluation/job12765/oracle_imitation/issue1470_evaluation_candidate_traces/evaluation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
+    sha256: 2a3c1397d4c23962497386ab92c23db243dce7097a2eaa2df9594164a26fdc3c
+    source_manifest_sha256: 31d1a67b3fa425d092f9fa8ba687aa77323c775afae163df910a20e47959a7e4
+    checksum_inventory_sha256: c938885cd1867a0c91ecbce0e0c58c7c615a81cb29701f836bdba009d8059dbe

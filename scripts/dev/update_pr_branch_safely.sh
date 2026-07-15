@@ -36,6 +36,7 @@ EXPECTED=""
 BASE_REF_OVERRIDE=""
 BASE_REF=""
 LIVE_HEAD=""
+HEAD_REF=""
 REMOTE="origin"
 LOCAL_FALLBACK=1
 DRY_RUN=0
@@ -52,6 +53,11 @@ while [[ $# -gt 0 ]]; do
     --repo)
       [[ $# -ge 2 ]] || usage
       REPO="$2"
+      shift 2
+      ;;
+    --pr)
+      [[ $# -ge 2 ]] || usage
+      PR="$2"
       shift 2
       ;;
     --expected-head-sha)
@@ -92,30 +98,47 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -n "$PR" && -n "$POS_PR" && "$PR" != "$POS_PR" ]]; then
+  echo "error: conflicting PR numbers: pass either positional or --pr, not both" >&2
+  exit 2
+fi
 PR="${PR:-$POS_PR}"
 [[ -n "$PR" ]] || usage
+[[ "$PR" =~ ^[0-9]+$ ]] || {
+  echo "error: PR number must be numeric" >&2
+  exit 2
+}
 [[ -n "$EXPECTED" ]] || {
   echo "error: --expected-head-sha is required (record the current PR head SHA first)" >&2
   exit 2
 }
 
-sanitize() {
-  # Strip double quotes and newlines so values stay valid in JSON output.
-  local v="$1"
-  v="${v//\"/}"
-  v="${v//$'\n'/ }"
-  printf '%s' "$v"
-}
-
 emit_result() {
   # $1 status, $2 updated(bool), $3 error(string), $4 method(string)
   local status="$1" updated="$2" error="${3:-}" method="${4:-}"
-  local err_json="null"
-  if [[ -n "$error" ]]; then
-    err_json="\"$(sanitize "$error")\""
-  fi
-  printf '{"status":"%s","pr":"%s","repo":"%s","expected_head_sha":"%s","live_head_sha":"%s","base":"%s","method":"%s","updated":%s,"error":%s}\n' \
-    "$status" "$PR" "$REPO" "$EXPECTED" "$LIVE_HEAD" "$BASE_REF" "$method" "$updated" "$err_json"
+  python3 - "$status" "$PR" "$REPO" "$EXPECTED" "$LIVE_HEAD" "$BASE_REF" "$REMOTE" "$method" "$updated" "$error" <<'PY'
+import json
+import sys
+
+status, pr, repo, expected, live, base, remote, method, updated, error = sys.argv[1:]
+print(
+    json.dumps(
+        {
+            "status": status,
+            "pr": pr,
+            "repo": repo,
+            "expected_head_sha": expected,
+            "live_head_sha": live,
+            "base": base,
+            "remote": remote,
+            "method": method,
+            "updated": updated == "true",
+            "error": error or None,
+        },
+        separators=(",", ":"),
+    )
+)
+PY
 }
 
 LEASE_CREATED=0
@@ -143,15 +166,19 @@ if [[ -z "$REPO" ]]; then
 fi
 
 set +e
-META_ERR=""
-LIVE_HEAD="$(gh api "repos/${REPO}/pulls/${PR}" --jq '.head.sha' 2>/dev/null)"
-RC_HEAD=$?
-HEAD_REF="$(gh api "repos/${REPO}/pulls/${PR}" --jq '.head.ref' 2>/dev/null)"
-BASE_REF_RESOLVED="$(gh api "repos/${REPO}/pulls/${PR}" --jq '.base.ref' 2>/dev/null)"
+META_OUTPUT="$(gh api "repos/${REPO}/pulls/${PR}" \
+  --jq '[.head.sha, .head.ref, .base.ref] | @tsv' 2>/dev/null)"
+META_RC=$?
 set -e
 
-if [[ $RC_HEAD -ne 0 ]] || [[ -z "$LIVE_HEAD" ]]; then
-  emit_result "error" "false" "could not fetch PR head SHA from REST" ""
+if [[ $META_RC -ne 0 ]] || [[ -z "$META_OUTPUT" ]]; then
+  emit_result "error" "false" "could not fetch PR metadata from REST" ""
+  exit 2
+fi
+
+IFS=$'\t' read -r LIVE_HEAD HEAD_REF BASE_REF_RESOLVED <<< "$META_OUTPUT"
+if [[ -z "$LIVE_HEAD" || -z "$HEAD_REF" || -z "$BASE_REF_RESOLVED" ]]; then
+  emit_result "error" "false" "PR metadata is missing head or base ref" ""
   exit 2
 fi
 
@@ -164,13 +191,10 @@ if [[ "$LIVE_HEAD" != "$EXPECTED" ]]; then
 fi
 
 # --- attempt the supported remote branch-update path --------------------------
-REST_ERR_FILE="$(mktemp)"
 set +e
-REST_MSG="$(gh api "repos/${REPO}/pulls/${PR}/update-branch" \
-  --method PUT -f "expected_head_sha=${EXPECTED}" --jq '.message' 2>"${REST_ERR_FILE}")"
+REST_STDERR="$(gh api "repos/${REPO}/pulls/${PR}/update-branch" \
+  --method PUT -f "expected_head_sha=${EXPECTED}" --jq '.message' 2>&1 >/dev/null)"
 REST_RC=$?
-REST_STDERR="$(cat "${REST_ERR_FILE}" 2>/dev/null || true)"
-rm -f "${REST_ERR_FILE}"
 set -e
 
 if [[ $REST_RC -eq 0 ]]; then
@@ -203,16 +227,21 @@ if [[ "$LOCAL_HEAD" != "$EXPECTED" ]]; then
   exit 1
 fi
 
-if [[ -f "$LEASE_HELPER" ]]; then
-  python3 "$LEASE_HELPER" create --pr "$PR" >/dev/null 2>&1 || true
-  LEASE_CREATED=1
-fi
-
 if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "dry-run: would fetch ${REMOTE} ${BASE_REF} ${HEAD_REF}, rebase onto origin/${BASE_REF}, then push --force-with-lease to ${REMOTE}/${HEAD_REF}" >&2
+  echo "dry-run: would fetch ${REMOTE} ${BASE_REF} ${HEAD_REF}, rebase onto ${REMOTE}/${BASE_REF}, then push --force-with-lease to ${REMOTE}/${HEAD_REF}" >&2
   emit_result "dry_run" "false" "" "local_fallback"
   exit 0
 fi
+
+if [[ ! -f "$LEASE_HELPER" ]]; then
+  emit_result "error" "false" "lease helper is missing; refusing unleased local fallback" "local_fallback"
+  exit 2
+fi
+if ! python3 "$LEASE_HELPER" create --pr "$PR" >/dev/null 2>&1; then
+  emit_result "error" "false" "could not acquire PR-gate lease; refusing local fallback" "local_fallback"
+  exit 2
+fi
+LEASE_CREATED=1
 
 set +e
 git fetch "${REMOTE}" "${BASE_REF}" "${HEAD_REF}" >/dev/null 2>&1
@@ -224,12 +253,12 @@ if [[ $FETCH_RC -ne 0 ]]; then
 fi
 
 set +e
-git rebase "origin/${BASE_REF}" >/dev/null 2>&1
+git rebase "${REMOTE}/${BASE_REF}" >/dev/null 2>&1
 REBASE_RC=$?
 set -e
 if [[ $REBASE_RC -ne 0 ]]; then
   git rebase --abort >/dev/null 2>&1 || true
-  emit_result "error" "false" "git rebase onto origin/${BASE_REF} failed (resolve conflicts manually)" "local_fallback"
+  emit_result "error" "false" "git rebase onto ${REMOTE}/${BASE_REF} failed (resolve conflicts manually)" "local_fallback"
   exit 2
 fi
 
@@ -247,7 +276,11 @@ if [[ $PUSH_RC -ne 0 ]]; then
 fi
 
 REMOTE_SHA="$(git ls-remote --heads "${REMOTE}" "${PUSH_REF}" 2>/dev/null | awk '{print $1}' | head -n1 || true)"
-if [[ -n "$REMOTE_SHA" && "$REMOTE_SHA" != "$NEW_HEAD" ]]; then
+if [[ -z "$REMOTE_SHA" ]]; then
+  emit_result "error" "false" "post-push verification failed: remote SHA was empty" "local_fallback"
+  exit 2
+fi
+if [[ "$REMOTE_SHA" != "$NEW_HEAD" ]]; then
   emit_result "error" "false" "post-push verification failed: remote ${REMOTE_SHA} != local ${NEW_HEAD}" "local_fallback"
   exit 2
 fi

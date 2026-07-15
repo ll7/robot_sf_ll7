@@ -1,6 +1,6 @@
 {
   "blockers": [
-    "trace-verified labeled fraction must meet preregistration minimum 0.500; got 0.000"
+    "trace-verified labeled fraction must meet preregistration minimum 0.500; got 0.373"
   ],
   "campaign": {
     "campaign_execution_status": "completed",
@@ -9,12 +9,23 @@
     "total_episodes_observed": 6480
   },
   "claim_boundary": "Registration readiness only: this receipt verifies campaign structure and trace-label coverage for the issue #4206 reanalysis. It does not establish benchmark, planner, paper, or dissertation claims.",
-  "generated_at": "2026-07-14T175754Z",
+  "generated_at": "2026-07-15T103000Z",
   "issue": 5248,
   "job_id": "13334",
+  "mechanism_sidecar": {
+    "load_error": null,
+    "path": "docs/context/evidence/issue_4831_trace_verified_failure_mechanisms/mechanism_labels.csv",
+    "row_count": 2612,
+    "rows_matched_in_campaign": 2612,
+    "sha256": "6bab8e40d58bc9254e28c0a9c66898e9c42403f592acd6369e3c3b25560396b1"
+  },
   "next_action": "Resolve the listed source-artifact or trace-label blockers before reanalysis.",
   "schema_version": "issue_5248_salvaged_trace_rerun_registration.v1",
   "source_files": {
+    "docs/context/evidence/issue_4831_trace_verified_failure_mechanisms/mechanism_labels.csv": {
+      "sha256": "6bab8e40d58bc9254e28c0a9c66898e9c42403f592acd6369e3c3b25560396b1",
+      "size_bytes": 1279861
+    },
     "reports/campaign_summary.json": {
       "sha256": "44b114c701e4eb5cbf0c280ec4045430bc69b235a897c9bbc230ffaea8c4da83",
       "size_bytes": 567705
@@ -37,8 +48,10 @@
       "mechanism_caveat"
     ],
     "required_schema_version": "failure_mechanism_taxonomy.v1",
-    "trace_labeled_fraction": 0.0,
-    "trace_labeled_rows": 0,
+    "trace_labeled_fraction": 0.3726851851851852,
+    "trace_labeled_fraction_without_sidecar": 0.0,
+    "trace_labeled_rows": 2415,
+    "trace_labeled_rows_without_sidecar": 0,
     "trace_verified_evidence_modes": [
       "deterministic_replay",
       "direct_probe",

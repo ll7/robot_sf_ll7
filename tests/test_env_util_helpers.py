@@ -181,6 +181,10 @@ def test_robot_env_flatten_helpers() -> None:
     assert info["collision"] is True
     assert info["step"] == 5
 
+    action_space = object()
+    info = _build_step_info({"action_space": action_space, "step": 6})
+    assert "action_space" not in info["meta"]
+
     class _DummyFusion:
         """Sensor-fusion stub for flattening wrapper coverage."""
 

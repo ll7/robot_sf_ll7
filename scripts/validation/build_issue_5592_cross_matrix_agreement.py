@@ -369,6 +369,9 @@ def _write_integration_report(
         roster = {}
     if not isinstance(selected_rows, list):
         selected_rows = []
+    planner_count = sum(
+        len(value) for value in roster.values() if isinstance(value, (list, tuple, set))
+    )
     scenario_ids = [
         str(row.get("scenario_id"))
         for row in selected_rows
@@ -405,7 +408,7 @@ current blocker state explicit for the campaign-capable successor lane.
 - Candidate scenarios, in frozen order: {", ".join("`" + item + "`" for item in scenario_ids)}
 - Pairing: seeds `{pairing.get("seeds")}`, horizon `{pairing.get("horizon_steps")}` steps, `dt={pairing.get("dt_seconds")}` seconds
 - Comparability: same seed schedule, same planner roster, frozen scenario order, and no seed substitution
-- Planner roster: `{sum(len(value) for value in roster.values())}` planners across `{len(roster)}` structural classes
+- Planner roster: `{planner_count}` planners across `{len(roster)}` structural classes
 - Primary output: `cross_matrix_agreement.csv`; ranks are compared independently, never merged
 
 ## Blocker accounting

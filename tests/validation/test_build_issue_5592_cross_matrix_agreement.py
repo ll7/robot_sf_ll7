@@ -203,7 +203,7 @@ def test_report_treats_explicit_null_contract_sections_as_empty(tmp_path: Path) 
             "reference_contract": None,
             "candidate_contract": None,
             "pairing_contract": None,
-            "planner_roster": None,
+            "planner_roster": {"structural_classes": {"constraint_first_hybrid": None}},
         },
         packet_path=PACKET,
         status="blocked_missing_matrix",

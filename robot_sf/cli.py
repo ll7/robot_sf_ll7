@@ -26,6 +26,9 @@ from robot_sf.examples_cli import examples_cli_main
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+DEFAULT_GALLERY_MATRIX = "configs/baselines/example_matrix.yaml"
+DEFAULT_GALLERY_OUT_DIR = "output/gallery"
+
 
 def _build_parser() -> argparse.ArgumentParser:
     """Construct the top-level ``robot-sf`` argument parser.
@@ -85,6 +88,63 @@ def _build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--scenario", type=Path, default=None)
     demo.add_argument("--seed", type=int, default=None)
     demo.add_argument("--verbose", action="store_true")
+
+    gallery = subparsers.add_parser(
+        "gallery",
+        help="Build a static scenario/planner gallery (issue #5796)",
+    )
+    gallery_sub = gallery.add_subparsers(dest="gallery_cmd", required=True)
+    g_build = gallery_sub.add_parser(
+        "build",
+        help=(
+            "Render per-scenario thumbnails (reusing existing tooling) and emit a "
+            "self-contained static HTML gallery plus a JSON manifest. "
+            "Discoverability artifact only — not benchmark evidence."
+        ),
+    )
+    g_build.add_argument(
+        "--matrix",
+        default=DEFAULT_GALLERY_MATRIX,
+        help=f"Path to scenario matrix YAML (default: {DEFAULT_GALLERY_MATRIX})",
+    )
+    g_build.add_argument(
+        "--out-dir",
+        default=DEFAULT_GALLERY_OUT_DIR,
+        help=f"Output directory (default: {DEFAULT_GALLERY_OUT_DIR})",
+    )
+    g_build.add_argument("--base-seed", type=int, default=0, help="Base seed for thumbnails")
+    g_build.add_argument(
+        "--horizon",
+        type=int,
+        default=100,
+        help="Horizon (steps) used for the expected-runtime estimate",
+    )
+    g_build.add_argument(
+        "--no-thumbnails",
+        action="store_true",
+        default=False,
+        help="Skip thumbnail rendering (cards show a placeholder)",
+    )
+    g_build.add_argument(
+        "--link-thumbnails",
+        action="store_true",
+        default=False,
+        help="Reference thumbnails by relative path instead of embedding as data URIs",
+    )
+    g_build.add_argument(
+        "--sample-rollout-root",
+        default=None,
+        help=(
+            "Optional directory searched for per-scenario sample rollouts "
+            "(<id>.mp4/.jsonl/.html)"
+        ),
+    )
+    g_build.add_argument(
+        "--title",
+        default=None,
+        help="Optional page title (defaults to a name derived from the matrix)",
+    )
+    g_build.set_defaults(gallery_cmd="build")
     return parser
 
 
@@ -427,10 +487,64 @@ def _format_datasets_prepare(payload: dict) -> None:
         sys.stdout.write(f"  action: {layout['action']}\n")
 
 
+def _handle_gallery_build(args: argparse.Namespace) -> int:
+    """Handle ``gallery build`` and emit a self-contained inspection artifact.
+
+    Returns:
+        Exit code (0 for success, 2 for invalid input or build failure).
+    """
+    from robot_sf.benchmark.runner import load_scenario_matrix  # noqa: PLC0415
+    from robot_sf.gallery.builder import build_gallery  # noqa: PLC0415
+
+    try:
+        scenarios = load_scenario_matrix(args.matrix)
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"error: failed to load matrix {args.matrix}: {exc}\n")
+        return 2
+
+    try:
+        result = build_gallery(
+            scenarios,
+            matrix_path=str(args.matrix),
+            out_dir=Path(args.out_dir),
+            base_seed=int(args.base_seed),
+            horizon_steps=int(args.horizon),
+            render_thumbnails=not bool(args.no_thumbnails),
+            embed_thumbnails=not bool(args.link_thumbnails),
+            sample_rollout_root=args.sample_rollout_root,
+            title=args.title,
+        )
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 2
+
+    payload = {
+        "html_path": str(result.html_path),
+        "manifest_path": str(result.manifest_path),
+        "scenario_count": len(result.cards),
+        "matrix_path": result.matrix_path,
+        "schema_version": result.schema_version,
+    }
+    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+    return 0
+
+
+def _handle_gallery(args: argparse.Namespace) -> int:
+    """Dispatch the ``gallery`` command group.
+
+    Returns:
+        Exit code from the selected gallery subcommand.
+    """
+    if args.gallery_cmd != "build":
+        return 2
+    return _handle_gallery_build(args)
+
+
 _HANDLERS = {
     "doctor": _handle_doctor,
     "models": _handle_models,
     "datasets": _handle_datasets,
+    "gallery": _handle_gallery,
 }
 
 

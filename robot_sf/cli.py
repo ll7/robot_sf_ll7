@@ -52,6 +52,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Skip the minimal reset/step environment smoke check",
     )
+    doc.add_argument(
+        "--skip-quickstart-smoke",
+        action="store_true",
+        default=False,
+        help="Skip executing the manifest-declared quickstart examples",
+    )
     return parser
 
 
@@ -64,6 +70,7 @@ def _handle_doctor(args: argparse.Namespace) -> int:
     report = collect_doctor_report(
         artifact_root=args.artifact_root,
         run_env_smoke=not args.skip_env_smoke,
+        run_quickstart_smoke=not args.skip_quickstart_smoke,
     )
     if args.format == "json":
         import json  # noqa: PLC0415

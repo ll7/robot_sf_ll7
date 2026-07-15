@@ -617,24 +617,6 @@ case "${1:-}" in
     ;;
   scripts/tools/run_post_campaign_stage.py)
     _original_args=("$@")
-    stage_campaign=""
-    shift 2
-    while [ "${1:-}" != "--stage-command" ] && [ "$#" -gt 0 ]; do
-      case "${1:-}" in
-        --campaign-summary) shift 2 ;;
-        --campaign-exit-code) shift 2 ;;
-        --stage-name) shift 2 ;;
-        --output) shift 2 ;;
-        *) shift ;;
-      esac
-    done
-    shift
-    while [ "$#" -gt 0 ]; do
-      case "${1:-}" in
-        --campaign) stage_campaign="$2"; shift 2 ;;
-        *) shift ;;
-      esac
-    done
     if [ "${STATUS_RECORDER_EXIT:-0}" -ne 0 ]; then
       exit "$STATUS_RECORDER_EXIT"
     fi
@@ -759,8 +741,6 @@ JSON
     ;;
   scripts/tools/run_post_campaign_stage.py)
     _orig_args=("$@")
-    shift 2
-    export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
     exec python "${_orig_args[@]}"
     ;;
   *) exit 98 ;;

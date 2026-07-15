@@ -4,18 +4,19 @@
 Plain-language summary: this bundle promotes raw fidelity-campaign episode rows into a compact control-action-latency evidence summary. It reports the 0/100/300 ms-equivalent delay cells' success, collision, and minimum-clearance metrics and excludes any fallback/degraded/non-native rows. It is not paper-facing evidence.
 
 - Schema: `control-action-latency-sweep-evidence-promotion.v2`
-- Git head: `250c661ad51820b64b714fe08897a0df679638b8`
+- Git head: `7d9bfbd5188971eb072552cf6a693b99c707d86d`
 - Raw rows: `ignored_output/fidelity_latency_raw/episode_rows.jsonl`
 - Preflight decision: `ready`
 - Evidence tier: `targeted smoke`
 - Result classification: `diagnostic-only`
 - Distance convention: `surface_clearance`
-- Claim boundary: control-action-latency metric-evidence promotion only: reads raw fidelity-campaign episode rows, isolates the control_action_latency axis, and reports action-latency metadata plus success / collision / minimum-clearance metrics per native latency cell. It runs no episode and promotes no claim beyond the declared campaign evidence tier; it is not simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence.
+- Claim boundary: control-action-latency metric-evidence promotion only: reads raw fidelity-campaign episode rows, isolates the control_action_latency axis, and reports action-latency metadata plus success / collision / minimum-clearance metrics per eligible native/adapter latency cell. It runs no episode and promotes no claim beyond the declared campaign evidence tier; it is not simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence.
 
 ## Scope
 
 - Latency rows: `72` (results `72`, excluded `0`)
 - Planners: `baseline_social_force, goal_seek, hybrid_rule_v0_minimal, orca`
+- Execution modes: `adapter, native`
 - Seeds: `101, 102, 103`
 - Latency-step coverage: required `[0, 1, 3]`, observed `[0, 1, 3]`, missing `none`
 

@@ -89,6 +89,7 @@ from robot_sf.benchmark.utils import (
     normalize_track_field,
     validate_episode_success_integrity,
 )
+from robot_sf.common.optional_import import try_import
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import is_task_bundle_reference
@@ -166,7 +167,12 @@ def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
                 raise TypeError("Algorithm config must be a mapping (YAML dict).")
             validate_no_local_model_artifacts(cfg, config_path=config_path)
             config = cfg
-    planner = planner_class(config, seed=seed)
+    if algo == "ppo":
+        # Keep direct PPOPlanner construction fail-closed while the fork worker
+        # performs native model loading after process creation.
+        planner = planner_class(config, seed=seed, defer_model_loading=True)
+    else:
+        planner = planner_class(config, seed=seed)
     return planner, Observation, config
 
 
@@ -277,6 +283,10 @@ def _build_observation(
 
 # Safety/robustness defaults for any baseline policy
 POLICY_STEP_TIMEOUT_SECS: float = 0.2  # step(obs) time budget; fallback to zero action on timeout
+# Model loading happens during the worker handshake, but PyTorch still performs
+# one-time kernel/runtime initialization on the first real PPO inference. Keep
+# that cold-start cost outside the strict steady-state planner-step budget.
+PPO_FIRST_STEP_TIMEOUT_SECS: float = 30.0
 # Native ORCA may transiently lose its forked worker; keep one retry before degrading.
 ORCA_TRANSIENT_STEP_RETRIES: int = 1
 FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
@@ -287,6 +297,22 @@ _episode_identity_hash = episode_identity_hash
 
 def _planner_step_worker(conn: Any, planner: Any) -> None:
     """Run planner steps in an isolated child process."""
+    try:
+        torch = try_import("torch")
+        if torch is not None:
+            torch.set_num_threads(1)
+        ensure_load = getattr(planner, "_ensure_model_loaded", None)
+        if callable(ensure_load):
+            ensure_load()
+        conn.send(("init_ok", None))
+    except Exception as exc:
+        try:
+            conn.send(("init_error", (type(exc).__name__, str(exc))))
+        except (BrokenPipeError, EOFError, OSError):
+            pass
+        conn.close()
+        return
+
     try:
         while True:
             try:
@@ -309,13 +335,21 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
 class _PlannerStepProcess:
     """Persistent process boundary for planner.step with hard timeout cleanup."""
 
-    def __init__(self, planner: Any, *, timeout_s: float) -> None:
+    def __init__(
+        self,
+        planner: Any,
+        *,
+        timeout_s: float,
+        first_step_timeout_s: float | None = None,
+    ) -> None:
         if "fork" not in mp.get_all_start_methods():
             raise RuntimeError(
                 "planner step timeout isolation requires multiprocessing fork support"
             )
         self._planner = planner
         self._timeout_s = timeout_s
+        self._first_step_timeout_s = first_step_timeout_s
+        self._worker_needs_warmup = True
         self._ctx = mp.get_context("fork")
         self._process: mp.Process | None = None
         self._conn: Any | None = None
@@ -335,7 +369,12 @@ class _PlannerStepProcess:
             self.close()
             raise RuntimeError("planner step worker was unavailable") from exc
 
-        deadline = time.monotonic() + self._timeout_s
+        step_timeout_s = (
+            self._first_step_timeout_s
+            if self._worker_needs_warmup and self._first_step_timeout_s is not None
+            else self._timeout_s
+        )
+        deadline = time.monotonic() + step_timeout_s
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -350,6 +389,7 @@ class _PlannerStepProcess:
                         "planner step worker exited before returning an action"
                     ) from exc
                 if status == "ok":
+                    self._worker_needs_warmup = False
                     return payload
                 error_type, message = payload
                 raise RuntimeError(f"Planner step failed in worker ({error_type}: {message})")
@@ -388,6 +428,24 @@ class _PlannerStepProcess:
         child_conn.close()
         self._process = process
         self._conn = parent_conn
+
+        # Handshake: wait for initialization inside child process
+        try:
+            if parent_conn.poll(30.0):
+                status, payload = parent_conn.recv()
+            else:
+                status, payload = "timeout", None
+        except (EOFError, OSError, ValueError) as exc:
+            self.close()
+            raise RuntimeError("planner step worker failed to start") from exc
+
+        if status != "init_ok":
+            self.close()
+            if status == "timeout":
+                raise RuntimeError("planner step worker initialization timed out")
+            error_type, msg = payload
+            raise RuntimeError(f"planner step worker failed to initialize ({error_type}: {msg})")
+        self._worker_needs_warmup = True
 
     def _terminate_worker(self) -> None:
         """Terminate the current worker after a timeout."""
@@ -725,6 +783,9 @@ def _create_robot_policy(  # noqa: C901, PLR0915
     timeout_metadata: dict[str, Any] = {
         "isolation": "process",
         "step_timeout_s": POLICY_STEP_TIMEOUT_SECS,
+        "first_step_timeout_s": (
+            PPO_FIRST_STEP_TIMEOUT_SECS if algo == "ppo" else POLICY_STEP_TIMEOUT_SECS
+        ),
         "step_timeouts": 0,
         "worker_errors": 0,
         "step_retries": 0,
@@ -733,7 +794,14 @@ def _create_robot_policy(  # noqa: C901, PLR0915
     retry_budget = ORCA_TRANSIENT_STEP_RETRIES if algo == "orca" else 0
     step_runner: _PlannerStepProcess | None
     try:
-        step_runner = _PlannerStepProcess(planner, timeout_s=POLICY_STEP_TIMEOUT_SECS)
+        if algo == "ppo":
+            step_runner = _PlannerStepProcess(
+                planner,
+                timeout_s=POLICY_STEP_TIMEOUT_SECS,
+                first_step_timeout_s=PPO_FIRST_STEP_TIMEOUT_SECS,
+            )
+        else:
+            step_runner = _PlannerStepProcess(planner, timeout_s=POLICY_STEP_TIMEOUT_SECS)
     except RuntimeError as exc:
         step_runner = None
         timeout_metadata["isolation"] = "unavailable"

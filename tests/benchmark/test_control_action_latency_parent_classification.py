@@ -50,7 +50,7 @@ def test_bundle_points_at_parent_issue_4977() -> None:
 
 
 def test_bundle_is_full_latency_coverage_without_exclusions() -> None:
-    """The diagnostic-only classification rests on complete native 0/1/3 coverage.
+    """The diagnostic-only classification rests on complete eligible 0/1/3 coverage.
 
     A partial or fallback-contaminated run must not be promoted as the latency
     sweep, so the parent classification would be unsafe. The bundle must show
@@ -62,7 +62,14 @@ def test_bundle_is_full_latency_coverage_without_exclusions() -> None:
     assert coverage["missing_latency_steps"] == []
     assert coverage["required_latency_steps"] == [0, 1, 3]
     assert coverage["observed_latency_steps"] == [0, 1, 3]
-    assert summary["scope"]["result_row_count"] == 36
+    assert summary["scope"]["latency_row_count"] == 72
+    assert summary["scope"]["result_row_count"] == 72
+    assert summary["scope"]["planners"] == [
+        "baseline_social_force",
+        "goal_seek",
+        "hybrid_rule_v0_minimal",
+        "orca",
+    ]
     assert summary["exclusions"]["excluded_row_count"] == 0
 
 

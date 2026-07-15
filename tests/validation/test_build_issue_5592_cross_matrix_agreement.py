@@ -63,6 +63,11 @@ def test_blocked_when_rankings_absent(tmp_path: Path) -> None:
     assert summary["reference_ranking_present"] is False
     assert summary["candidate_ranking_present"] is False
     assert summary["next_action"] is not None
+    report = (out / builder.INTEGRATION_REPORT).read_text(encoding="utf-8")
+    assert "reference (`classic_interactions`) structural ranking CSV" in report
+    assert "candidate (`atomic_topology`) structural ranking CSV" in report
+    assert "New blockers introduced by this slice" in report
+    assert "None. This report only consolidates" in report
 
     rows = list((out / PRIMARY_OUTPUT).read_text(encoding="utf-8").splitlines())
     header = rows[0].split(",")
@@ -144,7 +149,7 @@ def test_rejects_incomparable_planner_roster(tmp_path: Path) -> None:
 
 
 def test_artifact_set_is_complete_and_checksummed(tmp_path: Path) -> None:
-    """The durable evidence contract requires README, metadata, csv, and SHA256SUMS."""
+    """The durable evidence contract includes the consolidated integration report."""
     out = tmp_path / "out"
     builder.build_packet(
         packet_path=PACKET,
@@ -153,13 +158,62 @@ def test_artifact_set_is_complete_and_checksummed(tmp_path: Path) -> None:
         output_dir=out,
         generated_at="2026-07-14T00:00:00+00:00",
     )
-    for name in ("README.md", "metadata.json", PRIMARY_OUTPUT, "SHA256SUMS"):
+    for name in (
+        "README.md",
+        "metadata.json",
+        PRIMARY_OUTPUT,
+        builder.INTEGRATION_REPORT,
+        "SHA256SUMS",
+    ):
         assert (out / name).exists(), f"missing durable artifact: {name}"
     sums = (out / "SHA256SUMS").read_text(encoding="utf-8")
     # Every durable artifact except SHA256SUMS is represented in the checksum file.
     assert PRIMARY_OUTPUT in sums
     assert "metadata.json" in sums
+    assert builder.INTEGRATION_REPORT in sums
     metadata = json.loads((out / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["issue"] == 5592
     assert metadata["source_commit"] not in ("", "unknown")
     assert metadata["roster_signature"] == ROSTER_SIGNATURE
+
+
+def test_ready_report_records_no_remaining_input_blocker(tmp_path: Path) -> None:
+    """A complete pair keeps the report useful without claiming beyond two matrices."""
+    out = tmp_path / "out"
+    builder.build_packet(
+        packet_path=PACKET,
+        reference_ranking_path=_write_ranking(tmp_path, "ref.csv", REFERENCE_RANKING),
+        candidate_ranking_path=_write_ranking(tmp_path, "cand.csv", CANDIDATE_RANKING),
+        output_dir=out,
+        generated_at="2026-07-14T00:00:00+00:00",
+    )
+    report = (out / builder.INTEGRATION_REPORT).read_text(encoding="utf-8")
+    assert "None for the artifact builder" in report
+    assert "not a general-purpose generalization guarantee" in report
+    assert "Review `cross_matrix_agreement.csv`" in report
+
+
+def test_report_treats_explicit_null_contract_sections_as_empty(tmp_path: Path) -> None:
+    """Null YAML sections do not crash the diagnostic report writer."""
+    out = tmp_path / "out"
+    out.mkdir()
+    builder._write_integration_report(
+        out,
+        packet={
+            "reference_contract": None,
+            "candidate_contract": None,
+            "pairing_contract": None,
+            "planner_roster": {"structural_classes": {"constraint_first_hybrid": None}},
+        },
+        packet_path=PACKET,
+        status="blocked_missing_matrix",
+        source_commit="0" * 40,
+        reference_present=False,
+        candidate_present=False,
+        next_action="Provide both ranking inputs.",
+    )
+
+    report = (out / builder.INTEGRATION_REPORT).read_text(encoding="utf-8")
+
+    assert "Reference matrix: `None`" in report
+    assert "Candidate scenarios, in frozen order:" in report

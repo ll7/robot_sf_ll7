@@ -44,6 +44,16 @@ def test_parse_config_rejects_invalid_type():
         PPOPlanner(123)  # type: ignore[arg-type]
 
 
+def test_deferred_model_loading_waits_until_first_step() -> None:
+    """The benchmark worker can defer native model loading without weakening direct defaults."""
+    planner = PPOPlanner(_planner_config(), defer_model_loading=True)
+    assert planner._initialized is False
+
+    planner.step(_obs())
+
+    assert planner._initialized is True
+
+
 def test_planner_rejects_local_output_model_path_even_with_fallback() -> None:
     """Direct PPO construction should share the benchmark local-artifact boundary."""
     with pytest.raises(ValueError, match="local-only model artifact"):

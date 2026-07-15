@@ -10,9 +10,11 @@
 # vs. observed). Calibration is a *curve* over the risk budget, not a single
 # point. This config makes that curve CPU-reproducible TODAY: it sweeps
 # max_collision_risk across four budgets and across all three
-# chance-constraint formulations (marginal per-time-step, joint_horizon Boole
-# union bound, cvar_tail Conditional Value-at-Risk tail-risk) over matched
-# constant-velocity scenarios, and surfaces the issue's pre-registered stop-rule
+# chance-constraint formulations over matched constant-velocity scenarios. The
+# calibration output compares marginal per-pedestrian-timestep risk,
+# joint_horizon rolling-MPC-window any-collision risk, and cvar_tail empirical
+# CVaR over the same rolling MPC window; episode-level any-collision remains a
+# separate diagnostic. It also surfaces the issue's pre-registered stop-rule
 # observables (solver compute time vs the MPC control period, and zero-progress
 # freezing at the tightest budget) as inspection signals.
 #
@@ -44,6 +46,7 @@ warm_start: true
 fallback_to_stop: true
 chance_constraint_formulation: marginal
 max_collision_risk: 0.05
+cvar_alpha: 0.9
 radial_quadrature_order: 6
 angular_quadrature_order: 16
 calibration_sweep:

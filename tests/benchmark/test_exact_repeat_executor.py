@@ -25,6 +25,7 @@ from robot_sf.benchmark.exact_repeat_campaign import (
     resolve_runnable_definitions,
     verify_host_report,
 )
+from robot_sf.benchmark.runner import run_episode
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_DIR = (
@@ -547,13 +548,51 @@ def test_record_is_degraded_detects_fallback_status():
     )
 
 
-def test_record_is_degraded_detects_timeout_event():
-    """An outcome timeout_event marks a record as degraded even when status is ok."""
+def test_record_is_degraded_accepts_native_episode_horizon_timeout():
+    """A normal episode horizon timeout does not imply planner-step degradation.
+
+    ``run_episode`` sets ``outcome.timeout_event`` whenever an otherwise-native
+    episode reaches its configured horizon.  Planner fallback is reported
+    separately through ``algorithm_metadata`` and must not be inferred from the
+    episode outcome.
+    """
     assert (
         _record_is_degraded(
             {"algorithm_metadata": {"status": "ok"}, "outcome": {"timeout_event": True}}
         )
+        is False
+    )
+
+
+def test_record_is_degraded_detects_fallback_counter_when_status_is_stale():
+    """Explicit planner-step fallback counts remain fail-closed evidence."""
+    assert (
+        _record_is_degraded(
+            {
+                "algorithm_metadata": {
+                    "status": "ok",
+                    "policy_step_timeout": {"fallback_actions": 1},
+                },
+                "outcome": {"timeout_event": False},
+            }
+        )
         is True
+    )
+
+
+def test_record_is_degraded_ignores_malformed_fallback_counter():
+    """Malformed fallback metadata neither raises nor fabricates degradation."""
+    assert (
+        _record_is_degraded(
+            {
+                "algorithm_metadata": {
+                    "status": "ok",
+                    "policy_step_timeout": {"fallback_actions": "not-a-number"},
+                },
+                "outcome": {"timeout_event": False},
+            }
+        )
+        is False
     )
 
 
@@ -625,6 +664,41 @@ def test_execute_campaign_dispositions_degraded_fallback_targets(
         assert target["unrunnable"] is True
 
 
+# --- native PPO determinism (issue #5498 slice) --------------------------
+
+
+def test_native_ppo_target_runs_deterministically_with_real_runner(tmp_path, resolved_bundle):
+    """Native PPO executes through run_episode and is bitwise-identical across repeats.
+
+    Issue #5498's single-host slice (#5499) recorded the three PPO cells as
+    ``degraded``/``unrunnable`` because the forked planner-step worker crashed or
+    timed out. The native-PPO worker-isolation fix (#5740) unblocked native PPO,
+    so a PPO target must now execute with the real ``run_episode`` runner and
+    produce exactly three bitwise-identical repeats (matching trajectory hashes)
+    rather than a degraded disposition.
+    """
+    if not is_runnable_algo("ppo"):
+        pytest.skip("ppo baseline not runnable on this host")
+
+    ppo_target = next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo")
+    ppo_bundle = {k: v for k, v in resolved_bundle.items() if k != "bundle_sha256"}
+    ppo_bundle["targets"] = [ppo_target]
+    ppo_bundle["bundle_sha256"] = canonical_sha256(ppo_bundle)
+
+    host_result = execute_campaign(
+        ppo_bundle, output_dir=tmp_path / "native_ppo_deterministic", run_episode=run_episode
+    )
+    result = host_result["results"][0]
+
+    # Native execution: no degraded/unrunnable disposition, exactly three repeats.
+    assert "disposition" not in result, "native PPO must not be dispositioned as unrunnable"
+    assert result.get("degraded") is not True
+    assert len(result["repeats"]) == 3
+
+    fingerprints = [r["trajectory_sha256"] for r in result["repeats"]]
+    assert len(set(fingerprints)) == 1, "native PPO repeats must be bitwise-identical"
+
+
 def test_execute_campaign_dispositions_mixed_degraded_repeats(tmp_path, manifest, resolved_bundle):
     """A single degraded repeat prevents a mixed target from becoming evidence."""
     calls = 0
@@ -651,3 +725,41 @@ def test_execute_campaign_dispositions_mixed_degraded_repeats(tmp_path, manifest
     assert verified["summary"]["n_runnable_cells"] == 0
     assert verified["summary"]["n_unrunnable_cells"] == 7
     assert verified["summary"]["all_cells_bitwise_identical"] is False
+
+
+def test_planner_step_process_handshake_and_lazy_loading():
+    """Verify that _PlannerStepProcess triggers _ensure_model_loaded and handles startup handshake."""
+    from robot_sf.benchmark.runner import _PlannerStepProcess
+
+    class MockLazyPlanner:
+        def _ensure_model_loaded(self):
+            pass
+
+        def step(self, obs):
+            return {"vx": 1.0, "vy": 2.0}
+
+    planner = MockLazyPlanner()
+    step_runner = _PlannerStepProcess(planner, timeout_s=1.0)
+    try:
+        action = step_runner.step({"dummy": True})
+        assert action == {"vx": 1.0, "vy": 2.0}
+    finally:
+        step_runner.close()
+
+
+def test_planner_step_process_handshake_failure_propagation():
+    """Verify that initialization exceptions in the worker propagate to the parent during handshake."""
+    from robot_sf.benchmark.runner import _PlannerStepProcess
+
+    class MockFailingPlanner:
+        def _ensure_model_loaded(self):
+            raise ValueError("model loading failed failedly")
+
+        def step(self, obs):
+            return {"vx": 1.0, "vy": 2.0}
+
+    planner = MockFailingPlanner()
+    step_runner = _PlannerStepProcess(planner, timeout_s=1.0)
+    with pytest.raises(RuntimeError, match="failed to initialize"):
+        step_runner.step({"dummy": True})
+    step_runner.close()

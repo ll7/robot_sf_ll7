@@ -108,6 +108,27 @@ def test_torch_213_runtime_guard_is_limited_to_supported_versions(monkeypatch):
     assert os.environ["TORCH_COMPILE_DISABLE"] == "0"
 
 
+def test_torch_213_runtime_guard_skips_triton_when_conflicting_modules_imported(monkeypatch):
+    """Guard skips importing triton when conflicting modules (tensorflow, tensorboard, keras) are present in sys.modules."""
+    monkeypatch.setattr(sys, "version_info", (3, 13))
+    monkeypatch.setattr(seed_module, "package_version", lambda _name: "2.13.0+cpu")
+    imported: list[str] = []
+    monkeypatch.setattr(
+        seed_module.importlib,
+        "import_module",
+        lambda name: imported.append(name) or object(),
+    )
+    monkeypatch.setenv("TORCH_COMPILE_DISABLE", "0")
+
+    # Temporarily inject 'tensorflow' into sys.modules
+    with monkeypatch.context() as ctx:
+        ctx.setitem(sys.modules, "tensorflow", object())
+        assert seed_module._configure_torch_213_runtime()
+        # Should not have tried to import 'triton'
+        assert imported == []
+        assert os.environ["TORCH_COMPILE_DISABLE"] == "1"
+
+
 def test_torch_optional_behavior():
     """TODO docstring. Document this function."""
     torch = _import_torch()

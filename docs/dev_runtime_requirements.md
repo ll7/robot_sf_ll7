@@ -56,6 +56,16 @@ source .venv/bin/activate
 `--extra` is repeatable when a workflow needs more than one named optional dependency. Supplying it
 selects those named extras instead of the bootstrap helper's default `--all-extras` route.
 
+To inspect the locked dependencies selected by one project extra with uv 0.11.21, use `uv export`:
+
+```bash
+uv export --frozen --extra gpu --no-dev --no-emit-project
+```
+
+Replace `gpu` with the extra to inspect. In uv 0.11.21, `uv tree` does not accept project-extra
+selectors such as `--extra` or `--all-extras`; the frozen export is the supported read-only
+inspection path.
+
 CARLA is deliberately excluded from `--all-extras`. Use `uv sync --all-extras --group carla` only
 on machines or worktrees that need the host-side CARLA Python client.
 

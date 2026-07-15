@@ -181,7 +181,7 @@ def test_guarded_ppo_blends_safe_orca_prior_in_near_field() -> None:
             },
         ]
     )
-    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
 
     command, decision = guard.choose_command(
         _obs(ped_positions=[(1.0, 0.4)], ped_velocities=[(0.0, 0.0)]),
@@ -234,7 +234,7 @@ def test_guarded_ppo_selects_bounded_residual_over_orca_prior() -> None:
             },
         ]
     )
-    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
 
     decision = guard.choose_command_decision(_obs(), (0.8, -0.5))
 
@@ -314,7 +314,7 @@ def test_guarded_ppo_residual_mode_keeps_safer_orca_prior() -> None:
             },
         ]
     )
-    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
 
     decision = guard.choose_command_decision(_obs(), (0.8, -0.5))
 
@@ -367,7 +367,7 @@ def test_guarded_ppo_rejected_residual_does_not_leak_into_prior_safe_metadata() 
             },
         ]
     )
-    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
 
     decision = guard.choose_command_decision(_obs(), (0.8, -0.5))
 
@@ -415,7 +415,7 @@ def test_guarded_ppo_residual_mode_falls_through_when_not_safe() -> None:
             },
         ]
     )
-    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
 
     command, label = guard.choose_command(_obs(), (0.8, 0.0))
 
@@ -479,7 +479,7 @@ def test_guarded_ppo_uses_safe_prior_before_fallback_when_ppo_is_unsafe() -> Non
             {"safe": True, "min_ped_clear": 0.9},
         ]
     )
-    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
 
     command, decision = guard.choose_command(
         _obs(ped_positions=[(0.58, 0.0)], ped_velocities=[(0.0, 0.0)]),
@@ -510,7 +510,7 @@ def test_guarded_ppo_near_field_only_prior_skips_clear_scenes() -> None:
             {"safe": True, "min_ped_clear": 0.9},
         ]
     )
-    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
 
     command, decision = guard.choose_command(
         _obs(ped_positions=[(2.0, 2.0)], ped_velocities=[(0.0, 0.0)]),
@@ -625,7 +625,7 @@ def test_guarded_ppo_best_effort_prefers_fallback_when_clearer() -> None:
             {"safe": False, "min_ped_clear": 0.5},
         ]
     )
-    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
     command, decision = guard.choose_command(
         _obs(ped_positions=[(0.58, 0.0)], ped_velocities=[(0.0, 0.0)]),
         (0.6, 0.0),
@@ -692,7 +692,7 @@ def test_guarded_ppo_clear_path_still_checks_obstacle_safety() -> None:
             {"safe": True, "min_ped_clear": float("inf")},
         ]
     )
-    guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
     command, decision = guard.choose_command(_obs(ped_positions=[(2.0, 2.0)]), (0.3, 0.1))
     assert command == (0.0, 0.0)
     assert decision == "fallback_safe"
@@ -756,7 +756,7 @@ def test_guarded_ppo_no_peds_and_stop_best_effort_branch() -> None:
             {"safe": False, "min_ped_clear": 0.7},
         ]
     )
-    blocked_guard._evaluate_command = lambda observation, command: next(evaluations)  # type: ignore[method-assign]
+    blocked_guard._evaluate_command = lambda observation, command, **kwargs: next(evaluations)  # type: ignore[method-assign]
     command, decision = blocked_guard.choose_command(
         _obs(ped_positions=[(0.58, 0.0)], ped_velocities=[(0.0, 0.0)]),
         (0.6, 0.0),

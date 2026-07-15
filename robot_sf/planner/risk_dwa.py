@@ -119,16 +119,24 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         return float(np.clip(1.0 - density_ratio, cap_ratio, 1.0))
 
-    def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:
+    def _min_obstacle_clearance(
+        self,
+        point: np.ndarray,
+        observation: dict[str, Any] | None = None,
+        *,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
+    ) -> float:
         """Approximate obstacle clearance from occupancy grid payload.
 
         Returns:
             float: Clearance in meters (`inf` when unavailable/no nearby obstacle).
         """
-        payload = self._extract_grid_payload(observation)
-        if payload is None:
+        if grid_payload is None:
+            assert observation is not None
+            grid_payload = self._extract_grid_payload(observation)
+        if grid_payload is None:
             return float("inf")
-        grid, meta = payload
+        grid, meta = grid_payload
         channel = self._preferred_channel(meta)
         if channel < 0 or channel >= grid.shape[0]:
             return float("inf")
@@ -187,7 +195,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             return float("inf")
         return float(np.min(ttc))
 
-    def _rollout_score(
+    def _rollout_score(  # noqa: PLR0913
         self,
         *,
         robot_pos: np.ndarray,
@@ -196,8 +204,9 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         command: tuple[float, float],
         ped_pos: np.ndarray,
         ped_vel: np.ndarray,
-        observation: dict[str, Any],
+        observation: dict[str, Any] | None = None,
         current_speed: float,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> float:
         """Evaluate one constant command across rollout horizon.
 
@@ -218,6 +227,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
             ped_pos=ped_pos,
             ped_vel=ped_vel,
             observation=observation,
+            grid_payload=grid_payload,
         )
         x = trajectory[-1]
 
@@ -281,7 +291,8 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         steps: int,
         ped_pos: np.ndarray,
         ped_vel: np.ndarray,
-        observation: dict[str, Any],
+        observation: dict[str, Any] | None = None,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> tuple[float, float]:
         """Vectorized minimum clearance over the constant-command rollout horizon.
 
@@ -307,13 +318,19 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
         min_obs_clear = float("inf")
         for step_idx in range(steps):
             min_obs_clear = min(
-                min_obs_clear, self._min_obstacle_clearance(positions[step_idx], observation)
+                min_obs_clear,
+                self._min_obstacle_clearance(
+                    positions[step_idx],
+                    observation=observation,
+                    grid_payload=grid_payload,
+                ),
             )
         return min_ped_clear, min_obs_clear
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return best unicycle command `(v, omega)` for the current observation."""
         robot_pos, heading, goal, ped_pos, ped_vel = self._extract_robot_goal_ped(observation)
+        grid_payload = self._cache_grid_payload(observation)
         to_goal = float(np.linalg.norm(goal - robot_pos))
         if to_goal <= float(self.config.goal_tolerance):
             return 0.0, 0.0
@@ -345,6 +362,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     ped_vel=ped_vel,
                     observation=observation,
                     current_speed=current_speed,
+                    grid_payload=grid_payload,
                 )
                 if score > best_score:
                     best_score = score
@@ -374,6 +392,7 @@ class RiskDWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     ped_vel=ped_vel,
                     observation=observation,
                     current_speed=current_speed,
+                    grid_payload=grid_payload,
                 )
                 if escape_score > best_score:
                     best_score = escape_score

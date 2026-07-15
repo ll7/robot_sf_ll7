@@ -397,6 +397,7 @@ class TestAtlasHtmlParity:
                         {
                             "scenario_family": c.scenario_family,
                             "planner": c.planner,
+                            "release_arm_id": c.release_arm_id,
                             "eligible": c.eligible,
                             "ineligible_reason": c.ineligible_reason,
                             "n_total": c.n_total,
@@ -458,6 +459,7 @@ class TestAtlasHtmlParity:
                         {
                             "scenario_family": cell.scenario_family,
                             "planner": cell.planner,
+                            "release_arm_id": cell.release_arm_id,
                             "eligible": cell.eligible,
                             "ineligible_reason": cell.ineligible_reason,
                             "n_total": cell.n_total,

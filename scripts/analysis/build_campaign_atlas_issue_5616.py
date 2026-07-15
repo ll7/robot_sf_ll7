@@ -67,6 +67,9 @@ def _row_from_record(record: dict[str, Any]) -> EpisodeInventoryRow:
         scenario_family=str(record["scenario_family"]),
         seed=int(record["seed"]),
         outcome=str(record["outcome"]),
+        release_arm_id=str(record["release_arm_id"])
+        if record.get("release_arm_id") not in (None, "")
+        else None,
         metrics=dict(record.get("metrics", {})),
         trajectory=trajectory,
         event_anchors=event_anchors,

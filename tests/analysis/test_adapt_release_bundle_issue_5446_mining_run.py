@@ -114,6 +114,9 @@ def test_atlas_row_derives_family_and_outcome_from_literal_fields(tmp_path: Path
     assert by_planner["goal"]["scenario_family"] == "doorway"
     assert by_planner["goal"]["outcome"] == "success"
     assert by_planner["orca"]["outcome"] == "collision"
+    # release_arm_id is the pinned arm directory name, kept distinct per arm.
+    assert by_planner["goal"]["release_arm_id"] == "goal__differential_drive"
+    assert by_planner["orca"]["release_arm_id"] == "orca__differential_drive"
     # No trajectory/event_anchors/predicate_timeline are fabricated.
     assert "trajectory" not in by_planner["goal"]
     assert "event_anchors" not in by_planner["goal"]
@@ -131,6 +134,8 @@ def test_scenario_family_falls_back_to_difficulty_stripped_id_without_archetype(
     )
     projected = adapter._atlas_row(row)
     assert projected["scenario_family"] == "classic_doorway"
+    # release_arm_id is opt-in: the unit helper emits none unless an arm id is passed.
+    assert projected["release_arm_id"] is None
 
 
 def test_derive_outcome_label_precedence() -> None:

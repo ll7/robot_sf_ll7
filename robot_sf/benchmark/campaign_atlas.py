@@ -129,6 +129,15 @@ class EpisodeInventoryRow:
 
     The atlas consumes this as *input*; it does not compute outcomes, event
     anchors, or predicates. Outcome semantics are taken verbatim.
+
+    ``release_arm_id`` is the stable release-arm identity pinned by the
+    execution metadata/configuration (e.g. the ``runs/<arm>`` directory name in
+    a publication release bundle). It is the authoritative grouping key for the
+    atlas so architecturally distinct configurations that share one ``planner``
+    (``algo``) label -- such as the four hybrid configs that all report
+    ``algo="hybrid_rule_local_planner"`` -- remain distinct arms. It must never
+    be inferred from ``planner`` alone; when absent or ambiguous the builder
+    fails closed rather than silently pooling episodes across arms.
     """
 
     episode_id: str
@@ -137,6 +146,7 @@ class EpisodeInventoryRow:
     scenario_family: str
     seed: int
     outcome: str
+    release_arm_id: str | None = None
     metrics: Mapping[str, float] = field(default_factory=dict)
     trajectory: tuple[TrajectoryPoint, ...] = field(default_factory=tuple)
     event_anchors: Mapping[str, float] = field(default_factory=dict)
@@ -145,10 +155,11 @@ class EpisodeInventoryRow:
 
 @dataclass(frozen=True, slots=True)
 class AtlasCellSummary:
-    """One (scenario-family x planner) cell of the campaign atlas."""
+    """One (scenario-family x planner x release-arm) cell of the campaign atlas."""
 
     scenario_family: str
     planner: str
+    release_arm_id: str | None
     eligible: bool
     ineligible_reason: str | None
     n_total: int
@@ -270,9 +281,54 @@ class AtlasConfig:
                 raise CampaignAtlasError(f"{field_name} cannot contain empty labels")
 
 
-def _cell_key(scenario_family: str, planner: str) -> str:
-    """Return a deterministic cell key string."""
-    return f"{scenario_family}|{planner}"
+def _cell_key(
+    scenario_family: str, planner: str, release_arm_id: str | None
+) -> str:
+    """Return a deterministic cell key string honoring release-arm identity.
+
+    When a row carries a ``release_arm_id`` the key includes it so architecturally
+    distinct arms that share one ``planner`` (``algo``) label remain separate
+    atlas arms. Rows without an arm id pool under a single ``None`` arm key.
+    """
+    return f"{scenario_family}|{planner}|{release_arm_id if release_arm_id is not None else ''}"
+
+
+def _validate_arm_identity(rows: Sequence[EpisodeInventoryRow]) -> None:
+    """Fail closed when release-arm identity is missing, ambiguous, or inconsistent.
+
+    Rules (issue #5784):
+    - If any row carries a ``release_arm_id``, all rows must carry one (a mix of
+      armed and arm-less rows is ambiguous about intent and is rejected).
+    - A single ``release_arm_id`` must map to exactly one ``planner`` (``algo``)
+      label. If two distinct planner labels appear under one arm id, the arm
+      identity is inconsistent and the artifact is incomplete, never silently
+      merged under one planner.
+    """
+    armed = {row.release_arm_id for row in rows if row.release_arm_id is not None}
+    if not armed:
+        return
+    if any(row.release_arm_id is None for row in rows):
+        raise CampaignAtlasError(
+            "release-arm identity is ambiguous: rows mix armed and arm-less "
+            "release_arm_id values; provide release_arm_id for every row or none"
+        )
+    arm_to_planners: dict[str, set[str]] = {}
+    for row in rows:
+        assert row.release_arm_id is not None
+        arm_to_planners.setdefault(row.release_arm_id, set()).add(row.planner)
+    inconsistent = {
+        arm: sorted(planners)
+        for arm, planners in arm_to_planners.items()
+        if len(planners) > 1
+    }
+    if inconsistent:
+        detail = "; ".join(
+            f"{arm} -> {', '.join(planners)}" for arm, planners in sorted(inconsistent.items())
+        )
+        raise CampaignAtlasError(
+            "release-arm identity is inconsistent: one release_arm_id maps to "
+            f"multiple planner labels: {detail}"
+        )
 
 
 def build_atlas_summary(
@@ -282,6 +338,12 @@ def build_atlas_summary(
     exemplar_episode_ids: Sequence[str] = (),
 ) -> AtlasSummary:
     """Build a deterministic ``AtlasSummary`` from inventory rows.
+
+    Grouping uses the stable ``release_arm_id`` (when present) as the
+    authoritative arm identity so distinct configurations that share a
+    ``planner`` (``algo``) label remain distinct atlas arms. The human-readable
+    ``planner`` field is retained as the planner-family view only. Arm identity
+    is validated fail-closed before any grouping.
 
     Args:
         rows: Campaign inventory rows (consumed verbatim).
@@ -293,10 +355,14 @@ def build_atlas_summary(
         Deterministic atlas summary covering every eligible cell, with explicit
         markers for ineligible/missing cells.
     """
+    _validate_arm_identity(rows)
+
     exemplar_ids = frozenset(exemplar_episode_ids)
     grouped: dict[str, list[EpisodeInventoryRow]] = {}
     for row in rows:
-        grouped.setdefault(_cell_key(row.scenario_family, row.planner), []).append(row)
+        grouped.setdefault(
+            _cell_key(row.scenario_family, row.planner, row.release_arm_id), []
+        ).append(row)
 
     scenario_families = (
         sorted(set(config.eligible_scenario_families))
@@ -316,35 +382,45 @@ def build_atlas_summary(
     cells: list[AtlasCellSummary] = []
     for scenario_family in scenario_families:
         for planner in planners:
-            key = _cell_key(scenario_family, planner)
-            cell_rows = grouped.get(key, [])
-            n_total = len(cell_rows)
-            outcome_counts = Counter(row.outcome for row in cell_rows)
-            eligible = n_total >= config.min_cell_size
-            reason = None
-            if n_total == 0:
-                reason = "no eligible episodes for this (scenario-family, planner) cell"
-            elif not eligible:
-                reason = f"cell below minimum cell size ({n_total} < {config.min_cell_size})"
-            outcome_ci = {
-                label: _wilson_ci(outcome_counts.get(label, 0), n_total)
-                for label in _sorted_labels(outcome_counts) or ["other"]
-            }
-            cell_exemplars = tuple(
-                sorted(row.episode_id for row in cell_rows if row.episode_id in exemplar_ids)
-            )
-            cells.append(
-                AtlasCellSummary(
-                    scenario_family=scenario_family,
-                    planner=planner,
-                    eligible=eligible,
-                    ineligible_reason=reason,
-                    n_total=n_total,
-                    outcome_counts=dict(outcome_counts),
-                    outcome_ci=outcome_ci,
-                    exemplar_episode_ids=cell_exemplars,
+            for release_arm_id in _arm_ids_for(rows, planner):
+                key = _cell_key(scenario_family, planner, release_arm_id)
+                cell_rows = grouped.get(key, [])
+                n_total = len(cell_rows)
+                outcome_counts = Counter(row.outcome for row in cell_rows)
+                eligible = n_total >= config.min_cell_size
+                reason = None
+                if n_total == 0:
+                    if release_arm_id is not None:
+                        reason = (
+                            "no eligible episodes for this "
+                            "(scenario-family, planner, release-arm) cell"
+                        )
+                    else:
+                        reason = (
+                            "no eligible episodes for this (scenario-family, planner) cell"
+                        )
+                elif not eligible:
+                    reason = f"cell below minimum cell size ({n_total} < {config.min_cell_size})"
+                outcome_ci = {
+                    label: _wilson_ci(outcome_counts.get(label, 0), n_total)
+                    for label in _sorted_labels(outcome_counts) or ["other"]
+                }
+                cell_exemplars = tuple(
+                    sorted(row.episode_id for row in cell_rows if row.episode_id in exemplar_ids)
                 )
-            )
+                cells.append(
+                    AtlasCellSummary(
+                        scenario_family=scenario_family,
+                        planner=planner,
+                        release_arm_id=release_arm_id,
+                        eligible=eligible,
+                        ineligible_reason=reason,
+                        n_total=n_total,
+                        outcome_counts=dict(outcome_counts),
+                        outcome_ci=outcome_ci,
+                        exemplar_episode_ids=cell_exemplars,
+                    )
+                )
 
     return AtlasSummary(
         campaign_id=config.campaign_id,
@@ -357,18 +433,69 @@ def build_atlas_summary(
     )
 
 
+def _arm_ids_for(
+    rows: Sequence[EpisodeInventoryRow], planner: str
+) -> list[str | None]:
+    """Return the sorted release-arm ids observed for *planner* (``None`` if arm-less).
+
+    When no row carries a ``release_arm_id`` the atlas is planner-keyed
+    (single ``None`` arm), preserving pre-#5784 behavior for arm-less inventory.
+    """
+    armed = sorted({row.release_arm_id for row in rows if row.planner == planner and row.release_arm_id is not None})
+    if armed:
+        return armed
+    if any(row.planner == planner and row.release_arm_id is None for row in rows):
+        return [None]
+    return [None]
+
+
 # ---------------------------------------------------------------------------
 # Static atlas rendering (matplotlib authoritative output)
 # ---------------------------------------------------------------------------
 
 
+def _arm_columns(summary: AtlasSummary) -> tuple[list[str], dict[tuple[str, str | None], int]]:
+    """Compute atlas column layout honoring release-arm identity.
+
+    Each (family, planner) group occupies its own block of columns, one column
+    per release arm, so architecturally distinct arms that share a planner label
+    are drawn in separate panels. A planner-family grouping (all arms of a
+    planner in one column) is deliberately NOT the default atlas view; it is a
+    secondary aggregation the caller may build separately.
+
+    Returns:
+        ``(column_labels, col_map)`` where ``col_map`` maps
+        ``(planner, release_arm_id)`` to its column index.
+    """
+    planner_groups: list[tuple[str, list[str | None]]] = []
+    for planner in summary.planners:
+        arms_here = sorted(
+            {cell.release_arm_id for cell in summary.cells if cell.planner == planner}
+        )
+        if not arms_here:
+            arms_here = [None]
+        planner_groups.append((planner, arms_here))
+
+    column_labels: list[str] = []
+    col_map: dict[tuple[str, str | None], int] = {}
+    col = 0
+    for planner, arms_here in planner_groups:
+        for release_arm_id in arms_here:
+            column_labels.append(
+                f"{planner} [{release_arm_id}]" if release_arm_id is not None else planner
+            )
+            col_map[(planner, release_arm_id)] = col
+            col += 1
+    return column_labels, col_map
+
+
 def render_atlas_figure(summary: AtlasSummary, out: Path) -> Path:
     """Render the static campaign atlas grid to SVG and return the output path.
 
-    The figure uses small multiples: one panel per (scenario-family, planner)
-    cell. Each panel shows a stacked outcome proportion bar with a Wilson 95%
-    interval whisker and a marker for the number of selected exemplar cases.
-    Ineligible/missing cells are drawn as explicit hatched "N/A" panels.
+    The figure uses small multiples: one panel per (scenario-family, planner,
+    release-arm) cell. Each panel shows a stacked outcome proportion bar with a
+    Wilson 95% interval whisker and a marker for the number of selected exemplar
+    cases. Ineligible/missing cells are drawn as explicit hatched "N/A" panels.
 
     Returns:
         Path to the written SVG file (the authoritative static artifact).
@@ -378,9 +505,12 @@ def render_atlas_figure(summary: AtlasSummary, out: Path) -> Path:
         out = out.with_suffix(".svg")
     out.parent.mkdir(parents=True, exist_ok=True)
 
+    column_labels, col_map = _arm_columns(summary)
     n_rows = max(1, len(summary.scenario_families))
-    n_cols = max(1, len(summary.planners))
-    cell_index = {(cell.scenario_family, cell.planner): cell for cell in summary.cells}
+    n_cols = max(1, len(column_labels))
+    cell_index = {
+        (cell.scenario_family, cell.planner, cell.release_arm_id): cell for cell in summary.cells
+    }
 
     with plt.rc_context(_ATLAS_RC):
         figure, axes = plt.subplots(
@@ -390,15 +520,19 @@ def render_atlas_figure(summary: AtlasSummary, out: Path) -> Path:
             squeeze=False,
         )
         for r, scenario_family in enumerate(summary.scenario_families):
-            for c, planner in enumerate(summary.planners):
+            for (planner, release_arm_id), c in col_map.items():
                 ax = axes[r][c]
                 _draw_atlas_panel(
                     ax,
-                    cell_index.get((scenario_family, planner)),
+                    cell_index.get((scenario_family, planner, release_arm_id)),
                     scenario_family,
                     planner,
+                    release_arm_id,
                     figure,
                 )
+            for c, label in enumerate(column_labels):
+                axes[0][c].set_title(label, fontsize=8)
+        figure.suptitle(f"Campaign atlas — {summary.campaign_id}", fontsize=13)
         figure.suptitle(f"Campaign atlas — {summary.campaign_id}", fontsize=13)
         figure.tight_layout(rect=(0, 0, 1, 0.96))
         _save_figure(figure, out)
@@ -411,6 +545,7 @@ def _draw_atlas_panel(
     cell: AtlasCellSummary | None,
     scenario_family: str,
     planner: str,
+    release_arm_id: str | None,
     figure: plt.Figure,
 ) -> None:
     """Draw one atlas cell panel (or an explicit ineligible marker)."""
@@ -418,7 +553,10 @@ def _draw_atlas_panel(
     ax.set_ylim(0.0, 1.0)
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_title(f"{scenario_family}\n{planner}", fontsize=10)
+    title = f"{scenario_family}\n{planner}"
+    if release_arm_id is not None:
+        title = f"{title}\n[{release_arm_id}]"
+    ax.set_title(title, fontsize=10)
 
     if cell is None or not cell.eligible:
         reason = cell.ineligible_reason if cell is not None else "no eligible episodes"
@@ -539,6 +677,7 @@ def render_ensemble_context_view(
     cell = AtlasCellSummary(
         scenario_family=cell_rows[0].scenario_family if cell_rows else "unknown",
         planner=cell_rows[0].planner if cell_rows else "unknown",
+        release_arm_id=cell_rows[0].release_arm_id if cell_rows else None,
         eligible=bool(cell_rows),
         ineligible_reason=None if cell_rows else "no episodes",
         n_total=len(cell_rows),
@@ -903,6 +1042,7 @@ def _summary_parity_dict(summary: AtlasSummary) -> dict[str, Any]:
             {
                 "scenario_family": cell.scenario_family,
                 "planner": cell.planner,
+                "release_arm_id": cell.release_arm_id,
                 "eligible": cell.eligible,
                 "ineligible_reason": cell.ineligible_reason,
                 "n_total": cell.n_total,
@@ -966,6 +1106,7 @@ def _render_table_html(cells: Sequence[dict[str, Any]]) -> str:
             "<tr>"
             f"<td>{html_escape(str(cell['scenario_family']))}</td>"
             f"<td>{html_escape(str(cell['planner']))}</td>"
+            f"<td>{html_escape(str(cell.get('release_arm_id') or 'none'))}</td>"
             f"<td>{html_escape('yes' if cell['eligible'] else 'no')}</td>"
             f"<td>{html_escape(str(cell['n_total']))}</td>"
             f"<td>{outcomes}</td>"
@@ -975,7 +1116,7 @@ def _render_table_html(cells: Sequence[dict[str, Any]]) -> str:
     return (
         "<h1>Campaign atlas (exploration view)</h1>\n"
         '<table border="1">\n'
-        "<tr><th>scenario-family</th><th>planner</th><th>eligible</th>"
+        "<tr><th>scenario-family</th><th>planner</th><th>release-arm</th><th>eligible</th>"
         "<th>n</th><th>outcomes</th><th>exemplars</th></tr>\n"
         f"{''.join(rows_html)}\n</table>\n"
     )
@@ -994,9 +1135,9 @@ def _render_altair_html(cells: Sequence[dict[str, Any]], alt: Any) -> str:
         alt.Chart(alt.Data(values=data))
         .mark_bar()
         .encode(
-            x=alt.X("planner:N"),
+            x=alt.X("release_arm_id:N"),
             y=alt.Y("n_total:Q"),
-            color=alt.Color("planner:N"),
+            color=alt.Color("release_arm_id:N"),
             column=alt.Column("scenario_family:N"),
         )
     )
@@ -1109,15 +1250,18 @@ def build_campaign_atlas(
     if ensemble_anchor is not None:
         cells = _group_rows_by_cell(rows)
         eligible_cells = {
-            (cell.scenario_family, cell.planner) for cell in summary.cells if cell.eligible
+            (cell.scenario_family, cell.planner, cell.release_arm_id)
+            for cell in summary.cells
+            if cell.eligible
         }
-        for (scenario_family, planner), cell_rows in sorted(cells.items()):
-            if (scenario_family, planner) not in eligible_cells:
+        for (scenario_family, planner, release_arm_id), cell_rows in sorted(cells.items()):
+            if (scenario_family, planner, release_arm_id) not in eligible_cells:
                 continue
             result = render_ensemble_context_view(
                 cell_rows,
                 anchor=ensemble_anchor,
-                out=out_dir / f"ensemble__{scenario_family}__{planner}.svg",
+                out=out_dir
+                / f"ensemble__{scenario_family}__{planner}__{release_arm_id}.svg",
             )
             ensemble_views.append(result)
 
@@ -1145,11 +1289,13 @@ def build_campaign_atlas(
 
 def _group_rows_by_cell(
     rows: Sequence[EpisodeInventoryRow],
-) -> dict[tuple[str, str], list[EpisodeInventoryRow]]:
-    """Group inventory rows by (scenario-family, planner) cell."""
-    grouped: dict[tuple[str, str], list[EpisodeInventoryRow]] = {}
+) -> dict[tuple[str, str, str | None], list[EpisodeInventoryRow]]:
+    """Group inventory rows by (scenario-family, planner, release-arm) cell."""
+    grouped: dict[tuple[str, str, str | None], list[EpisodeInventoryRow]] = {}
     for row in rows:
-        grouped.setdefault((row.scenario_family, row.planner), []).append(row)
+        grouped.setdefault(
+            (row.scenario_family, row.planner, row.release_arm_id), []
+        ).append(row)
     return grouped
 
 
@@ -1176,6 +1322,7 @@ def _write_atlas_catalog(
             "scenario_id": row.scenario_id,
             "scenario_family": row.scenario_family,
             "planner": row.planner,
+            "release_arm_id": row.release_arm_id,
             "seed": row.seed,
         }
         for row in sorted(
@@ -1183,6 +1330,7 @@ def _write_atlas_catalog(
             key=lambda item: (
                 item.scenario_family,
                 item.planner,
+                item.release_arm_id or "",
                 item.scenario_id,
                 item.seed,
                 item.episode_id,
@@ -1256,7 +1404,12 @@ def _write_atlas_catalog(
             continue
         artifacts.append(
             {
-                "artifact_id": f"ensemble_{view.cell.scenario_family}_{view.cell.planner}",
+                "artifact_id": (
+                    f"ensemble_{view.cell.scenario_family}_{view.cell.planner}"
+                    f"_{view.cell.release_arm_id}"
+                    if view.cell.release_arm_id is not None
+                    else f"ensemble_{view.cell.scenario_family}_{view.cell.planner}"
+                ),
                 "artifact_kind": "figure",
                 "source_kind": "campaign_inventory",
                 "source_files": source_files,

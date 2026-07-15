@@ -142,13 +142,14 @@ class TestCheckConfigAbsPaths:
         this evidence README previously baked an absolute home-dir path, which made
         the ``--all`` baseline check fail on an unchanged pre-existing violation.
         """
+        repo_root = Path(__file__).resolve().parents[2]
         readme = (
-            Path("docs/context/evidence")
+            repo_root
+            / "docs/context/evidence"
             / "issue_5248_salvaged_h600_registration_2026-07"
             / "README.md"
         )
-        if not readme.is_file():
-            pytest.skip(f"{readme} not present in this checkout")
+        assert readme.is_file(), f"tracked issue-5248 evidence README is missing: {readme}"
         content = readme.read_text(encoding="utf-8")
         assert "/home/" not in content
         assert "--campaign-root output/" in content

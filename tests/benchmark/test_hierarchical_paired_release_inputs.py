@@ -1,5 +1,8 @@
 """Tests for issue #5351's fail-closed successor-release input checker."""
 
+# evidence-writer-exempt: this test writes synthetic JSONL under a temporary directory to
+# exercise durable-path validation; it does not generate a repository evidence artifact.
+
 from __future__ import annotations
 
 import copy

@@ -65,7 +65,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _handle_doctor(args: argparse.Namespace) -> int:
-    """Run the doctor check and print the report."""
+    """Run the doctor check and print the report.
+
+    Returns:
+        int: Process-style doctor exit code.
+    """
     report = collect_doctor_report(
         artifact_root=args.artifact_root,
         run_env_smoke=not args.skip_env_smoke,

@@ -51,6 +51,19 @@ def cheap_lane_runner() -> object:
     return _load_module("run_control_action_latency_sweep_cheap_lane", RUNNER_PATH)
 
 
+def _claim_boundaries(scenarios: list[Mapping[str, object]]) -> set[str]:
+    """Extract non-null claim boundaries while preserving falsy string values."""
+    claim_boundaries: set[str] = set()
+    for scenario in scenarios:
+        metadata = scenario.get("metadata")
+        if not isinstance(metadata, Mapping):
+            continue
+        value = metadata.get("claim_boundary")
+        if value is not None:
+            claim_boundaries.add(str(value).casefold())
+    return claim_boundaries
+
+
 def test_scenario_set_uses_pedestrian_bearing_scenarios() -> None:
     """The cheap-lane slice should exercise pedestrian-bearing scenarios, not empty maps."""
     data = yaml.safe_load(SCENARIO_SET.read_text(encoding="utf-8"))
@@ -61,6 +74,24 @@ def test_scenario_set_uses_pedestrian_bearing_scenarios() -> None:
         and float(scenario["simulation_config"].get("ped_density", 0.0)) > 0.0
         for scenario in scenarios
     )
+    claim_boundaries = _claim_boundaries(scenarios)
+    assert claim_boundaries
+    assert all("orca" in claim_boundary for claim_boundary in claim_boundaries)
+    assert all("hybrid_rule_v0_minimal" in claim_boundary for claim_boundary in claim_boundaries)
+    assert all("adapter-backed" in claim_boundary for claim_boundary in claim_boundaries)
+
+
+def test_claim_boundary_extraction_handles_null_and_falsy_metadata() -> None:
+    """Explicit null metadata is skipped, while an empty claim value is preserved."""
+    boundaries = _claim_boundaries(
+        [
+            {"metadata": None},
+            {"metadata": {"claim_boundary": None}},
+            {"metadata": {"claim_boundary": ""}},
+            {"metadata": {"claim_boundary": "ORCA"}},
+        ]
+    )
+    assert boundaries == {"", "orca"}
 
 
 def test_runner_exposes_all_native_cpu_planner_groups(cheap_lane_runner: object) -> None:
@@ -90,14 +121,14 @@ def test_runner_executes_real_latency_axis_episodes(cheap_lane_runner: object) -
 
 
 @pytest.mark.parametrize("planner", ["orca", "hybrid_rule_v0_minimal"])
-def test_runner_executes_orca_and_hybrid_natively_when_available(
+def test_runner_executes_orca_and_hybrid_with_native_runtime(
     cheap_lane_runner: object, planner: str
 ) -> None:
-    """ORCA (rvo2) and hybrid planners run natively on CPU when their runtime is present.
+    """ORCA (rvo2) and hybrid planners run through adapters when runtimes are present.
 
     These two planner groups were previously treated as out of cheap-lane reach. On a
-    CPU-capable host with ``rvo2`` installed they are native (no Slurm, no fallback),
-    so they must emit real latency rows. The test skips cleanly on a host whose
+    CPU-capable host with ``rvo2`` installed they are adapter-backed (no Slurm, no
+    fallback), so they must emit real latency rows. The test skips cleanly on a host whose
     optional runtime is missing rather than failing.
     """
     if not cheap_lane_runner._native_runtime_available(planner):
@@ -115,7 +146,7 @@ def test_runner_executes_orca_and_hybrid_natively_when_available(
     observed_steps = sorted({int(row["action_latency"]["effective_steps"]) for row in latency_rows})
     assert observed_steps == list(REQUIRED_LATENCY_STEPS)
     for row in latency_rows:
-        assert row.get("execution_mode", "native") == "native"
+        assert row.get("execution_mode") == "adapter"
         assert row.get("availability_status", "available") == "available"
 
 

@@ -14,16 +14,18 @@ the 0/100/300 ms-equivalent delays), and writes raw episode rows the durable
 promoter consumes. The native planner groups are:
 
 - ``goal_seek`` and ``baseline_social_force``: always dependency-free (pure Python).
-- ``orca``: native on CPU through the ``rvo2`` C extension; fail-closed when ``rvo2``
-  is not importable (never silently falls back to a heuristic ORCA).
-- ``hybrid_rule_v0_minimal``: pure-Python rule planner; gated by the existing
-  ``allow_testing_algorithms`` opt-in flag in ``configs/algos/hybrid_rule_v0_minimal.yaml``.
+- ``orca``: native runtime on CPU through the ``rvo2`` C extension, exposed through
+  the Robot SF ORCA adapter; fail-closed when ``rvo2`` is not importable (never
+  silently falls back to a heuristic ORCA).
+- ``hybrid_rule_v0_minimal``: pure-Python rule planner exposed through the Robot SF
+  adapter and gated by the existing ``allow_testing_algorithms`` opt-in flag in
+  ``configs/algos/hybrid_rule_v0_minimal.yaml``.
 
 The ORCA and hybrid groups were previously treated as out of cheap-lane reach, but
-on a CPU-capable host with ``rvo2`` installed both run natively in well under a second
-per episode; neither requires Slurm, GPU, or any degraded/fallback path. Adding their
-native latency rows is genuine new evidence toward issue #5034's fixed scope, not a
-readiness/decision packet.
+on a CPU-capable host with ``rvo2`` installed both have native runtimes and run through
+declared adapters in well under a second per episode; neither requires Slurm, GPU, or
+any degraded/fallback path. Adding their adapter-backed latency rows is genuine new
+evidence toward issue #5034's fixed scope, not a readiness/decision packet.
 
 It calls the existing :func:`run_episode` in
 ``scripts/benchmark/run_fidelity_sensitivity_campaign.py`` so the emitted row shape is
@@ -73,10 +75,15 @@ NATIVE_CPU_PLANNERS = (
 #: cheap boolean probe so the slice fails closed (rather than silently dropping) when a
 #: planner's native runtime is absent on the host.
 _RUNTIME_OPTIONAL_PLANNERS = {"orca": "rvo2"}
+# These planner groups use the repository's declared compatibility adapters even
+# when their underlying runtime is available. Keep this boundary explicit in raw
+# rows so the promoter cannot misclassify adapter-backed execution as native.
+_ADAPTER_BACKED_PLANNERS = frozenset({"orca", "hybrid_rule_v0_minimal"})
 CLAIM_BOUNDARY = (
     "cheap-lane cpu latency-sweep slice only: executes real Robot SF episodes for the "
-    "control_action_latency axis (0/1/3 steps) on the native CPU-runnable planner groups "
-    "(goal_seek, baseline_social_force, orca via rvo2, hybrid_rule_v0_minimal). It is a "
+    "control_action_latency axis (0/1/3 steps) on native CPU-runnable planner groups "
+    "(goal_seek, baseline_social_force, orca via rvo2, and adapter-backed "
+    "hybrid_rule_v0_minimal). It is a "
     "bounded CPU slice of issue #5034, not the full 7,344-episode fixed-scope campaign, "
     "not simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence."
 )
@@ -189,16 +196,19 @@ def run_sweep(
         for scenario in scenarios:
             for variant in variants:
                 for seed in seeds:
-                    rows.append(
-                        runner.run_episode(
-                            scenario,
-                            scenario_path=scenario_path,
-                            variant=variant,
-                            planner_name=planner,
-                            seed=int(seed),
-                            horizon=int(horizon),
-                        )
+                    row = runner.run_episode(
+                        scenario,
+                        scenario_path=scenario_path,
+                        variant=variant,
+                        planner_name=planner,
+                        seed=int(seed),
+                        horizon=int(horizon),
                     )
+                    row["execution_mode"] = (
+                        "adapter" if planner in _ADAPTER_BACKED_PLANNERS else "native"
+                    )
+                    row["availability_status"] = "available"
+                    rows.append(row)
     return rows
 
 

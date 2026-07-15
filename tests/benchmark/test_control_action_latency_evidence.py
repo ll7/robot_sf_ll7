@@ -562,6 +562,26 @@ def test_write_latency_evidence_writes_bundle(tmp_path: Path) -> None:
     assert {record["classification"] for record in records} == {"result"}
     readme = (tmp_path / "ev" / "README.md").read_text(encoding="utf-8")
     assert "Plain-language summary" in readme
+    assert "Execution modes: `native`" in readme
+
+
+def test_write_latency_evidence_names_adapter_execution_mode(tmp_path: Path) -> None:
+    """Human-readable evidence must expose adapter-backed result rows explicitly."""
+    rows = [
+        *_full_native_row_set(),
+        _latency_row(planner="orca", step=0, execution_mode="adapter"),
+    ]
+    packet = build_latency_evidence(
+        rows,
+        config=_load_real_config(),
+        config_path="configs/research/fidelity_sensitivity_v1.yaml",
+        git_head="abc123",
+        date="2026-07-10",
+        raw_rows_path="output/x/episode_rows.jsonl",
+    )
+    write_latency_evidence(packet, tmp_path / "ev")
+    readme = (tmp_path / "ev" / "README.md").read_text(encoding="utf-8")
+    assert "Execution modes: `adapter, native`" in readme
 
 
 def test_promote_end_to_end_from_jsonl(tmp_path: Path) -> None:

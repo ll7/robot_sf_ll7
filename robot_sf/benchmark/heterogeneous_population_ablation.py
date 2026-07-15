@@ -997,7 +997,6 @@ def _assert_cell_population_realizable(
     population_size: int,
     archetype_composition: Mapping[str, float],
     response_law_fractions: Sequence[float],
-    response_law_seed: int | None = None,
 ) -> None:
     """Reject a declared population that cannot realize its declared mix.
 
@@ -1077,7 +1076,6 @@ def _manifest_scenario_rows(
         population_size=population_size,
         archetype_composition=composition,
         response_law_fractions=response_law_fractions,
-        response_law_seed=scenario.get("response_law_seed", scenario.get("archetype_seed")),
     )
     pair = build_mean_matched_population_pair(
         population_size=population_size,

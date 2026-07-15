@@ -1187,6 +1187,10 @@ def test_harness_emits_control_trace_that_clears_readiness_gate(tmp_path: Path) 
         trace = record["algorithm_metadata"]["pedestrian_control_trace"]
         assert trace["near_field_clearance_threshold_m"] == pytest.approx(1.0)
         assert trace["pedestrians"], "trace must carry per-pedestrian rows"
+        sim_cfg = record["scenario_params"]["simulation_config"]
+        assert sim_cfg["declared_population_size"] == 6
+        assert sim_cfg["instantiated_population_size"] == 6
+        assert sim_cfg["population_size"] == 6
         for pedestrian in trace["pedestrians"]:
             assert pedestrian["steps"], "each pedestrian must carry per-step rows"
             for step in pedestrian["steps"]:

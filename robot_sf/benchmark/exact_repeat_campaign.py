@@ -74,10 +74,10 @@ def _record_is_degraded(record: Any) -> bool:
     """Return True when an episode record is a degraded fallback rather than native output.
 
     A target is degraded when the planner step fell back to a zero-velocity action
-    inside the isolation worker. Two signals are checked: the planner
-    ``algorithm_metadata.status`` prefix and the outcome ``timeout_event`` that the
-    runner sets when every step fell back. Either one is sufficient evidence that the
-    repeats do not represent native planner behavior.
+    inside the isolation worker. The runner reports that through the planner status
+    and the explicit ``policy_step_timeout.fallback_actions`` counter. Episode-level
+    ``outcome.timeout_event`` is deliberately not used: it also represents a native
+    episode reaching its configured horizon and is not planner-degradation evidence.
     """
     if not isinstance(record, Mapping):
         return False
@@ -86,9 +86,15 @@ def _record_is_degraded(record: Any) -> bool:
         status = metadata.get("status")
         if isinstance(status, str) and status.startswith(_DEGRADED_STATUS_PREFIXES):
             return True
-    outcome = record.get("outcome")
-    if isinstance(outcome, Mapping) and outcome.get("timeout_event") is True:
-        return True
+        timeout_metadata = metadata.get("policy_step_timeout")
+        if isinstance(timeout_metadata, Mapping):
+            fallback_actions = timeout_metadata.get("fallback_actions")
+            if not isinstance(fallback_actions, bool):
+                try:
+                    if float(fallback_actions) > 0:
+                        return True
+                except (TypeError, ValueError):
+                    pass
     return False
 
 

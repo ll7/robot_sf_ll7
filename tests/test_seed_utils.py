@@ -81,6 +81,33 @@ def test_matplotlib_headless_default():
     assert os.environ.get("MPLBACKEND") == "Agg"
 
 
+def test_torch_213_runtime_guard_disables_compile_wrapper(monkeypatch):
+    """Guard the optimizer path that segfaults with Torch 2.13 on Python 3.12+."""
+    monkeypatch.setattr(sys, "version_info", (3, 13))
+    monkeypatch.setattr(seed_module, "package_version", lambda _name: "2.13.0+cpu")
+    imported: list[str] = []
+    monkeypatch.setattr(
+        seed_module.importlib,
+        "import_module",
+        lambda name: imported.append(name) or object(),
+    )
+    monkeypatch.setenv("TORCH_COMPILE_DISABLE", "0")
+
+    assert seed_module._configure_torch_213_runtime()
+    assert imported == ["triton"]
+    assert os.environ["TORCH_COMPILE_DISABLE"] == "1"
+
+
+def test_torch_213_runtime_guard_is_limited_to_supported_versions(monkeypatch):
+    """Do not disable Torch compilation for unaffected interpreter/version pairs."""
+    monkeypatch.setattr(sys, "version_info", (3, 11))
+    monkeypatch.setattr(seed_module, "package_version", lambda _name: "2.13.0+cpu")
+    monkeypatch.setenv("TORCH_COMPILE_DISABLE", "0")
+
+    assert not seed_module._configure_torch_213_runtime()
+    assert os.environ["TORCH_COMPILE_DISABLE"] == "0"
+
+
 def test_torch_optional_behavior():
     """TODO docstring. Document this function."""
     torch = _import_torch()

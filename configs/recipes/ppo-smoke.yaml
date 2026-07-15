@@ -1,0 +1,21 @@
+id: ppo-smoke
+title: PPO baseline smoke test (dry-run)
+purpose: >
+  Exercise the PPO training entry point on CPU with a tiny smoke config in
+  --dry-run mode. This confirms the training stack, config loading, and the
+  manifest/artifact pipeline are wired up WITHOUT performing real PPO
+  optimisation. Remove --dry-run to run actual (longer) training. Requires the
+  'training' extra (uv sync --extra training) for Stable-Baselines3.
+runtime: "< 2 min CPU"
+category: training
+command: >
+  uv run python scripts/training/train_ppo.py
+  --config configs/training/ppo/issue_4017_unconstrained_smoke.yaml
+  --dry-run
+configs:
+  - configs/training/ppo/issue_4017_unconstrained_smoke.yaml
+  - configs/scenarios/sets/classic_cross_trap_subset.yaml
+  - scripts/training/train_ppo.py
+outputs:
+  - (dry-run manifest and placeholder checkpoint under the imitation report dir)
+docs: docs/recipes/README.md

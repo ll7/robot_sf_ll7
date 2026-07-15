@@ -5290,7 +5290,7 @@ requires-dist = [
     { name = "tensorboard", marker = "extra == 'training'", specifier = ">=2.21.0" },
     { name = "tensorflow", marker = "extra == 'sacadrl'", specifier = ">=2.15.0" },
     { name = "torch", marker = "extra == 'training'", specifier = ">=2.13.0,<2.14.0" },
-    { name = "torch", extras = ["cuda"], marker = "extra == 'gpu'", specifier = ">=2.5.1" },
+    { name = "torch", extras = ["cuda"], marker = "extra == 'gpu'", specifier = ">=2.13.0,<2.14.0" },
     { name = "tqdm", marker = "extra == 'progress'", specifier = ">=4.68.4" },
     { name = "wandb", marker = "extra == 'training'", specifier = ">=0.28.0" },
 ]

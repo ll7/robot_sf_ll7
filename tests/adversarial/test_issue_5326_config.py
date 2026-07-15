@@ -54,6 +54,28 @@ class TestIssue5326ConfigValidation:
         assert "repeated_seeds" in config
         assert config["repeated_seeds"] == [1101, 2202, 3303]
 
+    def test_durable_state_matches_comparison_contract(
+        self, repo_root: Path, config_path: Path
+    ) -> None:
+        """Keep the high-churn integration report aligned with the executable manifest."""
+        import yaml
+
+        state_path = repo_root / "docs" / "context" / "issue_5326_state.yaml"
+        state = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        contract = state["comparison_contract"]
+
+        assert state["issue"] == config["issue"] == 5326
+        assert contract["manifest"] == "configs/adversarial/issue_5326_objective_comparison.yaml"
+        assert contract["objectives"] == config["objectives"]
+        assert contract["budget_grid"] == config["budget_grid"]
+        assert contract["repeated_seeds"] == config["repeated_seeds"]
+        assert contract["samplers"] == config["samplers"]
+        assert contract["reporting_contract"] == config["reporting_contract"]
+        assert state["claim_boundary"].find("not matched-budget benchmark evidence") >= 0
+        assert state["remaining_gate"]["blockers_new"] == []
+        assert state["forbidden_claims"]["paper_or_dissertation_claim"] is False
+
     def test_runner_script_exists(self, runner_path: Path) -> None:
         """Verify the comparison runner script exists."""
         assert runner_path.exists(), f"Runner not found: {runner_path}"

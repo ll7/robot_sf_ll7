@@ -1032,3 +1032,40 @@ def test_policy_constructors():
     assert isinstance(sacadrl_policy.adapter, SACADRLPlannerAdapter)
     prediction_policy = make_prediction_policy(allow_fallback=True)
     assert isinstance(prediction_policy.adapter, PredictionPlannerAdapter)
+
+
+def test_prediction_planner_caching_rollout_in_score_action(monkeypatch):
+    """PredictionPlannerAdapter must only call _rollout_robot once per _score_action invocation."""
+    cfg = SocNavPlannerConfig(
+        predictive_candidate_speeds=(0.5,),
+        predictive_candidate_heading_deltas=(0.0,),
+    )
+    obs = _make_obs_with_peds([(1.0, 0.25)], goal=(4.0, 0.0), heading=0.0)
+
+    def _boom(self):
+        raise RuntimeError("missing predictive model")
+
+    monkeypatch.setattr(PredictionPlannerAdapter, "_build_model", _boom)
+
+    adapter = PredictionPlannerAdapter(cfg, allow_fallback=True)
+    rollouts = 0
+    original_rollout = adapter._rollout_robot
+
+    def _tracked_rollout(*args, **kwargs):
+        nonlocal rollouts
+        rollouts += 1
+        return original_rollout(*args, **kwargs)
+
+    monkeypatch.setattr(adapter, "_rollout_robot", _tracked_rollout)
+
+    future_peds = np.zeros((1, 5, 2))
+    mask = np.ones(1)
+    adapter._score_action(
+        observation=obs,
+        future_peds=future_peds,
+        mask=mask,
+        v=0.5,
+        w=0.0,
+        steps=5,
+    )
+    assert rollouts == 1

@@ -263,12 +263,20 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             w_max,
         )
 
-    def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:
+    def _min_obstacle_clearance(
+        self,
+        point: np.ndarray,
+        observation: dict[str, Any] | None = None,
+        *,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
+    ) -> float:
         """Return grid-derived obstacle clearance, or infinity when no grid is available."""
-        payload = self._extract_grid_payload(observation)
-        if payload is None:
+        if grid_payload is None:
+            assert observation is not None
+            grid_payload = self._extract_grid_payload(observation)
+        if grid_payload is None:
             return float("inf")
-        grid, meta = payload
+        grid, meta = grid_payload
         channel = self._preferred_channel(meta)
         if channel < 0 or channel >= grid.shape[0]:
             return float("inf")
@@ -292,7 +300,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         resolution = float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0])
         return float(np.min(np.hypot(row_delta, col_delta)) * max(resolution, 1e-6))
 
-    def _rollout_score(
+    def _rollout_score(  # noqa: PLR0913
         self,
         *,
         robot_pos: np.ndarray,
@@ -301,8 +309,9 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         pedestrian_positions: np.ndarray,
         pedestrian_velocities: np.ndarray,
         command: tuple[float, float],
-        observation: dict[str, Any],
+        observation: dict[str, Any] | None = None,
         rescue_overrides: dict[str, Any] | None = None,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> float:
         """Score a constant command rollout; a collision candidate is infeasible.
 
@@ -325,6 +334,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             pedestrian_positions=pedestrian_positions,
             pedestrian_velocities=pedestrian_velocities,
             observation=observation,
+            grid_payload=grid_payload,
         )
         # Terminal pose from the trajectory and matching heading recurrence.
         position = trajectory[-1]
@@ -416,7 +426,8 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
         steps: int,
         pedestrian_positions: np.ndarray,
         pedestrian_velocities: np.ndarray,
-        observation: dict[str, Any],
+        observation: dict[str, Any] | None = None,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> float:
         """Vectorized minimum clearance over the constant-command rollout horizon.
 
@@ -457,9 +468,11 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             min_clearance = min(min_clearance, ped_clearance)
 
         for step_idx in range(steps):
-            obs_clear = self._min_obstacle_clearance(positions[step_idx], observation) - float(
-                self.config.robot_radius
-            )
+            obs_clear = self._min_obstacle_clearance(
+                positions[step_idx],
+                observation=observation,
+                grid_payload=grid_payload,
+            ) - float(self.config.robot_radius)
             min_clearance = min(min_clearance, obs_clear)
         return min_clearance
 
@@ -561,6 +574,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             pedestrians,
             pedestrian_velocities,
         ) = self._extract_state(observation)
+        grid_payload = self._cache_grid_payload(observation)
         distance_to_goal = float(np.linalg.norm(goal - robot_pos))
         target_goal = self._target_goal_detail(observation, goal, robot_pos)
         if distance_to_goal <= float(self.config.goal_tolerance):
@@ -627,6 +641,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
                     command=command,
                     observation=observation,
                     rescue_overrides=rescue_overrides,
+                    grid_payload=grid_payload,
                 )
                 if not math.isfinite(score):
                     infeasible_count += 1
@@ -662,6 +677,7 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
                         command=command,
                         observation=observation,
                         rescue_overrides=rescue_overrides,
+                        grid_payload=grid_payload,
                     )
                     if not math.isfinite(score):
                         continue

@@ -155,6 +155,47 @@ def _has_ignored_output(path: str) -> bool:
     return False
 
 
+def _has_active_pr_gate_lease(path: str) -> bool:
+    """Check if a worktree has an active PR-gate lease.
+
+    Checks for a .pr-gate-lease.json file in the worktree's Git common directory
+    and verifies the lease is not expired.
+    """
+    try:
+        from scripts.dev.pr_gate_lease import load_lease
+
+        # Get the git common dir for this worktree
+        result = _run_command(["git", "rev-parse", "--git-common-dir"], cwd=path)
+        if result.returncode != 0:
+            return False
+
+        common_dir = result.stdout.strip()
+        if not Path(common_dir).is_absolute():
+            common_dir = str(Path(path) / common_dir)
+
+        lease_file = Path(common_dir) / ".pr-gate-lease.json"
+        if not lease_file.exists():
+            return False
+
+        # Temporarily swap the lease path to check this worktree's lease
+        import scripts.dev.pr_gate_lease as lease_module
+
+        original_lease_path = lease_module.lease_path
+
+        def temp_lease_path() -> Path:
+            return lease_file
+
+        lease_module.lease_path = temp_lease_path  # type: ignore[assignment]
+        try:
+            lease = load_lease()
+            return lease is not None and not lease.is_expired()
+        finally:
+            lease_module.lease_path = original_lease_path  # type: ignore[assignment]
+
+    except (ImportError, RuntimeError, AttributeError):
+        return False
+
+
 def classify_worktree(
     *,
     path: str,
@@ -190,6 +231,9 @@ def classify_worktree(
 
     if _has_ignored_output(path):
         risk_flags.append("ignored_output")
+
+    if _has_active_pr_gate_lease(path):
+        risk_flags.append("active_pr_gate_lease")
 
     if risk_flags:
         return WorktreeCandidate(

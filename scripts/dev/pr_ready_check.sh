@@ -320,6 +320,7 @@ fi
 "$SCRIPT_DIR/check_changed_coverage.sh"
 "$SCRIPT_DIR/check_docstring_todos_diff.sh"
 "$SCRIPT_DIR/check_docstring_todos_ratchet.sh"
+uv run python "$SCRIPT_DIR/check_optional_import_pr_freshness.py" --base-ref "$BASE_REF"
 uv run python "$SCRIPT_DIR/../validation/check_broad_exceptions.py"
 
 # Orphan guard for issue #5594: the readiness command must leave no worktree-owned

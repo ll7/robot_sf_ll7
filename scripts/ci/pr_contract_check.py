@@ -15,7 +15,7 @@ import os
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 # Best-effort helpers below shell out to git/gh, parse JSON, and read files; these
 # are the only errors those operations realistically raise. Catching this explicit
@@ -259,9 +259,15 @@ def _evidence_relative_path(path: str) -> str | None:
 
 def _is_safe_repository_relative_path(path: str) -> bool:
     """Reject absolute, normalized, or traversal-bearing repository paths."""
-    if not path or path.startswith("/") or "\\" in path:
+    normalized = path.replace("\\", "/").strip()
+    if (
+        not normalized
+        or normalized.startswith("/")
+        or "\\" in path
+        or PureWindowsPath(normalized).drive
+    ):
         return False
-    return all(part not in {"", ".", ".."} for part in path.split("/"))
+    return all(part not in {"", ".", ".."} for part in normalized.split("/"))
 
 
 def _path_matches_evidence_path(path: str, expected_path: str) -> bool:
@@ -311,6 +317,18 @@ def _sidecar_contains_review_markers(sidecar: dict[str, object]) -> bool:
         marker_values.extend(_collect_string_values(sidecar.get(field)))
     marker_text = " ".join(marker_values)
     return "AI-GENERATED" in marker_text and "NEEDS-REVIEW" in marker_text
+
+
+def _sha256_file(path: str) -> str:
+    """Hash a file incrementally so large immutable artifacts stay bounded in memory."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as artifact_file:
+        while True:
+            chunk = artifact_file.read(64 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _check_evidence_review_sidecar(  # noqa: C901
@@ -378,7 +396,7 @@ def _check_evidence_review_sidecar(  # noqa: C901
         )
 
     try:
-        actual_hash = hashlib.sha256(Path(artifact_filesystem_path).read_bytes()).hexdigest()
+        actual_hash = _sha256_file(artifact_filesystem_path)
     except _BEST_EFFORT_ERRORS as exc:
         return (
             f"BLOCKER: Could not hash evidence artifact '{artifact_filesystem_path}' for "

@@ -162,6 +162,7 @@ def test_markerless_new_evidence_accepts_valid_same_pr_review_sidecar(tmp_path: 
     [
         ("malformed_json", "not valid JSON"),
         ("path_traversal", "artifact_path"),
+        ("windows_drive", "artifact_path"),
         ("missing_hash", "artifact_sha256"),
         ("mismatched_hash", "does not match"),
         ("uppercase_hash", "lowercase"),
@@ -185,22 +186,25 @@ def test_markerless_new_evidence_rejects_invalid_review_sidecars(
         sidecar.write_text('{"review_marker": "AI-GENERATED NEEDS-REVIEW"', encoding="utf-8")
     else:
         payload = _valid_review_sidecar(artifact, artifact_path)
-        if case == "path_traversal":
-            payload["artifact_path"] = "../immutable_report.md"
-        elif case == "missing_hash":
+        mutation = {
+            "path_traversal": ("artifact_path", "../immutable_report.md"),
+            "windows_drive": ("artifact_path", "C:/immutable_report.md"),
+            "missing_hash": None,
+            "mismatched_hash": ("artifact_sha256", "0" * 64),
+            "uppercase_hash": ("artifact_sha256", str(payload["artifact_sha256"]).upper()),
+            "wrong_artifact_path": (
+                "artifact_path",
+                "docs/context/evidence/other_report.md",
+            ),
+            "missing_markers": ("review_marker", "AI-GENERATED"),
+            "wrong_schema": ("schema_version", "evidence-review-marker.v2"),
+            "unpreserved_bytes": ("preserved_exact_bytes", False),
+        }[case]
+        if mutation is None:
             payload.pop("artifact_sha256")
-        elif case == "mismatched_hash":
-            payload["artifact_sha256"] = "0" * 64
-        elif case == "uppercase_hash":
-            payload["artifact_sha256"] = str(payload["artifact_sha256"]).upper()
-        elif case == "wrong_artifact_path":
-            payload["artifact_path"] = "docs/context/evidence/other_report.md"
-        elif case == "missing_markers":
-            payload["review_marker"] = "AI-GENERATED"
-        elif case == "wrong_schema":
-            payload["schema_version"] = "evidence-review-marker.v2"
-        elif case == "unpreserved_bytes":
-            payload["preserved_exact_bytes"] = False
+        else:
+            field, value = mutation
+            payload[field] = value
         sidecar.write_text(json.dumps(payload), encoding="utf-8")
 
     blockers = pr_contract_check.check_evidence_tree_hygiene(

@@ -133,6 +133,9 @@ class PedSpawnConfig:
             "spread" spaces groups along the route length.
         route_spawn_jitter_frac: Fraction of spacing used as random jitter when spreading.
         route_spawn_seed: Optional RNG seed for deterministic spawn placement/jitter.
+        force_population_size: Exact total pedestrian count across generated route/crowd
+            pedestrians and authored single pedestrians. Authored singles are preserved and
+            consume slots from the generated population.
     """
 
     peds_per_area_m2: float
@@ -703,6 +706,24 @@ def populate_single_pedestrians(
     return ped_states, metadata
 
 
+def _generated_spawn_config(
+    spawn_config: PedSpawnConfig,
+    *,
+    authored_single_count: int,
+) -> PedSpawnConfig:
+    """Return a config whose forced count excludes preserved authored singles."""
+    forced_total = spawn_config.force_population_size
+    if forced_total is None:
+        return spawn_config
+    if authored_single_count > forced_total:
+        raise ValueError(
+            f"{authored_single_count} authored single pedestrians exceed forced "
+            f"population_size {forced_total}; authored pedestrians cannot be removed to satisfy "
+            "the exact-total contract"
+        )
+    return replace(spawn_config, force_population_size=forced_total - authored_single_count)
+
+
 def populate_simulation(  # noqa: PLR0913
     tau: float,
     spawn_config: PedSpawnConfig,
@@ -756,11 +777,18 @@ def populate_simulation(  # noqa: PLR0913
     """
     prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
 
-    # ``force_population_size`` sets the EXACT total pedestrian count. Both the crowded-zone
-    # and route spawners honor the field independently, so when a scenario declares both
-    # routes and crowded zones a naive pass would spawn ``2 * force_population_size`` peds
-    # (issue #4618 R4). Split the forced total between the two active spawners so the merged
-    # population matches the requested size; any odd remainder is assigned to routes.
+    # ``force_population_size`` sets the exact total across generated pedestrians and
+    # authored singles. Preserve every authored actor and let generated route/crowd
+    # pedestrians fill only the remaining slots (issue #5666).
+    authored_single_count = len(single_pedestrians or ())
+    spawn_config = _generated_spawn_config(
+        spawn_config,
+        authored_single_count=authored_single_count,
+    )
+
+    # Both generated spawners honor the field independently, so when a scenario declares both
+    # routes and crowded zones a naive pass would spawn twice the generated remainder. Split it
+    # between the two active spawners (issue #4618 R4); any odd remainder goes to routes.
     crowd_spawn_config = spawn_config
     route_spawn_config = spawn_config
     if spawn_config.force_population_size is not None and ped_crowded_zones and ped_routes:

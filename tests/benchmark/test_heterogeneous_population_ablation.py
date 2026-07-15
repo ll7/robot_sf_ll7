@@ -31,8 +31,10 @@ from robot_sf.benchmark.heterogeneous_population_ablation_runner import (
     run_manifest_row,
 )
 from robot_sf.benchmark.pedestrian_control_trace import PEDESTRIAN_CONTROL_TRACE_LABELS_KEY
+from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 
 _REPO_ROOT = Path(__file__).parents[2]
+_CLASSIC_BOTTLENECK_MEDIUM_MAP = _REPO_ROOT / "maps/svg_maps/classic_bottleneck_medium.svg"
 _CLASSIC_CROSSING_MAP = _REPO_ROOT / "maps/svg_maps/classic_crossing.svg"
 _CLASSIC_HEAD_ON_MAP = _REPO_ROOT / "maps/svg_maps/classic_head_on_corridor.svg"
 
@@ -1079,18 +1081,15 @@ def test_matrix_harness_aligns_trace_labels_to_each_density_population(tmp_path:
 
 
 @pytest.mark.slow
-def test_small_map_low_density_forces_declared_population_and_realizes_mix(
+def test_authored_single_counts_toward_forced_population_and_realizes_mix(
     tmp_path: Path,
 ) -> None:
-    """A small, low-density cell instantiates the declared population and mix (issue #5666 #3).
+    """A map-authored single counts toward the exact declared population (issue #5666).
 
-    Previously a small map at low ``ped_density`` instantiated ~1 pedestrian (whatever
-    ``ped_density * map_area`` yielded), so the declared 3/6/3 archetype split and the
-    response-law fractions were unrealizable and the readiness gate blocked the row.
-    With ``population_size`` wired to ``force_population_size`` (issue #5666 #1), the
-    cell must instantiate *exactly* 12 pedestrians and realize the 3/6/3 archetype
-    split plus every response-law fraction, even though ``ped_density`` alone would
-    spawn far fewer.  The declared-vs-actual count must also be recorded (issue #5666 #3).
+    ``classic_bottleneck_medium.svg`` authors one single pedestrian. Before the fix,
+    the constructor generated 12 more and the map-runner assertion observed 13 != 12.
+    The authored actor must be preserved while generated spawning is reduced so the
+    final total, trace labels, and declared-vs-instantiated provenance all remain 12.
     """
 
     config = {
@@ -1100,13 +1099,13 @@ def test_small_map_low_density_forces_declared_population_and_realizes_mix(
         "response_law_fractions": [0.0, 0.1, 0.25, 0.5],
         "scenarios": [
             {
-                "id": "small_map_low_density",
-                "density": 0.02,
+                "id": "classic_bottleneck_medium_authored_single",
+                "density": 0.0,
                 "population_size": 12,
                 "archetype_seed": 3574,
                 "response_law_seed": 3574,
                 "pedestrian_control_trace_near_field_clearance_m": 1.0,
-                "map_file": str(_CLASSIC_CROSSING_MAP),
+                "map_file": str(_CLASSIC_BOTTLENECK_MEDIUM_MAP),
                 "composition": {"cautious": 0.25, "standard": 0.5, "hurried": 0.25},
                 "archetypes": {
                     "cautious": {"desired_speed_factor": 0.7, "radius_m": 0.35},
@@ -1142,7 +1141,7 @@ def test_small_map_low_density_forces_declared_population_and_realizes_mix(
         assert "disposition" not in record, record
         trace = record["algorithm_metadata"]["pedestrian_control_trace"]
         assert trace["pedestrian_count"] == 12, (
-            f"response_law_fraction={row['response_law_fraction']}: small low-density map "
+            f"response_law_fraction={row['response_law_fraction']}: authored-single map "
             f"instantiated {trace['pedestrian_count']} pedestrians, expected the forced 12 "
             "(issue #5666 #1: population_size must override ped_density x area)"
         )
@@ -1236,6 +1235,27 @@ def test_harness_emission_readiness_fails_closed_when_trace_dropped(tmp_path: Pa
 # ---------------------------------------------------------------------------
 # Issue #5666 acceptance regression tests
 # ---------------------------------------------------------------------------
+
+
+def test_forced_population_rejects_more_authored_singles_than_total() -> None:
+    """Authored actors are preserved, so an undersized forced total fails clearly."""
+    spawn_config = PedSpawnConfig(
+        peds_per_area_m2=0.0,
+        max_group_members=3,
+        force_population_size=1,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="2 authored single pedestrians exceed forced population_size 1",
+    ):
+        populate_simulation(
+            tau=0.5,
+            spawn_config=spawn_config,
+            ped_routes=[],
+            ped_crowded_zones=[],
+            single_pedestrians=[object(), object()],
+        )
 
 
 def test_manifest_build_fails_fast_when_population_too_small_for_response_law_fraction() -> None:

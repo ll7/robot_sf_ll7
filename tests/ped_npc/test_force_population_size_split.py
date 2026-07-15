@@ -2,8 +2,9 @@
 
 Issue #4618 R4: when a scenario declares BOTH pedestrian routes and crowded zones, the
 route spawner and the crowd spawner each independently honored ``force_population_size``,
-so the merged population was ``2 * force_population_size`` (a silent double-count). The
-forced size must instead be the exact TOTAL, split across the active spawners.
+so the merged population was ``2 * force_population_size`` (a silent double-count). Issue
+#5666 extends the same exact-total contract to map-authored single pedestrians: authored
+actors count toward the total and the generated remainder is split across active spawners.
 """
 
 from __future__ import annotations
@@ -26,18 +27,28 @@ def _captured_spawner_sizes(monkeypatch):
     captured: dict[str, int | None] = {"crowd": None, "route": None}
 
     def _fake_crowded(config, crowded_zones, *, obstacle_polygons=None):
+        if not crowded_zones:
+            return np.zeros((0, 6)), [], {}
         captured["crowd"] = config.force_population_size
-        return np.zeros((0, 6)), [], {}
+        return np.zeros((config.force_population_size or 0, 6)), [], {}
 
     def _fake_routes(config, routes, *, obstacle_polygons=None):
+        if not routes:
+            return np.zeros((0, 6)), [], {}, {}
         captured["route"] = config.force_population_size
-        return np.zeros((0, 6)), [], {}, {}
+        return np.zeros((config.force_population_size or 0, 6)), [], {}, {}
+
+    def _fake_singles(single_pedestrians, initial_speed=0.5):
+        del initial_speed
+        return np.zeros((len(single_pedestrians), 7)), []
 
     monkeypatch.setattr(ped_population, "populate_crowded_zones", _fake_crowded)
     monkeypatch.setattr(ped_population, "populate_ped_routes", _fake_routes)
+    monkeypatch.setattr(ped_population, "populate_single_pedestrians", _fake_singles)
     # Replace behavior constructors with no-ops; the spawners return empty populations.
     monkeypatch.setattr(ped_population, "CrowdedZoneBehavior", lambda *a, **k: object())
     monkeypatch.setattr(ped_population, "FollowRouteBehavior", lambda *a, **k: object())
+    monkeypatch.setattr(ped_population, "SinglePedestrianBehavior", lambda *a, **k: object())
     return captured
 
 
@@ -89,7 +100,7 @@ def test_force_population_size_not_split_when_only_routes(_captured_spawner_size
         max_group_members=3,
         force_population_size=10,
     )
-    populate_simulation(
+    state, _, _ = populate_simulation(
         tau=0.5,
         spawn_config=spawn_config,
         ped_routes=[object()],
@@ -97,3 +108,24 @@ def test_force_population_size_not_split_when_only_routes(_captured_spawner_size
     )
 
     assert _captured_spawner_sizes["route"] == 10
+    assert state.num_peds == 10
+
+
+def test_force_population_size_counts_authored_singles_in_exact_total(_captured_spawner_sizes):
+    """One authored single leaves eleven generated slots in a forced total of twelve."""
+    spawn_config = PedSpawnConfig(
+        peds_per_area_m2=0.0,
+        max_group_members=3,
+        force_population_size=12,
+    )
+
+    state, _, _ = populate_simulation(
+        tau=0.5,
+        spawn_config=spawn_config,
+        ped_routes=[object()],
+        ped_crowded_zones=[],
+        single_pedestrians=[object()],
+    )
+
+    assert _captured_spawner_sizes["route"] == 11
+    assert state.num_peds == 12

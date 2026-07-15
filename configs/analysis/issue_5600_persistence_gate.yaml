@@ -1,0 +1,32 @@
+schema_version: generated-scenario-persistence-config.v1
+config_id: issue-5600-persistence-gate
+frozen: true
+claim_boundary: generated scenario hypotheses only
+source_issue: "#5600"
+description: >-
+  Preregistered timing/speed perturbation grid and tolerances for the
+  generated_scenario_persistence.v1 promotion gate. Ranges and thresholds are
+  frozen here before any smoke run; they must not be tuned after observing
+  candidate outcomes.
+perturbation:
+  timing_offsets_s:
+    - -0.25
+    - 0.0
+    - 0.25
+  speed_deltas_m_s:
+    - -0.2
+    - 0.0
+    - 0.2
+critical_event:
+  event_type: min_clearance
+  time_tolerance_s: 0.5
+  location_tolerance_m: 0.75
+promotion:
+  required_statuses:
+    - exact_replay
+    - critical_event_reproduced
+    - perturbation_persistence
+  min_persistence_rate: 1.0
+governance:
+  benchmark_evidence: false
+  required_manual_review: true

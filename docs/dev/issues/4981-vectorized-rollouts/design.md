@@ -23,6 +23,9 @@ keeping the established `DummyVecEnv`, `SubprocVecEnv`, and scalar LiDAR paths u
   dispatch. The coordinator selects it only for the explicit `threaded_lidar_batch` mode.
 - The compiled LiDAR raycast and postprocessing entry points release the Python global interpreter
   lock while executing, so independent scalar threaded scans can make progress concurrently.
+- Plain `threaded` steps select an output-identical social-force dispatcher that releases the Python
+  global interpreter lock. The selection is scoped to each worker step; default PySocialForce calls
+  and the separately coordinated `threaded_lidar_batch` mode retain the established dispatcher.
 - A one-environment LiDAR batch calls the existing `raycast_obstacles` kernel directly, preserving
   its output bit for bit.
 
@@ -55,5 +58,31 @@ uv run python scripts/validation/run_vecenv_worker_mode_throughput.py \
 
 The JSON records repeated throughput samples, median speedup against a separately measured
 one-environment dummy fallback, failures, and config/scenario/commit/host provenance. Its explicit
-claim boundary is diagnostic-only. The issue's >3x claim may only be promoted after a reviewed,
-sufficiently long standard-config measurement supports it; a bounded smoke is not that evidence.
+claim boundary is diagnostic-only. A bounded smoke is not acceptance evidence.
+
+The issue acceptance workload and strict `>3x` decision are frozen separately in
+`configs/training/lidar/issue_4981_vecenv_throughput_acceptance.yaml`. Inspect the exact local CPU
+command without running it:
+
+```bash
+uv run python scripts/validation/run_issue_4981_vecenv_throughput_acceptance.py \
+  --dry-run
+```
+
+When an uncontended host is available, run the full profile explicitly with `--run`. The wrapper
+requires a clean current commit, executes the single-environment fallback and LiDAR-equivalence
+tests, then runs five repetitions with 1,000 warmup and 10,000 measured steps per mode. It emits a
+machine-readable decision with three states:
+
+- `met`: a predeclared in-process candidate (`threaded` or `threaded_lidar_batch`) has median
+  throughput strictly greater than `3x` the one-environment dummy baseline;
+- `not_met`: the complete valid measurement ran, but the strict threshold was not exceeded;
+- `blocked`: inputs, provenance, required tests, mode rows, repetitions, or failures do not satisfy
+  the profile.
+
+The reversible assumption is that the already documented
+`lidar_ppo_mlp_smoke_issue_1662.yaml` workload is the standard config for this engineering gate and
+that a 100-times-longer step window plus five repetitions is sufficient for review. The decision
+remains host-specific implementation-performance evidence; it does not establish training quality,
+navigation-benchmark performance, cross-host speedup, or a paper/dissertation claim. This change
+does not run or promote the acceptance measurement itself.

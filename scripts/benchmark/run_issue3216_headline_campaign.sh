@@ -14,8 +14,11 @@
 #
 # Honesty boundary (docs/maintainer_values.md): this payload cannot
 # self-certify paper-grade. The report harness classifies the bundle
-# (paper_grade | nominal | diagnostic | blocked_until_run), but emitted
-# numbers must not be presented as paper-grade without claim-card review.
+# (paper_grade | nominal | diagnostic | completed_needs_claim_review |
+# blocked_until_run), but emitted numbers must not be presented as paper-grade
+# without claim-card review. blocked_until_run is reserved for input with no
+# countable cells; completed_needs_claim_review means the evidence was measured
+# and analyzed but awaits claim-card review.
 #
 # Usage:
 # scripts/benchmark/run_issue3216_headline_campaign.sh [--preflight-only] [--campaign-id ID] [--output-root DIR]
@@ -151,44 +154,38 @@ fi
 echo "== [#3216] report: per-cell CI + rank-stability (fail-closed; never self-certifies paper-grade) =="
 CAMPAIGN_ROOT="$OUTPUT_ROOT/$CAMPAIGN_ID"
 mkdir -p "$REPORT_DIR"
-report_exit_code=0
-uv run python scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py \
-  --campaign "$CAMPAIGN_ROOT" \
-  --rank-metric "$RANK_METRIC" \
-  --expected-planners-from-config "$CONFIG" \
-  --output-dir "$REPORT_DIR" || report_exit_code=$?
-
-ROWS="$CAMPAIGN_ROOT/reports/headline_rows.json"
-if [ "$report_exit_code" -eq 0 ] && [ ! -f "$ROWS" ]; then
-  echo "ERROR: report builder did not produce $ROWS." >&2
-  report_exit_code=5
-fi
-if [ "$report_exit_code" -eq 0 ] && [ ! -f "$REPORT_DIR/result.json" ]; then
-  echo "ERROR: report builder did not produce $REPORT_DIR/result.json." >&2
-  report_exit_code=5
-fi
-
 STAGE_STATUS="$CAMPAIGN_ROOT/reports/post_campaign_stage_status.json"
-status_record_exit_code=0
-uv run python scripts/tools/record_post_campaign_stage_status.py \
+
+# Issue #5244: route the post-campaign report stage through the reusable
+# `run_post_campaign_stage` primitive so a failed report step (e.g. the job-13274
+# exit-5 candidate: missing optional dep on the compute node, or a missing report
+# artifact under `set -euo pipefail`) is recorded in the `post_campaign_stage` lane
+# of the status envelope WITHOUT remapping the campaign exit. The script wrapper must
+# not `exit` with the report code here: the campaign already completed, and the
+# envelope (consumed by `slurm_job_finalize`) is what preserves the separate lanes.
+report_status_record_exit_code=0
+uv run python scripts/tools/run_post_campaign_stage.py \
   --campaign-summary "$CAMPAIGN_ROOT/reports/campaign_summary.json" \
   --campaign-exit-code "$campaign_exit_code" \
   --stage-name headline_ci_rank_stability_report \
-  --stage-exit-code "$report_exit_code" \
-  --output "$STAGE_STATUS" || status_record_exit_code=$?
-echo " report_stage_exit_code=$report_exit_code"
-echo " report_stage_failed=$([ "$report_exit_code" -eq 0 ] && echo false || echo true)"
+  --output "$STAGE_STATUS" \
+  --stage-command \
+    uv run python scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py \
+      --campaign "$CAMPAIGN_ROOT" \
+      --rank-metric "$RANK_METRIC" \
+      --expected-planners-from-config "$CONFIG" \
+      --output-dir "$REPORT_DIR" || report_status_record_exit_code=$?
+
+echo " report_status_record_exit_code=$report_status_record_exit_code"
 echo " post_campaign_stage_status=$STAGE_STATUS"
-if [ "$status_record_exit_code" -ne 0 ]; then
-  echo "ERROR: failed to write post-campaign stage status (exit $status_record_exit_code)." >&2
-  exit "$status_record_exit_code"
+# A failure to *write* the envelope is the only hard error here: without the envelope
+# the downstream finalizer cannot see the separated lanes and would fall back to guessing.
+if [ "$report_status_record_exit_code" -ne 0 ]; then
+  echo "ERROR: failed to run post-campaign stage / write envelope (exit $report_status_record_exit_code)." >&2
+  exit "$report_status_record_exit_code"
 fi
 
-if [ "$report_exit_code" -ne 0 ]; then
-  echo "WARNING: campaign completed but the post-campaign report stage failed; " \
-    "campaign exit remains $campaign_exit_code." >&2
-  exit "$campaign_exit_code"
-fi
+ROWS="$CAMPAIGN_ROOT/reports/headline_rows.json"
 echo " rows=$ROWS"
 
 echo "== [#3216] done =="

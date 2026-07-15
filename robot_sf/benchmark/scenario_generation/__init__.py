@@ -15,10 +15,26 @@ from robot_sf.benchmark.scenario_generation.archive_sampler import (
     run_archive_sampling,
     sample_generated_archive,
 )
+from robot_sf.benchmark.scenario_generation.candidate_runner import (
+    build_cell_verdict_from_trace_replay,
+    build_persistence_from_catalog_entry,
+    build_persistence_from_episode_trace,
+    get_critical_event_from_frames,
+    run_candidate_persistence_smoke,
+)
 from robot_sf.benchmark.scenario_generation.catalog_schema import (
     CATALOG_ENTRY_SCHEMA_VERSION,
     GeneratedScenarioCatalogValidationError,
     validate_catalog_entry,
+)
+from robot_sf.benchmark.scenario_generation.persistence_gate import (
+    PERSISTENCE_SCHEMA_VERSION,
+    ScenarioPersistenceValidationError,
+    assess_critical_event_reproduction,
+    assess_exact_replay,
+    compute_persistence_record,
+    evaluate_perturbation_grid,
+    validate_persistence_record,
 )
 from robot_sf.benchmark.scenario_generation.replay_adapter import (
     GeneratedScenarioMaterialization,
@@ -31,20 +47,32 @@ from robot_sf.benchmark.scenario_generation.segment_extraction import extract_cr
 
 __all__ = [
     "CATALOG_ENTRY_SCHEMA_VERSION",
+    "PERSISTENCE_SCHEMA_VERSION",
     "AdaptiveSelectionSpec",
     "ArchiveSamplingSpec",
     "GeneratedScenarioAdaptiveSelectionError",
     "GeneratedScenarioArchiveSamplingError",
     "GeneratedScenarioCatalogValidationError",
     "GeneratedScenarioMaterialization",
+    "ScenarioPersistenceValidationError",
     "apply_generated_replay_runtime",
+    "assess_critical_event_reproduction",
+    "assess_exact_replay",
+    "build_cell_verdict_from_trace_replay",
+    "build_persistence_from_catalog_entry",
+    "build_persistence_from_episode_trace",
+    "compute_persistence_record",
     "dump_generated_scenario_yaml",
+    "evaluate_perturbation_grid",
     "extract_critical_segment",
     "generated_replay_status_entry",
+    "get_critical_event_from_frames",
     "materialize_generated_scenario",
     "run_adaptive_selection",
     "run_archive_sampling",
+    "run_candidate_persistence_smoke",
     "sample_generated_archive",
     "select_generated_proposals",
     "validate_catalog_entry",
+    "validate_persistence_record",
 ]

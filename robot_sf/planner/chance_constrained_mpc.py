@@ -95,19 +95,49 @@ class ChanceConstrainedMPCConfig(PredictionMPCConfig):
     """Configuration for the experimental GMM chance-constrained MPC arm."""
 
     predictor_backend: str = "multimodal_gmm"
-    chance_constraint_formulation: Literal["marginal", "joint_horizon"] = "marginal"
+    chance_constraint_formulation: Literal["marginal", "joint_horizon", "cvar_tail"] = "marginal"
     max_collision_risk: float = 0.05
+    # Conditional Value-at-Risk confidence for the cvar_tail tail-risk formulation
+    # (issue #5307 Arm 4). The constraint bounds the expected collision risk in
+    # the worst (1 - cvar_alpha) fraction of the uniformly weighted
+    # pedestrian-timestep cell-risk distribution, instead of the Boole-union
+    # bound used by joint_horizon. Must lie in (0, 1).
+    cvar_alpha: float = 0.9
     radial_quadrature_order: int = 6
     angular_quadrature_order: int = 16
+    # Surrogate-only knob (#5307 successor slice). Number of Gaussian modes the
+    # constant_velocity_gmm diagnostic provider emits per pedestrian. The real
+    # #2844 learned backend controls its own mode count; this field is inert
+    # unless predictor_backend == "constant_velocity_gmm".
+    gmm_mode_count: int = 1
+    # Learned GMM predictor configuration (issue #5307 successor slice).  Passed
+    # to ``LearnedGmmPedestrianPredictor`` when predictor_backend == "learned_gmm".
+    # The ``allow_untrained_smoke`` flag controls whether the backend can run
+    # without a trained checkpoint (CPU smoke-test mode).
+    # ``learned_gmm_model_type`` keeps the historical flat MLP default while
+    # exposing the opt-in #2844 graph-GRU scaffold.
+    learned_gmm_checkpoint_path: str | None = None
+    learned_gmm_model_id: str | None = None
+    learned_gmm_hidden_dim: int = 128
+    learned_gmm_mode_count: int = 3
+    learned_gmm_model_type: str = "mlp"
+    learned_gmm_allow_untrained_smoke: bool = False
 
     def __post_init__(self) -> None:
         """Reject ambiguous risk settings and incompatible envelope composition."""
 
         super().__post_init__()
-        if self.chance_constraint_formulation not in {"marginal", "joint_horizon"}:
-            raise ValueError("chance_constraint_formulation must be 'marginal' or 'joint_horizon'")
+        if self.chance_constraint_formulation not in {"marginal", "joint_horizon", "cvar_tail"}:
+            raise ValueError(
+                "chance_constraint_formulation must be 'marginal', 'joint_horizon', or 'cvar_tail'"
+            )
         if not 0.0 < float(self.max_collision_risk) < 1.0:
             raise ValueError("max_collision_risk must be in (0, 1)")
+        if (
+            self.chance_constraint_formulation == "cvar_tail"
+            and not 0.0 < float(self.cvar_alpha) < 1.0
+        ):
+            raise ValueError("cvar_alpha must be in (0, 1) for the cvar_tail formulation")
         if int(self.radial_quadrature_order) < 2 or int(self.angular_quadrature_order) < 4:
             raise ValueError("quadrature orders must be at least 2 radial and 4 angular")
         if self.allow_predictor_fallback:
@@ -149,6 +179,18 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         reset = getattr(self._multimodal_predictor, "reset", None)
         if callable(reset):
             reset()
+
+    @property
+    def claimed_risk(self) -> float:
+        """Return the per-horizon collision-risk bound the planner targets.
+
+        This is the ``max_collision_risk`` from the active chance-constraint
+        config. The realized-risk calibration routine pairs it against observed
+        collisions over rolled-out episodes to assess calibration (claimed vs.
+        observed), which is the primary measure named by issue #5307.
+        """
+
+        return float(self.chance_config.max_collision_risk)
 
     def _optimizer_constraints(self, context: _RolloutContext) -> tuple[NonlinearConstraint, ...]:
         """Build the requested marginal or joint-horizon chance constraint.
@@ -204,9 +246,60 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         alpha = float(self.chance_config.max_collision_risk)
         if self.chance_config.chance_constraint_formulation == "marginal":
             return alpha - risks.reshape(-1)
+        if self.chance_config.chance_constraint_formulation == "cvar_tail":
+            # Conditional Value-at-Risk (tail-risk) formulation. Each
+            # pedestrian-timestep pair carries a marginal collision-risk
+            # estimate; the risk is the expected collision probability over the
+            # worst (1 - cvar_alpha) tail of the uniformly weighted cell-risk
+            # distribution. The single non-linear constraint bounds that tail
+            # expectation by alpha, so the planner limits the *average* collision
+            # risk exactly where it is highest. This is a direct alternative to the Boole-union
+            # joint_horizon bound (issue #5307 Arm 4) and does not require a
+            # cross-time covariance model.
+            return np.asarray([alpha - self._cvar_tail_risk(risks.reshape(-1))], dtype=float)
         # Boole's inequality bounds P(any collision over people and time) by the
         # sum of marginal probabilities without assuming cross-time independence.
         return np.asarray([alpha - float(np.sum(risks))], dtype=float)
+
+    def _cvar_tail_risk(self, cell_risks: np.ndarray) -> float:
+        """Return empirical CVaR for the uniformly weighted per-cell risks.
+
+        Let ``r`` be the per-pedestrian-per-timestep marginal collision-risk
+        estimates. The Conditional Value-at-Risk at confidence ``alpha`` is the
+        average of the worst ``(1 - alpha)`` probability mass. For a finite,
+        equally weighted cell sample, the boundary cell contributes fractionally
+        when that tail contains a non-integer number of cells. When fewer than
+        two cells exist, or ``alpha`` is extreme, the definition degenerates to
+        the ordinary mean, which keeps the constraint finite and the solver
+        well-posed.
+
+        Args:
+            cell_risks: Flat array of per-cell marginal collision-risk estimates
+                in ``[0, 1]``.
+
+        Returns:
+            The CVaR tail-risk scalar in ``[0, 1]``.
+        """
+
+        risks = np.asarray(cell_risks, dtype=float).reshape(-1)
+        if risks.size == 0:
+            return 0.0
+        alpha = float(self.chance_config.cvar_alpha)
+        if risks.size == 1 or not 0.0 < alpha < 1.0:
+            return float(np.mean(risks))
+        # Integrate the empirical upper tail directly. This preserves the
+        # fractional boundary cell when the tail mass is not an integer number
+        # of equally weighted cells; averaging only ``risks >= quantile`` would
+        # understate CVaR for those cases.
+        ordered = np.sort(risks)
+        tail_mass = (1.0 - alpha) * ordered.size
+        whole_cells = int(np.floor(tail_mass))
+        fractional_cell = tail_mass - whole_cells
+        tail_sum = float(np.sum(ordered[-whole_cells:])) if whole_cells else 0.0
+        if fractional_cell > 0.0:
+            boundary_index = ordered.size - whole_cells - 1
+            tail_sum += fractional_cell * float(ordered[boundary_index])
+        return float(tail_sum / tail_mass)
 
     def _marginal_collision_risks(
         self,
@@ -298,6 +391,11 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
                     "angular_order": self.chance_config.angular_quadrature_order,
                     "joint_bound": "Boole_union_bound"
                     if self.chance_config.chance_constraint_formulation == "joint_horizon"
+                    else "cvar_tail_risk"
+                    if self.chance_config.chance_constraint_formulation == "cvar_tail"
+                    else None,
+                    "cvar_alpha": self.chance_config.cvar_alpha
+                    if self.chance_config.chance_constraint_formulation == "cvar_tail"
                     else None,
                     "constraint_count": self._last_constraint_count,
                     "forecast_source": forecast.source if forecast else "not_run",
@@ -347,8 +445,16 @@ def build_chance_constrained_mpc_config(
         "pedestrian_uncertainty_alpha_mps": float,
         "chance_constraint_formulation": str,
         "max_collision_risk": float,
+        "cvar_alpha": float,
         "radial_quadrature_order": int,
         "angular_quadrature_order": int,
+        "gmm_mode_count": int,
+        "learned_gmm_checkpoint_path": lambda v: str(v).strip() if v is not None else None,
+        "learned_gmm_model_id": lambda v: str(v).strip() if v is not None else None,
+        "learned_gmm_hidden_dim": int,
+        "learned_gmm_mode_count": int,
+        "learned_gmm_model_type": str,
+        "learned_gmm_allow_untrained_smoke": _parse_bool,
         "hard_pedestrian_constraints_enabled": _parse_bool,
         "pedestrian_clearance_weight": float,
     }
@@ -379,12 +485,67 @@ def build_chance_constrained_mpc_config(
 def build_chance_constrained_mpc_adapter(
     algo_config: dict[str, Any] | None,
 ) -> ChanceConstrainedMPCPlannerAdapter:
-    """Fail closed until a #2844 provider is passed through an explicit integration path."""
+    """Build the chance-constrained MPC adapter.
+
+    Supported backends:
+
+    - ``constant_velocity_gmm`` (issue #5307 successor): CPU-validatable
+      surrogate provider that emits constant-velocity GMM forecasts.  Used
+      for diagnostic validation of the control law.
+    - ``learned_gmm`` (issue #5307 successor): minimal learned GMM predictor
+      scaffold implementing ``GaussianMixturePedestrianPredictor``.  When
+      ``learned_gmm_allow_untrained_smoke`` is set and no checkpoint is
+      provided, the network is zero-initialised (CPU smoke-test mode).
+      When a checkpoint is available it loads the #2844-trained weights.
+      ``learned_gmm_model_type=graph_gru`` selects the opt-in graph-pooled GRU
+      and diagonal-Gaussian mode head; the historical ``mlp`` default is unchanged.
+
+    All other backends fail closed.  No constant-velocity fallback is ever
+    permitted.
+
+    Returns:
+        The configured ``ChanceConstrainedMPCPlannerAdapter`` with its provider.
+    """
 
     config = build_chance_constrained_mpc_config(algo_config)
+    backend = config.predictor_backend.strip().lower()
+
+    if backend == "constant_velocity_gmm":
+        # Keep the surrogate provider import lazy so importing the provider module
+        # directly does not create a partially initialized circular import.
+        from robot_sf.planner.chance_constrained_mpc_provider import (  # noqa: PLC0415
+            ConstantVelocityGmmPredictor,
+        )
+
+        predictor = ConstantVelocityGmmPredictor(
+            mode_count=int(getattr(config, "gmm_mode_count", 1) or 1),
+        )
+        return ChanceConstrainedMPCPlannerAdapter(config=config, predictor=predictor)
+
+    if backend == "learned_gmm":
+        # Keep the learned predictor import lazy so it does not pull torch
+        # into core planner imports.
+        from robot_sf.planner.learned_gmm_predictor import (  # noqa: PLC0415
+            LearnedGmmPedestrianPredictor,
+            build_learned_gmm_predictor_config,
+        )
+
+        # Map prefixed config keys to the predictor-native keys that
+        # build_learned_gmm_predictor_config expects.
+        predictor_raw: dict[str, Any] = {}
+        if algo_config:
+            for k, v in algo_config.items():
+                if k.startswith("learned_gmm_"):
+                    native_key = k[len("learned_gmm_") :]  # strip prefix
+                    predictor_raw[native_key] = v
+        predictor_config = build_learned_gmm_predictor_config(predictor_raw)
+        predictor = LearnedGmmPedestrianPredictor(predictor_config)
+        return ChanceConstrainedMPCPlannerAdapter(config=config, predictor=predictor)
+
     raise ValueError(
         "chance_constrained_mpc is unavailable: its #2844 K-mode/GMM predictor provider is not "
-        f"configured (requested backend {config.predictor_backend!r})"
+        f"configured (requested backend {config.predictor_backend!r}). Supported backends: "
+        "'constant_velocity_gmm' (CPU diagnostic), 'learned_gmm' (CPU smoke or checkpoint)."
     )
 
 

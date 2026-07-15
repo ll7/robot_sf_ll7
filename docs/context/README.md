@@ -115,6 +115,8 @@ knowledge, not every transient iteration detail.
   [issue_3472_pr_body_contracts.md](issue_3472_pr_body_contracts.md)
 * Issue #5355 prediction × constraint factorial preregistration:
   [issue_5355_factorial_preregistration.md](issue_5355_factorial_preregistration.md)
+* Issue #5579 MPC tuning-budget sensitivity packet:
+  [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md)
 
 * Issue #3385 camera-ready decomposition closure audit:
 

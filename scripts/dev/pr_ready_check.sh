@@ -18,13 +18,18 @@ Environment variables:
   PR_READY_FINAL      Legacy compatibility flag: "1", "true", "yes", or "on"
                       for final mode; "0", "false", "no", "off" for interim.
                       Ignored when PR_READY_MODE is set.
-  PR_READY_SKIP_PREFLIGHT  Set to "1" to skip the cheap preflight check for
-                      test-collection dependencies (duckdb, pyarrow).
+  PR_READY_SKIP_PREFLIGHT  Set to "1" to skip cheap preflight checks for
+                      test-collection dependencies and the bundled fast-pysf API.
   PR_READY_PR_BODY_FILE  Optional markdown PR body. When set, readiness checks
                       that deferred work has a linked issue or explicit NA.
   PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES
                       Set to "0" to skip open-state verification for linked
                       follow-up issues when PR_READY_PR_BODY_FILE is set.
+  PR_READY_SERIAL_FALLBACK
+                      Set to "1" to auto-rerun serially when parallel pytest
+                      workers crash (issue #5633), separating an env crash from
+                      real failures. Disabled by default; the gate stays
+                      fail-closed and only reports the crash diagnostic.
 EOF
 }
 
@@ -223,6 +228,7 @@ fi
 
 if [[ "$pr_ready_final" == "1" ]]; then
   preflight_check_test_deps
+  preflight_check_fast_pysf
 fi
 
 resolve_base_ref
@@ -314,7 +320,40 @@ fi
 "$SCRIPT_DIR/check_changed_coverage.sh"
 "$SCRIPT_DIR/check_docstring_todos_diff.sh"
 "$SCRIPT_DIR/check_docstring_todos_ratchet.sh"
+uv run python "$SCRIPT_DIR/check_optional_import_pr_freshness.py" --base-ref "$BASE_REF"
 uv run python "$SCRIPT_DIR/../validation/check_broad_exceptions.py"
+
+# Orphan guard for issue #5594: the readiness command must leave no worktree-owned
+# pytest worker behind. A leaked planner-step worker (or any pytest descendant) that
+# outlives the controller and its parents becomes reparented to PID 1 while still
+# holding host resources; that orphans the shared host. We scan for reparented
+# (parent PID 1) pytest processes whose cwd/cmdline ties them to this worktree.
+check_no_orphaned_pytest_workers() {
+  local worktree_root
+  worktree_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 0
+  local orphaned=0
+  local pid ppid cmdline cwd_link
+  for proc_dir in /proc/[0-9]*; do
+    pid="${proc_dir#/proc/}"
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    ppid=$(awk '{print $4}' "/proc/$pid/stat" 2>/dev/null) || continue
+    [[ "$ppid" == "1" ]] || continue
+    cmdline=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null) || continue
+    [[ "$cmdline" == *"pytest"* ]] || continue
+    cwd_link=$(readlink "/proc/$pid/cwd" 2>/dev/null) || continue
+    if [[ "$cwd_link" == "$worktree_root"* || "$cmdline" == *"$worktree_root"* ]]; then
+      printf 'Orphaned pytest worker still attached to this worktree: PID %s (cwd=%s cmdline=%s)\n' \
+        "$pid" "$cwd_link" "$cmdline" >&2
+      orphaned=1
+    fi
+  done
+  if (( orphaned )); then
+    printf 'Readiness left an orphaned pytest worker on the shared host (issue #5594).\n' >&2
+    printf 'Terminate the listed PID(s) and fix the leaking test/worker before reporting success.\n' >&2
+    return 1
+  fi
+  return 0
+}
 
 freshness_args=(write --base-ref "$BASE_REF")
 if [[ "$pr_ready_final" == "1" ]]; then
@@ -325,3 +364,8 @@ elif [[ "$(worktree_state)" != "clean" ]]; then
   printf 'Use PR_READY_MODE=final BASE_REF=%q %q for final committed-HEAD PR proof.\n' "$BASE_REF" "$0" >&2
 fi
 uv run python "$SCRIPT_DIR/pr_ready_freshness.py" "${freshness_args[@]}"
+
+# Final orphan guard (issue #5594): after all lanes exit, assert no worktree-owned
+# pytest worker survived the controller. A leaked planner-step worker reparented to
+# PID 1 would otherwise sit orphaned on the shared host.
+check_no_orphaned_pytest_workers

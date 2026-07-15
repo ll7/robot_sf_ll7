@@ -144,14 +144,38 @@ def test_s20_preflight_stays_no_claim_but_allows_table_review() -> None:
         campaign="issue3216_s20_fixture",
     )
 
-    assert report["classification"] == "blocked_until_run"
+    assert report["classification"] == "completed_needs_claim_review"
     assert "claim-card review" in report["classification_rationale"]
+    assert "not been executed" not in report["classification_rationale"]
     assert report["decision_packet"]["manuscript_table_status"] == (
         "ready_for_table_review_no_claim_promotion"
     )
     assert report["decision_packet"]["s30_decision_status"] == "not_required_by_local_preflight"
     assert {claim["decision"] for claim in report["adjacent_rank_claims"]} == {"ci_separable"}
     assert report["decision_packet"]["constraints_first_metric_gaps"] == []
+
+
+def test_verified_completed_s20_never_renders_blocked_until_run() -> None:
+    """A verified completed S20 campaign must not read as 'missing execution'.
+
+    Regression for issue #5607: the report must separate execution state
+    (the campaign ran) from claim readiness (claim-card review still pending).
+    A completed, analyzed S20 result classifies ``completed_needs_claim_review``,
+    never ``blocked_until_run``.
+    """
+    report = build_report(
+        _stable_s20_rows(),
+        ReportConfig(bootstrap_samples=32, resamples=16),
+        campaign="issue3216_s20_fixture",
+    )
+
+    assert report["classification"] != "blocked_until_run"
+    assert report["classification"] == "completed_needs_claim_review"
+    assert report["inputs"]["counted_cells"] > 0
+    assert report["inputs"]["excluded_cells"] == 0
+    assert "not executed" not in report["classification_rationale"]
+    # The remaining blocker is explicitly claim review, not missing execution.
+    assert "claim-card review" in report["classification_rationale"]
 
 
 def test_expected_headline_grid_missing_cell_blocks_packet() -> None:
@@ -553,6 +577,7 @@ def test_campaign_wrapper_runs_builder_before_requiring_headline_rows(
     uv_stub.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
+export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 echo "$*" >> "$UV_STUB_LOG"
 if [ "$1" != "run" ] || [ "$2" != "python" ]; then
   exit 99
@@ -576,25 +601,26 @@ case "${1:-}" in
     ;;
   scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py)
     shift
+    _campaign="" _output_dir=""
     while [ "$#" -gt 0 ]; do
       case "$1" in
-        --campaign) campaign="$2"; shift 2 ;;
-        --output-dir) output_dir="$2"; shift 2 ;;
+        --campaign) _campaign="$2"; shift 2 ;;
+        --output-dir) _output_dir="$2"; shift 2 ;;
         *) shift ;;
       esac
     done
-    test -d "$campaign/reports"
-    test ! -f "$campaign/reports/headline_rows.json"
-    echo '[{"scenario_family":"fixture","planner_key":"orca","per_seed":[]}]' > "$campaign/reports/headline_rows.json"
-    mkdir -p "$output_dir"
-    echo '{"classification":"fixture"}' > "$output_dir/result.json"
-    echo '# fixture' > "$output_dir/report.md"
+    mkdir -p "$_campaign/reports"
+    echo '[{"scenario_family":"fixture","planner_key":"orca","per_seed":[]}]' > "$_campaign/reports/headline_rows.json"
+    mkdir -p "$_output_dir"
+    echo '{"classification":"fixture"}' > "$_output_dir/result.json"
+    echo '# fixture' > "$_output_dir/report.md"
     ;;
-  scripts/tools/record_post_campaign_stage_status.py)
+  scripts/tools/run_post_campaign_stage.py)
+    _original_args=("$@")
     if [ "${STATUS_RECORDER_EXIT:-0}" -ne 0 ]; then
       exit "$STATUS_RECORDER_EXIT"
     fi
-    exec python "$@"
+    exec python "${_original_args[@]}"
     ;;
   *)
     exit 98
@@ -630,7 +656,9 @@ esac
 
     assert result.returncode == status_recorder_exit, result.stderr
     if status_recorder_exit:
-        assert "ERROR: failed to write post-campaign stage status (exit 17)." in result.stderr
+        assert (
+            "ERROR: failed to run post-campaign stage / write envelope (exit 17)." in result.stderr
+        )
         assert not (
             output_root / "fixture_campaign" / "reports" / "post_campaign_stage_status.json"
         ).exists()
@@ -669,6 +697,7 @@ def test_campaign_wrapper_preserves_completed_soft_warning_exit_when_report_arti
     uv_stub.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
+export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
 shift 2
 case "${1:-}" in
   -)
@@ -690,23 +719,29 @@ JSON
     ;;
   scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py)
     shift
+    _campaign="" _output_dir=""
     while [ "$#" -gt 0 ]; do
       case "$1" in
-        --campaign) campaign="$2"; shift 2 ;;
-        --output-dir) output_dir="$2"; shift 2 ;;
+        --campaign) _campaign="$2"; shift 2 ;;
+        --output-dir) _output_dir="$2"; shift 2 ;;
         *) shift ;;
       esac
     done
     if [ "$REPORT_FIXTURE" = "headline_rows" ]; then
-      mkdir -p "$output_dir"
-      echo '{"classification":"fixture"}' > "$output_dir/result.json"
+      mkdir -p "$_output_dir"
+      echo '{"classification":"fixture"}' > "$_output_dir/result.json"
+      echo "ERROR: report builder did not produce $_campaign/reports/headline_rows.json." >&2
+      exit 5
     else
-      mkdir -p "$campaign/reports"
-      echo '[]' > "$campaign/reports/headline_rows.json"
+      mkdir -p "$_campaign/reports"
+      echo '[]' > "$_campaign/reports/headline_rows.json"
+      echo "ERROR: report builder did not produce $_output_dir/result.json." >&2
+      exit 5
     fi
     ;;
-  scripts/tools/record_post_campaign_stage_status.py)
-    exec python "$@"
+  scripts/tools/run_post_campaign_stage.py)
+    _orig_args=("$@")
+    exec python "${_orig_args[@]}"
     ;;
   *) exit 98 ;;
 esac
@@ -739,8 +774,8 @@ esac
 
     assert result.returncode == 0, result.stderr
     assert "campaign_stage_exit_code=0" in result.stdout
-    assert "report_stage_exit_code=5" in result.stdout
-    assert "report_stage_failed=true" in result.stdout
+    assert '"exit_code": 5' in result.stdout
+    assert '"status": "report_stage_failed"' in result.stdout
     expected_missing = (
         output_root / "soft_warning_fixture" / "reports" / "headline_rows.json"
         if missing_artifact == "headline_rows"

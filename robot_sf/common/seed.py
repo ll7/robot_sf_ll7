@@ -12,6 +12,8 @@ import os
 import random
 import sys
 from dataclasses import asdict, dataclass
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 from typing import Any
 
 import numpy as np
@@ -49,6 +51,46 @@ def _import_torch():
         return None
 
 
+def _configure_torch_213_runtime() -> bool:
+    """Disable Torch's crashing compile wrapper on the supported 2.13/Python path.
+
+    Torch 2.13.0 on Python 3.12+ can segfault when the first optimizer operation
+    imports its ``torch._dynamo``/Triton wrapper.  Preloading Triton gives its
+    native extension a safe import point before that lazy wrapper is entered.
+    ``TORCH_COMPILE_DISABLE=1`` is also set for Torch builds that honor the
+    corresponding non-compiling path. The guard is limited to the affected Torch
+    release and is applied before any benchmark or training code constructs an
+    optimizer.
+
+    Returns:
+        bool: Whether the compatibility guard was applied.
+    """
+    if sys.version_info[:2] >= (3, 12):  # noqa: UP036 - Python 3.11 remains supported.
+        try:
+            version = package_version("torch")
+        except PackageNotFoundError:
+            return False
+        if not str(version).split("+", 1)[0].startswith("2.13.0"):
+            return False
+        if any(m in sys.modules for m in ("tensorflow", "tensorboard", "keras")):
+            os.environ["TORCH_COMPILE_DISABLE"] = "1"
+            return True
+        try:
+            importlib.import_module("triton")
+        except ImportError:  # pragma: no cover - triton is optional on CPU-only installs
+            pass
+        os.environ["TORCH_COMPILE_DISABLE"] = "1"
+        return True
+    return False
+
+
+# Apply the process-level guard while the optional Torch graph is still in its
+# import-safe phase. Direct PPO imports also call the helper before importing
+# Stable-Baselines3, but keeping this initialization here covers benchmark CLI
+# imports where that optional module is loaded before the seed helper is used.
+_TORCH_213_RUNTIME_GUARD_APPLIED = _configure_torch_213_runtime()
+
+
 def _set_torch_deterministic_algorithms(torch_module: Any, deterministic: bool) -> bool:
     """Set torch's deterministic-algorithm flag without the Torch 2.13.0 CI crash path.
 
@@ -73,12 +115,15 @@ def _set_torch_deterministic_algorithms(torch_module: Any, deterministic: bool) 
         return False
 
     version = str(getattr(torch_module, "__version__", "")).split("+", 1)[0]
-    if sys.version_info[:2] == (3, 12) and version.startswith("2.13.0"):
+    if sys.version_info[:2] >= (3, 12) and version.startswith("2.13.0"):
         c_module = getattr(torch_module, "_C", None)
         c_setter = getattr(c_module, "_set_deterministic_algorithms", None)
         if c_setter is None:
             return False
-        c_setter(bool(deterministic), False)
+        # Torch 2.13.0's C-level setter takes only the enabled flag; passing
+        # the public wrapper's extra warn_only positional argument raises
+        # TypeError and would silently leave determinism unset (see issue #5556).
+        c_setter(bool(deterministic))
         return True
 
     public_setter(bool(deterministic))

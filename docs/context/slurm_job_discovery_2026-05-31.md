@@ -21,7 +21,7 @@ squeue --me --format='%i %j %T %P %Q %y %b %M %l %S %R'
 sacct -u "$USER" --starttime now-7days --format=JobID,JobName%28,State,ExitCode,Partition,Elapsed,Start,End -P
 gh issue list --repo ll7/robot_sf_ll7 --state open --label slurm --limit 100 --json number,title,labels,updatedAt,url
 gh issue list --repo ll7/robot_sf_ll7 --state open --search 'label:"resource:slurm" -label:"state:blocked"' --limit 100 --json number,title,labels,updatedAt,url
-gh issue view <issue> --repo ll7/robot_sf_ll7 --comments --json number,title,body,comments,labels,state,url
+uv run python scripts/dev/gh_issue_rest.py view <issue> --json number title body comments labels state url --repo ll7/robot_sf_ll7
 ```
 
 Live state:

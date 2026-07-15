@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import multiprocessing as mp
 import time
+from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 
 import numpy as np
 import pytest
+from loguru import logger
 
 from robot_sf import baselines
 from robot_sf.benchmark import runner
@@ -25,6 +27,73 @@ class _SlowPlanner:
 
     def get_metadata(self) -> dict[str, Any]:
         return {"algorithm": "random", "status": "ok", "seed": self.seed}
+
+
+class _FailingPlanner:
+    """Planner stub whose worker step raises a diagnostic error."""
+
+    def __init__(self, _config: dict[str, Any], *, seed: int) -> None:
+        self.seed = seed
+
+    def step(self, _obs: Any) -> dict[str, float]:
+        """Raise the worker error that the parent policy wrapper logs."""
+        raise ValueError("bad worker observation")
+
+    def get_metadata(self) -> dict[str, Any]:
+        """Return baseline metadata for the failing planner."""
+        return {"algorithm": "random", "status": "ok", "seed": self.seed}
+
+
+class _TransientPlanner:
+    """Planner stub used to exercise ORCA's one-step recovery budget."""
+
+    def __init__(self, _config: dict[str, Any], *, seed: int) -> None:
+        self.seed = seed
+
+    def step(self, _obs: Any) -> dict[str, float]:
+        """The fake step process supplies the transient failure in this test."""
+        return {"vx": 1.0, "vy": 0.0}
+
+    def get_metadata(self) -> dict[str, Any]:
+        """Return ORCA metadata so the planner-specific retry is enabled."""
+        return {"algorithm": "orca", "status": "ok", "seed": self.seed}
+
+
+class _TransientStepProcess:
+    """Step-process stand-in that recovers after one transient worker error."""
+
+    def __init__(self, _planner: Any, *, timeout_s: float) -> None:
+        self.timeout_s = timeout_s
+        self.calls = 0
+
+    def step(self, _obs: Any) -> dict[str, float]:
+        """Fail once, then return a native ORCA-shaped action."""
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("planner step worker exited without returning an action")
+        return {"vx": 1.0, "vy": 0.0}
+
+    def close(self) -> None:
+        """Match the production step-process close contract."""
+
+
+class _TransientTimeoutStepProcess(_TransientStepProcess):
+    """Step-process stand-in that recovers after one transient timeout."""
+
+    def step(self, _obs: Any) -> dict[str, float]:
+        """Fail once with the production timeout exception, then recover."""
+        self.calls += 1
+        if self.calls == 1:
+            raise FuturesTimeoutError()
+        return {"vx": 1.0, "vy": 0.0}
+
+
+class _UnavailableStepProcess:
+    """Step-process stand-in that fails during isolation initialization."""
+
+    def __init__(self, _planner: Any, *, timeout_s: float) -> None:
+        del timeout_s
+        raise RuntimeError("planner-step isolation unavailable")
 
 
 class _EOFConn:
@@ -92,6 +161,95 @@ def test_planner_step_timeout_fails_fast_and_reports_metadata(
 
 
 @pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")
+def test_planner_step_error_logs_exception_details(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Worker errors should retain their exception text in the Loguru warning."""
+    monkeypatch.setitem(baselines.BASELINES, "random", _FailingPlanner)
+    captured: list[str] = []
+    handler = logger.add(
+        lambda message: captured.append(message.record["message"]), level="WARNING"
+    )
+    try:
+        policy, metadata = runner._create_robot_policy("random", None, seed=123)
+        velocity = policy(
+            np.array([0.0, 0.0]),
+            np.array([0.0, 0.0]),
+            np.array([1.0, 0.0]),
+            np.empty((0, 2)),
+            0.1,
+        )
+    finally:
+        logger.remove(handler)
+        if "policy" in locals():
+            policy.close()
+
+    assert velocity == pytest.approx(np.array([0.0, 0.0]))
+    assert metadata["status"] == "policy_step_error_fallback"
+    assert any(
+        "Planner step failed unexpectedly: Planner step failed in worker" in message
+        and "bad worker observation" in message
+        for message in captured
+    )
+
+
+def test_orca_isolation_unavailable_does_not_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Initialization failures must fall back without consuming ORCA retries."""
+    monkeypatch.setitem(baselines.BASELINES, "orca", _TransientPlanner)
+    monkeypatch.setattr(runner, "_PlannerStepProcess", _UnavailableStepProcess)
+    policy, metadata = runner._create_robot_policy("orca", None, seed=123)
+
+    velocity = policy(
+        np.array([0.0, 0.0]),
+        np.array([0.0, 0.0]),
+        np.array([1.0, 0.0]),
+        np.empty((0, 2)),
+        0.1,
+    )
+
+    assert velocity == pytest.approx(np.array([0.0, 0.0]))
+    assert metadata["status"] == "policy_step_error_fallback"
+    assert metadata["policy_step_timeout"]["worker_errors"] == 1
+    assert metadata["policy_step_timeout"]["step_retries"] == 0
+    assert metadata["policy_step_timeout"]["fallback_actions"] == 1
+
+
+@pytest.mark.parametrize(
+    ("process_cls", "failure_counter"),
+    [
+        (_TransientStepProcess, "worker_errors"),
+        (_TransientTimeoutStepProcess, "step_timeouts"),
+    ],
+)
+def test_orca_retries_one_transient_worker_failure_before_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    process_cls: type[_TransientStepProcess],
+    failure_counter: str,
+) -> None:
+    """A transient ORCA worker failure gets one recovery attempt."""
+    monkeypatch.setitem(baselines.BASELINES, "orca", _TransientPlanner)
+    monkeypatch.setattr(runner, "_PlannerStepProcess", process_cls)
+    policy, metadata = runner._create_robot_policy("orca", None, seed=123)
+
+    try:
+        velocity = policy(
+            np.array([0.0, 0.0]),
+            np.array([0.0, 0.0]),
+            np.array([1.0, 0.0]),
+            np.empty((0, 2)),
+            0.1,
+        )
+    finally:
+        policy.close()  # type: ignore[attr-defined]
+
+    assert velocity == pytest.approx(np.array([1.0, 0.0]))
+    assert metadata["status"] == "ok"
+    assert metadata["policy_step_timeout"][failure_counter] == 1
+    assert metadata["policy_step_timeout"]["step_retries"] == 1
+    assert metadata["policy_step_timeout"]["fallback_actions"] == 0
+
+
+@pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")
 def test_planner_step_process_reports_eof_between_poll_and_recv() -> None:
     """A closed worker pipe should fail closed instead of leaking EOFError."""
     step_process = runner._PlannerStepProcess(object(), timeout_s=0.5)
@@ -100,3 +258,40 @@ def test_planner_step_process_reports_eof_between_poll_and_recv() -> None:
 
     with pytest.raises(RuntimeError, match="exited before returning an action"):
         step_process.step({"obs": "value"})
+
+
+@pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")
+def test_planner_step_worker_is_reaped_on_policy_close() -> None:
+    """Closing a runner policy must terminate its forked planner-step worker.
+
+    Regression for issue #5594: a leaked worker kept pytest-xdist's gateway fds
+    open and was reparented to PID 1 after the readiness command exited, so the
+    shared host was left with an orphaned ``[pytest-xdist running]`` process.
+    """
+    psutil = pytest.importorskip("psutil")
+    policy, _ = runner._create_robot_policy("random", None, seed=7)
+
+    try:
+        before_pids = {p.pid for p in psutil.Process().children()}
+
+        velocity = policy(
+            np.array([0.0, 0.0]),
+            np.array([0.0, 0.0]),
+            np.array([1.0, 0.0]),
+            np.empty((0, 2)),
+            0.1,
+        )
+        assert velocity.shape == (2,)
+
+        after_step_pids = {p.pid for p in psutil.Process().children()}
+        worker_pids = after_step_pids - before_pids
+        # Exactly one forked planner-step worker should be running after a step.
+        assert len(worker_pids) == 1
+    finally:
+        policy.close()  # type: ignore[attr-defined]
+
+    # The worker process must be reaped, not orphaned under PID 1.
+    remaining_pids = {p.pid for p in psutil.Process().children()}
+    assert not worker_pids.issubset(remaining_pids)
+    for pid in worker_pids:
+        assert not psutil.pid_exists(pid)

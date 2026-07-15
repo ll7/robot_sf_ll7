@@ -362,8 +362,10 @@ prevents merging a PR whose CI ran against a stale main:
 - **Behavior**: when the check detects that main has moved since the PR's CI ran, it returns exit
   code 1 and the merger skips the PR with a staleness report. The precise path reads the completed
   workflow run's recorded `pull_requests[].base.sha`; when that provenance is unavailable, the
-  checker falls back to the PR base-vs-main comparison. The author must `gh pr update-branch` and
-  re-run CI before the PR becomes mergeable again.
+  checker falls back to the PR base-vs-main comparison. The author must update the branch and
+  re-run CI before the PR becomes mergeable again. Because the installed `gh` version does not
+  provide `gh pr update-branch`, use the guarded repository helper after recording the current
+  head SHA: `uv run python scripts/dev/update_pr_branch.py <number> --expected-head-sha <sha>`.
 
 **Why not GitHub merge queue?** The native merge queue is the ideal solution — it re-validates each
 PR against the up-to-date prospective main before merging automatically. We chose the gate-side rule
@@ -395,6 +397,7 @@ scripts/dev/run_ci_local.sh
 scripts/dev/local_signoff.sh --no-setup lint test
 scripts/dev/check_docs_proof_consistency_diff.sh
 scripts/dev/sbatch_use_max_time.sh --partition <partition> --qos <qos> --sbatch-arg --partition=<partition> --sbatch-arg --qos=<qos> SLURM/templates/gpu_training.sl
+uv run python scripts/dev/update_pr_branch.py <pr-number> --expected-head-sha <head-sha>
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests
@@ -552,18 +555,18 @@ When issue or PR text needs to classify proof strength, use the
 [artifact evidence vocabulary](context/artifact_evidence_vocabulary.md) so local `output/` paths are
 not promoted into durable benchmark or paper-facing claims.
 
-#### Issue-reading fallback
+#### Issue-reading with comments (REST-backed)
 
-`gh issue view <number> --comments` can fail on some GitHub CLI versions with a
-`repository.issue.projectCards` GraphQL deprecation error. Use the targeted REST
-fallback (see issues #5186 and #5188):
+`gh issue view <number> --comments` fails on GitHub CLI 2.45.x (Ubuntu noble) with a
+`repository.issue.projectCards` GraphQL deprecation error (issue #5729). Use the
+REST-backed helpers for all issue-with-comments reads:
 
 ```bash
-# Drop-in shell wrapper (tries native CLI first, falls back to REST on projectCards):
-bash scripts/dev/gh_issue_view.sh <number> --repo ll7/robot_sf_ll7
-
-# Direct REST helper (same fallback logic, more options):
+# Preferred: complete thread read with native-first fallback
 uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7
+
+# Shell wrapper (same logic, concise invocation):
+bash scripts/dev/gh_issue_view.sh <number> --repo ll7/robot_sf_ll7
 
 # Explicit REST read with normalized fields (stable JSON output shape):
 uv run python scripts/dev/gh_issue_rest.py view <number> --repo ll7/robot_sf_ll7 --comments
@@ -571,9 +574,8 @@ uv run python scripts/dev/gh_issue_rest.py view <number> --json number title sta
 ```
 
 All issue-delivery skills (`gh-issue-autopilot`, `gh-issue-clarifier`,
-`goal-issue-implementation`, etc.) already route to `gh_issue_rest.py thread` when
-`gh issue view --comments` fails; see
-`docs/context/issue_713_batch_first_issue_workflow.md` for the full command reference.
+`goal-issue-implementation`, etc.) use `gh_issue_rest.py thread` as the primary path;
+see `docs/context/issue_713_batch_first_issue_workflow.md` for the full command reference.
 
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 
@@ -1619,22 +1621,24 @@ CI mapping to local tasks and CLI:
 
 Workflow location: `.github/workflows/ci.yml`.
 
-### Red-main merge hold
+### Main CI signal and staleness-aware merge policy
 
-When `main` CI is red, do not merge unrelated PRs onto it. A merge that lands
-while the required check is already failing hides its own new breakage under
-the existing red, so recovery cost compounds with every merge in the window
-(three such incidents on 2026-07-11/12). The deterministic green/red signal is:
+A red `main` signal is advisory, not a blanket merge hold. Prioritize PRs that
+explicitly repair the breakage (`fix(ci): unbreak main` or `unbreak-main`). For
+other PRs, inspect whether their changed files overlap the suspected breakage;
+hold only an overlapping PR. A clean, up-to-date PR with its own green checks
+may merge while an unrelated main failure is being repaired.
+
+The deterministic main signal is:
 
 ```bash
 uv run python scripts/dev/main_ci_is_green.py   # exit 0 green, 1 not-green
 ```
 
-It decides from the most recent **completed** CI run on `main` — an in-progress
-run never counts as green or red. Only PRs that fix the breakage (title-prefixed
-`fix(ci): unbreak main` or labeled `unbreak-main`) may merge while red; they are
-the cure and must land. Reviewing a PR while main is red is fine — only the
-merge is held.
+It decides from the most recent **completed** CI run on `main`; an in-progress,
+cancelled, or timed-out run is `stale`, not `red`. Reviewing a PR while main is
+red is fine, and only the suspected-file overlap or per-PR staleness check can
+hold an otherwise green PR.
 
 For automated gates, emit the machine-readable signal instead of parsing the
 human line (issue #5571). The `--json` flag prints the `main_ci_is_green.v1`

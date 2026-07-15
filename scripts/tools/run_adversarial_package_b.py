@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""Run the issue #3079 Package B budget-matched adversarial sampler comparison.
+
+Orchestrates the CPU-achievable portion of Package B:
+
+1. preflight the committed manifest (fail-closed);
+2. run the 27-cell budget-matched sampler comparison. By default this is the
+    reproducible synthetic CPU path; with ``--empirical`` it runs the real CPU
+    ``pysocialforce`` benchmark evaluator (no Slurm/GPU) and writes the durable
+    report artifact;
+3. validate the report through the Package-B report gate;
+4. emit the confirmation sidecar (every cell censored, artifact-bound to the report)
+    and validate it through the confirmation gate.
+
+The script never submits Slurm jobs. The empirical path uses only the CPU
+benchmark runner and produces certified, replayable, valid failures; its results
+are diagnostic/local nominal evidence, not paper-facing. Confirmed-failure
+discovery at paper tier (artifact-level replay + independent-seed + mechanism
+attribution review) remains a separate interpretive step.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from robot_sf.benchmark.adversarial_package_b_confirmation import (
+    build_package_b_confirmation_sidecar,
+    validate_package_b_confirmation,
+)
+from robot_sf.benchmark.adversarial_package_b_preflight import preflight_package_b_manifest
+from robot_sf.benchmark.adversarial_package_b_report import validate_package_b_report
+from scripts.tools.compare_adversarial_samplers import main as compare_main
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+DEFAULT_MANIFEST = Path("configs/adversarial/issue_3079_package_b_budget_matched.yaml")
+
+
+def _refine_manifest_paths(manifest_path: Path, *, repo_root: Path) -> Path:
+    """Return an absolute manifest path resolved against the repository root."""
+    return (manifest_path if manifest_path.is_absolute() else repo_root / manifest_path).resolve()
+
+
+def _run_pipeline(
+    manifest_path: Path, *, repo_root: Path, empirical: bool = False
+) -> dict[str, object]:
+    """Execute preflight, the comparison run, report gate, and confirmation sidecar/gate.
+
+    The comparison is run in synthetic mode by default (CPU-reproducible, no benchmark
+    episodes) or in empirical mode (real CPU ``pysocialforce`` evaluation producing certified,
+    replayable, valid failures). Empirical mode uses only the CPU benchmark runner and does not
+    submit Slurm jobs; its results are diagnostic/local nominal evidence, not paper-facing.
+
+    Returns:
+        A compact pipeline payload summarizing each stage's outcome.
+    """
+    manifest_path = _refine_manifest_paths(manifest_path, repo_root=repo_root)
+    preflight = preflight_package_b_manifest(manifest_path, repo_root=repo_root)
+    if not preflight.ready:
+        return {
+            "stage": "preflight",
+            "ready": False,
+            "blockers": list(preflight.blockers),
+            "metadata": preflight.metadata,
+        }
+
+    output_artifacts = preflight.metadata.get("output_artifacts", {})
+    report_json = repo_root / output_artifacts.get(
+        "report_json", "output/adversarial/issue_3079_package_b/report.json"
+    )
+    durable_table_md = repo_root / output_artifacts.get(
+        "durable_table_md",
+        str(report_json.parent / "comparison_table.md"),
+    )
+
+    compare_argv = [
+        "--manifest",
+        str(manifest_path),
+        "--repo-root",
+        str(repo_root),
+        "--empirical" if empirical else "--synthetic",
+        "--out-json",
+        str(report_json),
+        "--out-md",
+        str(durable_table_md),
+    ]
+    if compare_main(compare_argv) != 0:
+        raise RuntimeError("Package-B comparison runner returned a non-zero status")
+
+    report_gate = validate_package_b_report(report_json)
+
+    confirmation_path = report_json.parent / "confirmation.json"
+    sidecar = build_package_b_confirmation_sidecar(report_json, confirmation_path=confirmation_path)
+    sidecar.write()
+    confirmation_gate = validate_package_b_confirmation(
+        report_json,
+        confirmation_path,
+        artifact_root=repo_root,
+    )
+
+    return {
+        "stage": "complete",
+        "preflight_ready": preflight.ready,
+        "report_json": report_json.relative_to(repo_root).as_posix()
+        if report_json.is_relative_to(repo_root)
+        else report_json.as_posix(),
+        "confirmation_json": confirmation_path.relative_to(repo_root).as_posix()
+        if confirmation_path.is_relative_to(repo_root)
+        else confirmation_path.as_posix(),
+        "durable_table_md": durable_table_md.relative_to(repo_root).as_posix()
+        if durable_table_md.is_relative_to(repo_root)
+        else durable_table_md.as_posix(),
+        "report_gate": report_gate.to_payload(),
+        "confirmation_gate": confirmation_gate.to_payload(),
+    }
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the Package-B run CLI parser."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=DEFAULT_MANIFEST,
+        help="Package-B manifest (defaults to the committed issue #3079 manifest).",
+    )
+    parser.add_argument(
+        "--repo-root",
+        type=Path,
+        default=Path.cwd(),
+        help="Repository root used to resolve manifest-relative paths.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Optional path for the compact pipeline JSON summary.",
+    )
+    parser.add_argument(
+        "--fail-closed",
+        action="store_true",
+        help="Return a non-zero exit code when any gate is not ready (CPU-only checks).",
+    )
+    parser.add_argument(
+        "--empirical",
+        action="store_true",
+        help=(
+            "Run the comparison with the real CPU benchmark evaluator instead of the synthetic "
+            "path, producing certified, replayable, valid failures. CPU-only (pysocialforce); "
+            "never submits Slurm jobs. Diagnostic/local nominal evidence, not paper-facing."
+        ),
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the Package-B pipeline and emit a compact summary."""
+    args = build_parser().parse_args(argv)
+    repo_root = args.repo_root.resolve()
+    summary = _run_pipeline(args.manifest, repo_root=repo_root, empirical=args.empirical)
+    rendered = json.dumps(summary, indent=2, sort_keys=True) + "\n"
+    if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(rendered, encoding="utf-8")
+    print(rendered, end="")
+
+    if not args.fail_closed:
+        return 0
+    if summary.get("stage") != "complete":
+        return 2
+    gates = summary.get("report_gate", {}), summary.get("confirmation_gate", {})
+    if all(isinstance(gate, dict) and gate.get("ready") for gate in gates):
+        return 0
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -3689,6 +3689,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         w: float,
         *,
         steps: int | None = None,
+        robot_traj: np.ndarray | None = None,
     ) -> float:
         """Compute progress toward the goal over the rollout horizon.
 
@@ -3699,14 +3700,17 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
         goal = np.asarray(goal_state.get("current", [0.0, 0.0]), dtype=float)[:2]
         initial_dist = float(np.linalg.norm(goal - robot_pos))
-        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
-        steps = max(1, int(steps if steps is not None else self.config.predictive_horizon_steps))
-        local_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps)
+        if robot_traj is None:
+            dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+            steps_val = max(
+                1, int(steps if steps is not None else self.config.predictive_horizon_steps)
+            )
+            robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
 
         cos_h = float(np.cos(robot_heading))
         sin_h = float(np.sin(robot_heading))
-        x_world = cos_h * local_traj[-1, 0] - sin_h * local_traj[-1, 1]
-        y_world = sin_h * local_traj[-1, 0] + cos_h * local_traj[-1, 1]
+        x_world = cos_h * robot_traj[-1, 0] - sin_h * robot_traj[-1, 1]
+        y_world = sin_h * robot_traj[-1, 0] + cos_h * robot_traj[-1, 1]
         final_world = robot_pos + np.array([x_world, y_world], dtype=float)
         final_dist = float(np.linalg.norm(goal - final_world))
         return initial_dist - final_dist
@@ -3719,15 +3723,16 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         v: float,
         w: float,
         steps: int | None = None,
+        valid_dists: np.ndarray | None = None,
     ) -> tuple[float, float]:
         """Compute collision and near-miss penalties for a candidate action.
 
         Returns:
             tuple[float, float]: ``(collision_penalty, near_miss_penalty)``.
         """
-        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
-        steps = max(1, int(steps if steps is not None else self.config.predictive_horizon_steps))
-        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps)
+        steps_val = max(
+            1, int(steps if steps is not None else self.config.predictive_horizon_steps)
+        )
         radius_margin = float(self.config.predictive_robot_radius) + float(
             self.config.predictive_pedestrian_radius
         )
@@ -3738,14 +3743,26 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         )
         collisions = 0.0
         near_misses = 0.0
-        for t in range(min(steps, future_peds.shape[1])):
-            delta = future_peds[:, t, :] - robot_traj[t].reshape(1, 2)
-            dist = np.linalg.norm(delta, axis=1)
-            valid_dist = dist[mask > 0.5]
-            if valid_dist.size == 0:
-                continue
-            collisions += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
-            near_misses += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
+
+        if valid_dists is not None:
+            limit = min(steps_val, future_peds.shape[1], valid_dists.shape[1])
+            for t in range(limit):
+                valid_dist = valid_dists[:, t]
+                if valid_dist.size == 0:
+                    continue
+                collisions += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
+                near_misses += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
+        else:
+            dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+            robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
+            for t in range(min(steps_val, future_peds.shape[1])):
+                delta = future_peds[:, t, :] - robot_traj[t].reshape(1, 2)
+                dist = np.linalg.norm(delta, axis=1)
+                valid_dist = dist[mask > 0.5]
+                if valid_dist.size == 0:
+                    continue
+                collisions += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
+                near_misses += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
         return collisions, near_misses
 
     def _min_clearance(
@@ -3756,12 +3773,16 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         v: float,
         w: float,
         steps: int,
+        valid_dists: np.ndarray | None = None,
     ) -> float:
         """Compute minimum predicted robot-pedestrian clearance for a candidate.
 
         Returns:
             float: Minimum center-to-center clearance in meters.
         """
+        if valid_dists is not None:
+            return float(np.min(valid_dists)) if valid_dists.size > 0 else float("inf")
+
         dt = max(float(self.config.predictive_rollout_dt), 1e-3)
         robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=max(1, int(steps)))
         valid_idx = np.where(mask > 0.5)[0]
@@ -3782,6 +3803,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         v: float,
         w: float,
         steps: int | None = None,
+        valid_dists: np.ndarray | None = None,
     ) -> float:
         """Compute a TTC-style penalty for near-term close approaches.
 
@@ -3796,18 +3818,31 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         if threshold <= 0.0:
             return 0.0
         dt = max(float(self.config.predictive_rollout_dt), 1e-3)
-        steps = max(1, int(steps if steps is not None else self.config.predictive_horizon_steps))
-        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps)
+        steps_val = max(
+            1, int(steps if steps is not None else self.config.predictive_horizon_steps)
+        )
         penalty = 0.0
-        for t in range(min(steps, future_peds.shape[1])):
-            delta = future_peds[:, t, :] - robot_traj[t].reshape(1, 2)
-            dist = np.linalg.norm(delta, axis=1)
-            valid_dist = dist[mask > 0.5]
-            if valid_dist.size == 0:
-                continue
-            shortfall = np.maximum(0.0, threshold - valid_dist)
-            time_weight = 1.0 / (float(t + 1) * dt + self._EPS)
-            penalty += float(np.sum(shortfall * time_weight))
+
+        if valid_dists is not None:
+            limit = min(steps_val, future_peds.shape[1], valid_dists.shape[1])
+            for t in range(limit):
+                valid_dist = valid_dists[:, t]
+                if valid_dist.size == 0:
+                    continue
+                shortfall = np.maximum(0.0, threshold - valid_dist)
+                time_weight = 1.0 / (float(t + 1) * dt + self._EPS)
+                penalty += float(np.sum(shortfall * time_weight))
+        else:
+            robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
+            for t in range(min(steps_val, future_peds.shape[1])):
+                delta = future_peds[:, t, :] - robot_traj[t].reshape(1, 2)
+                dist = np.linalg.norm(delta, axis=1)
+                valid_dist = dist[mask > 0.5]
+                if valid_dist.size == 0:
+                    continue
+                shortfall = np.maximum(0.0, threshold - valid_dist)
+                time_weight = 1.0 / (float(t + 1) * dt + self._EPS)
+                penalty += float(np.sum(shortfall * time_weight))
         return penalty
 
     def _score_action(
@@ -3825,14 +3860,32 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             float: Scalar cost (lower is better).
         """
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        steps_val = max(1, int(steps))
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
+
+        valid_idx = np.where(mask > 0.5)[0]
+        if valid_idx.size > 0:
+            ped = future_peds[valid_idx, : robot_traj.shape[0], :]
+            if ped.size > 0:
+                delta = ped - robot_traj.reshape(1, robot_traj.shape[0], 2)
+                valid_dists = np.linalg.norm(delta, axis=2)
+            else:
+                valid_dists = np.empty((0, robot_traj.shape[0]), dtype=float)
+        else:
+            valid_dists = np.empty((0, robot_traj.shape[0]), dtype=float)
+
         robot_state, goal_state, _ped_state = self._socnav_fields(observation)
-        goal_progress = self._goal_progress(robot_state, goal_state, v, w, steps=steps)
+        goal_progress = self._goal_progress(
+            robot_state, goal_state, v, w, steps=steps, robot_traj=robot_traj
+        )
         collision_pen, near_pen = self._collision_cost(
             future_peds=future_peds,
             mask=mask,
             v=v,
             w=w,
             steps=steps,
+            valid_dists=valid_dists,
         )
         ttc_pen = self._ttc_penalty(
             future_peds=future_peds,
@@ -3840,6 +3893,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             v=v,
             w=w,
             steps=steps,
+            valid_dists=valid_dists,
         )
         min_clearance = self._min_clearance(
             future_peds=future_peds,
@@ -3847,6 +3901,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             v=v,
             w=w,
             steps=steps,
+            valid_dists=valid_dists,
         )
         progress_risk_shortfall = max(
             0.0, float(self.config.predictive_progress_risk_distance) - float(min_clearance)
@@ -3858,7 +3913,6 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
         robot_pos = np.asarray(robot_state.get("position", [0.0, 0.0]), dtype=float)[:2]
         robot_heading = float(self._as_1d_float(robot_state.get("heading", [0.0]), pad=1)[0])
-        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
         candidate_heading = robot_heading + w * dt
         direction = np.array([np.cos(candidate_heading), np.sin(candidate_heading)], dtype=float)
         _, occ_penalty = self._path_penalty(

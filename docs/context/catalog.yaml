@@ -28,6 +28,18 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/issue_5579_mpc_tuning_budget_sensitivity.md
+  status: current
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/README.md
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/tuning_effort_table.csv
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5097_release_0_0_3_collision_consumer_audit/README.md
   status: evidence
   freshness: evidence
@@ -53,6 +65,30 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5574_feasibility_oracle_2026-07-14/verdicts.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5352_release_0_0_2_cold_start_repro_2026-07-14/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5352_release_0_0_2_cold_start_repro_2026-07-14/checksum_verification_report.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5352_release_0_0_2_cold_start_repro_2026-07-14/cold_start_reproduction_report.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5596_blind_corner_diagnostic/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5596_blind_corner_diagnostic/blind_corner_diagnostic.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5600_persistence_gate.md
   status: evidence
   freshness: evidence
   area: benchmark_evidence
@@ -3532,6 +3568,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5247_job_13274_rank_stability
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4017_constrained_rl/README.md
   status: evidence
   freshness: evidence
@@ -3645,6 +3685,26 @@ entries:
   freshness: evidence
   area: benchmark_evidence
   legacy_dirty_evidence: true
+- path: docs/context/evidence/issue_5034_control_action_latency_sweep_plan_2026-07-14/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5034_control_action_latency_sweep_plan_2026-07-14/fixed_scope_plan_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5034_control_action_latency_sweep_plan_2026-07-14/manifest.sha256
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5034_control_action_latency_sweep
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5034_parent_4977_classification_2026-07-15
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4302_snqi_provenance_terminality_2026-07-04.md
   status: evidence
   freshness: evidence

@@ -362,6 +362,10 @@ def _build_provenance(run_dir: Path) -> dict[str, Any]:  # noqa: C901
                     for key in ("remote", "branch", "commit")
                     if repo.get(key) is not None
                 }
+            for field in ("commit_reconciliation", "goal_timeout_boundary"):
+                value = run_meta_payload.get(field)
+                if isinstance(value, dict):
+                    provenance[field] = value
             matrix_path = run_meta_payload.get("matrix_path")
             if isinstance(matrix_path, str) and matrix_path:
                 matrix_candidate = Path(matrix_path)
@@ -1119,7 +1123,9 @@ def export_publication_bundle(  # noqa: PLR0913
 
     entries = sorted(entries, key=lambda entry: entry.path)
     checksums_path = bundle_dir / "checksums.sha256"
-    checksums_payload = "".join(f"{entry.sha256}  {entry.path}\n" for entry in entries)
+    # The checksum manifest lives at the bundle root. Keep every target
+    # root-relative so ``sha256sum -c checksums.sha256`` works from that root.
+    checksums_payload = "".join(f"{entry.sha256}  payload/{entry.path}\n" for entry in entries)
     checksums_path.write_text(checksums_payload, encoding="utf-8")
 
     manifest_payload = {
@@ -1163,3 +1169,520 @@ def export_publication_bundle(  # noqa: PLR0913
         file_count=len(entries),
         total_bytes=total_bytes,
     )
+
+
+class PublicationPreflightError(Exception):
+    """Raised when a publication bundle fails the final self-consistency preflight.
+
+    The preflight (issue #5530) is the final gate before a bundle is treated as
+    release-valid. It fails closed: any blocking contradiction in the bundle
+    metadata, checksums, or episode provenance raises this rather than letting an
+    internally-inconsistent release ship.
+    """
+
+
+def _is_unresolved_channel_value(value: object) -> bool:
+    """Return ``True`` when a publication-channel value is still a placeholder.
+
+    Placeholders include the default DOI/release-tag templates, ``localhost`` URIs,
+    and local/relative paths that are not durable public identifiers.
+
+    Returns:
+        Whether ``value`` must be rejected by the publication preflight.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return False
+    v = value.strip()
+    vl = v.lower()
+    if any(vl.startswith(prefix) for prefix in ("output/", "file://", "./", "../")):
+        return True
+    if "localhost" in vl:
+        return True
+    if "{release_tag}" in v or "<record-id>" in v or "<record_id>" in v:
+        return True
+    if v == _DEFAULT_DOI_TEMPLATE:
+        return True
+    return False
+
+
+def _parse_checksum_lines(text: str) -> dict[str, str]:
+    """Parse a ``checksums.sha256`` file into ``{relative_path: sha256}``.
+
+    Returns:
+        Mapping from bundle-root-relative path to expected lowercase SHA-256 digest.
+    """
+    entries: dict[str, str] = {}
+    for line_number, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2 or len(parts[0]) != 64:
+            raise ValueError(f"checksums.sha256:{line_number}: malformed checksum entry")
+        if any(character not in "0123456789abcdefABCDEF" for character in parts[0]):
+            raise ValueError(f"checksums.sha256:{line_number}: malformed checksum entry")
+        path = parts[1].lstrip("*")
+        if path in entries:
+            raise ValueError(f"checksums.sha256:{line_number}: duplicate path {path!r}")
+        entries[path] = parts[0].lower()
+    if not entries:
+        raise ValueError("checksums.sha256 contains no entries")
+    return entries
+
+
+def _read_json_file(path: Path) -> dict[str, Any]:
+    """Read a JSON object from a path.
+
+    Returns:
+        Parsed JSON object.
+
+    Raises:
+        ValueError: If the file is missing, malformed, or not a JSON object.
+    """
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"{path}: invalid JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{path}: expected a JSON object")
+    return payload
+
+
+def _episode_row_software_commit(
+    record: object,
+    *,
+    episodes_path: Path,
+    line_number: int,
+    violations: list[str],
+) -> str | None:
+    """Validate one decoded episode row and return its software commit.
+
+    Returns:
+        The stripped software commit, or ``None`` after recording a violation.
+    """
+    if not isinstance(record, dict):
+        violations.append(f"{episodes_path}:{line_number}: episode row must be an object")
+        return None
+    ledger = record.get("event_ledger")
+    if not isinstance(ledger, dict):
+        violations.append(
+            f"{episodes_path}:{line_number}: episode row is missing object event_ledger"
+        )
+        return None
+    commit = ledger.get("software_commit")
+    if not isinstance(commit, str) or not commit.strip():
+        violations.append(
+            f"{episodes_path}:{line_number}: event_ledger.software_commit is required"
+        )
+        return None
+    return commit.strip()
+
+
+def _gather_episode_software_commits(
+    payload_dir: Path,
+    *,
+    violations: list[str],
+) -> dict[str, int]:
+    """Collect ``event_ledger.software_commit`` counts across all arm episode files.
+
+    Every non-empty episode row must carry a structured event ledger and a
+    non-empty software commit. Publication provenance cannot be established by
+    silently dropping malformed rows.
+
+    Returns:
+        Mapping from software commit hash to number of episode rows that record it.
+    """
+    commits: dict[str, int] = defaultdict(int)
+    episode_paths = sorted(payload_dir.glob("runs/*/episodes.jsonl"))
+    if not episode_paths:
+        violations.append("publication payload contains no runs/*/episodes.jsonl files")
+        return dict(commits)
+
+    for episodes_path in episode_paths:
+        try:
+            lines = episodes_path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError) as exc:
+            violations.append(f"{episodes_path}: cannot read episode ledger: {exc}")
+            continue
+        row_count = 0
+        for line_number, line in enumerate(lines, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                violations.append(f"{episodes_path}:{line_number}: invalid JSON: {exc}")
+                continue
+            row_count += 1
+            commit = _episode_row_software_commit(
+                record,
+                episodes_path=episodes_path,
+                line_number=line_number,
+                violations=violations,
+            )
+            if commit is not None:
+                commits[commit] += 1
+        if row_count == 0:
+            violations.append(f"{episodes_path}: episode ledger contains no non-empty rows")
+    return dict(commits)
+
+
+def _goal_timeout_row_rejection(episodes_path: Path, line_number: int, line: str) -> str | None:
+    """Return a rejection message for an ambiguous goal-reached + timeout row.
+
+    A row recording both ``goal_reached`` and ``timeout`` in its exact events is
+    ambiguous at the success-timing boundary. It is accepted only when it carries
+    timing evidence (a non-null ``reached_goal_step``) or an explicit
+    ``goal_timeout_boundary_note``.
+
+    Returns:
+        A rejection message, or ``None`` when the row is acceptable.
+    """
+    try:
+        record = json.loads(line)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(record, dict):
+        return None
+    ledger = record.get("event_ledger")
+    if not isinstance(ledger, dict):
+        return None
+    exact = ledger.get("exact_events")
+    if not isinstance(exact, dict):
+        return None
+    if not bool(exact.get("goal_reached")) or not bool(exact.get("timeout")):
+        return None
+    has_timing = record.get("reached_goal_step") is not None
+    note = record.get("goal_timeout_boundary_note")
+    if has_timing or (isinstance(note, str) and note.strip()):
+        return None
+    return (
+        f"{episodes_path}:{line_number}: goal_reached+timeout row lacks "
+        "reached_goal_step timing evidence or goal_timeout_boundary_note"
+    )
+
+
+def _check_goal_timeout_boundary(payload_dir: Path) -> tuple[int, list[str]]:
+    """Find ambiguous goal-reached + timeout rows lacking timing evidence or a note.
+
+    Returns:
+        Tuple of (count of ambiguous rows, list of rejection messages).
+    """
+    ambiguous = 0
+    rejections: list[str] = []
+    for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
+        try:
+            lines = episodes_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line_number, line in enumerate(lines, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            message = _goal_timeout_row_rejection(episodes_path, line_number, line)
+            if message is not None:
+                ambiguous += 1
+                rejections.append(message)
+    return ambiguous, rejections
+
+
+def _manifest_checksum_mapping(
+    manifest_files: list[object],
+    *,
+    violations: list[str],
+) -> dict[str, str]:
+    """Return normalized manifest file digests while reporting malformed entries."""
+    manifest_checksums: dict[str, str] = {}
+    for entry in manifest_files:
+        if not isinstance(entry, dict):
+            violations.append("publication manifest files must contain objects")
+            continue
+        path_value = entry.get("path")
+        digest_value = entry.get("sha256")
+        if not isinstance(path_value, str) or not path_value.strip():
+            violations.append("publication manifest file entry path must be a non-empty string")
+            continue
+        if (
+            not isinstance(digest_value, str)
+            or len(digest_value) != 64
+            or any(character not in "0123456789abcdefABCDEF" for character in digest_value)
+        ):
+            violations.append(f"publication manifest sha256 is malformed for file {path_value!r}")
+            continue
+        normalized_path = path_value.removeprefix("payload/")
+        manifest_path = f"payload/{normalized_path}"
+        if manifest_path in manifest_checksums:
+            violations.append(f"duplicate publication manifest file: {path_value!r}")
+            continue
+        manifest_checksums[manifest_path] = digest_value.lower()
+    return manifest_checksums
+
+
+def _preflight_check_checksums(
+    bundle_dir: Path,
+    manifest: dict[str, Any],
+    *,
+    checksums_path: Path,
+    violations: list[str],
+) -> dict[str, str]:
+    """Verify every checksum entry against a file present relative to the bundle root.
+
+    Returns:
+        The parsed ``{relative_path: sha256}`` checksum mapping.
+    """
+    checksums = _parse_checksum_lines(checksums_path.read_text(encoding="utf-8"))
+    for rel_path, expected in checksums.items():
+        candidate = bundle_dir / rel_path
+        if ".." in Path(rel_path).parts or Path(rel_path).is_absolute():
+            violations.append(f"checksum path escapes bundle root: {rel_path}")
+            continue
+        if not candidate.is_file():
+            violations.append(f"checksum-signed file is missing from bundle root: {rel_path}")
+            continue
+        if _sha256_file(candidate) != expected:
+            violations.append(f"checksum mismatch at bundle root: {rel_path}")
+
+    manifest_files = manifest.get("files")
+    if isinstance(manifest_files, list):
+        # The manifest lists file paths without the ``payload/`` prefix while
+        # checksums.sha256 is always written relative to the bundle root
+        # (``payload/...``); normalize both sides before comparing.
+        manifest_checksums = _manifest_checksum_mapping(manifest_files, violations=violations)
+        manifest_paths = {path.removeprefix("payload/") for path in manifest_checksums}
+        normalized_checksums = {key.removeprefix("payload/") for key in checksums}
+        for rel_path in sorted(normalized_checksums - manifest_paths):
+            violations.append(f"checksum entry not listed in manifest files: {rel_path}")
+        for rel_path in sorted(manifest_paths - normalized_checksums):
+            violations.append(f"manifest file not present in checksums.sha256: {rel_path}")
+        for path in sorted(set(manifest_checksums) & set(checksums)):
+            if manifest_checksums[path] != checksums[path]:
+                violations.append(f"manifest sha256 disagrees with checksums.sha256: {path}")
+    else:
+        violations.append("publication_manifest.json files must be a list")
+    return checksums
+
+
+def _preflight_check_channels(
+    manifest: dict[str, Any],
+    *,
+    violations: list[str],
+    warnings: list[str],
+) -> None:
+    """Reject unresolved DOI/release-tag placeholders in publication_channels."""
+    channels = manifest.get("publication_channels")
+    if isinstance(channels, dict):
+        for key, value in channels.items():
+            if _is_unresolved_channel_value(value):
+                violations.append(
+                    f"publication_channels.{key} retains an unresolved placeholder: {value!r}"
+                )
+    elif "publication_channels" not in manifest:
+        warnings.append("publication_manifest.json omits publication_channels")
+
+
+def _preflight_check_release_reconciliation(
+    payload_dir: Path,
+    require_release_reconciliation: bool,
+    *,
+    violations: list[str],
+) -> None:
+    """Fail closed when release_result.json disagrees with campaign_summary.json."""
+    release_result_path = payload_dir / "release" / "release_result.json"
+    campaign_summary_path = payload_dir / "reports" / "campaign_summary.json"
+    if release_result_path.is_file() and campaign_summary_path.is_file():
+        release_result = _read_json_file(release_result_path)
+        campaign_summary = _read_json_file(campaign_summary_path)
+        campaign = campaign_summary.get("campaign")
+        if not isinstance(campaign, dict):
+            violations.append(
+                "reports/campaign_summary.json campaign block is missing or not an object"
+            )
+            campaign = {}
+        comparisons = (
+            ("status", release_result.get("status"), campaign.get("status")),
+            (
+                "evidence_status",
+                release_result.get("evidence_status"),
+                campaign.get("evidence_status"),
+            ),
+            (
+                "total_episodes",
+                release_result.get("total_episodes"),
+                campaign.get("total_episodes"),
+            ),
+            (
+                "successful_runs",
+                release_result.get("successful_runs"),
+                campaign.get("successful_runs"),
+            ),
+        )
+        mismatched = [name for name, old, rebuilt in comparisons if old != rebuilt]
+        if mismatched:
+            violations.append(
+                "release/release_result.json disagrees with reports/campaign_summary.json on: "
+                + ", ".join(mismatched)
+            )
+    elif require_release_reconciliation:
+        missing = [
+            str(path.relative_to(payload_dir.parent))
+            for path in (release_result_path, campaign_summary_path)
+            if not path.is_file()
+        ]
+        violations.append(
+            "release reconciliation inputs missing from bundle: " + ", ".join(missing)
+        )
+
+
+def _preflight_check_commit_provenance(
+    manifest: dict[str, Any],
+    payload_dir: Path,
+    *,
+    violations: list[str],
+    warnings: list[str],
+) -> tuple[str | None, dict[str, int]]:
+    """Verify episode software_commit values match the publication repository commit.
+
+    Returns:
+        Tuple of (publication repository commit, episode-commit counts).
+    """
+    provenance = manifest.get("provenance")
+    repository_commit: str | None = None
+    if isinstance(provenance, dict):
+        repository = provenance.get("repository")
+        if isinstance(repository, dict):
+            commit = repository.get("commit")
+            repository_commit = commit if isinstance(commit, str) and commit else None
+    if not repository_commit:
+        violations.append("publication_manifest provenance.repository.commit is missing")
+
+    episode_commits = _gather_episode_software_commits(payload_dir, violations=violations)
+    if episode_commits and repository_commit:
+        if set(episode_commits) != {repository_commit}:
+            explanation = provenance.get("commit_reconciliation")
+            runtime_commits = set(episode_commits)
+            declared_runtime_commits = (
+                explanation.get("runtime_commits") if isinstance(explanation, dict) else None
+            )
+            declared_runtime_commits_valid = isinstance(declared_runtime_commits, list) and all(
+                isinstance(commit, str) and commit.strip() for commit in declared_runtime_commits
+            )
+            if (
+                isinstance(explanation, dict)
+                and explanation.get("status") == "explained"
+                and explanation.get("publication_commit") == repository_commit
+                and declared_runtime_commits_valid
+                and set(declared_runtime_commits) == runtime_commits
+                and isinstance(explanation.get("explanation"), str)
+                and explanation["explanation"].strip()
+            ):
+                warnings.append(
+                    "episode-ledger software commits differ from the publication commit; "
+                    "allowed via structured provenance.commit_reconciliation"
+                )
+            else:
+                violations.append(
+                    "episode-ledger software_commit values "
+                    f"{sorted(episode_commits)} do not match the publication commit "
+                    f"{repository_commit!r}; provide structured provenance.commit_reconciliation"
+                )
+    return repository_commit, episode_commits
+
+
+def verify_publication_bundle_preflight(
+    bundle_dir: Path,
+    *,
+    require_release_reconciliation: bool = True,
+) -> dict[str, Any]:
+    """Run the final publication preflight over a built bundle directory.
+
+    The preflight (issue #5530) reconciles the bundle against its own metadata and
+    fails closed on any internal contradiction:
+
+    1. ``release/release_result.json`` and ``reports/campaign_summary.json`` must
+       agree on status, evidence_status, total_episodes, and successful_runs.
+    2. every checksum in ``checksums.sha256`` must verify against a file present
+       relative to the bundle root (so ``sha256sum -c checksums.sha256`` works
+       from the bundle root), and every manifest-listed file must be signed.
+    3. episode-ledger ``software_commit`` values must equal the publication
+       manifest's repository commit, unless the manifest carries an explicit
+       machine-readable non-runtime-diff explanation.
+    4. ``publication_channels`` must not retain DOI/release-tag placeholders.
+    5. ambiguous goal-reached + timeout rows must carry timing evidence or a note.
+
+    Args:
+        bundle_dir: Built bundle directory (containing ``payload/``,
+            ``publication_manifest.json``, and ``checksums.sha256``).
+        require_release_reconciliation: When ``True`` (default, used by the
+            release builders), the absence of the release-result/campaign-summary
+            pair is a blocking failure; when ``False``, the reconciliation check is
+            skipped if those files are absent.
+
+    Returns:
+        A machine-readable preflight report dict.
+
+    Raises:
+        PublicationPreflightError: If any blocking check fails.
+    """
+    bundle_dir = bundle_dir.resolve()
+    manifest_path = bundle_dir / "publication_manifest.json"
+    checksums_path = bundle_dir / "checksums.sha256"
+    payload_dir = bundle_dir / "payload"
+
+    violations: list[str] = []
+    warnings: list[str] = []
+
+    if not manifest_path.is_file():
+        raise PublicationPreflightError(f"Publication preflight failed: missing {manifest_path}")
+    if not checksums_path.is_file():
+        raise PublicationPreflightError(f"Publication preflight failed: missing {checksums_path}")
+
+    try:
+        manifest = _read_json_file(manifest_path)
+    except ValueError as exc:
+        raise PublicationPreflightError(f"Publication preflight failed: {exc}") from exc
+    if not manifest.get("schema_version"):
+        violations.append("publication_manifest.json is missing schema_version")
+
+    try:
+        checksums = _preflight_check_checksums(
+            bundle_dir, manifest, checksums_path=checksums_path, violations=violations
+        )
+    except (OSError, ValueError) as exc:
+        violations.append(f"checksums.sha256 cannot be validated: {exc}")
+        checksums = {}
+    _preflight_check_channels(manifest, violations=violations, warnings=warnings)
+    try:
+        _preflight_check_release_reconciliation(
+            payload_dir,
+            require_release_reconciliation,
+            violations=violations,
+        )
+    except (OSError, ValueError) as exc:
+        violations.append(f"release reconciliation cannot be validated: {exc}")
+    repository_commit, episode_commits = _preflight_check_commit_provenance(
+        manifest, payload_dir, violations=violations, warnings=warnings
+    )
+
+    # ---- Check 5: ambiguous goal-reached + timeout rows ---------------------
+    goal_timeout_rows, goal_timeout_rejections = _check_goal_timeout_boundary(payload_dir)
+    violations.extend(goal_timeout_rejections)
+
+    status = "pass" if not violations else "fail"
+    report = {
+        "schema_version": "publication-preflight.v1",
+        "bundle_dir": str(bundle_dir),
+        "status": status,
+        "violation_count": len(violations),
+        "violations": violations,
+        "warnings": warnings,
+        "evidence": {
+            "signed_files": len(checksums),
+            "episode_software_commits": dict(sorted(episode_commits.items())),
+            "publication_commit": repository_commit,
+            "goal_reached_timeout_rows": goal_timeout_rows,
+        },
+    }
+    if status == "fail":
+        raise PublicationPreflightError("Publication preflight failed: " + "; ".join(violations))
+    return report

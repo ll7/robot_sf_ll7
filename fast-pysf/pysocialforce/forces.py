@@ -13,7 +13,9 @@ simulation including:
 
 import logging
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from math import atan2, exp
 from typing import Protocol
 
@@ -34,6 +36,21 @@ from pysocialforce.scene import Line2D, PedState, Point2D
 logging.getLogger("numba").setLevel(logging.WARNING)
 
 Force = Callable[[], np.ndarray]
+
+_release_gil_for_social_force: ContextVar[bool] = ContextVar(
+    "release_gil_for_social_force",
+    default=False,
+)
+
+
+@contextmanager
+def social_force_gil_releasing_context() -> Iterator[None]:
+    """Select the GIL-releasing social-force kernel within the current context."""
+    token = _release_gil_for_social_force.set(True)
+    try:
+        yield
+    finally:
+        _release_gil_for_social_force.reset(token)
 
 
 class SimEntitiesProvider(Protocol):
@@ -189,7 +206,10 @@ class SocialForce:
         """
         ped_positions = self.peds.pos()
         ped_velocities = self.peds.vel()
-        forces = social_force(
+        kernel = (
+            _social_force_gil_releasing if _release_gil_for_social_force.get() else social_force
+        )
+        forces = kernel(
             ped_positions,
             ped_velocities,
             self.config.activation_threshold,
@@ -259,6 +279,9 @@ def social_force(
 
     # Return the array containing social forces for all pedestrians
     return forces
+
+
+_social_force_gil_releasing = njit(fastmath=True, nogil=True)(social_force.py_func)
 
 
 @njit(fastmath=True)
@@ -408,7 +431,7 @@ class ObstacleForce:
         return forces * self.config.factor
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, nogil=True)
 def all_obstacle_forces(
     out_forces: np.ndarray, ped_positions: np.ndarray, obstacles: np.ndarray, ped_radius: float
 ):
@@ -437,7 +460,7 @@ def all_obstacle_forces(
             out_forces[i, 1] += force_y
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, nogil=True)
 def obstacle_force(
     obstacle: Line2D, ortho_vec: Point2D, ped_pos: Point2D, ped_radius: float
 ) -> tuple[float, float]:
@@ -709,7 +732,7 @@ class GroupRepulsiveForce:
         return forces * self.config.factor
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, nogil=True)
 def group_repulsive_force(member_pos: np.ndarray, threshold: float) -> np.ndarray:
     """Compute intra-group repulsive forces for one pedestrian group.
 
@@ -785,7 +808,7 @@ class GroupGazeForceAlt:
         return forces * self.config.factor
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, nogil=True)
 def group_gaze_force(
     member_pos: np.ndarray, member_directions: np.ndarray, member_dist: np.ndarray
 ) -> np.ndarray:
@@ -861,7 +884,7 @@ def vec_len_2d(vec_x: float, vec_y: float) -> float:
     return (vec_x**2 + vec_y**2) ** 0.5
 
 
-@njit
+@njit(nogil=True)
 def normalize(vecs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Normalize an (n, 2) array of vectors.
 
@@ -884,7 +907,7 @@ def normalize(vecs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return unit_vecs, vec_lengths
 
 
-@njit
+@njit(nogil=True)
 def desired_directions(state: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Compute desired directions and distances for each pedestrian.
 
@@ -930,7 +953,7 @@ def each_diff(vecs: np.ndarray, keepdims=False) -> np.ndarray:
     return diff
 
 
-@njit
+@njit(nogil=True)
 def centroid(vecs: np.ndarray) -> tuple[float, float]:
     """
     Compute the centroid of a set of points in 2D space.

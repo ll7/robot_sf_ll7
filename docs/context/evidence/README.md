@@ -122,6 +122,11 @@ Policy caveats:
 
 ## Current Bundles
 
+- `issue_5247_job_13274_rank_stability/`: diagnostic-only analysis of the verified, completed
+  8,640-episode S20 headline campaign. Preserves per-cell confidence intervals, constraints-first
+  success-rank resampling, adjacent-rank decision labels, exact SNQI contract failure, and hashes;
+  no planner-ranking, benchmark, paper, or dissertation claim is promoted.
+
 - `issue_5088_braking_authority_sensitivity_smoke/`: targeted CPU smoke comparing
   0.25 and 2.0 m/s² braking authority for the baseline-safe Social Force planner on
   `classic_cross_trap_high` at fixed seeds 101–103. The compact report records an

@@ -43,6 +43,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from robot_sf.data.external.eth_ucy import EthUcyDataError
+from robot_sf.data.external.eth_ucy_trajectories import (
+    load_provenance_validated_track_set,
+)
+from robot_sf.nav.map_config import SinglePedestrianDefinition
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
@@ -52,11 +58,20 @@ if TYPE_CHECKING:
 __all__ = [
     "REALISM_CLAIM_BOUNDARY",
     "REALISM_SCORECARD_SCHEMA_VERSION",
+    "RECONSTRUCTION_CLAIM_BOUNDARY",
+    "RECONSTRUCTION_SCHEMA_VERSION",
+    "STATIC_OBSTACLE_SEMANTIC",
     "RealismCrowdInputs",
+    "RealismEntryExitFlow",
     "RealismMetricConfig",
+    "RealismObstacle",
+    "RealismReconstructionPlan",
+    "RealismSceneGeometry",
     "RealismScorecard",
+    "RealismStagedDatasetReference",
     "RealismTrackPair",
     "build_dataset_scorecard",
+    "build_track_reconstruction_plan",
     "fundamental_diagram_comparison",
     "lane_formation_comparison",
     "lane_formation_score_curve",
@@ -64,6 +79,7 @@ __all__ = [
     "render_scorecard_markdown",
     "resample_track",
     "run_realism_validation",
+    "run_realism_validation_from_staged_dataset",
     "run_realism_validation_from_track_set",
     "speed_density_points",
     "trajectory_rmse",
@@ -75,12 +91,19 @@ REALISM_CLAIM_BOUNDARY = (
     "trajectory-level empirical realism metrics vs public trajectory datasets; "
     "no calibrated realism threshold, benchmark ranking, or paper-facing claim"
 )
+RECONSTRUCTION_SCHEMA_VERSION = "pedestrian_realism_validation.reconstruction.v1"
+RECONSTRUCTION_CLAIM_BOUNDARY = (
+    "trajectory-derived pedestrian replay seed plus validated caller-supplied static scene "
+    "geometry; scene-faithful benchmark evidence remains unavailable without a simulator trace"
+)
+STATIC_OBSTACLE_SEMANTIC = "static_blocking"
 
 #: Status reported when the real reference data is not staged. Per the repository
 #: fail-closed contract this is never treated as success evidence.
 STATUS_NOT_AVAILABLE = "not_available"
 STATUS_OK = "ok"
 STATUS_EMPTY = "empty"
+EVIDENCE_STATUS_DIAGNOSTIC_ONLY = "diagnostic-only"
 
 
 @dataclass(frozen=True)
@@ -138,6 +161,140 @@ class RealismTrackPair:
 
 
 @dataclass(frozen=True)
+class RealismEntryExitFlow:
+    """Observed entry/exit timing and displacement for one real track.
+
+    This record preserves the source track's temporal admission information for a replay
+    planner. It is not a scene annotation: the entry and exit points are observed trajectory
+    endpoints, and the flow direction is inferred from the dominant displacement axis.
+    """
+
+    pedestrian_id: int
+    entry_time_s: float
+    exit_time_s: float
+    entry_position: tuple[float, float]
+    exit_position: tuple[float, float]
+    flow_direction: str
+
+    @property
+    def observed_duration_s(self) -> float:
+        """Return the observed duration between the first and last samples."""
+
+        return float(self.exit_time_s - self.entry_time_s)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-safe representation for caller-owned decision packets."""
+
+        return {
+            "pedestrian_id": int(self.pedestrian_id),
+            "entry_time_s": float(self.entry_time_s),
+            "exit_time_s": float(self.exit_time_s),
+            "entry_position": [float(value) for value in self.entry_position],
+            "exit_position": [float(value) for value in self.exit_position],
+            "flow_direction": self.flow_direction,
+            "observed_duration_s": self.observed_duration_s,
+        }
+
+
+@dataclass(frozen=True)
+class RealismObstacle:
+    """One polygonal obstacle with an explicit collision semantic.
+
+    The public reconstruction contract currently supports only static blocking obstacles. The
+    polygon is kept in the in-memory plan for a future simulator adapter, while scorecard
+    summaries expose only counts and semantic labels so geometry coordinates are not exported.
+    """
+
+    obstacle_id: str
+    polygon_m: tuple[tuple[float, float], ...]
+    semantic: str = STATIC_OBSTACLE_SEMANTIC
+
+    def __post_init__(self) -> None:
+        """Validate and normalize the obstacle geometry."""
+
+        if not isinstance(self.obstacle_id, str) or not self.obstacle_id.strip():
+            raise ValueError("obstacle_id must be a non-empty string")
+        if self.semantic != STATIC_OBSTACLE_SEMANTIC:
+            raise ValueError(
+                f"unsupported obstacle semantic {self.semantic!r}; use {STATIC_OBSTACLE_SEMANTIC!r}"
+            )
+        try:
+            polygon = np.asarray(self.polygon_m, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("polygon_m must be a finite polygon with shape (N, 2)") from exc
+        if polygon.ndim != 2 or polygon.shape[1] != 2 or polygon.shape[0] < 3:
+            raise ValueError("polygon_m must have shape (N, 2) with at least three vertices")
+        if not np.all(np.isfinite(polygon)):
+            raise ValueError("polygon_m must contain only finite coordinates")
+        if polygon.shape[0] > 3 and np.array_equal(polygon[0], polygon[-1]):
+            polygon = polygon[:-1]
+        if abs(_polygon_signed_area(polygon)) <= 1e-9:
+            raise ValueError("polygon_m must enclose a non-zero area")
+        object.__setattr__(
+            self,
+            "obstacle_id",
+            self.obstacle_id.strip(),
+        )
+        object.__setattr__(
+            self,
+            "polygon_m",
+            tuple((float(point[0]), float(point[1])) for point in polygon),
+        )
+
+
+@dataclass(frozen=True)
+class RealismSceneGeometry:
+    """Validated static scene bounds and blocking obstacles for replay seeding.
+
+    This is an adapter input, not an ETH/UCY parser output: trajectory files do not contain
+    static scene geometry. Callers must provide the bounds and obstacle polygons from a trusted
+    scene source, and the reconstruction builder checks that observed tracks fit that contract.
+    """
+
+    bounds_m: tuple[tuple[float, float], tuple[float, float]]
+    obstacles: tuple[RealismObstacle, ...] = ()
+    source: str = "caller-supplied_scene_contract"
+
+    def __post_init__(self) -> None:
+        """Validate bounds, obstacle containment, and unique obstacle identifiers."""
+
+        bounds = _normalize_scene_bounds(self.bounds_m)
+        if not isinstance(self.source, str) or not self.source.strip():
+            raise ValueError("source must be a non-empty label")
+        try:
+            obstacles = tuple(self.obstacles)
+        except TypeError as exc:
+            raise ValueError("obstacles must be an iterable of RealismObstacle values") from exc
+        if any(not isinstance(obstacle, RealismObstacle) for obstacle in obstacles):
+            raise ValueError("obstacles must contain only RealismObstacle values")
+        obstacle_ids = [obstacle.obstacle_id for obstacle in obstacles]
+        if len(obstacle_ids) != len(set(obstacle_ids)):
+            raise ValueError("obstacle_id values must be unique")
+        lower = np.asarray(bounds[0], dtype=float)
+        upper = np.asarray(bounds[1], dtype=float)
+        for obstacle in obstacles:
+            polygon = np.asarray(obstacle.polygon_m, dtype=float)
+            if np.any(polygon < lower) or np.any(polygon > upper):
+                raise ValueError(
+                    f"obstacle {obstacle.obstacle_id!r} must be contained within scene bounds"
+                )
+        object.__setattr__(self, "bounds_m", bounds)
+        object.__setattr__(self, "obstacles", obstacles)
+        object.__setattr__(self, "source", self.source.strip())
+
+    def summary_dict(self) -> dict[str, Any]:
+        """Return content-light geometry metadata for reconstruction summaries."""
+
+        return {
+            "status": "validated",
+            "source": self.source,
+            "bounds_available": True,
+            "obstacle_count": len(self.obstacles),
+            "obstacle_semantics": sorted({obstacle.semantic for obstacle in self.obstacles}),
+        }
+
+
+@dataclass(frozen=True)
 class RealismCrowdInputs:
     """Matched simulation/real crowd arrays for distribution-metric comparison.
 
@@ -170,6 +327,9 @@ class RealismScorecard:
         config: JSON-safe metric configuration used.
         reference_source: Provenance note for the real reference data.
         notes: Caveat and limitation notes.
+        reconstruction: Content-light reconstruction readiness summary, when a parsed
+            trajectory set was supplied. The serialized scorecard derives an explicit
+            diagnostic-only or unavailable evidence boundary from ``status``.
     """
 
     dataset_id: str
@@ -178,6 +338,7 @@ class RealismScorecard:
     config: dict[str, Any] = field(default_factory=dict)
     reference_source: str = ""
     notes: list[str] = field(default_factory=list)
+    reconstruction: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe mapping representation of the scorecard."""
@@ -187,11 +348,84 @@ class RealismScorecard:
             "claim_boundary": REALISM_CLAIM_BOUNDARY,
             "dataset_id": self.dataset_id,
             "status": self.status,
+            "evidence_status": (
+                EVIDENCE_STATUS_DIAGNOSTIC_ONLY
+                if self.status == STATUS_OK
+                else STATUS_NOT_AVAILABLE
+            ),
             "metrics": self.metrics,
             "config": self.config,
             "reference_source": self.reference_source,
             "notes": list(self.notes),
+            "reconstruction": self.reconstruction,
         }
+
+
+@dataclass(frozen=True)
+class RealismReconstructionPlan:
+    """Trajectory-derived simulator seed inputs with explicit geometry status.
+
+    The plan converts parsed real tracks into the repository's existing
+    :class:`SinglePedestrianDefinition` input shape. Without ``scene_geometry``, it derives
+    padded observation bounds and reports ``trajectory_bounds_only``. With validated
+    ``scene_geometry``, the supplied bounds and static blocking obstacles are retained for a
+    future simulator adapter. A non-empty plan remains ``partial`` until a time-faithful
+    simulator trace is produced.
+    """
+
+    dataset_id: str
+    split: str
+    status: str
+    geometry_status: str
+    scene_bounds_m: tuple[tuple[float, float], tuple[float, float]] | None
+    pedestrians: tuple[SinglePedestrianDefinition, ...]
+    flow_axis: str | None
+    flow_direction_counts: dict[str, int]
+    total_sample_count: int
+    blockers: tuple[str, ...]
+    entry_exit_flows: tuple[RealismEntryExitFlow, ...] = ()
+    timing_status: str = "unavailable"
+    scene_geometry: RealismSceneGeometry | None = None
+
+    def summary_dict(self) -> dict[str, Any]:
+        """Return a content-light JSON-safe summary without trajectory coordinates."""
+
+        return {
+            "schema_version": RECONSTRUCTION_SCHEMA_VERSION,
+            "claim_boundary": RECONSTRUCTION_CLAIM_BOUNDARY,
+            "dataset_id": self.dataset_id,
+            "split": self.split,
+            "status": self.status,
+            "geometry_status": self.geometry_status,
+            "flow_axis": self.flow_axis,
+            "flow_direction_counts": dict(self.flow_direction_counts),
+            "entry_exit_flow_count": len(self.entry_exit_flows),
+            "timing_status": self.timing_status,
+            "entry_exit_time_span_s": _entry_exit_time_span(self.entry_exit_flows),
+            "pedestrian_count": len(self.pedestrians),
+            "total_sample_count": self.total_sample_count,
+            "blockers": list(self.blockers),
+            "scene_geometry": (
+                self.scene_geometry.summary_dict()
+                if self.scene_geometry is not None
+                else {
+                    "status": "unavailable",
+                    "bounds_available": False,
+                    "obstacle_count": 0,
+                    "obstacle_semantics": [],
+                }
+            ),
+        }
+
+
+@dataclass(frozen=True)
+class RealismStagedDatasetReference:
+    """Location and provenance pointer for one staged ETH/UCY split."""
+
+    split: str
+    root: Path | str | None = None
+    provenance_manifest: Path | str | None = None
+    scene_geometry: RealismSceneGeometry | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -548,6 +782,7 @@ def build_dataset_scorecard(
     lane_formation: dict[str, Any] | None,
     reference_source: str,
     notes: Sequence[str] | None = None,
+    reconstruction: dict[str, Any] | None = None,
 ) -> RealismScorecard:
     """Aggregate per-metric results into a per-dataset scorecard.
 
@@ -559,6 +794,7 @@ def build_dataset_scorecard(
         lane_formation: Lane-formation comparison mapping (or ``None``).
         reference_source: Provenance note for the real reference data.
         notes: Caveat notes.
+        reconstruction: Content-light reconstruction readiness summary.
 
     Returns:
         A :class:`RealismScorecard` with aggregated statistics.
@@ -609,10 +845,11 @@ def build_dataset_scorecard(
         config=_config_to_dict(config),
         reference_source=reference_source,
         notes=list(notes or []),
+        reconstruction=reconstruction,
     )
 
 
-def run_realism_validation(
+def run_realism_validation(  # noqa: PLR0913 - metric inputs are explicit for callers
     *,
     dataset_id: str,
     crowds: RealismCrowdInputs | None = None,
@@ -620,6 +857,7 @@ def run_realism_validation(
     rmse_pairs: Sequence[RealismTrackPair] | None = None,
     reference_source: str = "",
     notes: Sequence[str] | None = None,
+    reconstruction: dict[str, Any] | None = None,
     movement_axis: int = 0,
     lateral_axis: int = 1,
 ) -> RealismScorecard:
@@ -636,6 +874,9 @@ def run_realism_validation(
     corresponding distribution metric degrade to ``empty`` (fail-closed), so a
     partial run still produces a labeled scorecard. A missing real reference is
     never reported as a passing realism result.
+
+    The optional ``reconstruction`` mapping is serialized as a content-light readiness
+    summary; it does not change any metric computation or promote benchmark evidence.
 
     Returns:
         A :class:`RealismScorecard` aggregating all computed metrics.
@@ -673,7 +914,414 @@ def run_realism_validation(
         lane_formation=lane,
         reference_source=reference_source,
         notes=notes,
+        reconstruction=reconstruction,
     )
+
+
+def build_track_reconstruction_plan(
+    track_set: EthUcyTrackSet | None,
+    *,
+    dataset_id: str | None = None,
+    padding_m: float = 1.0,
+    direction_epsilon_m: float = 1e-6,
+    scene_geometry: RealismSceneGeometry | None = None,
+) -> RealismReconstructionPlan:
+    """Build trajectory-derived replay seeds and a conservative flow summary.
+
+    The returned ``pedestrians`` can be passed to the existing
+    ``MapDefinition.single_pedestrians`` field by a scenario runner. Without a
+    ``scene_geometry`` adapter input, bounds are derived from observed positions and padded
+    only to keep a replay container non-degenerate. When supplied, the scene contract's bounds
+    and static blocking polygons are used instead, and every observed track sample is checked
+    against that geometry. The plan remains partial because the track parser does not provide
+    per-waypoint timestamps or a simulator trace.
+
+    Args:
+        track_set: Parsed real track set, or ``None`` when the asset is not staged.
+        dataset_id: Optional scorecard-facing id. Defaults to ``asset/split``.
+        padding_m: Non-negative padding around observed position bounds.
+        direction_epsilon_m: Displacement below this value is treated as stationary.
+        scene_geometry: Optional trusted scene bounds and static blocking obstacles. This is
+            caller-supplied adapter input; ETH/UCY track files do not provide it.
+
+    Returns:
+        A ``partial`` plan for non-empty tracks or a ``not_available`` plan when
+        no parsed tracks are supplied.
+
+    Raises:
+        ValueError: If padding, direction tolerance, or track arrays are malformed.
+    """
+
+    _require_positive_finite(padding_m, "padding_m")
+    _require_non_negative_finite(direction_epsilon_m, "direction_epsilon_m")
+    resolved_dataset_id = dataset_id or (
+        f"{track_set.asset_id}/{track_set.split}" if track_set is not None else "unknown"
+    )
+    split = track_set.split if track_set is not None else "unknown"
+    geometry_blocker = (
+        "Static scene geometry is not encoded in ETH/UCY trajectory tracks; "
+        "trajectory bounds are diagnostic-only and cannot seed a scene-faithful benchmark."
+    )
+    geometry_status = (
+        "scene_geometry_validated" if scene_geometry is not None else "trajectory_bounds_only"
+    )
+    timing_blocker = (
+        "Replay preserves relative entry delays but not per-waypoint timestamps; a simulator "
+        "trace adapter is required for time-faithful trajectory comparison."
+    )
+    if track_set is None or not track_set.tracks:
+        return _empty_reconstruction_plan(
+            dataset_id=resolved_dataset_id,
+            split=split,
+            geometry_blocker=geometry_blocker,
+            timing_blocker=timing_blocker,
+            scene_geometry=scene_geometry,
+        )
+
+    track_arrays = _validated_track_arrays(track_set)
+    replay_start_time_s = min(float(times[0]) for times, _positions in track_arrays)
+
+    all_positions = np.concatenate([positions for _times, positions in track_arrays], axis=0)
+    if scene_geometry is None:
+        min_xy = np.min(all_positions, axis=0) - float(padding_m)
+        max_xy = np.max(all_positions, axis=0) + float(padding_m)
+        scene_bounds = (
+            (float(min_xy[0]), float(min_xy[1])),
+            (float(max_xy[0]), float(max_xy[1])),
+        )
+        blockers = (geometry_blocker, timing_blocker)
+    else:
+        _validate_tracks_against_scene_geometry(track_arrays, scene_geometry)
+        scene_bounds = scene_geometry.bounds_m
+        blockers = (timing_blocker,)
+    displacements = np.asarray(
+        [positions[-1] - positions[0] for _times, positions in track_arrays], dtype=float
+    )
+    axis_magnitudes = np.sum(np.abs(displacements), axis=0)
+    flow_axis_index: int | None = None
+    if float(np.max(axis_magnitudes)) > direction_epsilon_m:
+        flow_axis_index = int(np.argmax(axis_magnitudes))
+    flow_axis = None if flow_axis_index is None else ("x" if flow_axis_index == 0 else "y")
+    pedestrians, direction_counts, entry_exit_flows = _build_reconstruction_pedestrians(
+        track_set,
+        track_arrays,
+        flow_axis_index=flow_axis_index,
+        direction_epsilon_m=direction_epsilon_m,
+        replay_start_time_s=replay_start_time_s,
+    )
+
+    return RealismReconstructionPlan(
+        dataset_id=resolved_dataset_id,
+        split=track_set.split,
+        status="partial",
+        geometry_status=geometry_status,
+        scene_bounds_m=scene_bounds,
+        pedestrians=tuple(pedestrians),
+        flow_axis=flow_axis,
+        flow_direction_counts=direction_counts,
+        total_sample_count=sum(times.shape[0] for times, _positions in track_arrays),
+        blockers=blockers,
+        entry_exit_flows=tuple(entry_exit_flows),
+        timing_status="entry_delay_only",
+        scene_geometry=scene_geometry,
+    )
+
+
+def _empty_reconstruction_plan(
+    *,
+    dataset_id: str,
+    split: str,
+    geometry_blocker: str,
+    timing_blocker: str,
+    scene_geometry: RealismSceneGeometry | None,
+) -> RealismReconstructionPlan:
+    """Build the fail-closed plan used when no parsed tracks are available.
+
+    Returns:
+        A ``not_available`` reconstruction plan with actionable blockers.
+    """
+
+    blockers = ["No parsed real tracks are available; stage the dataset and rerun the parser."]
+    if scene_geometry is None:
+        blockers.append(geometry_blocker)
+    blockers.append(timing_blocker)
+    return RealismReconstructionPlan(
+        dataset_id=dataset_id,
+        split=split,
+        status=STATUS_NOT_AVAILABLE,
+        geometry_status=(
+            "scene_geometry_validated" if scene_geometry is not None else "unavailable"
+        ),
+        scene_bounds_m=scene_geometry.bounds_m if scene_geometry is not None else None,
+        pedestrians=(),
+        flow_axis=None,
+        flow_direction_counts={
+            "positive": 0,
+            "negative": 0,
+            "stationary": 0,
+            "off_axis": 0,
+        },
+        total_sample_count=0,
+        blockers=tuple(blockers),
+        entry_exit_flows=(),
+        timing_status="unavailable",
+        scene_geometry=scene_geometry,
+    )
+
+
+def _normalize_scene_bounds(
+    bounds_m: Any,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Normalize finite ``((min_x, min_y), (max_x, max_y))`` scene bounds.
+
+    Returns:
+        Normalized floating-point scene bounds.
+    """
+
+    try:
+        bounds = np.asarray(bounds_m, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("bounds_m must have shape ((min_x, min_y), (max_x, max_y))") from exc
+    if bounds.shape != (2, 2) or not np.all(np.isfinite(bounds)):
+        raise ValueError("bounds_m must have shape ((min_x, min_y), (max_x, max_y))")
+    if np.any(bounds[0] >= bounds[1]):
+        raise ValueError("bounds_m minimum must be strictly below its maximum")
+    return (
+        (float(bounds[0, 0]), float(bounds[0, 1])),
+        (float(bounds[1, 0]), float(bounds[1, 1])),
+    )
+
+
+def _polygon_signed_area(polygon: np.ndarray) -> float:
+    """Return the signed shoelace area of a polygon represented as ``(N, 2)``."""
+
+    x_coords = polygon[:, 0]
+    y_coords = polygon[:, 1]
+    return float(
+        0.5
+        * np.sum(
+            x_coords * np.roll(y_coords, -1) - y_coords * np.roll(x_coords, -1),
+            dtype=float,
+        )
+    )
+
+
+def _point_on_segment(
+    point: np.ndarray,
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> bool:
+    """Return whether a point lies on a polygon edge within numeric tolerance."""
+
+    point_xy = np.asarray(point, dtype=float)
+    start_xy = np.asarray(start, dtype=float)
+    end_xy = np.asarray(end, dtype=float)
+    edge = end_xy - start_xy
+    relative = point_xy - start_xy
+    cross = float(edge[0] * relative[1] - edge[1] * relative[0])
+    if abs(cross) > 1e-9:
+        return False
+    return bool(
+        np.all(point_xy >= np.minimum(start_xy, end_xy) - 1e-9)
+        and np.all(point_xy <= np.maximum(start_xy, end_xy) + 1e-9)
+    )
+
+
+def _point_in_polygon(point: np.ndarray, polygon: tuple[tuple[float, float], ...]) -> bool:
+    """Return whether a point is inside or on the boundary of a polygon."""
+
+    point_xy = np.asarray(point, dtype=float)
+    inside = False
+    for index, start in enumerate(polygon):
+        end = polygon[(index + 1) % len(polygon)]
+        if _point_on_segment(point_xy, start, end):
+            return True
+        start_x, start_y = start
+        end_x, end_y = end
+        if (start_y > point_xy[1]) != (end_y > point_xy[1]):
+            intersection_x = start_x + (point_xy[1] - start_y) * (end_x - start_x) / (
+                end_y - start_y
+            )
+            if point_xy[0] < intersection_x:
+                inside = not inside
+    return inside
+
+
+def _validate_tracks_against_scene_geometry(
+    track_arrays: list[tuple[np.ndarray, np.ndarray]],
+    scene_geometry: RealismSceneGeometry,
+) -> None:
+    """Fail closed when observed track samples violate the supplied scene contract."""
+
+    lower = np.asarray(scene_geometry.bounds_m[0], dtype=float)
+    upper = np.asarray(scene_geometry.bounds_m[1], dtype=float)
+    for track_index, (_times, positions) in enumerate(track_arrays):
+        if np.any(positions < lower) or np.any(positions > upper):
+            raise ValueError(
+                f"track {track_index} contains samples outside the supplied scene bounds"
+            )
+        for obstacle in scene_geometry.obstacles:
+            if any(_point_in_polygon(point, obstacle.polygon_m) for point in positions):
+                raise ValueError(
+                    f"track {track_index} intersects static obstacle {obstacle.obstacle_id!r}"
+                )
+
+
+def _validated_track_arrays(
+    track_set: EthUcyTrackSet,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Validate parsed track arrays before deriving replay inputs.
+
+    Returns:
+        Validated ``(time_s, positions)`` arrays in track order.
+    """
+
+    arrays: list[tuple[np.ndarray, np.ndarray]] = []
+    for track in track_set.tracks:
+        times = np.asarray(track.time_s, dtype=float).reshape(-1)
+        positions = np.asarray(track.positions, dtype=float)
+        if times.shape[0] < 2 or positions.shape != (times.shape[0], 2):
+            raise ValueError(
+                f"track {track.pedestrian_id} must have matching time/position arrays with "
+                "at least two samples"
+            )
+        if not np.all(np.isfinite(times)) or not np.all(np.isfinite(positions)):
+            raise ValueError(f"track {track.pedestrian_id} contains non-finite values")
+        if not np.all(np.diff(times) > 0.0):
+            raise ValueError(f"track {track.pedestrian_id} times must be strictly increasing")
+        arrays.append((times, positions))
+    return arrays
+
+
+def _build_reconstruction_pedestrians(
+    track_set: EthUcyTrackSet,
+    track_arrays: list[tuple[np.ndarray, np.ndarray]],
+    *,
+    flow_axis_index: int | None,
+    direction_epsilon_m: float,
+    replay_start_time_s: float,
+) -> tuple[
+    list[SinglePedestrianDefinition],
+    dict[str, int],
+    list[RealismEntryExitFlow],
+]:
+    """Convert tracks to simulator definitions and count inferred directions.
+
+    Returns:
+        A triple containing replay definitions, conservative flow-direction counts, and
+        observed entry/exit flow records.
+    """
+
+    direction_counts = {"positive": 0, "negative": 0, "stationary": 0, "off_axis": 0}
+    pedestrians: list[SinglePedestrianDefinition] = []
+    entry_exit_flows: list[RealismEntryExitFlow] = []
+    for track, (times, positions) in zip(track_set.tracks, track_arrays, strict=True):
+        waypoints = _trajectory_waypoints(positions)
+        entry_delay_s = float(times[0] - replay_start_time_s)
+        flow_direction = _increment_direction_count(
+            direction_counts,
+            positions[-1] - positions[0],
+            flow_axis_index=flow_axis_index,
+            direction_epsilon_m=direction_epsilon_m,
+        )
+        entry_exit_flows.append(
+            RealismEntryExitFlow(
+                pedestrian_id=int(track.pedestrian_id),
+                entry_time_s=float(times[0]),
+                exit_time_s=float(times[-1]),
+                entry_position=(float(positions[0, 0]), float(positions[0, 1])),
+                exit_position=(float(positions[-1, 0]), float(positions[-1, 1])),
+                flow_direction=flow_direction,
+            )
+        )
+        pedestrians.append(
+            SinglePedestrianDefinition(
+                id=f"{track_set.split}_p{track.pedestrian_id}",
+                start=(float(positions[0, 0]), float(positions[0, 1])),
+                trajectory=waypoints,
+                start_delay_s=entry_delay_s,
+                metadata={
+                    "reconstruction_mode": "trajectory_waypoint_replay",
+                    "source_asset_id": track_set.asset_id,
+                    "source_split": track_set.split,
+                    "source_pedestrian_id": int(track.pedestrian_id),
+                    "observed_sample_count": int(times.shape[0]),
+                    "observed_duration_s": float(times[-1] - times[0]),
+                    "entry_time_s": float(times[0]),
+                    "exit_time_s": float(times[-1]),
+                    "entry_delay_s": entry_delay_s,
+                    "entry_position": [float(value) for value in positions[0]],
+                    "exit_position": [float(value) for value in positions[-1]],
+                    "flow_direction": flow_direction,
+                    "timing_status": "entry_delay_only",
+                    "claim_boundary": RECONSTRUCTION_CLAIM_BOUNDARY,
+                },
+            )
+        )
+    return pedestrians, direction_counts, entry_exit_flows
+
+
+def _trajectory_waypoints(positions: np.ndarray) -> list[tuple[float, float]]:
+    """Convert positions after the initial sample to de-duplicated waypoints.
+
+    Returns:
+        Waypoints after the initial position, with consecutive duplicates removed.
+    """
+
+    waypoints: list[tuple[float, float]] = []
+    for point in positions[1:]:
+        waypoint = (float(point[0]), float(point[1]))
+        if not waypoints or waypoint != waypoints[-1]:
+            waypoints.append(waypoint)
+    return waypoints
+
+
+def _increment_direction_count(
+    counts: dict[str, int],
+    displacement: np.ndarray,
+    *,
+    flow_axis_index: int | None,
+    direction_epsilon_m: float,
+) -> str:
+    """Increment and return one conservative direction category for a displacement.
+
+    Returns:
+        The direction bucket used in ``counts``.
+    """
+
+    displacement_norm = float(np.linalg.norm(displacement))
+    if displacement_norm <= direction_epsilon_m:
+        direction = "stationary"
+    elif flow_axis_index is None or abs(displacement[flow_axis_index]) <= direction_epsilon_m:
+        direction = "off_axis"
+    elif displacement[flow_axis_index] > 0.0:
+        direction = "positive"
+    else:
+        direction = "negative"
+    counts[direction] += 1
+    return direction
+
+
+def _require_non_negative_finite(value: float, name: str) -> None:
+    """Validate a non-negative finite reconstruction parameter."""
+
+    try:
+        valid = not isinstance(value, bool) and math.isfinite(float(value)) and float(value) >= 0.0
+    except (TypeError, ValueError):
+        valid = False
+    if not valid:
+        raise ValueError(f"{name} must be finite and non-negative")
+
+
+def _require_positive_finite(value: float, name: str) -> None:
+    """Validate a positive finite reconstruction parameter."""
+
+    try:
+        valid = not isinstance(value, bool) and math.isfinite(float(value)) and float(value) > 0.0
+    except (TypeError, ValueError):
+        valid = False
+    if not valid:
+        raise ValueError(f"{name} must be finite and positive")
 
 
 def _crowds_complete(crowds: RealismCrowdInputs) -> bool:
@@ -685,7 +1333,7 @@ def _crowds_complete(crowds: RealismCrowdInputs) -> bool:
     )
 
 
-def run_realism_validation_from_track_set(
+def run_realism_validation_from_track_set(  # noqa: PLR0913 - explicit metric and scene inputs
     *,
     dataset_id: str,
     track_set: EthUcyTrackSet | None,
@@ -695,6 +1343,7 @@ def run_realism_validation_from_track_set(
     config: RealismMetricConfig | None = None,
     notes: Sequence[str] | None = None,
     movement_axis: int = 0,
+    scene_geometry: RealismSceneGeometry | None = None,
 ) -> RealismScorecard:
     """Run realism validation against a parsed real ETH/UCY track set.
 
@@ -711,6 +1360,11 @@ def run_realism_validation_from_track_set(
 
     cfg = config or RealismMetricConfig()
     base_notes = list(notes or [])
+    reconstruction = build_track_reconstruction_plan(
+        track_set,
+        dataset_id=dataset_id,
+        scene_geometry=scene_geometry,
+    )
     if track_set is None or not track_set.tracks:
         return build_dataset_scorecard(
             dataset_id=dataset_id,
@@ -729,6 +1383,7 @@ def run_realism_validation_from_track_set(
                 "This is not success evidence (fail-closed). Stage the dataset per "
                 "docs/datasets/eth-ucy.md and re-run."
             ],
+            reconstruction=reconstruction.summary_dict(),
         )
 
     real_positions, real_velocities = _gridded_crowd_from_tracks(track_set, cfg)
@@ -753,8 +1408,91 @@ def run_realism_validation_from_track_set(
             f"Real reference gridded from {len(track_set.tracks)} parsed pedestrians; "
             "velocities finite-differenced on the common grid."
         ],
+        reconstruction=reconstruction.summary_dict(),
         movement_axis=movement_axis,
         lateral_axis=1,
+    )
+
+
+def run_realism_validation_from_staged_dataset(
+    *,
+    dataset_id: str,
+    dataset: RealismStagedDatasetReference,
+    sim_positions: np.ndarray | None = None,
+    sim_velocities: np.ndarray | None = None,
+    rmse_pairs: Sequence[RealismTrackPair] | None = None,
+    config: RealismMetricConfig | None = None,
+    notes: Sequence[str] | None = None,
+    movement_axis: int = 0,
+) -> RealismScorecard:
+    """Run the scorecard path only after provenance-gated ETH/UCY loading.
+
+    This is the canonical integration entrypoint for a first staged-data scorecard. A missing
+    or incomplete manifest becomes a ``not_available`` scorecard instead of being silently
+    interpreted as real-data evidence. The successful path still requires caller-supplied
+    simulation arrays and/or matched pairs; the loader does not invent a simulation trace.
+
+    The provenance check validates the compact registry manifest but does not rehash the local
+    tree. Re-run the canonical staging/provenance command when the staged bytes change.
+
+    Returns:
+        A scorecard with ``not_available`` status when staging/provenance is incomplete, or the
+        metric scorecard when the manifest and parsed real reference are available.
+    """
+
+    cfg = config or RealismMetricConfig()
+    base_notes = list(notes or [])
+    try:
+        track_set = load_provenance_validated_track_set(
+            dataset.split,
+            root=dataset.root,
+            provenance_manifest=dataset.provenance_manifest,
+        )
+    except EthUcyDataError as exc:
+        reconstruction = build_track_reconstruction_plan(
+            None,
+            dataset_id=dataset_id,
+            scene_geometry=dataset.scene_geometry,
+        )
+        return build_dataset_scorecard(
+            dataset_id=dataset_id,
+            config=cfg,
+            rmse_metrics=None,
+            fundamental_diagram=None,
+            lane_formation=None,
+            reference_source=f"eth-ucy/{dataset.split} provenance-gated load unavailable",
+            notes=base_notes
+            + [
+                f"Staged ETH/UCY input unavailable: {exc}",
+                "This is not success evidence (fail-closed); complete acquisition and provenance "
+                "staging before rerunning.",
+            ],
+            reconstruction=reconstruction.summary_dict(),
+        )
+
+    reconstruction = build_track_reconstruction_plan(
+        track_set,
+        dataset_id=dataset_id,
+        scene_geometry=dataset.scene_geometry,
+    )
+    return run_realism_validation_from_track_set(
+        dataset_id=dataset_id,
+        track_set=track_set,
+        sim_positions=sim_positions,
+        sim_velocities=sim_velocities,
+        rmse_pairs=rmse_pairs,
+        config=cfg,
+        notes=base_notes
+        + [
+            "ETH/UCY provenance manifest passed the registry readiness check; the loader did not "
+            "rehash the local tree.",
+            f"Trajectory replay seed plan status: {reconstruction.status}; "
+            f"static geometry status: {reconstruction.geometry_status}.",
+            "The replay seed is diagnostic-only until a simulator trace is supplied; the "
+            "geometry status above records whether caller-supplied scene semantics passed.",
+        ],
+        movement_axis=movement_axis,
+        scene_geometry=dataset.scene_geometry,
     )
 
 
@@ -797,11 +1535,23 @@ def render_scorecard_markdown(scorecard: RealismScorecard) -> str:
         "",
         f"Claim boundary: {sc['claim_boundary']}.",
         "",
-        f"**Status: `{sc['status']}`**  |  schema `{sc['schema_version']}`",
+        f"**Status: `{sc['status']}`**  |  evidence status: `{sc['evidence_status']}`  "
+        f"|  schema `{sc['schema_version']}`",
         "",
     ]
     if sc["reference_source"]:
         lines += [f"Reference: {sc['reference_source']}", ""]
+    reconstruction = sc.get("reconstruction")
+    if isinstance(reconstruction, dict):
+        lines += [
+            "## Reconstruction Readiness",
+            "",
+            f"- status: `{reconstruction.get('status', 'unavailable')}`",
+            f"- geometry: `{reconstruction.get('geometry_status', 'unavailable')}`",
+            f"- timing: `{reconstruction.get('timing_status', 'unavailable')}`",
+            f"- entry/exit flows: {reconstruction.get('entry_exit_flow_count', 0)}",
+            "",
+        ]
     rmse = sc["metrics"].get("trajectory_rmse", {})
     if "rmse_m" in rmse:
         lines += [
@@ -962,6 +1712,23 @@ def _empty_metric(metric_id: str) -> dict[str, Any]:
     """Return a standardized empty-metric placeholder mapping."""
 
     return {"metric_id": metric_id, "status": STATUS_EMPTY, "count": 0}
+
+
+def _entry_exit_time_span(
+    flows: Sequence[RealismEntryExitFlow],
+) -> dict[str, float] | None:
+    """Summarize observed entry/exit times without exporting trajectory coordinates.
+
+    Returns:
+        First-entry and last-exit times, or ``None`` when no flow records exist.
+    """
+
+    if not flows:
+        return None
+    return {
+        "first_entry_time_s": float(min(flow.entry_time_s for flow in flows)),
+        "last_exit_time_s": float(max(flow.exit_time_s for flow in flows)),
+    }
 
 
 def _derive_scorecard_status(

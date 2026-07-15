@@ -36,11 +36,6 @@ from gymnasium import spaces as gym_spaces
 from gymnasium.spaces.utils import flatdim, flatten
 from loguru import logger
 
-try:  # Lazy import; not required for type-check only
-    from stable_baselines3 import PPO
-except ImportError:  # pragma: no cover - envs without SB3 installed
-    PPO = None  # type: ignore
-
 from robot_sf.baselines.interface import (
     Observation,
     is_observation_mapping,
@@ -48,11 +43,21 @@ from robot_sf.baselines.interface import (
 )
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
+from robot_sf.common.seed import _configure_torch_213_runtime
 from robot_sf.models import resolve_model_path
 from robot_sf.planner.predictive_foresight import (
     PredictiveForesightEncoder,
     predictive_foresight_config_from_source,
 )
+
+# Configure the known Torch 2.13/Python 3.12+ native-crash workaround before
+# Stable-Baselines3 imports the optimizer code that first touches torch._dynamo.
+_configure_torch_213_runtime()
+
+try:  # Lazy import; not required for type-check only
+    from stable_baselines3 import PPO
+except ImportError:  # pragma: no cover - envs without SB3 installed
+    PPO = None  # type: ignore
 
 
 @dataclass
@@ -279,6 +284,12 @@ class PPOPlanner:
 
         # Try model predict
         try:
+            if self._uses_dict_observation():
+                model_obs = self._build_model_obs_dict(self._observation_to_dict(obs))
+                action_vec = self._predict_action(model_obs)
+                if action_vec is None:
+                    raise RuntimeError("PPO model unavailable or prediction failed")
+                return self._action_vec_to_dict_from_array(action_vec)
             action_vec = self._predict_action(obs)
             if action_vec is None:
                 raise RuntimeError("PPO model unavailable or prediction failed")
@@ -318,6 +329,60 @@ class PPOPlanner:
                 return self._fallback_action_dict(obs)
             raise
 
+    def _observation_to_dict(self, obs: Observation) -> dict[str, Any]:
+        """Convert the legacy runner observation into the dict-policy contract.
+
+        Returns:
+            Structured observation mapping compatible with the dict adapter.
+        """
+        robot = dict(obs.robot)
+        robot.setdefault("velocity_xy", robot.get("velocity", [0.0, 0.0]))
+        robot.setdefault("heading", [0.0])
+        robot.setdefault("radius", [0.3])
+        goal = np.asarray(robot.get("goal", [0.0, 0.0]), dtype=np.float32).reshape(-1)[:2]
+
+        positions = np.asarray(
+            [agent.get("position", [0.0, 0.0]) for agent in obs.agents], dtype=np.float32
+        ).reshape(-1, 2)
+        velocities = np.asarray(
+            [agent.get("velocity", [0.0, 0.0]) for agent in obs.agents], dtype=np.float32
+        ).reshape(-1, 2)
+        positions = self._pad_agent_observation(positions, "pedestrians_positions")
+        velocities = self._pad_agent_observation(velocities, "pedestrians_velocities")
+        radius = float(obs.agents[0].get("radius", 0.35)) if obs.agents else 0.35
+
+        return {
+            "robot": robot,
+            "goal": {"current": goal, "next": goal.copy()},
+            "pedestrians": {
+                "positions": positions,
+                "velocities": velocities,
+                "count": np.array([len(obs.agents)], dtype=np.float32),
+                "radius": np.array([radius], dtype=np.float32),
+            },
+            "sim": {"timestep": np.array([obs.dt], dtype=np.float32)},
+        }
+
+    def _pad_agent_observation(self, values: np.ndarray, key: str) -> np.ndarray:
+        """Pad variable-length runner agent arrays to a declared model shape.
+
+        Returns:
+            Agent array with the model-declared row count when available.
+        """
+        if self._model is None:
+            return values
+        spaces = getattr(getattr(self._model, "observation_space", None), "spaces", None)
+        target_space = spaces.get(key) if isinstance(spaces, dict) else None
+        target_shape = getattr(target_space, "shape", None)
+        if target_shape is None or tuple(target_shape) == tuple(values.shape):
+            return values
+        if len(target_shape) != 2 or target_shape[1] != 2:
+            return values
+        padded = np.zeros(tuple(target_shape), dtype=np.float32)
+        rows = min(padded.shape[0], values.shape[0])
+        padded[:rows] = values[:rows]
+        return padded
+
     # --- Helpers -------------------------------------------------------
     def _predict_action(self, model_obs: np.ndarray | dict[str, np.ndarray]) -> np.ndarray | None:
         """Run PPO inference and return the raw action vector.
@@ -347,7 +412,7 @@ class PPOPlanner:
             IndexError,
         ) as exc:  # predict-time errors we can recover from
             # Log at debug level for diagnostics; fall back to goal if enabled
-            logger.debug("PPO model prediction failed: %s", exc, exc_info=True)
+            logger.opt(exception=True).debug("PPO model prediction failed: {}", exc)
             return None
 
     def _build_model_obs_dict(self, obs: dict[str, Any]) -> dict[str, np.ndarray] | np.ndarray:

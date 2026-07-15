@@ -17,7 +17,11 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
-from robot_sf.benchmark.artifact_publication import export_publication_bundle
+from robot_sf.benchmark.artifact_publication import (
+    PublicationPreflightError,
+    export_publication_bundle,
+    verify_publication_bundle_preflight,
+)
 from robot_sf.benchmark.camera_ready_campaign import (
     load_campaign_config,
     prepare_campaign_preflight,
@@ -88,6 +92,19 @@ def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str,
             "benchmark_release_manifest_path": release_provenance["manifest_path"],
             "benchmark_release_manifest_sha256": release_provenance["manifest_sha256"],
             "canonical_release_config": release_provenance["canonical_campaign_config"],
+            "release_tag": release_provenance["release_tag"],
+            "doi": release_provenance.get("doi", "10.5281/zenodo.<record-id>"),
+            "doi_url": (
+                f"https://doi.org/{release_provenance.get('doi', '10.5281/zenodo.<record-id>')}"
+            ),
+            "release_url": (
+                f"{release_provenance.get('repository_url', 'https://github.com/ll7/robot_sf_ll7').rstrip('/')}/releases/"
+                f"tag/{release_provenance['release_tag']}"
+            ),
+            "release_asset_url": (
+                f"{release_provenance.get('repository_url', 'https://github.com/ll7/robot_sf_ll7').rstrip('/')}/releases/download/"
+                f"{release_provenance['release_tag']}/{campaign_root.name}_publication_bundle.tar.gz"
+            ),
         }
     )
     _write_json(summary_path, summary)
@@ -138,7 +155,33 @@ def _build_publication_payload(
     }
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _run_publication_preflight(bundle_dir: Path) -> None:
+    """Run the final publication preflight over an exported bundle directory.
+
+    A missing bundle directory is treated as "not exported here" and is skipped
+    rather than failing (the export step owns the hard failure when it runs).
+
+    Raises:
+        PublicationPreflightError: If a built publication bundle is internally
+            self-inconsistent (issue #5530). The release must not be treated as
+            release-valid when this fails.
+    """
+    resolved = Path(bundle_dir).resolve()
+    if not resolved.is_dir():
+        return
+    verify_publication_bundle_preflight(resolved)
+
+
+def _record_publication_payload(campaign_root: Path, publication_payload: dict[str, Any]) -> None:
+    """Record the exported bundle descriptor in the campaign summary and report."""
+    summary_path = campaign_root / "reports" / "campaign_summary.json"
+    summary = _read_json(summary_path)
+    summary["publication_bundle"] = publication_payload
+    _write_json(summary_path, summary)
+    write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
+
+
+def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     """Run the benchmark release entrypoint and return a POSIX exit code."""
     raw_argv = list(argv) if argv is not None else list(sys.argv[1:])
     args = parse_release_args(raw_argv)
@@ -254,13 +297,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             doi=manifest.doi,
             repository_url=manifest.repository_url,
         )
-        result["publication_bundle"] = publication_payload
-
-        summary_path = campaign_root / "reports" / "campaign_summary.json"
-        summary = _read_json(summary_path)
-        summary["publication_bundle"] = publication_payload
-        _write_json(summary_path, summary)
-        write_campaign_report(campaign_root / "reports" / "campaign_report.md", summary)
     else:
         result["publication_bundle"] = None
 
@@ -285,7 +321,48 @@ def main(argv: Sequence[str] | None = None) -> int:
     result["release_exit_code"] = (
         0 if release_benchmark_success else (2 if missing else int(run_payload.get("exit_code", 2)))
     )
-    _write_json(release_dir / "release_result.json", result)
+
+    if release_benchmark_success:
+        try:
+            # The first export discovers the deterministic bundle descriptor.  Then write that
+            # descriptor and the final release result into the source campaign before exporting
+            # again.  Repeat until the descriptor is stable so the bundle contains the same
+            # metadata that the release result advertises.
+            for _ in range(5):
+                result["publication_bundle"] = publication_payload
+                _record_publication_payload(campaign_root, publication_payload)
+                _write_json(release_dir / "release_result.json", result)
+                refreshed_payload = _build_publication_payload(
+                    campaign_root=campaign_root,
+                    release_tag=manifest.release_tag,
+                    doi=manifest.doi,
+                    repository_url=manifest.repository_url,
+                )
+                if refreshed_payload == publication_payload:
+                    publication_payload = refreshed_payload
+                    break
+                publication_payload = refreshed_payload
+            else:
+                raise PublicationPreflightError(
+                    "publication bundle descriptor did not stabilize after final metadata write"
+                )
+            result["publication_bundle"] = publication_payload
+            _run_publication_preflight(Path(publication_payload["bundle_dir"]))
+        except PublicationPreflightError as exc:
+            result["publication_bundle"] = None
+            result["publication_preflight_status"] = "fail"
+            result["publication_preflight_violations"] = [str(exc)]
+            result["release_benchmark_success"] = False
+            result["release_status"] = "publication_preflight_failed"
+            result["release_status_reason"] = (
+                "publication bundle failed the final self-consistency preflight"
+            )
+            result["release_exit_code"] = 2
+            _write_json(release_dir / "release_result.json", result)
+            print(json.dumps(result, indent=2))
+            return 2
+    else:
+        _write_json(release_dir / "release_result.json", result)
 
     print(json.dumps(result, indent=2))
     return int(result["release_exit_code"])

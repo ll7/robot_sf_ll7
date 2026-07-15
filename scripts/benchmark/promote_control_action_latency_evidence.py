@@ -12,7 +12,9 @@ This command runs **no episode** and makes **no benchmark / simulator-realism /
 sim-to-real / paper-facing claim**. It fails closed when the latency preflight is
 not ready or when the native result rows do not cover the required action-latency
 step set (0, 1, 3), so a partial or non-latency run cannot be promoted as the
-latency sweep.
+latency sweep. Pass ``--fixed-scope-plan`` (and ``--require-fixed-scope`` for an
+explicit operator gate) to additionally require exact scenario/planner-group/
+variant/seed coverage from the fixed-scope plan.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from robot_sf.benchmark.control_action_latency_evidence import (
     PROMOTION_SCHEMA_VERSION,
     LatencyEvidenceError,
     build_latency_evidence,
+    load_fixed_scope_plan,
     load_latency_rows,
     write_latency_evidence,
 )
@@ -80,6 +83,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Durable evidence output directory under docs/context/evidence/.",
     )
     parser.add_argument(
+        "--fixed-scope-plan",
+        default=None,
+        help=(
+            "Serialized issue-3207 fixed-scope run plan. When supplied, promotion requires "
+            "exact scenario/planner-group/variant/seed coverage."
+        ),
+    )
+    parser.add_argument(
+        "--require-fixed-scope",
+        action="store_true",
+        help="Fail closed unless --fixed-scope-plan is supplied and verifies exact coverage.",
+    )
+    parser.add_argument(
         "--check-only",
         action="store_true",
         help=(
@@ -100,16 +116,21 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = parse_args(argv)
 
-    config_path = Path(args.config)
-    if not config_path.is_absolute():
-        config_path = REPO_ROOT / config_path
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-
-    raw_rows_path = Path(args.raw_rows)
-    if not raw_rows_path.is_absolute():
-        raw_rows_path = REPO_ROOT / raw_rows_path
-
+    strict_scope_requested = bool(args.require_fixed_scope or args.fixed_scope_plan)
     try:
+        config_path = Path(args.config)
+        if not config_path.is_absolute():
+            config_path = REPO_ROOT / config_path
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+
+        raw_rows_path = Path(args.raw_rows)
+        if not raw_rows_path.is_absolute():
+            raw_rows_path = REPO_ROOT / raw_rows_path
+        if args.require_fixed_scope and not args.fixed_scope_plan:
+            raise LatencyEvidenceError("--require-fixed-scope requires --fixed-scope-plan")
+        fixed_scope_plan = (
+            load_fixed_scope_plan(args.fixed_scope_plan) if args.fixed_scope_plan else None
+        )
         rows = load_latency_rows(raw_rows_path)
         packet = build_latency_evidence(
             rows,
@@ -118,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
             git_head=_git_head(),
             date=str(args.date),
             raw_rows_path=_repo_rel(raw_rows_path),
+            fixed_scope_plan=fixed_scope_plan,
         )
     except LatencyEvidenceError as exc:
         status = {
@@ -127,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
             "reason": str(exc),
         }
         print(json.dumps(status, indent=2, sort_keys=True))
-        return 1 if args.require_ready else 0
+        return 1 if args.require_ready or strict_scope_requested else 0
 
     if args.check_only:
         print(
@@ -139,6 +161,7 @@ def main(argv: list[str] | None = None) -> int:
                     "result_row_count": packet["scope"]["result_row_count"],
                     "excluded_row_count": packet["scope"]["excluded_row_count"],
                     "latency_coverage": packet["latency_coverage"],
+                    "fixed_scope_coverage": packet["fixed_scope_coverage"],
                 },
                 indent=2,
                 sort_keys=True,
@@ -159,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
         "result_row_count": packet["scope"]["result_row_count"],
         "excluded_row_count": packet["scope"]["excluded_row_count"],
         "latency_coverage": packet["latency_coverage"],
+        "fixed_scope_coverage": packet["fixed_scope_coverage"],
     }
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

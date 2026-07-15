@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import csv
+import dataclasses
 import json
 import sys
 import types
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -39,6 +41,7 @@ from robot_sf.adversarial.runtime import (
     multi_ped_config_to_single_pedestrian_definitions,
 )
 from robot_sf.adversarial.samplers import (
+    CmaEsCandidateSampler,
     CoordinateRefinementSampler,
     OptunaCandidateSampler,
     RandomCandidateSampler,
@@ -55,6 +58,7 @@ from robot_sf.nav.obstacle import Obstacle
 from robot_sf.ped_npc.ped_population import populate_single_pedestrians
 from scripts.tools.compare_adversarial_samplers import (
     _comparison_row_from_manifest,
+    render_durable_comparison_table,
     run_sampler_comparison,
 )
 
@@ -1606,6 +1610,182 @@ def test_sampler_comparison_multi_objective(tmp_path: Path) -> None:
             objective_names=("worst_case_snqi", "worst_case_snqi"),
             synthetic=True,
         )
+
+
+def test_cmaes_sampler_respects_bounds_and_feeds_back(tmp_path: Path) -> None:
+    """The CMA-ES-class sampler proposes in-bounds candidates and accepts feedback."""
+    space = SearchSpaceConfig.from_file("configs/adversarial/crossing_ttc_space.yaml")
+    sampler = CmaEsCandidateSampler(space, seed=7, popsize=4)
+    flush_generation = Mock(wraps=sampler._flush_generation)
+    sampler._flush_generation = flush_generation
+
+    for _ in range(8):
+        candidate = sampler.sample()
+        errors = space.validate_candidate(candidate)
+        assert errors == [], f"CMA-ES proposal left the search space: {errors}"
+        sampler.observe(
+            CandidateEvaluation(
+                candidate=candidate,
+                certification_status=passed_status("synthetic comparison"),
+                objective_value=1.0 if candidate.start.x > 0 else 0.0,
+                failure_attribution=None,
+                episode_record_path=None,
+                trajectory_csv_path=None,
+                scenario_yaml_path=None,
+            )
+        )
+    assert flush_generation.call_count == 2
+    next_candidate = sampler.sample()
+    assert space.validate_candidate(next_candidate) == []
+    assert isinstance(next_candidate, CandidateSpec)
+
+
+def test_sampler_comparison_runs_cmaes_class(tmp_path: Path) -> None:
+    """Issue #5326 CMA-ES-class search family must run and tag rows by sampler."""
+    template = tmp_path / "template.yaml"
+    search_space = tmp_path / "space.yaml"
+    _write_template(template)
+    _write_space(search_space)
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template,
+        search_space=search_space,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "comparison",
+        budget=4,
+        seed=23,
+    )
+
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=("cmaes",),
+        objective_names=("worst_case_snqi",),
+        synthetic=True,
+    )
+
+    assert len(rows) == 1
+    assert rows[0].sampler == "cmaes"
+    assert rows[0].num_candidates == 4
+    assert Path(rows[0].manifest_path).exists()
+    assert rows[0].num_failed_evaluations == 0
+    assert rows[0].best_valid_objective is not None
+
+
+def test_issue_5326_objective_comparison_contract(tmp_path: Path) -> None:
+    """Issue #5326 comparison must tag both objectives and write the signed robustness sidecar.
+
+    The signed temporal-logic robustness objective (issue #5304) must produce a
+    per-candidate ``robustness_report.json`` sidecar, while the baseline
+    ``worst_case_snqi`` objective must not. The comparison row must also expose
+    the fallback/degraded exclusion fields so the durable report can fail closed
+    against degraded execution.
+    """
+    config = _config(tmp_path, workers=1)
+
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=("random", "random"),
+        objective_names=("worst_case_snqi", "temporal_robustness"),
+        synthetic=True,
+    )
+
+    by_objective = {(row.objective, row.sampler): row for row in rows}
+    assert ("worst_case_snqi", "random") in by_objective
+    assert ("temporal_robustness", "random") in by_objective
+
+    snqi_row = by_objective[("worst_case_snqi", "random")]
+    signed_row = by_objective[("temporal_robustness", "random")]
+
+    bundle_dir = Path(str(signed_row.best_bundle_path))
+    assert (bundle_dir / "robustness_report.json").is_file()
+    report = json.loads((bundle_dir / "robustness_report.json").read_text(encoding="utf-8"))
+    assert report["schema_version"] == "robustness-report.v1"
+    assert {p["property_name"] for p in report["properties"]} == {
+        "clearance",
+        "ttc",
+        "goal",
+        "progress",
+        "collision",
+    }
+
+    snqi_bundle_dir = Path(str(snqi_row.best_bundle_path))
+    assert not (snqi_bundle_dir / "robustness_report.json").exists()
+
+    for row in rows:
+        assert row.fallback_candidate_count == 0
+        assert row.degraded_candidate_count == 0
+        assert row.held_out_family_status == "not_evaluated_narrow_archive"
+
+
+def test_issue_5326_durable_comparison_table(tmp_path: Path) -> None:
+    """Issue #5326 durable table must record both objectives, failures, and a stop-rule.
+
+    The renderer is the missing durable-report DoD item: it must expose both
+    objectives, annotate the signed objective with its per-property violation
+    count from the robustness sidecar while the baseline shows none, fail closed
+    on any degraded row, and emit a non-benchmark stop-rule decision.
+    """
+    config = _config(tmp_path, workers=1)
+
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=("random", "random"),
+        objective_names=("worst_case_snqi", "temporal_robustness"),
+        synthetic=True,
+    )
+
+    table_md = render_durable_comparison_table(
+        report_path=None,
+        rows=rows,
+        objectives=("worst_case_snqi", "temporal_robustness"),
+        budget_grid=(8,),
+        seeds=(1101,),
+    )
+
+    assert "worst_case_snqi" in table_md
+    assert "temporal_robustness" in table_md
+    assert "Stop-rule decision" in table_md
+    assert "not paper-facing benchmark evidence" in table_md
+    assert "signed_property_violations" in table_md
+
+    by_objective = {(row.objective, row.sampler): row for row in rows}
+    signed_row = by_objective[("temporal_robustness", "random")]
+    signed_bundle = Path(str(signed_row.best_bundle_path))
+    sidecar = json.loads((signed_bundle / "robustness_report.json").read_text(encoding="utf-8"))
+    expected_violations = sum(1 for p in sidecar["properties"] if p["violated"])
+
+    signed_line = next(ln for ln in table_md.splitlines() if ln.startswith("| temporal_robustness"))
+    assert f"| {expected_violations} |" in signed_line
+    baseline_line = next(ln for ln in table_md.splitlines() if ln.startswith("| worst_case_snqi"))
+    assert "| - |" in baseline_line
+
+    assert "fallback/degraded" in table_md
+    assert "**STOP / fail closed**" not in table_md
+
+
+def test_issue_5326_durable_table_fails_closed_on_degraded(tmp_path: Path) -> None:
+    """The durable table must stop/fail closed when any row is fallback/degraded."""
+    config = _config(tmp_path, workers=1)
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=("random", "random"),
+        objective_names=("worst_case_snqi", "temporal_robustness"),
+        synthetic=True,
+    )
+    degraded_rows = [
+        dataclasses.replace(row, fallback_candidate_count=1)
+        if row.objective == "worst_case_snqi"
+        else row
+        for row in rows
+    ]
+    table_md = render_durable_comparison_table(
+        report_path=None,
+        rows=degraded_rows,
+        objectives=("worst_case_snqi", "temporal_robustness"),
+        budget_grid=(8,),
+        seeds=(1101,),
+    )
+    assert "**STOP / fail closed" in table_md
 
 
 def test_invalid_optimizer_proposals_are_rejected_before_evaluation(tmp_path: Path) -> None:

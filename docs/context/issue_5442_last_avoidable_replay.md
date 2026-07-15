@@ -25,6 +25,35 @@ deterministic controlled fixture that validates it end to end on CPU:
 - `scripts/analysis/run_last_avoidable_replay_issue_5442.py` — offline report CLI.
 - `tests/benchmark/test_last_avoidable_replay_issue_5442.py` — acceptance tests.
 
+### Successor slice: production-simulator `CounterfactualModel` adapter (#5442, cheap-lane)
+
+This slice adds the **production-simulator adapter** the issue thread named as
+remaining (the global-RNG snapshot seam was the gated dependency):
+
+- `robot_sf/benchmark/simulator_counterfactual_adapter.py` — `SimulatorCounterfactualModel`,
+  a `CounterfactualModel` over the live `Simulator`. It captures the pedestrian PySF
+  state buffer, per-pedestrian behavior runtimes (single-pedestrian waypoint/hold
+  state and route-group navigator waypoint index), robot pose/velocity, and the
+  **global numpy RNG** via `numpy.random.get_state`/`set_state` (deep-copied so
+  repeated restores stay independent). The `capture_rng` flag documents the seam:
+  omitting it lets a mid-episode pedestrian respawn (`sample_zone` draws from the
+  global RNG) diverge a replay by meters, which the engine's fail-closed `unknown`
+  guard would catch.
+- `tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py` — headless
+  (no-display) `Simulator` construction, snapshot/restore determinism, the RNG-capture
+  seam, and a full `locate_last_avoidable` run on a genuine production fixture
+  (`classic_doorway.svg`, density 0.06, seed 21) where the maintain-speed baseline
+  collides at step 39 but halting the robot avoids contact (`avoidable`,
+  `t_uca=0`, `t_inevitable=39`, deterministic baseline, full feasible coverage).
+
+Scope correction versus the earlier doc's "broad simulator replacement" note: a code
+re-survey on current `main` found pedestrian goal/zone resampling now draws from the
+**global** numpy RNG (`sample_zone` / `ped_population` group respawn), not from the
+broad per-object generators the earlier note assumed. A faithful snapshot therefore
+needs only the global-RNG capture seam plus the actor/behavior state already restored
+here — not a broad simulator rewrite. The engine's determinism check is the safeguard:
+if a replay diverges, it abstains to `unknown` rather than guessing.
+
 ## Determination vocabulary (fail-closed)
 
 | Verdict | Meaning |
@@ -74,11 +103,36 @@ capture is documented in the fixture module.
 | Output conforms to a report contract and preserves every branch result | `last_avoidable_replay.v1.json`; `branches` preserved; `test_report_conforms_to_schema_and_records_provenance` |
 | Runtime reported, no online gate | `runtime_s` recorded by the CLI/engine |
 
-Note on the report contract: #5441's `collision_causal_report.v1` is not yet
-merged. This slice emits a self-contained `last_avoidable_replay.v1` whose field
-naming (`t_danger`/`t_uca`/`t_inevitable`/`t_contact` as available/unavailable,
-`normative_fault: not_assessed`) is forward-compatible, so it can be embedded as
-the counterfactual branch of that contract once #5441 lands — without re-running.
+Note on the report contract: #5441's `collision_causal_report.v1` is now merged,
+and the join described below embeds the replay result into that contract.
+
+## Join into `collision_causal_report.v1` (remaining item delivered)
+
+`robot_sf/benchmark/collision_causal_report.py` exposes
+`collide_causal_report_from_last_avoidable`, which wraps a `last_avoidable_replay.v1`
+result into the additive `collision_causal_report.v1` contract **without re-running**
+the engine. The fail-closed failure semantics survive the join:
+
+- `avoidable` replay → non-abstaining report, `verdict: avoidable`,
+  `supported_actual_cause: true`, the replay's `t_uca`/`t_inevitable` carried through
+  as available timestamps, and each minimal-sufficient preventing intervention recorded.
+  Mechanism metadata remains caller-supplied evidence; this join does not infer it
+  from replay coverage.
+- `already_unavoidable` replay → non-abstaining report, `verdict: unavoidable`,
+  `supported_actual_cause: false` (no planner action is the cause when contact was
+  already unavoidable at `t_danger`), with mechanism and confidence fields set to
+  explicit unknown values.
+- `unknown` replay (nondeterministic baseline or incomplete feasible-action
+  coverage), or an unsupported replay verdict → **fully abstaining** report,
+  `verdict: unknown`, every planner-internal reconstruction element and unavailable
+  timestamp declared in `missing_fields`. It **never** becomes `unavoidable`.
+
+The replay summary has no per-element canonical trace, so planner-internal
+reconstruction elements are unavailable for every joined verdict; only the
+replay-derived critical timestamps can be marked available.
+
+`normative_fault` is always `not_assessed`. The join is exercised by
+`tests/benchmark/test_collision_causal_report_join_5442.py`.
 
 ## Competing explanations carried from the issue
 
@@ -90,8 +144,8 @@ the counterfactual branch of that contract once #5441 lands — without re-runni
   social-navigation failure — the fixture's collision predicate is geometric only;
   broader social-failure attribution is out of scope for this slice.
 - The earliest divergent action may be a consequence of an earlier prediction or
-  guard defect — this slice localizes the avoidable action; upstream defect
-  attribution belongs to the #5441 causal-report join.
+  guard defect — this slice identifies an intervention-supported avoidability result,
+  but does not localize an upstream planner defect without a canonical trace.
 
 ## Validation
 
@@ -109,8 +163,9 @@ t_inevitable=7); `two_action_interaction` → avoidable (t_uca=0, t_inevitable=8
 
 ## Out of scope / remaining
 
-- Real-simulator `CounterfactualModel` adapter (needs the global-RNG capture seam
-  above; gated behind the determinism budget in the issue stop rule).
-- Join into `collision_causal_report.v1` once #5441 merges.
+- Join into `collision_causal_report.v1` once #5441 merges (the
+  `last_avoidable_replay.v1` field naming is already forward-compatible).
+- Broader action lattices / planner-specific feasible sets — `feasible_actions` here
+  returns a maintain-speed-or-halt lattice; subclasses can supply a planner action set.
 - No benchmark campaign run, no Slurm/GPU submission, no metric/release semantics
   change, no paper/dissertation claim edits.

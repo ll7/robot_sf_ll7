@@ -1,0 +1,67 @@
+# Calibration-sweep diagnostic slice for issue #5307 (cheap-lane successor slice).
+#
+# PR #5322 delivered the chance-constrained MPC control law (marginal +
+# joint_horizon Boole bounds). PR #5662 added the surrogate constant_velocity_gmm
+# provider and a *single-point* realized-risk calibration self-check. PR #5693
+# added the CVaR/tail-risk (Arm 4 branch 2) formulation. PR #5715 added the
+# minimal learned-GMM predictor scaffold.
+#
+# Issue #5307's primary measure is realized collision-risk CALIBRATION (claimed
+# vs. observed). Calibration is a *curve* over the risk budget, not a single
+# point. This config makes that curve CPU-reproducible TODAY: it sweeps
+# max_collision_risk across four budgets and across all three
+# chance-constraint formulations (marginal per-time-step, joint_horizon Boole
+# union bound, cvar_tail Conditional Value-at-Risk tail-risk) over matched
+# constant-velocity scenarios, and surfaces the issue's pre-registered stop-rule
+# observables (solver compute time vs the MPC control period, and zero-progress
+# freezing at the tightest budget) as inspection signals.
+#
+# This is NOT a calibrated forecast and NOT a benchmark claim, and it is NOT a
+# matched-arm benchmark comparison (those need the learned #2844 predictor and
+# the ops-queue campaign). The calibration_sweep sub-key is consumed by
+# build_calibration_sweep_config; everything else is the base chance-constrained
+# MPC adapter config inherited from the prior diagnostic configs.
+allow_testing_algorithms: true
+predictor_backend: constant_velocity_gmm
+allow_predictor_fallback: false
+gmm_mode_count: 1
+max_linear_speed: 0.9
+max_angular_speed: 1.1
+horizon_steps: 6
+rollout_dt: 0.25
+goal_tolerance: 0.25
+waypoint_switch_distance: 0.75
+path_goal_weight: 1.5
+terminal_goal_weight: 5.0
+heading_weight: 0.5
+control_effort_weight: 0.05
+smoothness_weight: 0.2
+pedestrian_safety_margin: 0.35
+static_obstacle_soft_weight: 1.0
+solver_ftol: 0.001
+solver_max_iterations: 40
+warm_start: true
+fallback_to_stop: true
+chance_constraint_formulation: marginal
+max_collision_risk: 0.05
+radial_quadrature_order: 6
+angular_quadrature_order: 16
+calibration_sweep:
+  # Risk budgets (max_collision_risk) swept left-to-right. The same RNG seed
+  # replays identical scenarios at every budget so claimed-vs-observed pairs are
+  # directly comparable. Defaults to (0.01, 0.05, 0.10, 0.20).
+  risk_budgets: [0.05, 0.10, 0.20]
+  # Formulations compared at matched budgets.
+  formulations: ["marginal", "joint_horizon", "cvar_tail"]
+  scenario:
+    # CPU-light reproducible grid (diagnostic self-consistency only; not a
+    # benchmark sample size). At 3 episodes x 6 steps x 3 budgets x 3
+    # formulations the full sweep completes in well under a minute on CPU.
+    num_episodes: 3
+    steps_per_episode: 6
+    dt: 0.25
+    num_pedestrians: 2
+    robot_goal_distance_m: 6.0
+    spawn_radius_m: 4.0
+    max_ped_speed_mps: 0.7
+    collision_radius_m: 0.85

@@ -1,0 +1,22 @@
+## Issue #5592 second scenario matrix: atomic topology generalization check.
+#
+# This manifest promotes existing issue-596 topology definitions without copying
+# their scenario content. The seed override is explicit so the future campaign
+# can be paired with the reference classic-interactions matrix.
+schema_version: robot_sf.scenario_matrix.v1
+
+includes:
+  - ../archetypes/issue_596_topology.yaml
+select_scenarios:
+  - corner_90_turn
+  - u_trap_local_minimum
+  - corridor_following
+scenario_overrides:
+  seeds:
+    - 20
+    - 21
+    - 22
+    - 23
+    - 24
+map_search_paths:
+  - ../../../maps/svg_maps

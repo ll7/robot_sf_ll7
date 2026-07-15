@@ -675,7 +675,8 @@ class SippLatticePlannerAdapter(OccupancyAwarePlannerMixin):
         goal: np.ndarray,
         pedestrian_positions: np.ndarray,
         ped_rad: float,
-        observation: dict[str, Any],
+        observation: dict[str, Any] | None = None,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> float:
         """Score one primitive for goal alignment and collision safety.
 
@@ -719,6 +720,7 @@ class SippLatticePlannerAdapter(OccupancyAwarePlannerMixin):
             observation,
             self.config.occupancy_lookahead,
             self.config.occupancy_candidates,
+            grid_payload,
         )
         if grid_penalty >= float(self.config.grid_obstacle_threshold):
             return float("-inf")
@@ -748,7 +750,7 @@ class SippLatticePlannerAdapter(OccupancyAwarePlannerMixin):
             pedestrian_positions,
             ped_rad,
         ) = self._extract_state(observation)
-
+        grid_payload = self._cache_grid_payload(observation)
         distance_to_goal = float(np.linalg.norm(goal - robot_pos))
         if distance_to_goal <= float(self.config.goal_tolerance):
             self._last_decision = {
@@ -773,6 +775,7 @@ class SippLatticePlannerAdapter(OccupancyAwarePlannerMixin):
                 pedestrian_positions=pedestrian_positions,
                 ped_rad=ped_rad,
                 observation=observation,
+                grid_payload=grid_payload,
             )
             scores.append((score, primitive))
 

@@ -43,10 +43,17 @@ from scripts.tools import run_post_campaign_stage, slurm_job_finalize
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-REPORT_REQUIRED_ARTIFACTS = (
-    "reports/headline_rows.json",
-    "reports/result.json",
-)
+
+def _validate_stage_exit_code(value: int) -> int:
+    """Reject exit codes outside the shell range before any fixture is produced.
+
+    The production post-campaign boundary accepts only shell exit codes ``0..255``;
+    the harness must fail closed on an impossible input instead of letting a nested
+    production parser raise after fixtures have already been written.
+    """
+    if not 0 <= value <= 255:
+        raise ValueError(f"--stage-exit-code must be a shell exit code in 0..255, got {value}")
+    return value
 
 
 def _write_completed_campaign_fixture(campaign_root: Path, *, soft_warning: bool) -> Path:
@@ -141,7 +148,7 @@ def reconstruct_after_fix(
             "--job-state",
             "COMPLETED",
             "--expected-artifact",
-            str(envelope_path),
+            str(summary_path),
             "--post-campaign-stage-status",
             str(envelope_path),
             "--output",
@@ -213,6 +220,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Exit code of the chained post-campaign stage to reproduce (job-13274: 5).",
     )
     parser.add_argument(
+        "--campaign-exit-code",
+        type=int,
+        default=0,
+        help="Exit code of the campaign lane; nonzero models a hard-failed campaign.",
+    )
+    parser.add_argument(
         "--no-soft-warning",
         action="store_true",
         help="Fixture a campaign without the soft contract warning (hard-success variant).",
@@ -223,6 +236,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Print the human-readable before/after exit mapping for the reproduced trace.",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
+    _validate_stage_exit_code(args.stage_exit_code)
+    _validate_stage_exit_code(args.campaign_exit_code)
 
     campaign_root = args.campaign_root
     soft_warning = not args.no_soft_warning
@@ -232,7 +247,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     after = reconstruct_after_fix(
         summary_path,
         campaign_root,
-        campaign_exit_code=0,
+        campaign_exit_code=args.campaign_exit_code,
         stage_exit_code=args.stage_exit_code,
     )
 
@@ -241,9 +256,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         print(json.dumps({"before": before, "after": after}, indent=2, sort_keys=True))
 
-    # The harness exits 0 when the corrected boundary preserves the campaign exit 0
-    # and isolates the stage failure, proving the reproduction is actionable.
-    return 0 if after["job_exit_code"] == 0 else 1
+    # The harness mirrors the campaign lane: exit 0 when the campaign completed (the
+    # corrected boundary preserves that lane and isolates any stage failure), nonzero
+    # when the campaign itself failed. A hard-failed campaign must stay nonzero.
+    return after["job_exit_code"]
 
 
 if __name__ == "__main__":

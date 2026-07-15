@@ -269,6 +269,16 @@ while IFS= read -r changed_file; do
   fi
 done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
 
+# The existing readiness lanes intentionally exclude deleted paths from their
+# optional-test classification.  The base-drift guard has a stronger contract:
+# every path changed by the PR must participate in the intersection, including a
+# path deleted by the PR, because main can modify that path during the run.
+drift_changed_files=()
+while IFS= read -r changed_file; do
+  [[ -z "$changed_file" ]] && continue
+  drift_changed_files+=("$changed_file")
+done < <(git diff --name-only --diff-filter=ACDMRT "$BASE_REF...HEAD")
+
 if [[ ${#changed_files[@]} -gt 0 ]]; then
   if [[ "$pr_ready_final" == "1" ]]; then
     printf 'Changed files vs %s:\n' "$BASE_REF" >&2
@@ -386,8 +396,8 @@ fi
 # a later freshness status check still catches any residual drift.
 if [[ -n "$VALIDATED_BASE_SHA" ]]; then
   changed_files_tmp="$(mktemp)"
-  if [[ ${#changed_files[@]} -gt 0 ]]; then
-    printf '%s\n' "${changed_files[@]}" > "$changed_files_tmp"
+  if [[ ${#drift_changed_files[@]} -gt 0 ]]; then
+    printf '%s\n' "${drift_changed_files[@]}" > "$changed_files_tmp"
   fi
   # ``set -e`` would exit on the failing command substitution before ``drift_rc`` is
   # captured, so append ``|| drift_rc=$?`` to record the exit code without aborting.

@@ -99,7 +99,11 @@ def _build_drift_repo(tmp_path: Path, *, main_touches_pr_file: bool) -> tuple[Pa
     pr_commit = _git(repo, "rev-parse", "HEAD")
 
     # Advance origin/main one commit past the base.
-    subprocess.run(["git", "branch", "main", base_sha], cwd=repo, check=True)
+    # Git may initialize the repository with ``main`` already configured as the
+    # default branch.  Detach the PR commit first, then move that branch to the
+    # base commit instead of assuming the name is available for creation.
+    subprocess.run(["git", "checkout", "-q", "--detach"], cwd=repo, check=True)
+    subprocess.run(["git", "branch", "-f", "main", base_sha], cwd=repo, check=True)
     subprocess.run(["git", "checkout", "-q", "main"], cwd=repo, check=True)
     if main_touches_pr_file:
         (repo / "shared.py").write_text("print('unrelated main change')\n", encoding="utf-8")

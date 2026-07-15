@@ -503,6 +503,7 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     )
     assert "Optional-extra changed files requiring the predictive lane" in script_text
     assert "No changed files require the optional-extra lane." in script_text
+    assert 'git diff --name-only --diff-filter=ACDMRT "$BASE_REF...HEAD"' in script_text
 
     freshness_call = 'uv run python "$SCRIPT_DIR/pr_ready_freshness.py" "${freshness_args[@]}"'
     assert 'freshness_args=(write --base-ref "$BASE_REF")' in script_text

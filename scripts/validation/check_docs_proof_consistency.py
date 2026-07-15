@@ -59,6 +59,12 @@ _OUTPUT_PATH_RE = re.compile(
     r"(?<!\w)(?:output/[^\s`'\"<>)\]}]+|/home/[^\s`'\"<>)\]}]*/output/[^\s`'\"<>)\]}]+|/Users/[^\s`'\"<>)\]}]*/output/[^\s`'\"<>)\]}]+)"
 )
 _TEXT_EVIDENCE_SUFFIXES = {".md", ".json", ".yaml", ".yml", ".txt"}
+# A post-run contract output names a future runner location, not a durable
+# artifact pointer. Only this exact plan-contract pointer is exempt; identical
+# keys elsewhere remain evidence pointers and must still be checked (issue
+# #5627).
+_POST_RUN_CONTRACT_SPECS_KEY = "post_run_contract_specs"
+_POST_RUN_CONTRACT_OUTPUT_PATH_KEY = "output_path"
 _VALIDATION_SKIP_RE = re.compile(r"\bno validation commands were run\b", re.IGNORECASE)
 _COMMAND_HINT_RE = re.compile(
     r"(`[^`\n]*(?:uv run|pytest|ruff|scripts/dev/|python )[^`\n]*`|```(?:bash|sh)?[\s\S]*?(?:uv run|pytest|ruff|scripts/dev/|python )[\s\S]*?```)",
@@ -284,6 +290,41 @@ def _context_index_link_diagnostics(
     return diagnostics
 
 
+def _redact_contract_output_paths(document: dict[str, object]) -> None:
+    """Blank only ``post_run_contract_specs[].output_path`` string values."""
+    contract_specs = document.get(_POST_RUN_CONTRACT_SPECS_KEY)
+    if not isinstance(contract_specs, list):
+        return
+    for contract_spec in contract_specs:
+        if not isinstance(contract_spec, dict):
+            continue
+        output_path = contract_spec.get(_POST_RUN_CONTRACT_OUTPUT_PATH_KEY)
+        if isinstance(output_path, str):
+            contract_spec[_POST_RUN_CONTRACT_OUTPUT_PATH_KEY] = ""
+
+
+def _json_without_contract_output_paths(text: str) -> str:
+    """Return JSON text with declarative contract output fields redacted.
+
+    Evidence files may embed a runner's post-run contract spec that names a
+    *future* output location (for example ``post_run_contract_specs[].output_path``
+    pointing at ``output/fidelity_sensitivity/<campaign>/rank_identifiability.json``).
+    That value is a runtime contract, not a durable artifact pointer, so it must
+    not trip the ignored-output rejection (issue #5627). We redact only that
+    exact pointer so matching keys outside the declarative contract container
+    remain visible to the regex. Non-JSON or unparseable input is returned
+    unchanged.
+    """
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        return text
+    if not isinstance(data, dict):
+        return text
+    _redact_contract_output_paths(data)
+    return json.dumps(data)
+
+
 def _evidence_path_diagnostics(path: Path, text: str) -> list[Diagnostic]:
     """Flag durable-evidence files that contain local absolute paths or output pointers."""
     diagnostics: list[Diagnostic] = []
@@ -291,6 +332,8 @@ def _evidence_path_diagnostics(path: Path, text: str) -> list[Diagnostic]:
         return diagnostics
 
     scan_text = _strip_fenced_code_blocks(text) if path.suffix == ".md" else text
+    if path.suffix == ".json":
+        scan_text = _json_without_contract_output_paths(scan_text)
 
     if _ABSOLUTE_LOCAL_PATH_RE.search(scan_text):
         diagnostics.append(
@@ -438,6 +481,8 @@ def _catalog_entry_evidence_diagnostics(
     except UnicodeDecodeError:
         return []
     scan_text = _strip_fenced_code_blocks(text) if path.suffix == ".md" else text
+    if path.suffix == ".json":
+        scan_text = _json_without_contract_output_paths(scan_text)
     diagnostics: list[Diagnostic] = []
     if _OUTPUT_PATH_RE.search(scan_text):
         diagnostics.append(

@@ -15,13 +15,14 @@ protocol and replaces the surrogate without any change to the planner.
 The calibration harness is a **closed-loop** diagnostic (issue #5307 measure
 #1): it rolls the planner through many short episodes in which the realized
 pedestrian dynamics match the surrogate's own constant-velocity forecast, then
-pairs the planner's *claimed* per-horizon risk against the *observed*
-collision frequency and the other named measures (infeasibility rate,
-freezing, completion, tail clearance, compute time). Under matched dynamics
-this is an API/self-consistency diagnostic of the GMM risk control law, not a
-matched-arm benchmark result and not a real-world risk claim; replacing the
-surrogate with the learned ``#2844`` predictor is required before any
-benchmark-facing calibration claim.
+pairs each formulation's *claimed* risk with an observed value in the same
+unit. Marginal uses pedestrian-time cells, joint-horizon uses rolling horizon
+any-collision events, and CVaR uses rolling-horizon empirical tail risk. The
+episode-level any-collision rate remains a separate diagnostic. Under matched
+dynamics this is an API/self-consistency diagnostic of the GMM risk control
+law, not a matched-arm benchmark result and not a real-world risk claim;
+replacing the surrogate with the learned ``#2844`` predictor is required
+before any benchmark-facing calibration claim.
 
 The :class:`~robot_sf.planner.chance_constrained_mpc.GaussianMixturePedestrianForecast`
 container is reused for every forecast this module emits.
@@ -30,6 +31,7 @@ container is reused for every forecast this module emits.
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
@@ -281,6 +283,231 @@ def _min_robot_pedestrian_clearance(
     return float(np.min(dists)) - contact_radius
 
 
+def _coerce_finite_array(value: object, *, label: str, shape: tuple[int, ...]) -> np.ndarray:
+    """Convert one required observation field to a finite array of ``shape``.
+
+    Returns:
+        A finite floating-point array with the requested shape.
+    """
+
+    try:
+        array = np.asarray(value, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be numeric") from exc
+    if array.shape != shape or not np.isfinite(array).all():
+        raise ValueError(f"{label} must contain finite values with shape {shape}")
+    return array
+
+
+def _coerce_pedestrian_positions(value: object) -> np.ndarray:
+    """Convert pedestrian positions to a finite ``(n, 2)`` array.
+
+    Returns:
+        A finite floating-point array with one two-dimensional position per row.
+    """
+
+    try:
+        ped_positions = np.asarray(value, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("observation.pedestrians.positions must be numeric") from exc
+    if ped_positions.ndim == 1 and ped_positions.size % 2 == 0:
+        ped_positions = ped_positions.reshape(-1, 2)
+    if ped_positions.ndim != 2 or ped_positions.shape[-1] != 2:
+        raise ValueError("observation.pedestrians.positions must have shape (n, 2)")
+    if not np.isfinite(ped_positions).all():
+        raise ValueError("observation.pedestrians.positions must be finite")
+    return ped_positions
+
+
+def _collision_indicators(
+    observation: Mapping[str, object], *, collision_radius_m: float
+) -> np.ndarray:
+    """Return one collision indicator per pedestrian at the observed state."""
+
+    contact_radius = float(collision_radius_m)
+    if not np.isfinite(contact_radius) or contact_radius <= 0.0:
+        raise ValueError("collision_radius_m must be finite and > 0")
+    if not isinstance(observation, Mapping):
+        raise ValueError("observation must be a mapping")
+    robot = observation.get("robot")
+    if not isinstance(robot, Mapping):
+        raise ValueError("observation.robot must be a mapping")
+    robot_pos = _coerce_finite_array(
+        robot.get("position"), label="observation.robot.position", shape=(2,)
+    )
+    peds = observation.get("pedestrians")
+    if not isinstance(peds, Mapping):
+        raise ValueError("observation.pedestrians must be a mapping")
+    ped_positions = _coerce_pedestrian_positions(peds.get("positions", []))
+    distances = np.linalg.norm(ped_positions - robot_pos[None, :], axis=1)
+    return distances < contact_radius
+
+
+def _empirical_cvar(values: np.ndarray, *, alpha: float) -> float:
+    """Return the empirical upper-tail CVaR of a finite sample."""
+
+    samples = np.asarray(values, dtype=float).reshape(-1)
+    if samples.size == 0:
+        return 0.0
+    if not 0.0 < float(alpha) < 1.0:
+        raise ValueError("cvar_alpha must be in (0, 1)")
+    ordered = np.sort(samples)
+    tail_mass = (1.0 - float(alpha)) * ordered.size
+    whole_cells = int(np.floor(tail_mass))
+    fractional_cell = tail_mass - whole_cells
+    tail_sum = float(np.sum(ordered[-whole_cells:])) if whole_cells else 0.0
+    if fractional_cell > 0.0:
+        boundary_index = ordered.size - whole_cells - 1
+        tail_sum += fractional_cell * float(ordered[boundary_index])
+    return float(tail_sum / tail_mass)
+
+
+def _planner_formulation(planner: ChanceConstrainedMPCPlannerAdapter) -> str:
+    """Return a planner formulation, normalizing absent optional values."""
+
+    chance_config = getattr(planner, "chance_config", None)
+    raw_formulation = (
+        getattr(chance_config, "chance_constraint_formulation", None)
+        if chance_config is not None
+        else None
+    )
+    return "marginal" if raw_formulation is None else str(raw_formulation)
+
+
+def _calibration_contract(
+    planner: ChanceConstrainedMPCPlannerAdapter,
+) -> tuple[str, str, int, float | None]:
+    """Describe the risk and observation units selected by a planner.
+
+    Returns:
+        Tuple of risk unit, observation window label, window length, and the
+        CVaR confidence when the formulation uses a tail-risk constraint.
+    """
+
+    chance_config = getattr(planner, "chance_config", None)
+    formulation = _planner_formulation(planner)
+    horizon_steps = max(int(getattr(getattr(planner, "config", None), "horizon_steps", 1)), 1)
+    if formulation == "marginal":
+        return "per_pedestrian_timestep", "control_step", 1, None
+    if formulation == "joint_horizon":
+        return "mpc_horizon_any_collision", "mpc_horizon", horizon_steps, None
+    if formulation == "cvar_tail":
+        cvar_alpha = float(getattr(chance_config, "cvar_alpha", 0.9))
+        if not 0.0 < cvar_alpha < 1.0:
+            raise ValueError("cvar_alpha must be in (0, 1)")
+        return "mpc_horizon_cvar_tail", "mpc_horizon", horizon_steps, cvar_alpha
+    raise ValueError(f"Unsupported calibration formulation: {formulation!r}")
+
+
+def _normalize_collision_samples(
+    collision_samples: list[list[np.ndarray]],
+) -> list[list[np.ndarray]]:
+    """Validate and normalize per-episode collision indicators.
+
+    Returns:
+        The same samples as boolean one-dimensional arrays, preserving episode
+        and timestep boundaries.
+    """
+
+    normalized: list[list[np.ndarray]] = []
+    for episode in collision_samples:
+        steps: list[np.ndarray] = []
+        for step in episode:
+            array = np.asarray(step, dtype=bool)
+            if array.ndim != 1:
+                raise ValueError("collision observations must have shape (steps, pedestrians)")
+            steps.append(array)
+        normalized.append(steps)
+    return normalized
+
+
+def _aggregate_marginal_risk(
+    episode_steps: list[list[np.ndarray]],
+) -> tuple[float, int, int]:
+    """Aggregate one collision indicator per pedestrian-time cell.
+
+    Returns:
+        Tuple of observed risk, scalar observation count, and timestep count.
+    """
+
+    observation_count = sum(int(step.size) for episode in episode_steps for step in episode)
+    collision_count = sum(
+        int(np.count_nonzero(step)) for episode in episode_steps for step in episode
+    )
+    observed = float(collision_count / observation_count) if observation_count else 0.0
+    observation_window_count = sum(len(episode) for episode in episode_steps)
+    return observed, observation_count, observation_window_count
+
+
+def _aggregate_horizon_risk(
+    episode_steps: list[list[np.ndarray]],
+    *,
+    formulation: str,
+    horizon_steps: int,
+    cvar_alpha: float | None,
+) -> tuple[float, int, int]:
+    """Aggregate collision indicators over each valid rolling horizon.
+
+    Returns:
+        Tuple of observed risk, rolling-window count, and reported window count.
+    """
+
+    window_values: list[float] = []
+    for episode in episode_steps:
+        if len(episode) < horizon_steps:
+            raise ValueError(
+                f"{formulation} calibration requires at least {horizon_steps} observed steps per "
+                f"episode; got {len(episode)}"
+            )
+        for start in range(len(episode) - horizon_steps + 1):
+            window = episode[start : start + horizon_steps]
+            if formulation == "joint_horizon":
+                window_values.append(float(any(np.any(step) for step in window)))
+            else:
+                assert cvar_alpha is not None
+                window_values.append(_empirical_cvar(np.concatenate(window), alpha=cvar_alpha))
+    observation_count = len(window_values)
+    observed = float(np.mean(window_values)) if window_values else 0.0
+    return observed, observation_count, observation_count
+
+
+def _aggregate_observed_risk(
+    collision_samples: list[list[np.ndarray]],
+    *,
+    formulation: str,
+    horizon_steps: int,
+    cvar_alpha: float | None,
+) -> tuple[float, int, int]:
+    """Aggregate collision observations in the unit used by the planner claim.
+
+    Marginal constraints compare one pedestrian-time cell with one observed
+    pedestrian-time cell. Joint-horizon constraints compare a Boole event over
+    one rolling MPC horizon. CVaR compares the empirical upper-tail average of
+    the same pedestrian-time cells in each rolling horizon. The returned counts
+    are the actual denominators used by ``observed_risk``.
+
+    Returns:
+        Tuple of observed risk, scalar observation count, and observation-window
+        count used for the reported mean.
+    """
+
+    if formulation not in {"marginal", "joint_horizon", "cvar_tail"}:
+        raise ValueError(f"Unsupported calibration formulation: {formulation!r}")
+    if formulation == "cvar_tail" and cvar_alpha is None:
+        raise ValueError("cvar_tail calibration requires cvar_alpha")
+    if not collision_samples:
+        return 0.0, 0, 0
+    episode_steps = _normalize_collision_samples(collision_samples)
+    if formulation == "marginal":
+        return _aggregate_marginal_risk(episode_steps)
+    return _aggregate_horizon_risk(
+        episode_steps,
+        formulation=formulation,
+        horizon_steps=horizon_steps,
+        cvar_alpha=cvar_alpha,
+    )
+
+
 @dataclass(frozen=True)
 class CalibrationScenario:
     """Scenario family for the closed-loop realized-risk calibration harness.
@@ -310,12 +537,14 @@ def realized_collision_risk_calibration(
 
     Rolls the chance-constrained MPC planner through many short episodes whose
     pedestrian dynamics *match* the surrogate's own constant-velocity forecast.
-    For every control step it records the planner's **claimed** per-horizon risk
-    (``planner.claimed_risk``) and, after integrating the realized motion, the
-    **observed** collision occurrence. The harness then reports the issue's named
-    measures: realized collision-risk calibration (claimed vs. observed),
-    infeasibility rate, freezing (zero-progress) rate, completion rate, tail
-    clearance, and per-step compute time.
+    It records the planner's **claimed** risk (``planner.claimed_risk``) and
+    aggregates collision indicators in the matching formulation-specific unit:
+    per-pedestrian timestep for ``marginal``, rolling MPC-horizon any-collision
+    for ``joint_horizon``, and rolling MPC-horizon empirical CVaR for
+    ``cvar_tail``. The harness also reports the episode-level any-collision
+    rate separately, plus the issue's other named measures: infeasibility rate,
+    freezing (zero-progress) rate, completion rate, tail clearance, and
+    per-step compute time.
 
     Under matched dynamics this is an API/self-consistency diagnostic of the GMM
     risk control law: it shows whether the planner's claimed risk bound is
@@ -332,14 +561,17 @@ def realized_collision_risk_calibration(
         seed: RNG seed for reproducibility.
 
     Returns:
-        Mapping with ``claimed_risk_per_horizon``, ``observed_collision_rate``,
-        ``calibration_error`` (observed - claimed, the issue's primary measure),
-        ``infeasible_rate``, ``freeze_rate``, ``completion_rate``,
-        ``mean_tail_clearance_m``, ``mean_compute_time_ms``, and a
+        Mapping with explicitly aligned ``claimed_risk`` and ``observed_risk``
+        units, the ``calibration_error`` (observed - claimed), separate
+        episode-level collision diagnostics, the named planner measures, and a
         ``claim_boundary`` marking the diagnostic scope.
     """
 
     scenario = scenario or CalibrationScenario()
+    formulation = _planner_formulation(planner)
+    risk_unit, observation_window, observation_window_steps, cvar_alpha = _calibration_contract(
+        planner
+    )
     planner_dt = float(getattr(getattr(planner, "config", None), "rollout_dt", scenario.dt))
     if not np.isclose(planner_dt, float(scenario.dt)):
         raise ValueError(
@@ -354,6 +586,7 @@ def realized_collision_risk_calibration(
     freezes = 0
     completions = 0
     claimed = float(getattr(planner, "claimed_risk", float("nan")))
+    collision_samples: list[list[np.ndarray]] = []
     for _ in range(int(scenario.num_episodes)):
         planner.reset()
         observation = _spawn_scenario(
@@ -365,7 +598,14 @@ def realized_collision_risk_calibration(
         )
         episode_collision = False
         episode_moved = False
+        episode_samples: list[np.ndarray] = []
+        episode_finished = False
         for step in range(int(scenario.steps_per_episode)):
+            indicators = _collision_indicators(
+                observation, collision_radius_m=scenario.collision_radius_m
+            )
+            episode_samples.append(indicators)
+            episode_collision = episode_collision or bool(np.any(indicators))
             start_ns = time.perf_counter_ns()
             raw_command = planner.plan(observation)
             command = (float(raw_command[0]), float(raw_command[1]))
@@ -380,7 +620,6 @@ def realized_collision_risk_calibration(
             )
             if tail_clearances[-1] < 0.0:
                 episode_collision = True
-                break
             _step_robot(observation, command, dt=float(scenario.dt))
             _step_pedestrians(observation, dt=float(scenario.dt))
             tail_clearances.append(
@@ -390,12 +629,12 @@ def realized_collision_risk_calibration(
             )
             if tail_clearances[-1] < 0.0:
                 episode_collision = True
-                break
             goal = np.asarray(observation["goal"]["current"], dtype=float)
             robot_pos = np.asarray(observation["robot"]["position"], dtype=float)
-            if float(np.linalg.norm(goal - robot_pos)) <= 0.25:
+            if not episode_finished and float(np.linalg.norm(goal - robot_pos)) <= 0.25:
                 completions += 1
-                break
+                episode_finished = True
+        collision_samples.append(episode_samples)
         if episode_collision:
             collisions += 1
         elif not episode_moved:
@@ -405,11 +644,25 @@ def realized_collision_risk_calibration(
         if planner.diagnostics().get("solver_failures", 0) > 0:
             infeasible += 1
     n = max(int(scenario.num_episodes), 1)
-    observed = collisions / float(n)
+    observed, observation_count, observation_window_count = _aggregate_observed_risk(
+        collision_samples,
+        formulation=formulation,
+        horizon_steps=observation_window_steps,
+        cvar_alpha=cvar_alpha,
+    )
     return {
-        "claimed_risk_per_horizon": float(claimed),
-        "observed_collision_rate": float(observed),
+        "formulation": formulation,
+        "claimed_risk": float(claimed),
+        "observed_risk": float(observed),
+        "claimed_risk_unit": risk_unit,
+        "observed_risk_unit": risk_unit,
+        "observation_window": observation_window,
+        "observation_window_steps": int(observation_window_steps),
+        "cvar_alpha": float(cvar_alpha) if cvar_alpha is not None else None,
+        "observation_count": int(observation_count),
+        "observation_window_count": int(observation_window_count),
         "calibration_error": float(observed - claimed),
+        "episode_collision_rate": float(collisions / n),
         "infeasible_rate": float(infeasible / n),
         "freeze_rate": float(freezes / n),
         "completion_rate": float(completions / n),
@@ -422,7 +675,8 @@ def realized_collision_risk_calibration(
         "sample_count": float(n),
         "claim_boundary": (
             "closed-loop self-consistency diagnostic under matched constant-velocity "
-            "dynamics; not a matched-arm benchmark calibration result and makes no "
+            "dynamics; calibration units are formulation-specific and explicitly "
+            "reported; not a matched-arm benchmark calibration result and makes no "
             "planner-value or real-world risk claim; replace the surrogate with the "
             "learned #2844 predictor before any benchmark-facing claim"
         ),
@@ -493,6 +747,10 @@ def realized_collision_risk_calibration_sweep(
     stream_gap``). These are exposed as observables for inspection, not as a
     gate verdict: the cheap-lane slice does not make a campaign-routing
     decision.
+
+    Every point names both risk units and its observation window. Horizon-based
+    formulations fail closed when ``scenario.steps_per_episode`` is shorter
+    than the planner horizon; they never fall back to episode-level rates.
 
     This slice is CPU-runnable today over the surrogate
     ``constant_velocity_gmm`` provider. It is an API/self-consistency
@@ -566,10 +824,18 @@ def realized_collision_risk_calibration_sweep(
             planner = adapter_builder(cfg)
             result = realized_collision_risk_calibration(planner, scenario, seed=seed)
             point = {
-                "formulation": formulation,
-                "claimed_risk": float(budget),
-                "observed_collision_rate": float(result["observed_collision_rate"]),
+                "formulation": str(result["formulation"]),
+                "claimed_risk": float(result["claimed_risk"]),
+                "observed_risk": float(result["observed_risk"]),
+                "claimed_risk_unit": str(result["claimed_risk_unit"]),
+                "observed_risk_unit": str(result["observed_risk_unit"]),
+                "observation_window": str(result["observation_window"]),
+                "observation_window_steps": int(result["observation_window_steps"]),
+                "cvar_alpha": result["cvar_alpha"],
+                "observation_count": int(result["observation_count"]),
+                "observation_window_count": int(result["observation_window_count"]),
                 "calibration_error": float(result["calibration_error"]),
+                "episode_collision_rate": float(result["episode_collision_rate"]),
                 "freeze_rate": float(result["freeze_rate"]),
                 "infeasible_rate": float(result["infeasible_rate"]),
                 "completion_rate": float(result["completion_rate"]),
@@ -583,7 +849,7 @@ def realized_collision_risk_calibration_sweep(
     reliability_summary: dict[str, dict[str, Any]] = {}
     for formulation, points in points_by_formulation.items():
         abs_errors = [abs(float(p["calibration_error"])) for p in points]
-        observed = [float(p["observed_collision_rate"]) for p in points]
+        observed = [float(p["observed_risk"]) for p in points]
         compute_times = [float(p["mean_compute_time_ms"]) for p in points]
         freeze_rates = [float(p["freeze_rate"]) for p in points]
         # The tightest (lowest) budget sits first because budgets sweep small->large.

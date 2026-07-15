@@ -49,9 +49,11 @@ def _grid_obs(
     }
 
 
-def test_dwa_plan_output_unchanged_with_grid_caching() -> None:
-    """DWA plan() output must be identical whether grid is extracted inline or via cached path."""
-    planner = DWAPlannerAdapter()
+def test_dwa_plan_output_unchanged_with_grid_caching(monkeypatch) -> None:
+    """DWA output must match the uncached extraction path for fixed observations."""
+    cached_planner = DWAPlannerAdapter()
+    uncached_planner = DWAPlannerAdapter()
+    monkeypatch.setattr(uncached_planner, "_cache_grid_payload", lambda _observation: None)
 
     # Multiple different observations to exercise different code paths
     observations = [
@@ -62,15 +64,14 @@ def test_dwa_plan_output_unchanged_with_grid_caching() -> None:
     ]
 
     for obs in observations:
-        result = planner.plan(obs)
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert np.all(np.isfinite(result))
+        assert cached_planner.plan(obs) == uncached_planner.plan(obs)
 
 
-def test_risk_dwa_plan_output_unchanged_with_grid_caching() -> None:
-    """RiskDWA plan() output must be identical whether grid is cached or not."""
-    planner = RiskDWAPlannerAdapter()
+def test_risk_dwa_plan_output_unchanged_with_grid_caching(monkeypatch) -> None:
+    """RiskDWA output must match the uncached extraction path for fixed observations."""
+    cached_planner = RiskDWAPlannerAdapter()
+    uncached_planner = RiskDWAPlannerAdapter()
+    monkeypatch.setattr(uncached_planner, "_cache_grid_payload", lambda _observation: None)
 
     observations = [
         _grid_obs(),
@@ -80,10 +81,7 @@ def test_risk_dwa_plan_output_unchanged_with_grid_caching() -> None:
     ]
 
     for obs in observations:
-        result = planner.plan(obs)
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert np.all(np.isfinite(result))
+        assert cached_planner.plan(obs) == uncached_planner.plan(obs)
 
 
 def test_mixin_cache_grid_payload_provides_sentinel_when_no_grid() -> None:

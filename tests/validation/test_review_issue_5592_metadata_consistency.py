@@ -210,6 +210,33 @@ def test_rejects_scenario_missing_from_archetype(tmp_path: Path) -> None:
         reviewer.review_metadata_consistency(doc_path=doc, archetype_path=arch)
 
 
+def test_rejects_duplicate_scenario_row_in_doc_table(tmp_path: Path) -> None:
+    """A duplicate documentation row must not be silently last-write-wins."""
+    duplicate = (
+        "| `corner_90_turn` | `atomic_corner_90_test` | `topology` | "
+        "`clearance_regression` | no | no |"
+    )
+    doc = _write_doc_table(tmp_path, extra_rows=duplicate)
+    arch = _write_archetype(tmp_path, _GOOD_SCENARIOS)
+    with pytest.raises(
+        reviewer.MetadataConsistencyError, match="Duplicate scenario row in documentation table"
+    ):
+        reviewer.review_metadata_consistency(doc_path=doc, archetype_path=arch)
+
+
+def test_rejects_duplicate_scenario_name_in_archetype(tmp_path: Path) -> None:
+    """A duplicate YAML scenario name must not be silently last-write-wins."""
+    doc = _write_doc_table(tmp_path)
+    duplicate = _topology_scenario(
+        "corner_90_turn", "atomic_corner_90_test", target_failure_mode="clearance_regression"
+    )
+    arch = _write_archetype(tmp_path, [*_GOOD_SCENARIOS, duplicate])
+    with pytest.raises(
+        reviewer.MetadataConsistencyError, match="Duplicate scenario name in archetype"
+    ):
+        reviewer.review_metadata_consistency(doc_path=doc, archetype_path=arch)
+
+
 # ---------------------------------------------------------------------------
 # Invalid-fixture gate
 # ---------------------------------------------------------------------------

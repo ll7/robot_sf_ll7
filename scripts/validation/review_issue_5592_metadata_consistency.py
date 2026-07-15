@@ -105,6 +105,10 @@ def parse_doc_table(doc_path: Path) -> dict[str, dict[str, str]]:
         if not m:
             continue
         scenario_id = m.group(1)
+        _require(
+            scenario_id not in rows,
+            f"Duplicate scenario row in documentation table: {scenario_id}",
+        )
         rows[scenario_id] = {
             "map_id": m.group(2),
             "primary_capability": m.group(3),
@@ -141,6 +145,7 @@ def load_archetype_scenarios(archetype_path: Path) -> dict[str, dict[str, Any]]:
         _require(isinstance(entry, dict), f"scenarios[{index}] must be a mapping")
         name = entry.get("name")
         _require(isinstance(name, str) and name.strip(), f"scenarios[{index}].name missing")
+        _require(name not in scenarios, f"Duplicate scenario name in archetype: {name}")
         scenarios[name] = entry
 
     return scenarios

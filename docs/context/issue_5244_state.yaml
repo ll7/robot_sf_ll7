@@ -1,0 +1,96 @@
+# Canonical high-churn state surface for issue #5244.
+#
+# This append-only table records the durable exit-lane integration boundary. It excludes
+# transient queue routing, packet lineage, host policy, raw logs, and campaign launch state.
+issue: 5244
+state_surface: soft_snqi_warning_exit_lane_integration
+entries:
+  - recorded_at_utc: "2026-07-15T07:36:15Z"
+    status: public_chain_integrated__raw_private_trace_and_campaign_rerun_pending
+    source:
+      issue_url: "https://github.com/ll7/robot_sf_ll7/issues/5244"
+      live_issue_state_checked: "open"
+      comments_reviewed: 8
+      latest_maintainer_comment_utc: "2026-07-15T06:38:12Z"
+      latest_maintainer_comment_summary: >-
+        All public producer, stage-runner, finalizer, reconstruction, and ledger-consumer
+        components are merged. The exact historical scheduler trace and a full campaign rerun
+        remain unavailable to the cheap implementation lane.
+    fragmentation_guard: >-
+      More than two issue-related guardrail or progression pull requests merged in the previous
+      24 hours. This entry accompanies one consolidation regression across the existing public
+      components; it does not add another isolated checker or encode transient routing state.
+    historical_source_trace:
+      evidence_status: source_reconstruction_without_raw_log_tail
+      confidence: 0.9
+      private_dispatch_commit: "004fa7e (private overlay; maintainer access required)"
+      public_payload_commit: "e7730c46de33399d709d58c3dcb97854bb0f1d71"
+      observed: >-
+        At the commits recorded for job 13274, the private dispatch wrapper delegated once to the
+        public payload and propagated its status; it contained no exit-5 remapping or chained
+        ledger step. After the completed Python campaign path, the recorded public payload had one
+        explicit exit-5 site: its headline_rows.json post-campaign artifact check.
+      not_observed: >-
+        Raw job stdout/stderr was not available in this work lane, so the exact emitted error
+        string and the reason the artifact check did not see the later-harvested file remain
+        unverified.
+      condition_that_changes_the_conclusion: >-
+        A recovered job tail showing a different exit-5 producer, such as an srun failure or a
+        chained analysis tool, would supersede the source-only attribution.
+    integration_contract:
+      new_capability: >-
+        One minimal-fixture regression now drives the public production entry points for the
+        launcher, post-campaign stage runner, finalizer, and ledger reconciler through their
+        serialized on-disk artifacts.
+      warn_lane: >-
+        A completed enforcement=warn campaign keeps campaign and job exit 0, exposes
+        soft_contract_warning=true, isolates report exit 5, and reaches the ledger as
+        diagnostic `warn_success` rather than failed; this is not benchmark-success evidence.
+      hard_lane: >-
+        A hard campaign exit remains nonzero through the finalizer and ledger even when the report
+        stage succeeds.
+      artifact_roles: >-
+        The campaign summary is the required campaign artifact; the post-campaign status envelope
+        is a separate required serialization boundary, and the finalizer report is the ledger
+        input.
+    closure_boundary:
+      closure_call_for_this_pr: keep_open
+      reason: >-
+        The public integration contract is complete, but issue #5244 explicitly requires the raw
+        historical production trace. That evidence is not present here, and a full campaign rerun
+        was neither authorized nor submitted.
+      remaining:
+        - "Recover and inspect job 13274 stdout/stderr to verify the exact exit-5 producer."
+        - "Run the full campaign only from an explicitly authorized Slurm lane."
+    next_empirical_action: >-
+      Recover the retained job-13274 tail and match it against the historical headline-row artifact
+      error. If it confirms the source reconstruction, record the exact line and close the trace
+      blocker; otherwise route the newly observed exit-5 producer through the same envelope.
+    validation:
+      - command: >-
+          .venv/bin/python -m pytest -q
+          tests/tools/test_run_camera_ready_benchmark.py
+          tests/tools/test_run_post_campaign_stage.py
+          tests/tools/test_slurm_job_finalize.py
+          tests/tools/test_issue3216_campaign_stage_handoff.py
+          tests/tools/test_reconstruct_job13274_exit_mapping.py
+          tests/tools/test_reconcile_slurm_evidence.py
+        result: "68 passed"
+      - command: >-
+          .venv/bin/ruff check tests/tools/test_issue3216_campaign_stage_handoff.py &&
+          .venv/bin/ruff format --check tests/tools/test_issue3216_campaign_stage_handoff.py
+        result: "Ruff check and format check passed"
+      - command: >-
+          .venv/bin/python scripts/validation/check_docs_proof_consistency.py
+          --base origin/main --path docs/context/INDEX.md
+          --path docs/context/issue_3216_headline_ci_rank_stability.md
+          --path docs/context/issue_5244_state.yaml
+        result: "docs/proof consistency passed for all three changed documentation files"
+    out_of_scope_confirmed:
+      full_benchmark_campaign_run: false
+      slurm_or_gpu_submission: false
+      paper_or_dissertation_claim_edit: false
+      issue_comment: false
+      release: false
+      merge: false
+      deletion: false

@@ -322,13 +322,20 @@ class TestLearnGmmPredictorConfig:
 
     def test_invalid_values_fallback_to_defaults(self) -> None:
         """Malformed field values produce warnings and fall back."""
-        cfg = build_learned_gmm_predictor_config(
-            {
-                "max_pedestrians": "not-a-number",
-            }
-        )
+        with pytest.warns(RuntimeWarning, match="max_pedestrians"):
+            cfg = build_learned_gmm_predictor_config(
+                {
+                    "max_pedestrians": "not-a-number",
+                }
+            )
         # Falls back to 16
         assert int(cfg.max_pedestrians) == 16
+
+    def test_invalid_boolean_falls_back_with_warning(self) -> None:
+        """Malformed boolean values do not silently change the smoke-mode contract."""
+        with pytest.warns(RuntimeWarning, match="allow_untrained_smoke"):
+            cfg = build_learned_gmm_predictor_config({"allow_untrained_smoke": "maybe"})
+        assert not cfg.allow_untrained_smoke
 
 
 # ── LearnedGmmPedestrianPredictor (untrained smoke mode) ─────────────────────
@@ -396,6 +403,33 @@ class TestLearnedGmmPedestrianPredictor:
         predictor.reset()
         assert predictor._calls == 0
         assert predictor._last_source == "not_run"
+
+    def test_dt_mismatch_fails_closed(self) -> None:
+        """A predictor refuses inference at a timestep different from its config."""
+        predictor = LearnedGmmPedestrianPredictor(
+            LearnedGmmPredictorConfig(allow_untrained_smoke=True)
+        )
+        with pytest.raises(ValueError, match="dt must match config.rollout_dt"):
+            predictor.predict(_simple_observation(), horizon_steps=6, dt=0.5)
+
+    def test_horizon_overflow_fails_closed(self) -> None:
+        """A predictor refuses a request longer than its checkpoint contract."""
+        predictor = LearnedGmmPedestrianPredictor(
+            LearnedGmmPredictorConfig(allow_untrained_smoke=True)
+        )
+        with pytest.raises(ValueError, match="exceeds the configured"):
+            predictor.predict(_simple_observation(), horizon_steps=7, dt=0.25)
+
+    def test_ambiguous_checkpoint_sources_fail_closed(self) -> None:
+        """Checkpoint paths and registry IDs cannot silently override each other."""
+        with pytest.raises(ValueError, match="either checkpoint_path or model_id"):
+            LearnedGmmPedestrianPredictor(
+                LearnedGmmPredictorConfig(
+                    checkpoint_path="/tmp/not-used.pt",
+                    model_id="some-model",
+                    allow_untrained_smoke=True,
+                )
+            )
 
 
 # ── end-to-end integration with ChanceConstrainedMPCPlannerAdapter ───────────

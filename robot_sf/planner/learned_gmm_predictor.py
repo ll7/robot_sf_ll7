@@ -32,6 +32,7 @@ import numpy as np
 
 from robot_sf.models.registry import resolve_model_path
 from robot_sf.planner.chance_constrained_mpc import GaussianMixturePedestrianForecast
+from robot_sf.planner.nmpc_social import _parse_bool
 
 # ── helpers reused from learned_short_horizon_predictor ──────────────────────
 
@@ -434,6 +435,12 @@ class LearnedGmmPedestrianPredictor:
             raise ValueError("mode_count must be >= 1")
         if config.hidden_dim <= 0:
             raise ValueError("hidden_dim must be strictly positive")
+        try:
+            rollout_dt = float(config.rollout_dt)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("rollout_dt must be finite and strictly positive") from exc
+        if not np.isfinite(rollout_dt) or rollout_dt <= 0.0:
+            raise ValueError("rollout_dt must be finite and strictly positive")
 
         self.config = config
         self._calls = 0
@@ -474,8 +481,24 @@ class LearnedGmmPedestrianPredictor:
         Returns:
             A validated ``GaussianMixturePedestrianForecast``.
         """
+        requested_steps = int(horizon_steps)
+        if requested_steps <= 0:
+            raise ValueError("horizon_steps must be strictly positive")
+        if requested_steps > int(self.config.horizon_steps):
+            raise ValueError(
+                "requested horizon_steps exceeds the configured learned GMM horizon: "
+                f"{requested_steps} > {self.config.horizon_steps}"
+            )
+        requested_dt = float(dt)
+        if not np.isfinite(requested_dt) or requested_dt <= 0.0:
+            raise ValueError("dt must be finite and strictly positive")
+        if not np.isclose(requested_dt, float(self.config.rollout_dt)):
+            raise ValueError(
+                "learned GMM predictor dt must match config.rollout_dt: "
+                f"{requested_dt} != {self.config.rollout_dt}"
+            )
         self._calls += 1
-        steps = max(1, min(int(horizon_steps), int(self.config.horizon_steps)))
+        steps = requested_steps
         ped_positions, ped_velocities_world = _pedestrian_world_state(observation)
         count = min(ped_positions.shape[0], int(self.config.max_pedestrians))
 
@@ -530,6 +553,8 @@ class LearnedGmmPedestrianPredictor:
         Returns:
             Path to the resolved checkpoint file, or None if not configured.
         """
+        if config.checkpoint_path and config.model_id:
+            raise ValueError("configure either checkpoint_path or model_id, not both")
         if config.checkpoint_path:
             path = Path(config.checkpoint_path)
             if not path.exists():
@@ -591,9 +616,7 @@ def build_learned_gmm_predictor_config(
         "hidden_dim": int,
         "mode_count": int,
         "model_type": str,
-        "allow_untrained_smoke": lambda value: (
-            bool(value) if str(value).strip().lower() in {"true", "1", "yes"} else False
-        ),
+        "allow_untrained_smoke": _parse_bool,
     }
     kwargs: dict[str, Any] = {}
     for field in fields(LearnedGmmPredictorConfig):

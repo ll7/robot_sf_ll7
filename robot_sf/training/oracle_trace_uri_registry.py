@@ -402,7 +402,9 @@ def _validate_checksum_inventory_metadata(
     uri = None
     if raw_uri is not None:
         uri = _validate_trace_uri(f"{label}.checksum_inventory", raw_uri, errors)
-    _validate_trace_checksum(f"{label}.checksum_inventory", raw_sha, "resolvable", errors)
+    _validate_trace_checksum(
+        f"{label}.checksum_inventory", raw_sha, trace.get("retrieval_status"), errors
+    )
     trace["_checksum_inventory_is_concrete_durable"] = uri is not None and _is_concrete_durable_uri(
         uri
     )

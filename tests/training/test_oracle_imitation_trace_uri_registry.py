@@ -242,17 +242,24 @@ def test_local_mirror_matching_checksum_passes(tmp_path: Path) -> None:
     assert report["training_ready"] is True
 
 
-def test_blocked_retrieval_is_not_training_ready(tmp_path: Path) -> None:
-    """An inaccessible (blocked) trace keeps the lane out of training-ready, failing closed."""
+@pytest.mark.parametrize("retrieval_status", ["pending", "blocked"])
+def test_pending_inventory_follows_non_resolvable_trace_lifecycle(
+    tmp_path: Path, retrieval_status: str
+) -> None:
+    """Pending inventory metadata is valid for a pending or blocked trace, but not ready."""
     registry = _training_ready_registry()
-    registry["traces"][2]["retrieval_status"] = "blocked"
     registry["traces"][2]["uri"] = "wandb-artifact://robot-sf/oracle-imitation/eval:pending"
     registry["traces"][2]["sha256"] = "pending"
+    registry["traces"][2]["retrieval_status"] = retrieval_status
+    registry["traces"][2]["checksum_inventory_uri"] = (
+        "wandb-artifact://robot-sf/oracle-imitation/eval_checksums:pending"
+    )
+    registry["traces"][2]["checksum_inventory_sha256"] = "pending"
 
-    # Base validation passes (a blocked, not-yet-resolvable trace is a legitimate state)...
+    # Base validation passes (a not-yet-resolvable trace is a legitimate state)...
     base_report = validate_trace_uri_registry(_write_registry(tmp_path, registry))
     assert base_report["training_ready"] is False
-    assert base_report["retrieval_status"]["evaluation__demo_v1"] == "blocked"
+    assert base_report["retrieval_status"]["evaluation__demo_v1"] == retrieval_status
 
     # ...but the strict gate fails closed.
     with pytest.raises(OracleTraceUriRegistryError, match="not resolvable: evaluation"):
@@ -260,6 +267,21 @@ def test_blocked_retrieval_is_not_training_ready(tmp_path: Path) -> None:
             _write_registry(tmp_path, registry),
             require_training_ready=True,
         )
+
+
+def test_pending_inventory_is_rejected_for_resolvable_trace(tmp_path: Path) -> None:
+    """A resolvable trace still requires a concrete checksum-inventory digest."""
+    registry = _training_ready_registry()
+    registry["traces"][0]["checksum_inventory_uri"] = (
+        "wandb-artifact://robot-sf/oracle-imitation/train_checksums:pending"
+    )
+    registry["traces"][0]["checksum_inventory_sha256"] = "pending"
+
+    with pytest.raises(
+        OracleTraceUriRegistryError,
+        match="checksum_inventory.sha256 must be a concrete digest",
+    ):
+        validate_trace_uri_registry(_write_registry(tmp_path, registry))
 
 
 def test_pending_uri_is_not_concrete_durable(tmp_path: Path) -> None:

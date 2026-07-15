@@ -130,8 +130,8 @@ def test_threaded_vec_env_steps_sibling_environments_concurrently() -> None:
         vec_env.close()
 
 
-def test_threaded_vec_env_scopes_gil_releasing_forces_to_plain_mode(monkeypatch) -> None:
-    """Plain threaded steps opt in, while coordinated LiDAR steps retain their own schedule."""
+def test_threaded_vec_env_applies_gil_releasing_forces_in_all_modes(monkeypatch) -> None:
+    """Both plain and coordinated LiDAR modes enable the GIL-releasing social-force context."""
     context_entries: list[None] = []
 
     @contextmanager
@@ -167,7 +167,7 @@ def test_threaded_vec_env_scopes_gil_releasing_forces_to_plain_mode(monkeypatch)
         batch_env.step(np.zeros((2, 1), dtype=np.float32))
     finally:
         batch_env.close()
-    assert context_entries == []
+    assert len(context_entries) == 2
 
 
 def test_threaded_vec_env_preserves_sb3_terminal_observation_and_auto_reset() -> None:

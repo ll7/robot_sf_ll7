@@ -482,10 +482,11 @@ def render_durable_comparison_table(
     lines: list[str] = []
     lines.append("## Issue #5326 durable objective-comparison table (diagnostic tier)\n")
     lines.append(
-        "> Claim scope: not paper-facing benchmark evidence. Synthesized on the"
-        " `--synthetic` CPU path; full matched-budget certification/replay/"
-        "independent-seed confirmation requires a SLURM-capable worker (out of"
-        " cheap-lane scope).\n"
+        "> Claim scope: not paper-facing benchmark evidence. The `--synthetic` CPU path"
+        " is reproducible by construction; the `--empirical` CPU path runs the real"
+        " `pysocialforce` evaluator and produces certified/replayable failures without"
+        " Slurm/GPU. Matched-budget confirmation at paper tier still requires artifact-level"
+        " review of certification/replay/independent-seed evidence.\n"
     )
     lines.append("| " + " | ".join(header_cols) + " |")
     lines.append("| " + " | ".join("---" for _ in header_cols) + " |")
@@ -539,8 +540,8 @@ def render_durable_comparison_table(
             "**DIRECTION NARROWED (diagnostic).** Both objectives compared under matched"
             " CPU-synthetic budgets with no degraded execution. This is a contract/structure"
             " check only; it does not constitute benchmark evidence for the signed-objective"
-            " hypothesis (requires SLURM campaign with certification/replay/independent-seed"
-            " confirmation)."
+            " hypothesis (requires artifact-level confirmation of certification/replay/"
+            "independent-seed evidence)."
         )
     lines.append(decision)
 
@@ -552,7 +553,7 @@ def render_durable_comparison_table(
             "- learned failure proposal #2921: stretch/out of scope",
             "- held-out-family yield: not evaluated (narrow archive caveat)",
             "- paper-facing success claims: forbidden at this tier",
-            "- campaign evidence: requires SLURM-capable worker",
+            "- confirmation tier: artifact-level review of certification/replay/independent-seed",
         )
     )
     lines.append(
@@ -701,6 +702,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Use a deterministic synthetic evaluator instead of running benchmark episodes.",
     )
+    parser.add_argument(
+        "--empirical",
+        action="store_true",
+        help=(
+            "Run the real CPU benchmark evaluator (pysocialforce) instead of the synthetic "
+            "path. Produces certified, replayable, valid failures. This is diagnostic/local "
+            "nominal evidence, not paper-facing benchmark evidence."
+        ),
+    )
     parser.add_argument("--out-json", type=Path, default=None)
     parser.add_argument(
         "--out-md",
@@ -714,6 +724,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.manifest is None and args.output_dir is None:
         parser.error("--output-dir is required unless --manifest is supplied")
+    if args.empirical and args.synthetic:
+        parser.error("--empirical and --synthetic are mutually exclusive")
     return args
 
 
@@ -755,7 +767,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         config=config,
         sampler_names=tuple(samplers),
         objective_names=objectives,
-        synthetic=bool(args.synthetic),
+        synthetic=bool(args.synthetic) and not args.empirical,
         budgets=budgets,
         seeds=seeds,
     )

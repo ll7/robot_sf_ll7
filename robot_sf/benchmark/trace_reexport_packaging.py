@@ -764,8 +764,32 @@ def _verify_complete_output(root: Path) -> dict[str, Any] | None:
     return marker
 
 
+def _paths_overlap(left: Path, right: Path) -> bool:
+    return left == right or left in right.parents or right in left.parents
+
+
+def _validate_output_path(output_dir: Path, input_paths: Mapping[str, Path]) -> None:
+    canonical_output = output_dir.resolve()
+    for label, input_path in input_paths.items():
+        canonical_input = input_path.resolve()
+        if _paths_overlap(canonical_output, canonical_input):
+            raise TraceReexportPackagingError(
+                f"output path overlaps raw {label} input: {output_dir}"
+            )
+
+    if os.path.lexists(output_dir) and _verify_complete_output(canonical_output) is None:
+        raise TraceReexportPackagingError(
+            f"output path exists but is not a complete trace package: {output_dir}"
+        )
+
+
 def _install_staging(staging: Path, output_dir: Path) -> None:
-    existing_marker = _verify_complete_output(output_dir) if output_dir.exists() else None
+    output_exists = os.path.lexists(output_dir)
+    existing_marker = _verify_complete_output(output_dir) if output_exists else None
+    if output_exists and existing_marker is None:
+        raise TraceReexportPackagingError(
+            f"output path exists but is not a complete trace package: {output_dir}"
+        )
     staged_marker = _read_json_object(staging / "package_complete.json")
     if existing_marker == staged_marker:
         shutil.rmtree(staging)
@@ -785,6 +809,16 @@ def _install_staging(staging: Path, output_dir: Path) -> None:
         raise
     if backup.exists():
         shutil.rmtree(backup)
+
+
+def _cleanup_staging(staging: Path, *, completed: bool) -> None:
+    if not staging.exists():
+        return
+    try:
+        shutil.rmtree(staging)
+    except OSError:
+        if completed:
+            raise
 
 
 def package_trace_reexport(  # noqa: PLR0913, PLR0915
@@ -807,7 +841,18 @@ def package_trace_reexport(  # noqa: PLR0913, PLR0915
     repo_root = (repo_root or Path(__file__).resolve().parents[2]).resolve()
     release_bundle = release_bundle.resolve()
     request_manifest = request_manifest.resolve()
-    output_dir = output_dir.resolve()
+    requested_output_dir = Path(output_dir)
+    output_dir = requested_output_dir.resolve()
+    _validate_output_path(
+        requested_output_dir,
+        {
+            "release bundle": release_bundle,
+            "request manifest": request_manifest,
+            "canary": canary_output,
+            "PPO": ppo_output,
+            "goal": goal_output,
+        },
+    )
 
     # All frozen byte-level provenance is checked before episode rows are interpreted.
     _verify_local_frozen_inputs(repo_root)
@@ -842,6 +887,7 @@ def package_trace_reexport(  # noqa: PLR0913, PLR0915
 
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{output_dir.name}.staging-", dir=output_dir.parent))
+    completed = False
     try:
         _write_json(
             staging / "expected_outcomes.json",
@@ -929,10 +975,9 @@ def package_trace_reexport(  # noqa: PLR0913, PLR0915
         _write_json(staging / "package_complete.json", marker)
         _verify_complete_output(staging)
         _install_staging(staging, output_dir)
-    except Exception:
-        if staging.exists():
-            shutil.rmtree(staging)
-        raise
+        completed = True
+    finally:
+        _cleanup_staging(staging, completed=completed)
     return output_dir
 
 

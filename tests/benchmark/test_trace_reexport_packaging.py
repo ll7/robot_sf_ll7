@@ -9,7 +9,10 @@ import json
 import tarfile
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import pytest
 
@@ -327,6 +330,14 @@ def _tree_digests(root: Path) -> dict[str, str]:
     }
 
 
+def _input_digests(synthetic_inputs: SyntheticInputs) -> dict[str, Any]:
+    return {
+        "release_bundle": _sha256_file(synthetic_inputs.release_bundle),
+        "request_manifest": _sha256_file(synthetic_inputs.request_manifest),
+        **{label: _tree_digests(path) for label, path in synthetic_inputs.outputs.items()},
+    }
+
+
 def test_package_success_is_isolated_deterministic_and_idempotent(
     synthetic_inputs: SyntheticInputs,
 ) -> None:
@@ -536,3 +547,46 @@ def test_failed_repackage_does_not_replace_previous_complete_output(
     assert _tree_digests(output) == before
     assert json.loads((output / "package_complete.json").read_text())["status"] == "complete"
     assert not list(output.parent.glob(f".{output.name}.staging-*"))
+
+
+def test_markerless_output_is_preserved(
+    synthetic_inputs: SyntheticInputs,
+) -> None:
+    output = synthetic_inputs.root / "markerless"
+    output.mkdir()
+    (output / "unrelated.bin").write_bytes(b"unrelated output content")
+    before_output = _tree_digests(output)
+    before_inputs = _input_digests(synthetic_inputs)
+
+    with pytest.raises(TraceReexportPackagingError, match="not a complete trace package"):
+        package_trace_reexport(**synthetic_inputs.kwargs(output))
+
+    assert _tree_digests(output) == before_output
+    assert _input_digests(synthetic_inputs) == before_inputs
+    assert not list(output.parent.glob(f".{output.name}.staging-*"))
+
+
+@pytest.mark.parametrize(
+    ("output_factory", "match"),
+    [
+        (lambda inputs: inputs.outputs["canary"], "overlaps raw canary input"),
+        (lambda inputs: inputs.outputs["ppo"] / "nested" / "package", "overlaps raw PPO input"),
+        (lambda inputs: inputs.root, "overlaps raw"),
+    ],
+    ids=["exact-input-alias", "input-ancestor-overlap", "input-descendant-overlap"],
+)
+def test_output_input_overlaps_are_rejected_without_mutation(
+    synthetic_inputs: SyntheticInputs,
+    output_factory: Callable[[SyntheticInputs], Path],
+    match: str,
+) -> None:
+    output = output_factory(synthetic_inputs)
+    before_output = _tree_digests(output)
+    before_inputs = _input_digests(synthetic_inputs)
+
+    with pytest.raises(TraceReexportPackagingError, match=match):
+        package_trace_reexport(**synthetic_inputs.kwargs(output))
+
+    assert _tree_digests(output) == before_output
+    assert _input_digests(synthetic_inputs) == before_inputs
+    assert not (synthetic_inputs.outputs["ppo"] / "nested").exists()

@@ -474,6 +474,7 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
         '"$SCRIPT_DIR/check_changed_coverage.sh"',
         '"$SCRIPT_DIR/check_docstring_todos_diff.sh"',
         '"$SCRIPT_DIR/check_docstring_todos_ratchet.sh"',
+        'uv run python "$SCRIPT_DIR/check_optional_import_pr_freshness.py" --base-ref "$BASE_REF"',
     ]
     for gate in expected_gates:
         assert gate in script_text

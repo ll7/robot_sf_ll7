@@ -81,6 +81,11 @@ def test_avoidable_replay_joins_to_supporting_causal_report() -> None:
     ts = report["observed_reconstruction"]["critical_timestamps"]
     assert ts["t_uca"]["available"] is True and ts["t_uca"]["step"] is not None
     assert ts["t_inevitable"]["available"] is True and ts["t_inevitable"]["step"] is not None
+    # The summary has no per-element canonical trace, so coverage cannot make
+    # planner-internal reconstruction fields appear available.
+    elements = report["observed_reconstruction"]["elements"]
+    assert all(element["available"] is False for element in elements.values())
+    assert all(key in report["missing_fields"] for key in elements)
     # Every preventing branch from the replay is recorded as a preventing intervention.
     interventions = report["causal_contribution"]["interventions"]
     assert interventions and all(i["prevented_contact"] is True for i in interventions)
@@ -99,6 +104,11 @@ def test_already_unavoidable_replay_joins_to_non_abstaining_unavoidable() -> Non
     ts = report["observed_reconstruction"]["critical_timestamps"]
     assert ts["t_uca"]["available"] is False
     assert ts["t_inevitable"]["available"] is True and ts["t_inevitable"]["step"] == 0
+    mechanism = report["proximate_mechanism"]
+    assert mechanism["mechanism_label"] == "unknown"
+    assert mechanism["cause_location"] == "unknown_or_interacting"
+    assert mechanism["unsafe_control_action_class"] == "unknown"
+    assert report["confidence"]["level"] == "unknown"
     assert report["normative_fault"] == "not_assessed"
 
 
@@ -133,6 +143,27 @@ def test_missing_feasible_action_joins_to_abstaining_unknown() -> None:
     assert report["causal_contribution"]["verdict"] != "unavoidable"
 
 
+def test_unsupported_replay_verdict_abstains_and_fails_closed() -> None:
+    """A future replay verdict becomes an explicit unknown report."""
+    from dataclasses import replace
+
+    replay = _run_replay(fx.preventable_late_braking_scenario())
+    unsupported = replace(replay, verdict="future_verdict", abstained=False)
+    report = collide_causal_report_from_last_avoidable(
+        report_id="unsupported",
+        case_id="fixture",
+        replay=unsupported,
+        metadata=_METADATA,
+    )
+    assert report["abstained"] is True
+    assert report["abstention_reason"] == "unsupported_replay_verdict"
+    assert report["causal_contribution"]["verdict"] == "unknown"
+    assert report["causal_contribution"]["supported_actual_cause"] is False
+    assert report["proximate_mechanism"]["mechanism_label"] == "unknown"
+    assert report["confidence"]["level"] == "unknown"
+    validate_collision_causal_report(report)
+
+
 def test_two_action_interaction_joins_as_avoidable() -> None:
     """A closed-loop two-body interaction replay joins as an avoidable report."""
     scenario = fx.two_action_interaction_scenario()
@@ -149,6 +180,21 @@ def test_join_rejects_unknown_mechanism_label() -> None:
     replay = _run_replay(fx.preventable_late_braking_scenario())
     bad_metadata = replace(_METADATA, mechanism_label="made_up_label")
     with pytest.raises(CollisionCausalReportError):
+        collide_causal_report_from_last_avoidable(
+            report_id="x",
+            case_id="x",
+            replay=replay,
+            metadata=bad_metadata,
+        )
+
+
+def test_join_rejects_empty_intervention_model_for_supported_cause() -> None:
+    """A supported actual cause must name the intervention model."""
+    from dataclasses import replace
+
+    replay = _run_replay(fx.preventable_late_braking_scenario())
+    bad_metadata = replace(_METADATA, intervention_model="")
+    with pytest.raises(CollisionCausalReportError, match="intervention_model"):
         collide_causal_report_from_last_avoidable(
             report_id="x",
             case_id="x",

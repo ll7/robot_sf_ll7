@@ -21,10 +21,11 @@ The contract is deliberately conservative: planner-internal reconstruction
 fields (observations, predictions, generated/selected candidates, guard and
 arbitration results, feasible/applied commands) are marked *unavailable* unless
 a canonical trace owner actually produced them. First-unsafe-action
-(``t_uca``) and last-avoidable-state (``t_inevitable``) computation does not yet
-exist in this repository (see #5442), so those timestamps are expected to be
-unavailable in v1 reports. Marking them unavailable is the correct fail-closed
-behaviour; fabricating them is not.
+(``t_uca``) and last-avoidable-state (``t_inevitable``) timestamps are available
+in a joined report only when the replay engine actually computed them;
+planner-internal reconstruction elements remain unavailable because this join
+does not own a canonical trace for them. Fabricating those elements from
+report-wide replay coverage is not allowed.
 """
 
 from __future__ import annotations
@@ -259,6 +260,11 @@ _LAST_AVOIDABLE_TO_CAUSAL_VERDICT = {
 class CausalJoinMetadata:
     """Shared causal-report provenance for a ``last_avoidable_replay.v1`` join.
 
+    The replay engine proves avoidability under the named intervention model,
+    but it does not localise a planner-internal mechanism. Callers must provide
+    independent evidence for the mechanism fields; otherwise they must use the
+    explicit ``unknown`` values.
+
     Attributes:
         intervention_model: Named intervention/model under which the causal
             contribution is asserted (e.g. ``frozen_state_brake_swap__replayed_pedestrians``).
@@ -318,16 +324,30 @@ def collide_causal_report_from_last_avoidable(
 
     _validate_join_metadata(metadata)
 
-    causal_verdict = _LAST_AVOIDABLE_TO_CAUSAL_VERDICT.get(replay.verdict, "unknown")
-    abstained = replay.verdict == VERDICT_UNKNOWN
-    supported_actual_cause = replay.verdict == VERDICT_AVOIDABLE
+    unsupported_verdict = replay.verdict not in _LAST_AVOIDABLE_TO_CAUSAL_VERDICT
+    abstained = replay.abstained or replay.verdict == VERDICT_UNKNOWN or unsupported_verdict
+    causal_verdict = "unknown" if abstained else _LAST_AVOIDABLE_TO_CAUSAL_VERDICT[replay.verdict]
+    supported_actual_cause = replay.verdict == VERDICT_AVOIDABLE and not abstained
 
     config = replay.config
     ped_response = config.pedestrian_response
     replay_determinism = "deterministic" if replay.determinism.deterministic else "nondeterministic"
     rationale = _join_rationale(replay, abstained)
-    missing_fields = _join_missing_fields(replay, supported_actual_cause)
+    missing_fields = _join_missing_fields(replay)
     interventions = _join_interventions(replay, ped_response, supported_actual_cause)
+
+    if unsupported_verdict:
+        abstention_reason = "unsupported_replay_verdict"
+    elif replay.abstained and not replay.abstain_reason:
+        abstention_reason = "replay_marked_abstained"
+    else:
+        abstention_reason = replay.abstain_reason or ""
+
+    # A replay that does not support an actual cause cannot support a mechanism,
+    # unsafe-action, or confidence claim either. In particular, an
+    # already-unavoidable result is not evidence for metadata a caller may have
+    # supplied for an avoidable fixture.
+    mechanism_metadata = metadata if supported_actual_cause else None
 
     def _ts(available: bool, step: int | None) -> dict[str, Any]:
         # The replay reports t_* as integer control steps; express them as steps
@@ -353,7 +373,7 @@ def collide_causal_report_from_last_avoidable(
             "replay_determinism": replay_determinism,
         },
         "abstained": abstained,
-        "abstention_reason": replay.abstain_reason if abstained else "",
+        "abstention_reason": abstention_reason if abstained else "",
         "observed_reconstruction": {
             "critical_timestamps": {
                 "t_danger": _ts(True, config.t_danger),
@@ -363,19 +383,25 @@ def collide_causal_report_from_last_avoidable(
             },
             "elements": {
                 key: {
-                    "available": not abstained,
-                    "source": ("last_avoidable_replay.v1.branch_search" if not abstained else None),
-                    "detail": None
-                    if abstained
-                    else {"feasible_coverage": replay.feasible_coverage},
+                    "available": False,
+                    "source": None,
+                    "detail": None,
                 }
                 for key in RECONSTRUCTION_ELEMENT_KEYS
             },
         },
         "proximate_mechanism": {
-            "mechanism_label": metadata.mechanism_label,
-            "cause_location": metadata.cause_location,
-            "unsafe_control_action_class": metadata.unsafe_control_action_class,
+            "mechanism_label": (
+                mechanism_metadata.mechanism_label if mechanism_metadata else "unknown"
+            ),
+            "cause_location": (
+                mechanism_metadata.cause_location
+                if mechanism_metadata
+                else "unknown_or_interacting"
+            ),
+            "unsafe_control_action_class": (
+                mechanism_metadata.unsafe_control_action_class if mechanism_metadata else "unknown"
+            ),
             "rationale": rationale,
         },
         "causal_contribution": {
@@ -386,14 +412,14 @@ def collide_causal_report_from_last_avoidable(
             "interventions": interventions,
         },
         "confidence": {
-            "level": metadata.confidence_level,
+            "level": mechanism_metadata.confidence_level if mechanism_metadata else "unknown",
             "rationale": rationale,
         },
         "assumptions": list(assumptions or []),
         "missing_fields": missing_fields,
         "competing_explanations": list(competing_explanations or []),
     }
-    return report
+    return validate_collision_causal_report(report)
 
 
 def _validate_join_metadata(metadata: CausalJoinMetadata) -> None:
@@ -416,6 +442,8 @@ def _validate_join_metadata(metadata: CausalJoinMetadata) -> None:
 
 def _join_rationale(replay: LastAvoidableReport, abstained: bool) -> str:
     """Return the proximate-mechanism/confidence rationale for the join verdict."""
+    if abstained:
+        return replay.abstain_reason or "last-avoidable replay abstained before causal attribution"
     if replay.verdict == VERDICT_AVOIDABLE:
         return (
             "Frozen-state counterfactual replay found an admissible action that "
@@ -430,16 +458,15 @@ def _join_rationale(replay: LastAvoidableReport, abstained: bool) -> str:
     return replay.abstain_reason or "last-avoidable replay unable to test avoidability"
 
 
-def _join_missing_fields(replay: LastAvoidableReport, supported_actual_cause: bool) -> list[str]:
+def _join_missing_fields(replay: LastAvoidableReport) -> list[str]:
     """Return the missing_fields list for the joined report.
 
-    When the replay abstains or does not support an actual cause, every
-    planner-internal reconstruction element and every unavailable critical timestamp
-    must be declared missing so unsupported evidence is explicit, never inferred.
+    The replay summary has no per-element canonical trace, so every
+    planner-internal reconstruction element is unavailable for every verdict.
+    Unsupported evidence is explicit, never inferred from report-wide coverage.
     """
     missing: list[str] = []
-    if not (supported_actual_cause or replay.verdict == VERDICT_ALREADY_UNAVOIDABLE):
-        missing.extend(RECONSTRUCTION_ELEMENT_KEYS)
+    missing.extend(RECONSTRUCTION_ELEMENT_KEYS)
     for key in CRITICAL_TIMESTAMP_KEYS:
         is_available = (
             key in ("t_danger", "t_contact")

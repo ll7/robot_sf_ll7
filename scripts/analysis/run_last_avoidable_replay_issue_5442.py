@@ -31,21 +31,30 @@ from robot_sf.benchmark.collision_causal_report import (
 )
 from robot_sf.benchmark.last_avoidable_replay import (
     SUBSTITUTION_HOLD,
+    VERDICT_AVOIDABLE,
     LastAvoidableReport,
     ReplayConfig,
     locate_last_avoidable,
 )
 
-#: Shared causal-report provenance applied to every joined report. The mechanism
-#: label/location and STPA class describe a *frozen-state* avoidance localisation,
-#: not a planner-internal defect attribution (which stays out of scope here).
-_CAUSAL_METADATA = CausalJoinMetadata(
-    intervention_model="frozen_state_counterfactual_replay__replayed_pedestrians",
-    mechanism_label="guard_or_handoff_domination",
-    cause_location="candidate_scoring_selection",
-    unsafe_control_action_class="action_not_provided",
-    confidence_level="supported_hypothesis",
-)
+#: The replay proves only the intervention result. It does not own a canonical
+#: planner trace, so mechanism localisation stays explicitly unknown. A
+#: confidence claim is valid only for an avoidable replay, where the preventing
+#: intervention is actually recorded by the engine.
+_CAUSAL_INTERVENTION_MODEL = "frozen_state_counterfactual_replay__replayed_pedestrians"
+
+
+def _causal_metadata_for(report: LastAvoidableReport) -> CausalJoinMetadata:
+    """Return fixture metadata that matches the replay evidence boundary."""
+    is_avoidable = report.verdict == VERDICT_AVOIDABLE and not report.abstained
+    return CausalJoinMetadata(
+        intervention_model=_CAUSAL_INTERVENTION_MODEL if is_avoidable else "",
+        mechanism_label="unknown",
+        cause_location="unknown_or_interacting",
+        unsafe_control_action_class="unknown",
+        confidence_level="supported_hypothesis" if is_avoidable else "unknown",
+    )
+
 
 _SCHEMA_PATH = (
     Path(__file__).resolve().parents[2]
@@ -174,7 +183,7 @@ def main(argv: list[str] | None = None) -> int:
                 report_id=f"ccr-{name}",
                 case_id=name,
                 replay=report,
-                metadata=_CAUSAL_METADATA,
+                metadata=_causal_metadata_for(report),
             )
             causal_path = args.out_dir / f"{name}__causal_report.json"
             causal_path.write_text(json.dumps(causal, indent=2) + "\n", encoding="utf-8")

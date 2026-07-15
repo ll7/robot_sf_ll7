@@ -792,7 +792,7 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
             "n_runnable_cells": len(runnable_rows),
             "n_unrunnable_cells": len(unrunnable_rows),
             "n_mixed_cells": len(mixed_rows),
-            "all_cells_bitwise_identical": version_match
+            "all_cells_bitwise_identical": provenance_match
             and bool(runnable_rows)
             and all(row["bitwise_identical"] for row in runnable_rows),
         },

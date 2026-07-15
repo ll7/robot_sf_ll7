@@ -286,6 +286,8 @@ def test_cross_host_comparison_rejects_provenance_drift_as_identical(manifest, f
     """Matching NumPy/Numba is insufficient when another execution identity drifts."""
     first = verify_host_report(manifest, _host_report(manifest, "host-a"))
     second = verify_host_report(manifest, _host_report(manifest, "host-b"))
+    if field not in second["environment"]:
+        raise KeyError(f"Key '{field}' not found in environment")
     second["environment"][field] = "drifted"
 
     comparison = compare_verified_hosts(manifest, first, second)

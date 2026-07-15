@@ -72,7 +72,7 @@ class TestIssue5326ConfigValidation:
         assert contract["repeated_seeds"] == config["repeated_seeds"]
         assert contract["samplers"] == config["samplers"]
         assert contract["reporting_contract"] == config["reporting_contract"]
-        assert state["claim_boundary"].find("not matched-budget benchmark evidence") >= 0
+        assert "not matched-budget benchmark evidence" in state["claim_boundary"]
         assert state["remaining_gate"]["blockers_new"] == []
         assert state["forbidden_claims"]["paper_or_dissertation_claim"] is False
 

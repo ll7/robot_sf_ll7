@@ -37,6 +37,7 @@ _POST_PREFLIGHT_SCRIPTS = [
     "check_changed_coverage.sh",
     "check_docstring_todos_diff.sh",
     "check_docstring_todos_ratchet.sh",
+    "check_optional_import_pr_freshness.py",
     "pr_ready_freshness.py",
 ]
 

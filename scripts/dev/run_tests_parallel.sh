@@ -70,6 +70,7 @@ core_test_paths=(
   tests/contract
   tests/factories
   tests/guard
+  tests/ped_npc
   tests/prediction
   tests/scenario_certification
   tests/sensor

@@ -439,6 +439,20 @@ def test_optional_lane_collection_hook_skips_core_paths(monkeypatch: pytest.Monk
     )
 
 
+def test_ped_npc_collection_stays_in_core_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pedestrian population tests are core-only, not optional-extra tests (#5753)."""
+    import tests.conftest as test_conftest
+
+    ped_npc_test = Path("tests/ped_npc/test_force_population_size_split.py")
+    assert test_conftest._is_optional_readiness_test_path(ped_npc_test.as_posix()) is False
+
+    monkeypatch.setenv("ROBOT_SF_TEST_LANE", "core")
+    assert test_conftest.pytest_ignore_collect(ped_npc_test, None) is False
+
+    monkeypatch.setenv("ROBOT_SF_TEST_LANE", "optional")
+    assert test_conftest.pytest_ignore_collect(ped_npc_test, None) is True
+
+
 def test_focused_snqi_selector_collects_without_unrelated_optional_stacks(tmp_path: Path) -> None:
     """Explicit SNQI targets must collect when unrelated optional imports are unavailable."""
     sitecustomize = tmp_path / "sitecustomize.py"

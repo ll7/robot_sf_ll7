@@ -43,6 +43,7 @@ from robot_sf.baselines.interface import (
 )
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
+from robot_sf.common.optional_import import try_import
 from robot_sf.common.seed import _configure_torch_213_runtime
 from robot_sf.models import resolve_model_path
 from robot_sf.planner.predictive_foresight import (
@@ -123,12 +124,9 @@ class PPOPlanner:
                 ``step``. The benchmark fork worker uses this to avoid loading native
                 libraries in the parent process.
         """
-        try:
-            import torch  # noqa: PLC0415
-
+        torch = try_import("torch")
+        if torch is not None:
             torch.set_num_threads(1)
-        except ImportError:
-            pass
         self.config = self._parse_config(config)
         self._seed = seed
         self._model = None

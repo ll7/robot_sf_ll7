@@ -89,6 +89,7 @@ from robot_sf.benchmark.utils import (
     normalize_track_field,
     validate_episode_success_integrity,
 )
+from robot_sf.common.optional_import import try_import
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import is_task_bundle_reference
@@ -293,12 +294,9 @@ _episode_identity_hash = episode_identity_hash
 def _planner_step_worker(conn: Any, planner: Any) -> None:
     """Run planner steps in an isolated child process."""
     try:
-        try:
-            import torch  # noqa: PLC0415
-
+        torch = try_import("torch")
+        if torch is not None:
             torch.set_num_threads(1)
-        except ImportError:
-            pass
         ensure_load = getattr(planner, "_ensure_model_loaded", None)
         if callable(ensure_load):
             ensure_load()

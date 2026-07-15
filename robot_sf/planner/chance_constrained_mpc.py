@@ -110,6 +110,15 @@ class ChanceConstrainedMPCConfig(PredictionMPCConfig):
     # #2844 learned backend controls its own mode count; this field is inert
     # unless predictor_backend == "constant_velocity_gmm".
     gmm_mode_count: int = 1
+    # Learned GMM predictor configuration (issue #5307 successor slice).  Passed
+    # to ``LearnedGmmPedestrianPredictor`` when predictor_backend == "learned_gmm".
+    # The ``allow_untrained_smoke`` flag controls whether the backend can run
+    # without a trained checkpoint (CPU smoke-test mode).
+    learned_gmm_checkpoint_path: str | None = None
+    learned_gmm_model_id: str | None = None
+    learned_gmm_hidden_dim: int = 128
+    learned_gmm_mode_count: int = 3
+    learned_gmm_allow_untrained_smoke: bool = False
 
     def __post_init__(self) -> None:
         """Reject ambiguous risk settings and incompatible envelope composition."""
@@ -437,6 +446,11 @@ def build_chance_constrained_mpc_config(
         "radial_quadrature_order": int,
         "angular_quadrature_order": int,
         "gmm_mode_count": int,
+        "learned_gmm_checkpoint_path": lambda v: str(v).strip() if v is not None else None,
+        "learned_gmm_model_id": lambda v: str(v).strip() if v is not None else None,
+        "learned_gmm_hidden_dim": int,
+        "learned_gmm_mode_count": int,
+        "learned_gmm_allow_untrained_smoke": _parse_bool,
         "hard_pedestrian_constraints_enabled": _parse_bool,
         "pedestrian_clearance_weight": float,
     }
@@ -467,13 +481,21 @@ def build_chance_constrained_mpc_config(
 def build_chance_constrained_mpc_adapter(
     algo_config: dict[str, Any] | None,
 ) -> ChanceConstrainedMPCPlannerAdapter:
-    """Build the chance-constrained MPC adapter, fail-closed by default.
+    """Build the chance-constrained MPC adapter.
 
-    The default backend (``issue_2844_k_mode_gmm``) still fails closed until the
-    learned predictor lands. The explicit ``constant_velocity_gmm`` backend
-    (issue #5307 successor slice) wires the CPU-validatable surrogate provider so
-    the control law runs end-to-end without a learned model. No constant-velocity
-    fallback is ever permitted for the real learned backend.
+    Supported backends:
+
+    - ``constant_velocity_gmm`` (issue #5307 successor): CPU-validatable
+      surrogate provider that emits constant-velocity GMM forecasts.  Used
+      for diagnostic validation of the control law.
+    - ``learned_gmm`` (issue #5307 successor): minimal learned GMM predictor
+      scaffold implementing ``GaussianMixturePedestrianPredictor``.  When
+      ``learned_gmm_allow_untrained_smoke`` is set and no checkpoint is
+      provided, the network is zero-initialised (CPU smoke-test mode).
+      When a checkpoint is available it loads the #2844-trained weights.
+
+    All other backends fail closed.  No constant-velocity fallback is ever
+    permitted.
 
     Returns:
         The configured ``ChanceConstrainedMPCPlannerAdapter`` with its provider.
@@ -481,6 +503,7 @@ def build_chance_constrained_mpc_adapter(
 
     config = build_chance_constrained_mpc_config(algo_config)
     backend = config.predictor_backend.strip().lower()
+
     if backend == "constant_velocity_gmm":
         # Keep the surrogate provider import lazy so importing the provider module
         # directly does not create a partially initialized circular import.
@@ -492,10 +515,31 @@ def build_chance_constrained_mpc_adapter(
             mode_count=int(getattr(config, "gmm_mode_count", 1) or 1),
         )
         return ChanceConstrainedMPCPlannerAdapter(config=config, predictor=predictor)
+
+    if backend == "learned_gmm":
+        # Keep the learned predictor import lazy so it does not pull torch
+        # into core planner imports.
+        from robot_sf.planner.learned_gmm_predictor import (  # noqa: PLC0415
+            LearnedGmmPedestrianPredictor,
+            build_learned_gmm_predictor_config,
+        )
+
+        # Map prefixed config keys to the predictor-native keys that
+        # build_learned_gmm_predictor_config expects.
+        predictor_raw: dict[str, Any] = {}
+        if algo_config:
+            for k, v in algo_config.items():
+                if k.startswith("learned_gmm_"):
+                    native_key = k[len("learned_gmm_") :]  # strip prefix
+                    predictor_raw[native_key] = v
+        predictor_config = build_learned_gmm_predictor_config(predictor_raw)
+        predictor = LearnedGmmPedestrianPredictor(predictor_config)
+        return ChanceConstrainedMPCPlannerAdapter(config=config, predictor=predictor)
+
     raise ValueError(
         "chance_constrained_mpc is unavailable: its #2844 K-mode/GMM predictor provider is not "
-        f"configured (requested backend {config.predictor_backend!r}). Use backend "
-        "'constant_velocity_gmm' only for CPU diagnostic validation of the control law."
+        f"configured (requested backend {config.predictor_backend!r}). Supported backends: "
+        "'constant_velocity_gmm' (CPU diagnostic), 'learned_gmm' (CPU smoke or checkpoint)."
     )
 
 

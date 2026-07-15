@@ -317,7 +317,7 @@ class TestLearnGmmPredictorConfig:
             model_type="transformer",
             allow_untrained_smoke=True,
         )
-        with pytest.raises(ValueError, match="model_type='mlp' only"):
+        with pytest.raises(ValueError, match="model_type.*mlp.*graph_gru"):
             LearnedGmmPedestrianPredictor(cfg)
 
     def test_invalid_values_fallback_to_defaults(self) -> None:
@@ -419,6 +419,16 @@ class TestLearnedGmmPedestrianPredictor:
         )
         with pytest.raises(ValueError, match="exceeds the configured"):
             predictor.predict(_simple_observation(), horizon_steps=7, dt=0.25)
+
+    def test_shorter_requested_horizon_is_sliced_from_model_output(self) -> None:
+        """A shorter MPC request returns only the requested forecast steps."""
+        predictor = LearnedGmmPedestrianPredictor(
+            LearnedGmmPredictorConfig(allow_untrained_smoke=True)
+        )
+
+        forecast = predictor.predict(_simple_observation(), horizon_steps=2, dt=0.25)
+
+        assert forecast.means_world.shape == (3, 3, 2, 2)
 
     def test_ambiguous_checkpoint_sources_fail_closed(self) -> None:
         """Checkpoint paths and registry IDs cannot silently override each other."""

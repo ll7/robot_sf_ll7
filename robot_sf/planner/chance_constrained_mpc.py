@@ -114,10 +114,13 @@ class ChanceConstrainedMPCConfig(PredictionMPCConfig):
     # to ``LearnedGmmPedestrianPredictor`` when predictor_backend == "learned_gmm".
     # The ``allow_untrained_smoke`` flag controls whether the backend can run
     # without a trained checkpoint (CPU smoke-test mode).
+    # ``learned_gmm_model_type`` keeps the historical flat MLP default while
+    # exposing the opt-in #2844 graph-GRU scaffold.
     learned_gmm_checkpoint_path: str | None = None
     learned_gmm_model_id: str | None = None
     learned_gmm_hidden_dim: int = 128
     learned_gmm_mode_count: int = 3
+    learned_gmm_model_type: str = "mlp"
     learned_gmm_allow_untrained_smoke: bool = False
 
     def __post_init__(self) -> None:
@@ -450,6 +453,7 @@ def build_chance_constrained_mpc_config(
         "learned_gmm_model_id": lambda v: str(v).strip() if v is not None else None,
         "learned_gmm_hidden_dim": int,
         "learned_gmm_mode_count": int,
+        "learned_gmm_model_type": str,
         "learned_gmm_allow_untrained_smoke": _parse_bool,
         "hard_pedestrian_constraints_enabled": _parse_bool,
         "pedestrian_clearance_weight": float,
@@ -493,6 +497,8 @@ def build_chance_constrained_mpc_adapter(
       ``learned_gmm_allow_untrained_smoke`` is set and no checkpoint is
       provided, the network is zero-initialised (CPU smoke-test mode).
       When a checkpoint is available it loads the #2844-trained weights.
+      ``learned_gmm_model_type=graph_gru`` selects the opt-in graph-pooled GRU
+      and diagonal-Gaussian mode head; the historical ``mlp`` default is unchanged.
 
     All other backends fail closed.  No constant-velocity fallback is ever
     permitted.

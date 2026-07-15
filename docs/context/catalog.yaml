@@ -24,6 +24,10 @@ entries:
   status: evidence
   freshness: dated
   area: reproducibility
+- path: docs/context/evidence/issue_5792_demo_validation_2026-07-15.md.review.json
+  status: evidence
+  freshness: dated
+  area: reproducibility
 - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/README.md
   status: evidence
   freshness: evidence

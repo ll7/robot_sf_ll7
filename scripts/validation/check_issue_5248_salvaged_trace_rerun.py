@@ -79,10 +79,11 @@ def _public_path(path: Path) -> str:
     """
 
     resolved = path.resolve()
-    for anchor in ("docs", "configs", "scripts", "tests", "output"):
-        if anchor in resolved.parts:
-            index = resolved.parts.index(anchor)
-            return str(Path(*resolved.parts[index:]))
+    repo_root = Path(__file__).resolve().parents[2]
+    try:
+        return str(resolved.relative_to(repo_root))
+    except ValueError:
+        pass
     try:
         return str(path.resolve().relative_to(Path.cwd().resolve()))
     except ValueError:
@@ -152,11 +153,17 @@ def _load_mechanism_sidecar(path: Path) -> tuple[list[dict[str, str]], str]:
     fieldnames: list[str] | None = None
     try:
         with path.open("r", encoding="utf-8", newline="") as handle:
-            sample = handle.readline()
-            # The sidecar may start with a ``# ...`` review-marker comment line;
-            # rewind only when it is not the header.
-            if sample.startswith("episode_id"):
-                handle.seek(0)
+            # The sidecar may start with one or more ``# ...`` review-marker
+            # comment lines. Rewind to the first non-comment line so the CSV
+            # header is detected regardless of its column order.
+            while True:
+                position = handle.tell()
+                line = handle.readline()
+                if not line:
+                    break
+                if not line.startswith("#"):
+                    handle.seek(position)
+                    break
             reader = csv.DictReader(handle)
             fieldnames = list(reader.fieldnames or [])
             rows = list(reader)

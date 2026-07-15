@@ -15,6 +15,7 @@ from scripts.validation.check_issue_5248_salvaged_trace_rerun import (
     BLOCKED_STATUS,
     READY_STATUS,
     _load_trace_contract,
+    _public_path,
     build_registration_receipt,
     main,
 )
@@ -299,6 +300,7 @@ def _write_sidecar(
     labeled: list[str],
     weak: list[str] | None = None,
     drop_field: str | None = None,
+    reorder_header: bool = False,
 ) -> Path:
     """Write a #4831-style derived mechanism-label sidecar CSV.
 
@@ -323,6 +325,12 @@ def _write_sidecar(
     ]
     if drop_field is not None and drop_field in fields:
         fields.remove(drop_field)
+    if reorder_header:
+        fields = [
+            "scenario_id",
+            "episode_id",
+            *[field for field in fields if field != "episode_id"],
+        ]
     weak = weak or []
     with path.open("w", encoding="utf-8", newline="") as handle:
         handle.write("# AI-GENERATED NEEDS-REVIEW\n")
@@ -379,6 +387,18 @@ def test_sidecar_overlay_promotes_unlabeled_failures_above_floor(tmp_path: Path)
     assert receipt["trace_labels"]["trace_labeled_fraction_without_sidecar"] == 0.0
     assert receipt["trace_labels"]["trace_labeled_rows"] == 3
     assert receipt["trace_labels"]["trace_labeled_fraction"] == 0.75
+
+
+def test_sidecar_accepts_comment_and_reordered_header(tmp_path: Path) -> None:
+    """Leading review comments cannot make a valid reordered CSV look malformed."""
+    episode_ids = [f"ep-{i}" for i in range(4)]
+    campaign = _write_unlabeled_campaign(tmp_path / "campaign", episode_ids=episode_ids)
+    sidecar = _write_sidecar(tmp_path / "side.csv", labeled=episode_ids, reorder_header=True)
+
+    receipt = _receipt_with_sidecar(campaign, sidecar)
+
+    assert receipt["status"] == READY_STATUS
+    assert receipt["trace_labels"]["trace_labeled_rows"] == 4
 
 
 def test_sidecar_overlay_excludes_weak_hypothesis_from_floor(tmp_path: Path) -> None:
@@ -464,6 +484,13 @@ def test_sidecar_receipt_records_provenance(tmp_path: Path) -> None:
     assert "/home/" not in sidecar_block["path"]
 
 
+def test_public_path_does_not_strip_external_directory_names(tmp_path: Path) -> None:
+    """Only paths under the repository root receive a repository-relative key."""
+    external_path = tmp_path / "docs" / "artifact.csv"
+
+    assert _public_path(external_path) == "artifact.csv"
+
+
 def test_no_sidecar_omits_sidecar_block_and_keeps_legacy_fraction(tmp_path: Path) -> None:
     """Without a sidecar the receipt has no sidecar block and keeps legacy behavior."""
 
@@ -493,9 +520,9 @@ def test_real_harvest_with_sidecar_records_accurate_partial_coverage() -> None:
     """
 
     if not HARVEST_CAMPAIGN_ROOT.is_dir() or not REAL_MECHANISM_SIDECAR.is_file():
-        raise pytest.skip.Exception(
-            "verified job-13334 harvest or #4831 sidecar absent on this host",
-            reason="harvest_or_sidecar_not_available",
+        pytest.skip(
+            "verified job-13334 harvest or #4831 sidecar absent on this host "
+            "[harvest_or_sidecar_not_available]"
         )
 
     receipt = build_registration_receipt(

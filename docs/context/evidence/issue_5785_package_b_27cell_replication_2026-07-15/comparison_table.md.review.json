@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/comparison_table.md",
+  "artifact_sha256": "36c7b59f149ccc7b8809066aa30ea0137d533570d83820a5c43c5429ac7461b2",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

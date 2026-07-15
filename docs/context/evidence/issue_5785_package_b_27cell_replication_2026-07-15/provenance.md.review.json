@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/provenance.md",
+  "artifact_sha256": "f425afad4ad33bec91010d69872b04b99b8070f57dddac8f259eac73674c6d48",
+  "preserved_exact_bytes": true,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+}

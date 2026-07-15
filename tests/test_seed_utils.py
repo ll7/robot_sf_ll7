@@ -85,6 +85,8 @@ def test_torch_213_runtime_guard_disables_compile_wrapper(monkeypatch):
     """Guard the optimizer path that segfaults with Torch 2.13 on Python 3.12+."""
     monkeypatch.setattr(sys, "version_info", (3, 13))
     monkeypatch.setattr(seed_module, "package_version", lambda _name: "2.13.0+cpu")
+    for module_name in ("tensorflow", "tensorboard", "keras"):
+        monkeypatch.delitem(sys.modules, module_name, raising=False)
     imported: list[str] = []
     monkeypatch.setattr(
         seed_module.importlib,
@@ -108,8 +110,11 @@ def test_torch_213_runtime_guard_is_limited_to_supported_versions(monkeypatch):
     assert os.environ["TORCH_COMPILE_DISABLE"] == "0"
 
 
-def test_torch_213_runtime_guard_skips_triton_when_conflicting_modules_imported(monkeypatch):
-    """Guard skips importing triton when conflicting modules (tensorflow, tensorboard, keras) are present in sys.modules."""
+@pytest.mark.parametrize("conflicting_module", ("tensorflow", "tensorboard", "keras"))
+def test_torch_213_runtime_guard_skips_triton_when_conflicting_modules_imported(
+    monkeypatch, conflicting_module
+):
+    """Skip Triton when a conflicting module is already present in sys.modules."""
     monkeypatch.setattr(sys, "version_info", (3, 13))
     monkeypatch.setattr(seed_module, "package_version", lambda _name: "2.13.0+cpu")
     imported: list[str] = []
@@ -120,9 +125,9 @@ def test_torch_213_runtime_guard_skips_triton_when_conflicting_modules_imported(
     )
     monkeypatch.setenv("TORCH_COMPILE_DISABLE", "0")
 
-    # Temporarily inject 'tensorflow' into sys.modules
+    # Temporarily inject one conflicting top-level module into sys.modules.
     with monkeypatch.context() as ctx:
-        ctx.setitem(sys.modules, "tensorflow", object())
+        ctx.setitem(sys.modules, conflicting_module, object())
         assert seed_module._configure_torch_213_runtime()
         # Should not have tried to import 'triton'
         assert imported == []

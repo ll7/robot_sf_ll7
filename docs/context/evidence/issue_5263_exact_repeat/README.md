@@ -112,7 +112,7 @@ requires: ppo is no longer counted as `unrunnable`/`degraded`, and no fallback r
 Evidence grade: observed single-host primary-host diagnostic. NOT benchmark or paper-facing
 evidence. This registration satisfies the in-scope, single-host-achievable capability for #5498; it
 is not a duplicate of the #5499 single-host orca+goal run, the #5740 worker-isolation fix, or the
-#5778 cross-host provenance matcher.
+Issue #5778 cross-host provenance matcher.
 
 ### Remaining Action After #5498
 

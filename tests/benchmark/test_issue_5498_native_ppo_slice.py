@@ -12,8 +12,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 import robot_sf.benchmark.exact_repeat_campaign as erc
 from scripts.benchmark.run_issue_5498_native_ppo_slice import (
     TOTAL_PPO_TARGETS,
@@ -28,8 +26,7 @@ MANIFEST_PATH = EVIDENCE_DIR / "exact_repeat_manifest.json"
 
 
 def _require_existing(path: Path) -> Path:
-    if not path.exists():
-        pytest.skip(f"evidence fixture missing: {path}")
+    assert path.is_file(), f"required evidence fixture missing: {path}"
     return path
 
 
@@ -55,14 +52,13 @@ def test_ppo_only_bundle_smoke_cap() -> None:
     assert all(t["planner"] == "ppo" for t in slim["targets"])
 
 
-def test_ppo_only_manifest_slice_verifies_against_subset() -> None:
+def test_ppo_only_manifest_slice_verifies_against_subset(tmp_path: Path) -> None:
     _require_existing(BUNDLE_PATH)
     _require_existing(MANIFEST_PATH)
     slim = _ppo_only_bundle(2)
 
     # Execute the tiny PPO subset and verify against the re-hashed manifest slice.
-    out_dir = Path(erc.__file__).resolve().parents[2] / "output" / "test_5498_slice"
-    host = erc.execute_campaign(slim, output_dir=out_dir)
+    host = erc.execute_campaign(slim, output_dir=tmp_path / "test_5498_slice")
     manifest_slice = _ppo_only_manifest_slice(
         [(r["scenario_id"], r["planner"], int(r["seed"])) for r in host["results"]]
     )

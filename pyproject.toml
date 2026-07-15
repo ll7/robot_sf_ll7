@@ -387,6 +387,7 @@ max-statements = 60
 "scripts/classic_benchmark_full.py" = ["BLE001"]
 "scripts/coverage/open_coverage_report.py" = ["BLE001"]
 "scripts/demo/run_robot_sf_smoke.py" = ["BLE001"]
+"scripts/demo/quickstart_demo.py" = ["BLE001"]
 "scripts/demo_jsonl_recording.py" = ["BLE001"]
 "scripts/dev/compact_ci_snapshot.py" = ["BLE001"]
 "scripts/dev/compact_worktree_snapshot.py" = ["BLE001"]
@@ -666,6 +667,7 @@ imitation = [
 [project.scripts]
 robot-sf = "robot_sf.cli:main"
 robot_sf_bench = "robot_sf.benchmark.cli:main"
+robot-sf = "robot_sf.cli:main"
 robot-sf-export-carla-t0 = "robot_sf_carla_bridge.cli:export_t0_scenarios_main"
 robot-sf-validate-carla-t0-manifest = "robot_sf_carla_bridge.cli:validate_t0_manifest_main"
 robot-sf-validate-carla-t0-batch = "robot_sf_carla_bridge.cli:validate_t0_export_batch_main"

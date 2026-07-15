@@ -51,10 +51,19 @@ cd robot_sf_ll7
 scripts/dev/check_runtime_requirements.sh
 uv sync --all-extras
 
+# One-command visual demo: run a tiny deterministic episode and open a viewer.
+uv run robot-sf demo
+
 uv run python examples/quickstart/01_basic_robot.py
 uv run python examples/quickstart/02_trained_model.py
 uv run python examples/quickstart/03_custom_map.py
 ```
+
+`uv run robot-sf demo` runs a short deterministic scenario, writes a recorded episode
+(`episode.jsonl`), a static browser viewer (`viewer/index.html`), a map thumbnail
+(`thumbnail.png`), and a plain-English summary under `output/demo/latest/`. It is the
+fastest install → run → *see something* path and is CPU-only. Open
+`output/demo/latest/viewer/index.html` in a browser to replay the episode.
 
 ### Packaging smoke (wheel install smoke)
 

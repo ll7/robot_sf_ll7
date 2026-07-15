@@ -2,7 +2,8 @@
 
 The command exposes the existing runtime doctor and the one-command visual
 demo from the adoption/UX epic. More everyday workflows can be added here
-without creating another top-level entry point.
+without creating another top-level entry point, including discovery of
+manifest-declared examples.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
+from robot_sf.examples_cli import examples_cli_main
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -51,7 +53,14 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the minimal reset/step environment smoke check.",
     )
-
+    # The ``examples`` subcommand owns its own sub-subcommand parser
+    # (``list``/``run``); it is registered here only so the top-level parser
+    # recognises the token. Remaining args are forwarded by the handler.
+    subparsers.add_parser(
+        "examples",
+        add_help=False,
+        help="List and run examples from examples_manifest.yaml (issue #5794)",
+    )
     demo = subparsers.add_parser(
         "demo",
         help="Run the one-command visual demo (tiny deterministic episode + viewer).",
@@ -85,14 +94,36 @@ def _handle_doctor(args: argparse.Namespace) -> int:
     return doctor_exit_code(report)
 
 
+def _handle_examples(extra_args: Sequence[str]) -> int:
+    """Forward to the examples discovery CLI.
+
+    Args:
+        extra_args: The arguments following the ``examples`` token.
+
+    Returns:
+        int: Process-style exit code from the examples CLI.
+    """
+    return examples_cli_main(list(extra_args))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Dispatch to the requested ``robot-sf`` subcommand.
+
+    Args:
+        argv: Optional argument vector (defaults to ``sys.argv[1:]``).
 
     Returns:
         int: Process exit status code.
     """
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    # The ``examples`` subcommand owns its own sub-parser (``list``/``run``), so
+    # forward everything after the token verbatim and avoid letting the
+    # top-level parser consume example-specific options.
+    if args_list and args_list[0] == "examples":
+        return _handle_examples(args_list[1:])
+
     parser = _build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
 
     if args.command == "doctor":
         return _handle_doctor(args)

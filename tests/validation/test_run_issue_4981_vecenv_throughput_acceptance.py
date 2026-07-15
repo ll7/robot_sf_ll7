@@ -17,6 +17,7 @@ from scripts.validation.run_issue_4981_vecenv_throughput_acceptance import (  # 
     REPORT_SCHEMA,
     SOURCE_CLAIM_BOUNDARY,
     SOURCE_SCHEMA,
+    _tolerated_comparator_exit,
     adjudicate,
     build_comparator_command,
     expected_source_provenance,
@@ -194,6 +195,70 @@ def test_subproc_speedup_is_comparison_only_not_acceptance() -> None:
         "threaded",
         "threaded_lidar_batch",
     }
+
+
+def test_failed_comparison_only_mode_is_tolerated_when_row_matches() -> None:
+    """A known comparison-only measurement failure does not mask valid candidates."""
+    current_commit = "f" * 40
+    evidence = _evidence(
+        current_commit=current_commit,
+        speedups={"threaded": 2.9, "threaded_lidar_batch": 2.8},
+    )
+    subproc = next(row for row in evidence["results"] if row["mode"] == "subproc")
+    subproc.update(status="construction_failed", error="connection reset")
+    evidence.update(
+        status="failed",
+        failures=[{"scope": "mode", "mode": "subproc", "error": "connection reset"}],
+    )
+
+    report = _adjudicate(evidence, current_commit)
+
+    assert report["status"] == "not_met"
+    assert report["acceptance_met"] is False
+    assert report["blockers"] == []
+
+
+@pytest.mark.parametrize(
+    ("failures", "status", "expected_blocker"),
+    [
+        ("not-a-list", "failed", "failures must be a list"),
+        ([{"scope": "mode", "mode": "subproc", "error": "stale"}], "failed", "non-ok"),
+        ([{"scope": "mode", "mode": "subproc", "error": "stale"}], "ok", "'failed'"),
+    ],
+)
+def test_failure_contract_mismatches_block_instead_of_being_admitted(
+    failures: object,
+    status: str,
+    expected_blocker: str,
+) -> None:
+    """Malformed or inconsistent comparison failures cannot produce a clean decision."""
+    current_commit = "1" * 40
+    evidence = _evidence(
+        current_commit=current_commit,
+        speedups={"threaded": 2.9, "threaded_lidar_batch": 2.8},
+    )
+    evidence.update(status=status, failures=failures)
+
+    report = _adjudicate(evidence, current_commit)
+
+    assert report["status"] == "blocked"
+    assert report["acceptance_met"] is None
+    assert any(expected_blocker in blocker for blocker in report["blockers"])
+
+
+def test_only_comparator_mode_failure_exit_is_tolerated() -> None:
+    """Exit 1/crash-style results remain blocked even when exit 2 is admissible."""
+    profile = load_profile(DEFAULT_PROFILE)
+    evidence = _evidence(current_commit="2" * 40)
+    subproc = next(row for row in evidence["results"] if row["mode"] == "subproc")
+    subproc.update(status="construction_failed", error="connection reset")
+    evidence.update(
+        status="failed",
+        failures=[{"scope": "mode", "mode": "subproc", "error": "connection reset"}],
+    )
+
+    assert _tolerated_comparator_exit(profile, evidence, 2)
+    assert not _tolerated_comparator_exit(profile, evidence, 1)
 
 
 @pytest.mark.parametrize(

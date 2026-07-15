@@ -991,6 +991,60 @@ def _smoke_conditions(smoke_report: Mapping[str, Any]) -> Mapping[str, Any]:
     return condition_payloads
 
 
+def _assert_cell_population_realizable(
+    cell_identifier: str,
+    *,
+    population_size: int,
+    archetype_composition: Mapping[str, float],
+    response_law_fractions: Sequence[float],
+) -> None:
+    """Reject a declared population that cannot realize its declared mix.
+
+    A positive archetype or response-law category that largest-remainder rounding
+    drops to zero at the declared ``population_size`` would never be realizable by
+    the simulator, so the cell is dead on arrival. Fail fast and name it so the
+    manifest build aborts in seconds rather than after a multi-hour shard.
+
+    Raises:
+        PopulationMixNotRealizableError: A category drops to zero at the declared size.
+    """
+
+    archetype_counts = allocate_archetype_counts(population_size, dict(archetype_composition))
+    missing_archetypes = sorted(
+        name
+        for name, fraction in archetype_composition.items()
+        if fraction > 0 and archetype_counts.get(name, 0) == 0
+    )
+    if missing_archetypes:
+        categories = ", ".join(missing_archetypes)
+        raise PopulationMixNotRealizableError(
+            f"{cell_identifier}: declared population_size {population_size} cannot realize "
+            f"archetype mix {dict(archetype_composition)}; zero-count categories: {categories}"
+        )
+
+    for fraction in response_law_fractions or ():
+        response_law_composition: dict[str, float] = {}
+        if fraction < 1.0:
+            response_law_composition["reactive"] = 1.0 - fraction
+        if fraction > 0.0:
+            response_law_composition["non_reactive"] = fraction
+        if not response_law_composition:
+            continue
+        law_counts = allocate_archetype_counts(population_size, response_law_composition)
+        missing_laws = sorted(
+            name
+            for name, frac in response_law_composition.items()
+            if frac > 0 and law_counts.get(name, 0) == 0
+        )
+        if missing_laws:
+            categories = ", ".join(missing_laws)
+            raise PopulationMixNotRealizableError(
+                f"{cell_identifier} response_law_fraction={fraction:g}: declared population_size "
+                f"{population_size} cannot realize response-law mix {response_law_composition}; "
+                f"zero-count categories: {categories}"
+            )
+
+
 def _manifest_scenario_rows(
     scenario: Mapping[str, Any],
     *,
@@ -1010,6 +1064,19 @@ def _manifest_scenario_rows(
     )
     composition = _normalize_composition(_required_mapping(scenario, "composition"))
     archetypes = _required_mapping(scenario, "archetypes")
+    # Fail fast at manifest-build time (issue #5666 #4): a declared population that
+    # cannot realize its archetype or response-law mix must be rejected in seconds,
+    # naming the offending cell, instead of after 2-5 hours per shard.
+    cell_identifier = (
+        f"scenarios[{scenario_index}] id={scenario_id} population_size={population_size} "
+        f"density={density}"
+    )
+    _assert_cell_population_realizable(
+        cell_identifier,
+        population_size=population_size,
+        archetype_composition=composition,
+        response_law_fractions=response_law_fractions,
+    )
     pair = build_mean_matched_population_pair(
         population_size=population_size,
         composition=composition,

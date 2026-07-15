@@ -63,6 +63,10 @@ def _run_pipeline(manifest_path: Path, *, repo_root: Path) -> dict[str, object]:
     report_json = repo_root / output_artifacts.get(
         "report_json", "output/adversarial/issue_3079_package_b/report.json"
     )
+    durable_table_md = repo_root / output_artifacts.get(
+        "durable_table_md",
+        str(report_json.parent / "comparison_table.md"),
+    )
 
     compare_argv = [
         "--manifest",
@@ -72,6 +76,8 @@ def _run_pipeline(manifest_path: Path, *, repo_root: Path) -> dict[str, object]:
         "--synthetic",
         "--out-json",
         str(report_json),
+        "--out-md",
+        str(durable_table_md),
     ]
     if compare_main(compare_argv) != 0:
         raise RuntimeError("Package-B comparison runner returned a non-zero status")
@@ -96,6 +102,9 @@ def _run_pipeline(manifest_path: Path, *, repo_root: Path) -> dict[str, object]:
         "confirmation_json": confirmation_path.relative_to(repo_root).as_posix()
         if confirmation_path.is_relative_to(repo_root)
         else confirmation_path.as_posix(),
+        "durable_table_md": durable_table_md.relative_to(repo_root).as_posix()
+        if durable_table_md.is_relative_to(repo_root)
+        else durable_table_md.as_posix(),
         "report_gate": report_gate.to_payload(),
         "confirmation_gate": confirmation_gate.to_payload(),
     }

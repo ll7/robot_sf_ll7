@@ -1,0 +1,37 @@
+# Diagnostic surrogate slice for issue #5307 (cheap-lane successor slice).
+#
+# PR #5322 delivered the chance-constrained MPC control law (marginal +
+# joint_horizon Boole bounds). This config exercises the issue #5307 Arm 4
+# CVaR/tail-risk formulation ("joint-horizon chance constraint OR
+# CVaR/tail-risk formulation") over the surrogate constant_velocity_gmm
+# provider so the new control law is CPU-runnable and its realized-risk
+# calibration self-check is reproducible TODAY.
+#
+# This is NOT a calibrated forecast and NOT a benchmark claim. Replace the
+# predictor_backend with the landed #2844 provider for real matched-arm runs.
+allow_testing_algorithms: true
+predictor_backend: constant_velocity_gmm
+allow_predictor_fallback: false
+gmm_mode_count: 1
+max_linear_speed: 0.9
+max_angular_speed: 1.1
+horizon_steps: 6
+rollout_dt: 0.25
+goal_tolerance: 0.25
+waypoint_switch_distance: 0.75
+path_goal_weight: 1.5
+terminal_goal_weight: 5.0
+heading_weight: 0.5
+control_effort_weight: 0.05
+smoothness_weight: 0.2
+pedestrian_safety_margin: 0.35
+static_obstacle_soft_weight: 1.0
+solver_ftol: 0.001
+solver_max_iterations: 40
+warm_start: true
+fallback_to_stop: true
+chance_constraint_formulation: "cvar_tail"
+max_collision_risk: 0.05
+cvar_alpha: 0.9
+radial_quadrature_order: 6
+angular_quadrature_order: 16

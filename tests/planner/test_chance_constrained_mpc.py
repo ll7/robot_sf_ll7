@@ -162,6 +162,121 @@ def test_joint_horizon_constraint_uses_conservative_union_bound() -> None:
     assert slack[0] < 0.0
 
 
+def test_cvar_tail_formulation_bounds_worst_tail_risk() -> None:
+    """CVaR mode bounds the expected risk in the worst (1-alpha) tail, a direct
+    alternative to the Boole union bound (issue #5307 Arm 4)."""
+
+    # One pedestrian, single mode, two horizons: the first step overlaps the
+    # robot (high per-cell risk), the second is far away (near-zero risk). With
+    # alpha=0.9 and two cells the 0.9-quantile lands on the high cell, so the
+    # CVaR reduces to that high risk and must be rejected even though the plain
+    # mean would be acceptable.
+    means = np.zeros((1, 1, 2, 2), dtype=float)
+    means[:, 0, 0, :] = [0.0, 0.0]
+    means[:, 0, 1, :] = [4.0, 4.0]
+    covariances = np.tile(np.eye(2, dtype=float) * 0.05, (1, 1, 2, 1, 1))
+    forecast = GaussianMixturePedestrianForecast(
+        means_world=means,
+        covariances_world=covariances,
+        mode_weights=np.asarray([[1.0]]),
+        dt=0.25,
+        source="test_gmm",
+    )
+    planner = ChanceConstrainedMPCPlannerAdapter(
+        ChanceConstrainedMPCConfig(
+            horizon_steps=2,
+            chance_constraint_formulation="cvar_tail",
+            max_collision_risk=0.15,
+            cvar_alpha=0.9,
+            radial_quadrature_order=10,
+            angular_quadrature_order=24,
+        ),
+        predictor=_FixedGmmPredictor(forecast),
+    )
+
+    risks = planner._marginal_collision_risks(np.zeros(4), context=_context(), forecast=forecast)
+    slack = planner._chance_constraint_values(np.zeros(4), context=_context(), forecast=forecast)
+
+    assert slack.shape == (1,)
+    assert risks[0, 0] > 0.15
+    assert risks[0, 1] < 0.15
+    assert slack[0] < 0.0
+
+
+def test_cvar_tail_risk_matches_mean_for_single_or_extreme_cell() -> None:
+    """With one cell or an extreme alpha the CVaR degenerates to the plain mean."""
+
+    planner = ChanceConstrainedMPCPlannerAdapter(
+        ChanceConstrainedMPCConfig(
+            chance_constraint_formulation="cvar_tail",
+            cvar_alpha=0.9,
+        ),
+        predictor=_FixedGmmPredictor(_forecast()),
+    )
+    # Single cell -> ordinary mean regardless of alpha.
+    assert planner._cvar_tail_risk(np.asarray([0.3])) == pytest.approx(0.3)
+    # Out-of-range alpha also falls back to the mean.
+    planner.chance_config.cvar_alpha = 1.5  # type: ignore[assignment]
+    assert planner._cvar_tail_risk(np.asarray([0.1, 0.7])) == pytest.approx(0.4)
+
+
+def test_cvar_tail_risk_includes_fractional_boundary_cell() -> None:
+    """Empirical CVaR must include a partial cell for a non-integer tail mass."""
+
+    planner = ChanceConstrainedMPCPlannerAdapter(
+        ChanceConstrainedMPCConfig(
+            chance_constraint_formulation="cvar_tail",
+            cvar_alpha=0.6,
+        ),
+        predictor=_FixedGmmPredictor(_forecast()),
+    )
+
+    # The worst 40% of four equally weighted cells has mass 1.6 cells:
+    # 0.6 + 0.6 * 0.4, divided by 1.6, equals 0.525.
+    assert planner._cvar_tail_risk(np.asarray([0.0, 0.2, 0.4, 0.6])) == pytest.approx(0.525)
+
+
+def test_cvar_tail_diagnostics_record_tail_bound_and_alpha() -> None:
+    """The diagnostics surface the tail-risk bound and the configured CVaR alpha."""
+
+    planner = ChanceConstrainedMPCPlannerAdapter(
+        ChanceConstrainedMPCConfig(
+            horizon_steps=2,
+            chance_constraint_formulation="cvar_tail",
+            cvar_alpha=0.9,
+        ),
+        predictor=_FixedGmmPredictor(_forecast()),
+    )
+    planner._optimizer_constraints(_context())
+    diagnostics = planner.diagnostics()["chance_constraint"]
+
+    assert diagnostics["formulation"] == "cvar_tail"
+    assert diagnostics["joint_bound"] == "cvar_tail_risk"
+    assert diagnostics["cvar_alpha"] == pytest.approx(0.9)
+    assert diagnostics["constraint_count"] == 1
+
+
+def test_config_rejects_cvar_alpha_outside_unit_interval() -> None:
+    """A non-positive / non-unit CVaR confidence must not be silently accepted."""
+
+    with pytest.raises(ValueError, match="cvar_alpha must be in"):
+        ChanceConstrainedMPCConfig(chance_constraint_formulation="cvar_tail", cvar_alpha=1.0)
+
+
+def test_builder_parses_cvar_alpha_and_formulation() -> None:
+    """The YAML config builder threads the new CVaR fields through to the config."""
+
+    config = build_chance_constrained_mpc_config(
+        {
+            "predictor_backend": "issue_2844_k_mode_gmm",
+            "chance_constraint_formulation": "cvar_tail",
+            "cvar_alpha": "0.95",
+        }
+    )
+    assert config.chance_constraint_formulation == "cvar_tail"
+    assert config.cvar_alpha == pytest.approx(0.95)
+
+
 def test_optimizer_uses_injected_predictor_and_records_claim_boundary() -> None:
     """The planner queries the injected GMM provider and exposes non-claim diagnostics."""
 

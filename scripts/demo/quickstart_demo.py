@@ -49,6 +49,7 @@ from robot_sf.gym_env.environment_factory import make_robot_env  # noqa: E402
 from robot_sf.gym_env.robot_env import RobotEnv  # noqa: E402
 from robot_sf.render.jsonl_playback import JSONLPlaybackLoader  # noqa: E402
 from robot_sf.render.threejs_viewer import export_threejs_viewer  # noqa: E402
+from robot_sf.sensor.range_sensor import LidarScannerSettings  # noqa: E402
 from robot_sf.training.scenario_loader import (  # noqa: E402
     build_robot_config_from_scenario,
     load_scenarios,
@@ -80,6 +81,18 @@ class DemoResult:
     viewer_html: Path
     thumbnail_png: Path
 
+    def _artifact_paths(self) -> dict[str, str]:
+        """Return stable output-root-relative artifact paths for user-facing payloads."""
+        output_root = self.summary_json.parent
+        paths = {
+            "episode_jsonl": self.episode_jsonl,
+            "summary_json": self.summary_json,
+            "metrics_json": self.metrics_json,
+            "viewer_html": self.viewer_html,
+            "thumbnail_png": self.thumbnail_png,
+        }
+        return {name: path.relative_to(output_root).as_posix() for name, path in paths.items()}
+
     def to_summary_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable plain-English summary payload."""
         return {
@@ -92,13 +105,7 @@ class DemoResult:
             "min_ped_distance_m": self.min_ped_distance_m,
             "route_complete": self.route_complete,
             "claim_boundary": CLAIM_BOUNDARY,
-            "artifacts": {
-                "episode_jsonl": str(self.episode_jsonl),
-                "summary_json": str(self.summary_json),
-                "metrics_json": str(self.metrics_json),
-                "viewer_html": str(self.viewer_html),
-                "thumbnail_png": str(self.thumbnail_png),
-            },
+            "artifacts": self._artifact_paths(),
         }
 
 
@@ -113,6 +120,23 @@ def _build_scenario_config(scenario_path: Path) -> dict[str, Any]:
             f"available: {available}",
         )
     return matches[0]
+
+
+def _deterministic_lidar_settings(settings: LidarScannerSettings) -> LidarScannerSettings:
+    """Return equivalent LiDAR settings without stochastic scan corruption.
+
+    The default scanner intentionally injects small global-NumPy noise for
+    simulation realism. The quickstart demo promises a reproducible recording,
+    including the rays consumed by its viewer, so this UX-only run uses the
+    same geometry with both noise probabilities disabled.
+    """
+    return LidarScannerSettings(
+        max_scan_dist=settings.max_scan_dist,
+        visual_angle_portion=settings.visual_angle_portion,
+        num_rays=settings.num_rays,
+        scan_noise=[0.0, 0.0],
+        detect_other_robots=settings.detect_other_robots,
+    )
 
 
 def _select_action(planner: Any) -> np.ndarray:
@@ -166,6 +190,7 @@ def _run_deterministic_episode(
         scenario_config,
         scenario_path=scenario_path,
     )
+    config.lidar_config = _deterministic_lidar_settings(config.lidar_config)
     planner = RandomPlanner({"mode": "velocity", "v_max": 1.5}, seed=seed)
 
     env: RobotEnv = make_robot_env(  # type: ignore[assignment]
@@ -244,6 +269,11 @@ def _export_viewer(episode_jsonl: Path, output_root: Path) -> Path:
     """Export the recorded episode into a static browser viewer."""
     viewer_dir = output_root / "viewer"
     result = export_threejs_viewer(episode_jsonl, viewer_dir)
+    scene = json.loads(result.scene_path.read_text(encoding="utf-8"))
+    scene["source"] = "episode.jsonl"
+    result.scene_path.write_text(
+        json.dumps(scene, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     return result.html_path
 
 
@@ -278,16 +308,16 @@ def _check_runtime_requirements(*, strict: bool = False) -> bool:
     """
     script = ROOT / "scripts" / "dev" / "check_runtime_requirements.sh"
     if not script.exists():
-        print("Skipping runtime check (scripts/dev/check_runtime_requirements.sh not found).")
-        return True
+        print("Runtime check: failed (scripts/dev/check_runtime_requirements.sh not found).")
+        return False
     cmd = ["bash", str(script)]
     if strict:
         cmd.append("--strict")
     try:
         completed = subprocess.run(cmd, check=False, capture_output=True, text=True)
     except FileNotFoundError:
-        print("Runtime check: skipped (bash not available).")
-        return True
+        print("Runtime check: failed (bash not available).")
+        return False
     ok = completed.returncode == 0
     print(f"Runtime check: {'ok' if ok else 'missing required tool(s)'}")
     # Surface the full doctor report only when something is wrong, so the
@@ -313,7 +343,8 @@ def run_demo(
     recording_dir = output_root / "recordings"
 
     if check_deps:
-        _check_runtime_requirements()
+        if not _check_runtime_requirements():
+            raise RuntimeError("Required runtime checks failed; see the doctor report above.")
 
     scenario_config = _build_scenario_config(scenario_path)
     result = _run_deterministic_episode(
@@ -347,9 +378,9 @@ def run_demo(
             "collisions": result.collisions,
             "min_ped_distance_m": result.min_ped_distance_m,
             "route_complete": result.route_complete,
-            "episode_jsonl": str(result.episode_jsonl),
-            "viewer_html": str(viewer_html),
-            "thumbnail_png": str(thumbnail_png),
+            "episode_jsonl": result._artifact_paths()["episode_jsonl"],
+            "viewer_html": result._artifact_paths()["viewer_html"],
+            "thumbnail_png": result._artifact_paths()["thumbnail_png"],
             "claim_boundary": CLAIM_BOUNDARY,
         },
     )
@@ -375,8 +406,19 @@ def _print_summary(result: DemoResult) -> None:
         f"Scenario: {result.scenario_name}   Planner: {result.planner}   Steps: {result.steps}",
     )
     print(f"Collisions: {result.collisions}   Min pedestrian distance: {min_dist}")
-    print(f"Viewer: {result.viewer_html}   Metrics: {result.metrics_json}")
+    print(
+        "Viewer: "
+        f"{_display_path(result.viewer_html)}   Metrics: {_display_path(result.metrics_json)}",
+    )
     print(CLAIM_BOUNDARY)
+
+
+def _display_path(path: Path) -> str:
+    """Prefer repository-relative paths in the default newcomer-facing summary."""
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def build_parser() -> argparse.ArgumentParser:

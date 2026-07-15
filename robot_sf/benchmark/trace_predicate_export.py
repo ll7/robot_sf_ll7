@@ -97,10 +97,16 @@ def _episode_metadata(record: Mapping[str, Any], *, run_id: str | None) -> dict[
     def required_text(keys: tuple[str, ...], label: str) -> str:
         for key in keys:
             value = record.get(key)
-            if isinstance(value, str):
-                value = value.strip()
-            if value not in (None, ""):
-                return str(value)
+            if value is None:
+                continue
+            if not isinstance(value, str):
+                raise TracePredicateExportError(
+                    f"episode field {label} must be a string, got {type(value).__name__}: {value!r}"
+                )
+            value = value.strip()
+            if value == "":
+                raise TracePredicateExportError(f"episode field {label} must be a non-empty string")
+            return value
         raise TracePredicateExportError(f"missing required episode field: {label}")
 
     seed = record.get("seed")

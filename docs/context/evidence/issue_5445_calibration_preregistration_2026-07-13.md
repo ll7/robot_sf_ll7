@@ -41,6 +41,10 @@ report `provenance` block so the comparison cannot be tuned post hoc:
 - **Stop rule:** stop before any real-distribution run until eligible simulator traces,
   target-distribution provenance, and action-conditioned labels exist; stop promotion of an
   estimator whose calibration CI includes the simple baseline while its runtime is worse.
+- **Action-sensitivity fixture:** two explicit actor states, each paired with a higher-risk
+  centerline action and a lower-risk sidestep action. Each pair reuses the same actor state and
+  fixed Monte Carlo seed for both candidates; pair rows are diagnostic only and are not added to
+  the 880 calibration labels.
 
 ## Reported metrics (per the acceptance criteria)
 
@@ -78,10 +82,17 @@ Overall prevalence 0.633.
 | `misspecified_biased` | 220 | 0.673 | 0.075 |
 | `misspecified_underconfident` | 220 | 0.605 | 0.166 |
 
+**Matched action sensitivity (constant_velocity_mc):** 2/2 pairs were ordered in the
+predeclared direction. This is fixture evidence that the estimator responds to the candidate
+action while holding the forecast inputs fixed; it is not a calibration or planning-benefit claim.
+
 ## Reading of the fixture result (honest, bounded)
 
 - **Self-consistency holds:** in-model families are close to calibrated (ECE ≈ 0.05–0.07), and the
   first-passage CDF is monotone in the horizon for 100% of samples.
+- **Action conditioning is exercised:** both explicit same-state pairs ranked the centerline
+  action above the sidestep action under common forecast draws (2/2). The pair check is a narrow
+  diagnostic, not evidence that the ranking transfers to simulator traces.
 - **Miscalibration is detected** where it is strong: the *underconfident* misspecification (ground
   truth noisier than assumed) drives ECE to 0.166, well above the in-model band.
 - **A weak shift is only weakly detectable:** the *biased* misspecification at this magnitude

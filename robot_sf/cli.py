@@ -60,6 +60,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the minimal reset/step environment smoke check.",
     )
+    doctor.add_argument(
+        "--skip-quickstart-smoke",
+        action="store_true",
+        default=False,
+        help="Skip executing the manifest-declared quickstart examples",
+    )
     _add_models_subparser(subparsers)
     _add_datasets_subparser(subparsers)
     # The ``examples`` subcommand owns its own sub-subcommand parser
@@ -91,6 +97,7 @@ def _handle_doctor(args: argparse.Namespace) -> int:
     report = collect_doctor_report(
         artifact_root=args.artifact_root,
         run_env_smoke=not args.skip_env_smoke,
+        run_quickstart_smoke=not args.skip_quickstart_smoke,
     )
     if args.format == "json":
         import json  # noqa: PLC0415

@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import shutil
+import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import robot_sf
+from robot_sf.examples.manifest_loader import load_manifest
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -29,20 +31,15 @@ DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 OPTIONAL_EXTRAS = ("training", "gpu", "orca", "socnav", "rllib", "analysis")
 # Map deps are pulled in by osmnx-based OSM map authoring examples.
 MAP_DEP_IMPORTS = ("osmnx", "shapely")
-# Bundled model artifacts the quickstart examples rely on.
+# Bundled model artifacts the quickstart examples rely on, including the PPO
+# checkpoint referenced by configs/baselines/ppo.yaml.
 MODEL_ARTIFACTS = (
+    Path("model/ppo_model_retrained_10m_2025-02-01.zip"),
     Path("model/pedestrian/ppo_ped_01.zip"),
     Path("model/pedestrian/ppo_ped_02.zip"),
     Path("model/pedestrian/ppo_corner.zip"),
     Path("model/pedestrian/ppo_headon.zip"),
     Path("model/pedestrian/ppo_intersection.zip"),
-)
-# Quickstart examples the doctor can sanity-check for presence/runnability.
-QUICKSTART_EXAMPLES = (
-    Path("examples/quickstart/01_basic_robot.py"),
-    Path("examples/quickstart/02_trained_model.py"),
-    Path("examples/quickstart/03_custom_map.py"),
-    Path("examples/quickstart/04_occupancy_grid.py"),
 )
 UV_BOOTSTRAP_HINT = (
     "Install uv (https://docs.astral.sh/uv/getting-started/) with one of:\n"
@@ -120,11 +117,14 @@ def _check_binary(name: str, *, required: bool) -> DoctorCheck:
         DoctorCheck: Binary availability check result.
     """
     path = shutil.which(name)
+    details: dict[str, Any] = {"path": path}
+    if path is None:
+        details["hint"] = f"Install {name} and ensure it is available on PATH."
     return DoctorCheck(
         name=f"binary:{name}",
         status="ok" if path else ("failed" if required else "missing_optional"),
         required=required,
-        details={"path": path},
+        details=details,
     )
 
 
@@ -135,11 +135,14 @@ def _check_optional_import(name: str) -> DoctorCheck:
         DoctorCheck: Optional import availability check result.
     """
     spec = importlib_util.find_spec(name)
+    details: dict[str, Any] = {"available": spec is not None}
+    if spec is None:
+        details["hint"] = f"Install the dependency providing {name} (try: uv sync --all-extras)."
     return DoctorCheck(
         name=f"import:{name}",
         status="ok" if spec else "missing_optional",
         required=False,
-        details={"available": spec is not None},
+        details=details,
     )
 
 
@@ -298,26 +301,169 @@ def _check_optional_extras() -> DoctorCheck:
     )
 
 
-def _check_quickstart(workspace_root: Path) -> DoctorCheck:
-    """Report whether the quickstart examples are present and importable.
+def _resolve_quickstart_examples(
+    workspace_root: Path,
+) -> tuple[tuple[Path, ...], str | None]:
+    """Resolve quickstart examples from the canonical examples manifest.
+
+    Args:
+        workspace_root: Repository workspace root containing ``examples/``.
+
+    Returns:
+        tuple[tuple[Path, ...], str | None]: Resolved absolute example paths and
+        an optional manifest error string. On error the path tuple is empty.
+    """
+    manifest_path = workspace_root / "examples" / "examples_manifest.yaml"
+    try:
+        manifest = load_manifest(manifest_path=manifest_path, validate_paths=False)
+    except Exception as exc:
+        return (), f"{type(exc).__name__}: {exc}"
+
+    examples = tuple(manifest.examples_for_category("quickstart"))
+    return tuple(manifest.resolve_example_path(example) for example in examples), None
+
+
+def _tail_output(value: str | bytes | None, *, limit: int = 20) -> str:
+    """Return a bounded text tail for a failed quickstart subprocess.
+
+    Args:
+        value: Raw subprocess output (stdout/stderr combined or None).
+        limit: Maximum number of trailing lines to keep.
+
+    Returns:
+        str: Bounded tail of the output, or an empty string.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    lines = value.splitlines()
+    return "\n".join(lines[-limit:])
+
+
+def _check_quickstart(
+    workspace_root: Path,
+    artifact_root: Path,
+    *,
+    run_smoke: bool,
+) -> DoctorCheck:
+    """Report whether manifest-declared quickstarts are present and runnable.
+
+    Resolves quickstart entries from ``examples/examples_manifest.yaml`` (the
+    single source of truth) instead of a hard-coded list, fails closed on a
+    missing/unreadable manifest or an empty quickstart category, and optionally
+    executes each quickstart headlessly and fails closed on non-zero exit.
+
+    Args:
+        workspace_root: Repository workspace root containing ``examples/``.
+        artifact_root: Artifact root for smoke outputs.
+        run_smoke: When ``True`` and all examples are present, execute each
+            quickstart headlessly and report the first non-zero exit as a failure.
 
     Returns:
         DoctorCheck: Quickstart readiness check result.
     """
-    missing = [str(rel) for rel in QUICKSTART_EXAMPLES if not (workspace_root / rel).is_file()]
-    status = "ok" if not missing else "failed"
+    manifest_path = workspace_root / "examples" / "examples_manifest.yaml"
+    examples, manifest_error = _resolve_quickstart_examples(workspace_root)
+    if manifest_error is not None:
+        return DoctorCheck(
+            name="quickstart",
+            status="failed",
+            required=True,
+            details={
+                "manifest": str(manifest_path),
+                "error": manifest_error,
+                "hint": "Restore a valid examples/examples_manifest.yaml before running quickstarts.",
+            },
+        )
+    if not examples:
+        return DoctorCheck(
+            name="quickstart",
+            status="failed",
+            required=True,
+            details={
+                "manifest": str(manifest_path),
+                "present": [],
+                "missing": [],
+                "smoke": "skipped",
+                "failures": [],
+                "hint": "Add at least one manifest-declared quickstart example.",
+            },
+        )
+
+    missing = [str(path.relative_to(workspace_root)) for path in examples if not path.is_file()]
+    failures: list[dict[str, Any]] = []
+    smoke_status = "skipped"
+    if not missing and run_smoke:
+        smoke_status = "passed"
+        smoke_env = os.environ.copy()
+        smoke_env.update(
+            {
+                "DISPLAY": "",
+                "MPLBACKEND": "Agg",
+                "SDL_VIDEODRIVER": "dummy",
+                "ROBOT_SF_FAST_DEMO": "1",
+                "ROBOT_SF_EXAMPLES_MAX_STEPS": "12",
+                "ROBOT_SF_ARTIFACT_ROOT": str((artifact_root / "quickstart_smoke").resolve()),
+            }
+        )
+        pythonpath = [str(workspace_root)]
+        if smoke_env.get("PYTHONPATH"):
+            pythonpath.append(smoke_env["PYTHONPATH"])
+        smoke_env["PYTHONPATH"] = os.pathsep.join(pythonpath)
+        for path in examples:
+            try:
+                completed = subprocess.run(
+                    [sys.executable, str(path)],
+                    cwd=workspace_root,
+                    env=smoke_env,
+                    capture_output=True,
+                    text=True,
+                    timeout=30.0,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                failures.append(
+                    {
+                        "path": str(path.relative_to(workspace_root)),
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+                smoke_status = "failed"
+                break
+            if completed.returncode != 0:
+                failures.append(
+                    {
+                        "path": str(path.relative_to(workspace_root)),
+                        "returncode": completed.returncode,
+                        "output_tail": _tail_output(
+                            "\n".join(part for part in (completed.stdout, completed.stderr) if part)
+                        ),
+                    }
+                )
+                smoke_status = "failed"
+                break
+
+    status = "ok" if not missing and not failures else "failed"
     return DoctorCheck(
         name="quickstart",
         status=status,
         required=True,
         details={
+            "manifest": str(manifest_path),
             "present": [
-                str(rel) for rel in QUICKSTART_EXAMPLES if (workspace_root / rel).is_file()
+                str(path.relative_to(workspace_root)) for path in examples if path.is_file()
             ],
             "missing": missing,
-            "hint": "Quickstart examples are missing from the checkout."
-            if missing
-            else "Quickstart examples present; run with: uv run python examples/quickstart/01_basic_robot.py",
+            "smoke": smoke_status,
+            "failures": failures,
+            "hint": (
+                "Restore the missing quickstart files from the checkout."
+                if missing
+                else "Fix the failed quickstart smoke before relying on this environment."
+                if failures
+                else "Quickstart examples passed the headless smoke."
+            ),
         },
     )
 
@@ -344,9 +490,17 @@ def collect_doctor_report(
     *,
     artifact_root: Path = Path("output"),
     run_env_smoke: bool = True,
+    run_quickstart_smoke: bool = False,
     workspace_root: Path | None = None,
 ) -> dict[str, Any]:
     """Collect local runtime diagnostics for issue reports and setup triage.
+
+    Args:
+        artifact_root: Artifact root to probe for temporary write access.
+        run_env_smoke: When ``True``, run the minimal reset/step env smoke.
+        run_quickstart_smoke: When ``True``, execute manifest-declared quickstart
+            examples headlessly and fail closed on non-zero exits.
+        workspace_root: Repository workspace root. Defaults to the package root.
 
     Returns:
         dict[str, Any]: JSON-serializable doctor report.
@@ -367,7 +521,11 @@ def collect_doctor_report(
         _check_artifact_root(resolved_artifact_root),
         _check_model_artifacts(resolved_workspace_root),
         _check_optional_extras(),
-        _check_quickstart(resolved_workspace_root),
+        _check_quickstart(
+            resolved_workspace_root,
+            resolved_artifact_root,
+            run_smoke=run_quickstart_smoke,
+        ),
     ]
     if run_env_smoke:
         checks.append(_run_env_smoke())
@@ -408,7 +566,6 @@ def _format_human(report: dict[str, Any]) -> str:
         str: Human-readable doctor report.
     """
     lines: list[str] = ["Robot SF environment check", ""]
-    failures: list[str] = []
     for check in report["checks"]:
         symbol = _STATUS_SYMBOL.get(check["status"], check["status"].upper())
         lines.append(f"[{symbol}] {check['name']}")
@@ -417,8 +574,6 @@ def _format_human(report: dict[str, Any]) -> str:
         if hint and check["status"] in {"failed", "missing_optional"}:
             for hint_line in str(hint).splitlines():
                 lines.append(f"      -> {hint_line}")
-        if check["status"] == "failed":
-            failures.append(check["name"])
     lines.append("")
     overall = report["status"]
     if overall == "ok":

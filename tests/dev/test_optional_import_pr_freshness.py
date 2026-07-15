@@ -105,3 +105,53 @@ def test_script_enforces_snapshot_update_on_change(tmp_path: Path) -> None:
     assert res_pass.returncode == 0, (
         f"Expected exit 0 since snapshot has been modified. Output:\n{res_pass.stdout}\n{res_pass.stderr}"
     )
+
+
+def test_script_ignores_changes_only_on_diverged_base(tmp_path: Path) -> None:
+    """A base-only guard change must not look like a change authored by the PR."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
+
+    git("init", "-q")
+    git("config", "user.email", "test@example.invalid")
+    git("config", "user.name", "Test Agent")
+
+    robot_sf = repo / "robot_sf"
+    robot_sf.mkdir()
+    (robot_sf / "base_only.py").write_text("value = 1\n", encoding="utf-8")
+    (repo / "tests" / "fixtures").mkdir(parents=True)
+    (repo / "tests" / "fixtures" / "optional_import_guards.json").write_text(
+        "{}\n", encoding="utf-8"
+    )
+    git("add", ".")
+    git("commit", "-q", "-m", "initial")
+    initial = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+    git("switch", "-c", "diverged-base")
+    (robot_sf / "base_only.py").write_text(
+        "try:\n    import optional_dep\nexcept ImportError:\n    optional_dep = None\n",
+        encoding="utf-8",
+    )
+    git("add", ".")
+    git("commit", "-q", "-m", "base-only guard")
+
+    git("switch", "-c", "feature", initial)
+    (robot_sf / "feature.py").write_text("value = 2\n", encoding="utf-8")
+    git("add", ".")
+    git("commit", "-q", "-m", "unrelated feature")
+
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--base-ref", "diverged-base"],
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        check=False,
+    )
+    assert result.returncode == 0, (
+        f"Unexpected freshness failure:\n{result.stdout}\n{result.stderr}"
+    )

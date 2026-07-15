@@ -76,11 +76,25 @@ def count_guards_in_source(src: str, filepath: str) -> dict[str, int]:
     return counts
 
 
-def get_git_diff_files(base_ref: str) -> list[str]:
-    """Get all python files in robot_sf/ that differ between base_ref and the working tree."""
+def get_merge_base(base_ref: str) -> str:
+    """Resolve the common ancestor used for a base-versus-HEAD comparison."""
+    res = subprocess.run(
+        ["git", "merge-base", base_ref, "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    merge_base = res.stdout.strip()
+    if not merge_base:
+        raise RuntimeError(f"Could not resolve a merge base between {base_ref!r} and HEAD")
+    return merge_base
+
+
+def get_git_diff_files(base_commit: str) -> list[str]:
+    """Get Python files in ``robot_sf/`` changed from the merge base to the worktree."""
     # Modified/added/deleted tracked files
     res = subprocess.run(
-        ["git", "diff", "--name-only", base_ref, "--", "robot_sf/"],
+        ["git", "diff", "--name-only", base_commit, "--", "robot_sf/"],
         capture_output=True,
         text=True,
         check=True,
@@ -107,10 +121,10 @@ def get_git_diff_files(base_ref: str) -> list[str]:
     return sorted(set(changed + untracked))
 
 
-def get_base_content(base_ref: str, filepath: str) -> str:
-    """Read the content of a file at base_ref from git."""
+def get_base_content(base_commit: str, filepath: str) -> str:
+    """Read the content of a file at the merge base from git."""
     res = subprocess.run(
-        ["git", "show", f"{base_ref}:{filepath}"],
+        ["git", "show", f"{base_commit}:{filepath}"],
         capture_output=True,
         text=True,
         check=False,
@@ -120,14 +134,14 @@ def get_base_content(base_ref: str, filepath: str) -> str:
     return ""
 
 
-def is_snapshot_modified(base_ref: str) -> bool:
-    """True if tests/fixtures/optional_import_guards.json has changes relative to base_ref."""
+def is_snapshot_modified(base_commit: str) -> bool:
+    """True if the snapshot has changes relative to the merge base."""
     res = subprocess.run(
         [
             "git",
             "diff",
             "--name-only",
-            base_ref,
+            base_commit,
             "--",
             "tests/fixtures/optional_import_guards.json",
         ],
@@ -138,9 +152,9 @@ def is_snapshot_modified(base_ref: str) -> bool:
     return bool(res.stdout.strip())
 
 
-def check_freshness(base_ref: str, git_root: Path) -> list[tuple[str, int, int]]:
-    """Compare guard occurrences between base_ref and current worktree across changed files."""
-    changed_files = get_git_diff_files(base_ref)
+def check_freshness(base_commit: str, git_root: Path) -> list[tuple[str, int, int]]:
+    """Compare guard occurrences between the merge base and current worktree."""
+    changed_files = get_git_diff_files(base_commit)
     if not changed_files:
         return []
 
@@ -159,7 +173,7 @@ def check_freshness(base_ref: str, git_root: Path) -> list[tuple[str, int, int]]
             head_src = ""
 
         # Read BASE content from git
-        base_src = get_base_content(base_ref, filepath)
+        base_src = get_base_content(base_commit, filepath)
 
         head_counts = count_guards_in_source(head_src, filepath)
         base_counts = count_guards_in_source(base_src, filepath)
@@ -207,12 +221,13 @@ def main() -> int:
         )
         return 0
 
-    mismatched_spellings = check_freshness(base_ref, git_root)
+    comparison_base = get_merge_base(base_ref)
+    mismatched_spellings = check_freshness(comparison_base, git_root)
     if not mismatched_spellings:
         return 0
 
     # Mismatch detected: requires snapshot update
-    if is_snapshot_modified(base_ref):
+    if is_snapshot_modified(comparison_base):
         return 0
 
     print(

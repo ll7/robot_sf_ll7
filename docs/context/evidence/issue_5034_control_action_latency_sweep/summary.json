@@ -183,7 +183,7 @@
     "sample_exclusions": []
   },
   "fixed_scope_coverage": null,
-  "git_head": "7d9bfbd5188971eb072552cf6a693b99c707d86d",
+  "git_head": "aeef01698d0ccaacfdf73e288bd6607e2c46b4fa",
   "issue": 5034,
   "latency_coverage": {
     "coverage_complete": true,

@@ -4,7 +4,7 @@
 Plain-language summary: this bundle promotes raw fidelity-campaign episode rows into a compact control-action-latency evidence summary. It reports the 0/100/300 ms-equivalent delay cells' success, collision, and minimum-clearance metrics and excludes any fallback/degraded/non-native rows. It is not paper-facing evidence.
 
 - Schema: `control-action-latency-sweep-evidence-promotion.v2`
-- Git head: `7d9bfbd5188971eb072552cf6a693b99c707d86d`
+- Git head: `aeef01698d0ccaacfdf73e288bd6607e2c46b4fa`
 - Raw rows: `ignored_output/fidelity_latency_raw/episode_rows.jsonl`
 - Preflight decision: `ready`
 - Evidence tier: `targeted smoke`

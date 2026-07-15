@@ -980,8 +980,9 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
                 ("scenario_id", scenario_id),
                 ("planner", planner),
                 ("seed", seed),
+                ("release_episode_id", requested_episode_id),
             )
-            if mapped.get(field) != expected
+            if expected is not None and mapped.get(field) != expected
         ]
         if identity_mismatches:
             base["reason_code"] = "mapping_identity_mismatch:" + ",".join(identity_mismatches)

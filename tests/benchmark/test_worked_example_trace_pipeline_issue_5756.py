@@ -226,6 +226,20 @@ def test_release_episode_id_alias_joins_to_rerun_episode(tmp_path: Path) -> None
     assert result["rows"][0]["episode_id"] == "rerun_episode_001"
 
 
+def test_request_release_id_cannot_match_only_rerun_id(tmp_path: Path) -> None:
+    """A requested release id must not resolve a mapping through its rerun id alone."""
+    request_manifest = _load_test_requests(tmp_path / "requests.json", _request_manifest())
+    mapping = _load_test_mapping(
+        tmp_path / "mapping.json",
+        [_mapping_row(release_episode_id="WRONG_RELEASE_ID")],
+        request_sha256=request_manifest.content_sha256,
+    )
+    result = resolve_episode_requests(request_manifest, mapping)
+    row = result["rows"][0]
+    assert row["resolution_status"] == "provenance-incomplete"
+    assert row["reason_code"] == "mapping_identity_mismatch:release_episode_id"
+
+
 @pytest.mark.parametrize(
     "payload",
     [

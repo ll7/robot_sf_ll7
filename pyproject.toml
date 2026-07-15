@@ -489,6 +489,7 @@ max-statements = 60
 "robot_sf/benchmark/camera_ready_campaign.py" = ["BLE001"]
 "robot_sf/benchmark/camera_ready/campaign.py" = ["BLE001"]
 "robot_sf/benchmark/cli.py" = ["T201"]
+"robot_sf/examples_cli.py" = ["T201"]
 "robot_sf/benchmark/doctor.py" = ["BLE001"]
 "robot_sf/benchmark/failure_extractor.py" = ["BLE001"]
 "robot_sf/benchmark/full_classic/render_sim_view.py" = ["C901"]

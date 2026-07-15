@@ -1,9 +1,12 @@
 """Top-level ``robot-sf`` command line interface.
 
-Thin, user-facing entry point for everyday Robot SF workflows. The
-``doctor`` subcommand wraps the existing runtime diagnostics in
-:mod:`robot_sf.benchmark.doctor` behind one obvious command, adding
-friendly, remedy-bearing output for beginners.
+Thin, user-facing entry point for everyday Robot SF workflows. Subcommands
+wrap existing tooling behind one obvious command:
+
+* ``robot-sf doctor`` — runtime diagnostics from :mod:`robot_sf.benchmark.doctor`
+  with friendly, remedy-bearing output for beginners.
+* ``robot-sf examples`` — discover and run examples from
+  ``examples/examples_manifest.yaml`` (issue #5794).
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
+from robot_sf.examples_cli import examples_cli_main
 
 if TYPE_CHECKING:  # pragma: no cover - static typing only
     from collections.abc import Sequence
@@ -52,6 +56,14 @@ def _build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Skip the minimal reset/step environment smoke check",
     )
+    # The ``examples`` subcommand owns its own sub-subcommand parser
+    # (``list``/``run``); it is registered here only so the top-level parser
+    # recognises the token. Remaining args are forwarded by the handler.
+    sub.add_parser(
+        "examples",
+        add_help=False,
+        help="List and run examples from examples_manifest.yaml (issue #5794)",
+    )
     return parser
 
 
@@ -76,6 +88,18 @@ def _handle_doctor(args: argparse.Namespace) -> int:
     return doctor_exit_code(report)
 
 
+def _handle_examples(extra_args: Sequence[str]) -> int:
+    """Forward to the examples discovery CLI.
+
+    Args:
+        extra_args: The arguments following the ``examples`` token.
+
+    Returns:
+        int: Process-style exit code from the examples CLI.
+    """
+    return examples_cli_main(list(extra_args))
+
+
 _HANDLERS = {
     "doctor": _handle_doctor,
 }
@@ -84,11 +108,21 @@ _HANDLERS = {
 def main(argv: Sequence[str] | None = None) -> int:
     """Top-level ``robot-sf`` entry point.
 
+    Args:
+        argv: Optional argument vector (defaults to ``sys.argv[1:]``).
+
     Returns:
         int: Process-style exit code.
     """
+    args_list = list(sys.argv[1:] if argv is None else argv)
+    # The ``examples`` subcommand owns its own sub-parser (``list``/``run``), so
+    # forward everything after the token verbatim and avoid letting the
+    # top-level parser consume example-specific options.
+    if args_list and args_list[0] == "examples":
+        return _handle_examples(args_list[1:])
+
     parser = _build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_list)
     if args.cmd is None:
         parser.print_help()
         return 1

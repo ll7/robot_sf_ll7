@@ -30,6 +30,7 @@ un-selected/triage-only candidates are not asked to re-export by this script.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -41,9 +42,18 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     Returns:
         The parsed row list.
     """
-    return [
-        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
-    ]
+    rows: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as handle:
+        for line_no, raw_line in enumerate(handle, start=1):
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Failed to parse JSONL at {path}:{line_no}: {exc}") from exc
+            rows.append(row)
+    return rows
 
 
 def _episode_index(mining_rows: list[dict[str, Any]]) -> dict[tuple[str, str, str], str]:
@@ -54,13 +64,22 @@ def _episode_index(mining_rows: list[dict[str, Any]]) -> dict[tuple[str, str, st
     """
     index: dict[tuple[str, str, str], str] = {}
     for row in mining_rows:
-        key = (str(row.get("scenario_id")), str(row.get("algo")), str(row.get("seed")))
-        index[key] = str(row.get("episode_id"))
+        scenario_id = row.get("scenario_id")
+        planner = row.get("algo")
+        seed = row.get("seed")
+        episode_id = row.get("episode_id")
+        if any(value is None for value in (scenario_id, planner, seed, episode_id)):
+            continue
+        key = (str(scenario_id), str(planner), str(seed))
+        index[key] = str(episode_id)
     return index
 
 
 def build_reexport_list(
-    candidate_manifest: dict[str, Any], mining_rows: list[dict[str, Any]]
+    candidate_manifest: dict[str, Any],
+    mining_rows: list[dict[str, Any]],
+    *,
+    source_manifest_hash: str | None = None,
 ) -> dict[str, Any]:
     """Expand every selected candidate's raw seed evidence into tuples needing a trace.
 
@@ -117,7 +136,7 @@ def build_reexport_list(
             "candidates' embedded raw per-seed outcomes because the #5615 resolver, as shipped, "
             "cannot resolve per-seed episodes from a cell-level candidate (see README)."
         ),
-        "source_candidate_manifest_hash": candidate_manifest.get("summary"),
+        "source_candidate_manifest_hash": source_manifest_hash,
         "n_tuples": len(ordered),
         "n_episode_id_found": sum(1 for e in ordered if e["episode_id_status"] == "found"),
         "tuples": ordered,
@@ -132,9 +151,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", required=True, type=Path)
     args = parser.parse_args(argv)
 
-    candidate_manifest = json.loads(args.candidates.read_text(encoding="utf-8"))
+    candidate_bytes = args.candidates.read_bytes()
+    candidate_manifest = json.loads(candidate_bytes)
     mining_rows = _load_jsonl(args.mining_rows)
-    manifest = build_reexport_list(candidate_manifest, mining_rows)
+    manifest = build_reexport_list(
+        candidate_manifest,
+        mining_rows,
+        source_manifest_hash=hashlib.sha256(candidate_bytes).hexdigest(),
+    )
 
     args.json.parent.mkdir(parents=True, exist_ok=True)
     args.json.write_text(json.dumps(manifest, indent=2, sort_keys=False) + "\n", encoding="utf-8")

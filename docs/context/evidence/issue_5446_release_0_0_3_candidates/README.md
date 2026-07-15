@@ -212,6 +212,8 @@ uv run python scripts/analysis/build_issue_5446_trace_reexport_list.py \
 ```
 
 - **90 tuples**, all 90 with a real `episode_id` found (0 `not_found`).
+  The re-export manifest records the SHA-256 of the exact candidate-manifest
+  input bytes as `source_candidate_manifest_hash`.
   - 30 from `seed_flip::classic_doorway_medium::ppo` (planner `ppo`)
   - 30 + 30 from `planner_upset::classic_realworld_double_bottleneck_high::goal>ppo`
     (planners `goal` and `ppo`)

@@ -162,9 +162,20 @@ def test_store_row_status_collapses_mixed_to_adapter() -> None:
         success=True,
     )
     store_row = adapter._store_row(
-        row, run_id="run-1", line_no=0, source_path=Path("episodes.jsonl")
+        row, run_id="run-1", line_no=1, source_path=Path("episodes.jsonl")
     )
     assert store_row["row_status"] == "adapter"
+    assert store_row["artifact_uri"] == "episodes.jsonl#L1"
+
+
+def test_iter_arm_dirs_fails_closed_with_typed_missing_path_error(tmp_path: Path) -> None:
+    """Missing release-bundle directories are reported as filesystem failures."""
+    try:
+        adapter.iter_arm_dirs(tmp_path / "missing-payload")
+    except FileNotFoundError as exc:
+        assert "runs/ directory" in str(exc)
+    else:
+        raise AssertionError("missing payload directory did not fail closed")
 
 
 def test_adapter_is_deterministic_across_reruns(tmp_path: Path) -> None:

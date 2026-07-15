@@ -105,7 +105,11 @@ def _derive_outcome_label(row: dict[str, Any]) -> str:
     success = metrics.get("success")
     if isinstance(success, bool) and success:
         return "success"
-    if isinstance(success, int | float) and float(success) >= 0.5:
+    if (
+        isinstance(success, (int, float))
+        and not isinstance(success, bool)
+        and float(success) >= 0.5
+    ):
         return "success"
     return "other"
 
@@ -176,7 +180,7 @@ def _store_row(
         "scenario_family": _derive_scenario_family(scenario_id, archetype),
         "seed": row.get("seed"),
         "row_status": row_status,
-        "artifact_uri": f"{source_path}#L{line_no}",
+        "artifact_uri": f"{source_path.as_posix()}#L{line_no}",
         "artifact_sha256": hashlib.sha256(raw_line.encode("utf-8")).hexdigest(),
     }
 
@@ -185,7 +189,7 @@ def iter_arm_dirs(payload_dir: Path, *, arms: list[str] | None = None) -> list[P
     """Return sorted ``runs/<arm>`` directories that contain an ``episodes.jsonl``."""
     runs_dir = payload_dir / "runs"
     if not runs_dir.is_dir():
-        raise SystemExit(f"no runs/ directory under {payload_dir}")
+        raise FileNotFoundError(f"no runs/ directory under {payload_dir}")
     out = []
     for arm_dir in sorted(runs_dir.iterdir()):
         if arms and arm_dir.name not in arms:
@@ -193,7 +197,7 @@ def iter_arm_dirs(payload_dir: Path, *, arms: list[str] | None = None) -> list[P
         if (arm_dir / "episodes.jsonl").is_file():
             out.append(arm_dir)
     if not out:
-        raise SystemExit(f"no runs/<arm>/episodes.jsonl found under {payload_dir}")
+        raise FileNotFoundError(f"no runs/<arm>/episodes.jsonl found under {payload_dir}")
     return out
 
 
@@ -230,7 +234,7 @@ def _adapt_one_arm(
     run_id = _resolve_run_id(arm_dir)
     arm_count = 0
     with episodes_path.open("r", encoding="utf-8") as fh:
-        for line_no, raw_line in enumerate(fh):
+        for line_no, raw_line in enumerate(fh, start=1):
             line = raw_line.strip()
             if not line:
                 continue
@@ -297,7 +301,7 @@ def adapt(
             store_rows,
             study_id="issue_5446_release_0_0_3_candidates",
             command="scripts/analysis/adapt_release_bundle_issue_5446_mining_run.py",
-            source_commit=store_rows[0]["run_id"] if store_rows else None,
+            source_commit=None,
         )
 
     return {

@@ -3,15 +3,7 @@
   "schema_version": "issue_5446_trace_reexport_list.v1",
   "issue": "#5446 -> #5447",
   "claim_boundary": "Targeted trace re-export request list only. Derived from the Pareto-selected candidates' embedded raw per-seed outcomes because the #5615 resolver, as shipped, cannot resolve per-seed episodes from a cell-level candidate (see README).",
-  "source_candidate_manifest_hash": {
-    "n_rows": 20160,
-    "n_eligible_cells": 96,
-    "n_excluded_rows": 17280,
-    "n_candidates": 50,
-    "n_seed_flip_candidates": 45,
-    "n_planner_upset_candidates": 5,
-    "n_selected": 2
-  },
+  "source_candidate_manifest_hash": "76b4e54570e9f236008efc13f0f87801035e586b3ffe4fdfb5ee0eabb4538865",
   "n_tuples": 90,
   "n_episode_id_found": 90,
   "tuples": [

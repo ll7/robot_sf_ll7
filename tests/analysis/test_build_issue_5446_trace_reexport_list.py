@@ -8,7 +8,9 @@ too large to fixture directly.
 
 from __future__ import annotations
 
-from scripts.analysis.build_issue_5446_trace_reexport_list import build_reexport_list
+import pytest
+
+from scripts.analysis.build_issue_5446_trace_reexport_list import _load_jsonl, build_reexport_list
 
 
 def _mining_row(scenario_id: str, algo: str, seed: int) -> dict:
@@ -113,3 +115,40 @@ def test_missing_episode_id_is_reported_not_fabricated() -> None:
     assert manifest["n_tuples"] == 1
     assert manifest["tuples"][0]["episode_id"] is None
     assert manifest["tuples"][0]["episode_id_status"] == "not_found_in_mining_rows"
+
+
+def test_index_skips_none_but_preserves_falsy_identifiers() -> None:
+    """None rows are missing while zero and empty-string identifiers remain literal."""
+    candidate_manifest = {
+        "summary": {},
+        "candidates": [
+            {
+                "candidate_id": "seed_flip::s1::plannerA",
+                "archetype": "seed_flip",
+                "scenario_id": "s1",
+                "planner": "plannerA",
+                "selected": True,
+                "reproducibility": {"raw_seed_outcomes": {"0": 1}},
+            }
+        ],
+    }
+    mining_rows = [
+        {"scenario_id": "s1", "algo": "plannerA", "seed": 0, "episode_id": "episode-0"},
+        {"scenario_id": "s1", "algo": "plannerA", "seed": None, "episode_id": "bad"},
+    ]
+
+    manifest = build_reexport_list(
+        candidate_manifest, mining_rows, source_manifest_hash="fixture-hash"
+    )
+
+    assert manifest["source_candidate_manifest_hash"] == "fixture-hash"
+    assert manifest["tuples"][0]["episode_id"] == "episode-0"
+
+
+def test_load_jsonl_reports_path_and_line_for_invalid_json(tmp_path) -> None:
+    """Malformed JSONL fails with an actionable source locator."""
+    path = tmp_path / "rows.jsonl"
+    path.write_text('{"ok": 1}\nnot-json\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"rows\.jsonl:2"):
+        _load_jsonl(path)

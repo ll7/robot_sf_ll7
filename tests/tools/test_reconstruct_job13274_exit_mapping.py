@@ -170,6 +170,7 @@ class TestJob13274ExitMappingReconstruction:
                 ]
             )
         assert exc_info.value.code == 2
+        assert not campaign_root.exists()
 
     def test_after_fix_finalizer_expects_campaign_summary_as_artifact(self, tmp_path: Path) -> None:
         """The finalizer receives the campaign summary as the campaign artifact.

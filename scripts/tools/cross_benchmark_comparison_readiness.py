@@ -38,6 +38,7 @@ import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -368,6 +369,199 @@ def validate_campaign_manifest(
     return manifest
 
 
+# Tokens that must never appear in the authorized canary slice (issue #5783): they would mean
+# the slice regressed to a placeholder/blocked scaffold instead of a concrete runnable canary.
+CANARY_SLICE_FORBIDDEN_TOKENS = (
+    "tbd",
+    "to_be_selected",
+    "to_be_selected_when_unblocked",
+    "blocked_prerequisite",
+    "blocked_external_input",
+    "scaffold_only",
+    "unvalidated_scaffold",
+    "campaign_authorized: false",
+)
+
+
+@dataclass
+class CanarySliceReport:
+    """Result of validating the issue #5783 canary slice in the campaign manifest."""
+
+    issue: int
+    status: str
+    canary_authorized: bool
+    ok: bool
+    policy_id: str | None
+    policy_version: str | None
+    algo: str | None
+    algo_config: str | None
+    robot_sf_scenario_id: str | None
+    socnavbench_scenario_id: str | None
+    seed: int | None
+    external_asset_id: str | None
+    metric_id: str | None
+    limitation_flags: tuple[str, ...]
+    errors: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the canary-slice report to a JSON-friendly mapping."""
+        return {
+            "schema": "cross_benchmark_canary_slice.v1",
+            "issue": self.issue,
+            "status": self.status,
+            "canary_authorized": self.canary_authorized,
+            "ok": self.ok,
+            "policy_id": self.policy_id,
+            "policy_version": self.policy_version,
+            "algo": self.algo,
+            "algo_config": self.algo_config,
+            "robot_sf_scenario_id": self.robot_sf_scenario_id,
+            "socnavbench_scenario_id": self.socnavbench_scenario_id,
+            "seed": self.seed,
+            "external_asset_id": self.external_asset_id,
+            "metric_id": self.metric_id,
+            "limitation_flags": list(self.limitation_flags),
+            "errors": self.errors,
+            "claim_boundary": (
+                "diagnostic sim-to-sim canary only; not simulator equivalence, policy "
+                "superiority, or a campaign/benchmark/paper claim"
+            ),
+        }
+
+
+def _canary_slice_missing_report(errors: list[str]) -> CanarySliceReport:
+    """Build the fail-closed report returned when the canary_slice block is absent."""
+    errors.append("canary_slice block missing or not a mapping")
+    return CanarySliceReport(
+        issue=5783,
+        status="missing",
+        canary_authorized=False,
+        ok=False,
+        policy_id=None,
+        policy_version=None,
+        algo=None,
+        algo_config=None,
+        robot_sf_scenario_id=None,
+        socnavbench_scenario_id=None,
+        seed=None,
+        external_asset_id=None,
+        metric_id=None,
+        limitation_flags=(),
+        errors=errors,
+    )
+
+
+def _check_concrete_fields(
+    block: dict,
+    fields: tuple[tuple[str, Any], ...],
+    errors: list[str],
+) -> None:
+    """Append an error for every required concrete field that is empty/placeholder."""
+    for label, value in fields:
+        if not value or not str(value).strip():
+            errors.append(f"canary_slice.{label} must be concrete (no empty/placeholder)")
+
+
+def _check_forbidden_tokens(slice_block: dict, errors: list[str]) -> None:
+    """Append an error for every forbidden placeholder/blocked token found in the slice."""
+    lowered = yaml.safe_dump(slice_block, default_flow_style=True).lower()
+    for token in CANARY_SLICE_FORBIDDEN_TOKENS:
+        if token in lowered:
+            errors.append(f"canary_slice contains forbidden token {token!r}")
+
+
+def validate_canary_slice(
+    manifest_path: Path = REPO_ROOT / CAMPAIGN_MANIFEST_PATH,
+) -> CanarySliceReport:
+    """Validate the concrete, authorized issue #5783 canary slice.
+
+    The slice must be authorized, pin a concrete policy (no TBD/blocked tokens), map one
+    concrete Robot SF scenario to one SocNavBench scenario with a seed, name a cross-suite
+    metric, and list limitation flags. Fails closed on any placeholder/blocked field.
+    """
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    slice_block = manifest.get("canary_slice")
+    errors: list[str] = []
+    if not isinstance(slice_block, dict):
+        return _canary_slice_missing_report(errors)
+
+    status = slice_block.get("status")
+    if status != "authorized_canary":
+        errors.append(f"canary_slice.status must be 'authorized_canary', got {status!r}")
+    if not slice_block.get("canary_authorized", False):
+        errors.append("canary_slice.canary_authorized must be true")
+
+    _check_forbidden_tokens(slice_block, errors)
+
+    policy = slice_block.get("policy") or {}
+    if not isinstance(policy, dict):
+        errors.append("canary_slice.policy must be a mapping")
+    policy_id = policy.get("policy_id")
+    policy_version = policy.get("version")
+    algo = policy.get("algo")
+    algo_config = policy.get("algo_config")
+    _check_concrete_fields(
+        policy if isinstance(policy, dict) else {},
+        (
+            ("policy.policy_id", policy_id),
+            ("policy.version", policy_version),
+            ("policy.algo", algo),
+            ("policy.algo_config", algo_config),
+        ),
+        errors,
+    )
+
+    mapping = slice_block.get("scenario_mapping") or {}
+    if not isinstance(mapping, dict):
+        errors.append("canary_slice.scenario_mapping must be a mapping")
+    robot_sf_scenario_id = mapping.get("robot_sf_scenario_id")
+    socnavbench_scenario_id = mapping.get("socnavbench_scenario_id")
+    seed = mapping.get("seed")
+    external_asset_id = mapping.get("external_asset_id")
+    _check_concrete_fields(
+        mapping if isinstance(mapping, dict) else {},
+        (
+            ("scenario_mapping.robot_sf_scenario_id", robot_sf_scenario_id),
+            ("scenario_mapping.socnavbench_scenario_id", socnavbench_scenario_id),
+            ("scenario_mapping.external_asset_id", external_asset_id),
+        ),
+        errors,
+    )
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        errors.append("canary_slice.scenario_mapping.seed must be an integer")
+
+    metric_id = slice_block.get("metric_id")
+    _check_concrete_fields(slice_block, (("metric_id", metric_id),), errors)
+
+    limitation_flags = tuple(
+        mapping.get("limitation_flags") or slice_block.get("limitation_flags") or ()
+    )
+    if not limitation_flags:
+        errors.append("canary_slice.limitation_flags must be a non-empty list")
+
+    return CanarySliceReport(
+        issue=int(slice_block.get("issue", 5783)),
+        status=str(status) if status is not None else "missing",
+        canary_authorized=bool(slice_block.get("canary_authorized", False)),
+        ok=not errors,
+        policy_id=policy_id if isinstance(policy_id, str) else None,
+        policy_version=policy_version if isinstance(policy_version, str) else None,
+        algo=algo if isinstance(algo, str) else None,
+        algo_config=algo_config if isinstance(algo_config, str) else None,
+        robot_sf_scenario_id=(
+            robot_sf_scenario_id if isinstance(robot_sf_scenario_id, str) else None
+        ),
+        socnavbench_scenario_id=(
+            socnavbench_scenario_id if isinstance(socnavbench_scenario_id, str) else None
+        ),
+        seed=seed if isinstance(seed, int) and not isinstance(seed, bool) else None,
+        external_asset_id=external_asset_id if isinstance(external_asset_id, str) else None,
+        metric_id=metric_id if isinstance(metric_id, str) else None,
+        limitation_flags=limitation_flags,
+        errors=errors,
+    )
+
+
 def validate_waivers(waivers: dict[str, str]) -> dict[str, str]:
     """Validate a waiver mapping; return it unchanged if every entry is well-formed.
 
@@ -485,6 +679,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Validate the issue #3287 campaign-manifest scaffold before reporting readiness.",
     )
+    parser.add_argument(
+        "--validate-canary-slice",
+        action="store_true",
+        help=(
+            "Validate the issue #5783 canary slice (concrete policy, scenario mapping, "
+            "metric, and limitation flags). Fails closed on placeholder/blocked fields."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -498,17 +700,31 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
         waivers = _parse_waiver_args(args.waive)
-        if args.validate_manifest:
+        if args.validate_canary_slice:
+            report = validate_canary_slice(args.repo_root / CAMPAIGN_MANIFEST_PATH).to_dict()
+            if not report["ok"]:
+                raise CampaignManifestError("; ".join(report["errors"]))
+        elif args.validate_manifest:
             validate_campaign_manifest(args.repo_root / CAMPAIGN_MANIFEST_PATH)
-        report = evaluate_readiness(args.repo_root, waivers)
+            report = evaluate_readiness(args.repo_root, waivers)
+        else:
+            report = evaluate_readiness(args.repo_root, waivers)
     except (WaiverError, CampaignManifestError) as exc:
         # Diagnostics go to stderr so stdout stays reserved for the text/JSON report.
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
+    elif args.validate_canary_slice:
+        status = "OK" if report["ok"] else "BLOCKED"
+        print(
+            f"canary slice {status}: policy={report['policy_id']}@{report['policy_version']} "
+            f"seed={report['seed']} metric={report['metric_id']}"
+        )
     else:
         print(render_text(report))
+    if args.validate_canary_slice:
+        return 0 if report["ok"] else 1
     return 0 if report["prerequisites_status"] == "ready" else 1
 
 

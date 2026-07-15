@@ -103,3 +103,36 @@ limitations_sections:
   - dynamics_and_pedestrian_model_differences
   - unsupported_direct_equivalence_claims
   - valid_bounded_comparison_statements
+
+# ---------------------------------------------------------------------------
+# Issue #5783 canary slice: concrete, authorized, and free of placeholder/blocked
+# fields. The broader #3287 campaign remains blocked_prerequisite above by design; this
+# slice materializes the runnable SocNavBench export + one-policy cross-suite canary and is
+# authorized as a bounded diagnostic (no campaign, no training, no equivalence claim).
+# ---------------------------------------------------------------------------
+canary_slice:
+  issue: 5783
+  status: authorized_canary
+  canary_authorized: true
+  canary_name: socnavbench_cross_suite_canary
+  canary_version: "1"
+  source_issue: 3287
+  policy:
+    policy_id: social_force_holonomic
+    version: tau_low_v1
+    algo: social_force
+    algo_config: configs/algos/social_force_holonomic_tuned_tau_low.yaml
+  scenario_mapping:
+    robot_sf_scenario_id: canary-corridor-uni-low-open
+    socnavbench_scenario_id: ETH/canary-corridor-unilowopen
+    seed: 0
+    external_asset_id: socnavbench-s3dis-eth
+    mapping_quality: documented_canary_mapping
+  metric_id: socnavbench.path_length_ratio
+  export_artifact: output/cross_benchmark_canary/ETH_canary-corridor-unilowopen.socnavbench.json
+  receipt_artifact: output/cross_benchmark_canary/cross_suite_canary_receipt.json
+  limitation_flags:
+    - geometry_non_equivalence_eth_vs_robot_sf_svg
+    - pedestrian_dynamics_proxy
+    - no_real_sim_equivalence
+    - single_seed_canary_not_campaign_evidence

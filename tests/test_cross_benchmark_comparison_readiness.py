@@ -13,6 +13,7 @@ import pytest
 
 from scripts.tools.cross_benchmark_comparison_readiness import (
     CAMPAIGN_MANIFEST_PATH,
+    CANARY_SLICE_FORBIDDEN_TOKENS,
     LIMITATIONS_TEMPLATE_PATH,
     PREREQUISITE_FAMILIES,
     REQUIRED_LIMITATION_SECTIONS,
@@ -25,6 +26,7 @@ from scripts.tools.cross_benchmark_comparison_readiness import (
     main,
     render_text,
     validate_campaign_manifest,
+    validate_canary_slice,
     validate_waivers,
 )
 
@@ -245,3 +247,86 @@ def test_campaign_manifest_validation_rejects_equivalence_claim(tmp_path: Path) 
 def test_main_validate_manifest_keeps_campaign_blocked() -> None:
     """CLI manifest validation succeeds but still reports blocked campaign prerequisites."""
     assert main(["--validate-manifest"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Issue #5783 canary-slice validation tests
+# ---------------------------------------------------------------------------
+
+
+def test_real_canary_slice_is_concrete_and_authorized() -> None:
+    """The checked-in #5783 canary slice must be authorized with no placeholder fields."""
+    report = validate_canary_slice()
+    assert report.ok is True
+    assert report.canary_authorized is True
+    assert report.status == "authorized_canary"
+    assert report.policy_id
+    assert report.policy_version
+    assert report.algo
+    assert report.algo_config
+    assert report.robot_sf_scenario_id
+    assert report.socnavbench_scenario_id
+    assert isinstance(report.seed, int)
+    assert report.external_asset_id
+    assert report.metric_id
+    assert report.limitation_flags
+    assert report.errors == []
+
+
+def test_real_canary_slice_external_asset_in_registry() -> None:
+    """The canary slice asset id must be a real external-data registry entry (no drift)."""
+    from scripts.tools.manage_external_data import list_assets
+
+    report = validate_canary_slice()
+    registry_ids = {asset.asset_id for asset in list_assets()}
+    assert report.external_asset_id in registry_ids
+
+
+def test_canary_slice_rejects_unauthorized_status(tmp_path: Path) -> None:
+    """A slice that is not authorized_canary must fail closed."""
+    source = CAMPAIGN_MANIFEST_PATH
+    target = tmp_path / source.name
+    text = source.read_text(encoding="utf-8").replace(
+        "status: authorized_canary", "status: blocked_prerequisite"
+    )
+    target.write_text(text, encoding="utf-8")
+    report = validate_canary_slice(target)
+    assert report.ok is False
+    assert any("status" in err for err in report.errors)
+
+
+def test_canary_slice_rejects_forbidden_placeholder_tokens(tmp_path: Path) -> None:
+    """Any forbidden placeholder/blocked token in the slice must fail closed."""
+    source = CAMPAIGN_MANIFEST_PATH
+    target = tmp_path / source.name
+    text = source.read_text(encoding="utf-8").replace(
+        "version: tau_low_v1", "version: to_be_selected"
+    )
+    target.write_text(text, encoding="utf-8")
+    report = validate_canary_slice(target)
+    assert report.ok is False
+    assert any("forbidden token" in err for err in report.errors)
+
+
+def test_canary_slice_rejects_missing_block(tmp_path: Path) -> None:
+    """A manifest with no canary_slice block must fail closed as missing."""
+    target = tmp_path / "no_slice.yaml"
+    target.write_text(
+        "schema_version: cross_benchmark_policy_comparison.issue_3287.v1\n", encoding="utf-8"
+    )
+    report = validate_canary_slice(target)
+    assert report.ok is False
+    assert report.status == "missing"
+
+
+def test_main_validate_canary_slice_exit_codes(capsys: pytest.CaptureFixture) -> None:
+    """CLI canary-slice validation exits 0 on the real slice and emits the OK line."""
+    assert main(["--validate-canary-slice"]) == 0
+    out = capsys.readouterr().out
+    assert "canary slice OK" in out
+
+
+def test_canary_slice_forbidden_tokens_cover_known_placeholders() -> None:
+    """Guard against drift: the forbidden-token set covers the standing placeholder markers."""
+    for token in ("tbd", "blocked_prerequisite", "to_be_selected"):
+        assert token in CANARY_SLICE_FORBIDDEN_TOKENS

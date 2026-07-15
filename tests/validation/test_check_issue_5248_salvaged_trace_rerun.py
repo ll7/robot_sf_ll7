@@ -39,9 +39,8 @@ def test_real_harvest_blocks_on_trace_label_floor_not_missing_inputs() -> None:
     """
 
     if not HARVEST_CAMPAIGN_ROOT.is_dir():
-        raise pytest.skip.Exception(
-            "verified job-13334 harvest absent on this host",
-            reason="harvest_not_available",
+        pytest.skip(
+            "harvest_not_available: verified job-13334 harvest absent on this host",
         )
 
     receipt = build_registration_receipt(

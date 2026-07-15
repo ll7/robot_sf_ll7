@@ -6,7 +6,9 @@ Thin, user-facing entry point for everyday Robot SF workflows. The
 friendly, remedy-bearing output for beginners. The ``models`` and
 ``datasets`` subcommands wrap the existing model registry and external-data
 provenance/checksum machinery (issue #5797) behind list/verify/download and
-list/verify/prepare commands.
+list/verify/prepare commands. The ``demo`` subcommand exposes the one-command
+visual demo from the adoption/UX epic. More everyday workflows can be added
+here without creating another top-level entry point.
 """
 
 from __future__ import annotations
@@ -20,45 +22,54 @@ from typing import TYPE_CHECKING
 from robot_sf import cli_datasets, cli_models
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
 
-if TYPE_CHECKING:  # pragma: no cover - static typing only
+if TYPE_CHECKING:
     from collections.abc import Sequence
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """Build the top-level parser with its subcommands.
+    """Construct the top-level ``robot-sf`` argument parser.
 
     Returns:
-        argparse.ArgumentParser: Configured argument parser.
+        argparse.ArgumentParser: Parser with the registered subcommands.
     """
     parser = argparse.ArgumentParser(
         prog="robot-sf",
         description="Robot SF top-level command line interface.",
     )
-    sub = parser.add_subparsers(dest="cmd")
-    doc = sub.add_parser(
+    subparsers = parser.add_subparsers(dest="cmd")
+
+    doctor = subparsers.add_parser(
         "doctor",
-        help="Environment/readiness check with friendly remedies (uv run robot-sf doctor)",
+        help="Environment/readiness check with friendly remedies.",
     )
-    doc.add_argument(
+    doctor.add_argument(
         "--format",
         choices=("friendly", "json"),
         default="friendly",
         help="Output format (default: friendly).",
     )
-    doc.add_argument(
+    doctor.add_argument(
         "--artifact-root",
         type=Path,
         default=Path("output"),
-        help="Artifact root to probe for temporary write access (default: output)",
+        help="Artifact root to probe for temporary write access (default: output).",
     )
-    doc.add_argument(
+    doctor.add_argument(
         "--skip-env-smoke",
         action="store_true",
-        default=False,
-        help="Skip the minimal reset/step environment smoke check",
+        help="Skip the minimal reset/step environment smoke check.",
     )
-    _add_models_subparser(sub)
-    _add_datasets_subparser(sub)
+    _add_models_subparser(subparsers)
+    _add_datasets_subparser(subparsers)
+
+    demo = subparsers.add_parser(
+        "demo",
+        help="Run the one-command visual demo (tiny deterministic episode + viewer).",
+    )
+    demo.add_argument("--output-root", type=Path, default=None)
+    demo.add_argument("--scenario", type=Path, default=None)
+    demo.add_argument("--seed", type=int, default=None)
+    demo.add_argument("--verbose", action="store_true")
     return parser
 
 
@@ -66,7 +77,7 @@ def _handle_doctor(args: argparse.Namespace) -> int:
     """Run the doctor check and print the report.
 
     Returns:
-        int: Doctor command exit code.
+        int: Process-style doctor exit code.
     """
     report = collect_doctor_report(
         artifact_root=args.artifact_root,
@@ -406,15 +417,29 @@ _HANDLERS = {
     "datasets": _handle_datasets,
 }
 
-
 def main(argv: Sequence[str] | None = None) -> int:
-    """Top-level ``robot-sf`` entry point.
+    """Dispatch to the requested ``robot-sf`` subcommand.
 
     Returns:
-        int: Process-style exit code.
+        int: Process exit status code.
     """
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    if args.cmd == "demo":
+        from scripts.demo.quickstart_demo import main as demo_main  # noqa: PLC0415
+
+        demo_argv = []
+        if args.output_root is not None:
+            demo_argv += ["--output-root", str(args.output_root)]
+        if args.scenario is not None:
+            demo_argv += ["--scenario", str(args.scenario)]
+        if args.seed is not None:
+            demo_argv += ["--seed", str(args.seed)]
+        if args.verbose:
+            demo_argv.append("--verbose")
+        return demo_main(demo_argv)
+
     if args.cmd is None:
         parser.print_help()
         return 1
@@ -425,5 +450,5 @@ def main(argv: Sequence[str] | None = None) -> int:
     return handler(args)
 
 
-if __name__ == "__main__":  # pragma: no cover - entrypoint
-    raise SystemExit(main())
+if __name__ == "__main__":  # pragma: no cover
+    sys.exit(main())

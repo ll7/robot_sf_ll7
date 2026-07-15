@@ -119,9 +119,9 @@ def test_model_package_preloads_torch_runtime_before_direct_ppo_import():
             sys.executable,
             "-c",
             (
-                "import gymnasium as gym; import os, sys; import robot_sf.models; "
+                "import gymnasium as gym; import os, sys, importlib.util; import robot_sf.models; "
                 "assert os.environ.get('TORCH_COMPILE_DISABLE') == '1'; "
-                "assert 'triton' in sys.modules; "
+                "assert importlib.util.find_spec('triton') is None or 'triton' in sys.modules; "
                 "from stable_baselines3 import PPO; "
                 "env = gym.make('CartPole-v1'); "
                 "model = PPO('MlpPolicy', env, n_steps=8, batch_size=4, device='cpu'); "

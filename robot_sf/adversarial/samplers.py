@@ -8,6 +8,7 @@ from random import Random
 from typing import TYPE_CHECKING, Any, Protocol
 
 from robot_sf.adversarial.config import CandidateSpec, Pose2D, RangeConfig, SearchSpaceConfig
+from robot_sf.common.optional_import import try_import
 
 if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateEvaluation
@@ -236,13 +237,13 @@ def _import_optuna() -> Any:
 
 def _import_cma() -> Any:
     """Import the cma package or raise an actionable optional-dependency error."""
-    try:
-        return import_module("cma")
-    except ImportError as exc:
+    cma = try_import("cma")
+    if cma is None:
         raise RuntimeError(
             "CmaEsCandidateSampler requires cma. Install project dependencies with "
             "`uv sync --all-extras` before using the optimizer-backed adversarial sampler."
-        ) from exc
+        )
+    return cma
 
 
 class CmaEsCandidateSampler:

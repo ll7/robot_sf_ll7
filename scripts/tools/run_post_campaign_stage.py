@@ -53,6 +53,10 @@ def run_stage_command(command: Sequence[str]) -> tuple[int, str, str]:
             capture_output=True,
             check=False,
         )
+        if completed.stdout:
+            sys.stdout.write(completed.stdout)
+        if completed.stderr:
+            sys.stderr.write(completed.stderr)
     except FileNotFoundError as exc:
         return 5, "", f"post-campaign stage command not found: {exc}"
     return completed.returncode, completed.stdout or "", completed.stderr or ""

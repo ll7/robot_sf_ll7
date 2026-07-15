@@ -3,17 +3,20 @@
 
 Orchestrates the CPU-achievable portion of Package B:
 
-1. preflight the committed manifest (fail-closed, no campaign execution);
-2. run the 27-cell budget-matched sampler comparison in synthetic mode and write
-   the durable report artifact;
+1. preflight the committed manifest (fail-closed);
+2. run the 27-cell budget-matched sampler comparison. By default this is the
+    reproducible synthetic CPU path; with ``--empirical`` it runs the real CPU
+    ``pysocialforce`` benchmark evaluator (no Slurm/GPU) and writes the durable
+    report artifact;
 3. validate the report through the Package-B report gate;
 4. emit the confirmation sidecar (every cell censored, artifact-bound to the report)
-   and validate it through the confirmation gate.
+    and validate it through the confirmation gate.
 
-The script never submits Slurm jobs or runs benchmark episodes; the synthetic
-evaluator makes the 27-cell comparison reproducible on CPU. Confirmed-failure
-discovery (replay + independent-seed + mechanism attribution) is intentionally
-left as a censored caveate until the artifacts exist.
+The script never submits Slurm jobs. The empirical path uses only the CPU
+benchmark runner and produces certified, replayable, valid failures; its results
+are diagnostic/local nominal evidence, not paper-facing. Confirmed-failure
+discovery at paper tier (artifact-level replay + independent-seed + mechanism
+attribution review) remains a separate interpretive step.
 """
 
 from __future__ import annotations
@@ -43,8 +46,15 @@ def _refine_manifest_paths(manifest_path: Path, *, repo_root: Path) -> Path:
     return (manifest_path if manifest_path.is_absolute() else repo_root / manifest_path).resolve()
 
 
-def _run_pipeline(manifest_path: Path, *, repo_root: Path) -> dict[str, object]:
-    """Execute preflight, synthetic run, report gate, and confirmation sidecar/gate.
+def _run_pipeline(
+    manifest_path: Path, *, repo_root: Path, empirical: bool = False
+) -> dict[str, object]:
+    """Execute preflight, the comparison run, report gate, and confirmation sidecar/gate.
+
+    The comparison is run in synthetic mode by default (CPU-reproducible, no benchmark
+    episodes) or in empirical mode (real CPU ``pysocialforce`` evaluation producing certified,
+    replayable, valid failures). Empirical mode uses only the CPU benchmark runner and does not
+    submit Slurm jobs; its results are diagnostic/local nominal evidence, not paper-facing.
 
     Returns:
         A compact pipeline payload summarizing each stage's outcome.
@@ -73,7 +83,7 @@ def _run_pipeline(manifest_path: Path, *, repo_root: Path) -> dict[str, object]:
         str(manifest_path),
         "--repo-root",
         str(repo_root),
-        "--synthetic",
+        "--empirical" if empirical else "--synthetic",
         "--out-json",
         str(report_json),
         "--out-md",
@@ -136,6 +146,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Return a non-zero exit code when any gate is not ready (CPU-only checks).",
     )
+    parser.add_argument(
+        "--empirical",
+        action="store_true",
+        help=(
+            "Run the comparison with the real CPU benchmark evaluator instead of the synthetic "
+            "path, producing certified, replayable, valid failures. CPU-only (pysocialforce); "
+            "never submits Slurm jobs. Diagnostic/local nominal evidence, not paper-facing."
+        ),
+    )
     return parser
 
 
@@ -143,7 +162,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the Package-B pipeline and emit a compact summary."""
     args = build_parser().parse_args(argv)
     repo_root = args.repo_root.resolve()
-    summary = _run_pipeline(args.manifest, repo_root=repo_root)
+    summary = _run_pipeline(args.manifest, repo_root=repo_root, empirical=args.empirical)
     rendered = json.dumps(summary, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)

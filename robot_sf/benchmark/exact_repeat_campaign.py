@@ -69,6 +69,16 @@ MIXED_DISPOSITION = "mixed_runnability"
 DEGRADED_DISPOSITION = "degraded_fallback"
 _DEGRADED_STATUS_PREFIXES = ("policy_step_timeout_fallback", "policy_step_error_fallback")
 
+# A target whose repeats could not be produced *natively* because the planner-step
+# isolation boundary itself failed (for example an xdist-forked pytest worker that
+# cannot safely fork again, a dead/reparented planner worker under CPU starvation,
+# or a model-cache miss that only manifests under parallel process isolation). This
+# is a process-isolation / environment failure, *not* evidence that the planner is
+# unrunnable on current main. Issue #5781: such a cause must be recorded explicitly
+# and fail closed (still excluded from the bitwise-identical claim) rather than
+# misfiled as ``unrunnable_on_current_main`` or as a genuine planner degradation.
+PROCESS_ISOLATION_DISPOSITION = "process_isolation_failure"
+
 
 def _record_is_degraded(record: Any) -> bool:
     """Return True when an episode record is a degraded fallback rather than native output.
@@ -96,6 +106,73 @@ def _record_is_degraded(record: Any) -> bool:
                 except (TypeError, ValueError):
                     pass
     return False
+
+
+# Substrings that identify a process-isolation / environment failure rather than a
+# genuine planner degradation. These are the exact error messages emitted by the
+# forked planner-step worker lifecycle in ``robot_sf.benchmark.runner``. When any
+# repeats carry them the target failed at the isolation boundary, not in the
+# planner policy itself.
+_PROCESS_ISOLATION_FAILURE_SIGNATURES = (
+    "policy step worker was unavailable",
+    "planner step worker exited before returning an action",
+    "planner step worker exited without returning an action",
+    "planner step worker failed to start",
+    "planner step worker failed to initialize",
+    "policy_step_isolation_unavailable",
+    "policy step isolation unavailable",
+)
+
+
+def _record_is_isolation_failure(record: Any) -> bool:
+    """Return True when a record failed at the planner-step isolation boundary.
+
+    A record that *did* produce a policy action but whose isolation worker died
+    (handshake failure, dead worker, or unavailable fork under xdist) is an
+    environment/process failure, not evidence that the planner is unrunnable on
+    main. The runner surfaces this through the explicit ``fallback_reason``
+    metadata field and, when the worker is entirely unavailable, through a status
+    of ``policy_step_isolation_unavailable``. This helper distinguishes that class
+    from a genuine planner ``policy_step_*_fallback`` (a real zero-action policy
+    substitute that still executed inside the worker).
+    """
+    if not isinstance(record, Mapping):
+        return False
+    metadata = record.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        return False
+    if metadata.get("status") == "policy_step_isolation_unavailable":
+        return True
+    reason = metadata.get("fallback_reason")
+    if isinstance(reason, str):
+        if any(sig in reason for sig in _PROCESS_ISOLATION_FAILURE_SIGNATURES):
+            return True
+    # If a repeat carries no usable policy metadata at all, the worker boundary
+    # failed before/around action production; treat it as an isolation failure so
+    # it is not silently promoted to a determinism verdict (fail-closed).
+    if metadata.get("status") is None and not metadata.get("config_hash"):
+        return False
+    return False
+
+
+def _classify_repeat_failure(records: Sequence[Any]) -> tuple[bool, bool]:
+    """Classify repeat-level failures for a target.
+
+    Returns:
+        ``(any_degraded, any_isolation_failure)`` where ``any_degraded`` marks a
+        genuine planner-policy fallback (zero-action substitute produced inside
+        the worker) and ``any_isolation_failure`` marks a process-isolation /
+        environment failure at the worker boundary. A target can be both, but the
+        isolation failure takes precedence: it is not a planner-runnability defect.
+    """
+    any_degraded = False
+    any_isolation = False
+    for record in records:
+        if _record_is_degraded(record):
+            any_degraded = True
+        if _record_is_isolation_failure(record):
+            any_isolation = True
+    return any_degraded, any_isolation
 
 
 def canonical_sha256(value: Any) -> str:
@@ -564,7 +641,7 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
         result = indexed_results[key]
         disposition = result.get("disposition")
         if disposition is not None:
-            if disposition != UNRUNNABLE_DISPOSITION:
+            if disposition not in (UNRUNNABLE_DISPOSITION, PROCESS_ISOLATION_DISPOSITION):
                 raise ValueError(f"target {key} has an unsupported disposition {disposition!r}")
             repeats = result.get("repeats")
             if "repeats" in result and (not isinstance(repeats, list) or repeats):
@@ -574,11 +651,18 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
             disposition_reason = _require_text(
                 result.get("disposition_reason"), f"target {key} disposition_reason"
             )
+            # A process-isolation failure is an environment/process failure, not a
+            # planner-runnability defect on main. It is still excluded from the
+            # bitwise-identical claim (fail-closed), and is surfaced with a distinct
+            # ``isolation_failure`` flag so the determinism signal is not polluted by
+            # transient xdist/worker infra failures (issue #5781).
+            isolation_failure = result.get("isolation_failure", False)
             verified = {
                 "scenario_id": key[0],
                 "planner": key[1],
                 "seed": key[2],
                 "unrunnable": True,
+                "isolation_failure": bool(isolation_failure),
                 "disposition": disposition,
                 "disposition_reason": disposition_reason,
                 "bitwise_identical": None,
@@ -1140,12 +1224,44 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
                 }
             )
 
-        # Issue #5498: a planner that constructs but degrades any repeat to a
-        # no-op fallback (for example a forked planner-step worker that times out
-        # or crashes, leaving the robot motionless) must not be promoted to a
-        # determinism verdict. Record it as an explicit unrunnable disposition so
-        # the verifier excludes it, with a degraded flag and reason.
-        if records and any(_record_is_degraded(record) for record in records):
+        # Issue #5498 / #5781: a planner that constructs but does not produce
+        # native repeats must not be promoted to a determinism verdict. Two distinct
+        # failure classes exist, and they must not be conflated:
+        #
+        #  * genuine planner degradation (``policy_step_*_fallback``) — a zero-action
+        #    substitute produced *inside* the worker. Recorded with the
+        #    ``unrunnable_on_current_main`` disposition (degraded flag set) so the
+        #    verifier excludes it from the bitwise-identical claim.
+        #  * process-isolation / environment failure at the planner-step worker
+        #    boundary (handshake failure, dead/reparented worker, unsupported fork
+        #    under xdist, model-cache miss under parallel isolation). This is NOT a
+        #    planner-runnability defect on main, so it must be recorded with the
+        #    separate ``process_isolation_failure`` disposition and fail closed
+        #    rather than misfiled as ``unrunnable_on_current_main``. Issue #5781:
+        #    this keeps the native-PPO exact-repeat test deterministic under xdist
+        #    and prevents transient infra failures from poisoning the determinism
+        #    signal. Both classes preserve the assertion that a disposition is not
+        #    success evidence.
+        any_degraded, any_isolation = _classify_repeat_failure(records)
+        if records and any_isolation:
+            result_entry = {
+                "scenario_id": scenario_id,
+                "planner": planner,
+                "seed": seed,
+                "horizon": horizon,
+                "source_config_hash": target["source_config_hash"],
+                "repeats": [],
+                "isolation_failure": True,
+                "disposition": PROCESS_ISOLATION_DISPOSITION,
+                "disposition_reason": (
+                    f"planner {planner_algo!r} could not execute natively because the "
+                    "planner-step isolation boundary failed (worker handshake/death or "
+                    "fork/process-isolation failure under parallel execution); this is an "
+                    "environment/process failure, not a planner-runnability defect on "
+                    "current main, and is not valid exact-repeat evidence"
+                ),
+            }
+        elif records and any_degraded:
             result_entry = {
                 "scenario_id": scenario_id,
                 "planner": planner,

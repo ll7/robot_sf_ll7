@@ -12,6 +12,11 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+try:
+    import triton  # noqa: F401
+except ImportError:
+    pass
+
 import pytest
 
 from robot_sf.common.artifact_paths import ensure_canonical_tree

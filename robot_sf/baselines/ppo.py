@@ -36,11 +36,6 @@ from gymnasium import spaces as gym_spaces
 from gymnasium.spaces.utils import flatdim, flatten
 from loguru import logger
 
-try:  # Lazy import; not required for type-check only
-    from stable_baselines3 import PPO
-except ImportError:  # pragma: no cover - envs without SB3 installed
-    PPO = None  # type: ignore
-
 from robot_sf.baselines.interface import (
     Observation,
     is_observation_mapping,
@@ -48,11 +43,21 @@ from robot_sf.baselines.interface import (
 )
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
+from robot_sf.common.seed import _configure_torch_213_runtime
 from robot_sf.models import resolve_model_path
 from robot_sf.planner.predictive_foresight import (
     PredictiveForesightEncoder,
     predictive_foresight_config_from_source,
 )
+
+# Configure the known Torch 2.13/Python 3.12+ native-crash workaround before
+# Stable-Baselines3 imports the optimizer code that first touches torch._dynamo.
+_configure_torch_213_runtime()
+
+try:  # Lazy import; not required for type-check only
+    from stable_baselines3 import PPO
+except ImportError:  # pragma: no cover - envs without SB3 installed
+    PPO = None  # type: ignore
 
 
 @dataclass

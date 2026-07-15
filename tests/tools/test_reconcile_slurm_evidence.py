@@ -668,3 +668,180 @@ def test_missing_finalizer_manifest_mapping_is_reported(tmp_path: Path) -> None:
     assert any(
         "no manifest row for queue/seed linkage" in error for error in report["errors"]
     ) or any("issue 2656 not in queue" in error for error in report["warnings"])
+
+
+def test_finalizer_envelope_warn_success_isolated_report_stage(tmp_path: Path) -> None:
+    """Issue #5244: the ledger must adopt the post-campaign exit-code envelope.
+
+    A job whose campaign completed (exit 0) under ``snqi_contract.enforcement=warn`` but
+    whose post-campaign report stage failed (the job-13274 exit-5 candidate) must surface as
+    ``warn_success`` with an isolated ``report_stage_failed`` lane, not as a flat failure. The
+    envelope's campaign lane must be preserved and the downstream ``job_exit_code`` must equal
+    it.
+    """
+    payload = _queue_payload()
+    payload["entries"][0]["id"] = "issue-2656-example"
+    payload["entries"][0]["seeds"] = [201]
+    payload["entries"][0]["issue"] = 2656
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    _write_yaml(
+        manifest_path,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="completed",
+            seeds=[201],
+            slurm_job_id=13274,
+            exp_id="exp-finalizer",
+        ),
+    )
+
+    finalizer = tmp_path / "evidence" / "finalization_13274.json"
+    _write_json(
+        finalizer,
+        {
+            "schema_version": "robot-sf-slurm-job-finalization.v1",
+            "issue_number": 2656,
+            "job_id": "13274",
+            "job_state": "COMPLETED",
+            "classification": "success",
+            "artifact_status": "all_required_present",
+            "artifacts": [
+                {
+                    "path": "output/slurm/job-13274/campaign_summary.json",
+                    "artifact_uri": "wandb-artifact://robot-sf/finalizer/job-13274:latest",
+                    "exists": True,
+                    "required": True,
+                    "kind": "file",
+                    "sha256": "deadbeef",
+                    "size_bytes": 1,
+                }
+            ],
+            "claim_boundary": (
+                "Campaign execution completed with exit 0, but the post-campaign report "
+                "stage failed with exit 5; this is not benchmark evidence until the report "
+                "is available and validated."
+            ),
+            "exit_code_lanes": {
+                "campaign": {
+                    "status": "completed",
+                    "exit_code": 0,
+                    "soft_contract_warning": True,
+                },
+                "post_campaign_stage": {
+                    "name": "headline_ci_rank_stability_report",
+                    "status": "report_stage_failed",
+                    "exit_code": 5,
+                },
+                "job_exit_code": 0,
+            },
+            "post_campaign_stage_status": {
+                "path": "output/slurm/job-13274/reports/post_campaign_stage_status.json",
+                "load_status": "loaded",
+            },
+            "durable_uri": "wandb-artifact://robot-sf/finalizer/job-13274:latest",
+        },
+    )
+
+    evidence = tmp_path / "evidence" / "seed_summary.csv"
+    _write_csv(
+        evidence,
+        ["queue_id", "seed", "job_id", "wandb_url", "claim_boundary", "run_summary_sha256"],
+        [
+            {
+                "queue_id": "issue-2656-example",
+                "seed": "201",
+                "job_id": "13274",
+                "wandb_url": "wandb-artifact://robot-sf/finalizer/job-13274:latest",
+                "claim_boundary": "warn_success_diagnostic",
+                "run_summary_sha256": "0123456789abcdef0123456789abcdef",
+            }
+        ],
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+        finalizer_manifests=[finalizer],
+    )
+
+    assert report["errors"] == []
+    bridge_row = report["finalizer_bridge"]["rows"][0]
+    assert bridge_row["job_id"] == "13274"
+    assert bridge_row["issue_transition"]["to"] == "warn_success"
+    assert bridge_row["report_stage_status"] == "report_stage_failed"
+    lanes = bridge_row["exit_code_lanes"]
+    assert lanes["campaign"]["exit_code"] == 0
+    assert lanes["campaign"]["soft_contract_warning"] is True
+    assert lanes["post_campaign_stage"]["exit_code"] == 5
+    assert lanes["job_exit_code"] == 0
+    assert bridge_row["post_campaign_stage_status"]["load_status"] == "loaded"
+
+
+def test_finalizer_envelope_failed_campaign_not_relabeled_as_success(tmp_path: Path) -> None:
+    """Issue #5244: a hard-failed campaign lane must keep the finalizer classification failed."""
+    payload = _queue_payload()
+    payload["entries"][0]["id"] = "issue-2656-example"
+    payload["entries"][0]["seeds"] = [202]
+    payload["entries"][0]["issue"] = 2656
+    queue_path = tmp_path / "experiments" / "submission_queue.yaml"
+    _write_yaml(queue_path, payload)
+
+    manifest_path = tmp_path / "manifests" / "one.yaml"
+    _write_yaml(
+        manifest_path,
+        _manifest_payload(
+            queue_id="issue-2656-example",
+            status="completed",
+            seeds=[202],
+            slurm_job_id=13275,
+            exp_id="exp-finalizer",
+        ),
+    )
+
+    finalizer = tmp_path / "evidence" / "finalization_13275.json"
+    _write_json(
+        finalizer,
+        {
+            "schema_version": "robot-sf-slurm-job-finalization.v1",
+            "issue_number": 2656,
+            "job_id": "13275",
+            "job_state": "COMPLETED",
+            "classification": "failed",
+            "artifact_status": "all_required_present",
+            "artifacts": [
+                {
+                    "path": "output/slurm/job-13275/campaign_summary.json",
+                    "exists": True,
+                    "required": True,
+                    "kind": "file",
+                    "sha256": "deadbeef",
+                    "size_bytes": 1,
+                }
+            ],
+            "exit_code_lanes": {
+                "campaign": {"status": "failed", "exit_code": 3, "soft_contract_warning": False},
+                "post_campaign_stage": {
+                    "name": "headline_ci_rank_stability_report",
+                    "status": "report_stage_failed",
+                    "exit_code": 5,
+                },
+                "job_exit_code": 3,
+            },
+        },
+    )
+
+    report = reconcile_slurm_evidence.reconcile(
+        queue_path=queue_path,
+        submission_manifests=[manifest_path],
+        evidence_root=tmp_path / "evidence",
+        finalizer_manifests=[finalizer],
+    )
+
+    bridge_row = report["finalizer_bridge"]["rows"][0]
+    assert bridge_row["issue_transition"]["to"] == "failed"
+    assert bridge_row["exit_code_lanes"]["campaign"]["exit_code"] == 3
+    assert bridge_row["exit_code_lanes"]["job_exit_code"] == 3

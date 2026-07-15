@@ -216,6 +216,32 @@ def test_calibration_is_reproducible_under_fixed_seed() -> None:
     assert first["mean_tail_clearance_m"] == second["mean_tail_clearance_m"]
 
 
+def test_calibration_runs_end_to_end_for_cvar_tail_formulation() -> None:
+    """The CVaR/tail-risk Arm 4 formulation (issue #5307) is CPU-runnable end
+    to end through the realized-risk calibration harness via the surrogate
+    constant_velocity_gmm provider."""
+
+    adapter = build_chance_constrained_mpc_adapter(
+        {
+            "predictor_backend": "constant_velocity_gmm",
+            "chance_constraint_formulation": "cvar_tail",
+            "cvar_alpha": 0.9,
+            "solver_max_iterations": 20,
+        }
+    )
+    result = realized_collision_risk_calibration(
+        adapter,
+        CalibrationScenario(num_episodes=4, steps_per_episode=8, num_pedestrians=3),
+        seed=3,
+    )
+    assert result["claimed_risk_per_horizon"] == pytest.approx(0.05)
+    assert 0.0 <= result["observed_collision_rate"] <= 1.0
+    assert result["calibration_error"] == pytest.approx(
+        result["observed_collision_rate"] - result["claimed_risk_per_horizon"]
+    )
+    assert 0.0 <= result["mean_compute_time_ms"]
+
+
 def test_calibration_runs_end_to_end_without_pedestrians() -> None:
     """A pedestrian-free episode still reports finite, well-formed diagnostics."""
 

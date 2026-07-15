@@ -38,6 +38,7 @@ CI_DRIVER = ROOT / "scripts" / "dev" / "ci_driver.sh"
 GH_COMMENT = ROOT / "scripts" / "dev" / "gh_comment.sh"
 PYPROJECT = ROOT / "pyproject.toml"
 RUN_TESTS_PARALLEL = ROOT / "scripts" / "dev" / "run_tests_parallel.sh"
+OPTIONAL_ALLOWLIST = ROOT / "tests" / "support" / "optional_test_allowlist.txt"
 RUN_XDIST_RACE_VALIDATION = ROOT / "scripts" / "dev" / "run_xdist_race_validation.sh"
 RUN_CI_LOCAL = ROOT / "scripts" / "dev" / "run_ci_local.sh"
 LOCAL_SIGNOFF = ROOT / "scripts" / "dev" / "local_signoff.sh"
@@ -93,6 +94,7 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert "core_test_paths=(" in script_text
     assert "tests/adversarial" in script_text
     assert "tests/analysis_workbench" in script_text
+    assert "tests/ped_npc" in script_text
     assert "tests/scenario_certification" in script_text
     assert "explicit_test_targets=(" in script_text
     assert 'cmd+=("--ignore=$optional_test_path")' in script_text
@@ -228,6 +230,9 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
     (repo / "tests" / "test_optional_top_level.py").write_text(
         "def test_optional(): pass\n", encoding="utf-8"
     )
+    ped_npc_test = repo / "tests" / "ped_npc" / "test_population.py"
+    ped_npc_test.parent.mkdir(parents=True)
+    ped_npc_test.write_text("def test_population(): pass\n", encoding="utf-8")
     subprocess.run(["git", "add", "tests"], cwd=repo, check=True, capture_output=True, text=True)
     subprocess.run(
         ["git", "commit", "-m", "add top-level tests"],
@@ -258,6 +263,16 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
     pytest_args = captured_args.read_text(encoding="utf-8")
     assert "tests/test_new_top_level.py" in pytest_args
     assert "tests/test_optional_top_level.py" not in pytest_args
+    assert "tests/ped_npc" in pytest_args
+
+
+def test_run_tests_parallel_keeps_ped_npc_in_core_lane() -> None:
+    """The core lane must collect pedestrian-constructor tests (issue #5753)."""
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+    core_paths = script_text.split("core_test_paths=(", maxsplit=1)[1].split(")", maxsplit=1)[0]
+
+    assert "\n  tests/ped_npc\n" in core_paths
+    assert "tests/ped_npc" not in OPTIONAL_ALLOWLIST.read_text(encoding="utf-8")
 
 
 def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(

@@ -160,6 +160,46 @@ def _pyproject() -> dict[str, Any]:
     return tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
 
 
+def test_torch_213_constraint_is_shared_by_training_and_gpu_extras() -> None:
+    """Keep both Torch installation paths on the tested 2.13 release line (issue #5556)."""
+    project = _pyproject()["project"]
+    optional_dependencies = project["optional-dependencies"]
+    training_requirement = next(
+        requirement
+        for value in optional_dependencies["training"]
+        if (requirement := Requirement(value)).name == "torch"
+    )
+    gpu_requirement = next(
+        requirement
+        for value in optional_dependencies["gpu"]
+        if (requirement := Requirement(value)).name == "torch"
+    )
+    expected = Requirement("torch>=2.13.0,<2.14.0").specifier
+
+    assert training_requirement.specifier == expected
+    assert gpu_requirement.specifier == expected
+    assert gpu_requirement.extras == {"cuda"}
+
+    lock_data = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    locked_project = next(item for item in lock_data["package"] if item["name"] == "robot-sf")
+    locked_metadata = locked_project.get("metadata", {})
+    assert isinstance(locked_metadata, dict)
+    requires_dist = locked_metadata.get("requires-dist", [])
+    assert isinstance(requires_dist, list)
+    locked_torch = {
+        (item.get("marker"), tuple(item.get("extras", []))): item
+        for item in requires_dist
+        if isinstance(item, dict) and item.get("name") == "torch"
+    }
+
+    training_lock = locked_torch.get(("extra == 'training'", ()))
+    gpu_lock = locked_torch.get(("extra == 'gpu'", ("cuda",)))
+    assert training_lock is not None, "uv.lock is missing the training Torch entry"
+    assert gpu_lock is not None, "uv.lock is missing the gpu Torch entry"
+    assert training_lock.get("specifier") == ">=2.13.0,<2.14.0"
+    assert gpu_lock.get("specifier") == ">=2.13.0,<2.14.0"
+
+
 def test_extract_workflow_phases_handles_multiple_phase_args() -> None:
     """Capture all phase arguments from one workflow run stanza."""
 

@@ -5,13 +5,10 @@ from __future__ import annotations
 import json
 import time
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from scripts.dev.pr_gate_lease import (
     PRGateLease,
@@ -291,3 +288,83 @@ class TestPRGateLeaseSchema:
         seconds = lease.time_until_expiry_seconds()
         # Should be approximately 3600 seconds (1 hour)
         assert 3599 < seconds < 3601
+
+
+class TestPRGateLeaseRobustnessAndIsolation:
+    """Additional tests for invalid durations, atomic writes, robust parsing, and concurrent isolation."""
+
+    def test_invalid_durations_rejected(self, mock_git_dirs: None) -> None:
+        """Reject non-positive and non-finite lease durations."""
+
+        for invalid_val in [0, -1, float("inf"), float("-inf"), float("nan"), "string", True]:
+            with pytest.raises(ValueError, match="ttl_hours|extend_hours"):
+                create_lease(ttl_hours=invalid_val)
+
+        # Create a valid lease first
+        create_lease(pr_number=5727, ttl_hours=2)
+        for invalid_val in [0, -1, float("inf"), float("-inf"), float("nan"), "string", True]:
+            with pytest.raises(ValueError, match="extend_hours|ttl_hours"):
+                heartbeat(extend_hours=invalid_val)
+
+    def test_robust_load_extra_or_missing_fields(self, mock_git_dirs: None) -> None:
+        """Loading a lease file with extra fields should succeed, but missing fields should raise error."""
+        lease_file = lease_path()
+
+        # Extra fields should be ignored gracefully
+        data = {
+            "schema": "pr_gate_lease.v1",
+            "created_at": datetime.now(UTC).isoformat(),
+            "expires_at": (datetime.now(UTC) + timedelta(hours=2)).isoformat(),
+            "pr_number": 5727,
+            "gate_id": "test",
+            "owner": "test",
+            "last_heartbeat": datetime.now(UTC).isoformat(),
+            "extra_field_123": "ignore_me",
+        }
+        lease_file.write_text(json.dumps(data) + "\n")
+        loaded = load_lease()
+        assert loaded is not None
+        assert loaded.pr_number == 5727
+
+        # Missing required fields should raise RuntimeError
+        bad_data = {
+            "schema": "pr_gate_lease.v1",
+            "pr_number": 5727,
+        }
+        lease_file.write_text(json.dumps(bad_data) + "\n")
+        with pytest.raises(RuntimeError, match="Invalid lease file"):
+            load_lease()
+
+    def test_atomic_lease_write(self, mock_git_dirs: None, monkeypatch) -> None:
+        """Verify that saving a lease replaces the file atomically."""
+        replaced_called = False
+        original_replace = Path.replace
+
+        def mock_replace(self, target):
+            nonlocal replaced_called
+            replaced_called = True
+            return original_replace(self, target)
+
+        monkeypatch.setattr(Path, "replace", mock_replace)
+        create_lease(pr_number=5727)
+        assert replaced_called is True
+
+    def test_concurrent_worktree_isolation(self, tmp_path: Path) -> None:
+        """Linked worktrees should map to different lease paths based on worktree directory."""
+        git_common = tmp_path / ".git"
+        git_common.mkdir()
+
+        wt1 = tmp_path / "wt1"
+        wt2 = tmp_path / "wt2"
+        wt1.mkdir()
+        wt2.mkdir()
+
+        with patch("scripts.dev.pr_gate_lease._git_common_dir", return_value=git_common):
+            path1 = lease_path(wt1)
+            path2 = lease_path(wt2)
+
+            assert path1 != path2
+            assert path1.parent == git_common
+            assert path2.parent == git_common
+            assert path1.name.startswith(".pr-gate-lease-")
+            assert path2.name.startswith(".pr-gate-lease-")

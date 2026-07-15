@@ -281,11 +281,11 @@ def _headless_env(base: dict[str, str], *, fast: bool) -> dict[str, str]:
     env.setdefault("PYTHONUNBUFFERED", "1")
     env.setdefault("PYTHONIOENCODING", "utf-8")
     if fast:
-        env.setdefault("DISPLAY", "")
-        env.setdefault("MPLBACKEND", "Agg")
-        env.setdefault("SDL_VIDEODRIVER", "dummy")
-        env.setdefault("ROBOT_SF_FAST_DEMO", "1")
-        env.setdefault("ROBOT_SF_EXAMPLES_MAX_STEPS", _FAST_MAX_STEPS)
+        env["DISPLAY"] = ""
+        env["MPLBACKEND"] = "Agg"
+        env["SDL_VIDEODRIVER"] = "dummy"
+        env["ROBOT_SF_FAST_DEMO"] = "1"
+        env["ROBOT_SF_EXAMPLES_MAX_STEPS"] = _FAST_MAX_STEPS
     return env
 
 

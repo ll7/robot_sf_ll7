@@ -221,6 +221,33 @@ def test_run_uses_fast_env_vars_and_invokes_subprocess(monkeypatch: pytest.Monke
     assert str(captured["cwd"]) == str(_REPO_ROOT)
 
 
+def test_run_fast_overrides_inherited_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``--fast`` must win over inherited flags, step caps, and GUI backends."""
+    captured: dict[str, object] = {}
+
+    class _FakeResult:
+        returncode = 0
+
+    def fake_runner(command, env, cwd, timeout):
+        captured["env"] = env
+        return _FakeResult()
+
+    monkeypatch.setenv("DISPLAY", ":99")
+    monkeypatch.setenv("MPLBACKEND", "TkAgg")
+    monkeypatch.setenv("SDL_VIDEODRIVER", "x11")
+    monkeypatch.setenv("ROBOT_SF_FAST_DEMO", "0")
+    monkeypatch.setenv("ROBOT_SF_EXAMPLES_MAX_STEPS", "4096")
+
+    assert run_example(_MANIFEST, "quickstart/01_basic_robot", fast=True, runner=fake_runner) == 0
+
+    env = captured["env"]
+    assert env["DISPLAY"] == ""
+    assert env["MPLBACKEND"] == "Agg"
+    assert env["SDL_VIDEODRIVER"] == "dummy"
+    assert env["ROBOT_SF_FAST_DEMO"] == "1"
+    assert env["ROBOT_SF_EXAMPLES_MAX_STEPS"] == "64"
+
+
 def test_run_passes_extra_args_to_script(monkeypatch: pytest.MonkeyPatch) -> None:
     """Extra args after the id are forwarded to the example script."""
 

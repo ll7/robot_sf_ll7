@@ -16,6 +16,7 @@ from scripts.dev.pr_gate_lease import (
     heartbeat,
     is_active,
     lease_path,
+    legacy_lease_path,
     load_lease,
     release_lease,
     status,
@@ -334,6 +335,14 @@ class TestPRGateLeaseRobustnessAndIsolation:
         lease_file.write_text(json.dumps(bad_data) + "\n")
         with pytest.raises(RuntimeError, match="Invalid lease file"):
             load_lease()
+
+        lease_file.write_text("[]\n")
+        with pytest.raises(RuntimeError, match="Invalid lease file"):
+            load_lease()
+
+    def test_legacy_lease_path_is_common_dir_scoped(self, mock_git_dirs: None) -> None:
+        """The migration path remains in the shared Git common directory."""
+        assert legacy_lease_path().parent == lease_path().parent
 
     def test_atomic_lease_write(self, mock_git_dirs: None, monkeypatch) -> None:
         """Verify that saving a lease replaces the file atomically."""

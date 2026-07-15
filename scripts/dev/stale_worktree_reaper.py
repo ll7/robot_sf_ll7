@@ -164,22 +164,25 @@ def _check_worktree_lease_state(path: str) -> str | None:
         None if there is no lease file or if the lease has expired.
     """
     try:
-        from scripts.dev.pr_gate_lease import lease_path, load_lease
+        from scripts.dev.pr_gate_lease import lease_path, legacy_lease_path, load_lease
 
-        l_path = lease_path(Path(path))
-        if not l_path.exists():
-            return None
+        lease_paths = [lease_path(Path(path))]
+        legacy_path = legacy_lease_path()
+        if legacy_path not in lease_paths:
+            # Older gate processes used one shared lease file. Treat any still-live
+            # legacy record as protecting this worktree until that process releases it.
+            lease_paths.append(legacy_path)
 
-        try:
+        for l_path in lease_paths:
+            if not l_path.exists():
+                continue
             lease = load_lease(l_path)
             if lease is not None and not lease.is_expired():
                 return "active"
-            return None
-        except Exception:
-            # File exists but could not be loaded/parsed successfully
-            return "unreadable"
+        return None
     except Exception:
-        # Fallback in case of general setup issues
+        # File exists but could not be loaded/parsed successfully, or lease
+        # discovery failed. Both cases must fail closed.
         return "unreadable"
 
 

@@ -34,6 +34,7 @@ from pathlib import Path
 SCHEMA_VERSION = "pr_gate_lease.v1"
 DEFAULT_TTL_HOURS = 2
 LEASE_FILENAME = ".pr-gate-lease.json"
+LEGACY_LEASE_FILENAME = LEASE_FILENAME
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +127,11 @@ def lease_path(worktree_path: Path | None = None) -> Path:
     return _git_common_dir() / filename
 
 
+def legacy_lease_path() -> Path:
+    """Return the pre-isolation lease path used by older gate processes."""
+    return _git_common_dir() / LEGACY_LEASE_FILENAME
+
+
 def create_lease(
     pr_number: int | None = None,
     gate_id: str | None = None,
@@ -169,12 +175,19 @@ def load_lease(path: Path | None = None) -> PRGateLease | None:
 
     try:
         data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            raise TypeError("lease JSON must be an object")
         import inspect
 
         valid_keys = inspect.signature(PRGateLease).parameters.keys()
         filtered_data = {k: v for k, v in data.items() if k in valid_keys}
-        return PRGateLease(**filtered_data)
-    except (json.JSONDecodeError, TypeError, KeyError) as exc:
+        lease = PRGateLease(**filtered_data)
+        for timestamp in (lease.created_at, lease.expires_at, lease.last_heartbeat):
+            parsed = datetime.fromisoformat(timestamp)
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
+                raise ValueError("lease timestamps must be timezone-aware")
+        return lease
+    except (json.JSONDecodeError, TypeError, KeyError, ValueError) as exc:
         raise RuntimeError(f"Invalid lease file: {exc}") from exc
 
 

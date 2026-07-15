@@ -281,16 +281,24 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             ped_vel = ped_vel[: min(ped_count, ped_vel.shape[0])]
         return robot_pos, heading, goal, ped_pos, ped_vel
 
-    def _min_obstacle_clearance(self, point: np.ndarray, observation: dict[str, Any]) -> float:
+    def _min_obstacle_clearance(
+        self,
+        point: np.ndarray,
+        observation: dict[str, Any] | None = None,
+        *,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
+    ) -> float:
         """Approximate obstacle clearance from occupancy grid payload.
 
         Returns:
             float: Clearance in meters, or ``inf`` when unavailable.
         """
-        payload = self._extract_grid_payload(observation)
-        if payload is None:
+        if grid_payload is None:
+            assert observation is not None
+            grid_payload = self._extract_grid_payload(observation)
+        if grid_payload is None:
             return float("inf")
-        grid, meta = payload
+        grid, meta = grid_payload
         channel = self._preferred_channel(meta)
         if channel < 0 or channel >= grid.shape[0]:
             return float("inf")
@@ -321,14 +329,22 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         return float(np.min(cell_dist) * max(resolution, 1e-6))
 
     def _evaluate_command(
-        self, observation: dict[str, Any], command: tuple[float, float]
+        self,
+        observation: dict[str, Any],
+        command: tuple[float, float],
+        *,
+        state: tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray] | None = None,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> dict[str, float | bool]:
         """Evaluate a command over a short rollout horizon.
 
         Returns:
             dict[str, float | bool]: Safety summary including `safe` and clearance metrics.
         """
-        robot_pos, heading, goal, ped_pos, ped_vel = self._extract_state(observation)
+        if state is not None:
+            robot_pos, heading, goal, ped_pos, ped_vel = state
+        else:
+            robot_pos, heading, goal, ped_pos, ped_vel = self._extract_state(observation)
         dt = float(self.config.rollout_dt)
         steps = max(int(self.config.rollout_steps), 1)
         x = np.array(robot_pos, dtype=float)
@@ -374,7 +390,10 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                         ttc = ttc[ttc > 0.0]
                         if ttc.size > 0:
                             min_ttc = min(min_ttc, float(np.min(ttc)))
-            min_obs_clear = min(min_obs_clear, self._min_obstacle_clearance(x, observation))
+            min_obs_clear = min(
+                min_obs_clear,
+                self._min_obstacle_clearance(x, observation=observation, grid_payload=grid_payload),
+            )
 
         end_dist = float(np.linalg.norm(goal - x))
         progress = start_dist - end_dist
@@ -398,6 +417,8 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         observation: dict[str, Any],
         command: tuple[float, float],
         base_eval: dict[str, float | bool],
+        *,
+        state: tuple[np.ndarray, float, np.ndarray, np.ndarray, np.ndarray] | None = None,
     ) -> dict[str, Any]:
         """Evaluate diagnostic uncertainty-triggered fallback conditions.
 
@@ -407,7 +428,10 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         if not self.config.uncertainty_fallback_enabled:
             return {"enabled": False, "triggered": False}
 
-        robot_pos, heading, _goal, ped_pos, ped_vel = self._extract_state(observation)
+        if state is not None:
+            robot_pos, heading, _goal, ped_pos, ped_vel = state
+        else:
+            robot_pos, heading, _goal, ped_pos, ped_vel = self._extract_state(observation)
         steps = max(int(self.config.rollout_steps), 1)
         dt = float(self.config.rollout_dt)
         x = np.array(robot_pos, dtype=float)
@@ -515,7 +539,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             "residual_clipped": False,
             "hard_guard_authoritative": True,
         }
-        robot_pos, _heading, goal, ped_pos, _ped_vel = self._extract_state(observation)
+        cached_state = self._extract_state(observation)
+        cached_grid = self._cache_grid_payload(observation)
+        robot_pos, _heading, goal, ped_pos, _ped_vel = cached_state
         if float(np.linalg.norm(goal - robot_pos)) <= float(self.config.goal_tolerance):
             return self._shield_decision(
                 ppo_command=ppo_command,
@@ -535,7 +561,12 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         prior_allowed_by_scene = not bool(
             self.config.prior_near_field_only
         ) or current_min_dist <= float(self.config.near_field_distance)
-        ppo_eval = self._evaluate_command(observation, ppo_command)
+        ppo_eval = self._evaluate_command(
+            observation,
+            ppo_command,
+            state=cached_state,
+            grid_payload=cached_grid,
+        )
         prior_command = self._prior_command(observation) if prior_allowed_by_scene else None
         prior_eval: dict[str, float | bool] | None = None
         if (
@@ -543,9 +574,13 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
             and prior_command is not None
             and not bool(ppo_eval["safe"])
         ):
-            prior_eval = self._evaluate_command(observation, prior_command)
+            prior_eval = self._evaluate_command(
+                observation, prior_command, state=cached_state, grid_payload=cached_grid
+            )
             residual_command = self._residual_prior_command(ppo_command, prior_command)
-            residual_eval = self._evaluate_command(observation, residual_command)
+            residual_eval = self._evaluate_command(
+                observation, residual_command, state=cached_state, grid_payload=cached_grid
+            )
             residual_improves_ppo = self._blend_is_preferred(ppo_eval, residual_eval)
             residual_improves_prior = not bool(prior_eval["safe"]) or self._blend_is_preferred(
                 prior_eval, residual_eval
@@ -565,7 +600,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
         use_prior_in_scene = prior_command is not None and prior_weight > 0.0
         if use_prior_in_scene and prior_command is not None:
             blended_command = self._blend_commands(ppo_command, prior_command, prior_weight)
-            blended_eval = self._evaluate_command(observation, blended_command)
+            blended_eval = self._evaluate_command(
+                observation, blended_command, state=cached_state, grid_payload=cached_grid
+            )
             if self._blend_is_preferred(ppo_eval, blended_eval):
                 return self._shield_decision(
                     ppo_command=ppo_command,
@@ -577,12 +614,16 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                     fallback_policy=type(self.prior_adapter).__name__,
                 )
 
-        uncertainty_eval = self._evaluate_uncertainty_fallback(observation, ppo_command, ppo_eval)
+        uncertainty_eval = self._evaluate_uncertainty_fallback(
+            observation, ppo_command, ppo_eval, state=cached_state
+        )
         if bool(uncertainty_eval["triggered"]):
             fallback_command, label, fallback_policy = self._uncertainty_fallback_command(
                 observation, ppo_command
             )
-            fallback_eval = self._evaluate_command(observation, fallback_command)
+            fallback_eval = self._evaluate_command(
+                observation, fallback_command, state=cached_state, grid_payload=cached_grid
+            )
             metrics = uncertainty_eval["metrics"]
             uncertainty_metadata = {
                 "schema_version": "uncertainty-fallback.v1",
@@ -635,7 +676,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
 
         if prior_command is not None:
             if prior_eval is None:
-                prior_eval = self._evaluate_command(observation, prior_command)
+                prior_eval = self._evaluate_command(
+                    observation, prior_command, state=cached_state, grid_payload=cached_grid
+                )
             if bool(prior_eval["safe"]):
                 return self._shield_decision(
                     ppo_command=ppo_command,
@@ -648,7 +691,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 )
 
         fallback_command = self.fallback_adapter.plan(observation)
-        fallback_eval = self._evaluate_command(observation, fallback_command)
+        fallback_eval = self._evaluate_command(
+            observation, fallback_command, state=cached_state, grid_payload=cached_grid
+        )
         if bool(fallback_eval["safe"]):
             return self._shield_decision(
                 ppo_command=ppo_command,
@@ -660,7 +705,9 @@ class GuardedPPOAdapter(OccupancyAwarePlannerMixin):
                 fallback_policy=type(self.fallback_adapter).__name__,
             )
 
-        stop_eval = self._evaluate_command(observation, (0.0, 0.0))
+        stop_eval = self._evaluate_command(
+            observation, (0.0, 0.0), state=cached_state, grid_payload=cached_grid
+        )
         if bool(stop_eval["safe"]):
             return self._shield_decision(
                 ppo_command=ppo_command,

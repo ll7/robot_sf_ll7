@@ -268,6 +268,61 @@ def test_risk_calibration_action_sensitivity_fails_closed_without_pairs() -> Non
         evaluate_matched_action_sensitivity((), _small_config())
 
 
+def test_risk_calibration_report_rejects_explicit_null_action_fixture(tmp_path: Path) -> None:
+    """An explicit null action fixture cannot silently select legacy compatibility."""
+    pytest.importorskip("yaml")
+    import yaml
+
+    from scripts.analysis.collision_risk_calibration_report import build_report
+
+    with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    data["evaluation"]["action_sensitivity"] = None
+    packet = tmp_path / "null-action-sensitivity.yaml"
+    with packet.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle)
+
+    with pytest.raises(CalibrationInputError, match="action_sensitivity must be a mapping"):
+        build_report(packet)
+
+
+@pytest.mark.parametrize("value", [None, "2", 2.0, True])
+def test_risk_calibration_report_rejects_malformed_min_pairs(tmp_path: Path, value: object) -> None:
+    """Malformed minimum-pair values fail with the structured config error."""
+    pytest.importorskip("yaml")
+    import yaml
+
+    from scripts.analysis.collision_risk_calibration_report import build_report
+
+    with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    data["evaluation"]["action_sensitivity"]["min_pairs"] = value
+    packet = tmp_path / "malformed-min-pairs.yaml"
+    with packet.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle)
+
+    with pytest.raises(CalibrationInputError, match="min_pairs must be a positive integer"):
+        build_report(packet)
+
+
+def test_risk_calibration_report_rejects_null_pair_id(tmp_path: Path) -> None:
+    """A null pair identifier cannot become the string ``None``."""
+    pytest.importorskip("yaml")
+    import yaml
+
+    from scripts.analysis.collision_risk_calibration_report import build_report
+
+    with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    data["evaluation"]["action_sensitivity"]["pairs"][0]["pair_id"] = None
+    packet = tmp_path / "null-pair-id.yaml"
+    with packet.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle)
+
+    with pytest.raises(CalibrationInputError, match="has no pair_id"):
+        build_report(packet)
+
+
 # --------------------------------------------------------------------------- #
 # Registry + fail-closed behaviour
 # --------------------------------------------------------------------------- #

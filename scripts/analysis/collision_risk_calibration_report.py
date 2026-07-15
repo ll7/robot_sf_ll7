@@ -146,9 +146,10 @@ def _build_action_sensitivity_pairs(
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
             raise CalibrationInputError(f"action-sensitivity pair {index} must be a mapping")
-        pair_id = str(entry.get("pair_id", "")).strip()
-        if not pair_id:
+        raw_pair_id = entry.get("pair_id")
+        if not isinstance(raw_pair_id, str) or not raw_pair_id.strip():
             raise CalibrationInputError(f"action-sensitivity pair {index} has no pair_id")
+        pair_id = raw_pair_id.strip()
         actor_entries = entry.get("pedestrians")
         if not isinstance(actor_entries, list) or not actor_entries:
             raise CalibrationInputError(f"action-sensitivity pair {pair_id!r} needs pedestrians")
@@ -221,6 +222,8 @@ def build_report(config_path: Path) -> dict[str, Any]:
     estimator_config = _build_estimator_config(data["estimator"])
     families = _build_families(data["families"])
     evaluation = data["evaluation"]
+    if not isinstance(evaluation, dict):
+        raise CalibrationInputError("evaluation must be a mapping")
 
     n_samples = sum(family.n_scenarios for family in families)
     min_samples = int(evaluation.get("min_eligible_samples", 1))
@@ -274,8 +277,7 @@ def build_report(config_path: Path) -> dict[str, Any]:
         for estimator_id, reason in sorted(UNAVAILABLE_ESTIMATORS.items())
     ]
 
-    action_sensitivity_block = evaluation.get("action_sensitivity")
-    if action_sensitivity_block is None:
+    if "action_sensitivity" not in evaluation:
         # Preserve the v1 packet reader for older local packets while requiring
         # the current issue packet to declare typed same-state pairs below.
         action_pairs = [tuple(pair) for pair in evaluation.get("action_pairs", [])]
@@ -283,9 +285,15 @@ def build_report(config_path: Path) -> dict[str, Any]:
             action_sensitivity(dataset, estimator_config, action_pairs) if action_pairs else None
         )
     else:
+        action_sensitivity_block = evaluation["action_sensitivity"]
         if not isinstance(action_sensitivity_block, dict):
             raise CalibrationInputError("evaluation.action_sensitivity must be a mapping")
-        min_pairs = int(action_sensitivity_block.get("min_pairs", 1))
+        raw_min_pairs = action_sensitivity_block.get("min_pairs", 1)
+        if isinstance(raw_min_pairs, bool) or not isinstance(raw_min_pairs, int):
+            raise CalibrationInputError(
+                "evaluation.action_sensitivity.min_pairs must be a positive integer"
+            )
+        min_pairs = raw_min_pairs
         if min_pairs <= 0:
             raise CalibrationInputError("evaluation.action_sensitivity.min_pairs must be positive")
         action_pairs = _build_action_sensitivity_pairs(

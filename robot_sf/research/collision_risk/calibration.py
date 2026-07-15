@@ -1025,7 +1025,7 @@ def evaluate_matched_action_sensitivity(
             )
         higher_waypoints = pair.higher_risk_action.as_array(horizon_steps=config.horizon_steps)
         lower_waypoints = pair.lower_risk_action.as_array(horizon_steps=config.horizon_steps)
-        if not np.array_equal(higher_waypoints[0], lower_waypoints[0]):
+        if not np.allclose(higher_waypoints[0], lower_waypoints[0]):
             raise CalibrationInputError(
                 f"action-sensitivity pair {pair_id!r} must share the robot start state"
             )

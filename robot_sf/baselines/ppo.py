@@ -119,6 +119,12 @@ class PPOPlanner:
             config: Planner configuration or dict payload.
             seed: Optional seed for reproducibility.
         """
+        try:
+            import torch  # noqa: PLC0415
+
+            torch.set_num_threads(1)
+        except ImportError:
+            pass
         self.config = self._parse_config(config)
         self._seed = seed
         self._model = None
@@ -126,8 +132,7 @@ class PPOPlanner:
         self._fallback_reason: str | None = None
         self._predictive_foresight: PredictiveForesightEncoder | None = None
         self._runtime_observation_space: gym_spaces.Space | None = None
-        self._load_model()
-        self._init_predictive_foresight()
+        self._initialized = False
 
     # --- Lifecycle -----------------------------------------------------
     def _parse_config(self, cfg: PPOPlannerConfig | dict[str, Any]) -> PPOPlannerConfig:
@@ -250,9 +255,18 @@ class PPOPlanner:
     def configure(self, config: PPOPlannerConfig | dict[str, Any]) -> None:
         """Update the planner's configuration."""
         self.config = self._parse_config(config)
-        # Need to reload the model if model_path changed
+        self._model = None
+        self._initialized = False
+
+    def _ensure_model_loaded(self) -> None:
+        """Lazily load model and init predictive foresight if not done yet."""
+        if getattr(self, "_initialized", False):
+            return
+        self._initialized = True
         self._load_model()
         self._init_predictive_foresight()
+        if self._model is not None and self._runtime_observation_space is not None:
+            self._validate_runtime_observation_space()
 
     def _init_predictive_foresight(self) -> None:
         """(Re)build the optional predictive foresight encoder from current config."""
@@ -275,6 +289,7 @@ class PPOPlanner:
         Returns:
             Action dict in either velocity or unicycle format.
         """
+        self._ensure_model_loaded()
         if is_observation_mapping(obs) and self._uses_dict_observation():
             return self._step_dict_obs(obs)
 

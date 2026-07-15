@@ -651,3 +651,41 @@ def test_execute_campaign_dispositions_mixed_degraded_repeats(tmp_path, manifest
     assert verified["summary"]["n_runnable_cells"] == 0
     assert verified["summary"]["n_unrunnable_cells"] == 7
     assert verified["summary"]["all_cells_bitwise_identical"] is False
+
+
+def test_planner_step_process_handshake_and_lazy_loading():
+    """Verify that _PlannerStepProcess triggers _ensure_model_loaded and handles startup handshake."""
+    from robot_sf.benchmark.runner import _PlannerStepProcess
+
+    class MockLazyPlanner:
+        def _ensure_model_loaded(self):
+            pass
+
+        def step(self, obs):
+            return {"vx": 1.0, "vy": 2.0}
+
+    planner = MockLazyPlanner()
+    step_runner = _PlannerStepProcess(planner, timeout_s=1.0)
+    try:
+        action = step_runner.step({"dummy": True})
+        assert action == {"vx": 1.0, "vy": 2.0}
+    finally:
+        step_runner.close()
+
+
+def test_planner_step_process_handshake_failure_propagation():
+    """Verify that initialization exceptions in the worker propagate to the parent during handshake."""
+    from robot_sf.benchmark.runner import _PlannerStepProcess
+
+    class MockFailingPlanner:
+        def _ensure_model_loaded(self):
+            raise ValueError("model loading failed failedly")
+
+        def step(self, obs):
+            return {"vx": 1.0, "vy": 2.0}
+
+    planner = MockFailingPlanner()
+    step_runner = _PlannerStepProcess(planner, timeout_s=1.0)
+    with pytest.raises(RuntimeError, match="failed to initialize"):
+        step_runner.step({"dummy": True})
+    step_runner.close()

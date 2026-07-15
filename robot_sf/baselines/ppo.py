@@ -112,12 +112,16 @@ class PPOPlanner:
         config: PPOPlannerConfig | dict[str, Any],
         *,
         seed: int | None = None,
+        defer_model_loading: bool = False,
     ):
-        """Initialize the PPO planner and load the model if available.
+        """Initialize the PPO planner and load the model unless explicitly deferred.
 
         Args:
             config: Planner configuration or dict payload.
             seed: Optional seed for reproducibility.
+            defer_model_loading: Defer model and predictive-foresight loading until
+                ``step``. The benchmark fork worker uses this to avoid loading native
+                libraries in the parent process.
         """
         try:
             import torch  # noqa: PLC0415
@@ -132,7 +136,10 @@ class PPOPlanner:
         self._fallback_reason: str | None = None
         self._predictive_foresight: PredictiveForesightEncoder | None = None
         self._runtime_observation_space: gym_spaces.Space | None = None
+        self._defer_model_loading = defer_model_loading
         self._initialized = False
+        if not defer_model_loading:
+            self._ensure_model_loaded()
 
     # --- Lifecycle -----------------------------------------------------
     def _parse_config(self, cfg: PPOPlannerConfig | dict[str, Any]) -> PPOPlannerConfig:
@@ -257,16 +264,18 @@ class PPOPlanner:
         self.config = self._parse_config(config)
         self._model = None
         self._initialized = False
+        if not self._defer_model_loading:
+            self._ensure_model_loaded()
 
     def _ensure_model_loaded(self) -> None:
         """Lazily load model and init predictive foresight if not done yet."""
         if getattr(self, "_initialized", False):
             return
-        self._initialized = True
         self._load_model()
         self._init_predictive_foresight()
         if self._model is not None and self._runtime_observation_space is not None:
             self._validate_runtime_observation_space()
+        self._initialized = True
 
     def _init_predictive_foresight(self) -> None:
         """(Re)build the optional predictive foresight encoder from current config."""

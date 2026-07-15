@@ -166,7 +166,12 @@ def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
                 raise TypeError("Algorithm config must be a mapping (YAML dict).")
             validate_no_local_model_artifacts(cfg, config_path=config_path)
             config = cfg
-    planner = planner_class(config, seed=seed)
+    if algo == "ppo":
+        # Keep direct PPOPlanner construction fail-closed while the fork worker
+        # performs native model loading after process creation.
+        planner = planner_class(config, seed=seed, defer_model_loading=True)
+    else:
+        planner = planner_class(config, seed=seed)
     return planner, Observation, config
 
 
@@ -301,7 +306,7 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
     except Exception as exc:
         try:
             conn.send(("init_error", (type(exc).__name__, str(exc))))
-        except Exception:
+        except (BrokenPipeError, EOFError, OSError):
             pass
         conn.close()
         return
@@ -414,7 +419,7 @@ class _PlannerStepProcess:
                 status, payload = parent_conn.recv()
             else:
                 status, payload = "timeout", None
-        except Exception as exc:
+        except (EOFError, OSError, ValueError) as exc:
             self.close()
             raise RuntimeError("planner step worker failed to start") from exc
 

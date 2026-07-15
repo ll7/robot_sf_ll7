@@ -165,14 +165,14 @@ def test_torch_213_constraint_is_shared_by_training_and_gpu_extras() -> None:
     project = _pyproject()["project"]
     optional_dependencies = project["optional-dependencies"]
     training_requirement = next(
-        Requirement(value)
+        requirement
         for value in optional_dependencies["training"]
-        if Requirement(value).name == "torch"
+        if (requirement := Requirement(value)).name == "torch"
     )
     gpu_requirement = next(
-        Requirement(value)
+        requirement
         for value in optional_dependencies["gpu"]
-        if Requirement(value).name == "torch"
+        if (requirement := Requirement(value)).name == "torch"
     )
     expected = Requirement("torch>=2.13.0,<2.14.0").specifier
 
@@ -182,14 +182,22 @@ def test_torch_213_constraint_is_shared_by_training_and_gpu_extras() -> None:
 
     lock_data = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
     locked_project = next(item for item in lock_data["package"] if item["name"] == "robot-sf")
+    locked_metadata = locked_project.get("metadata", {})
+    assert isinstance(locked_metadata, dict)
+    requires_dist = locked_metadata.get("requires-dist", [])
+    assert isinstance(requires_dist, list)
     locked_torch = {
-        (item["marker"], tuple(item.get("extras", []))): item
-        for item in locked_project["metadata"]["requires-dist"]
-        if item["name"] == "torch"
+        (item.get("marker"), tuple(item.get("extras", []))): item
+        for item in requires_dist
+        if isinstance(item, dict) and item.get("name") == "torch"
     }
 
-    assert locked_torch[("extra == 'training'", ())]["specifier"] == ">=2.13.0,<2.14.0"
-    assert locked_torch[("extra == 'gpu'", ("cuda",))]["specifier"] == ">=2.13.0,<2.14.0"
+    training_lock = locked_torch.get(("extra == 'training'", ()))
+    gpu_lock = locked_torch.get(("extra == 'gpu'", ("cuda",)))
+    assert training_lock is not None, "uv.lock is missing the training Torch entry"
+    assert gpu_lock is not None, "uv.lock is missing the gpu Torch entry"
+    assert training_lock.get("specifier") == ">=2.13.0,<2.14.0"
+    assert gpu_lock.get("specifier") == ">=2.13.0,<2.14.0"
 
 
 def test_extract_workflow_phases_handles_multiple_phase_args() -> None:

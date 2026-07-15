@@ -1,3 +1,4 @@
+# AI-GENERATED NEEDS-REVIEW
 artifacts:
 - artifact_id: campaign_atlas
   artifact_kind: figure
@@ -38,7 +39,7 @@ artifacts:
   outputs:
     svg:
       path: ensemble__doorway__goal.svg
-      sha256: 4c3d5403949168b523b7240e9e47e1e591da09694bfb42aed348adcd5edb262c
+      sha256: c77d78a291a76ee364452b882d4c7a31f2b73f7c1f63e521af087464fb1ee4c4
   source_files: *id001
   source_kind: campaign_inventory
 catalog_id: campaign_atlas_paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final

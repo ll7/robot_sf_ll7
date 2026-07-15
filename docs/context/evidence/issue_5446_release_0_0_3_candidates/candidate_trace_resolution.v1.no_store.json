@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "candidate_trace_resolution.v1",
   "issue": "#5615",
   "generated_at_utc": "deterministic-not-a-clock",

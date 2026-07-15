@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#5446) - NEEDS-REVIEW -->
 # Seed-flip & held-out planner-inversion candidates (issue #5446)
 
 - schema: `seed_flip_inversion_candidates.v1`

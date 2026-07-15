@@ -1,4 +1,5 @@
 {
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "issue_5446_trace_reexport_list.v1",
   "issue": "#5446 -> #5447",
   "claim_boundary": "Targeted trace re-export request list only. Derived from the Pareto-selected candidates' embedded raw per-seed outcomes because the #5615 resolver, as shipped, cannot resolve per-seed episodes from a cell-level candidate (see README).",

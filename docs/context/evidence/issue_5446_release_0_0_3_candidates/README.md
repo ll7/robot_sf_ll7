@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#5446) - NEEDS-REVIEW -->
 # Issue #5446 mining run over release v0.0.3 evidence
 
 First real-data execution of the #5446 miner, the #5615 candidate-to-trace

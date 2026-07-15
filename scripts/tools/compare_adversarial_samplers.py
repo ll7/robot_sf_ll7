@@ -16,6 +16,7 @@ from robot_sf.adversarial.certification import passed_status
 from robot_sf.adversarial.config import CandidateEvaluation, SearchConfig
 from robot_sf.adversarial.samplers import (
     CandidateSampler,
+    CmaEsCandidateSampler,
     CoordinateRefinementSampler,
     OptunaCandidateSampler,
     RandomCandidateSampler,
@@ -65,7 +66,9 @@ def build_sampler(name: str, search_space: SearchSpaceConfig, *, seed: int) -> C
         return CoordinateRefinementSampler(search_space, seed=seed)
     if key == "optuna":
         return OptunaCandidateSampler(search_space, seed=seed)
-    raise ValueError("sampler must be one of: random, coordinate, optuna")
+    if key == "cmaes":
+        return CmaEsCandidateSampler(search_space, seed=seed)
+    raise ValueError("sampler must be one of: random, coordinate, optuna, cmaes")
 
 
 def run_sampler_comparison(
@@ -693,9 +696,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--sampler",
         action="append",
         dest="samplers",
-        choices=("random", "coordinate", "optuna"),
+        choices=("random", "coordinate", "optuna", "cmaes"),
         default=None,
-        help="Sampler to run; repeat to select multiple. Defaults to all three.",
+        help="Sampler to run; repeat to select multiple. Defaults to all four.",
     )
     parser.add_argument(
         "--synthetic",
@@ -760,7 +763,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             (16, 32, 64) if args.package_b_budget_grid and args.budget is None else args.budget
         )
         seeds = args.seed or [123]
-        samplers = args.samplers or ("random", "coordinate", "optuna")
+        samplers = args.samplers or ("random", "coordinate", "optuna", "cmaes")
         out_json = args.out_json
 
     rows = run_sampler_comparison(

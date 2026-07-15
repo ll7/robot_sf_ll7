@@ -732,7 +732,7 @@ class GroupRepulsiveForce:
         return forces * self.config.factor
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, nogil=True)
 def group_repulsive_force(member_pos: np.ndarray, threshold: float) -> np.ndarray:
     """Compute intra-group repulsive forces for one pedestrian group.
 
@@ -808,7 +808,7 @@ class GroupGazeForceAlt:
         return forces * self.config.factor
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, nogil=True)
 def group_gaze_force(
     member_pos: np.ndarray, member_directions: np.ndarray, member_dist: np.ndarray
 ) -> np.ndarray:
@@ -884,7 +884,7 @@ def vec_len_2d(vec_x: float, vec_y: float) -> float:
     return (vec_x**2 + vec_y**2) ** 0.5
 
 
-@njit
+@njit(nogil=True)
 def normalize(vecs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Normalize an (n, 2) array of vectors.
 
@@ -907,7 +907,7 @@ def normalize(vecs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return unit_vecs, vec_lengths
 
 
-@njit
+@njit(nogil=True)
 def desired_directions(state: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Compute desired directions and distances for each pedestrian.
 
@@ -953,7 +953,7 @@ def each_diff(vecs: np.ndarray, keepdims=False) -> np.ndarray:
     return diff
 
 
-@njit
+@njit(nogil=True)
 def centroid(vecs: np.ndarray) -> tuple[float, float]:
     """
     Compute the centroid of a set of points in 2D space.

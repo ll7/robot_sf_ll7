@@ -175,6 +175,10 @@ class ThreadedVecEnv(DummyVecEnv):
     def _step_env(self, env_idx: int, env: gym.Env, action: np.ndarray) -> Any:
         """Step one environment with its optional coordinated LiDAR binding.
 
+        The GIL-releasing social-force context is always active so that Numba
+        kernels in the step hot path run without the GIL regardless of whether
+        cross-environment LiDAR batching is also enabled.
+
         Returns:
             The Gymnasium step transition emitted by ``env``.
         """
@@ -182,12 +186,13 @@ class ThreadedVecEnv(DummyVecEnv):
         if coordinator is None:
             with social_force_gil_releasing_context():
                 return env.step(action)
-        try:
-            with lidar_batch_context(coordinator, env_idx):
-                return env.step(action)
-        except BaseException as exc:
-            coordinator.abort(exc)
-            raise
+        with social_force_gil_releasing_context():
+            try:
+                with lidar_batch_context(coordinator, env_idx):
+                    return env.step(action)
+            except BaseException as exc:
+                coordinator.abort(exc)
+                raise
 
     def _ensure_no_pending_step(self, operation: str) -> None:
         """Reject operations that would race an outstanding asynchronous step."""

@@ -1,0 +1,96 @@
+# Canonical high-churn state and integration report for #5326.
+# This file contains no target host, queue route, or private packet lineage.
+schema_version: issue_state.v1
+issue: 5326
+title: "research: evaluate temporal-robustness adversarial objective under matched budgets"
+state_surface: high_churn_single_file
+updated_at: "2026-07-15"
+status: infrastructure_ready_blocked_on_campaign
+claim_boundary: >
+  This is an integration and closure report only. CPU-synthetic execution proves
+  implementation integrity and report wiring; it is not matched-budget benchmark
+  evidence, a planner-ranking result, or a paper/dissertation claim.
+
+comparison_contract:
+  manifest: configs/adversarial/issue_5326_objective_comparison.yaml
+  canonical_command: >
+    uv run python scripts/tools/compare_adversarial_samplers.py
+    --manifest configs/adversarial/issue_5326_objective_comparison.yaml
+    --repo-root . --out-json output/adversarial/issue_5326_objective_comparison/report.json
+    --out-md output/adversarial/issue_5326_objective_comparison/comparison_table.md
+  objectives:
+    - worst_case_snqi
+    - temporal_robustness
+  budget_grid: [16, 32, 64]
+  repeated_seeds: [1101, 2202, 3303]
+  samplers:
+    - random
+    - coordinate
+    - optuna
+    - cmaes
+  required_search_families:
+    - random
+    - optuna
+    - cmaes
+  configured_extra_sampler:
+    name: coordinate
+    boundary: diagnostic_only_compatibility_comparator
+  reporting_contract:
+    - objective
+    - first_failure_iteration
+    - best_valid_objective
+    - invalid_candidate_rate
+    - replay_success_rate
+    - certified_valid_failure_count
+    - replayable_valid_failure_count
+    - fallback_candidate_count
+    - degraded_candidate_count
+    - held_out_family_yield
+  artifacts:
+    report_json: output/adversarial/issue_5326_objective_comparison/report.json
+    durable_table_md: output/adversarial/issue_5326_objective_comparison/comparison_table.md
+
+integration_evidence:
+  - criterion: "Signed objective is available to the comparison runner."
+    status: met
+    evidence: "PR #5325; temporal_robustness objective registration"
+  - criterion: "Both objectives run through one matched-budget manifest."
+    status: met_at_diagnostic_only_strength
+    evidence: "PRs #5333, #5658, #5694; manifest-driven synthetic contract tests"
+  - criterion: "Durable JSON and Markdown comparison artifacts are wired end-to-end."
+    status: met_at_diagnostic_only_strength
+    evidence: "PRs #5684, #5700, #5708; canonical-command synthetic test"
+  - criterion: "The configured search-family matrix includes a CMA-ES-class sampler."
+    status: met_at_diagnostic_only_strength
+    evidence: "PR #5714; manifest-driven cmaes sampler test"
+  - criterion: "A submission boundary exists without being exercised by CPU validation."
+    status: met
+    evidence: "PR #5735; scripts/benchmark/submit_issue_5326_campaign.sh"
+  - criterion: "Real campaign rows are certified, replayed, independently confirmed, and adjudicated."
+    status: blocked
+    evidence: "Requires a SLURM-capable worker and actual campaign artifacts"
+
+remaining_gate:
+  blockers_remaining:
+    - >
+      Execute random, Tree-structured Parzen Estimator (TPE), and Covariance
+      Matrix Adaptation Evolution Strategy (CMA-ES)-class matched-budget rows, then
+      certify, replay, independently-seed-confirm, and produce the benchmark-tier
+      stop-rule comparison table.
+  blockers_new: []
+  blockers_intentional:
+    - >
+      Campaign execution is intentionally excluded from this CPU-only PR; the
+      synthetic path must remain diagnostic_local_nominal and cannot satisfy the
+      benchmark evidence gate.
+  next_empirical_action: >
+    A SLURM-capable worker should run
+    scripts/benchmark/submit_issue_5326_campaign.sh from a clean checkout, then
+    verify certification, replay, independent-seed confirmation, exclusions, and
+    the durable stop-rule table before any benchmark interpretation.
+
+forbidden_claims:
+  benchmark_success: false
+  planner_ranking: false
+  metric_semantics_change: false
+  paper_or_dissertation_claim: false

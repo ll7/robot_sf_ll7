@@ -293,6 +293,7 @@ class CmaEsCandidateSampler:
         self._rng = Random(seed)
         self._seed_rng = Random(seed ^ 0x9E3779B9)
         self._pending: list[tuple[CandidateSpec, Any, list[float]]] = []
+        self._in_flight: list[tuple[CandidateSpec, Any, list[float]]] = []
         self._observed: list[tuple[Any, list[float], float]] = []
 
         bounds = self._continuous_bounds()
@@ -384,7 +385,8 @@ class CmaEsCandidateSampler:
         ``sample`` calls drain the queue until the generation is exhausted.
         """
         if self._pending:
-            candidate, _es, _vec = self._pending.pop(0)
+            candidate, es, vec = self._pending.pop(0)
+            self._in_flight.append((candidate, es, vec))
             return candidate
         if not self._active_dims:
             candidate = CandidateSpec(
@@ -414,7 +416,8 @@ class CmaEsCandidateSampler:
         population = self._es.ask(self._popsize)
         queued = [(self._make_candidate(list(vec)), self._es, list(vec)) for vec in population]
         self._pending.extend(queued)
-        candidate, _es, _vec = self._pending.pop(0)
+        candidate, es, vec = self._pending.pop(0)
+        self._in_flight.append((candidate, es, vec))
         return candidate
 
     @staticmethod
@@ -436,13 +439,13 @@ class CmaEsCandidateSampler:
                     self._pending.pop(index)
                     return
             return
-        for index, (candidate, es, vec) in enumerate(self._pending):
+        for index, (candidate, es, vec) in enumerate(self._in_flight):
             if candidate == evaluation.candidate:
-                self._pending.pop(index)
+                self._in_flight.pop(index)
                 score = evaluation.objective_value
                 value = float(score) if score is not None and math.isfinite(float(score)) else -1e9
                 self._observed.append((es, list(vec), value))
-                if not self._pending:
+                if not self._pending and not self._in_flight:
                     self._flush_generation()
                 return
 

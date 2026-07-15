@@ -9,6 +9,7 @@ import sys
 import types
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -1614,13 +1615,14 @@ def test_sampler_comparison_multi_objective(tmp_path: Path) -> None:
 def test_cmaes_sampler_respects_bounds_and_feeds_back(tmp_path: Path) -> None:
     """The CMA-ES-class sampler proposes in-bounds candidates and accepts feedback."""
     space = SearchSpaceConfig.from_file("configs/adversarial/crossing_ttc_space.yaml")
-    sampler = CmaEsCandidateSampler(space, seed=7)
+    sampler = CmaEsCandidateSampler(space, seed=7, popsize=4)
+    flush_generation = Mock(wraps=sampler._flush_generation)
+    sampler._flush_generation = flush_generation
 
-    candidates = [sampler.sample() for _ in range(8)]
-    for candidate in candidates:
+    for _ in range(8):
+        candidate = sampler.sample()
         errors = space.validate_candidate(candidate)
         assert errors == [], f"CMA-ES proposal left the search space: {errors}"
-    for candidate in candidates:
         sampler.observe(
             CandidateEvaluation(
                 candidate=candidate,
@@ -1632,6 +1634,7 @@ def test_cmaes_sampler_respects_bounds_and_feeds_back(tmp_path: Path) -> None:
                 scenario_yaml_path=None,
             )
         )
+    assert flush_generation.call_count == 2
     next_candidate = sampler.sample()
     assert space.validate_candidate(next_candidate) == []
     assert isinstance(next_candidate, CandidateSpec)

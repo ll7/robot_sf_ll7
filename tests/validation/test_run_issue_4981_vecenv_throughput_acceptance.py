@@ -246,6 +246,37 @@ def test_failure_contract_mismatches_block_instead_of_being_admitted(
     assert any(expected_blocker in blocker for blocker in report["blockers"])
 
 
+def test_resolved_verdict_shape_when_threaded_matches_baseline_and_subproc_failed() -> None:
+    """Pin the actual current-HEAD outcome: threaded ~= baseline yields not_met.
+
+    This mirrors the frozen adjudication resolved on host imech156-u at commit
+    be888a2be: best in-process candidate ``threaded`` at 0.99x (throughput-neutral
+    versus the single-environment dummy baseline) with a tolerated comparison-only
+    ``subproc`` construction failure. It guards the issue's ``not_met`` result from
+    being mis-classified as ``met`` or ``blocked``.
+    """
+    current_commit = "be888a2beac66c986b5f5ef8dc0ed0884da4a223"
+    evidence = _evidence(
+        current_commit=current_commit,
+        speedups={"dummy": 1.083, "threaded": 0.99, "threaded_lidar_batch": 0.84},
+    )
+    subproc = next(row for row in evidence["results"] if row["mode"] == "subproc")
+    subproc.update(status="construction_failed", error="spawn context unavailable")
+    evidence.update(
+        status="failed",
+        failures=[{"scope": "mode", "mode": "subproc", "error": "spawn context unavailable"}],
+    )
+
+    report = _adjudicate(evidence, current_commit)
+
+    assert report["status"] == "not_met"
+    assert report["acceptance_met"] is False
+    assert report["best_mode"] == "threaded"
+    assert report["best_speedup_vs_baseline"] == pytest.approx(0.99, abs=0.001)
+    assert report["blockers"] == []
+    assert report["source_commit"] == current_commit
+
+
 def test_only_comparator_mode_failure_exit_is_tolerated() -> None:
     """Exit 1/crash-style results remain blocked even when exit 2 is admissible."""
     profile = load_profile(DEFAULT_PROFILE)

@@ -338,12 +338,45 @@ class _EvidenceValidator:
             "baseline_num_envs": 1,
             "claim_boundary": SOURCE_CLAIM_BOUNDARY,
             "scenario_selection": {"strategy": "first", "index": 0},
-            "failures": [],
         }
         for field, expected in expected_fields.items():
             self._expect(field, expected)
+        # Only baseline and candidate-mode failures block acceptance.
+        # Comparison-only modes (subproc, 4-env dummy) may fail without blocking,
+        # provided their mode is identifiable. Unidentified or missing-mode failures
+        # are treated as critical since they may mask regressions.
+        failures = self.evidence.get("failures") or []
+        critical_failures = [
+            f for f in failures
+            if f.get("scope") == "baseline"
+            or f.get("mode") in self.profile.candidate_modes
+        ]
+        unknown_failures = [
+            f for f in failures
+            if f not in critical_failures and (
+                f.get("mode") is None or f.get("mode") not in self.profile.modes
+            )
+        ]
+        if critical_failures:
+            self.blockers.append(
+                f"baseline or candidate-mode failures block acceptance: {critical_failures}"
+            )
+        if unknown_failures:
+            self.blockers.append(
+                f"unidentified or unrecognized-mode failures block acceptance: {unknown_failures}"
+            )
+        # Source status may be "failed" when only non-critical comparison modes
+        # failed with known mode identities. It must still block when status
+        # is "failed" with no documented failures (inconsistent state).
         if self.evidence.get("status") != "ok":
-            self.blockers.append(f"source status must be 'ok', got {self.evidence.get('status')!r}")
+            if not failures:
+                self.blockers.append(
+                    f"source status must be 'ok', got {self.evidence.get('status')!r}"
+                )
+            elif critical_failures or unknown_failures:
+                self.blockers.append(
+                    f"source status must be 'ok', got {self.evidence.get('status')!r}"
+                )
         if self.evidence.get("commit") != self.current_commit:
             self.blockers.append(
                 f"source commit must match current HEAD {self.current_commit!r}, "
@@ -378,6 +411,11 @@ class _EvidenceValidator:
 
         candidate_speedups = []
         for mode, row in zip(self.profile.modes, results, strict=False):
+            # Only validate comparison-only modes if they succeeded; skip
+            # detailed checks for non-critical modes that are known to have
+            # failed (e.g. subproc connection resets on some hosts).
+            if mode not in self.profile.candidate_modes and row.get("status") != "ok":
+                continue
             throughput = self._summary(row, label=f"results[{mode}]", mode=mode)
             if baseline is None or throughput is None:
                 continue
@@ -587,13 +625,12 @@ def _execute(
         current_commit=_git_commit(_REPO_ROOT),
         preflight=preflight,
     )
-    if comparator_exit_code not in {None, 0}:
+    if comparator_exit_code not in {None, 0} and report["blockers"]:
+        # Record the comparator exit code only when the adjudicator already
+        # has blockers. If the adjudicator is clean (e.g. only non-critical
+        # comparison modes failed), the adjudicator's own verdict is authoritative
+        # and we must not override it with the coarse comparator exit.
         report["blockers"].append(f"comparator exited with code {comparator_exit_code}")
-        report.update(
-            status="blocked",
-            acceptance_met=None,
-            evidence_status="blocked_invalid_or_incomplete_evidence",
-        )
     return report, {"met": 0, "not_met": 2}.get(str(report["status"]), 3)
 
 

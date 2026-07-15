@@ -20,6 +20,11 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
 from matplotlib.transforms import Bbox, IdentityTransform
 
+from robot_sf.analysis_workbench.simulation_trace_export import (
+    SimulationTraceExportValidationError,
+    load_simulation_trace_export,
+)
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
@@ -44,6 +49,7 @@ DEFAULT_COLLISION_ENVELOPE_M = 1.4
 DEFAULT_COMFORT_DISTANCE_M = 1.2
 _MATRIX_PATH = Path(__file__).resolve().parents[2] / "configs/scenarios/classic_interactions.yaml"
 _SUCCESS_STATUSES = {"success", "goal", "goal_reached", "completed"}
+_TRACE_EXPORT_OUTCOMES = {"success", "collision_event", "route_complete", "timeout_event"}
 _DEFAULT_MARKER_INTERVAL_S = 2.0
 _LONG_EPISODE_MARKER_INTERVAL_S = 4.0
 _LONG_EPISODE_THRESHOLD_S = 25.0
@@ -319,6 +325,144 @@ def load_episode(episode_dir: Path) -> EpisodeTrace:
         nearest_pedestrian_id=robot.nearest_ids,
         pedestrian_tracks=tracks,
         episode_dir=episode_dir.resolve(),
+    )
+
+
+def load_episode_from_trace_export(
+    trace_path: Path,
+    *,
+    outcome: str,
+) -> EpisodeTrace:
+    """Adapt a typed ``simulation_trace_export.v1`` file for this renderer.
+
+    The public trace-export schema intentionally stores frame-level state,
+    while this legacy renderer consumes the derived ``metadata.json`` plus
+    ``trace_series.json`` pair.  This deterministic adapter derives only the
+    renderer's existing quantities (speed, nearest pedestrian, and minimum
+    distance); it does not add evidence or outcome semantics.
+
+    Args:
+        trace_path: Typed trace-export JSON file.
+        outcome: Validated release-row outcome label used for the terminal
+            annotation (for example ``success`` or ``collision_event``).
+
+    Returns:
+        A renderer-compatible :class:`EpisodeTrace`.
+
+    Raises:
+        TraceSchemaError: If the typed trace is invalid, has no pedestrians,
+            or lacks a supported outcome label.
+    """
+    try:
+        trace = load_simulation_trace_export(Path(trace_path))
+    except (OSError, ValueError, SimulationTraceExportValidationError) as exc:
+        raise TraceSchemaError(f"cannot load simulation trace export {trace_path}: {exc}") from exc
+    if outcome not in _TRACE_EXPORT_OUTCOMES:
+        raise TraceSchemaError(
+            "trace-export outcome must be one of " + ", ".join(sorted(_TRACE_EXPORT_OUTCOMES))
+        )
+
+    derived_rows: list[dict[str, Any]] = []
+    frames: list[dict[str, Any]] = []
+    global_min_distance = math.inf
+    global_min_step: int | None = None
+    for frame in trace.frames:
+        robot_position = frame.robot.get("position")
+        robot_velocity = frame.robot.get("velocity")
+        if not _is_xy_vector(robot_position) or not _is_xy_vector(robot_velocity):
+            raise TraceSchemaError(f"trace frame {frame.step} has invalid robot vectors")
+        pedestrians = frame.pedestrians
+        if not pedestrians:
+            raise TraceSchemaError(
+                f"trace frame {frame.step} has no pedestrians; minimum distance is undefined"
+            )
+        if any("id" not in pedestrian for pedestrian in pedestrians):
+            raise TraceSchemaError(f"trace frame {frame.step} has a pedestrian missing id")
+        distances = [
+            (
+                math.hypot(
+                    float(pedestrian["position"][0]) - float(robot_position[0]),
+                    float(pedestrian["position"][1]) - float(robot_position[1]),
+                ),
+                str(pedestrian["id"]),
+            )
+            for pedestrian in pedestrians
+            if _is_xy_vector(pedestrian.get("position"))
+        ]
+        if len(distances) != len(pedestrians):
+            raise TraceSchemaError(f"trace frame {frame.step} has an invalid pedestrian position")
+        min_distance, nearest_id = min(distances)
+        if min_distance < global_min_distance:
+            global_min_distance = min_distance
+            global_min_step = frame.step
+        derived_rows.append(
+            {
+                "step": frame.step,
+                "time_s": frame.time_s,
+                "robot_x_m": robot_position[0],
+                "robot_y_m": robot_position[1],
+                "robot_heading_rad": frame.robot.get("heading", 0.0),
+                "executed_speed_m_s": math.hypot(
+                    float(robot_velocity[0]), float(robot_velocity[1])
+                ),
+                "min_robot_ped_distance_m": min_distance,
+                "nearest_pedestrian_id": nearest_id,
+            }
+        )
+        frames.append(
+            {
+                "step": frame.step,
+                "time_s": frame.time_s,
+                "pedestrians": [
+                    {"id": str(pedestrian["id"]), "position": pedestrian["position"]}
+                    for pedestrian in pedestrians
+                ],
+            }
+        )
+    if global_min_step is None:
+        raise TraceSchemaError("trace export has no frames")
+    status = "success" if outcome in {"success", "route_complete"} else "failure"
+    metadata = {
+        "planner": trace.source.planner_id,
+        "scenario_id": trace.source.scenario_id,
+        "seed": trace.source.seed,
+        "episode_id": trace.source.episode_id,
+        "episode_status": status,
+        "summary": {
+            "global_min_robot_ped_distance_m": global_min_distance,
+            "global_min_distance_step": global_min_step,
+            "step_count": len(derived_rows),
+            "termination_reason": outcome,
+        },
+    }
+    robot = _parse_derived_rows(derived_rows)
+    time_by_step = dict(zip(robot.steps, robot.times, strict=True))
+    tracks = _parse_frames(frames, time_by_step)
+    return EpisodeTrace(
+        metadata=metadata,
+        steps=robot.steps,
+        time_s=robot.times,
+        robot_xy=robot.xy,
+        robot_heading_rad=robot.headings,
+        executed_speed_m_s=robot.speeds,
+        min_robot_ped_distance_m=robot.min_distances,
+        nearest_pedestrian_id=robot.nearest_ids,
+        pedestrian_tracks=tracks,
+        episode_dir=Path(trace_path).resolve().parent,
+    )
+
+
+def _is_xy_vector(value: Any) -> bool:
+    """Return whether a value is a finite two-element numeric vector."""
+    return (
+        isinstance(value, (list, tuple))
+        and len(value) == 2
+        and all(
+            isinstance(component, (int, float))
+            and not isinstance(component, bool)
+            and math.isfinite(float(component))
+            for component in value
+        )
     )
 
 

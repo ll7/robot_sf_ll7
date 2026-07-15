@@ -1,0 +1,123 @@
+schema_version: issue_5579_mpc_tuning_sensitivity.v1
+issue: 5579
+study_id: issue_5579_mpc_tuning_budget_sensitivity_v1
+status: preregistration
+
+# This packet makes the under-tuning test reproducible without changing the
+# benchmark runner, metric semantics, or paper-facing configuration.
+claim_boundary: >-
+  Diagnostic bounded sensitivity contract. A completed run can describe the
+  tested fixed scenario slice and the observed best-found configuration, but it
+  cannot establish a benchmark ranking, structural planner superiority, or a
+  paper/dissertation claim. Fallback, degraded, failed, and unavailable rows
+  are excluded from the success comparison and keep the report blocked.
+
+execution_boundary:
+  full_benchmark_campaign_run_in_this_pr: false
+  slurm_or_gpu_submission_in_this_pr: false
+  paper_or_dissertation_claim_edit_in_this_pr: false
+  bounded_local_run_allowed: true
+
+scenario_scope:
+  source_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+  scenario_ids:
+    - classic_bottleneck_medium
+    - classic_cross_trap_high
+    - francis2023_intersection_wait
+  seeds: [111, 112, 113]
+  horizon: 100
+  dt: 0.1
+  workers: 1
+
+# The target arms are the two prediction-aware MPC rows added to the h600
+# extended roster. Every sensitivity point is applied to both base configs.
+target_arms:
+  - key: prediction_mpc
+    algo: prediction_mpc
+    algo_config_path: configs/algos/prediction_mpc_cv.yaml
+  - key: prediction_mpc_cbf
+    algo: prediction_mpc
+    algo_config_path: configs/algos/prediction_mpc_cv_cbf_collision_cone.yaml
+
+# The four h600 hybrid arms are the incumbent band. They are evaluated at their
+# incumbent configs; they do not consume any of the 20 MPC candidate points.
+incumbent_arms:
+  - key: scenario_adaptive_hybrid_orca_v1
+    algo: hybrid_rule_local_planner
+    algo_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+  - key: scenario_adaptive_hybrid_orca_v2_collision_guard
+    algo: hybrid_rule_local_planner
+    algo_config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+  - key: hybrid_rule_v3_fast_progress_static_escape
+    algo: hybrid_rule_local_planner
+    algo_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape.yaml
+  - key: hybrid_rule_v3_fast_progress_static_escape_continuous
+    algo: hybrid_rule_local_planner
+    algo_config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+
+search:
+  design: bounded_grid_subset
+  candidate_count: 20
+  top_parameters:
+    - max_linear_speed
+    - horizon_steps
+    - pedestrian_safety_margin
+  parameter_levels:
+    max_linear_speed: [0.75, 0.9, 1.2]
+    horizon_steps: [4, 6, 8]
+    pedestrian_safety_margin: [0.25, 0.35, 0.45]
+  candidate_points:
+    - id: incumbent
+      overrides: {}
+    - id: speed_low
+      overrides: {max_linear_speed: 0.75}
+    - id: speed_high
+      overrides: {max_linear_speed: 1.2}
+    - id: horizon_low
+      overrides: {horizon_steps: 4}
+    - id: horizon_high
+      overrides: {horizon_steps: 8}
+    - id: margin_low
+      overrides: {pedestrian_safety_margin: 0.25}
+    - id: margin_high
+      overrides: {pedestrian_safety_margin: 0.45}
+    - id: speed_low_horizon_low
+      overrides: {max_linear_speed: 0.75, horizon_steps: 4}
+    - id: speed_low_margin_low
+      overrides: {max_linear_speed: 0.75, pedestrian_safety_margin: 0.25}
+    - id: speed_high_horizon_high
+      overrides: {max_linear_speed: 1.2, horizon_steps: 8}
+    - id: speed_high_margin_high
+      overrides: {max_linear_speed: 1.2, pedestrian_safety_margin: 0.45}
+    - id: horizon_low_margin_low
+      overrides: {horizon_steps: 4, pedestrian_safety_margin: 0.25}
+    - id: horizon_high_margin_high
+      overrides: {horizon_steps: 8, pedestrian_safety_margin: 0.45}
+    - id: speed_high_horizon_low_margin_low
+      overrides: {max_linear_speed: 1.2, horizon_steps: 4, pedestrian_safety_margin: 0.25}
+    - id: speed_low_horizon_high_margin_high
+      overrides: {max_linear_speed: 0.75, horizon_steps: 8, pedestrian_safety_margin: 0.45}
+    - id: speed_high_horizon_high_margin_low
+      overrides: {max_linear_speed: 1.2, horizon_steps: 8, pedestrian_safety_margin: 0.25}
+    - id: speed_low_horizon_low_margin_high
+      overrides: {max_linear_speed: 0.75, horizon_steps: 4, pedestrian_safety_margin: 0.45}
+    - id: speed_high_horizon_low_margin_high
+      overrides: {max_linear_speed: 1.2, horizon_steps: 4, pedestrian_safety_margin: 0.45}
+    - id: speed_low_horizon_high_margin_low
+      overrides: {max_linear_speed: 0.75, horizon_steps: 8, pedestrian_safety_margin: 0.25}
+    - id: speed_high_horizon_high_margin_high
+      overrides: {max_linear_speed: 1.2, horizon_steps: 8, pedestrian_safety_margin: 0.45}
+
+comparison:
+  primary_metric: route_complete_and_collision_free
+  success_fields: [outcome.route_complete, outcome.collision_event]
+  higher_is_better: true
+  hybrid_band_read:
+    structural_if: both_best_mpc_rates_below_all_incumbent_rates
+    budget_bound_if: both_best_mpc_rates_at_or_above_all_incumbent_rates
+    otherwise: mixed_or_inconclusive
+  fallback_degraded_policy: exclude_from_success_evidence
+
+artifacts:
+  raw_output_root: output/benchmarks/issue_5579_mpc_tuning_sensitivity
+  durable_evidence_root: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14

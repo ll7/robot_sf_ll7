@@ -20,6 +20,6 @@ static_obstacle_soft_weight: 1.0
 solver_ftol: 0.001
 solver_max_iterations: 40
 warm_start: true
-fallback_to_stop: true
+fallback_to_stop: false
 cbf_safety_filter:
   enabled: true

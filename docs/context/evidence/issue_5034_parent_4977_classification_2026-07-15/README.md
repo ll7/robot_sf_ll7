@@ -19,7 +19,7 @@ classification step.
 - Claim boundary: control-action-latency metric-evidence promotion only; reads raw
   fidelity-campaign episode rows, isolates the `control_action_latency` axis, and
   reports action-latency metadata plus success / collision / minimum-clearance
-  metrics per native latency cell. It runs no episode and promotes no claim beyond
+  metrics per eligible native/adapter latency cell. It runs no episode and promotes no claim beyond
   the declared campaign evidence tier; it is not simulator-realism evidence, not
   sim-to-real evidence, and not paper-facing evidence.
 
@@ -49,24 +49,35 @@ permitted by the issue contract.
   provenance).
 - PR #5629: durable fixed-scope launch plan +
   `docs/context/evidence/issue_5034_control_action_latency_sweep_plan_2026-07-14/`.
-- PR #5648: cheap-lane CPU control-action-latency sweep — **36 native rows**
-  (`baseline_social_force`, `goal_seek`; seeds `101/102/103`; latency steps
-  `0/1/3`; 2 scenarios), classified `diagnostic-only` and promoted under
-  `docs/context/evidence/issue_5034_control_action_latency_sweep/`.
+- PR #5751: bounded cheap-lane CPU control-action-latency sweep — **72 eligible
+  rows** (`baseline_social_force`, `goal_seek`, `hybrid_rule_v0_minimal`, and
+  `orca`; seeds `101/102/103`; latency steps `0/1/3`; 2 scenarios). The first
+  two planner groups ran natively; ORCA and hybrid used the explicitly labeled
+  adapter path. The result remained `diagnostic-only` and was merged as a
+  bounded slice, not as the nominal campaign.
+- PR #5759: fix-forward provenance repair for #5751, including the regenerated
+  durable bundle and this updated parent-classification record.
 
-## Diagnostic-only result observed (from #5648, 36 native rows)
+## Diagnostic-only result observed (from #5751/#5759, 72 eligible rows)
 
-| Planner | Latency steps | Latency ms | Cells | Success | Collision | Min clearance |
-|---|---:|---:|---:|---:|---:|---:|
-| `baseline_social_force` | 0 | 0.0 | 6 | 0.0 | 0.0 | 3.707 |
-| `baseline_social_force` | 1 | 100.0 | 6 | 0.0 | 0.0 | 3.786 |
-| `baseline_social_force` | 3 | 300.0 | 6 | 0.0 | 0.0 | 4.084 |
-| `goal_seek` | 0 | 0.0 | 6 | 0.0 | 1.0 | -0.045 |
-| `goal_seek` | 1 | 100.0 | 6 | 0.0 | 1.0 | -0.040 |
-| `goal_seek` | 3 | 300.0 | 6 | 0.0 | 1.0 | -0.049 |
+| Planner | Mode | Latency steps | Latency ms | Cells | Success | Collision | Min clearance |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `baseline_social_force` | native | 0 | 0.0 | 6 | 0 | 0 | 3.707 |
+| `baseline_social_force` | native | 1 | 100.0 | 6 | 0 | 0 | 3.786 |
+| `baseline_social_force` | native | 3 | 300.0 | 6 | 0 | 0 | 4.084 |
+| `goal_seek` | native | 0 | 0.0 | 6 | 0 | 1 | -0.045 |
+| `goal_seek` | native | 1 | 100.0 | 6 | 0 | 1 | -0.040 |
+| `goal_seek` | native | 3 | 300.0 | 6 | 0 | 1 | -0.049 |
+| `hybrid_rule_v0_minimal` | adapter | 0 | 0.0 | 6 | 0 | 0 | 0.789 |
+| `hybrid_rule_v0_minimal` | adapter | 1 | 100.0 | 6 | 0 | 0 | 0.836 |
+| `hybrid_rule_v0_minimal` | adapter | 3 | 300.0 | 6 | 0 | 0 | 0.961 |
+| `orca` | adapter | 0 | 0.0 | 6 | 0 | 0 | 0.229 |
+| `orca` | adapter | 1 | 100.0 | 6 | 0 | 0 | 0.211 |
+| `orca` | adapter | 3 | 300.0 | 6 | 0 | 0 | 0.239 |
 
 Excluded rows: `0`. These are compact CPU-smoke cells, not the full fixed-scope
-campaign; treat the numbers as exploratory signal, not a benchmark conclusion.
+campaign; native and adapter-backed rows are labeled explicitly, and all remain
+exploratory signal rather than a benchmark conclusion.
 
 ## Remaining work before parent #4977 can reach the nominal tier
 

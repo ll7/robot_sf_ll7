@@ -387,7 +387,9 @@ def run_robot_sf_receipt(
     )
     try:
         ratio = float(socnavbench_path_length_ratio(data))
-    except Exception as exc:  # pragma: no cover - metric edge cases
+    except (AttributeError, IndexError, TypeError, ValueError) as exc:
+        # The metric boundary can reject malformed episode arrays, but programming
+        # errors must remain visible instead of being mislabeled as canary failures.
         raise CanaryError(f"Robot SF metric computation failed: {exc}") from exc
 
     return {
@@ -456,7 +458,9 @@ def run_socnavbench_receipt(
         )
 
         ratio = float(_sn_path_length_ratio(trajectory, export["robot"]["goal"]))
-    except Exception as exc:  # pragma: no cover - vendored API edge cases
+    except (AttributeError, ImportError, IndexError, KeyError, TypeError, ValueError) as exc:
+        # Preserve fail-closed behavior for malformed exports and unavailable vendored
+        # dependencies without masking unrelated implementation errors.
         raise CanaryError(f"SocNavBench metric computation failed: {exc}") from exc
 
     return {

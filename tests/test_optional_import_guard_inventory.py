@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -36,7 +37,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SCANNED_ROOT = REPO_ROOT / "robot_sf"
+# Allow subprocess callers (e.g. the gate contract test) to override the
+# scanned directory via an environment variable.  This is the isolation
+# mechanism that makes ``test_gate_catches_new_unblessed_spelling`` safe
+# under xdist: instead of writing a temp file into ``robot_sf/`` (where
+# concurrent workers can see it), the gate test creates a minimal temp tree
+# and passes ``OPTIONAL_IMPORT_SCAN_ROOT`` to this subprocess.  See #5722.
+_env_scan_root = os.environ.get("OPTIONAL_IMPORT_SCAN_ROOT")
+SCANNED_ROOT = Path(_env_scan_root) if _env_scan_root else REPO_ROOT / "robot_sf"
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "optional_import_guards.json"
 
 # Exception type names this ratchet tracks. ``ModuleNotFoundError`` is a
@@ -94,6 +102,20 @@ def _has_pragma(line: str) -> bool:
     return bool(re.search(r"#\s*pragma:\s*no cover", line))
 
 
+def _rel_path(path: Path, root: Path) -> str:
+    """Return a display-friendly relative path string for a scanner hit.
+
+    Prefer ``path`` relative to ``REPO_ROOT`` so location strings match the
+    repository-root convention used elsewhere.  Fall back to ``root`` when
+    the scan root is outside ``REPO_ROOT`` (e.g. a ``tmp_path`` tree used by
+    the gate contract test for xdist isolation — see issue #5722).
+    """
+    try:
+        return path.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return path.relative_to(root).as_posix()
+
+
 def collect_optional_import_guards(root: Path) -> dict[str, dict[str, object]]:
     """Walk ``root`` and return the optional-import guard inventory.
 
@@ -121,7 +143,7 @@ def collect_optional_import_guards(root: Path) -> dict[str, dict[str, object]]:
             if not (_TRACKED & set(names)):
                 continue
             key = _spelling_key(names)
-            rel = path.relative_to(REPO_ROOT).as_posix()
+            rel = _rel_path(path, root)
             occurrences[key].append(f"{rel}:{node.lineno}")
             if node.name:
                 has_as_counts[key] += 1

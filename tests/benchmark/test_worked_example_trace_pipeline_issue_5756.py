@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import robot_sf.benchmark.candidate_trace_resolution as resolution_module
 from robot_sf.benchmark.candidate_trace_resolution import (
     CandidateTraceResolutionError,
     load_episode_mapping,
@@ -157,6 +158,133 @@ def test_release_episode_id_alias_joins_to_rerun_episode(tmp_path: Path) -> None
     result = resolve_episode_requests(request_manifest, mapping)
     assert result["summary"]["n_resolved"] == 1
     assert result["rows"][0]["episode_id"] == "rerun_episode_001"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [],
+        {"schema_version": "wrong", "tuples": [], "n_tuples": 0},
+        {"schema_version": "issue_5446_trace_reexport_list.v1", "tuples": [], "n_tuples": 0},
+        {
+            "schema_version": "issue_5446_trace_reexport_list.v1",
+            "tuples": [_request_manifest()["tuples"][0]],
+            "n_tuples": 2,
+        },
+        {
+            "schema_version": "issue_5446_trace_reexport_list.v1",
+            "tuples": ["not-an-object"],
+            "n_tuples": 1,
+        },
+        {
+            "schema_version": "issue_5446_trace_reexport_list.v1",
+            "tuples": [{"scenario_id": "s", "planner": "p"}],
+            "n_tuples": 1,
+        },
+        {
+            "schema_version": "issue_5446_trace_reexport_list.v1",
+            "tuples": [{"scenario_id": "s", "planner": "p", "seed": 1, "expected_outcome": "bad"}],
+            "n_tuples": 1,
+        },
+    ],
+)
+def test_request_loader_rejects_malformed_contract(tmp_path: Path, payload: object) -> None:
+    """Malformed request inputs fail before any trace lookup occurs."""
+    with pytest.raises(CandidateTraceResolutionError):
+        load_episode_requests(_write_json(tmp_path / "requests.json", payload))
+
+
+def test_request_loader_rejects_unreadable_json(tmp_path: Path) -> None:
+    """An unreadable request path is a machine-readable resolver failure."""
+    with pytest.raises(CandidateTraceResolutionError, match="unreadable"):
+        load_episode_requests(tmp_path / "missing.json")
+    invalid = tmp_path / "invalid.json"
+    invalid.write_text("{", encoding="utf-8")
+    with pytest.raises(CandidateTraceResolutionError, match="unreadable"):
+        load_episode_requests(invalid)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        [],
+        {"rows": []},
+        {"rows": ["not-an-object"]},
+        {"rows": [{"episode_id": "only-id"}]},
+    ],
+)
+def test_episode_mapping_loader_rejects_malformed_contract(tmp_path: Path, payload: object) -> None:
+    """A rerun mapping cannot omit identity or silently contain empty rows."""
+    with pytest.raises(CandidateTraceResolutionError):
+        load_episode_mapping(_write_json(tmp_path / "mapping.json", payload))
+
+
+def test_episode_mapping_loader_rejects_duplicate_identity(tmp_path: Path) -> None:
+    """Episode and tuple identity are unique joins, including release aliases."""
+    duplicate_episode = [_mapping_row(), _mapping_row(seed=112)]
+    with pytest.raises(CandidateTraceResolutionError, match="duplicate mapped episode_id"):
+        load_episode_mapping(_write_json(tmp_path / "episode-duplicate.json", duplicate_episode))
+
+    duplicate_tuple = [_mapping_row(), _mapping_row(episode_id="other")]
+    with pytest.raises(CandidateTraceResolutionError, match="duplicate mapped episode tuple"):
+        load_episode_mapping(_write_json(tmp_path / "tuple-duplicate.json", duplicate_tuple))
+
+    duplicate_release = [
+        _mapping_row(episode_id="rerun-1", release_episode_id="release-1"),
+        _mapping_row(seed=112, episode_id="rerun-2", release_episode_id="release-1"),
+    ]
+    with pytest.raises(CandidateTraceResolutionError, match="duplicate mapped release"):
+        load_episode_mapping(_write_json(tmp_path / "release-duplicate.json", duplicate_release))
+
+
+def test_episode_mapping_loader_accepts_direct_mapping_payload(tmp_path: Path) -> None:
+    """A direct episode-id mapping remains convenient for small rerun receipts."""
+    payload = {"fixture_episode_001": _mapping_row()}
+    mapping = load_episode_mapping(_write_json(tmp_path / "mapping.json", payload))
+    assert mapping["fixture_episode_001"]["episode_id"] == "fixture_episode_001"
+
+
+@pytest.mark.parametrize(
+    "request_manifest",
+    [{}, {"tuples": ["bad"]}, {"tuples": [{"scenario_id": "only"}]}],
+)
+def test_request_resolution_rejects_malformed_runtime_payload(
+    request_manifest: dict[str, object],
+) -> None:
+    """The public resolver also guards callers that bypass the file loader."""
+    with pytest.raises(CandidateTraceResolutionError):
+        resolve_episode_requests(request_manifest, {})
+
+
+def test_request_resolution_rejects_invalid_outcome_and_trace_source(tmp_path: Path) -> None:
+    """Outcome and embedded source disagreement never becomes a rendered row."""
+    request = _request_manifest()
+    invalid_outcome = load_episode_mapping(
+        _write_json(tmp_path / "invalid-outcome.json", {"rows": [_mapping_row(outcome="other")]})
+    )
+    invalid_result = resolve_episode_requests(request, invalid_outcome)
+    assert invalid_result["rows"][0]["reason_code"] == "outcome_missing_or_invalid"
+
+    mismatched_trace = json.loads(TRACE.read_text(encoding="utf-8"))
+    mismatched_trace["source"]["scenario_id"] = "classic_doorway_medium"
+    mismatched_path = _write_json(tmp_path / "mismatched-trace.json", mismatched_trace)
+    mismatch_mapping = load_episode_mapping(
+        _write_json(
+            tmp_path / "mismatch-mapping.json",
+            {"rows": [_mapping_row(trace_artifact_uri=str(mismatched_path))]},
+        )
+    )
+    mismatch_result = resolve_episode_requests(request, mismatch_mapping)
+    assert mismatch_result["rows"][0]["reason_code"] == "trace_source_mismatch:scenario_id"
+
+
+def test_outcome_normalization_accepts_release_boolean_shapes() -> None:
+    """Release rows may expose typed events as booleans or canonical strings."""
+    assert resolution_module._normalize_outcome({"route_complete": True}) == "route_complete"
+    assert resolution_module._normalize_outcome("goal_reached") == "route_complete"
+    assert resolution_module._mapping_outcome({"collision_event": True}) == "collision_event"
+    assert resolution_module._mapping_outcome({"outcome": "timeout_event"}) == "timeout_event"
 
 
 def _write_json(path: Path, payload: object) -> Path:

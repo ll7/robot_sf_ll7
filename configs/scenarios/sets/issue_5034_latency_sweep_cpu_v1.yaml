@@ -3,13 +3,15 @@
 # Purpose:
 #   A bounded, CPU-only scenario slice used by the cheap-lane implementation worker to
 #   execute the control_action_latency axis (0/1/3 steps, i.e. 0/100/300 ms-equivalent
-#   delays) of the fidelity-sensitivity study config for the two dependency-free native
-#   planners (goal_seek, baseline_social_force). It runs REAL Robot SF simulator episodes
+#   delays) of the fidelity-sensitivity study config for the native CPU-runnable planner
+#   groups (goal_seek, baseline_social_force, orca, and hybrid_rule_v0_minimal). ORCA and
+#   hybrid use declared Robot SF adapters with no
+#   fallback; the run records that adapter boundary explicitly.
 #   and feeds raw rows to scripts/benchmark/promote_control_action_latency_evidence.py.
 #
-# This is NOT the full 7,344-episode fixed-scope campaign (that requires native ORCA/hybrid
-# planners and Slurm capacity). It is a conservative, reproducible CPU slice that produces a
-# genuine native latency evidence artifact rather than another readiness/decision packet.
+# This is NOT the full 7,344-episode fixed-scope campaign. It is a conservative, reproducible
+# CPU slice that produces latency evidence for native and adapter-backed execution rather than
+# another readiness/decision packet; it remains diagnostic-only.
 #
 # Canonical cheap-lane command shape:
 #   uv run python scripts/benchmark/run_control_action_latency_sweep_cheap_lane.py \
@@ -45,9 +47,10 @@ scenarios:
       density: low
       evidence_tier: cheap_lane_cpu_slice
       claim_boundary: >
-        Cheap-lane CPU slice only; runs real native episodes for the two dependency-free
-        planners on the control_action_latency axis; not the full fixed-scope campaign,
-        not the native ORCA/hybrid planner set, not paper-facing evidence.
+        Cheap-lane CPU slice only; runs real episodes for goal_seek and baseline_social_force
+        plus adapter-backed ORCA and hybrid_rule_v0_minimal with no fallback on the
+        control_action_latency axis; not the full fixed-scope campaign, not paper-facing
+        evidence.
     seeds: [101, 102, 103]
   - name: issue_5034_classic_crossing_mixed
     map_file: ../../../maps/svg_maps/classic_crossing.svg
@@ -74,9 +77,10 @@ scenarios:
       density: low
       evidence_tier: cheap_lane_cpu_slice
       claim_boundary: >
-        Cheap-lane CPU slice only; runs real native episodes for the two dependency-free
-        planners on the control_action_latency axis; not the full fixed-scope campaign,
-        not the native ORCA/hybrid planner set, not paper-facing evidence.
+        Cheap-lane CPU slice only; runs real episodes for goal_seek and baseline_social_force
+        plus adapter-backed ORCA and hybrid_rule_v0_minimal with no fallback on the
+        control_action_latency axis; not the full fixed-scope campaign, not paper-facing
+        evidence.
     seeds: [101, 102, 103]
 
 map_search_paths:

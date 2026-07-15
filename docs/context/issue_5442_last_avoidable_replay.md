@@ -25,6 +25,35 @@ deterministic controlled fixture that validates it end to end on CPU:
 - `scripts/analysis/run_last_avoidable_replay_issue_5442.py` — offline report CLI.
 - `tests/benchmark/test_last_avoidable_replay_issue_5442.py` — acceptance tests.
 
+### Successor slice: production-simulator `CounterfactualModel` adapter (#5442, cheap-lane)
+
+This slice adds the **production-simulator adapter** the issue thread named as
+remaining (the global-RNG snapshot seam was the gated dependency):
+
+- `robot_sf/benchmark/simulator_counterfactual_adapter.py` — `SimulatorCounterfactualModel`,
+  a `CounterfactualModel` over the live `Simulator`. It captures the pedestrian PySF
+  state buffer, per-pedestrian behavior runtimes (single-pedestrian waypoint/hold
+  state and route-group navigator waypoint index), robot pose/velocity, and the
+  **global numpy RNG** via `numpy.random.get_state`/`set_state` (deep-copied so
+  repeated restores stay independent). The `capture_rng` flag documents the seam:
+  omitting it lets a mid-episode pedestrian respawn (`sample_zone` draws from the
+  global RNG) diverge a replay by meters, which the engine's fail-closed `unknown`
+  guard would catch.
+- `tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py` — headless
+  (no-display) `Simulator` construction, snapshot/restore determinism, the RNG-capture
+  seam, and a full `locate_last_avoidable` run on a genuine production fixture
+  (`classic_doorway.svg`, density 0.06, seed 21) where the maintain-speed baseline
+  collides at step 39 but halting the robot avoids contact (`avoidable`,
+  `t_uca=0`, `t_inevitable=39`, deterministic baseline, full feasible coverage).
+
+Scope correction versus the earlier doc's "broad simulator replacement" note: a code
+re-survey on current `main` found pedestrian goal/zone resampling now draws from the
+**global** numpy RNG (`sample_zone` / `ped_population` group respawn), not from the
+broad per-object generators the earlier note assumed. A faithful snapshot therefore
+needs only the global-RNG capture seam plus the actor/behavior state already restored
+here — not a broad simulator rewrite. The engine's determinism check is the safeguard:
+if a replay diverges, it abstains to `unknown` rather than guessing.
+
 ## Determination vocabulary (fail-closed)
 
 | Verdict | Meaning |
@@ -134,8 +163,9 @@ t_inevitable=7); `two_action_interaction` → avoidable (t_uca=0, t_inevitable=8
 
 ## Out of scope / remaining
 
-- Real-simulator `CounterfactualModel` adapter (needs the global-RNG capture seam
-  above; gated behind the determinism budget in the issue stop rule).
-- Join into `collision_causal_report.v1` once #5441 merges.
+- Join into `collision_causal_report.v1` once #5441 merges (the
+  `last_avoidable_replay.v1` field naming is already forward-compatible).
+- Broader action lattices / planner-specific feasible sets — `feasible_actions` here
+  returns a maintain-speed-or-halt lattice; subclasses can supply a planner action set.
 - No benchmark campaign run, no Slurm/GPU submission, no metric/release semantics
   change, no paper/dissertation claim edits.

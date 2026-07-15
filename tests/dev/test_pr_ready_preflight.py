@@ -38,6 +38,11 @@ _POST_PREFLIGHT_SCRIPTS = [
     "check_docstring_todos_diff.sh",
     "check_docstring_todos_ratchet.sh",
     "check_optional_import_pr_freshness.py",
+    # check_base_drift.py is invoked by pr_ready_check.sh as a final base-drift
+    # recheck before recording the freshness stamp (issue #5782).  Stub it here so
+    # the fake repo exercises the wiring cleanly instead of emitting a missing-file
+    # error that the rc-2 fallback silently swallows.
+    "check_base_drift.py",
     "pr_ready_freshness.py",
 ]
 
@@ -125,6 +130,31 @@ def _make_fake_bin(repo: Path, *, fail: bool = True) -> None:
         '  exec "$@"\n'
         "fi\n"
         f'exec "{real_uv}" "$@"\n',
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+
+def _make_real_python_bin(repo: Path) -> None:
+    """Create a fake ``uv`` that execs the real Python interpreter.
+
+    The base-drift end-to-end tests need ``check_base_drift.py`` to run with a real
+    interpreter (so its git logic executes), while still avoiding ``uv sync`` and
+    stubbing the expensive readiness lanes. Unlike ``_make_fake_bin``, this does NOT
+    replace ``python``: ``uv run python <script>`` execs ``python <script>`` which PATH
+    resolves to the real interpreter, so the real ``check_base_drift.py`` logic runs in
+    interim mode (where the final-mode analytics preflight is skipped).
+    """
+    bin_dir = repo / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    fake_uv = bin_dir / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [[ "$1" == "run" ]]; then\n'
+        "  shift\n"
+        '  exec "$@"\n'
+        "fi\n"
+        f'exec "{shutil.which("uv") or "uv"}" "$@"\n',
         encoding="utf-8",
     )
     fake_uv.chmod(0o755)
@@ -575,3 +605,148 @@ def test_preflight_skip_env_var_bypasses_check(preflight_repo: Path) -> None:
     )
     assert result.returncode == 0, f"Script failed: {result.stderr}"
     assert "Final PR readiness requires analytics dependencies" not in result.stderr
+
+
+# Issue #5782: end-to-end wiring of the base-drift recheck in pr_ready_check.sh.
+# These build a fake repo whose post-preflight lanes are stubbed (so the expensive
+# pytest/coverage gates are skipped) but whose check_base_drift.py is the REAL
+# script. The ``run_tests_parallel.sh`` stub advances origin/main mid-run to
+# deterministically model main advancing during the long lanes, then the gate
+# fails closed on related drift and surfaces the reuse path on unrelated drift.
+
+
+def _wire_real_base_drift(repo: Path) -> None:
+    """Replace the stubbed check_base_drift.py with the real script from this checkout."""
+    shutil.copy2(
+        SCRIPTS_DEV / "check_base_drift.py",
+        repo / "scripts" / "dev" / "check_base_drift.py",
+    )
+
+
+def _commit(repo: Path, message: str) -> None:
+    """Stage and commit all changes in *repo* with a test identity."""
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", message)
+
+
+def _build_drift_pr_repo(tmp_path: Path, *, main_touches_pr_file: bool) -> tuple[Path, str, str]:
+    """Build a fake repo with a PR branch on a base commit and an advanced main commit.
+
+    Returns (repo, base_sha, moved_sha). The PR branch sits on top of ``base_sha``
+    and changes ``shared.py``; a separate ``main`` branch advances one commit past
+    ``base_sha``. When *main_touches_pr_file* is True that advance edits
+    ``shared.py`` (related drift); otherwise it edits ``unrelated.py`` (unrelated
+    drift). ``origin/main`` starts at ``base_sha`` so a run captures the validated
+    base SHA; the lane stub advances it to ``moved_sha`` mid-run.
+    """
+    repo = tmp_path / "repo"
+    scripts_dir = repo / "scripts" / "dev"
+    scripts_dir.mkdir(parents=True)
+    shutil.copy2(SCRIPTS_DEV / "common_setup.sh", scripts_dir / "common_setup.sh")
+    shutil.copy2(SCRIPTS_DEV / "pr_ready_check.sh", scripts_dir / "pr_ready_check.sh")
+    _make_fake_scripts(repo)
+    _wire_real_base_drift(repo)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / ".git" / "info" / "exclude").write_text("bin/\n.home/\nlane.log\n", encoding="utf-8")
+
+    (repo / "shared.py").write_text("print('base')\n", encoding="utf-8")
+    (repo / "unrelated.py").write_text("print('base')\n", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "init")
+    (repo / "shared.py").write_text("print('base commit')\n", encoding="utf-8")
+    _commit(repo, "base")
+    base_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+    # PR commit on top of base changes shared.py.
+    (repo / "shared.py").write_text("print('pr change')\n", encoding="utf-8")
+    _commit(repo, "pr")
+    pr_commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+    # Advance a main branch one commit past the base (simulating main moving).
+    subprocess.run(["git", "branch", "main", base_sha], cwd=repo, check=True)
+    subprocess.run(["git", "checkout", "-q", "main"], cwd=repo, check=True)
+    if main_touches_pr_file:
+        (repo / "shared.py").write_text("print('main moved shared')\n", encoding="utf-8")
+    else:
+        (repo / "unrelated.py").write_text("print('main moved unrelated')\n", encoding="utf-8")
+    _commit(repo, "main advance")
+    moved_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    # origin/main starts AT THE BASE so the run captures the validated base SHA; the
+    # lane stub advances it to moved_sha mid-run (see _wire_lane_stub_advancing_base).
+    subprocess.run(
+        ["git", "update-ref", "refs/remotes/origin/main", base_sha], cwd=repo, check=True
+    )
+    # Return HEAD to the PR commit.
+    subprocess.run(["git", "checkout", "-q", pr_commit], cwd=repo, check=True)
+    return repo, base_sha, moved_sha
+
+
+def _wire_lane_stub_advancing_base(repo: Path, moved_sha: str) -> None:
+    """Make the stubbed ``run_tests_parallel.sh`` advance origin/main mid-run.
+
+    pr_ready_check.sh captures the validated base SHA BEFORE the expensive lanes and
+    rechecks it AFTER. In production, origin/main advances during those long lanes.
+    The stubbed lanes complete instantly, so this stub advances origin/main to
+    *moved_sha* while the lane runs, deterministically modelling that passage of
+    time so the final drift recheck observes the moved base.
+    """
+    stub = repo / "scripts" / "dev" / "run_tests_parallel.sh"
+    stub.write_text(
+        f"#!/usr/bin/env bash\ngit update-ref refs/remotes/origin/main {moved_sha}\nexit 0\n",
+        encoding="utf-8",
+    )
+    stub.chmod(0o755)
+
+
+def test_pr_ready_check_fails_closed_on_related_base_drift(tmp_path: Path) -> None:
+    """Issue #5782: drift touching a PR-changed file must fail the gate before stamping.
+
+    The expensive pytest/coverage lanes are stubbed. The ``run_tests_parallel.sh``
+    stub models the passage of time during the long lanes by advancing origin/main
+    (as an unrelated PR merging would). pr_ready_check.sh captures the base SHA at
+    the start, so when the final drift recheck sees the advanced base editing the
+    PR's own file, it must exit nonzero and name the base to revalidate instead of
+    recording a misleading stamp.
+    """
+    repo, _base_sha, moved = _build_drift_pr_repo(tmp_path, main_touches_pr_file=True)
+    _make_real_python_bin(repo)
+    _wire_lane_stub_advancing_base(repo, moved)
+
+    result = _run_pr_ready(
+        repo,
+        help_flag=False,
+        env_overrides={"BASE_REF": "origin/main", "PR_READY_MODE": "interim"},
+    )
+    assert result.returncode != 0, (
+        f"expected base-drift failure, got rc={result.returncode}: {result.stderr}"
+    )
+    assert "revalidate against origin/main" in result.stderr
+    assert "shared.py" in result.stderr
+    assert "Validated base SHA for this run" in result.stderr
+
+
+def test_pr_ready_check_surfaces_reuse_path_on_unrelated_base_drift(tmp_path: Path) -> None:
+    """Issue #5782: drift unrelated to the PR's changed files recommends reuse.
+
+    origin/main advances during the (stubbed) lanes but only edits a file the PR
+    does not touch. The gate must still succeed and surface the reviewable reuse
+    message rather than needlessly failing or silently ignoring the drift.
+    """
+    repo, _base_sha, moved = _build_drift_pr_repo(tmp_path, main_touches_pr_file=False)
+    _make_real_python_bin(repo)
+    _wire_lane_stub_advancing_base(repo, moved)
+
+    result = _run_pr_ready(
+        repo,
+        help_flag=False,
+        env_overrides={"BASE_REF": "origin/main", "PR_READY_MODE": "interim"},
+    )
+    assert result.returncode == 0, f"expected reuse success, got: {result.stderr}"
+    # The reuse decision must be visible (reviewable), not silently swallowed.
+    assert "reuse" in result.stderr.lower()

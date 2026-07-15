@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 109,
+  "total_guards": 110,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 3,
@@ -108,7 +108,7 @@
         "robot_sf/baselines/sicnav.py:420",
         "robot_sf/baselines/sicnav.py:298",
         "robot_sf/benchmark/cli.py:198",
-        "robot_sf/benchmark/collision_causal_report.py:47",
+        "robot_sf/benchmark/collision_causal_report.py:55",
         "robot_sf/benchmark/distributions.py:131",
         "robot_sf/benchmark/episode_replay_figure.py:37",
         "robot_sf/benchmark/episode_replay_figure.py:50",
@@ -229,14 +229,15 @@
       ]
     },
     "ModuleNotFoundError": {
-      "count_ceiling": 6,
-      "has_as_count": 2,
+      "count_ceiling": 7,
+      "has_as_count": 3,
       "pragma_no_cover_count": 3,
       "blessed": true,
       "note": "Pure optional-import (ModuleNotFoundError spelling). Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
         "robot_sf/benchmark/parquet_export.py:20",
         "robot_sf/common/hardware.py:129",
+        "robot_sf/planner/learned_gmm_predictor.py:86",
         "robot_sf/planner/learned_short_horizon_predictor.py:424",
         "robot_sf/planner/social_navigation_pyenvs_force_model.py:39",
         "robot_sf/research/metadata.py:54",

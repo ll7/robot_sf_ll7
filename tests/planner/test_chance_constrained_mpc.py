@@ -220,6 +220,22 @@ def test_cvar_tail_risk_matches_mean_for_single_or_extreme_cell() -> None:
     assert planner._cvar_tail_risk(np.asarray([0.1, 0.7])) == pytest.approx(0.4)
 
 
+def test_cvar_tail_risk_includes_fractional_boundary_cell() -> None:
+    """Empirical CVaR must include a partial cell for a non-integer tail mass."""
+
+    planner = ChanceConstrainedMPCPlannerAdapter(
+        ChanceConstrainedMPCConfig(
+            chance_constraint_formulation="cvar_tail",
+            cvar_alpha=0.6,
+        ),
+        predictor=_FixedGmmPredictor(_forecast()),
+    )
+
+    # The worst 40% of four equally weighted cells has mass 1.6 cells:
+    # 0.6 + 0.6 * 0.4, divided by 1.6, equals 0.525.
+    assert planner._cvar_tail_risk(np.asarray([0.0, 0.2, 0.4, 0.6])) == pytest.approx(0.525)
+
+
 def test_cvar_tail_diagnostics_record_tail_bound_and_alpha() -> None:
     """The diagnostics surface the tail-risk bound and the configured CVaR alpha."""
 

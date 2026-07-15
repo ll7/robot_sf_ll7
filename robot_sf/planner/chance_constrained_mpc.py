@@ -99,8 +99,9 @@ class ChanceConstrainedMPCConfig(PredictionMPCConfig):
     max_collision_risk: float = 0.05
     # Conditional Value-at-Risk confidence for the cvar_tail tail-risk formulation
     # (issue #5307 Arm 4). The constraint bounds the expected collision risk in
-    # the worst (1 - cvar_alpha) fraction of the GMM forecast mass, instead of
-    # the Boole-union bound used by joint_horizon. Must lie in (0, 1).
+    # the worst (1 - cvar_alpha) fraction of the uniformly weighted
+    # pedestrian-timestep cell-risk distribution, instead of the Boole-union
+    # bound used by joint_horizon. Must lie in (0, 1).
     cvar_alpha: float = 0.9
     radial_quadrature_order: int = 6
     angular_quadrature_order: int = 16
@@ -237,10 +238,10 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
             # Conditional Value-at-Risk (tail-risk) formulation. Each
             # pedestrian-timestep pair carries a marginal collision-risk
             # estimate; the risk is the expected collision probability over the
-            # worst (1 - cvar_alpha) tail of those per-cell risks. The single
-            # non-linear constraint bounds that tail expectation by alpha, so the
-            # planner limits the *average* collision risk exactly where it is
-            # highest. This is a direct alternative to the Boole-union
+            # worst (1 - cvar_alpha) tail of the uniformly weighted cell-risk
+            # distribution. The single non-linear constraint bounds that tail
+            # expectation by alpha, so the planner limits the *average* collision
+            # risk exactly where it is highest. This is a direct alternative to the Boole-union
             # joint_horizon bound (issue #5307 Arm 4) and does not require a
             # cross-time covariance model.
             return np.asarray([alpha - self._cvar_tail_risk(risks.reshape(-1))], dtype=float)
@@ -249,15 +250,16 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         return np.asarray([alpha - float(np.sum(risks))], dtype=float)
 
     def _cvar_tail_risk(self, cell_risks: np.ndarray) -> float:
-        """Return the CVaR of per-cell collision risks above the ``cvar_alpha`` quantile.
+        """Return empirical CVaR for the uniformly weighted per-cell risks.
 
         Let ``r`` be the per-pedestrian-per-timestep marginal collision-risk
-        estimates.  The Value-at-Risk at confidence ``alpha = cvar_alpha`` is the
-        ``alpha``-quantile ``q`` of ``r``; the Conditional Value-at-Risk is the
-        mean of the risks that exceed ``q`` (the worst ``1 - alpha`` tail).  When
-        fewer than two cells exist, or ``alpha`` is extreme, the definition
-        degenerates to the ordinary mean, which keeps the constraint finite and
-        the solver well-posed.
+        estimates. The Conditional Value-at-Risk at confidence ``alpha`` is the
+        average of the worst ``(1 - alpha)`` probability mass. For a finite,
+        equally weighted cell sample, the boundary cell contributes fractionally
+        when that tail contains a non-integer number of cells. When fewer than
+        two cells exist, or ``alpha`` is extreme, the definition degenerates to
+        the ordinary mean, which keeps the constraint finite and the solver
+        well-posed.
 
         Args:
             cell_risks: Flat array of per-cell marginal collision-risk estimates
@@ -273,13 +275,19 @@ class ChanceConstrainedMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         alpha = float(self.chance_config.cvar_alpha)
         if risks.size == 1 or not 0.0 < alpha < 1.0:
             return float(np.mean(risks))
-        # Linear-interpolation quantile so the VaR boundary is well defined even
-        # when no cell risk falls exactly on the probability level.
-        quantile = np.quantile(risks, alpha)
-        tail = risks[risks >= quantile]
-        if tail.size == 0:
-            return float(quantile)
-        return float(np.mean(tail))
+        # Integrate the empirical upper tail directly. This preserves the
+        # fractional boundary cell when the tail mass is not an integer number
+        # of equally weighted cells; averaging only ``risks >= quantile`` would
+        # understate CVaR for those cases.
+        ordered = np.sort(risks)
+        tail_mass = (1.0 - alpha) * ordered.size
+        whole_cells = int(np.floor(tail_mass))
+        fractional_cell = tail_mass - whole_cells
+        tail_sum = float(np.sum(ordered[-whole_cells:])) if whole_cells else 0.0
+        if fractional_cell > 0.0:
+            boundary_index = ordered.size - whole_cells - 1
+            tail_sum += fractional_cell * float(ordered[boundary_index])
+        return float(tail_sum / tail_mass)
 
     def _marginal_collision_risks(
         self,

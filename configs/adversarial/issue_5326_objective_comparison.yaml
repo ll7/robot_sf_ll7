@@ -16,6 +16,7 @@ samplers:
   - random
   - coordinate
   - optuna
+  - cmaes
 reporting_contract:
   - objective
   - first_failure_iteration

@@ -40,6 +40,7 @@ from robot_sf.adversarial.runtime import (
     multi_ped_config_to_single_pedestrian_definitions,
 )
 from robot_sf.adversarial.samplers import (
+    CmaEsCandidateSampler,
     CoordinateRefinementSampler,
     OptunaCandidateSampler,
     RandomCandidateSampler,
@@ -1608,6 +1609,63 @@ def test_sampler_comparison_multi_objective(tmp_path: Path) -> None:
             objective_names=("worst_case_snqi", "worst_case_snqi"),
             synthetic=True,
         )
+
+
+def test_cmaes_sampler_respects_bounds_and_feeds_back(tmp_path: Path) -> None:
+    """The CMA-ES-class sampler proposes in-bounds candidates and accepts feedback."""
+    space = SearchSpaceConfig.from_file("configs/adversarial/crossing_ttc_space.yaml")
+    sampler = CmaEsCandidateSampler(space, seed=7)
+
+    candidates = [sampler.sample() for _ in range(8)]
+    for candidate in candidates:
+        errors = space.validate_candidate(candidate)
+        assert errors == [], f"CMA-ES proposal left the search space: {errors}"
+    for candidate in candidates:
+        sampler.observe(
+            CandidateEvaluation(
+                candidate=candidate,
+                certification_status=passed_status("synthetic comparison"),
+                objective_value=1.0 if candidate.start.x > 0 else 0.0,
+                failure_attribution=None,
+                episode_record_path=None,
+                trajectory_csv_path=None,
+                scenario_yaml_path=None,
+            )
+        )
+    next_candidate = sampler.sample()
+    assert space.validate_candidate(next_candidate) == []
+    assert isinstance(next_candidate, CandidateSpec)
+
+
+def test_sampler_comparison_runs_cmaes_class(tmp_path: Path) -> None:
+    """Issue #5326 CMA-ES-class search family must run and tag rows by sampler."""
+    template = tmp_path / "template.yaml"
+    search_space = tmp_path / "space.yaml"
+    _write_template(template)
+    _write_space(search_space)
+    config = SearchConfig.from_files(
+        policy="goal",
+        scenario_template=template,
+        search_space=search_space,
+        objective="worst_case_snqi",
+        output_dir=tmp_path / "comparison",
+        budget=4,
+        seed=23,
+    )
+
+    rows = run_sampler_comparison(
+        config=config,
+        sampler_names=("cmaes",),
+        objective_names=("worst_case_snqi",),
+        synthetic=True,
+    )
+
+    assert len(rows) == 1
+    assert rows[0].sampler == "cmaes"
+    assert rows[0].num_candidates == 4
+    assert Path(rows[0].manifest_path).exists()
+    assert rows[0].num_failed_evaluations == 0
+    assert rows[0].best_valid_objective is not None
 
 
 def test_issue_5326_objective_comparison_contract(tmp_path: Path) -> None:

@@ -234,6 +234,230 @@ def _import_optuna() -> Any:
         ) from exc
 
 
+def _import_cma() -> Any:
+    """Import the cma package or raise an actionable optional-dependency error."""
+    try:
+        return import_module("cma")
+    except ImportError as exc:
+        raise RuntimeError(
+            "CmaEsCandidateSampler requires cma. Install project dependencies with "
+            "`uv sync --all-extras` before using the optimizer-backed adversarial sampler."
+        ) from exc
+
+
+class CmaEsCandidateSampler:
+    """CMA-ES-class feedback sampler for bounded adversarial search pilots.
+
+    Covariance Matrix Adaptation Evolution Strategy (via the ``cma`` package)
+    over the continuous candidate dimensions. The discrete ``scenario_seed`` is
+    drawn per proposal from the seeded RNG. Implements the
+    ``FeedbackCandidateSampler`` contract so the sequential adversarial runner
+    can feed objective values back through ``observe`` without changing the
+    runner contract. Used by issue #5326 to cover the CMA-ES-class search family
+    required by the comparison scope.
+    """
+
+    _CONTINUOUS_DIMENSIONS = (
+        "start.x",
+        "start.y",
+        "goal.x",
+        "goal.y",
+        "spawn_time_s",
+        "pedestrian_speed_mps",
+        "pedestrian_delay_s",
+    )
+
+    def __init__(
+        self,
+        search_space: SearchSpaceConfig,
+        *,
+        seed: int,
+        sigma_fraction: float = 0.25,
+        popsize: int | None = None,
+    ) -> None:
+        """Initialize a CMA-ES strategy over the bounded continuous dimensions.
+
+        Degenerate (min == max) dimensions are held fixed at their midpoint and
+        excluded from the CMA-ES vector, so the sampler also works on the
+        fixed-range fixtures used by cheap-lane tests. The sequential adversarial
+        runner calls ``sample``/``observe`` one candidate at a time, so the
+        sampler buffers a full generation (CMA-ES population) internally and
+        feeds it back to the optimizer only once the whole generation has been
+        observed.
+        """
+        if not math.isfinite(sigma_fraction) or sigma_fraction <= 0.0:
+            raise ValueError("sigma_fraction must be finite and positive")
+        cma = _import_cma()
+        self._search_space = search_space
+        self._cma = cma
+        self._rng = Random(seed)
+        self._seed_rng = Random(seed ^ 0x9E3779B9)
+        self._pending: list[tuple[CandidateSpec, Any, list[float]]] = []
+        self._observed: list[tuple[Any, list[float], float]] = []
+
+        bounds = self._continuous_bounds()
+        self._active_dims = [
+            name for name in self._CONTINUOUS_DIMENSIONS if bounds[name][0] != bounds[name][1]
+        ]
+        self._fixed_values = {
+            name: 0.5 * (bounds[name][0] + bounds[name][1])
+            for name in self._CONTINUOUS_DIMENSIONS
+            if bounds[name][0] == bounds[name][1]
+        }
+        lower = [bounds[name][0] for name in self._active_dims]
+        upper = [bounds[name][1] for name in self._active_dims]
+        spans = [upper[i] - lower[i] for i in range(len(lower))]
+        max_span = max(spans) if spans else 1.0
+        x0 = [0.5 * (lower[i] + upper[i]) for i in range(len(lower))]
+        sigma0 = max(1e-3, sigma_fraction * max_span)
+        opts: dict[str, Any] = {
+            "bounds": [lower, upper],
+            "seed": int(seed),
+            "verbose": -9,
+        }
+        if popsize is not None:
+            if popsize < 1:
+                raise ValueError("popsize must be >= 1")
+            opts["popsize"] = int(popsize)
+        self._popsize = int(opts.get("popsize", 4 * len(lower) + 3)) if self._active_dims else 1
+        self._es = cma.CMAEvolutionStrategy(x0, sigma0, opts) if self._active_dims else None
+
+    def _continuous_bounds(self) -> dict[str, tuple[float, float]]:
+        """Return the (min, max) bound for each continuous candidate dimension."""
+        space = self._search_space
+        ranges: dict[str, RangeConfig] = {
+            "start.x": space.start_x,
+            "start.y": space.start_y,
+            "goal.x": space.goal_x,
+            "goal.y": space.goal_y,
+            "spawn_time_s": space.spawn_time_s,
+            "pedestrian_speed_mps": space.pedestrian_speed_mps,
+            "pedestrian_delay_s": space.pedestrian_delay_s,
+        }
+        return {name: (float(r.min), float(r.max)) for name, r in ranges.items()}
+
+    def _range_for(self, name: str) -> RangeConfig:
+        """Return the configured range for a continuous dimension name."""
+        space = self._search_space
+        ranges: dict[str, RangeConfig] = {
+            "start.x": space.start_x,
+            "start.y": space.start_y,
+            "goal.x": space.goal_x,
+            "goal.y": space.goal_y,
+            "spawn_time_s": space.spawn_time_s,
+            "pedestrian_speed_mps": space.pedestrian_speed_mps,
+            "pedestrian_delay_s": space.pedestrian_delay_s,
+        }
+        return ranges[name]
+
+    def _es_bounds(self) -> list[list[float]]:
+        """Return the [lower, upper] CMA-ES bounds for the active dimensions."""
+        bounds = self._continuous_bounds()
+        return [
+            [bounds[name][0] for name in self._active_dims],
+            [bounds[name][1] for name in self._active_dims],
+        ]
+
+    def _make_candidate(self, vec: list[float]) -> CandidateSpec:
+        """Build a candidate from an active-dimension vector plus fixed dims."""
+        values = dict(self._fixed_values)
+        for idx, name in enumerate(self._active_dims):
+            values[name] = float(self._clamp_range(self._range_for(name), vec[idx]))
+        return CandidateSpec(
+            start=Pose2D(values["start.x"], values["start.y"]),
+            goal=Pose2D(values["goal.x"], values["goal.y"]),
+            spawn_time_s=values["spawn_time_s"],
+            pedestrian_speed_mps=values["pedestrian_speed_mps"],
+            pedestrian_delay_s=values["pedestrian_delay_s"],
+            scenario_seed=self._seed_rng.randint(
+                int(self._search_space.scenario_seed.min),
+                int(self._search_space.scenario_seed.max),
+            ),
+        )
+
+    def sample(self) -> CandidateSpec:
+        """Return the next CMA-ES proposal within the configured bounds.
+
+        CMA-ES optimizes a whole population per generation. The sequential
+        runner asks for one candidate at a time, so the first ``sample`` of a
+        generation draws a full population and queues the rest; subsequent
+        ``sample`` calls drain the queue until the generation is exhausted.
+        """
+        if self._pending:
+            candidate, _es, _vec = self._pending.pop(0)
+            return candidate
+        if not self._active_dims:
+            candidate = CandidateSpec(
+                start=Pose2D(self._fixed_values["start.x"], self._fixed_values["start.y"]),
+                goal=Pose2D(self._fixed_values["goal.x"], self._fixed_values["goal.y"]),
+                spawn_time_s=self._fixed_values["spawn_time_s"],
+                pedestrian_speed_mps=self._fixed_values["pedestrian_speed_mps"],
+                pedestrian_delay_s=self._fixed_values["pedestrian_delay_s"],
+                scenario_seed=self._seed_rng.randint(
+                    int(self._search_space.scenario_seed.min),
+                    int(self._search_space.scenario_seed.max),
+                ),
+            )
+            self._pending.append((candidate, None, []))
+            return candidate
+        if self._es.stop():
+            best = self._es.result.xbest if self._es.result.xbest is not None else self._es.mean
+            self._es = self._cma.CMAEvolutionStrategy(
+                best,
+                max(1e-3, self._es.sigma * 0.5),
+                {
+                    "bounds": self._es_bounds(),
+                    "seed": int(self._rng.randint(0, 2**31 - 1)),
+                    "verbose": -9,
+                },
+            )
+        population = self._es.ask(self._popsize)
+        queued = [(self._make_candidate(list(vec)), self._es, list(vec)) for vec in population]
+        self._pending.extend(queued)
+        candidate, _es, _vec = self._pending.pop(0)
+        return candidate
+
+    @staticmethod
+    def _clamp_range(bounds: RangeConfig, value: float) -> float:
+        """Clamp a CMA-ES proposal into the inclusive range."""
+        return min(float(bounds.max), max(float(bounds.min), float(value)))
+
+    def observe(self, evaluation: CandidateEvaluation) -> None:
+        """Return objective feedback for one observed candidate.
+
+        Scores are buffered until the entire current generation has been
+        observed, then fed to the optimizer in one ``tell`` call (CMA-ES
+        requires a full population per generation). Degenerate fixed-range
+        spaces skip optimization entirely.
+        """
+        if not self._active_dims:
+            for index, (candidate, _es, _vec) in enumerate(self._pending):
+                if candidate == evaluation.candidate:
+                    self._pending.pop(index)
+                    return
+            return
+        for index, (candidate, es, vec) in enumerate(self._pending):
+            if candidate == evaluation.candidate:
+                self._pending.pop(index)
+                score = evaluation.objective_value
+                value = float(score) if score is not None and math.isfinite(float(score)) else -1e9
+                self._observed.append((es, list(vec), value))
+                if not self._pending:
+                    self._flush_generation()
+                return
+
+    def _flush_generation(self) -> None:
+        """Feed the buffered generation to CMA-ES once it is fully observed."""
+        generations = {}
+        for es, vec, value in self._observed:
+            generations.setdefault(es, ([], []))
+            generations[es][0].append(vec)
+            generations[es][1].append(value)
+        for es, (vectors, values) in generations.items():
+            es.tell(vectors, values)
+        self._observed = []
+
+
 def _suggest_float(trial: Any, name: str, bounds: RangeConfig) -> float:
     """Suggest a float while supporting degenerate fixed ranges."""
     if bounds.min == bounds.max:

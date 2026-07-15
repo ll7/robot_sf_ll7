@@ -238,11 +238,17 @@ def test_issue_5326_canonical_example_command_emits_durable_table(tmp_path: Path
     copy and asserts both the JSON report and the markdown table are written with both
     objectives, the stop-rule decision, and signed-property annotations.
     """
-    # 5326 manifest reuses the same scenario/search-space/template assets as 3079.
-    shutil.copy2(
-        REPO_ROOT / "configs/adversarial/issue_5326_objective_comparison.yaml",
-        tmp_path / "configs/adversarial/issue_5326_objective_comparison.yaml",
-    )
+    # 5326 manifest references scenario-template / search-space assets relative to
+    # --repo-root; stage a repo-shaped fixture so the canonical command runs CPU-synthetic.
+    for relative_path in (
+        "configs/adversarial/issue_5326_objective_comparison.yaml",
+        "configs/adversarial/crossing_ttc_space.yaml",
+        "configs/scenarios/templates/crossing_ttc.yaml",
+    ):
+        source = REPO_ROOT / relative_path
+        target = tmp_path / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
     report_json = tmp_path / "out/report.json"
     table_md = tmp_path / "out/comparison_table.md"
 
@@ -253,6 +259,7 @@ def test_issue_5326_canonical_example_command_emits_durable_table(tmp_path: Path
         "configs/adversarial/issue_5326_objective_comparison.yaml",
         "--repo-root",
         str(tmp_path),
+        "--synthetic",
         "--out-json",
         str(report_json),
         "--out-md",

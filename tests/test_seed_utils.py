@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import random
+import subprocess
 import sys
+from importlib.metadata import PackageNotFoundError
 
 import pytest
 
@@ -98,6 +101,39 @@ def test_torch_213_runtime_guard_disables_compile_wrapper(monkeypatch):
     assert seed_module._configure_torch_213_runtime()
     assert imported == ["triton"]
     assert os.environ["TORCH_COMPILE_DISABLE"] == "1"
+
+
+def test_model_package_preloads_torch_runtime_before_direct_ppo_import():
+    """Keep model resolution safe for callers that import SB3 immediately afterward."""
+    try:
+        version = seed_module.package_version("torch")
+    except PackageNotFoundError:
+        pytest.skip("Torch is not installed")
+    if sys.version_info[:2] < (3, 12) or not str(version).split("+", 1)[0].startswith("2.13.0"):
+        pytest.skip("the model-import boundary guard only applies to Torch 2.13/Python 3.12+")
+    if importlib.util.find_spec("stable_baselines3") is None:
+        pytest.skip("Stable-Baselines3 is not installed")
+
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import gymnasium as gym; import os, sys, importlib.util; import robot_sf.models; "
+                "assert os.environ.get('TORCH_COMPILE_DISABLE') == '1'; "
+                "assert importlib.util.find_spec('triton') is None or 'triton' in sys.modules; "
+                "from stable_baselines3 import PPO; "
+                "env = gym.make('CartPole-v1'); "
+                "model = PPO('MlpPolicy', env, n_steps=8, batch_size=4, device='cpu'); "
+                "assert model.policy.optimizer is not None; env.close()"
+            ),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert probe.returncode == 0, probe.stderr
 
 
 def test_torch_213_runtime_guard_is_limited_to_supported_versions(monkeypatch):

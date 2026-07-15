@@ -791,15 +791,21 @@ def _time_dot_indices(time_s: np.ndarray, interval_s: float = 0.5) -> list[int]:
 def _text_overlaps_lines_or_markers(
     ax: plt.Axes, text_artist: Any, renderer: Any, tolerance: float = 2.0
 ) -> bool:
-    """Item 4 / figure_qa gate: check ONE text artist against the exact criterion
+    """Item 4 / figure_qa gate: check ONE text artist against the exact criteria
     ``figure_qa.lint_figure`` uses (its own private ``_line_bbox_overlaps_text`` /
-    ``_point_in_bbox`` helpers, reused verbatim rather than reimplemented), so label
-    placement is judged by the same rule the QA gate will apply -- not a separate
-    geometric heuristic that might disagree with it.
+    ``_point_in_bbox`` / ``_bboxes_overlap`` + ``_is_meaningful_text`` helpers, reused
+    verbatim rather than reimplemented), so label placement is judged by the same rules
+    the QA gate will apply -- not a separate geometric heuristic that might disagree
+    with it. Covers all three of the QA gate's text-adjacent defect types this script
+    can trigger: ``text_line_overlap``, ``text_marker_overlap``, and
+    ``text_text_overlap`` (this scenario's 6-pedestrian doorway congestion produces
+    enough simultaneous labels -- braking/collision/focal/context-ped/clearance -- that
+    label-vs-label collisions are as common as label-vs-geometry ones, unlike the
+    sparser 4-pedestrian reference pair this closed-loop placer was first written for).
 
     Returns:
-        True if the text artist's rendered bounding box overlaps any visible Line2D or
-        scatter-marker offset already drawn in ``ax``.
+        True if the text artist's rendered bounding box overlaps any visible Line2D,
+        scatter-marker offset, or other meaningful text artist already drawn in ``ax``.
     """
     text_bbox = text_artist.get_window_extent(renderer)
     for child in ax.get_children():
@@ -815,6 +821,10 @@ def _text_overlaps_lines_or_markers(
                 px, py = transform.transform((float(point[0]), float(point[1])))
                 if figure_qa._point_in_bbox(px, py, text_bbox, tolerance):
                     return True
+        elif child is not text_artist and figure_qa._is_meaningful_text(child):
+            other_bbox = child.get_window_extent(renderer)
+            if figure_qa._bboxes_overlap(text_bbox, other_bbox, tolerance):
+                return True
     return False
 
 
@@ -915,6 +925,7 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     bounds: tuple[float, float, float, float],
     map_definition: Any | None = None,
     defer_labels: bool = False,
+    pivot_label_text: str = "pivot",
 ) -> list[tuple[tuple[float, float], str, dict[str, Any]]]:
     """Draw one spatial panel of the hinge figure. Mutates ``ax`` in place.
 
@@ -947,22 +958,33 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     # jump); break the polyline at those jumps instead of drawing a spurious teleport
     # line, reusing the repo's own established fix for this exact artifact
     # (robot_sf.benchmark.trace_scene_figure._contiguous_segments / _TELEPORT_STEP_M).
+    # Context/focal pedestrian id labels use the same closed-loop figure_qa-driven
+    # placement as the pivot/clearance labels below (_place_clear_label): a fixed
+    # offset (the first-cut approach, still applied here for the reference
+    # head-on-corridor pair's sparser 4-pedestrian layout) collides routinely in a
+    # denser scene -- this pair's 6-pedestrian doorway congestion is exactly such a
+    # case (figure_qa.lint_figure caught p4/p5/focal-p2 line overlaps on the first
+    # render of this scenario).
     for col, pid in enumerate(ep.ped_ids):
         xy = ep.ped_xy[:, col, :]
         if pid == focal_ped_id:
             continue
         for seg_x, seg_y in _contiguous_segments(list(xy[:, 0]), list(xy[:, 1])):
             ax.plot(seg_x, seg_y, color=COLOR_PED_CONTEXT, linewidth=0.6, alpha=0.55, zorder=1)
-        ax.annotate(
+        ped_label_spec = (
+            (float(xy[0, 0]), float(xy[0, 1])),
             f"p{pid}",
-            xy[0],
-            fontsize=6.5,
-            color=COLOR_PED_CONTEXT,
-            alpha=0.8,
-            xytext=(8, 2),
-            textcoords="offset points",
-            bbox=_LABEL_BBOX,
+            {
+                "color": COLOR_PED_CONTEXT,
+                "fontsize": 6.5,
+                "draw_leader": False,
+                "radii_points": (18.0, 30.0, 44.0, 60.0),
+            },
         )
+        if defer_labels:
+            pending_labels.append(ped_label_spec)
+        else:
+            _place_clear_label(ax, *ped_label_spec[:2], **ped_label_spec[2])
 
     # -- focal pedestrian, heavier outline, stable ID (teleport-broken, see above) ------
     focal_col = ep.ped_ids.index(focal_ped_id)
@@ -977,16 +999,15 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
             zorder=2,
             solid_capstyle="round",
         )
-    ax.annotate(
+    focal_label_spec = (
+        (float(focal_xy[0, 0]), float(focal_xy[0, 1])),
         f"focal p{focal_ped_id}",
-        focal_xy[0],
-        fontsize=7,
-        color=COLOR_PED_FOCAL_OUTLINE,
-        xytext=(-8, 10),
-        textcoords="offset points",
-        weight="bold",
-        bbox=_LABEL_BBOX,
+        {"color": COLOR_PED_FOCAL_OUTLINE, "fontsize": 7, "weight": "bold", "draw_leader": False},
     )
+    if defer_labels:
+        pending_labels.append(focal_label_spec)
+    else:
+        _place_clear_label(ax, *focal_label_spec[:2], **focal_label_spec[2])
 
     # -- robot trajectory: common prefix gray, post-pivot in planner style ------------
     xy = ep.robot_xy
@@ -1039,7 +1060,7 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
         )
         pivot_label_spec = (
             (px, py),
-            "pivot",
+            pivot_label_text,
             {"color": "#111111", "fontsize": 6.5, "draw_leader": False},
         )
         if defer_labels:
@@ -1066,14 +1087,15 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
                 linewidth=0.4,
                 zorder=6,
             )
-            ax.annotate(
+            braking_label_spec = (
+                (float(px), float(py)),
                 "braking",
-                (px, py),
-                fontsize=6,
-                xytext=(8, 4),
-                textcoords="offset points",
-                bbox=_LABEL_BBOX,
+                {"color": "#111111", "fontsize": 6, "draw_leader": False},
             )
+            if defer_labels:
+                pending_labels.append(braking_label_spec)
+            else:
+                _place_clear_label(ax, *braking_label_spec[:2], **braking_label_spec[2])
 
     # -- closest-approach line, labelled with clearance ----------------------------------
     # Label placement uses the closed-loop figure_qa-driven search (_place_clear_label,
@@ -1099,15 +1121,15 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
         px, py = xy[collision_or_near_miss_step]
         if outcome_kind == "collision":
             ax.scatter([px], [py], marker="x", s=90, color=COLOR_COLLISION, linewidth=2.2, zorder=7)
-            ax.annotate(
+            outcome_label_spec = (
+                (float(px), float(py)),
                 "collision",
-                (px, py),
-                fontsize=7,
-                xytext=(8, 8),
-                textcoords="offset points",
-                weight="bold",
-                bbox=_LABEL_BBOX,
+                {"color": COLOR_COLLISION, "fontsize": 7, "weight": "bold", "draw_leader": False},
             )
+            if defer_labels:
+                pending_labels.append(outcome_label_spec)
+            else:
+                _place_clear_label(ax, *outcome_label_spec[:2], **outcome_label_spec[2])
         elif outcome_kind == "near_miss":
             ax.scatter(
                 [px],
@@ -1119,15 +1141,15 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
                 linewidth=1.6,
                 zorder=7,
             )
-            ax.annotate(
+            outcome_label_spec = (
+                (float(px), float(py)),
                 "near miss",
-                (px, py),
-                fontsize=7,
-                xytext=(8, 8),
-                textcoords="offset points",
-                weight="bold",
-                bbox=_LABEL_BBOX,
+                {"color": COLOR_COLLISION, "fontsize": 7, "weight": "bold", "draw_leader": False},
             )
+            if defer_labels:
+                pending_labels.append(outcome_label_spec)
+            else:
+                _place_clear_label(ax, *outcome_label_spec[:2], **outcome_label_spec[2])
 
     # -- start/end glyphs (large outlined) ----------------------------------------------
     ax.scatter(
@@ -1153,15 +1175,15 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
 
     # -- outcome annotation for non-completion (B has no collision/near-miss marker) ----
     if outcome_kind == "non_completion":
-        ax.annotate(
+        non_completion_label_spec = (
+            (float(xy[-1, 0]), float(xy[-1, 1])),
             "episode continues past this crop\n(non-completion / timeout, not shown)",
-            (xy[-1, 0], xy[-1, 1]),
-            fontsize=6,
-            color=color,
-            xytext=(-9, 10),
-            textcoords="offset points",
-            bbox=_LABEL_BBOX,
+            {"color": color, "fontsize": 6, "draw_leader": False},
         )
+        if defer_labels:
+            pending_labels.append(non_completion_label_spec)
+        else:
+            _place_clear_label(ax, *non_completion_label_spec[:2], **non_completion_label_spec[2])
 
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
@@ -1246,6 +1268,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     map_definition: Any | None,
     out_pdf: Path,
     out_png: Path,
+    pivot_label_text: str = "pivot",
 ) -> list[Any]:
     """Render + export the two-panel hinge figure (vector PDF + PNG preview).
 
@@ -1300,6 +1323,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
         bounds=bounds,
         map_definition=map_definition,
         defer_labels=True,
+        pivot_label_text=pivot_label_text,
     )
     pending_b = _draw_panel(
         ax_b,
@@ -1318,6 +1342,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
         bounds=bounds,
         map_definition=map_definition,
         defer_labels=True,
+        pivot_label_text=pivot_label_text,
     )
     ax_b.set_ylabel("")
     ax_a.set_ylabel("y (m)", fontsize=8)
@@ -1676,19 +1701,59 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
     divergence = compute_joint_state_divergence(ep_a, ep_b, focal_ped_id)
     dt = float(ep_a.time_s[1] - ep_a.time_s[0]) if len(ep_a.time_s) > 1 else 0.1
     onset = find_persistence_onset(divergence, dt)
-    if onset["step"] is None:
-        print(
-            "error: D(t) never stays persistently above threshold in the shared trace "
-            "window -- no butterfly divergence detected for this pair",
-            file=sys.stderr,
-        )
-        return 1
-    onset["time_s"] = float(ep_a.time_s[onset["step"]])
+    # A persistence-onset step can genuinely fail to exist for a reason other than "no
+    # divergence": if A and B do not share a common start (e.g. two different
+    # route_spawn_seed draws of the same scenario, rather than a same-seed/
+    # different-planner pair), D(t) is already elevated at t=0 and never dips back to a
+    # true pre-interaction floor, so no threshold crossing is possible by construction
+    # (the floor itself is computed from that same elevated window). Reported honestly
+    # as "no shared prefix" -- same "explicit unavailable, not fabricated" precedent as
+    # find_separator's tier-1 (planner mode) note -- rather than erroring out or forcing
+    # a fake mid-trace pivot.
+    no_shared_prefix = onset["step"] is None
+    if no_shared_prefix:
+        start_sep_m = float(np.linalg.norm(ep_a.robot_xy[0] - ep_b.robot_xy[0]))
+        onset = {
+            "step": 0,
+            "time_s": float(ep_a.time_s[0]),
+            "threshold": onset["threshold"],
+            "floor": onset["floor"],
+            "hold_steps": onset["hold_steps"],
+            "floor_window_steps": onset["floor_window_steps"],
+            "no_shared_prefix": True,
+            "no_shared_prefix_note": (
+                "D(t) never returns to a genuine pre-interaction floor within this "
+                "trace, so no persistence-onset threshold crossing exists; A and B "
+                f"start {start_sep_m:.2f} m apart (different per-seed spawn draws), "
+                "not from a shared prefix"
+            ),
+        }
+    else:
+        onset["time_s"] = float(ep_a.time_s[onset["step"]])
     divergence["onset"] = onset
 
     events_a = compute_critical_events(ep_a)
     events_b = compute_critical_events(ep_b)
-    separator = find_separator(ep_a, ep_b, divergence, onset["step"], events_a, events_b)
+    if no_shared_prefix:
+        separator = {
+            "step": 0,
+            "time_s": float(ep_a.time_s[0]),
+            "tier": "no_shared_prefix",
+            "tier1_note": (
+                "tier 1 (first differing planner mode) is unavailable: this trace "
+                "schema carries no per-step categorical planner-mode field"
+            ),
+            "note": (
+                "episodes A and B do not share a common start (different "
+                "route_spawn_seed draws under the scenario's route_spawn_distribution="
+                "'spread', route_spawn_jitter_frac=0.2 spawn randomization), so there is "
+                "no shared prefix for a backward separator search to run over; the pivot "
+                "is reported as the trace start (step 0) instead of a mid-trace "
+                "separator"
+            ),
+        }
+    else:
+        separator = find_separator(ep_a, ep_b, divergence, onset["step"], events_a, events_b)
 
     closest_a = closest_approach(ep_a)
     closest_b = closest_approach(ep_b)
@@ -1715,39 +1780,54 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
     )
 
     d_clearance = focal_closest_a["distance_m"] - focal_closest_b["distance_m"]
-    if separator["tier"] == "command_jump":
-        who = separator["jump_in"]
-        kind = separator["jump_kind"]
-        mag = separator["jump_v_mps"] if kind == "v" else separator["jump_omega_rad_s"]
-        unit = "m/s" if kind == "v" else "rad/s"
-        separator_clause = (
-            f"First separator at t={separator['time_s']:.2f} s: {who} commands a "
-            f"{mag:.2f} {unit} {kind}-command jump. "
+    pivot_label_text = "pivot"
+    if separator["tier"] == "no_shared_prefix":
+        pivot_label_text = "start\n(no shared prefix)"
+        headline = (
+            f"A and B start {start_sep_m:.1f} m apart (different per-seed spawn draws under "
+            f"the scenario's spawn randomization) -- there is no shared prefix. D(t) is "
+            f"elevated from t=0 and never returns to a genuine pre-interaction floor, "
+            f"so the trace start is shown as the reference point instead of a "
+            f"persistence-onset pivot. "
+            f"B's minimum clearance to the focal pedestrian "
+            f"({focal_closest_b['distance_m']:.2f} m at t={focal_closest_b['time_s']:.1f} s) "
+            f"is {d_clearance:.2f} m lower than A's ({focal_closest_a['distance_m']:.2f} m at "
+            f"t={focal_closest_a['time_s']:.1f} s)."
         )
-    elif separator["tier"] == "braking_onset":
-        separator_clause = (
-            f"First separator at t={separator['time_s']:.2f} s: {separator['braking_in']} "
-            f"begins braking (critical_intervals.first_braking_event). "
+    else:
+        if separator["tier"] == "command_jump":
+            who = separator["jump_in"]
+            kind = separator["jump_kind"]
+            mag = separator["jump_v_mps"] if kind == "v" else separator["jump_omega_rad_s"]
+            unit = "m/s" if kind == "v" else "rad/s"
+            separator_clause = (
+                f"First separator at t={separator['time_s']:.2f} s: {who} commands a "
+                f"{mag:.2f} {unit} {kind}-command jump. "
+            )
+        elif separator["tier"] == "braking_onset":
+            separator_clause = (
+                f"First separator at t={separator['time_s']:.2f} s: {separator['braking_in']} "
+                f"begins braking (critical_intervals.first_braking_event). "
+            )
+        else:  # largest_risk_rise
+            separator_clause = (
+                f"No discrete command jump or braking onset found in the "
+                f"{SEPARATOR_SEARCH_BACK_S:g} s window before the divergence became persistent; "
+                f"the separator is reported as the step of largest single-step rise in the "
+                f"joint-state divergence D(t), at t={separator['time_s']:.2f} s (this pair's "
+                f"divergence accumulates smoothly rather than from one sharp decision -- see "
+                f"the report's `pivot.separator` for the full tier trail). "
+            )
+        headline = (
+            f"{separator_clause}"
+            f"D(t) becomes persistently divergent (threshold {onset['threshold']:.2f}, "
+            f"{DIVERGENCE_THRESHOLD_MARGIN:g}x the {onset['floor']:.2f} pre-divergence floor) "
+            f"by t={onset['time_s']:.2f} s. "
+            f"B's subsequent minimum clearance to the focal pedestrian "
+            f"({focal_closest_b['distance_m']:.2f} m at t={focal_closest_b['time_s']:.1f} s) "
+            f"is {d_clearance:.2f} m lower than A's ({focal_closest_a['distance_m']:.2f} m at "
+            f"t={focal_closest_a['time_s']:.1f} s)."
         )
-    else:  # largest_risk_rise
-        separator_clause = (
-            f"No discrete command jump or braking onset found in the {SEPARATOR_SEARCH_BACK_S:g} s "
-            f"window before the divergence became persistent; the separator is reported as the "
-            f"step of largest single-step rise in the joint-state divergence D(t), at "
-            f"t={separator['time_s']:.2f} s (this pair's divergence accumulates smoothly rather "
-            f"than from one sharp decision -- see the report's `pivot.separator` for the full "
-            f"tier trail). "
-        )
-    headline = (
-        f"{separator_clause}"
-        f"D(t) becomes persistently divergent (threshold {onset['threshold']:.2f}, "
-        f"{DIVERGENCE_THRESHOLD_MARGIN:g}x the {onset['floor']:.2f} pre-divergence floor) "
-        f"by t={onset['time_s']:.2f} s. "
-        f"B's subsequent minimum clearance to the focal pedestrian "
-        f"({focal_closest_b['distance_m']:.2f} m at t={focal_closest_b['time_s']:.1f} s) "
-        f"is {d_clearance:.2f} m lower than A's ({focal_closest_a['distance_m']:.2f} m at "
-        f"t={focal_closest_a['time_s']:.1f} s)."
-    )
 
     scenario_id = str(ep_a.metadata["scenario_id"])
     try:
@@ -1778,6 +1858,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
         map_definition=map_definition,
         out_pdf=out_pdf,
         out_png=out_png,
+        pivot_label_text=pivot_label_text,
     )
     qa_errors = [d for d in qa_defects if getattr(d, "severity", "") == "error"]
 

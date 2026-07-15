@@ -19,11 +19,22 @@
 
 set -euo pipefail
 
-DRY_RUN="${1:-}"
+if [[ "$#" -gt 1 || ( "$#" -eq 1 && "$1" != "--dry-run" ) ]]; then
+    echo "Usage: $0 [--dry-run]" >&2
+    exit 2
+fi
+
+DRY_RUN=false
+if [[ "${1:-}" == "--dry-run" ]]; then
+    DRY_RUN=true
+fi
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 CONFIG_PATH="${REPO_ROOT}/configs/adversarial/issue_5326_objective_comparison.yaml"
 OUTPUT_DIR="${REPO_ROOT}/output/adversarial/issue_5326_objective_comparison"
 RUNNER="${REPO_ROOT}/scripts/tools/compare_adversarial_samplers.py"
+
+cd "${REPO_ROOT}"
 
 if [[ ! -f "${CONFIG_PATH}" ]]; then
     echo "ERROR: Config not found: ${CONFIG_PATH}" >&2
@@ -36,7 +47,6 @@ if [[ ! -f "${RUNNER}" ]]; then
 fi
 
 # SLURM parameters tuned for adversarial search campaigns
-# Each job runs one objective-sampler-budget-seed combination
 SLURM_TIME="4:00:00"
 SLURM_MEM="8G"
 SLURM_CPUS="4"
@@ -44,15 +54,15 @@ SLURM_PARTITION="gpu"
 
 COMMAND=(
     "uv" "run" "python" "${RUNNER}"
-    "--objective" "worst_case_snqi"
-    "--objective" "temporal_robustness"
-    "--package-b-budget-grid"
-    "--seed" "1101" "--seed" "2202" "--seed" "3303"
-    "--output-dir" "${OUTPUT_DIR}"
+    "--manifest" "${CONFIG_PATH}"
+    "--repo-root" "${REPO_ROOT}"
     "--out-json" "${OUTPUT_DIR}/report.json"
+    "--out-md" "${OUTPUT_DIR}/comparison_table.md"
 )
 
-if [[ -n "${DRY_RUN}" ]]; then
+printf -v COMMAND_TEXT '%q ' "${COMMAND[@]}"
+
+if [[ "${DRY_RUN}" == true ]]; then
     echo "=== DRY RUN MODE ==="
     echo "Config: ${CONFIG_PATH}"
     echo "Output: ${OUTPUT_DIR}"
@@ -64,9 +74,9 @@ if [[ -n "${DRY_RUN}" ]]; then
     exit 0
 fi
 
-# Submit as SLURM job array
-# Each array element handles one objective-sampler-budget-seed tuple
-# For simplicity, submit as single job that runs full grid
+mkdir -p "${OUTPUT_DIR}"
+
+# Submit one SLURM job that runs the full objective/sampler/budget/seed grid.
 sbatch <<SLURM_EOF
 #!/bin/bash
 #SBATCH --job-name=issue_5326_obj_cmp
@@ -85,7 +95,7 @@ echo "Config: ${CONFIG_PATH}"
 echo "Output: ${OUTPUT_DIR}"
 echo "Started at: \$(date -Iseconds)"
 
-"${COMMAND[@]}"
+${COMMAND_TEXT}
 
 echo "Completed at: \$(date -Iseconds)"
 SLURM_EOF

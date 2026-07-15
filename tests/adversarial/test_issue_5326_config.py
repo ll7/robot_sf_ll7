@@ -194,5 +194,24 @@ class TestIssue5326ConfigValidation:
 
         assert result.returncode == 0, f"Script failed: {result.stderr}"
         assert "DRY RUN MODE" in result.stdout
-        assert "temporal_robustness" in result.stdout
-        assert "worst_case_snqi" in result.stdout
+        assert "--manifest" in result.stdout
+        assert str(repo_root / "configs/adversarial/issue_5326_objective_comparison.yaml") in (
+            result.stdout
+        )
+        assert "--out-md" in result.stdout
+
+    def test_submission_script_rejects_unknown_argument(self, repo_root: Path) -> None:
+        """Verify typos cannot silently turn a real submission into a dry run."""
+        submission_script = repo_root / "scripts" / "benchmark" / "submit_issue_5326_campaign.sh"
+
+        result = subprocess.run(
+            [str(submission_script), "--not-a-real-option"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        assert "Usage:" in result.stderr

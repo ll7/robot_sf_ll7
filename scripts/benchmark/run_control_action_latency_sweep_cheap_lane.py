@@ -1,15 +1,29 @@
 #!/usr/bin/env python3
 """Cheap-lane CPU execution of the control-action-latency fidelity sweep (issue #5034).
 
-This is the EXECUTION step that prior PRs (#5061, #5085, #5536, #5620, #5629) left
-un-done: they built the fail-closed preflight, the durable evidence promoter, the
-fixed-scope launch plan, and the coverage/reconciliation gate, but none of them ran
-a single real latency episode. The full 7,344-episode fixed-scope campaign requires
-the native ORCA/hybrid planner set and Slurm capacity, which the cheap lane must not
-use. This script instead executes REAL Robot SF simulator episodes on CPU for the two
-dependency-free native planners (``goal_seek``, ``baseline_social_force``) on the
-``control_action_latency`` axis only (0/1/3 steps, the 0/100/300 ms-equivalent
-delays), and writes raw episode rows the durable promoter consumes.
+This is the EXECUTION step that prior PRs (#5061, #5085, #5536, #5620, #5629, #5648)
+progressively built up: the fail-closed preflight, the durable evidence promoter, the
+fixed-scope launch plan, the coverage/reconciliation gate, and a first 36-row CPU
+slice over the two always-dependency-free planners. The full 7,344-episode
+fixed-scope campaign (all 48 scenarios x all planner groups x all seeds) is a
+long-running campaign the cheap lane does not launch.
+
+This script executes REAL Robot SF simulator episodes on CPU for *all* native,
+CPU-runnable planner groups on the ``control_action_latency`` axis only (0/1/3 steps,
+the 0/100/300 ms-equivalent delays), and writes raw episode rows the durable
+promoter consumes. The native planner groups are:
+
+- ``goal_seek`` and ``baseline_social_force``: always dependency-free (pure Python).
+- ``orca``: native on CPU through the ``rvo2`` C extension; fail-closed when ``rvo2``
+  is not importable (never silently falls back to a heuristic ORCA).
+- ``hybrid_rule_v0_minimal``: pure-Python rule planner; gated by the existing
+  ``allow_testing_algorithms`` opt-in flag in ``configs/algos/hybrid_rule_v0_minimal.yaml``.
+
+The ORCA and hybrid groups were previously treated as out of cheap-lane reach, but
+on a CPU-capable host with ``rvo2`` installed both run natively in well under a second
+per episode; neither requires Slurm, GPU, or any degraded/fallback path. Adding their
+native latency rows is genuine new evidence toward issue #5034's fixed scope, not a
+readiness/decision packet.
 
 It calls the existing :func:`run_episode` in
 ``scripts/benchmark/run_fidelity_sensitivity_campaign.py`` so the emitted row shape is
@@ -19,7 +33,8 @@ from the env ``reset``). No new row schema, no new planner path.
 
 This is a conservative, fail-closed CPU slice. It:
 - runs only the latency axis (never silently sweeps other fidelity axes);
-- runs only planners with a native, dependency-free runner binding;
+- runs only native planner groups whose runtime is actually importable on this host
+  (capability-guarded, not just name-allowlisted), and rejects everything else;
 - writes raw rows under ``output/`` (gitignored) for durable promotion downstream;
 - makes NO benchmark / simulator-realism / sim-to-real / paper-facing claim.
 """
@@ -45,15 +60,54 @@ DEFAULT_CONFIG = "configs/research/fidelity_sensitivity_v1.yaml"
 DEFAULT_SCENARIO_SET = "configs/scenarios/sets/issue_5034_latency_sweep_cpu_v1.yaml"
 DEFAULT_RAW_ROOT = "output/fidelity_latency_raw"
 LATENCY_AXIS_KEY = "control_action_latency"
-#: Dependency-free native planners the cheap-lane CPU slice may execute.
-NATIVE_CPU_PLANNERS = ("goal_seek", "baseline_social_force")
+#: Native CPU-runnable planner groups the cheap-lane slice may execute. ``orca`` is
+#: native through the optional ``rvo2`` C extension; ``hybrid_rule_v0_minimal`` is
+#: pure Python but gated by an opt-in flag. Neither requires Slurm or GPU.
+NATIVE_CPU_PLANNERS = (
+    "goal_seek",
+    "baseline_social_force",
+    "orca",
+    "hybrid_rule_v0_minimal",
+)
+#: Native planners whose runtime is an importable optional dependency. Each maps to a
+#: cheap boolean probe so the slice fails closed (rather than silently dropping) when a
+#: planner's native runtime is absent on the host.
+_RUNTIME_OPTIONAL_PLANNERS = {"orca": "rvo2"}
 CLAIM_BOUNDARY = (
     "cheap-lane cpu latency-sweep slice only: executes real Robot SF episodes for the "
-    "control_action_latency axis (0/1/3 steps) on the two dependency-free native planners. "
-    "It is a bounded CPU slice of issue #5034, not the full fixed-scope campaign (native "
-    "ORCA/hybrid planners + Slurm), not simulator-realism evidence, not sim-to-real evidence, "
-    "and not paper-facing evidence."
+    "control_action_latency axis (0/1/3 steps) on the native CPU-runnable planner groups "
+    "(goal_seek, baseline_social_force, orca via rvo2, hybrid_rule_v0_minimal). It is a "
+    "bounded CPU slice of issue #5034, not the full 7,344-episode fixed-scope campaign, "
+    "not simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence."
 )
+
+
+def _runtime_module_importable(module_name: str) -> bool:
+    """Return ``True`` when an optional runtime module imports cleanly.
+
+    Used as a capability probe so the cheap-lane slice can include native planners
+    backed by optional C extensions (e.g. ``rvo2`` for ORCA) exactly when they are
+    present, and fail closed with a precise reason when they are not.
+    """
+    try:
+        __import__(module_name)
+    except (ImportError, OSError):
+        return False
+    return True
+
+
+def _native_runtime_available(planner: str) -> bool:
+    """Return ``True`` when a native planner's runtime is usable on this host.
+
+    Planners with no optional runtime dependency (``goal_seek``,
+    ``baseline_social_force``, ``hybrid_rule_v0_minimal``) are always available on a
+    CPU-capable host. Planners backed by an optional module are available only when
+    that module imports.
+    """
+    required = _RUNTIME_OPTIONAL_PLANNERS.get(planner)
+    if required is None:
+        return True
+    return _runtime_module_importable(required)
 
 
 def _load_campaign_runner() -> ModuleType:
@@ -93,10 +147,11 @@ def run_sweep(
 ) -> list[dict[str, Any]]:
     """Execute real latency-axis episodes for each native planner and seed.
 
-    Only dependency-free native planners are accepted. Any planner name outside
-    ``NATIVE_CPU_PLANNERS`` is rejected so the cheap-lane slice fails closed rather
-    than silently narrowing a requested campaign that needs the native ORCA/hybrid
-    runtime or Slurm capacity.
+    Only native CPU-runnable planner groups are accepted, and only when their runtime
+    is actually importable on this host. Any planner name outside
+    ``NATIVE_CPU_PLANNERS`` is rejected, as is any native planner whose optional
+    runtime is missing (e.g. ``orca`` without ``rvo2``), so the cheap-lane slice fails
+    closed rather than silently narrowing or falling back to a degraded path.
     """
     runner = _load_campaign_runner()
     variants = _latency_variants(config)
@@ -104,6 +159,10 @@ def run_sweep(
     if not scenarios:
         raise ValueError(f"scenario set produced no scenarios: {scenario_path}")
     planner_names = list(planner_names)
+    if not planner_names:
+        raise ValueError(
+            f"no native planner requested; cheap-lane slice runs only {NATIVE_CPU_PLANNERS}"
+        )
     unsupported = sorted(
         {planner for planner in planner_names if planner not in NATIVE_CPU_PLANNERS}
     )
@@ -112,10 +171,18 @@ def run_sweep(
             "unsupported planner request for cheap-lane CPU slice: "
             f"{unsupported}; allowed={list(NATIVE_CPU_PLANNERS)}"
         )
-    if not planner_names:
+    runtime_missing = sorted(
+        planner for planner in planner_names if not _native_runtime_available(planner)
+    )
+    if runtime_missing:
+        missing_modules = [
+            f"{planner} requires {_RUNTIME_OPTIONAL_PLANNERS[planner]}"
+            for planner in runtime_missing
+            if planner in _RUNTIME_OPTIONAL_PLANNERS
+        ]
         raise ValueError(
-            "no dependency-free native planner requested; cheap-lane slice runs only "
-            f"{NATIVE_CPU_PLANNERS}"
+            "native runtime not importable on this host for cheap-lane CPU slice: "
+            f"{missing_modules}; install the missing dependency or drop the planner"
         )
     rows: list[dict[str, Any]] = []
     for planner in planner_names:
@@ -145,7 +212,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--planners",
         nargs="+",
         default=list(NATIVE_CPU_PLANNERS),
-        help="Native dependency-free planners to execute (default: all CPU-native planners).",
+        help="Native CPU-runnable planners to execute (default: all native groups).",
     )
     parser.add_argument(
         "--seed",

@@ -6,6 +6,8 @@ import csv
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.validation.check_issue_5248_salvaged_trace_rerun import (
     BLOCKED_STATUS,
     READY_STATUS,
@@ -18,6 +20,50 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PREREGISTRATION_CONFIG = (
     REPO_ROOT / "configs/benchmarks/issue_4206_trace_capable_h600_rerun_preregistration.yaml"
 )
+
+# Host-local, verified harvest root for job 13334. Present only on the issue's
+# declared execution host; absent on CI / other hosts by design.
+HARVEST_CAMPAIGN_ROOT = Path(
+    "/home/luttkule/git/robot_sf_ll7/output/issue4206-13334-harvest"
+    "/issue4206_trace_capable_h600_rerun_20260704"
+)
+
+
+def test_real_harvest_blocks_on_trace_label_floor_not_missing_inputs() -> None:
+    """Regression guard for issue #5248 successor slice.
+
+    When the verified job-13334 harvest is present (issue-declared host only),
+    the checker must read both source artifacts, confirm 6,480 completed episodes,
+    but still block because every row predates trace capture (#4301) and carries
+    unknown mechanism labels. It must NOT block on missing inputs.
+    """
+
+    if not HARVEST_CAMPAIGN_ROOT.is_dir():
+        raise pytest.skip.Exception(
+            "verified job-13334 harvest absent on this host",
+            reason="harvest_not_available",
+        )
+
+    receipt = build_registration_receipt(
+        campaign_root=HARVEST_CAMPAIGN_ROOT,
+        job_id="13334",
+        expected_total_episodes=6480,
+        preregistration_config=PREREGISTRATION_CONFIG,
+        generated_at="2026-07-14T175754Z",
+    )
+
+    assert receipt["status"] == BLOCKED_STATUS
+    assert receipt["campaign"]["total_episodes_observed"] == 6480
+    assert receipt["campaign"]["campaign_execution_status"] == "completed"
+    assert receipt["campaign"]["episode_row_count"] == 6480
+    # Source artifacts were actually read, not missing.
+    assert set(receipt["source_files"]) == {
+        "reports/campaign_summary.json",
+        "reports/seed_episode_rows.csv",
+    }
+    # The blocker is the real trace-label floor, never a missing-input error.
+    assert any("trace-verified labeled fraction" in blocker for blocker in receipt["blockers"])
+    assert not any("cannot read" in blocker for blocker in receipt["blockers"])
 
 
 def _write_campaign(

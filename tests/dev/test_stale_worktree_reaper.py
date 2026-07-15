@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import asdict
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 
@@ -452,3 +454,219 @@ def test_build_plan_dry_run_default(tmp_path: Path, monkeypatch) -> None:
     assert len(plan.candidates) == 1
     assert plan.candidates[0].classification == "current"
     assert plan.audit_log == [f"classified {main} as current"]
+
+
+def test_classify_active_pr_gate_lease_risk(tmp_path: Path, monkeypatch) -> None:
+    """A worktree with an active PR-gate lease should be flagged as risky."""
+    main = tmp_path / "main"
+    lease_wt = tmp_path / "lease-wt"
+    main.mkdir()
+    lease_wt.mkdir()
+
+    def fake_run(args, *, cwd=None, timeout=30):
+        if args == ["git", "status", "--porcelain"]:
+            return _result("")
+        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
+            return _result("origin/lease-branch\n")
+        if args == ["git", "log", "origin/lease-branch..HEAD", "--oneline"]:
+            return _result("")
+        if args == [
+            "gh",
+            "pr",
+            "list",
+            "--head",
+            "lease-branch",
+            "--state",
+            "open",
+            "--json",
+            "number",
+        ]:
+            return _result("[]")
+        if args == ["git", "status", "--ignored", "--short", "-uall"]:
+            return _result("")
+        if args == ["git", "rev-parse", "--git-common-dir"]:
+            return _result(str(tmp_path / ".git"))
+        return _result("", returncode=1)
+
+    # Mock the lease check to return True (active lease)
+    def fake_has_active_lease(path: str) -> bool:
+        return True
+
+    monkeypatch.setattr(reaper, "_has_active_pr_gate_lease", fake_has_active_lease)
+    monkeypatch.setattr(reaper, "_run_command", fake_run)
+
+    candidate = reaper.classify_worktree(
+        path=str(lease_wt),
+        branch="lease-branch",
+        head_sha="abc",
+        current_path=str(main),
+        skip_pr_check=False,
+    )
+    assert candidate.classification == "risky"
+    assert "active_pr_gate_lease" in candidate.risk_flags
+
+
+def test_classify_no_pr_gate_lease_not_risky(tmp_path: Path, monkeypatch) -> None:
+    """A worktree without an active PR-gate lease should not get the flag."""
+    main = tmp_path / "main"
+    stale = tmp_path / "stale-wt"
+    main.mkdir()
+    stale.mkdir()
+
+    def fake_run(args, *, cwd=None, timeout=30):
+        if args == ["git", "status", "--porcelain"]:
+            return _result("")
+        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
+            return _result("origin/stale-branch\n")
+        if args == ["git", "log", "origin/stale-branch..HEAD", "--oneline"]:
+            return _result("")
+        if args == [
+            "gh",
+            "pr",
+            "list",
+            "--head",
+            "stale-branch",
+            "--state",
+            "open",
+            "--json",
+            "number",
+        ]:
+            return _result("[]")
+        if args == ["git", "status", "--ignored", "--short", "-uall"]:
+            return _result("")
+        if args == ["git", "rev-parse", "--git-common-dir"]:
+            return _result(str(tmp_path / ".git"))
+        return _result("", returncode=1)
+
+    # Mock the lease check to return False (no active lease)
+    def fake_has_active_lease(path: str) -> bool:
+        return False
+
+    monkeypatch.setattr(reaper, "_has_active_pr_gate_lease", fake_has_active_lease)
+    monkeypatch.setattr(reaper, "_run_command", fake_run)
+
+    candidate = reaper.classify_worktree(
+        path=str(stale),
+        branch="stale-branch",
+        head_sha="abc",
+        current_path=str(main),
+        skip_pr_check=False,
+    )
+    assert candidate.classification == "clean_stale"
+    assert "active_pr_gate_lease" not in candidate.risk_flags
+
+
+def test_classify_unreadable_pr_gate_lease_risk(tmp_path: Path, monkeypatch) -> None:
+    """A worktree with an unreadable/malformed lease file should be flagged as risky."""
+    main = tmp_path / "main"
+    stale = tmp_path / "stale-wt"
+    main.mkdir()
+    stale.mkdir()
+
+    git_common = tmp_path / ".git"
+    git_common.mkdir()
+
+    def fake_run(args, *, cwd=None, timeout=30):
+        if args == ["git", "status", "--porcelain"]:
+            return _result("")
+        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
+            return _result("origin/stale-branch\n")
+        if args == ["git", "log", "origin/stale-branch..HEAD", "--oneline"]:
+            return _result("")
+        if args == [
+            "gh",
+            "pr",
+            "list",
+            "--head",
+            "stale-branch",
+            "--state",
+            "open",
+            "--json",
+            "number",
+        ]:
+            return _result("[]")
+        if args == ["git", "status", "--ignored", "--short", "-uall"]:
+            return _result("")
+        if args == ["git", "rev-parse", "--git-common-dir"]:
+            return _result(str(git_common))
+        return _result("", returncode=1)
+
+    monkeypatch.setattr(reaper, "_run_command", fake_run)
+
+    from scripts.dev.pr_gate_lease import lease_path
+
+    with patch("scripts.dev.pr_gate_lease._git_common_dir", return_value=git_common):
+        l_path = lease_path(stale)
+        l_path.write_text("{invalid json\n")
+
+    with patch("scripts.dev.pr_gate_lease._git_common_dir", return_value=git_common):
+        candidate = reaper.classify_worktree(
+            path=str(stale),
+            branch="stale-branch",
+            head_sha="abc",
+            current_path=str(main),
+            skip_pr_check=False,
+        )
+
+    assert candidate.classification == "risky"
+    assert "unreadable_pr_gate_lease" in candidate.risk_flags
+
+
+def test_classify_legacy_pr_gate_lease_risk(tmp_path: Path, monkeypatch) -> None:
+    """A live pre-isolation lease protects worktrees during the path migration."""
+    main = tmp_path / "main"
+    stale = tmp_path / "stale-wt"
+    main.mkdir()
+    stale.mkdir()
+
+    git_common = tmp_path / ".git"
+    git_common.mkdir()
+
+    def fake_run(args, *, cwd=None, timeout=30):
+        if args == ["git", "status", "--porcelain"]:
+            return _result("")
+        if args == ["git", "rev-parse", "--abbrev-ref", "@{upstream}"]:
+            return _result("origin/stale-branch\n")
+        if args == ["git", "log", "origin/stale-branch..HEAD", "--oneline"]:
+            return _result("")
+        if args == [
+            "gh",
+            "pr",
+            "list",
+            "--head",
+            "stale-branch",
+            "--state",
+            "open",
+            "--json",
+            "number",
+        ]:
+            return _result("[]")
+        if args == ["git", "status", "--ignored", "--short", "-uall"]:
+            return _result("")
+        if args == ["git", "rev-parse", "--git-common-dir"]:
+            return _result(str(git_common))
+        return _result("", returncode=1)
+
+    monkeypatch.setattr(reaper, "_run_command", fake_run)
+
+    from scripts.dev.pr_gate_lease import create_lease, lease_path, legacy_lease_path
+
+    with (
+        patch("scripts.dev.pr_gate_lease._git_common_dir", return_value=git_common),
+        patch("scripts.dev.pr_gate_lease._repo_root", return_value=stale),
+    ):
+        lease = create_lease(pr_number=5736)
+        new_path = lease_path(stale)
+        new_path.unlink()
+        legacy_lease_path().write_text(json.dumps(asdict(lease)) + "\n")
+
+        candidate = reaper.classify_worktree(
+            path=str(stale),
+            branch="stale-branch",
+            head_sha="abc",
+            current_path=str(main),
+            skip_pr_check=False,
+        )
+
+    assert candidate.classification == "risky"
+    assert "active_pr_gate_lease" in candidate.risk_flags

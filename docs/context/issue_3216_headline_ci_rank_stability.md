@@ -1,9 +1,14 @@
 # Issue #3216 — Headline 7x7 CI + Rank-Stability Report Harness
 
 **Status**: the verified S20 job 13274 analysis is preserved as diagnostic-only evidence.
-It reports per-cell confidence intervals (CIs) and constraints-first rank stability, while
-claim-card/domain review and the S30 decision remain. This harness never self-certifies
-paper-grade evidence.
+It reports per-cell confidence intervals (CIs) and constraints-first rank stability. The integrated
+claim card records S30 as deferred for the dissertation draft, following the repository's existing
+S30 ruling; the predeclared schedule remains available only for a specific strict-ordering need or
+explicit reviewer request. This harness never self-certifies paper-grade evidence.
+
+The job-13274 [claim decision](evidence/issue_5247_job_13274_rank_stability/claim_decision.md)
+keeps the historical harness packet's `needs_review` status distinct from that S30 disposition and
+lists the remaining maintainer/domain review and #3216 propagation steps.
 
 ## What this delivers
 
@@ -36,11 +41,15 @@ the increased-seed-budget run, and the durable
   resampling (`kendall_tau_mean`, `kendall_tau_min`, `rank_flip_rate`,
   `top1_stable`).
 - Emits `result.json` + `report.md` and classifies the result
-  `paper_grade | nominal | diagnostic | blocked_until_run`. **Insufficient seed
-  budget (S10 or fewer) is never paper-grade**: it emits `diagnostic`; an all-
-  excluded input emits `blocked_until_run`. Even at S20+ per cell the harness
-  emits `blocked_until_run` because paper-grade promotion requires the actual
-  predeclared S20/S30 SLURM run (#1554) plus claim-card review. Captures git HEAD.
+  `paper_grade | nominal | diagnostic | completed_needs_claim_review |
+  blocked_until_run`. **Insufficient seed budget (S10 or fewer) is never
+  paper-grade**: it emits `diagnostic`. An all-excluded (no countable cells)
+  input emits `blocked_until_run`. Even at S20+ per cell the harness emits
+  `completed_needs_claim_review` (not `blocked_until_run`) because
+  `blocked_until_run` means the campaign has not produced countable evidence;
+  at S20+ the evidence was measured and analyzed, so paper-grade promotion
+  merely requires the predeclared S20/S30 SLURM run (#1554) plus claim-card
+  review. Captures git HEAD.
 
 ### Launch packet
 
@@ -55,10 +64,13 @@ References the real canonical configs with verified sha256:
 
 S20 (`paper_eval_s20`) and the launch-only S30 schedule (`paper_eval_s30`) are available via #1554.
 Job 13274 completed the S20 campaign with 8,640 episodes; the verified harvest is now analyzed and
-preserved under `docs/context/evidence/issue_5247_job_13274_rank_stability/`. The generated report
-remains conservatively classified `blocked_until_run`, and its decision packet says
-`ready_for_table_review_no_claim_promotion` / `needs_review`: empirical execution is complete, but
-claim review and the S30 decision are not.
+preserved under `docs/context/evidence/issue_5247_job_13274_rank_stability/`. The preserved report
+was generated before the classifier repair in [PR #5643](https://github.com/ll7/robot_sf_ll7/pull/5643)
+and intentionally retains its historical `blocked_until_run` value; it is not a newly generated
+classification. Rerunning the repaired harness on counted, rank-identifiable S20+ evidence yields
+`completed_needs_claim_review`. Its decision packet remains
+`ready_for_table_review_no_claim_promotion` / `needs_review`: claim review and authorized #3216
+propagation are still open; S30 is deferred unless its conditional escalation trigger is met.
 
 The portable launcher `scripts/benchmark/run_issue3216_headline_campaign.sh`
 keeps campaign execution and post-campaign reporting as separate status lanes.
@@ -75,6 +87,13 @@ exit code still matches the campaign lane, records the campaign/report/job exit 
 returns a completed campaign as successful when only reporting failed while keeping the run
 outside benchmark evidence. Missing, malformed, or mismatched envelopes fail closed for manual
 decision rather than guessing which downstream exit code to trust.
+
+The ledger reconciler consumes that exact finalizer report through
+`scripts/tools/reconcile_slurm_evidence.py`. It maps a completed campaign plus a failed report
+stage to `warn_success` for diagnostic recovery, not benchmark success; it retains all three
+exit-code lanes and keeps a hard campaign failure nonzero. The integration regression in
+`tests/tools/test_issue3216_campaign_stage_handoff.py` drives the same on-disk campaign summary,
+status envelope, and finalizer report through the full public launcher-to-ledger boundary.
 
 ## Reuse of canonical owners (no reinvention)
 

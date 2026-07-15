@@ -104,7 +104,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 173
+    "total": 174
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -140,7 +140,7 @@
       "context": "load_campaign_result_store",
       "fingerprint": "be56e321c978a733",
       "handler": "Exception",
-      "lineno": 144,
+      "lineno": 158,
       "path": "robot_sf/benchmark/candidate_trace_resolution.py",
       "source": "except Exception as exc:"
     },
@@ -248,7 +248,7 @@
       "context": "_planner_step_worker",
       "fingerprint": "a8cc46e15ae90443",
       "handler": "Exception",
-      "lineno": 301,
+      "lineno": 303,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # pragma: no cover - defensive child-process path"
     },
@@ -257,7 +257,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "6a761009a771ebe5",
       "handler": "Exception",
-      "lineno": 1627,
+      "lineno": 1661,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover - progress best-effort"
     },
@@ -266,7 +266,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "e7dc39de4571ff10",
       "handler": "Exception",
-      "lineno": 1629,
+      "lineno": 1663,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - error path"
     },
@@ -275,7 +275,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "92d92f1cb4a3a0e5",
       "handler": "Exception",
-      "lineno": 1645,
+      "lineno": 1679,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
     },
@@ -284,7 +284,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "6a475b0e80195804",
       "handler": "Exception",
-      "lineno": 1729,
+      "lineno": 1763,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
     },
@@ -293,7 +293,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "448c5c0fff47cfc4",
       "handler": "Exception",
-      "lineno": 1731,
+      "lineno": 1765,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover"
     },
@@ -302,7 +302,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "6a475b0e80195804",
       "handler": "Exception",
-      "lineno": 1747,
+      "lineno": 1781,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
     },

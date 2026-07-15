@@ -93,7 +93,7 @@ should not be conflated with the current AMV paper-defense evidence path.
 Checked on 2026-05-09:
 
 ```bash
-rtk gh issue view 1076 --comments --json number,title,body,comments,labels,state,url
+rtk uv run python scripts/dev/gh_issue_rest.py view 1076 --json number title body comments labels state url --repo ll7/robot_sf_ll7
 rtk bash -lc 'for i in $(seq 1077 1092); do gh issue view "$i" --json number,title,body,url | jq -r "[.number, .title, .url, ((.body // \"\") | if test(\"#1076\\\\b\") then \"links-1076\" else \"missing-1076-link\" end)] | @tsv"; done'
 ```
 

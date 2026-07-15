@@ -13,6 +13,7 @@ from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from pysocialforce.forces import social_force_gil_releasing_context
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from robot_sf.sensor.range_sensor import LidarBatchCoordinator, lidar_batch_context
@@ -21,6 +22,27 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     import gymnasium as gym
+
+
+def _fast_deepcopy_info(obj: Any) -> Any:
+    """A highly optimized deep copy helper for environment info dicts.
+
+    Avoids the slow introspection overhead of standard ``copy.deepcopy``.
+
+    Returns:
+        A recursively isolated copy of the supported container values.
+        Unsupported values use ``deepcopy`` to preserve the previous helper's
+        isolation contract.
+    """
+    if isinstance(obj, dict):
+        return {k: _fast_deepcopy_info(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_fast_deepcopy_info(x) for x in obj]
+    if type(obj) is tuple:
+        return tuple(_fast_deepcopy_info(x) for x in obj)
+    if isinstance(obj, np.ndarray):
+        return obj.copy()
+    return deepcopy(obj)
 
 
 class ThreadedVecEnv(DummyVecEnv):
@@ -133,7 +155,7 @@ class ThreadedVecEnv(DummyVecEnv):
             self._obs_from_buf(),
             np.copy(self.buf_rews),
             np.copy(self.buf_dones),
-            deepcopy(self.buf_infos),
+            _fast_deepcopy_info(self.buf_infos),
         )
 
     def close(self) -> None:
@@ -153,18 +175,24 @@ class ThreadedVecEnv(DummyVecEnv):
     def _step_env(self, env_idx: int, env: gym.Env, action: np.ndarray) -> Any:
         """Step one environment with its optional coordinated LiDAR binding.
 
+        The GIL-releasing social-force context is always active so that Numba
+        kernels in the step hot path run without the GIL regardless of whether
+        cross-environment LiDAR batching is also enabled.
+
         Returns:
             The Gymnasium step transition emitted by ``env``.
         """
         coordinator = self._lidar_batch_coordinator
         if coordinator is None:
-            return env.step(action)
-        try:
-            with lidar_batch_context(coordinator, env_idx):
+            with social_force_gil_releasing_context():
                 return env.step(action)
-        except BaseException as exc:
-            coordinator.abort(exc)
-            raise
+        with social_force_gil_releasing_context():
+            try:
+                with lidar_batch_context(coordinator, env_idx):
+                    return env.step(action)
+            except BaseException as exc:
+                coordinator.abort(exc)
+                raise
 
     def _ensure_no_pending_step(self, operation: str) -> None:
         """Reject operations that would race an outstanding asynchronous step."""

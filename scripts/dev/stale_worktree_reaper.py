@@ -155,6 +155,42 @@ def _has_ignored_output(path: str) -> bool:
     return False
 
 
+def _check_worktree_lease_state(path: str) -> str | None:
+    """Check lease state for a worktree.
+
+    Returns:
+        "active" if there is an active lease.
+        "unreadable" if a lease file exists but cannot be read/parsed.
+        None if there is no lease file or if the lease has expired.
+    """
+    try:
+        from scripts.dev.pr_gate_lease import lease_path, legacy_lease_path, load_lease
+
+        lease_paths = [lease_path(Path(path))]
+        legacy_path = legacy_lease_path()
+        if legacy_path not in lease_paths:
+            # Older gate processes used one shared lease file. Treat any still-live
+            # legacy record as protecting this worktree until that process releases it.
+            lease_paths.append(legacy_path)
+
+        for l_path in lease_paths:
+            if not l_path.exists():
+                continue
+            lease = load_lease(l_path)
+            if lease is not None and not lease.is_expired():
+                return "active"
+        return None
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError):
+        # File exists but could not be loaded/parsed successfully, or lease
+        # discovery failed. Both cases must fail closed.
+        return "unreadable"
+
+
+def _has_active_pr_gate_lease(path: str) -> bool:
+    """Check if a worktree has an active PR-gate lease."""
+    return _check_worktree_lease_state(path) == "active"
+
+
 def classify_worktree(
     *,
     path: str,
@@ -190,6 +226,11 @@ def classify_worktree(
 
     if _has_ignored_output(path):
         risk_flags.append("ignored_output")
+
+    if _has_active_pr_gate_lease(path):
+        risk_flags.append("active_pr_gate_lease")
+    elif _check_worktree_lease_state(path) == "unreadable":
+        risk_flags.append("unreadable_pr_gate_lease")
 
     if risk_flags:
         return WorktreeCandidate(

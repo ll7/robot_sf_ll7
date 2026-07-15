@@ -260,6 +260,96 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
     assert "tests/test_optional_top_level.py" not in pytest_args
 
 
+def test_run_tests_parallel_serial_fallback_is_single_worker_and_fail_closed(
+    tmp_path: Path,
+) -> None:
+    """Serial fallback must not inherit parallel flags or hide serial failures (issue #5633)."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    (repo / "tests" / "dev").mkdir(parents=True)
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+    (repo / "tests" / "support").mkdir(parents=True)
+    (repo / "tests" / "support" / "optional_test_allowlist.txt").write_text(
+        "tests/optional\n", encoding="utf-8"
+    )
+
+    for script_name in ("run_tests_parallel.sh", "common_setup.sh"):
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
+    captured_args = repo / "captured-pytest-args.txt"
+    invocation_count = repo / "pytest-invocations.txt"
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "\n".join(
+            [
+                "#!/usr/bin/env bash",
+                'if [[ "$1" == "run" && "$2" == "python" ]]; then',
+                '  case "$3" in',
+                '    *resolve_pytest_workers.py) printf "2\\n" ;;',
+                "    *diagnose_xdist_crash.py)",
+                '      if [[ " $* " == *" --serialized-ok false "* ]]; then',
+                '        echo "serial diagnostic observed" >&2',
+                "      else",
+                '        echo "parallel diagnostic observed" >&2',
+                "      fi",
+                "      ;;",
+                '    *) echo "unexpected python helper: $*" >&2; exit 99 ;;',
+                "  esac",
+                "  exit 0",
+                "fi",
+                'if [[ "$1" == "run" && "$2" == "pytest" ]]; then',
+                "  count=0",
+                '  [[ -f "$UV_COUNT_FILE" ]] && count=$(<"$UV_COUNT_FILE")',
+                "  count=$((count + 1))",
+                '  printf "%s\\n" "$count" > "$UV_COUNT_FILE"',
+                '  printf "%s\\n" "$*" >> "$UV_CAPTURED_ARGS"',
+                '  echo "Segmentation fault (core dumped)" >&2',
+                "  exit 1",
+                "fi",
+                'echo "unexpected uv invocation: $*" >&2',
+                "exit 99",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    result = subprocess.run(
+        [str(script_dir / "run_tests_parallel.sh"), "--no-ordering", "tests/dev"],
+        cwd=repo,
+        env={
+            **os.environ,
+            "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+            "PR_READY_SERIAL_FALLBACK": "1",
+            "PYTEST_NUM_WORKERS": "2",
+            "PYTEST_FAST_FAIL": "0",
+            "PYTEST_ORDER_MODE": "none",
+            "UV_CAPTURED_ARGS": str(captured_args),
+            "UV_COUNT_FILE": str(invocation_count),
+        },
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 1
+    calls = captured_args.read_text(encoding="utf-8").splitlines()
+    assert len(calls) == 2
+    assert "-n 2" in calls[0]
+    assert "-n 1" in calls[1]
+    assert "-n 2" not in calls[1]
+    assert "parallel diagnostic observed" in result.stderr
+    assert "serial diagnostic observed" in result.stderr
+
+
 def test_xdist_race_validation_wraps_parallel_tests_and_artifact_scan() -> None:
     """The stress route should force high xdist concurrency and scan shared outputs."""
 
@@ -384,6 +474,7 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
         '"$SCRIPT_DIR/check_changed_coverage.sh"',
         '"$SCRIPT_DIR/check_docstring_todos_diff.sh"',
         '"$SCRIPT_DIR/check_docstring_todos_ratchet.sh"',
+        'uv run python "$SCRIPT_DIR/check_optional_import_pr_freshness.py" --base-ref "$BASE_REF"',
     ]
     for gate in expected_gates:
         assert gate in script_text

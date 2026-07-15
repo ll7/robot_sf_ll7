@@ -241,13 +241,15 @@ class OccupancyAwarePlannerMixin:
         observation: dict,
         base_distance: float,
         num_samples: int,
+        grid_payload: tuple[np.ndarray, dict[str, Any]] | None = None,
     ) -> tuple[float, float]:
         """Compute occupancy penalty along a candidate heading.
 
         Returns:
             tuple[float, float]: Mean obstacle and pedestrian occupancy along the sample line.
         """
-        grid_payload = self._extract_grid_payload(observation)
+        if grid_payload is None:
+            grid_payload = self._extract_grid_payload(observation)
         if grid_payload is None or np.linalg.norm(direction) < 1e-6:
             return 0.0, 0.0
 

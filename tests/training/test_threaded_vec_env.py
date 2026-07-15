@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from threading import Barrier
 
 import gymnasium as gym
@@ -11,6 +12,7 @@ from gymnasium import spaces
 
 from robot_sf.sensor import range_sensor
 from robot_sf.sensor.range_sensor import LidarScannerSettings, lidar_ray_scan_ranges_only
+from robot_sf.training import threaded_vec_env as threaded_vec_env_module
 from robot_sf.training.threaded_vec_env import ThreadedVecEnv
 
 
@@ -82,6 +84,31 @@ class _LidarEnv(gym.Env):
         return observation, 0.0, False, False, {}
 
 
+class _MutableInfoPayload:
+    """Mutable fallback payload used to verify deepcopy isolation."""
+
+    def __init__(self) -> None:
+        self.value = 1
+
+
+def test_fast_deepcopy_info_preserves_nested_mutable_isolation() -> None:
+    """The optimized info copy must retain deepcopy semantics for nested values."""
+    source_array = np.array([1.0, 2.0])
+    source_payload = _MutableInfoPayload()
+    source = {
+        "tuple": ({"array": source_array},),
+        "fallback": source_payload,
+    }
+
+    copied = threaded_vec_env_module._fast_deepcopy_info(source)
+
+    copied["tuple"][0]["array"][0] = 9.0
+    copied["fallback"].value = 9
+    assert source_array[0] == 1.0
+    assert source_payload.value == 1
+    assert copied["fallback"] is not source_payload
+
+
 def test_threaded_vec_env_steps_sibling_environments_concurrently() -> None:
     """Threaded mode must complete mutually waiting sibling steps and batch their results."""
     barrier = Barrier(2)
@@ -101,6 +128,46 @@ def test_threaded_vec_env_steps_sibling_environments_concurrently() -> None:
         ]
     finally:
         vec_env.close()
+
+
+def test_threaded_vec_env_applies_gil_releasing_forces_in_all_modes(monkeypatch) -> None:
+    """Both plain and coordinated LiDAR modes enable the GIL-releasing social-force context."""
+    context_entries: list[None] = []
+
+    @contextmanager
+    def _record_context():
+        context_entries.append(None)
+        yield
+
+    monkeypatch.setattr(
+        threaded_vec_env_module,
+        "social_force_gil_releasing_context",
+        _record_context,
+    )
+
+    plain_barrier = Barrier(2)
+    plain_env = ThreadedVecEnv(
+        [lambda: _BarrierEnv(plain_barrier), lambda: _BarrierEnv(plain_barrier)]
+    )
+    try:
+        plain_env.reset()
+        plain_env.step(np.zeros((2, 1), dtype=np.float32))
+    finally:
+        plain_env.close()
+    assert len(context_entries) == 2
+
+    context_entries.clear()
+    batch_barrier = Barrier(2)
+    batch_env = ThreadedVecEnv(
+        [lambda: _BarrierEnv(batch_barrier), lambda: _BarrierEnv(batch_barrier)],
+        batch_lidar=True,
+    )
+    try:
+        batch_env.reset()
+        batch_env.step(np.zeros((2, 1), dtype=np.float32))
+    finally:
+        batch_env.close()
+    assert len(context_entries) == 2
 
 
 def test_threaded_vec_env_preserves_sb3_terminal_observation_and_auto_reset() -> None:

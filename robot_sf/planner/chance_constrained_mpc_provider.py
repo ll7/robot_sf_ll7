@@ -31,6 +31,7 @@ container is reused for every forecast this module emits.
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
@@ -282,21 +283,62 @@ def _min_robot_pedestrian_clearance(
     return float(np.min(dists)) - contact_radius
 
 
+def _coerce_finite_array(value: object, *, label: str, shape: tuple[int, ...]) -> np.ndarray:
+    """Convert one required observation field to a finite array of ``shape``.
+
+    Returns:
+        A finite floating-point array with the requested shape.
+    """
+
+    try:
+        array = np.asarray(value, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be numeric") from exc
+    if array.shape != shape or not np.isfinite(array).all():
+        raise ValueError(f"{label} must contain finite values with shape {shape}")
+    return array
+
+
+def _coerce_pedestrian_positions(value: object) -> np.ndarray:
+    """Convert pedestrian positions to a finite ``(n, 2)`` array.
+
+    Returns:
+        A finite floating-point array with one two-dimensional position per row.
+    """
+
+    try:
+        ped_positions = np.asarray(value, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("observation.pedestrians.positions must be numeric") from exc
+    if ped_positions.ndim == 1 and ped_positions.size % 2 == 0:
+        ped_positions = ped_positions.reshape(-1, 2)
+    if ped_positions.ndim != 2 or ped_positions.shape[-1] != 2:
+        raise ValueError("observation.pedestrians.positions must have shape (n, 2)")
+    if not np.isfinite(ped_positions).all():
+        raise ValueError("observation.pedestrians.positions must be finite")
+    return ped_positions
+
+
 def _collision_indicators(
-    observation: dict[str, object], *, collision_radius_m: float
+    observation: Mapping[str, object], *, collision_radius_m: float
 ) -> np.ndarray:
     """Return one collision indicator per pedestrian at the observed state."""
 
     contact_radius = float(collision_radius_m)
     if not np.isfinite(contact_radius) or contact_radius <= 0.0:
         raise ValueError("collision_radius_m must be finite and > 0")
-    robot_pos = np.asarray(observation["robot"]["position"], dtype=float)
-    peds = observation["pedestrians"]
-    ped_positions = np.asarray(peds.get("positions", []), dtype=float)
-    if ped_positions.ndim == 1 and ped_positions.size % 2 == 0:
-        ped_positions = ped_positions.reshape(-1, 2)
-    if ped_positions.ndim != 2 or ped_positions.shape[-1] != 2:
-        return np.zeros((0,), dtype=bool)
+    if not isinstance(observation, Mapping):
+        raise ValueError("observation must be a mapping")
+    robot = observation.get("robot")
+    if not isinstance(robot, Mapping):
+        raise ValueError("observation.robot must be a mapping")
+    robot_pos = _coerce_finite_array(
+        robot.get("position"), label="observation.robot.position", shape=(2,)
+    )
+    peds = observation.get("pedestrians")
+    if not isinstance(peds, Mapping):
+        raise ValueError("observation.pedestrians must be a mapping")
+    ped_positions = _coerce_pedestrian_positions(peds.get("positions", []))
     distances = np.linalg.norm(ped_positions - robot_pos[None, :], axis=1)
     return distances < contact_radius
 
@@ -320,6 +362,18 @@ def _empirical_cvar(values: np.ndarray, *, alpha: float) -> float:
     return float(tail_sum / tail_mass)
 
 
+def _planner_formulation(planner: ChanceConstrainedMPCPlannerAdapter) -> str:
+    """Return a planner formulation, normalizing absent optional values."""
+
+    chance_config = getattr(planner, "chance_config", None)
+    raw_formulation = (
+        getattr(chance_config, "chance_constraint_formulation", None)
+        if chance_config is not None
+        else None
+    )
+    return "marginal" if raw_formulation is None else str(raw_formulation)
+
+
 def _calibration_contract(
     planner: ChanceConstrainedMPCPlannerAdapter,
 ) -> tuple[str, str, int, float | None]:
@@ -331,7 +385,7 @@ def _calibration_contract(
     """
 
     chance_config = getattr(planner, "chance_config", None)
-    formulation = str(getattr(chance_config, "chance_constraint_formulation", "marginal"))
+    formulation = _planner_formulation(planner)
     horizon_steps = max(int(getattr(getattr(planner, "config", None), "horizon_steps", 1)), 1)
     if formulation == "marginal":
         return "per_pedestrian_timestep", "control_step", 1, None
@@ -343,6 +397,78 @@ def _calibration_contract(
             raise ValueError("cvar_alpha must be in (0, 1)")
         return "mpc_horizon_cvar_tail", "mpc_horizon", horizon_steps, cvar_alpha
     raise ValueError(f"Unsupported calibration formulation: {formulation!r}")
+
+
+def _normalize_collision_samples(
+    collision_samples: list[list[np.ndarray]],
+) -> list[list[np.ndarray]]:
+    """Validate and normalize per-episode collision indicators.
+
+    Returns:
+        The same samples as boolean one-dimensional arrays, preserving episode
+        and timestep boundaries.
+    """
+
+    normalized: list[list[np.ndarray]] = []
+    for episode in collision_samples:
+        steps: list[np.ndarray] = []
+        for step in episode:
+            array = np.asarray(step, dtype=bool)
+            if array.ndim != 1:
+                raise ValueError("collision observations must have shape (steps, pedestrians)")
+            steps.append(array)
+        normalized.append(steps)
+    return normalized
+
+
+def _aggregate_marginal_risk(
+    episode_steps: list[list[np.ndarray]],
+) -> tuple[float, int, int]:
+    """Aggregate one collision indicator per pedestrian-time cell.
+
+    Returns:
+        Tuple of observed risk, scalar observation count, and timestep count.
+    """
+
+    observation_count = sum(int(step.size) for episode in episode_steps for step in episode)
+    collision_count = sum(
+        int(np.count_nonzero(step)) for episode in episode_steps for step in episode
+    )
+    observed = float(collision_count / observation_count) if observation_count else 0.0
+    observation_window_count = sum(len(episode) for episode in episode_steps)
+    return observed, observation_count, observation_window_count
+
+
+def _aggregate_horizon_risk(
+    episode_steps: list[list[np.ndarray]],
+    *,
+    formulation: str,
+    horizon_steps: int,
+    cvar_alpha: float | None,
+) -> tuple[float, int, int]:
+    """Aggregate collision indicators over each valid rolling horizon.
+
+    Returns:
+        Tuple of observed risk, rolling-window count, and reported window count.
+    """
+
+    window_values: list[float] = []
+    for episode in episode_steps:
+        if len(episode) < horizon_steps:
+            raise ValueError(
+                f"{formulation} calibration requires at least {horizon_steps} observed steps per "
+                f"episode; got {len(episode)}"
+            )
+        for start in range(len(episode) - horizon_steps + 1):
+            window = episode[start : start + horizon_steps]
+            if formulation == "joint_horizon":
+                window_values.append(float(any(np.any(step) for step in window)))
+            else:
+                assert cvar_alpha is not None
+                window_values.append(_empirical_cvar(np.concatenate(window), alpha=cvar_alpha))
+    observation_count = len(window_values)
+    observed = float(np.mean(window_values)) if window_values else 0.0
+    return observed, observation_count, observation_count
 
 
 def _aggregate_observed_risk(
@@ -365,38 +491,20 @@ def _aggregate_observed_risk(
         count used for the reported mean.
     """
 
+    if formulation not in {"marginal", "joint_horizon", "cvar_tail"}:
+        raise ValueError(f"Unsupported calibration formulation: {formulation!r}")
+    if formulation == "cvar_tail" and cvar_alpha is None:
+        raise ValueError("cvar_tail calibration requires cvar_alpha")
     if not collision_samples:
         return 0.0, 0, 0
-    episode_arrays = [np.asarray(episode, dtype=bool) for episode in collision_samples]
-    if any(array.ndim != 2 for array in episode_arrays):
-        raise ValueError("collision observations must have shape (steps, pedestrians)")
-    matrix = np.stack(episode_arrays, axis=0)
+    episode_steps = _normalize_collision_samples(collision_samples)
     if formulation == "marginal":
-        observation_count = int(matrix.size)
-        observed = float(np.mean(matrix)) if observation_count else 0.0
-        return observed, observation_count, int(matrix.shape[0] * matrix.shape[1])
-
-    if matrix.shape[1] < horizon_steps:
-        raise ValueError(
-            f"{formulation} calibration requires at least {horizon_steps} observed steps per "
-            f"episode; got {matrix.shape[1]}"
-        )
-    window_values: list[float] = []
-    for episode in matrix:
-        for start in range(episode.shape[0] - horizon_steps + 1):
-            window = episode[start : start + horizon_steps]
-            if formulation == "joint_horizon":
-                window_values.append(float(np.any(window)))
-            elif formulation == "cvar_tail":
-                assert cvar_alpha is not None
-                window_values.append(_empirical_cvar(window, alpha=cvar_alpha))
-            else:
-                raise ValueError(f"Unsupported calibration formulation: {formulation!r}")
-    observation_count = len(window_values)
-    return (
-        float(np.mean(window_values)) if window_values else 0.0,
-        observation_count,
-        observation_count,
+        return _aggregate_marginal_risk(episode_steps)
+    return _aggregate_horizon_risk(
+        episode_steps,
+        formulation=formulation,
+        horizon_steps=horizon_steps,
+        cvar_alpha=cvar_alpha,
     )
 
 
@@ -460,6 +568,7 @@ def realized_collision_risk_calibration(
     """
 
     scenario = scenario or CalibrationScenario()
+    formulation = _planner_formulation(planner)
     risk_unit, observation_window, observation_window_steps, cvar_alpha = _calibration_contract(
         planner
     )
@@ -537,20 +646,12 @@ def realized_collision_risk_calibration(
     n = max(int(scenario.num_episodes), 1)
     observed, observation_count, observation_window_count = _aggregate_observed_risk(
         collision_samples,
-        formulation=str(
-            getattr(
-                getattr(planner, "chance_config", None), "chance_constraint_formulation", "marginal"
-            )
-        ),
+        formulation=formulation,
         horizon_steps=observation_window_steps,
         cvar_alpha=cvar_alpha,
     )
     return {
-        "formulation": str(
-            getattr(
-                getattr(planner, "chance_config", None), "chance_constraint_formulation", "marginal"
-            )
-        ),
+        "formulation": formulation,
         "claimed_risk": float(claimed),
         "observed_risk": float(observed),
         "claimed_risk_unit": risk_unit,

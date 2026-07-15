@@ -31,6 +31,8 @@ from robot_sf.planner.chance_constrained_mpc_provider import (
     CalibrationSweep,
     ConstantVelocityGmmPredictor,
     _aggregate_observed_risk,
+    _calibration_contract,
+    _collision_indicators,
     _min_robot_pedestrian_clearance,
     build_calibration_sweep_config,
     build_constant_velocity_gmm_forecast,
@@ -360,6 +362,65 @@ def test_calibration_aggregation_distinguishes_step_horizon_and_episode_units() 
     assert tail_count == 2
     # Episode-level any-collision is 1.0, but is not the marginal calibration unit.
     assert marginal < 1.0
+
+
+def test_calibration_aggregation_accepts_variable_episode_shapes() -> None:
+    """Aggregation supports per-episode step and pedestrian-count variation."""
+
+    samples = [
+        [np.asarray([False, True]), np.asarray([True, False])],
+        [np.asarray([False]), np.asarray([True]), np.asarray([False])],
+    ]
+
+    marginal, marginal_count, marginal_windows = _aggregate_observed_risk(
+        samples, formulation="marginal", horizon_steps=1, cvar_alpha=None
+    )
+    joint, joint_count, _ = _aggregate_observed_risk(
+        samples, formulation="joint_horizon", horizon_steps=2, cvar_alpha=None
+    )
+
+    assert marginal == pytest.approx(3.0 / 7.0)
+    assert marginal_count == 7
+    assert marginal_windows == 5
+    assert joint == pytest.approx(1.0)
+    assert joint_count == 3
+
+
+@pytest.mark.parametrize(
+    "observation",
+    [
+        {},
+        {"robot": {"position": [0.0, 0.0]}},
+        {"robot": {"position": [0.0, 0.0]}, "pedestrians": []},
+        {
+            "robot": {"position": [0.0, 0.0]},
+            "pedestrians": {"positions": [[float("nan"), 0.0]]},
+        },
+    ],
+)
+def test_collision_indicators_fail_closed_on_malformed_observation(
+    observation: dict,
+) -> None:
+    """Malformed observation structure must not become a zero-risk result."""
+
+    with pytest.raises(ValueError, match="observation"):
+        _collision_indicators(observation, collision_radius_m=0.85)
+
+
+@pytest.mark.parametrize(
+    "chance_config",
+    [None, SimpleNamespace(chance_constraint_formulation=None)],
+)
+def test_calibration_contract_defaults_missing_formulation_to_marginal(
+    chance_config: object,
+) -> None:
+    """Absent or explicit-null formulation values use the documented default."""
+
+    planner = SimpleNamespace(
+        chance_config=chance_config,
+        config=SimpleNamespace(horizon_steps=4),
+    )
+    assert _calibration_contract(planner) == ("per_pedestrian_timestep", "control_step", 1, None)
 
 
 def test_horizon_calibration_fails_closed_without_a_full_observation_window() -> None:

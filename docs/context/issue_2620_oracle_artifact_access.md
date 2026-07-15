@@ -101,9 +101,9 @@ jq '{artifact_classification, split_leakage_check, analysis, jobs: [.jobs[] | {j
 ```bash
 rg -n 'issue_1397_oracle_imitation_v1|issue1470|oracle-imitation|wandb-artifact://|artifact://|s3://|gs://|hf://|huggingface|W&B|wandb' \
   docs configs robot_sf scripts tests
-gh issue view 2441 --comments --json body,comments,url,state,title
-gh issue view 1470 --comments --json body,comments,url,state,title
-gh issue view 1496 --comments --json body,comments,url,state,title
+uv run python scripts/dev/gh_issue_rest.py view 2441 --json body comments url state title --repo ll7/robot_sf_ll7
+uv run python scripts/dev/gh_issue_rest.py view 1470 --json body comments url state title --repo ll7/robot_sf_ll7
+uv run python scripts/dev/gh_issue_rest.py view 1496 --json body comments url state title --repo ll7/robot_sf_ll7
 ```
 
 Result: tracked compact evidence and issue comments preserve checksums and split routing, but

@@ -57,26 +57,26 @@ Git command can answer the same question.
 
 ### Issue-with-comments helper
 
-`gh issue view <number> --comments` fails on some GitHub CLI versions because it requests the
-deprecated classic-Projects GraphQL field `repository.issue.projectCards` (issue #5021). Autonomous
-workflows that must read an issue together with its comment thread should use the shared helper:
+`gh issue view <number> --comments` fails on GitHub CLI 2.45.x (Ubuntu noble) because it requests
+the deprecated classic-Projects GraphQL field `repository.issue.projectCards` (issue #5021, #5729).
+Use the shared helper for all issue-with-comments reads in autonomous workflows:
 
 ```bash
-# preferred complete read: native CLI first, targeted REST fallback
+# preferred complete read: REST-backed, works on all CLI versions
 uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7
 
 # explicit REST and normalized JSON fields for machine consumers
-uv run python scripts/dev/gh_issue_rest.py view <number> --json number title state url labels
+uv run python scripts/dev/gh_issue_rest.py view <number> --json number title state url labels comments
 
 # library use for Python callers
 from scripts.dev.gh_issue_rest import fetch_issue_with_comments
 payload = fetch_issue_with_comments(<number>)
 ```
 
-The `thread` command preserves successful native output. It falls back only when stderr names the
-known `repository.issue.projectCards` field; authentication, authorization, and other failures stay
-visible instead of being masked. The REST path preserves API comment order, paginates comments, and
-fails closed when a thread exceeds the page budget. The `view` command remains REST-only and
+The `thread` command tries native `gh issue view` first and falls back to paginated REST only for
+the known `repository.issue.projectCards` failure; authentication, authorization, and other failures
+stay visible instead of being masked. The REST path preserves API comment order, paginates comments,
+and fails closed when a thread exceeds the page budget. The `view` command is REST-only and
 normalizes `state`/`url` for `gh issue view --json` consumers.
 
 ## Project #5 Cache

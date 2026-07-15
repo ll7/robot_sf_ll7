@@ -69,6 +69,28 @@ WORKED_EXAMPLE_OUTCOMES = frozenset(
     {"success", "collision_event", "route_complete", "timeout_event"}
 )
 
+# Frozen #5756 inputs.  The request manifest itself intentionally remains
+# byte-identical to the mining artifact, so release outcomes and rerun
+# provenance live in the separate versioned mapping receipt.
+ISSUE_5756_REQUEST_SCHEMA_VERSION = "issue_5446_trace_reexport_list.v1"
+ISSUE_5756_MAPPING_SCHEMA_VERSION = "issue_5756_trace_mapping_receipt.v1"
+ISSUE_5756_REQUEST_COUNT = 90
+ISSUE_5756_REQUEST_MANIFEST_SHA256 = (
+    "320190fd489797efeb194711d75f41d19f23eeef56107408270e62624b0e49e8"
+)
+ISSUE_5756_PINNED_PROVENANCE = {
+    "release_tag": "0.0.3",
+    "release_bundle_sha256": ("3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7"),
+    "report_commit": "e2ac534c9d6bb750346b1e0724638c91306e410a",
+    "execution_commit": "a307ef276d701f8d14dead1aa0513f44ee97c0b0",
+    "canonical_campaign_config_sha256": (
+        "143ab63a235f40326c93c93044fba95e808388751f04d8ca979b89d1142ca465"
+    ),
+    "scenario_matrix_sha256": ("d9e148e4b544b4c7e2b6ba98e599aef47046d114e0e25645f021946674cb9dc5"),
+    "checkpoint_sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d",
+    "request_manifest_sha256": ISSUE_5756_REQUEST_MANIFEST_SHA256,
+}
+
 #: Resolution statuses (fail-closed, never silently drop a candidate).
 ResolutionStatus = Literal[
     "resolved",
@@ -95,6 +117,32 @@ class CampaignResultStore:
 
     study_id: str
     episodes: dict[str, dict[str, Any]]
+
+
+@dataclass(frozen=True, slots=True)
+class EpisodeRequestManifest:
+    """Validated request bytes plus normalized concrete episode rows."""
+
+    payload: dict[str, Any]
+    rows: tuple[dict[str, Any], ...]
+    content_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class EpisodeMappingReceipt:
+    """Versioned rerun receipt whose provenance applies to every indexed row."""
+
+    provenance: dict[str, str]
+    rows: tuple[dict[str, Any], ...]
+    index: dict[str, dict[str, Any]]
+
+    def get(self, key: str, default: Any = None) -> dict[str, Any] | Any:
+        """Return the row indexed by rerun id, release id, or concrete tuple."""
+        return self.index.get(key, default)
+
+    def __getitem__(self, key: str) -> dict[str, Any]:
+        """Return a row by a validated mapping key."""
+        return self.index[key]
 
 
 def _coerce_optional_text(value: Any) -> str | None:
@@ -154,7 +202,7 @@ def load_campaign_result_store(store_dir: Path) -> CampaignResultStore:
         )
     try:
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CandidateTraceResolutionError(
             f"campaign result store summary.json unreadable: {exc}"
         ) from exc
@@ -306,16 +354,26 @@ def _locate_trace_path(
         candidate_path = Path(str(artifact_uri))
         if candidate_path.is_file():
             return candidate_path
-        for root in roots:
-            probe = root / candidate_path.name
-            if probe.is_file():
-                return probe
+        matches = [
+            root / candidate_path.name for root in roots if (root / candidate_path.name).is_file()
+        ]
+        if len(matches) > 1:
+            raise CandidateTraceResolutionError(
+                f"ambiguous trace artifact search for {candidate_path.name}: "
+                + ", ".join(str(match) for match in matches)
+            )
+        if matches:
+            return matches[0]
 
     if episode_id is not None and roots:
-        for root in roots:
-            matches = sorted(root.rglob(f"*{episode_id}*.json"))
-            if matches:
-                return matches[0]
+        matches = sorted(match for root in roots for match in root.rglob(f"*{episode_id}*.json"))
+        if len(matches) > 1:
+            raise CandidateTraceResolutionError(
+                f"ambiguous trace artifact search for episode {episode_id}: "
+                + ", ".join(str(match) for match in matches)
+            )
+        if matches:
+            return matches[0]
     return None
 
 
@@ -326,8 +384,18 @@ def _validate_trace_file(trace_path: Path) -> dict[str, Any]:
         A dict with ``trace_artifact_uri``, ``trace_content_hash``,
         ``trace_schema_version``, ``resolution_status``, and ``reason_code``.
     """
-    raw = trace_path.read_text(encoding="utf-8")
-    content_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    try:
+        raw_bytes = trace_path.read_bytes()
+        raw = raw_bytes.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return {
+            "trace_artifact_uri": str(trace_path),
+            "trace_content_hash": None,
+            "trace_schema_version": None,
+            "resolution_status": "schema-mismatch",
+            "reason_code": f"trace_read_failed:{exc}",
+        }
+    content_hash = hashlib.sha256(raw_bytes).hexdigest()
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -614,7 +682,10 @@ def resolve_candidate_trace_resolution(
 
 def load_episode_requests(  # noqa: C901
     path: Path,
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    *,
+    expected_count: int | None = ISSUE_5756_REQUEST_COUNT,
+    expected_sha256: str | None = ISSUE_5756_REQUEST_MANIFEST_SHA256,
+) -> EpisodeRequestManifest:
     """Load and validate the concrete #5756 episode request manifest.
 
     The request list is intentionally separate from the cell-level candidate
@@ -623,21 +694,22 @@ def load_episode_requests(  # noqa: C901
     from the release bundle, or leave it null for a later rerun mapping.
 
     Returns:
-        The source payload and normalized request rows.
+        The source payload, normalized rows, and exact input-byte digest.
 
     Raises:
         CandidateTraceResolutionError: If the request contract is malformed or
             contains duplicate tuples.
     """
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        raw_bytes = path.read_bytes()
+        payload = json.loads(raw_bytes.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CandidateTraceResolutionError(f"episode request manifest unreadable: {exc}") from exc
     if not isinstance(payload, dict):
         raise CandidateTraceResolutionError("episode request manifest must be a JSON object")
-    if payload.get("schema_version") != "issue_5446_trace_reexport_list.v1":
+    if payload.get("schema_version") != ISSUE_5756_REQUEST_SCHEMA_VERSION:
         raise CandidateTraceResolutionError(
-            "episode request manifest schema_version must be 'issue_5446_trace_reexport_list.v1'"
+            f"episode request manifest schema_version must be {ISSUE_5756_REQUEST_SCHEMA_VERSION!r}"
         )
     raw_tuples = payload.get("tuples")
     if not isinstance(raw_tuples, list) or not raw_tuples:
@@ -646,6 +718,17 @@ def load_episode_requests(  # noqa: C901
     if declared_count != len(raw_tuples):
         raise CandidateTraceResolutionError(
             f"episode request count mismatch: n_tuples={declared_count!r}, actual={len(raw_tuples)}"
+        )
+    if expected_count is not None and declared_count != expected_count:
+        raise CandidateTraceResolutionError(
+            f"episode request manifest must contain exactly {expected_count} tuples; "
+            f"found {declared_count}"
+        )
+    content_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    if expected_sha256 is not None and content_sha256 != expected_sha256:
+        raise CandidateTraceResolutionError(
+            "episode request manifest SHA-256 mismatch: "
+            f"expected={expected_sha256}, observed={content_sha256}"
         )
 
     normalized: list[dict[str, Any]] = []
@@ -668,7 +751,7 @@ def load_episode_requests(  # noqa: C901
             )
         seen_tuples.add(tuple_key)
         episode_id = _coerce_optional_text(raw_request.get("episode_id"))
-        expected_outcome = _normalize_outcome(raw_request.get("expected_outcome"))
+        expected_outcome = _canonical_outcome(raw_request.get("expected_outcome"))
         if raw_request.get("expected_outcome") is not None and expected_outcome is None:
             raise CandidateTraceResolutionError(
                 f"episode request {index} has unsupported expected_outcome"
@@ -683,97 +766,140 @@ def load_episode_requests(  # noqa: C901
                 "requested_by_candidates": list(raw_request.get("requested_by_candidates", [])),
             }
         )
-    return payload, normalized
+    return EpisodeRequestManifest(
+        payload=payload,
+        rows=tuple(normalized),
+        content_sha256=content_sha256,
+    )
 
 
-def load_episode_mapping(  # noqa: C901
+def load_episode_mapping(  # noqa: C901, PLR0912
     path: Path,
-) -> dict[str, dict[str, Any]]:
-    """Load a rerun episode mapping indexed by episode id and tuple identity.
+    *,
+    expected_count: int | None = ISSUE_5756_REQUEST_COUNT,
+    expected_provenance: Mapping[str, str] | None = ISSUE_5756_PINNED_PROVENANCE,
+) -> EpisodeMappingReceipt:
+    """Load a versioned #5756 rerun receipt with artifact-bound provenance.
 
-    Accepted payloads are a JSON list or an object containing ``rows``,
-    ``episodes``, or ``mappings``.  Every row must identify the scenario,
-    planner, seed, and episode id.  Trace URI and outcome fields are checked by
-    :func:`resolve_episode_requests` so missing rerun outputs remain fail-closed.
+    Every row carries both the expected release outcome and observed rerun
+    outcome, an exact trace SHA-256, and the concrete trace path.  Receipt-level
+    pins bind all rows to release tag, report/execution commits, campaign and
+    scenario hashes, checkpoint, and request-manifest bytes.
 
     Returns:
-        Mapping keyed by rerun ``episode_id``, release/request episode id, and
-        normalized tuple key.
+        A validated receipt indexed by rerun id, release id, and tuple identity.
     """
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CandidateTraceResolutionError(f"episode mapping unreadable: {exc}") from exc
-    if isinstance(payload, list):
-        raw_rows = payload
-    elif isinstance(payload, Mapping):
-        raw_rows = next(
-            (payload[key] for key in ("rows", "episodes", "mappings") if key in payload),
-            None,
+    if not isinstance(payload, Mapping):
+        raise CandidateTraceResolutionError("episode mapping receipt must be a JSON object")
+    if payload.get("schema_version") != ISSUE_5756_MAPPING_SCHEMA_VERSION:
+        raise CandidateTraceResolutionError(
+            f"episode mapping schema_version must be {ISSUE_5756_MAPPING_SCHEMA_VERSION!r}"
         )
-        if raw_rows is None:
-            raw_rows = [
-                {"requested_episode_id": episode_id, "episode_id": episode_id, **dict(row)}
-                for episode_id, row in payload.items()
-                if isinstance(row, Mapping)
-            ]
-    else:
-        raw_rows = None
+    provenance_raw = payload.get("provenance")
+    if not isinstance(provenance_raw, Mapping):
+        raise CandidateTraceResolutionError("episode mapping receipt has no provenance object")
+    provenance = {
+        str(key): str(value).strip() for key, value in provenance_raw.items() if value is not None
+    }
+    if expected_provenance is not None:
+        for key, expected in expected_provenance.items():
+            observed = provenance.get(key)
+            if observed != expected:
+                raise CandidateTraceResolutionError(
+                    f"episode mapping provenance mismatch for {key}: "
+                    f"expected={expected!r}, observed={observed!r}"
+                )
+
+    raw_rows = payload.get("rows")
     if not isinstance(raw_rows, list) or not raw_rows:
-        raise CandidateTraceResolutionError("episode mapping has no rows")
+        raise CandidateTraceResolutionError("episode mapping receipt has no rows")
+    declared_count = payload.get("n_rows")
+    if declared_count != len(raw_rows):
+        raise CandidateTraceResolutionError(
+            f"episode mapping count mismatch: n_rows={declared_count!r}, actual={len(raw_rows)}"
+        )
+    if expected_count is not None and declared_count != expected_count:
+        raise CandidateTraceResolutionError(
+            f"episode mapping receipt must contain exactly {expected_count} rows; "
+            f"found {declared_count}"
+        )
 
     indexed: dict[str, dict[str, Any]] = {}
     tuple_index: dict[str, dict[str, Any]] = {}
+    normalized_rows: list[dict[str, Any]] = []
     for index, raw_row in enumerate(raw_rows):
         if not isinstance(raw_row, Mapping):
             raise CandidateTraceResolutionError(f"episode mapping row {index} must be an object")
         episode_id = _coerce_optional_text(raw_row.get("episode_id"))
-        request_episode_id = _coerce_optional_text(
-            raw_row.get(
-                "release_episode_id",
-                raw_row.get("requested_episode_id", raw_row.get("source_episode_id")),
-            )
-        )
+        release_episode_id = _coerce_optional_text(raw_row.get("release_episode_id"))
         scenario_id = _coerce_optional_text(raw_row.get("scenario_id"))
         planner = _coerce_optional_text(raw_row.get("planner", raw_row.get("planner_id")))
         seed = coerce_optional_id(raw_row.get("seed"))
-        if None in (episode_id, scenario_id, planner, seed):
+        trace_uri = _coerce_optional_text(raw_row.get("trace_artifact_uri"))
+        trace_sha256 = _coerce_optional_text(raw_row.get("trace_sha256"))
+        expected_release_outcome = _canonical_outcome(raw_row.get("expected_release_outcome"))
+        rerun_outcome = _canonical_outcome(raw_row.get("rerun_outcome"))
+        if None in (episode_id, release_episode_id, scenario_id, planner, seed, trace_uri):
             raise CandidateTraceResolutionError(
-                f"episode mapping row {index} is missing episode identity fields"
+                f"episode mapping row {index} is missing episode identity or trace URI"
             )
-        assert episode_id is not None and scenario_id is not None and planner is not None
-        assert seed is not None
+        if not _is_sha256(trace_sha256):
+            raise CandidateTraceResolutionError(
+                f"episode mapping row {index} has invalid trace SHA-256"
+            )
+        if expected_release_outcome is None:
+            raise CandidateTraceResolutionError(
+                f"episode mapping row {index} has no canonical expected release outcome"
+            )
+        if rerun_outcome is None:
+            raise CandidateTraceResolutionError(
+                f"episode mapping row {index} has no canonical rerun outcome"
+            )
+        assert episode_id is not None
+        assert release_episode_id is not None
+        assert scenario_id is not None and planner is not None and seed is not None
+        assert trace_uri is not None and trace_sha256 is not None
         tuple_key = _episode_request_key(scenario_id, planner, seed)
         row = {
             **dict(raw_row),
             "episode_id": episode_id,
+            "release_episode_id": release_episode_id,
             "scenario_id": scenario_id,
             "planner": planner,
             "seed": seed,
+            "trace_artifact_uri": trace_uri,
+            "trace_sha256": trace_sha256.lower(),
+            "expected_release_outcome": expected_release_outcome,
+            "rerun_outcome": rerun_outcome,
         }
-        if episode_id in indexed:
-            raise CandidateTraceResolutionError(f"duplicate mapped episode_id: {episode_id}")
         if tuple_key in tuple_index:
             raise CandidateTraceResolutionError(
                 "duplicate mapped episode tuple: "
                 f"scenario_id={scenario_id}, planner={planner}, seed={seed}"
             )
-        indexed[episode_id] = row
-        if request_episode_id is not None and request_episode_id != episode_id:
-            if request_episode_id in indexed:
-                raise CandidateTraceResolutionError(
-                    f"duplicate mapped release episode_id: {request_episode_id}"
-                )
-            indexed[request_episode_id] = row
+        for identity, label in (
+            (episode_id, "episode_id"),
+            (release_episode_id, "release episode_id"),
+        ):
+            if identity in indexed and indexed[identity] is not row:
+                raise CandidateTraceResolutionError(f"duplicate mapped {label}: {identity}")
+            indexed[identity] = row
         tuple_index[tuple_key] = row
-    return {**indexed, **tuple_index}
+        normalized_rows.append(row)
+    return EpisodeMappingReceipt(
+        provenance=provenance,
+        rows=tuple(normalized_rows),
+        index={**indexed, **tuple_index},
+    )
 
 
 def resolve_episode_requests(  # noqa: C901, PLR0915
-    request_manifest: Mapping[str, Any],
-    episode_mapping: Mapping[str, Mapping[str, Any]],
-    *,
-    trace_search_roots: Sequence[Path] | None = None,
+    request_manifest: EpisodeRequestManifest,
+    episode_mapping: EpisodeMappingReceipt,
 ) -> dict[str, Any]:
     """Resolve concrete #5756 requests against rerun rows and trace exports.
 
@@ -786,26 +912,31 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
         A ``candidate_trace_resolution.v1`` manifest whose rows are keyed by
         deterministic ``trace_request::<scenario>::<planner>::<seed>`` ids.
     """
-    source_bytes = json.dumps(request_manifest, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
-    source_hash = hashlib.sha256(source_bytes).hexdigest()
-    raw_requests = request_manifest.get("tuples")
-    if not isinstance(raw_requests, list) or not raw_requests:
-        raise CandidateTraceResolutionError("request_manifest has no tuples")
+    if not isinstance(request_manifest, EpisodeRequestManifest):
+        raise CandidateTraceResolutionError("request_manifest must come from load_episode_requests")
+    if not isinstance(episode_mapping, EpisodeMappingReceipt):
+        raise CandidateTraceResolutionError(
+            "episode_mapping must be a versioned receipt from load_episode_mapping"
+        )
+    source_hash = request_manifest.content_sha256
+    if episode_mapping.provenance.get("request_manifest_sha256") != source_hash:
+        raise CandidateTraceResolutionError(
+            "episode mapping request-manifest digest does not match loaded request bytes"
+        )
+    if len(request_manifest.rows) != len(episode_mapping.rows):
+        raise CandidateTraceResolutionError(
+            "request/mapping coverage mismatch: "
+            f"requests={len(request_manifest.rows)}, mapping_rows={len(episode_mapping.rows)}"
+        )
     rows: list[dict[str, Any]] = []
     counts = dict.fromkeys(
         ("resolved", "trace-missing", "schema-mismatch", "provenance-incomplete"), 0
     )
-    roots = list(trace_search_roots or [])
-    for request in raw_requests:
-        if not isinstance(request, Mapping):
-            raise CandidateTraceResolutionError("request_manifest contains a non-object tuple")
-        scenario_id = _coerce_optional_text(request.get("scenario_id"))
-        planner = _coerce_optional_text(request.get("planner", request.get("planner_id")))
-        seed = coerce_optional_id(request.get("seed"))
-        if scenario_id is None or planner is None or seed is None:
-            raise CandidateTraceResolutionError("request tuple has incomplete identity")
+    provenance = episode_mapping.provenance
+    for request in request_manifest.rows:
+        scenario_id = str(request["scenario_id"])
+        planner = str(request["planner"])
+        seed = int(request["seed"])
         request_key = _episode_request_key(scenario_id, planner, seed)
         request_id = f"trace_request::{scenario_id}::{planner}::{seed}"
         requested_episode_id = _coerce_optional_text(request.get("episode_id"))
@@ -815,13 +946,19 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
         base = {
             "candidate_id": request_id,
             "source_manifest_hash": source_hash,
-            "campaign_id": None,
-            "campaign_row_reference": None,
+            "campaign_id": provenance["release_tag"],
+            "campaign_row_reference": (
+                f"release_bundle_sha256={provenance['release_bundle_sha256']};"
+                f"report_commit={provenance['report_commit']};"
+                f"execution_commit={provenance['execution_commit']};"
+                f"scenario_matrix_sha256={provenance['scenario_matrix_sha256']};"
+                f"checkpoint_sha256={provenance['checkpoint_sha256']}"
+            ),
             "artifact_uri": None,
             "scenario_id": scenario_id,
             "planner_id": planner,
             "seed": seed,
-            "config_hash": None,
+            "config_hash": provenance["canonical_campaign_config_sha256"],
             "episode_id": None,
             "trace_artifact_uri": None,
             "trace_content_hash": None,
@@ -852,14 +989,18 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
             counts["provenance-incomplete"] += 1
             continue
 
-        observed_outcome = _mapping_outcome(mapped)
-        expected_outcome = _normalize_outcome(request.get("expected_outcome"))
-        if observed_outcome is None:
-            base["reason_code"] = "outcome_missing_or_invalid"
+        expected_outcome = str(mapped["expected_release_outcome"])
+        observed_outcome = str(mapped["rerun_outcome"])
+        request_expected_outcome = request.get("expected_outcome")
+        if request_expected_outcome is not None and request_expected_outcome != expected_outcome:
+            base["reason_code"] = (
+                "request_release_outcome_mismatch:"
+                f"request={request_expected_outcome},mapping={expected_outcome}"
+            )
             rows.append(base)
             counts["provenance-incomplete"] += 1
             continue
-        if expected_outcome is not None and observed_outcome != expected_outcome:
+        if observed_outcome != expected_outcome:
             base["reason_code"] = (
                 f"outcome_mismatch:expected={expected_outcome},observed={observed_outcome}"
             )
@@ -867,17 +1008,11 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
             counts["provenance-incomplete"] += 1
             continue
 
-        trace_uri = _coerce_optional_text(
-            mapped.get(
-                "trace_artifact_uri",
-                mapped.get("trace_uri", mapped.get("artifact_uri", mapped.get("trace_path"))),
-            )
-        )
+        trace_uri = str(mapped["trace_artifact_uri"])
         episode_id = str(mapped["episode_id"])
-        episode_provenance = {"artifact_uri": trace_uri, "episode_id": episode_id}
-        trace_path = _locate_trace_path(episode_provenance, trace_search_roots=roots)
+        trace_path = Path(trace_uri)
         row = {**base, "episode_id": episode_id, "artifact_uri": trace_uri}
-        if trace_path is None:
+        if not trace_path.is_file():
             row["reason_code"] = "trace_artifact_not_found"
             row["resolution_status"] = "trace-missing"
             rows.append(row)
@@ -896,6 +1031,16 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
             row["reason_code"] = trace["reason_code"]
             rows.append(row)
             counts[trace["resolution_status"]] += 1
+            continue
+        expected_trace_sha256 = str(mapped["trace_sha256"])
+        if trace["trace_content_hash"] != expected_trace_sha256:
+            row["resolution_status"] = "provenance-incomplete"
+            row["reason_code"] = (
+                "trace_sha256_mismatch:"
+                f"expected={expected_trace_sha256},observed={trace['trace_content_hash']}"
+            )
+            rows.append(row)
+            counts["provenance-incomplete"] += 1
             continue
         try:
             typed_trace = load_simulation_trace_export(trace_path)
@@ -925,7 +1070,7 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
         row.update(
             {
                 "resolution_status": "resolved",
-                "reason_code": f"trace_schema_valid:outcome={observed_outcome}",
+                "reason_code": (f"trace_schema_and_provenance_valid:outcome={observed_outcome}"),
                 "exact_repeat_determinism": "pinned_artifact",
             }
         )
@@ -938,8 +1083,11 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
         "generated_at_utc": "deterministic-not-a-clock",
         "source_manifest_hash": source_hash,
         "determinism": {
-            "policy": "requests are ordered by scenario_id, planner, seed; rerun identity and trace hashes are explicit",
-            "tool_version": "#5756-request-resolution.v1",
+            "policy": (
+                "requests are ordered by scenario_id, planner, seed; exact request bytes, "
+                "release/rerun outcomes, receipt pins, and trace bytes are verified"
+            ),
+            "tool_version": ISSUE_5756_MAPPING_SCHEMA_VERSION,
         },
         "summary": {
             "n_candidates": len(rows),
@@ -954,6 +1102,25 @@ def resolve_episode_requests(  # noqa: C901, PLR0915
 
 def _episode_request_key(scenario_id: str, planner: str, seed: int) -> str:
     return f"scenario_id={scenario_id}|planner={planner}|seed={seed}"
+
+
+def _is_sha256(value: str | None) -> bool:
+    """Return whether ``value`` is a lowercase or uppercase SHA-256 hex digest."""
+    return bool(
+        value
+        and len(value) == 64
+        and all(character in "0123456789abcdefABCDEF" for character in value)
+    )
+
+
+def _canonical_outcome(value: Any) -> str | None:
+    """Accept only the four release outcome labels used by the #5756 contract.
+
+    Returns:
+        The canonical label, or ``None`` for aliases and unsupported values.
+    """
+    text = _coerce_optional_text(value)
+    return text if text in WORKED_EXAMPLE_OUTCOMES else None
 
 
 def _normalize_outcome(value: Any) -> str | None:
@@ -1038,11 +1205,18 @@ def json_pointer(path: Sequence[str | int]) -> str:
 # Re-export for callers that want the canonical candidate field reader.
 __all__ = [
     "CANDIDATE_SCHEMA_VERSION",
+    "ISSUE_5756_MAPPING_SCHEMA_VERSION",
+    "ISSUE_5756_PINNED_PROVENANCE",
+    "ISSUE_5756_REQUEST_COUNT",
+    "ISSUE_5756_REQUEST_MANIFEST_SHA256",
+    "ISSUE_5756_REQUEST_SCHEMA_VERSION",
     "SCHEMA_VERSION",
     "TRACE_SCHEMA_VERSION",
     "WORKED_EXAMPLE_OUTCOMES",
     "CampaignResultStore",
     "CandidateTraceResolutionError",
+    "EpisodeMappingReceipt",
+    "EpisodeRequestManifest",
     "load_campaign_result_store",
     "load_episode_mapping",
     "load_episode_requests",

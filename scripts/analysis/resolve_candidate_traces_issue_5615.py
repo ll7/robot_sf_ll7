@@ -96,7 +96,10 @@ def build_parser() -> argparse.ArgumentParser:
         dest="episode_mapping",
         type=Path,
         default=None,
-        help="Read-only rerun mapping with episode identity, outcome, and trace URI.",
+        help=(
+            "Versioned issue_5756_trace_mapping_receipt.v1 JSON with pinned "
+            "provenance and trace digests."
+        ),
     )
     p.add_argument(
         "--campaign-store",
@@ -144,19 +147,34 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912
         if args.episode_mapping is None:
             print("error: --episode-mapping is required with --episode-requests", file=sys.stderr)
             return 2
+        incompatible = [
+            flag
+            for flag, supplied in (
+                ("--campaign-store", args.campaign_store is not None),
+                ("--trace-roots", bool(args.trace_roots)),
+                ("--critical-interval-config", args.critical_interval_config is not None),
+            )
+            if supplied
+        ]
+        if incompatible:
+            print(
+                "error: episode-request mode does not accept candidate-only flags: "
+                + ", ".join(incompatible),
+                file=sys.stderr,
+            )
+            return 2
         try:
-            request_manifest, _ = load_episode_requests(args.episode_requests)
+            request_manifest = load_episode_requests(args.episode_requests)
             episode_mapping = load_episode_mapping(args.episode_mapping)
+            manifest = resolve_episode_requests(request_manifest, episode_mapping)
         except CandidateTraceResolutionError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
-        manifest = resolve_episode_requests(
-            request_manifest,
-            episode_mapping,
-            trace_search_roots=[Path(r) for r in args.trace_roots],
-        )
         candidate_manifest = None
     else:
+        if args.episode_mapping is not None:
+            print("error: --episode-mapping requires --episode-requests", file=sys.stderr)
+            return 2
         try:
             candidate_manifest = _load_json(args.candidates)
         except (OSError, json.JSONDecodeError) as exc:
@@ -180,11 +198,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912
 
     if args.check_determinism:
         if args.episode_requests is not None:
-            manifest2 = resolve_episode_requests(
-                request_manifest,
-                episode_mapping,
-                trace_search_roots=[Path(r) for r in args.trace_roots],
-            )
+            manifest2 = resolve_episode_requests(request_manifest, episode_mapping)
         else:
             manifest2 = resolve_candidate_trace_resolution(candidate_manifest, **kwargs)
         if json.dumps(manifest, sort_keys=True) != json.dumps(manifest2, sort_keys=True):

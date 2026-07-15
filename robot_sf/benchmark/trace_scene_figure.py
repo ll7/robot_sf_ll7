@@ -49,6 +49,7 @@ DEFAULT_COLLISION_ENVELOPE_M = 1.4
 DEFAULT_COMFORT_DISTANCE_M = 1.2
 _MATRIX_PATH = Path(__file__).resolve().parents[2] / "configs/scenarios/classic_interactions.yaml"
 _SUCCESS_STATUSES = {"success", "goal", "goal_reached", "completed"}
+_TRACE_EXPORT_OUTCOMES = {"success", "collision_event", "route_complete", "timeout_event"}
 _DEFAULT_MARKER_INTERVAL_S = 2.0
 _LONG_EPISODE_MARKER_INTERVAL_S = 4.0
 _LONG_EPISODE_THRESHOLD_S = 25.0
@@ -356,8 +357,10 @@ def load_episode_from_trace_export(
         trace = load_simulation_trace_export(Path(trace_path))
     except (OSError, ValueError, SimulationTraceExportValidationError) as exc:
         raise TraceSchemaError(f"cannot load simulation trace export {trace_path}: {exc}") from exc
-    if not outcome.strip():
-        raise TraceSchemaError("trace-export outcome must be non-empty")
+    if outcome not in _TRACE_EXPORT_OUTCOMES:
+        raise TraceSchemaError(
+            "trace-export outcome must be one of " + ", ".join(sorted(_TRACE_EXPORT_OUTCOMES))
+        )
 
     derived_rows: list[dict[str, Any]] = []
     frames: list[dict[str, Any]] = []
@@ -373,6 +376,8 @@ def load_episode_from_trace_export(
             raise TraceSchemaError(
                 f"trace frame {frame.step} has no pedestrians; minimum distance is undefined"
             )
+        if any("id" not in pedestrian for pedestrian in pedestrians):
+            raise TraceSchemaError(f"trace frame {frame.step} has a pedestrian missing id")
         distances = [
             (
                 math.hypot(
@@ -414,10 +419,9 @@ def load_episode_from_trace_export(
                 ],
             }
         )
-    assert global_min_step is not None
-    status = (
-        "success" if outcome in {"success", "route_complete", "goal", "completed"} else "failure"
-    )
+    if global_min_step is None:
+        raise TraceSchemaError("trace export has no frames")
+    status = "success" if outcome in {"success", "route_complete"} else "failure"
     metadata = {
         "planner": trace.source.planner_id,
         "scenario_id": trace.source.scenario_id,
@@ -454,7 +458,9 @@ def _is_xy_vector(value: Any) -> bool:
         isinstance(value, (list, tuple))
         and len(value) == 2
         and all(
-            isinstance(component, (int, float)) and math.isfinite(float(component))
+            isinstance(component, (int, float))
+            and not isinstance(component, bool)
+            and math.isfinite(float(component))
             for component in value
         )
     )

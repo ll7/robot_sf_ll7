@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Resolve and render the two native worked-example trace figures for #5756.
 
-The command consumes the durable #5446 request list and a read-only mapping
-from the pinned rerun.  It writes the resolution manifest before rendering and
-fails closed unless the four required exemplars resolve with matching source
-identity, allowed outcomes, and valid ``simulation_trace_export.v1`` payloads.
-It does not launch a campaign or infer missing episode outcomes.
+The command consumes the byte-pinned #5446 request list and a versioned,
+artifact-bound mapping receipt from the pinned rerun.  It writes the resolution
+manifest before rendering and fails closed unless all 90 requests reproduce
+their release outcomes with matching source identity, pinned provenance, exact
+trace digests, and valid ``simulation_trace_export.v1`` payloads.  It does not
+launch a campaign or infer missing episode outcomes.
 """
 
 from __future__ import annotations
@@ -19,7 +20,10 @@ from typing import Any
 import matplotlib.pyplot as plt
 
 from robot_sf.benchmark.candidate_trace_resolution import (
+    ISSUE_5756_REQUEST_COUNT,
+    WORKED_EXAMPLE_OUTCOMES,
     CandidateTraceResolutionError,
+    EpisodeMappingReceipt,
     load_episode_mapping,
     load_episode_requests,
     resolve_episode_requests,
@@ -37,16 +41,20 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--episode-requests", type=Path, required=True)
     parser.add_argument(
-        "--episode-mapping", "--episode-map", dest="episode_mapping", type=Path, required=True
+        "--episode-mapping",
+        "--episode-map",
+        dest="episode_mapping",
+        type=Path,
+        required=True,
+        help="Versioned issue_5756_trace_mapping_receipt.v1 JSON with pinned provenance.",
     )
-    parser.add_argument("--trace-roots", type=Path, nargs="*", default=[])
     parser.add_argument("--out-dir", type=Path, required=True)
     parser.add_argument("--resolution-json", type=Path, default=None)
     parser.add_argument("--qa", action="store_true", help="run the figure linter and emit PNGs")
     return parser
 
 
-def _mapping_row(mapping: dict[str, dict[str, Any]], row: dict[str, Any]) -> dict[str, Any]:
+def _mapping_row(mapping: EpisodeMappingReceipt, row: dict[str, Any]) -> dict[str, Any]:
     episode_id = str(row["episode_id"])
     mapped = mapping.get(episode_id)
     if mapped is None:
@@ -55,22 +63,37 @@ def _mapping_row(mapping: dict[str, dict[str, Any]], row: dict[str, Any]) -> dic
 
 
 def _outcome(row: dict[str, Any]) -> str | None:
-    value = row.get("outcome", row.get("episode_outcome", row.get("status")))
-    if isinstance(value, dict):
-        for key in ("collision_event", "timeout_event", "route_complete", "success"):
-            if value.get(key) is True:
-                return key
-        return None
-    if value in {"success", "collision_event", "route_complete", "timeout_event"}:
-        return str(value)
-    if value in {"goal", "goal_reached", "completed"}:
-        return "route_complete"
-    return None
+    value = row.get("rerun_outcome")
+    return str(value) if value in WORKED_EXAMPLE_OUTCOMES else None
+
+
+def _require_complete_resolution(resolution: dict[str, Any]) -> None:
+    """Require the full pinned 90-row request set before any figure is rendered."""
+    summary = resolution.get("summary")
+    rows = resolution.get("rows")
+    if not isinstance(summary, dict) or not isinstance(rows, list):
+        raise CandidateTraceResolutionError("resolution has no summary or rows")
+    expected = {
+        "n_candidates": ISSUE_5756_REQUEST_COUNT,
+        "n_resolved": ISSUE_5756_REQUEST_COUNT,
+        "n_trace_missing": 0,
+        "n_schema_mismatch": 0,
+        "n_provenance_incomplete": 0,
+    }
+    observed = {key: summary.get(key) for key in expected}
+    if observed != expected or len(rows) != ISSUE_5756_REQUEST_COUNT:
+        raise CandidateTraceResolutionError(
+            f"rendering requires complete 90/90 resolution; summary={observed}, rows={len(rows)}"
+        )
+    if any(row.get("resolution_status") != "resolved" for row in rows):
+        raise CandidateTraceResolutionError(
+            "rendering requires every one of the 90 resolution rows to be resolved"
+        )
 
 
 def _find_exemplar(
     resolution: dict[str, Any],
-    mapping: dict[str, dict[str, Any]],
+    mapping: EpisodeMappingReceipt,
     *,
     scenario_id: str,
     planner: str,
@@ -107,7 +130,6 @@ def _render_pair(
     rows: tuple[dict[str, Any], dict[str, Any]],
     outcomes: tuple[str, str],
     *,
-    mapping: dict[str, dict[str, Any]],
     output: Path,
     emit_png: bool,
 ) -> None:
@@ -139,13 +161,9 @@ def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     resolution_json = args.resolution_json or args.out_dir / "candidate_trace_resolution.v1.json"
     try:
-        request_manifest, _ = load_episode_requests(args.episode_requests)
+        request_manifest = load_episode_requests(args.episode_requests)
         mapping = load_episode_mapping(args.episode_mapping)
-        resolution = resolve_episode_requests(
-            request_manifest,
-            mapping,
-            trace_search_roots=args.trace_roots,
-        )
+        resolution = resolve_episode_requests(request_manifest, mapping)
         resolution_json.parent.mkdir(parents=True, exist_ok=True)
         resolution_json.write_text(json.dumps(resolution, indent=2) + "\n", encoding="utf-8")
         validation = validate_candidate_trace_resolution(resolution)
@@ -153,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
             raise CandidateTraceResolutionError(
                 "resolution manifest failed schema validation: " + "; ".join(validation["errors"])
             )
+        _require_complete_resolution(resolution)
         doorway_success, doorway_collision = (
             _find_exemplar(
                 resolution,
@@ -193,14 +212,12 @@ def main(argv: list[str] | None = None) -> int:
         _render_pair(
             (doorway_success[0], doorway_collision[0]),
             (doorway_success[1], doorway_collision[1]),
-            mapping=mapping,
             output=args.out_dir / "doorway_ppo_seed113_vs_114.pdf",
             emit_png=args.qa,
         )
         _render_pair(
             (bottleneck_goal[0], bottleneck_ppo[0]),
             (bottleneck_goal[1], bottleneck_ppo[1]),
-            mapping=mapping,
             output=args.out_dir / "double_bottleneck_goal_vs_ppo_seed118.pdf",
             emit_png=args.qa,
         )

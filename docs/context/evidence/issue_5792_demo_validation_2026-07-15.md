@@ -3,7 +3,8 @@
 Status: `diagnostic-only` UX/reproducibility evidence; not benchmark, safety, or paper evidence.
 
 This compact record is the durable artifact pointer for PR #5807. The generated JSONL, viewer, and
-PNG remain worktree-local under `output/` and are intentionally not copied into git. They can be
+PNG remain worktree-local under the configured demo artifact root and are intentionally not copied
+into git. They can be
 recovered from the tracked scenario, code, seed, and command below.
 
 ## Reproduction
@@ -13,8 +14,8 @@ recovered from the tracked scenario, code, seed, and command below.
 - Scenario name: `quickstart_demo_crossing_basic`
 - Planner: built-in `random`
 - Seed: `270`
-- Command: `uv run robot-sf demo --output-root output/demo/latest --seed 270`
-- Artifact root: `output/demo/latest/`
+- Command: `uv run robot-sf demo --output-root <demo-artifact-root> --seed 270`
+- Artifact root: `<demo-artifact-root>/`
 - Artifact set: `episode.jsonl`, `summary.json`, `metrics.json`, `viewer/index.html`,
   `viewer/scene.json`, and `thumbnail.png`
 

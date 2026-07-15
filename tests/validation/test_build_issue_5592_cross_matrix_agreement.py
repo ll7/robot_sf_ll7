@@ -191,3 +191,29 @@ def test_ready_report_records_no_remaining_input_blocker(tmp_path: Path) -> None
     assert "None for the artifact builder" in report
     assert "not a general-purpose generalization guarantee" in report
     assert "Review `cross_matrix_agreement.csv`" in report
+
+
+def test_report_treats_explicit_null_contract_sections_as_empty(tmp_path: Path) -> None:
+    """Null YAML sections do not crash the diagnostic report writer."""
+    out = tmp_path / "out"
+    out.mkdir()
+    builder._write_integration_report(
+        out,
+        packet={
+            "reference_contract": None,
+            "candidate_contract": None,
+            "pairing_contract": None,
+            "planner_roster": None,
+        },
+        packet_path=PACKET,
+        status="blocked_missing_matrix",
+        source_commit="0" * 40,
+        reference_present=False,
+        candidate_present=False,
+        next_action="Provide both ranking inputs.",
+    )
+
+    report = (out / builder.INTEGRATION_REPORT).read_text(encoding="utf-8")
+
+    assert "Reference matrix: `None`" in report
+    assert "Candidate scenarios, in frozen order:" in report

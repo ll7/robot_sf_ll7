@@ -43,6 +43,7 @@ DEFAULT_OUTPUT_DIR = _REPO_ROOT / "output/issue_4981_vecenv_throughput_acceptanc
 _COMPARATOR = _REPO_ROOT / "scripts/validation/run_vecenv_worker_mode_throughput.py"
 _STANDARD_CONFIG = Path("configs/training/lidar/lidar_ppo_mlp_smoke_issue_1662.yaml")
 _SUPPORTED_MODES = ("dummy", "subproc", "threaded", "threaded_lidar_batch")
+_COMPARATOR_MODE_FAILURE_EXIT_CODE = 2
 _SPEEDUP_STATISTIC = "median_transitions_per_second_ratio"
 _CLAIM_BOUNDARY = (
     "Host-specific CPU implementation-performance acceptance for issue #4981 only; this does not "
@@ -258,6 +259,7 @@ class _EvidenceValidator:
         self.current_commit = current_commit
         self.preflight = preflight
         self.blockers: list[str] = []
+        self._comparison_only_failure_modes: set[str] = set()
 
     def _expect(self, field: str, expected: object) -> None:
         actual = self.evidence.get(field)
@@ -324,7 +326,7 @@ class _EvidenceValidator:
                 throughputs.append(throughput)
         return throughputs
 
-    def _validate_source_contract(self) -> None:
+    def _validate_source_fields(self) -> None:
         expected_fields: dict[str, object] = {
             "schema": SOURCE_SCHEMA,
             **expected_source_provenance(self.profile),
@@ -341,22 +343,41 @@ class _EvidenceValidator:
         }
         for field, expected in expected_fields.items():
             self._expect(field, expected)
-        # Only baseline and candidate-mode failures block acceptance.
-        # Comparison-only modes (subproc, 4-env dummy) may fail without blocking,
-        # provided their mode is identifiable. Unidentified or missing-mode failures
-        # are treated as critical since they may mask regressions.
-        failures = self.evidence.get("failures") or []
-        critical_failures = [
-            f for f in failures
-            if f.get("scope") == "baseline"
-            or f.get("mode") in self.profile.candidate_modes
-        ]
-        unknown_failures = [
-            f for f in failures
-            if f not in critical_failures and (
-                f.get("mode") is None or f.get("mode") not in self.profile.modes
-            )
-        ]
+
+    def _validate_failures(self) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]]]:
+        """Validate failure records and return critical/comparison-only groups."""
+        raw_failures = self.evidence.get("failures")
+        if not isinstance(raw_failures, list):
+            self.blockers.append("failures must be a list of mappings")
+            return [], []
+
+        critical_failures: list[Mapping[str, Any]] = []
+        comparison_only_failures: list[Mapping[str, Any]] = []
+        unknown_failures: list[Mapping[str, Any]] = []
+        for index, failure in enumerate(raw_failures):
+            if not isinstance(failure, Mapping):
+                self.blockers.append(f"failures[{index}] must be a mapping")
+                continue
+            error = failure.get("error")
+            if not isinstance(error, str) or not error.strip():
+                self.blockers.append(f"failures[{index}].error must be a non-empty string")
+            mode = failure.get("mode")
+            scope = failure.get("scope")
+            if scope == "baseline" or mode in self.profile.candidate_modes:
+                critical_failures.append(failure)
+            elif (
+                scope == "mode"
+                and isinstance(mode, str)
+                and mode in self.profile.modes
+                and mode not in self.profile.candidate_modes
+            ):
+                comparison_only_failures.append(failure)
+            else:
+                unknown_failures.append(failure)
+
+        self._comparison_only_failure_modes = {
+            str(failure["mode"]) for failure in comparison_only_failures
+        }
         if critical_failures:
             self.blockers.append(
                 f"baseline or candidate-mode failures block acceptance: {critical_failures}"
@@ -365,18 +386,31 @@ class _EvidenceValidator:
             self.blockers.append(
                 f"unidentified or unrecognized-mode failures block acceptance: {unknown_failures}"
             )
+        return critical_failures, comparison_only_failures
+
+    def _validate_source_status(
+        self,
+        failures: list[Mapping[str, Any]],
+        critical_failures: list[Mapping[str, Any]],
+        comparison_only_failures: list[Mapping[str, Any]],
+    ) -> None:
+        # Only baseline and candidate-mode failures block acceptance.
+        # Comparison-only modes (subproc, 4-env dummy) may fail without blocking,
+        # provided their mode is identifiable. Unidentified or missing-mode failures
+        # are treated as critical since they may mask regressions.
         # Source status may be "failed" when only non-critical comparison modes
         # failed with known mode identities. It must still block when status
         # is "failed" with no documented failures (inconsistent state).
-        if self.evidence.get("status") != "ok":
-            if not failures:
+        status = self.evidence.get("status")
+        if status == "ok" and failures:
+            self.blockers.append("source status must be 'failed' when failures are present")
+        elif status != "ok":
+            if not failures or critical_failures or not comparison_only_failures:
                 self.blockers.append(
                     f"source status must be 'ok', got {self.evidence.get('status')!r}"
                 )
-            elif critical_failures or unknown_failures:
-                self.blockers.append(
-                    f"source status must be 'ok', got {self.evidence.get('status')!r}"
-                )
+
+    def _validate_provenance(self) -> None:
         if self.evidence.get("commit") != self.current_commit:
             self.blockers.append(
                 f"source commit must match current HEAD {self.current_commit!r}, "
@@ -395,36 +429,70 @@ class _EvidenceValidator:
                 f"required fallback/equivalence preflight failed: {self.preflight!r}"
             )
 
-    def validate(self) -> tuple[float | None, list[dict[str, Any]]]:
-        """Return validated baseline throughput and in-process candidate speedups."""
-        self._validate_source_contract()
-        baseline = self._summary(self.evidence.get("baseline"), label="baseline", mode="dummy")
+    def _validate_source_contract(self) -> None:
+        self._validate_source_fields()
+        raw_failures = self.evidence.get("failures")
+        failures = raw_failures if isinstance(raw_failures, list) else []
+        critical_failures, comparison_only_failures = self._validate_failures()
+        self._validate_source_status(failures, critical_failures, comparison_only_failures)
+        self._validate_provenance()
+
+    def _validated_results(self) -> list[Mapping[str, Any]] | None:
         results = self.evidence.get("results")
         if not isinstance(results, list) or any(not isinstance(row, Mapping) for row in results):
             self.blockers.append("results must be a list of mappings")
-            return baseline, []
+            return None
         modes = [row.get("mode") for row in results]
         if modes != list(self.profile.modes):
             self.blockers.append(
                 f"result mode order must be {list(self.profile.modes)!r}, got {modes!r}"
             )
+        result_by_mode = {
+            row.get("mode"): row for row in results if isinstance(row.get("mode"), str)
+        }
+        for mode in self._comparison_only_failure_modes:
+            row = result_by_mode.get(mode)
+            if row is None or row.get("status") == "ok":
+                self.blockers.append(
+                    f"comparison-only failure for {mode!r} must have a non-ok result row"
+                )
+            elif row.get("status") not in {"construction_failed", "step_failed"} or not (
+                isinstance(row.get("error"), str) and row.get("error", "").strip()
+            ):
+                self.blockers.append(
+                    f"comparison-only failure for {mode!r} must retain a known failure status "
+                    "and non-empty error"
+                )
+        return results
 
-        candidate_speedups = []
+    def _result_speedup(
+        self, mode: str, row: Mapping[str, Any], baseline: float
+    ) -> tuple[float | None, float | None]:
+        throughput = self._summary(row, label=f"results[{mode}]", mode=mode)
+        if throughput is None:
+            return None, None
+        speedup = round(throughput / baseline, 3)
+        reported = _number(row.get("speedup_vs_baseline"))
+        if reported is None or not math.isclose(reported, speedup, rel_tol=0.0, abs_tol=0.0011):
+            self.blockers.append(
+                f"results[{mode}].speedup_vs_baseline must equal {speedup}, got {reported!r}"
+            )
+        return throughput, speedup
+
+    def _candidate_speedups(
+        self,
+        results: list[Mapping[str, Any]],
+        baseline: float | None,
+    ) -> list[dict[str, Any]]:
+        if baseline is None:
+            return []
+        candidate_speedups: list[dict[str, Any]] = []
         for mode, row in zip(self.profile.modes, results, strict=False):
-            # Only validate comparison-only modes if they succeeded; skip
-            # detailed checks for non-critical modes that are known to have
-            # failed (e.g. subproc connection resets on some hosts).
             if mode not in self.profile.candidate_modes and row.get("status") != "ok":
                 continue
-            throughput = self._summary(row, label=f"results[{mode}]", mode=mode)
-            if baseline is None or throughput is None:
+            throughput, speedup = self._result_speedup(mode, row, baseline)
+            if throughput is None or speedup is None:
                 continue
-            speedup = round(throughput / baseline, 3)
-            reported = _number(row.get("speedup_vs_baseline"))
-            if reported is None or not math.isclose(reported, speedup, rel_tol=0.0, abs_tol=0.0011):
-                self.blockers.append(
-                    f"results[{mode}].speedup_vs_baseline must equal {speedup}, got {reported!r}"
-                )
             if mode in self.profile.candidate_modes:
                 candidate_speedups.append(
                     {
@@ -434,17 +502,56 @@ class _EvidenceValidator:
                         "threshold_met": speedup > self.profile.minimum_speedup_exclusive,
                     }
                 )
-        if baseline is not None:
-            reported = _number(
-                self.evidence.get("baseline", {}).get("speedup_vs_baseline")
-                if isinstance(self.evidence.get("baseline"), Mapping)
-                else None
-            )
-            if reported != 1.0:
-                self.blockers.append("baseline.speedup_vs_baseline must equal 1.0")
+        return candidate_speedups
+
+    def _validate_baseline_speedup(self, baseline: float | None) -> None:
+        if baseline is None:
+            return
+        baseline_record = self.evidence.get("baseline")
+        reported = (
+            _number(baseline_record.get("speedup_vs_baseline"))
+            if isinstance(baseline_record, Mapping)
+            else None
+        )
+        if reported != 1.0:
+            self.blockers.append("baseline.speedup_vs_baseline must equal 1.0")
+
+    def validate(self) -> tuple[float | None, list[dict[str, Any]]]:
+        """Return validated baseline throughput and in-process candidate speedups."""
+        self._validate_source_contract()
+        baseline = self._summary(self.evidence.get("baseline"), label="baseline", mode="dummy")
+        results = self._validated_results()
+        if results is None:
+            return baseline, []
+        candidate_speedups = self._candidate_speedups(results, baseline)
+        self._validate_baseline_speedup(baseline)
         if not candidate_speedups:
             self.blockers.append("no valid candidate-mode speedups were available")
         return baseline, candidate_speedups
+
+
+def _tolerated_comparator_exit(
+    profile: AcceptanceProfile,
+    evidence: Mapping[str, Any],
+    comparator_exit_code: int | None,
+) -> bool:
+    """Allow only the comparator's known non-candidate measurement-failure exit."""
+    if comparator_exit_code != _COMPARATOR_MODE_FAILURE_EXIT_CODE:
+        return False
+    failures = evidence.get("failures")
+    return (
+        evidence.get("status") == "failed"
+        and isinstance(failures, list)
+        and bool(failures)
+        and all(
+            isinstance(failure, Mapping)
+            and failure.get("scope") == "mode"
+            and isinstance(failure.get("mode"), str)
+            and failure.get("mode") in profile.modes
+            and failure.get("mode") not in profile.candidate_modes
+            for failure in failures
+        )
+    )
 
 
 def adjudicate(
@@ -625,12 +732,19 @@ def _execute(
         current_commit=_git_commit(_REPO_ROOT),
         preflight=preflight,
     )
-    if comparator_exit_code not in {None, 0} and report["blockers"]:
+    if comparator_exit_code not in {None, 0} and not _tolerated_comparator_exit(
+        profile, evidence, comparator_exit_code
+    ):
         # Record the comparator exit code only when the adjudicator already
-        # has blockers. If the adjudicator is clean (e.g. only non-critical
-        # comparison modes failed), the adjudicator's own verdict is authoritative
-        # and we must not override it with the coarse comparator exit.
+        # has blockers or the exit does not describe a known comparison-only
+        # mode failure. The adjudicator's verdict is authoritative only for the
+        # documented comparator exit and validated non-candidate failure records.
         report["blockers"].append(f"comparator exited with code {comparator_exit_code}")
+        report.update(
+            status="blocked",
+            acceptance_met=None,
+            evidence_status="blocked_invalid_or_incomplete_evidence",
+        )
     return report, {"met": 0, "not_met": 2}.get(str(report["status"]), 3)
 
 

@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5792, 2026-07-15) - NEEDS-REVIEW -->
+
 # Issue #5792 demo validation record
 
 Status: `diagnostic-only` UX/reproducibility evidence; not benchmark, safety, or paper evidence.

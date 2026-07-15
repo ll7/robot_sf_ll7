@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5579, 2026-07-15) - NEEDS-REVIEW -->
+
 # Issue #5579 tuning-budget evidence surface
 
 Status: preregistration and configuration-history evidence only. This directory does not contain

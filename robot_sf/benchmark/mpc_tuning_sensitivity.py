@@ -179,6 +179,12 @@ def normalize_episode_record(
     missing_availability = [field for field in availability_fields if field not in availability]
     if missing_availability:
         raise ValueError(f"episode availability is missing explicit fields: {missing_availability}")
+    algorithm_metadata = record.get("algorithm_metadata")
+    planner_runtime = (
+        algorithm_metadata.get("planner_runtime")
+        if isinstance(algorithm_metadata, Mapping)
+        else None
+    )
     return {
         "arm_key": arm_key,
         "candidate_id": candidate_id,
@@ -195,6 +201,7 @@ def normalize_episode_record(
         "benchmark_success": _bool_field(
             availability["benchmark_success"], field="benchmark_success"
         ),
+        "planner_runtime_status": _planner_runtime_status(planner_runtime),
     }
 
 
@@ -248,6 +255,9 @@ def analyze_results(
         group_rows = grouped[group_key]
         eligible_rows = [row for row in group_rows if _eligible(row)]
         excluded_rows = [row for row in group_rows if not _eligible(row)]
+        exclusion_reasons = sorted(
+            {str(row.get("planner_runtime_status", "missing")) for row in excluded_rows}
+        )
         success_count = sum(row.get("success") is True for row in eligible_rows)
         candidate_rows.append(
             {
@@ -262,6 +272,7 @@ def analyze_results(
                 "successes": success_count,
                 "success_rate": (success_count / len(eligible_rows) if eligible_rows else None),
                 "status": "eligible" if not excluded_rows else "excluded",
+                "exclusion_reasons": exclusion_reasons,
             }
         )
 
@@ -294,7 +305,9 @@ def analyze_results(
         "read": read,
         "fallback_degraded_exclusion": (
             "Rows are eligible only with explicit native/adapter/mixed execution, native/adapter "
-            "readiness, available status, and benchmark_success=true."
+            "readiness, available status, benchmark_success=true, and planner_runtime_status="
+            "eligible; missing, fallback, solver-failure, or malformed runtime diagnostics block "
+            "the read."
         ),
     }
 
@@ -457,6 +470,8 @@ def _validate_arm(value: Any, *, repo_root: Path) -> str:
             raise ValueError(f"target arm {key} must use constant_velocity prediction")
         if algorithm_config.get("allow_predictor_fallback") is not False:
             raise ValueError(f"target arm {key} must disable predictor fallback")
+        if algorithm_config.get("fallback_to_stop") is not False:
+            raise ValueError(f"target arm {key} must disable solver fallback_to_stop")
         build_prediction_mpc_config(algorithm_config)
     return key
 
@@ -611,7 +626,33 @@ def _eligible(row: Mapping[str, Any]) -> bool:
         and str(row.get("readiness_status", "")).strip().lower() in VALID_READINESS_STATUSES
         and str(row.get("availability_status", "")).strip().lower() == "available"
         and row.get("benchmark_success") is True
+        and row.get("planner_runtime_status") == "eligible"
     )
+
+
+def _planner_runtime_status(value: Any) -> str:
+    """Classify planner runtime diagnostics for fail-closed episode eligibility.
+
+    Returns:
+        ``eligible`` when no known fallback/failure counter is active; otherwise
+        a status that keeps the row out of the preregistered read.
+    """
+    if not isinstance(value, Mapping) or not value:
+        return "missing"
+    for field in ("solver_failures", "fallback_stop_count", "fallback_count"):
+        if field not in value:
+            continue
+        count = value[field]
+        if not _is_int(count) or count < 0:
+            return "invalid"
+        if count > 0:
+            return "solver_failure" if field == "solver_failures" else "fallback"
+    if value.get("fallback_triggered") is True:
+        return "fallback"
+    checkpoint = value.get("checkpoint_provenance")
+    if isinstance(checkpoint, Mapping) and checkpoint.get("fallback_triggered") is True:
+        return "fallback"
+    return "eligible"
 
 
 def _mapping(value: Any, context: str) -> Mapping[str, Any]:

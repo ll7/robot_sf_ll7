@@ -152,9 +152,9 @@ def run_study(config: dict[str, Any], *, out_dir: Path, config_path: Path) -> di
             "--config configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml "
             "--out-dir output/benchmarks/issue_5579_mpc_tuning_sensitivity"
         ),
-        raw_artifact_root=str(raw_dir.relative_to(REPO_ROOT)),
+        raw_artifact_root=_display_path(raw_dir),
     )
-    report["normalized_episode_rows"] = str(normalized_path.relative_to(REPO_ROOT))
+    report["normalized_episode_rows"] = _display_path(normalized_path)
     write_report(report, out_dir)
     return report
 

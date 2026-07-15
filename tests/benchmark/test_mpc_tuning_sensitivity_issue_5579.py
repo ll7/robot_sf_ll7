@@ -16,6 +16,7 @@ from robot_sf.benchmark.mpc_tuning_sensitivity import (
     selected_scenarios,
     write_report,
 )
+from scripts.benchmark.run_mpc_tuning_sensitivity_issue_5579 import _display_path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml"
@@ -97,6 +98,7 @@ def test_report_applies_preregistered_read_to_best_found_configs(tmp_path: Path)
                         "readiness_status": "adapter",
                         "availability_status": "available",
                         "benchmark_success": True,
+                        "planner_runtime_status": "eligible",
                     }
                 )
     report = analyze_results(
@@ -139,6 +141,51 @@ def test_fallback_row_blocks_read_and_is_not_counted(tmp_path: Path) -> None:
     write_report(report, tmp_path)
 
 
+def test_solver_fallback_runtime_blocks_read_and_is_not_counted() -> None:
+    """Planner solver/fallback diagnostics are a fail-closed exclusion axis."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    rows = _fixture_rows(config, build_candidate_plan(config, repo_root=ROOT))
+    rows[0]["planner_runtime_status"] = "fallback"
+    report = analyze_results(
+        config,
+        rows,
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit="fixture",
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+    )
+    assert report["status"] == "blocked"
+    assert report["read"]["decision"] == "blocked"
+    assert report["excluded_episode_rows"] == 1
+    assert report["candidate_rows"][0]["exclusion_reasons"] == ["fallback"]
+
+
+def test_missing_planner_runtime_blocks_read() -> None:
+    """Missing per-episode planner runtime provenance cannot become evidence."""
+    config = load_sensitivity_config(CONFIG, repo_root=ROOT)
+    rows = _fixture_rows(config, build_candidate_plan(config, repo_root=ROOT))
+    rows[0].pop("planner_runtime_status")
+    report = analyze_results(
+        config,
+        rows,
+        repo_root=ROOT,
+        config_path=str(CONFIG),
+        run_commit="fixture",
+        reproduction_command="fixture",
+        raw_artifact_root="output/fixture",
+    )
+    assert report["status"] == "blocked"
+    assert report["candidate_rows"][0]["exclusion_reasons"] == ["missing"]
+
+
+def test_external_output_path_has_stable_display() -> None:
+    """Runner artifact paths remain valid when --out-dir is outside the repository."""
+    external = Path("/tmp") / "issue-5579-output"
+    assert _display_path(external) == str(external)
+    assert _display_path(ROOT / "output") == "output"
+
+
 def test_report_rejects_missing_paired_rows() -> None:
     """The paired fixed-scope denominator cannot silently shrink."""
     config = load_sensitivity_config(CONFIG, repo_root=ROOT)
@@ -172,6 +219,7 @@ def _fixture_rows(config: dict, plan: list[dict]) -> list[dict]:
                         "readiness_status": "adapter",
                         "availability_status": "available",
                         "benchmark_success": True,
+                        "planner_runtime_status": "eligible",
                     }
                 )
     return rows
@@ -192,5 +240,11 @@ def _raw_record(*, route_complete: bool, collision_event: bool) -> dict[str, obj
             "readiness_status": "adapter",
             "availability_status": "available",
             "benchmark_success": True,
+        },
+        "algorithm_metadata": {
+            "planner_runtime": {
+                "solver_failures": 0,
+                "fallback_stop_count": 0,
+            }
         },
     }

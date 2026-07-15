@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import math
-from importlib import import_module
 from random import Random
 from typing import TYPE_CHECKING, Any, Protocol
 
 from robot_sf.adversarial.config import CandidateSpec, Pose2D, RangeConfig, SearchSpaceConfig
+from robot_sf.common.optional_import import try_import
 
 if TYPE_CHECKING:
     from robot_sf.adversarial.config import CandidateEvaluation
@@ -225,13 +225,13 @@ class OptunaCandidateSampler:
 
 def _import_optuna() -> Any:
     """Import Optuna or raise an actionable optional-dependency error."""
-    try:
-        return import_module("optuna")
-    except ImportError as exc:
+    optuna = try_import("optuna")
+    if optuna is None:
         raise RuntimeError(
             "OptunaCandidateSampler requires optuna. Install project dependencies with "
             "`uv sync --all-extras` before using the optimizer-backed adversarial sampler."
-        ) from exc
+        )
+    return optuna
 
 
 def _suggest_float(trial: Any, name: str, bounds: RangeConfig) -> float:

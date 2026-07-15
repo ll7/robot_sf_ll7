@@ -184,6 +184,22 @@ class MatchedDataset:
 
 
 @dataclass(frozen=True)
+class MatchedActionPair:
+    """Two candidate actions scored on one shared actor state.
+
+    The pair deliberately stores the pedestrian state once so both candidates
+    receive identical forecast inputs. The estimator's fixed seed then also
+    gives both candidates the same Monte Carlo forecast draws, isolating the
+    action-conditioned difference in the diagnostic comparison.
+    """
+
+    pair_id: str
+    pedestrians: tuple[PedestrianState, ...]
+    higher_risk_action: CandidateAction
+    lower_risk_action: CandidateAction
+
+
+@dataclass(frozen=True)
 class EstimatorPrediction:
     """One estimator's output for one matched sample.
 
@@ -973,6 +989,89 @@ def action_sensitivity(
     }
 
 
+def evaluate_matched_action_sensitivity(
+    pairs: Sequence[MatchedActionPair], config: RiskEstimatorConfig
+) -> dict[str, object]:
+    """Evaluate action ordering on explicitly shared forecast inputs.
+
+    This is a diagnostic fixture check, not a calibration metric. A pair is
+    valid only when the higher- and lower-risk candidates are constructed from
+    the same actor state; :class:`MatchedActionPair` makes that shared input
+    explicit instead of relying on scenario-id conventions. Empty pair sets or
+    duplicate identifiers fail closed so an absent action-sensitivity fixture
+    cannot be reported as a successful zero-denominator result.
+
+    Returns:
+        A JSON-safe action-sensitivity record with matched-input provenance and
+        one result for each pair.
+    """
+    if not pairs:
+        raise CalibrationInputError("action-sensitivity fixture must contain at least one pair")
+
+    pair_ids = [pair.pair_id.strip() for pair in pairs]
+    if any(not pair_id for pair_id in pair_ids):
+        raise CalibrationInputError("action-sensitivity pair identifiers must be non-empty")
+    if len(set(pair_ids)) != len(pair_ids):
+        raise CalibrationInputError("action-sensitivity pair identifiers must be unique")
+
+    details: list[dict[str, object]] = []
+    correct = 0
+    for pair, pair_id in zip(pairs, pair_ids, strict=True):
+        if not pair.pedestrians:
+            raise CalibrationInputError(f"action-sensitivity pair {pair_id!r} has no actors")
+        if pair.higher_risk_action.action_id == pair.lower_risk_action.action_id:
+            raise CalibrationInputError(
+                f"action-sensitivity pair {pair_id!r} reuses the same action identifier"
+            )
+        higher_waypoints = pair.higher_risk_action.as_array(horizon_steps=config.horizon_steps)
+        lower_waypoints = pair.lower_risk_action.as_array(horizon_steps=config.horizon_steps)
+        if not np.array_equal(higher_waypoints[0], lower_waypoints[0]):
+            raise CalibrationInputError(
+                f"action-sensitivity pair {pair_id!r} must share the robot start state"
+            )
+
+        higher_sample = LabeledSample(
+            scenario_id=f"{pair_id}:higher_risk",
+            family="action_sensitivity_fixture",
+            action=pair.higher_risk_action,
+            pedestrians=pair.pedestrians,
+            realized_contact=False,
+            realized_first_contact_step=-1,
+        )
+        lower_sample = LabeledSample(
+            scenario_id=f"{pair_id}:lower_risk",
+            family="action_sensitivity_fixture",
+            action=pair.lower_risk_action,
+            pedestrians=pair.pedestrians,
+            realized_contact=False,
+            realized_first_contact_step=-1,
+        )
+        higher = _predict_constant_velocity_mc(higher_sample, config, warn_threshold=0.5)
+        lower = _predict_constant_velocity_mc(lower_sample, config, warn_threshold=0.5)
+        direction_as_expected = higher.score > lower.score
+        correct += int(direction_as_expected)
+        details.append(
+            {
+                "pair_id": pair_id,
+                "higher_risk_action": pair.higher_risk_action.action_id,
+                "lower_risk_action": pair.lower_risk_action.action_id,
+                "higher_score": higher.score,
+                "lower_score": lower.score,
+                "direction_as_expected": direction_as_expected,
+            }
+        )
+
+    return {
+        "status": "scored",
+        "estimator_id": "constant_velocity_mc",
+        "matched_forecast_inputs": True,
+        "forecast_seed": config.seed,
+        "n_pairs": len(pairs),
+        "fraction_correct": correct / len(pairs),
+        "pairs": details,
+    }
+
+
 __all__ = [
     "AVAILABLE_ESTIMATORS",
     "CALIBRATION_SCHEMA_VERSION",
@@ -982,6 +1081,7 @@ __all__ = [
     "EstimatorPrediction",
     "FamilySpec",
     "LabeledSample",
+    "MatchedActionPair",
     "MatchedDataset",
     "MatchedDatasetProvenance",
     "VerdictThresholds",
@@ -989,6 +1089,7 @@ __all__ = [
     "average_precision",
     "brier_score",
     "evaluate_estimator",
+    "evaluate_matched_action_sensitivity",
     "expected_calibration_error",
     "fnr_at_thresholds",
     "generate_matched_dataset",

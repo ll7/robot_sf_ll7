@@ -31,9 +31,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 
-from robot_sf.research.collision_risk import RiskEstimatorConfig
+from robot_sf.nav.predictive_types import PedestrianState
+from robot_sf.research.collision_risk import RiskEstimatorConfig, action_from_constant_velocity
 from robot_sf.research.collision_risk.calibration import (
     AVAILABLE_ESTIMATORS,
     CALIBRATION_SCHEMA_VERSION,
@@ -41,10 +43,12 @@ from robot_sf.research.collision_risk.calibration import (
     UNAVAILABLE_ESTIMATORS,
     CalibrationInputError,
     FamilySpec,
+    MatchedActionPair,
     MatchedDatasetProvenance,
     VerdictThresholds,
     action_sensitivity,
     evaluate_estimator,
+    evaluate_matched_action_sensitivity,
     generate_matched_dataset,
 )
 
@@ -120,6 +124,97 @@ def _build_provenance(block: dict[str, Any], seed: int, n_samples: int) -> Match
     )
 
 
+def _vector2(value: object, field_name: str) -> tuple[float, float]:
+    """Parse one finite two-dimensional vector from the YAML packet."""
+    try:
+        array = np.asarray(value, dtype=float).reshape(-1)
+    except (TypeError, ValueError) as exc:
+        raise CalibrationInputError(f"{field_name} must be a finite 2D vector") from exc
+    if array.shape != (2,) or not np.all(np.isfinite(array)):
+        raise CalibrationInputError(f"{field_name} must be a finite 2D vector")
+    return float(array[0]), float(array[1])
+
+
+def _build_action_sensitivity_pairs(
+    entries: object, estimator_config: RiskEstimatorConfig
+) -> list[MatchedActionPair]:
+    """Build typed same-state action pairs from the preregistered packet."""
+    if not isinstance(entries, list):
+        raise CalibrationInputError("evaluation.action_sensitivity.pairs must be a list")
+
+    pairs: list[MatchedActionPair] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise CalibrationInputError(f"action-sensitivity pair {index} must be a mapping")
+        pair_id = str(entry.get("pair_id", "")).strip()
+        if not pair_id:
+            raise CalibrationInputError(f"action-sensitivity pair {index} has no pair_id")
+        actor_entries = entry.get("pedestrians")
+        if not isinstance(actor_entries, list) or not actor_entries:
+            raise CalibrationInputError(f"action-sensitivity pair {pair_id!r} needs pedestrians")
+
+        pedestrians: list[PedestrianState] = []
+        actor_ids: set[int] = set()
+        for actor_index, actor in enumerate(actor_entries):
+            if not isinstance(actor, dict):
+                raise CalibrationInputError(
+                    f"action-sensitivity pair {pair_id!r} actor {actor_index} must be a mapping"
+                )
+            try:
+                actor_id = int(actor["id"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise CalibrationInputError(
+                    f"action-sensitivity pair {pair_id!r} actor {actor_index} needs an integer id"
+                ) from exc
+            if actor_id in actor_ids:
+                raise CalibrationInputError(
+                    f"action-sensitivity pair {pair_id!r} repeats actor id {actor_id}"
+                )
+            actor_ids.add(actor_id)
+            pedestrians.append(
+                PedestrianState(
+                    id=actor_id,
+                    position=np.asarray(
+                        _vector2(actor.get("position"), f"{pair_id}.pedestrians.position"),
+                        dtype=float,
+                    ),
+                    velocity=np.asarray(
+                        _vector2(actor.get("velocity"), f"{pair_id}.pedestrians.velocity"),
+                        dtype=float,
+                    ),
+                )
+            )
+
+        start_position = _vector2(entry.get("start_position"), f"{pair_id}.start_position")
+        higher_velocity = _vector2(
+            entry.get("higher_risk_velocity"), f"{pair_id}.higher_risk_velocity"
+        )
+        lower_velocity = _vector2(
+            entry.get("lower_risk_velocity"), f"{pair_id}.lower_risk_velocity"
+        )
+        pairs.append(
+            MatchedActionPair(
+                pair_id=pair_id,
+                pedestrians=tuple(pedestrians),
+                higher_risk_action=action_from_constant_velocity(
+                    f"{pair_id}:higher_risk",
+                    start_position,
+                    higher_velocity,
+                    horizon_steps=estimator_config.horizon_steps,
+                    dt_s=estimator_config.dt_s,
+                ),
+                lower_risk_action=action_from_constant_velocity(
+                    f"{pair_id}:lower_risk",
+                    start_position,
+                    lower_velocity,
+                    horizon_steps=estimator_config.horizon_steps,
+                    dt_s=estimator_config.dt_s,
+                ),
+            )
+        )
+    return pairs
+
+
 def build_report(config_path: Path) -> dict[str, Any]:
     """Run the frozen comparison packet and return a JSON-safe report dict."""
     data = _load_config(config_path)
@@ -179,10 +274,30 @@ def build_report(config_path: Path) -> dict[str, Any]:
         for estimator_id, reason in sorted(UNAVAILABLE_ESTIMATORS.items())
     ]
 
-    action_pairs = [tuple(pair) for pair in evaluation.get("action_pairs", [])]
-    sensitivity = (
-        action_sensitivity(dataset, estimator_config, action_pairs) if action_pairs else None
-    )
+    action_sensitivity_block = evaluation.get("action_sensitivity")
+    if action_sensitivity_block is None:
+        # Preserve the v1 packet reader for older local packets while requiring
+        # the current issue packet to declare typed same-state pairs below.
+        action_pairs = [tuple(pair) for pair in evaluation.get("action_pairs", [])]
+        sensitivity = (
+            action_sensitivity(dataset, estimator_config, action_pairs) if action_pairs else None
+        )
+    else:
+        if not isinstance(action_sensitivity_block, dict):
+            raise CalibrationInputError("evaluation.action_sensitivity must be a mapping")
+        min_pairs = int(action_sensitivity_block.get("min_pairs", 1))
+        if min_pairs <= 0:
+            raise CalibrationInputError("evaluation.action_sensitivity.min_pairs must be positive")
+        action_pairs = _build_action_sensitivity_pairs(
+            action_sensitivity_block.get("pairs"), estimator_config
+        )
+        if len(action_pairs) < min_pairs:
+            raise CalibrationInputError(
+                "action-sensitivity fixture has fewer pairs than its preregistered minimum: "
+                f"{len(action_pairs)} < {min_pairs}"
+            )
+        sensitivity = evaluate_matched_action_sensitivity(action_pairs, estimator_config)
+        sensitivity["min_pairs"] = min_pairs
 
     # Per-family stratified prevalence where denominators permit.
     strata_prevalence: dict[str, dict[str, float]] = {}

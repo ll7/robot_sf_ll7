@@ -30,6 +30,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Repository root used to resolve relative local-mirror paths.",
     )
+    parser.add_argument(
+        "--private-artifact-root",
+        type=Path,
+        help=(
+            "Explicit root for private-artifact:// URIs. Required for those URIs to satisfy "
+            "--require-training-ready."
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Emit a JSON validation report.")
     parser.add_argument(
         "--require-training-ready",
@@ -49,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         report = validate_trace_uri_registry(
             args.config,
             repo_root=args.repo_root,
+            private_artifact_root=args.private_artifact_root,
             require_training_ready=args.require_training_ready,
         )
     except OracleTraceUriRegistryError as exc:

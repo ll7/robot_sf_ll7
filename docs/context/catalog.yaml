@@ -3689,6 +3689,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5034_parent_4977_classification_2026-07-15
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4302_snqi_provenance_terminality_2026-07-04.md
   status: evidence
   freshness: evidence

@@ -9,7 +9,7 @@ recovered from the tracked scenario, code, seed, and command below.
 
 ## Reproduction
 
-- Source repair commit: `240963388` (`fix(ux): make demo artifacts deterministic`)
+- Source repair commit: `b93983c2e` (`fix(ux): make demo artifacts deterministic`)
 - Scenario: `configs/scenarios/single/quickstart_demo.yaml`
 - Scenario name: `quickstart_demo_crossing_basic`
 - Planner: built-in `random`

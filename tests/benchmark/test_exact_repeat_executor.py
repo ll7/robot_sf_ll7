@@ -25,6 +25,7 @@ from robot_sf.benchmark.exact_repeat_campaign import (
     resolve_runnable_definitions,
     verify_host_report,
 )
+from robot_sf.benchmark.runner import run_episode
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_DIR = (
@@ -623,6 +624,41 @@ def test_execute_campaign_dispositions_degraded_fallback_targets(
     assert verified["summary"]["all_cells_bitwise_identical"] is False
     for target in verified["targets"]:
         assert target["unrunnable"] is True
+
+
+# --- native PPO determinism (issue #5498 slice) --------------------------
+
+
+def test_native_ppo_target_runs_deterministically_with_real_runner(tmp_path, resolved_bundle):
+    """Native PPO executes through run_episode and is bitwise-identical across repeats.
+
+    Issue #5498's single-host slice (#5499) recorded the three PPO cells as
+    ``degraded``/``unrunnable`` because the forked planner-step worker crashed or
+    timed out. The native-PPO worker-isolation fix (#5740) unblocked native PPO,
+    so a PPO target must now execute with the real ``run_episode`` runner and
+    produce exactly three bitwise-identical repeats (matching trajectory hashes)
+    rather than a degraded disposition.
+    """
+    if not is_runnable_algo("ppo"):
+        pytest.skip("ppo baseline not runnable on this host")
+
+    ppo_target = next(t for t in resolved_bundle["targets"] if t["planner"] == "ppo")
+    ppo_bundle = {k: v for k, v in resolved_bundle.items() if k != "bundle_sha256"}
+    ppo_bundle["targets"] = [ppo_target]
+    ppo_bundle["bundle_sha256"] = canonical_sha256(ppo_bundle)
+
+    host_result = execute_campaign(
+        ppo_bundle, output_dir=tmp_path / "native_ppo_deterministic", run_episode=run_episode
+    )
+    result = host_result["results"][0]
+
+    # Native execution: no degraded/unrunnable disposition, exactly three repeats.
+    assert "disposition" not in result, "native PPO must not be dispositioned as unrunnable"
+    assert result.get("degraded") is not True
+    assert len(result["repeats"]) == 3
+
+    fingerprints = [r["trajectory_sha256"] for r in result["repeats"]]
+    assert len(set(fingerprints)) == 1, "native PPO repeats must be bitwise-identical"
 
 
 def test_execute_campaign_dispositions_mixed_degraded_repeats(tmp_path, manifest, resolved_bundle):

@@ -1,0 +1,611 @@
+{
+  "claim_scope": "not_paper_facing_benchmark_evidence",
+  "issue": 3079,
+  "rows": [
+    {
+      "budget": 16,
+      "certified_failure_count": 1,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 12,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "random",
+      "seed": 1101,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 1
+    },
+    {
+      "budget": 16,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "coordinate",
+      "seed": 1101,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 16,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "optuna",
+      "seed": 1101,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 16,
+      "certified_failure_count": 1,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 3,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "random",
+      "seed": 2202,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 1
+    },
+    {
+      "budget": 16,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "coordinate",
+      "seed": 2202,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 16,
+      "certified_failure_count": 3,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 9,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 12,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 15,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "optuna",
+      "seed": 2202,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 3
+    },
+    {
+      "budget": 16,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "random",
+      "seed": 3303,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 16,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "coordinate",
+      "seed": 3303,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 16,
+      "certified_failure_count": 3,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 2,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 10,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 13,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "optuna",
+      "seed": 3303,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 3
+    },
+    {
+      "budget": 32,
+      "certified_failure_count": 2,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 12,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 22,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "random",
+      "seed": 1101,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 2
+    },
+    {
+      "budget": 32,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "coordinate",
+      "seed": 1101,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 32,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "optuna",
+      "seed": 1101,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 32,
+      "certified_failure_count": 5,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 3,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 17,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 22,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 30,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 31,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "random",
+      "seed": 2202,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 5
+    },
+    {
+      "budget": 32,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "coordinate",
+      "seed": 2202,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 32,
+      "certified_failure_count": 3,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 9,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 12,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 15,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "optuna",
+      "seed": 2202,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 3
+    },
+    {
+      "budget": 32,
+      "certified_failure_count": 1,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 25,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "random",
+      "seed": 3303,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 1
+    },
+    {
+      "budget": 32,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "coordinate",
+      "seed": 3303,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 32,
+      "certified_failure_count": 3,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 2,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 10,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 13,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "optuna",
+      "seed": 3303,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 3
+    },
+    {
+      "budget": 64,
+      "certified_failure_count": 6,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 12,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 22,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 38,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 46,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 47,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 60,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "random",
+      "seed": 1101,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 6
+    },
+    {
+      "budget": 64,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "coordinate",
+      "seed": 1101,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 64,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "optuna",
+      "seed": 1101,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 64,
+      "certified_failure_count": 6,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 3,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 17,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 22,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 30,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 31,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 33,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "random",
+      "seed": 2202,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 6
+    },
+    {
+      "budget": 64,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "coordinate",
+      "seed": 2202,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 64,
+      "certified_failure_count": 3,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 9,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 12,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 15,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "optuna",
+      "seed": 2202,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 3
+    },
+    {
+      "budget": 64,
+      "certified_failure_count": 2,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 25,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 51,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "random",
+      "seed": 3303,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 2
+    },
+    {
+      "budget": 64,
+      "certified_failure_count": 0,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [],
+      "sampler": "coordinate",
+      "seed": 3303,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 0
+    },
+    {
+      "budget": 64,
+      "certified_failure_count": 3,
+      "confirmation_status": "complete",
+      "confirmed_failure_count": 0,
+      "evidence": [
+        {
+          "candidate_index": 2,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 10,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        },
+        {
+          "candidate_index": 13,
+          "reason": "awaiting deterministic replay, independent-seed confirmation, and stable mechanism attribution before a discovery is counted",
+          "status": "not_confirmed"
+        }
+      ],
+      "sampler": "optuna",
+      "seed": 3303,
+      "simulator_seconds": 0.0,
+      "simulator_seconds_per_confirmed_failure": null,
+      "time_to_first_confirmed_failure_censored": true,
+      "time_to_first_confirmed_failure_s": null,
+      "unconfirmed_certified_failure_count": 3
+    }
+  ],
+  "schema_version": "adversarial-package-b-confirmation.v1",
+  "source_report_schema_version": "adversarial-sampler-comparison.v3",
+  "source_report_sha256": "2ff65b8cd8da7307b47ca069758f98db67173cb248fcd3ab16fcc4ab189662da"
+}

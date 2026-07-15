@@ -1,0 +1,95 @@
+{
+  "confirmation_gate": {
+    "blockers": {
+      "intentional": [
+        "not_confirmed candidates are excluded from confirmed-failure counts",
+        "held-out-family yield remains subject to the narrow certified-archive caveat",
+        "learned failure proposal #2921 remains out of scope",
+        "paper-facing and dissertation claims remain forbidden"
+      ],
+      "new": [],
+      "remaining": [
+        "The exact Package B campaign and durable artifact review remain external to this CPU-only checker."
+      ]
+    },
+    "claim_boundary": "diagnostic-only confirmation-chain validation; this gate does not promote benchmark, paper, or dissertation evidence",
+    "confirmation_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/confirmation.json",
+    "errors": [],
+    "issue": 3079,
+    "matrix": {
+      "censored_row_count": 27,
+      "confirmed_failure_count": 0,
+      "expected_budgets": [
+        16,
+        32,
+        64
+      ],
+      "expected_row_count": 27,
+      "expected_samplers": [
+        "random",
+        "coordinate",
+        "optuna"
+      ],
+      "expected_seeds": [
+        1101,
+        2202,
+        3303
+      ],
+      "observed_row_count": 27,
+      "unconfirmed_certified_failure_count": 42
+    },
+    "next_empirical_action": "Run the exact manifest command on an approved compute-capable path, emit one confirmation row per report cell, then review the referenced artifacts before interpreting any sampler difference.",
+    "ready": true,
+    "report_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/report.json",
+    "schema_version": "adversarial-package-b-confirmation.v1",
+    "source_report_sha256": "2ff65b8cd8da7307b47ca069758f98db67173cb248fcd3ab16fcc4ab189662da",
+    "status": "ready_for_confirmed_failure_review"
+  },
+  "confirmation_json": "output/adversarial/issue_3079_package_b/confirmation.json",
+  "durable_table_md": "output/adversarial/issue_3079_package_b/comparison_table.md",
+  "preflight_ready": true,
+  "report_gate": {
+    "blockers": {
+      "intentional": [
+        "held-out-family yield remains unevaluated against the narrow certified archive",
+        "learned failure proposal #2921 remains out of scope until the base comparison succeeds",
+        "paper-facing and dissertation claims remain forbidden"
+      ],
+      "new": [],
+      "remaining": [
+        "certification, deterministic replay, independent-seed confirmation, and mechanism attribution still require artifact-level review"
+      ]
+    },
+    "claim_boundary": "diagnostic-only report validation; this gate does not promote benchmark or paper-facing evidence",
+    "errors": [],
+    "issue": 3079,
+    "matrix": {
+      "degraded_candidate_count": 0,
+      "expected_budgets": [
+        16,
+        32,
+        64
+      ],
+      "expected_row_count": 27,
+      "expected_samplers": [
+        "random",
+        "coordinate",
+        "optuna"
+      ],
+      "expected_seeds": [
+        1101,
+        2202,
+        3303
+      ],
+      "fallback_candidate_count": 0,
+      "observed_row_count": 27
+    },
+    "next_empirical_action": "Run the exact manifest command on an approved compute-capable path, then review this gate together with certification and independent replay artifacts before interpreting any sampler difference.",
+    "ready": true,
+    "report_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/report.json",
+    "schema_version": "adversarial-package-b-report-gate.v1",
+    "status": "ready_for_empirical_review"
+  },
+  "report_json": "output/adversarial/issue_3079_package_b/report.json",
+  "stage": "complete"
+}

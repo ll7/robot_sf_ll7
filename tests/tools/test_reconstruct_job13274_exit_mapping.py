@@ -152,6 +152,79 @@ class TestJob13274ExitMappingReconstruction:
         assert envelope["job_exit_code"] == 0
         assert envelope["post_campaign_stage"]["exit_code"] == 5
 
+    def test_cli_rejects_out_of_range_stage_exit_code(self, tmp_path: Path) -> None:
+        """The harness boundary rejects impossible shell exit codes before any output.
+
+        The reproduction in issue #5702 shows the merged head accepted an integer
+        such as 256 at its own parser and only failed later inside the nested
+        production parser. The harness must reject it at the CLI boundary.
+        """
+        campaign_root = tmp_path / "cid"
+        with pytest.raises(SystemExit) as exc_info:
+            reconstruct_job13274_exit_mapping.main(
+                [
+                    "--campaign-root",
+                    str(campaign_root),
+                    "--stage-exit-code",
+                    "256",
+                ]
+            )
+        assert exc_info.value.code == 2
+
+    def test_after_fix_finalizer_expects_campaign_summary_as_artifact(self, tmp_path: Path) -> None:
+        """The finalizer receives the campaign summary as the campaign artifact.
+
+        Issue #5702 gap 1: the finalizer's required-artifact check must represent
+        the campaign summary/report boundary, not only the status envelope.
+        """
+        summary = self._completed_campaign_summary(tmp_path, soft_warning=True)
+        campaign_root = tmp_path / "cid"
+        after = reconstruct_job13274_exit_mapping.reconstruct_after_fix(
+            summary,
+            campaign_root,
+            campaign_exit_code=0,
+            stage_exit_code=5,
+        )
+        assert after["campaign_exit_code"] == 0
+        assert after["job_exit_code"] == 0
+        # The report must record the campaign summary as a required expected artifact
+        # and the status envelope separately, so artifact loading is observable.
+        report_path = campaign_root / "finalize.json"
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        artifact_paths = {artifact["path"] for artifact in report["artifacts"]}
+        assert summary.resolve().as_posix() in artifact_paths
+        stage_artifact = next(
+            artifact
+            for artifact in report["artifacts"]
+            if artifact["role"] == "post_campaign_stage_status"
+        )
+        assert stage_artifact["exists"] is True
+        assert report["post_campaign_stage_status"]["load_status"] == "loaded"
+
+    def test_hard_campaign_exit_preserved_through_production_boundary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A genuinely failed campaign exit is preserved, not relabeled by the stage.
+
+        Hard-campaign-exit regression for issue #5702: a nonzero campaign exit must
+        stay the job exit code and classify the run as failed, while a coincident
+        stage failure does not hide the campaign failure behind a success.
+        """
+        summary = self._completed_campaign_summary(tmp_path, soft_warning=True)
+        campaign_root = tmp_path / "cid"
+        monkeypatch.setattr(sys, "argv", ["reconstruct_job13274_exit_mapping.py"])
+        after = reconstruct_job13274_exit_mapping.reconstruct_after_fix(
+            summary,
+            campaign_root,
+            campaign_exit_code=3,
+            stage_exit_code=5,
+        )
+        assert after["campaign_exit_code"] == 3
+        assert after["job_exit_code"] == 3
+        assert after["post_campaign_stage_exit_code"] == 5
+        assert after["finalize_classification"] == "failed"
+        assert "benchmark evidence" in after["claim_boundary"].lower()
+
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

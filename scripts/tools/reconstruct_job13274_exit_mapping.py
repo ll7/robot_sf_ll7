@@ -43,10 +43,19 @@ from scripts.tools import run_post_campaign_stage, slurm_job_finalize
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-REPORT_REQUIRED_ARTIFACTS = (
-    "reports/headline_rows.json",
-    "reports/result.json",
-)
+
+def _exit_code(value: str) -> int:
+    """Parse a portable shell exit code at the harness boundary.
+
+    The production boundary (``run_post_campaign_stage`` /
+    ``record_post_campaign_stage_status``) accepts only shell exit codes
+    ``0..255``. The reconstruction must reject impossible values before it
+    writes any fixture output so the diagnostic never runs a misleading case.
+    """
+    parsed = int(value)
+    if not 0 <= parsed <= 255:
+        raise argparse.ArgumentTypeError("exit code must be between 0 and 255")
+    return parsed
 
 
 def _write_completed_campaign_fixture(campaign_root: Path, *, soft_warning: bool) -> Path:
@@ -141,7 +150,7 @@ def reconstruct_after_fix(
             "--job-state",
             "COMPLETED",
             "--expected-artifact",
-            str(envelope_path),
+            str(summary_path),
             "--post-campaign-stage-status",
             str(envelope_path),
             "--output",
@@ -208,9 +217,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--stage-exit-code",
-        type=int,
+        type=_exit_code,
         default=5,
-        help="Exit code of the chained post-campaign stage to reproduce (job-13274: 5).",
+        help="Exit code of the chained post-campaign stage to reproduce (job-13274: 5); shell range 0..255.",
     )
     parser.add_argument(
         "--no-soft-warning",

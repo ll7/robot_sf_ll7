@@ -555,18 +555,18 @@ When issue or PR text needs to classify proof strength, use the
 [artifact evidence vocabulary](context/artifact_evidence_vocabulary.md) so local `output/` paths are
 not promoted into durable benchmark or paper-facing claims.
 
-#### Issue-reading fallback
+#### Issue-reading with comments (REST-backed)
 
-`gh issue view <number> --comments` can fail on some GitHub CLI versions with a
-`repository.issue.projectCards` GraphQL deprecation error. Use the targeted REST
-fallback (see issues #5186 and #5188):
+`gh issue view <number> --comments` fails on GitHub CLI 2.45.x (Ubuntu noble) with a
+`repository.issue.projectCards` GraphQL deprecation error (issue #5729). Use the
+REST-backed helpers for all issue-with-comments reads:
 
 ```bash
-# Drop-in shell wrapper (tries native CLI first, falls back to REST on projectCards):
-bash scripts/dev/gh_issue_view.sh <number> --repo ll7/robot_sf_ll7
-
-# Direct REST helper (same fallback logic, more options):
+# Preferred: complete thread read with native-first fallback
 uv run python scripts/dev/gh_issue_rest.py thread <number> --repo ll7/robot_sf_ll7
+
+# Shell wrapper (same logic, concise invocation):
+bash scripts/dev/gh_issue_view.sh <number> --repo ll7/robot_sf_ll7
 
 # Explicit REST read with normalized fields (stable JSON output shape):
 uv run python scripts/dev/gh_issue_rest.py view <number> --repo ll7/robot_sf_ll7 --comments
@@ -574,9 +574,8 @@ uv run python scripts/dev/gh_issue_rest.py view <number> --json number title sta
 ```
 
 All issue-delivery skills (`gh-issue-autopilot`, `gh-issue-clarifier`,
-`goal-issue-implementation`, etc.) already route to `gh_issue_rest.py thread` when
-`gh issue view --comments` fails; see
-`docs/context/issue_713_batch_first_issue_workflow.md` for the full command reference.
+`goal-issue-implementation`, etc.) use `gh_issue_rest.py thread` as the primary path;
+see `docs/context/issue_713_batch_first_issue_workflow.md` for the full command reference.
 
 For GitHub issue batches and Project #5 updates, follow the batch-first workflow note:
 

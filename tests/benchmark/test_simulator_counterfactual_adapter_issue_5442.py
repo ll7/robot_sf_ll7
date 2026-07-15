@@ -5,7 +5,8 @@ This is the remaining slice named in the issue thread: a real
 RNG-capture seam. The tests build a headless ``Simulator`` (no display), prove the
 snapshot/restore seam reproduces a baseline pedestrian-robot episode bit-for-bit,
 and drive the frozen-state replay engine end to end on a genuine production fixture
-where the baseline collides but halting the robot avoids contact.
+where the native forward-acceleration baseline contacts but native braking
+avoids contact.
 
 The fail-closed ``unknown`` path for a nondeterministic baseline is already covered
 by the controlled-fixture tests (``nondeterministic_baseline_scenario``); here we
@@ -15,36 +16,59 @@ replay diverge, exercising the same guard on production state.
 
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
+from robot_sf.benchmark.last_avoidable_fixtures import (
+    KinematicCollisionModel,
+    KinematicScenario,
+)
 from robot_sf.benchmark.last_avoidable_replay import (
     SUBSTITUTION_HOLD,
     VERDICT_AVOIDABLE,
+    VERDICT_UNKNOWN,
     ReplayConfig,
     locate_last_avoidable,
 )
 from robot_sf.benchmark.simulator_counterfactual_adapter import (
     SimulatorCounterfactualModel,
+    _capture_route_navigators,
+    _restore_route_navigators,
 )
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
+from robot_sf.nav.navigation import RouteNavigator
 from robot_sf.nav.svg_map_parser import convert_map
 from robot_sf.sim.sim_config import SimulationSettings
 from robot_sf.sim.simulator import init_simulators
 
 # A genuine production fixture: the robot drives into a doorway crossing; the
-# maintain-speed baseline collides at step 39 but halting the robot clears it.
-_FIXTURE_MAP = "maps/svg_maps/classic_doorway.svg"
+# forward-acceleration baseline contacts after 39 applied ticks, while native
+# braking clears it. The explicit global seed controls spawn-zone sampling.
+_FIXTURE_MAP = Path(__file__).resolve().parents[2] / "maps/svg_maps/classic_doorway.svg"
 _FIXTURE_DENSITY = [0.06]
 _FIXTURE_SEED = 21
+_FIXTURE_GLOBAL_SEED = 25
+_DENSE_GLOBAL_SEED = 26
 _FIXTURE_SPEED = 1.0
 _FIXTURE_CONTACT_STEP = 39
 _COLLISION_RADIUS = 0.5
 
 
+@pytest.fixture(autouse=True)
+def _preserve_numpy_rng():
+    """Keep global RNG changes in these seam tests from leaking to other tests."""
+    state = np.random.get_state()
+    yield
+    np.random.set_state(state)
+
+
 def _build_simulator() -> object:
     """Construct a deterministic, headless ``Simulator`` for the fixture map."""
-    map_def = convert_map(_FIXTURE_MAP)
+    np.random.seed(_FIXTURE_GLOBAL_SEED)
+    map_def = convert_map(str(_FIXTURE_MAP))
     sim_config = SimulationSettings(
         difficulty=0,
         ped_density_by_difficulty=_FIXTURE_DENSITY,
@@ -61,7 +85,8 @@ def _build_dense_simulator() -> object:
     without the RNG-capture seam diverges — exercising the same guard the engine's
     ``unknown`` determination relies on.
     """
-    map_def = convert_map(_FIXTURE_MAP)
+    np.random.seed(_DENSE_GLOBAL_SEED)
+    map_def = convert_map(str(_FIXTURE_MAP))
     sim_config = SimulationSettings(
         difficulty=0,
         ped_density_by_difficulty=[0.15],
@@ -81,8 +106,8 @@ def _run_engine(model: SimulatorCounterfactualModel, *, determinism_replays: int
         horizon=horizon,
         substitution_mode=SUBSTITUTION_HOLD,
         determinism_replays=determinism_replays,
-        action_set_id="sim_robot_cmd_lattice",
-        feasibility_filter="maintain_or_halt",
+        action_set_id="simulator_native_action_lattice",
+        feasibility_filter="native_maintain_or_brake",
         collision_predicate="robot_ped_euclidean<=radius",
         pedestrian_response="replayed",
     )
@@ -109,7 +134,7 @@ def test_snapshot_restore_reproduces_baseline_deterministically() -> None:
             if model.collision():
                 c = _FIXTURE_CONTACT_STEP + 5
         contacts.append(c)
-    assert len(set(contacts)) == 1, "snapshot/restore must be deterministic"
+    assert contacts == [_FIXTURE_CONTACT_STEP] * 4
 
 
 def test_rng_capture_seam_prevents_divergence() -> None:
@@ -126,6 +151,8 @@ def test_rng_capture_seam_prevents_divergence() -> None:
     sim = _build_dense_simulator()
     model = SimulatorCounterfactualModel(sim, collision_radius=_COLLISION_RADIUS, capture_rng=True)
     snap0 = model.snapshot()
+    initial_positions = np.asarray(sim.ped_pos).copy()
+    np.random.seed(999)
     model.restore(snap0)
     for _ in range(100):
         model.step((0.0, 0.0))
@@ -137,6 +164,7 @@ def test_rng_capture_seam_prevents_divergence() -> None:
         sim2, collision_radius=_COLLISION_RADIUS, capture_rng=False
     )
     snap0b = model2.snapshot()
+    assert np.array_equal(initial_positions, np.asarray(sim2.ped_pos))
     model2.restore(snap0b)
     np.random.seed(999)
     for _ in range(100):
@@ -157,6 +185,7 @@ def test_production_fixture_is_avoidable() -> None:
     report = _run_engine(model)
     assert report.verdict == VERDICT_AVOIDABLE
     assert report.determinism.deterministic is True
+    assert report.determinism.observed_contact_steps == (_FIXTURE_CONTACT_STEP - 1,) * 5
     assert report.t_uca is not None and report.t_inevitable is not None
     assert report.t_uca <= report.t_inevitable <= report.config.t_contact
     assert report.feasible_coverage == pytest.approx(1.0)
@@ -176,4 +205,46 @@ def test_adapter_satisfies_counterfactual_model_protocol() -> None:
     assert isinstance(model.collision(), bool)
     actions = model.feasible_actions()
     assert len(actions) >= 2
-    assert model.action_label(actions[0]).startswith("robot_cmd=")
+    assert model.action_label(actions[0]).startswith("robot_accel=")
+
+
+def test_route_group_navigator_progress_restores() -> None:
+    """Route-group waypoint progress is restored rather than left at branch state."""
+    navigator = RouteNavigator([(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)])
+    navigator.waypoint_id = 1
+    navigator.reached_waypoint = False
+    behavior = SimpleNamespace(navigators={7: navigator})
+    snapshot = _capture_route_navigators([behavior])
+
+    navigator.waypoint_id = 2
+    navigator.reached_waypoint = True
+    _restore_route_navigators([behavior], snapshot)
+
+    assert navigator.waypoint_id == 1
+    assert navigator.reached_waypoint is False
+
+
+def test_no_contact_baseline_abstains() -> None:
+    """A stable baseline without contact cannot produce an avoidability verdict."""
+    scenario = KinematicScenario(
+        robot_x0=0.0,
+        robot_speed0=0.0,
+        ped_pos0=(10.0, 10.0),
+        ped_vel0=(0.0, 0.0),
+    )
+    report = locate_last_avoidable(
+        KinematicCollisionModel(scenario),
+        [0.0] * 10,
+        ReplayConfig(
+            t_danger=0,
+            t_contact=3,
+            horizon=3,
+            action_set_id="test",
+            feasibility_filter="test",
+            collision_predicate="test",
+            pedestrian_response="replayed",
+        ),
+    )
+
+    assert report.verdict == VERDICT_UNKNOWN
+    assert report.abstain_reason == "baseline_no_contact"

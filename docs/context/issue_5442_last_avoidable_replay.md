@@ -33,18 +33,20 @@ remaining (the global-RNG snapshot seam was the gated dependency):
 - `robot_sf/benchmark/simulator_counterfactual_adapter.py` — `SimulatorCounterfactualModel`,
   a `CounterfactualModel` over the live `Simulator`. It captures the pedestrian PySF
   state buffer, per-pedestrian behavior runtimes (single-pedestrian waypoint/hold
-  state and route-group navigator waypoint index), robot pose/velocity, and the
+  state and route-group navigator waypoint index), robot pose/velocity and route
+  navigator progress, and the
   **global numpy RNG** via `numpy.random.get_state`/`set_state` (deep-copied so
   repeated restores stay independent). The `capture_rng` flag documents the seam:
   omitting it lets a mid-episode pedestrian respawn (`sample_zone` draws from the
   global RNG) diverge a replay by meters, which the engine's fail-closed `unknown`
-  guard would catch.
+  guard would catch. The default action lattice follows the native drivetrain
+  control semantics and returns an empty set for unknown action contracts.
 - `tests/benchmark/test_simulator_counterfactual_adapter_issue_5442.py` — headless
   (no-display) `Simulator` construction, snapshot/restore determinism, the RNG-capture
   seam, and a full `locate_last_avoidable` run on a genuine production fixture
-  (`classic_doorway.svg`, density 0.06, seed 21) where the maintain-speed baseline
-  collides at step 39 but halting the robot avoids contact (`avoidable`,
-  `t_uca=0`, `t_inevitable=39`, deterministic baseline, full feasible coverage).
+  (`classic_doorway.svg`, density 0.06, route seed 21, global seed 25) where the
+  forward-acceleration baseline contacts after 39 applied ticks and native braking
+  avoids contact (`avoidable`, deterministic baseline, full feasible coverage).
 
 Scope correction versus the earlier doc's "broad simulator replacement" note: a code
 re-survey on current `main` found pedestrian goal/zone resampling now draws from the
@@ -163,9 +165,8 @@ t_inevitable=7); `two_action_interaction` → avoidable (t_uca=0, t_inevitable=8
 
 ## Out of scope / remaining
 
-- Join into `collision_causal_report.v1` once #5441 merges (the
-  `last_avoidable_replay.v1` field naming is already forward-compatible).
-- Broader action lattices / planner-specific feasible sets — `feasible_actions` here
-  returns a maintain-speed-or-halt lattice; subclasses can supply a planner action set.
+- The `collision_causal_report.v1` join is delivered by PR #5713; broader
+  planner-specific action lattices remain out of scope — subclasses can supply a
+  planner action set.
 - No benchmark campaign run, no Slurm/GPU submission, no metric/release semantics
   change, no paper/dissertation claim edits.

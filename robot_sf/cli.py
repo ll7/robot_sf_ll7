@@ -417,6 +417,7 @@ _HANDLERS = {
     "datasets": _handle_datasets,
 }
 
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Dispatch to the requested ``robot-sf`` subcommand.
 

@@ -230,3 +230,31 @@ def test_runner_smoke(tmp_path) -> None:
     jsonschema.validate(written, _SCHEMA)
     assert written["verdict"] == VERDICT_AVOIDABLE
     assert written["runtime_s"] is not None
+
+
+def test_runner_smoke_joins_causal_report(tmp_path) -> None:
+    """With --join-causal-report the CLI also emits a valid collision_causal_report.v1."""
+    from robot_sf.benchmark.collision_causal_report import (
+        COLLISION_CAUSAL_REPORT_SCHEMA_VERSION,
+        validate_collision_causal_report,
+    )
+    from scripts.analysis.run_last_avoidable_replay_issue_5442 import main
+
+    exit_code = main(
+        [
+            "--out-dir",
+            str(tmp_path),
+            "--fixtures",
+            "preventable_late_braking",
+            "--determinism-replays",
+            "5",
+            "--join-causal-report",
+        ]
+    )
+    assert exit_code == 0
+    causal_path = tmp_path / "preventable_late_braking__causal_report.json"
+    causal = json.loads(causal_path.read_text())
+    assert causal["schema_version"] == COLLISION_CAUSAL_REPORT_SCHEMA_VERSION
+    # The joined report validates against the additive causal-report contract.
+    validate_collision_causal_report(causal)
+    assert causal["causal_contribution"]["verdict"] == "avoidable"

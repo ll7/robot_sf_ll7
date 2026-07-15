@@ -1,5 +1,9 @@
 # Context Retrieval Index
 
+Issue #5579 MPC tuning-budget archaeology and bounded sensitivity packet (two prediction-MPC arms,
+20-point shared grid, fixed paired slice, and fail-closed diagnostic read):
+[issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md).
+
 Collision causality, action-conditioned online risk, and statistically defensible Chapter 7
 scenario discovery research program:
 [collision_causality_online_risk_scenario_discovery_2026-07-12.md](collision_causality_online_risk_scenario_discovery_2026-07-12.md).

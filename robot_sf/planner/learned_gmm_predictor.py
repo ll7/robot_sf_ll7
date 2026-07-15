@@ -754,7 +754,13 @@ class LearnedGmmPedestrianPredictor:
         self._calls += 1
         steps = requested_steps
         ped_positions, ped_velocities_world = _pedestrian_world_state(observation)
-        count = min(ped_positions.shape[0], int(self.config.max_pedestrians))
+        max_pedestrians = int(self.config.max_pedestrians)
+        if ped_positions.shape[0] > max_pedestrians:
+            raise ValueError(
+                "observed pedestrian count exceeds configured max_pedestrians: "
+                f"{ped_positions.shape[0]} > {max_pedestrians}"
+            )
+        count = ped_positions.shape[0]
 
         if self._model is None:
             raise RuntimeError("learned GMM predictor model is unavailable")
@@ -771,6 +777,16 @@ class LearnedGmmPedestrianPredictor:
                 node_features,
                 node_mask,
                 global_features,
+            )
+            raw_output = (
+                np.asarray(raw_output)
+                .reshape(
+                    max_pedestrians,
+                    int(self.config.horizon_steps),
+                    int(self.config.mode_count),
+                    -1,
+                )[:, :steps, ...]
+                .reshape(-1)
             )
             forecast = decode_graph_gmm_forecast(
                 raw_output,
@@ -790,6 +806,16 @@ class LearnedGmmPedestrianPredictor:
                 max_pedestrians=int(self.config.max_pedestrians),
             )
             raw_output = self._model.predict_numpy(features)
+            raw_output = (
+                np.asarray(raw_output)
+                .reshape(
+                    max_pedestrians,
+                    int(self.config.horizon_steps),
+                    int(self.config.mode_count),
+                    -1,
+                )[:, :steps, ...]
+                .reshape(-1)
+            )
             forecast = decode_gmm_forecast(
                 raw_output,
                 ped_positions[:count],

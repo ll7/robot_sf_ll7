@@ -123,6 +123,40 @@ def test_graph_predictor_cpu_smoke_is_explicitly_diagnostic() -> None:
     }
 
 
+def test_graph_predictor_slices_shorter_requested_horizon() -> None:
+    """A graph model configured for a longer horizon serves shorter MPC requests."""
+    predictor = LearnedGmmPedestrianPredictor(
+        LearnedGmmPredictorConfig(
+            max_pedestrians=3,
+            horizon_steps=3,
+            mode_count=2,
+            hidden_dim=8,
+            model_type="graph_gru",
+            allow_untrained_smoke=True,
+        )
+    )
+
+    forecast = predictor.predict(_observation(), horizon_steps=2, dt=0.25)
+
+    assert forecast.means_world.shape == (2, 2, 2, 2)
+
+
+def test_graph_predictor_rejects_excess_pedestrians() -> None:
+    """Scenes over the fixed graph capacity fail closed instead of dropping nodes."""
+    predictor = LearnedGmmPedestrianPredictor(
+        LearnedGmmPredictorConfig(
+            max_pedestrians=1,
+            horizon_steps=2,
+            mode_count=2,
+            model_type="graph_gru",
+            allow_untrained_smoke=True,
+        )
+    )
+
+    with pytest.raises(ValueError, match="exceeds configured max_pedestrians"):
+        predictor.predict(_observation(), horizon_steps=2, dt=0.25)
+
+
 def test_graph_predictor_checkpoint_round_trip_preserves_provenance(tmp_path) -> None:
     """A graph state dict can be reloaded without relabeling smoke as evidence."""
     torch = pytest.importorskip("torch")

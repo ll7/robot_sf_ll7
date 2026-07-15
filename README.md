@@ -65,6 +65,18 @@ uv run python examples/quickstart/03_custom_map.py
 fastest install → run → *see something* path and is CPU-only. Open
 `output/demo/latest/viewer/index.html` in a browser to replay the episode.
 
+### Beginner notebooks
+
+For an interactive, plotted walkthrough (run → compare → visualize), open the
+CPU-only notebooks under [`notebooks/`](notebooks/README.md):
+
+```bash
+uv run jupyter notebook notebooks/01_run_first_episode.ipynb
+```
+
+Each notebook is deterministic and writes its small artifact under `output/notebooks/`.
+Run all three headless with `uv run python scripts/validation/run_notebooks_smoke.py`.
+
 ### Packaging smoke (wheel install smoke)
 
 To validate a wheel install path in a clean environment:

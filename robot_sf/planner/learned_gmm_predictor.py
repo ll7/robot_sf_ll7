@@ -8,15 +8,21 @@ checkpoint-loaded mode expects a model trained by the #2844 forecast lane.
 
 Architecture
 ------------
-The predictor encodes the current scene (robot state, goal offset, relative
-pedestrian positions and velocities) into a fixed-size feature vector, feeds
-it through a small MLP, and reshapes the output to produce per-mode position
-deltas (relative to a constant-velocity baseline), log-variances, correlation
-parameters, and unnormalised mode-weight logits for each pedestrian.
+The original ``mlp`` model type encodes the current scene (robot state, goal
+offset, relative pedestrian positions and velocities) into a fixed-size feature
+vector, feeds it through a small MLP, and reshapes the output to produce per-mode
+position deltas (relative to a constant-velocity baseline), log-variances,
+correlation parameters, and unnormalised mode-weight logits for each pedestrian.
 
-When the MLP is zero-initialised (untrained smoke mode) every mode predicts
-the constant-velocity trajectory with unit isotropic covariances and equal
-mode weights, so the end-to-end chance-constrained MPC control law is
+The opt-in ``graph_gru`` model type is the bounded #2844 progression slice. It
+encodes each pedestrian as a graph node, mean-pools valid node embeddings into
+scene context, and uses a GRU decoder to emit K trajectory modes with a diagonal
+Gaussian head. Mode weights remain equal in this scaffold; learning mode weights
+or correlations belongs to a later checkpoint/training slice.
+
+When either backend is zero-initialised (untrained smoke mode), every mode
+predicts the constant-velocity trajectory with unit isotropic covariances and
+equal mode weights, so the end-to-end chance-constrained MPC control law is
 exercisable.
 """
 
@@ -33,6 +39,10 @@ import numpy as np
 from robot_sf.models.registry import resolve_model_path
 from robot_sf.planner.chance_constrained_mpc import GaussianMixturePedestrianForecast
 from robot_sf.planner.nmpc_social import _parse_bool
+
+GRAPH_NODE_FEATURE_DIM: int = 4
+GRAPH_GLOBAL_FEATURE_DIM: int = 6
+GRAPH_GAUSSIAN_PARAM_DIM: int = 4
 
 # ── helpers reused from learned_short_horizon_predictor ──────────────────────
 
@@ -123,13 +133,14 @@ def _pedestrian_world_state(observation: dict[str, Any]) -> tuple[np.ndarray, np
 class LearnedGmmPredictorConfig:
     """Configuration for the learned K-mode GMM pedestrian predictor.
 
-    The predictor is a small MLP that outputs per-mode position deltas,
-    log-variances, correlation parameters, and weight logits.  When
-    ``allow_untrained_smoke`` is true and no checkpoint is provided, the
-    network is zero-initialised so it behaves as a constant-velocity baseline
-    with isotropic unit covariances and equal mode weights — enabling end-to-end
-    CPU validation of the chance-constrained MPC control law without a trained
-    model.
+    The historical ``mlp`` backend outputs per-mode position deltas,
+    log-variances, correlation parameters, and weight logits. The opt-in
+    ``graph_gru`` backend uses masked graph-node pooling and emits diagonal
+    Gaussian parameters with equal mode weights. When ``allow_untrained_smoke``
+    is true and no checkpoint is provided, either backend is zero-initialised so
+    it behaves as a constant-velocity baseline with isotropic unit covariances —
+    enabling end-to-end CPU validation of the chance-constrained MPC control law
+    without a trained model.
 
     Attributes:
         checkpoint_path: Path to a PyTorch state-dict checkpoint (``.pt``).
@@ -141,7 +152,9 @@ class LearnedGmmPredictorConfig:
         rollout_dt: Timestep in seconds (must match MPC ``rollout_dt``).
         hidden_dim: Hidden-layer width for the tiny MLP.
         mode_count: Number of Gaussian modes per pedestrian (K >= 1).
-        model_type: Only ``"mlp"`` is currently supported.
+        model_type: ``"mlp"`` preserves the existing flat-feature backend. The
+            opt-in ``"graph_gru"`` backend is the #2844 graph-pooled GRU scaffold
+            with K diagonal-Gaussian modes.
         allow_untrained_smoke: If true and no checkpoint, zero-initialise the
             network for diagnostic smoke tests.
     """
@@ -183,6 +196,26 @@ def predictor_io_dims(config: LearnedGmmPredictorConfig) -> tuple[int, int]:
         * 6  # delta_x, delta_y, log_std_x, log_std_y, atanh_rho, weight_logit
     )
     return input_dim, output_dim
+
+
+def graph_predictor_io_dims(config: LearnedGmmPredictorConfig) -> tuple[int, int, int]:
+    """Return graph-node, graph-global, and flattened output dimensions.
+
+    The graph backend consumes fixed-width node features and one scene-level context
+    vector. Its head emits two mean deltas and two log standard deviations per mode
+    and timestep. Mode weights are deliberately fixed to equal values in this
+    scaffold.
+
+    Returns:
+        ``(node_feature_dim, global_feature_dim, output_dim)``.
+    """
+    output_dim = (
+        int(config.max_pedestrians)
+        * int(config.horizon_steps)
+        * int(config.mode_count)
+        * GRAPH_GAUSSIAN_PARAM_DIM
+    )
+    return GRAPH_NODE_FEATURE_DIM, GRAPH_GLOBAL_FEATURE_DIM, output_dim
 
 
 # ── feature encoding ─────────────────────────────────────────────────────────
@@ -229,6 +262,55 @@ def encode_gmm_predictor_features(
         features[offset + 2 : offset + 4] = ped_velocities_world[idx]
         offset += 4
     return features
+
+
+def encode_graph_predictor_features(
+    observation: dict[str, Any],
+    ped_positions: np.ndarray,
+    ped_velocities_world: np.ndarray,
+    *,
+    max_pedestrians: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Encode valid pedestrian nodes and scene context for ``graph_gru``.
+
+    Returns:
+        Tuple of ``(node_features, node_mask, global_features)``. Node features are
+        relative position and world-frame velocity with shape ``(N, 4)``. The global
+        vector contains robot position, heading, speed, and goal offset with shape
+        ``(6,)``. Invalid padded nodes are zero-filled and masked out.
+    """
+    robot = observation.get("robot", {})
+    goal = observation.get("goal", {})
+    robot_pos = _as_xy(robot.get("position", [0.0, 0.0]))
+    heading = float(_as_1d(robot.get("heading", [0.0]), pad=1)[0])
+    speed = float(_as_1d(robot.get("speed", [0.0]), pad=1)[0])
+    goal_pos = _as_xy(goal.get("current", goal.get("next", [0.0, 0.0])))
+
+    node_count = int(max_pedestrians)
+    if node_count <= 0:
+        raise ValueError("max_pedestrians must be strictly positive")
+    node_features = np.zeros((node_count, GRAPH_NODE_FEATURE_DIM), dtype=float)
+    node_mask = np.zeros((node_count,), dtype=float)
+    positions = np.asarray(ped_positions, dtype=float)
+    velocities = np.asarray(ped_velocities_world, dtype=float)
+    count = min(node_count, positions.shape[0], velocities.shape[0])
+    if count:
+        node_features[:count, :2] = positions[:count] - robot_pos
+        node_features[:count, 2:] = velocities[:count]
+        node_mask[:count] = 1.0
+
+    global_features = np.asarray(
+        [
+            robot_pos[0],
+            robot_pos[1],
+            heading,
+            speed,
+            goal_pos[0] - robot_pos[0],
+            goal_pos[1] - robot_pos[1],
+        ],
+        dtype=float,
+    )
+    return node_features, node_mask, global_features
 
 
 # ── Torch wrapper ────────────────────────────────────────────────────────────
@@ -282,6 +364,116 @@ class _TinyGmmMlp:
             tensor = torch.as_tensor(features[None, :], dtype=torch.float32, device=device)
             output = self.module(tensor).detach().cpu().numpy()
         return np.asarray(output[0], dtype=float)
+
+
+class _TinyGraphGmmGru:
+    """Lazy graph-pooled gated recurrent unit (GRU) with a diagonal GMM head."""
+
+    def __init__(
+        self,
+        *,
+        max_pedestrians: int,
+        horizon_steps: int,
+        mode_count: int,
+        hidden_dim: int,
+        device: str,
+    ) -> None:
+        """Build the graph encoder, masked pool, and GRU decoder on ``device``."""
+        torch, nn = _load_torch()
+        self.torch = torch
+        self.max_pedestrians = int(max_pedestrians)
+        node_feature_dim = GRAPH_NODE_FEATURE_DIM
+        global_feature_dim = GRAPH_GLOBAL_FEATURE_DIM
+        output_dim = int(mode_count) * GRAPH_GAUSSIAN_PARAM_DIM
+        horizon = int(horizon_steps)
+
+        class GraphGruModule(nn.Module):
+            """Torch implementation kept local so importing this module stays lazy."""
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.node_encoder = nn.Sequential(
+                    nn.Linear(node_feature_dim, hidden_dim),
+                    nn.Tanh(),
+                )
+                self.global_encoder = nn.Sequential(
+                    nn.Linear(global_feature_dim, hidden_dim),
+                    nn.Tanh(),
+                )
+                self.decoder = nn.GRU(
+                    input_size=hidden_dim,
+                    hidden_size=hidden_dim,
+                    batch_first=True,
+                )
+                self.head = nn.Linear(hidden_dim, output_dim)
+
+            def forward(
+                self,
+                node_features: Any,
+                node_mask: Any,
+                global_features: Any,
+            ) -> Any:
+                mask = node_mask.float().clamp(0.0, 1.0)
+                encoded = self.node_encoder(node_features) * mask.unsqueeze(-1)
+                pooled = encoded.sum(dim=1) / mask.sum(dim=1, keepdim=True).clamp(min=1.0)
+                context = (
+                    encoded
+                    + pooled.unsqueeze(1)
+                    + self.global_encoder(global_features).unsqueeze(1)
+                )
+                batch_size, node_count, _ = context.shape
+                decoder_input = (
+                    context.unsqueeze(2)
+                    .expand(batch_size, node_count, horizon, hidden_dim)
+                    .reshape(batch_size * node_count, horizon, hidden_dim)
+                )
+                decoded, _ = self.decoder(decoder_input)
+                raw = self.head(decoded).reshape(
+                    batch_size,
+                    node_count,
+                    horizon,
+                    int(mode_count),
+                    GRAPH_GAUSSIAN_PARAM_DIM,
+                )
+                return raw * mask[:, :, None, None, None]
+
+        self.module = GraphGruModule().to(device)
+
+    def zero_initialize(self) -> None:
+        """Make untrained smoke output exactly the constant-velocity baseline."""
+        for param in self.module.parameters():
+            param.data.zero_()
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        """Load a graph-GRU checkpoint state dict."""
+        self.module.load_state_dict(state_dict)
+
+    def predict_numpy(
+        self,
+        node_features: np.ndarray,
+        node_mask: np.ndarray,
+        global_features: np.ndarray,
+    ) -> np.ndarray:
+        """Run one padded graph through the model and return raw head parameters.
+
+        Returns:
+            Raw graph-head parameters with shape ``(N, T, K, 4)``.
+        """
+        if node_features.shape[0] != self.max_pedestrians:
+            raise ValueError(
+                "graph node count must match the configured max_pedestrians: "
+                f"{node_features.shape[0]} != {self.max_pedestrians}"
+            )
+        torch = self.torch
+        self.module.eval()
+        device = next(self.module.parameters()).device
+        with torch.no_grad():
+            output = self.module(
+                torch.as_tensor(node_features[None, :], dtype=torch.float32, device=device),
+                torch.as_tensor(node_mask[None, :], dtype=torch.float32, device=device),
+                torch.as_tensor(global_features[None, :], dtype=torch.float32, device=device),
+            )
+        return np.asarray(output.detach().cpu().numpy()[0], dtype=float)
 
 
 # ── GMM decoder: raw MLP output → GaussianMixturePedestrianForecast ──────────
@@ -392,6 +584,68 @@ def decode_gmm_forecast(
     )
 
 
+def decode_graph_gmm_forecast(
+    raw_output: np.ndarray,
+    ped_positions: np.ndarray,
+    ped_velocities_world: np.ndarray,
+    *,
+    dt: float,
+    horizon_steps: int,
+    mode_count: int,
+    max_pedestrians: int,
+    source: str = "learned_graph_gru_predictor",
+) -> GaussianMixturePedestrianForecast:
+    """Decode graph-GRU output into equal-weight diagonal Gaussian modes.
+
+    The four head values are ``delta_x``, ``delta_y``, ``log_std_x``, and
+    ``log_std_y``. The decoder intentionally does not infer correlations or
+    learned mode weights, so the scaffold's uncertainty contract stays explicit
+    and easy to validate before a trained checkpoint exists.
+
+    Returns:
+        Validated K-mode Gaussian forecast with diagonal covariance matrices.
+    """
+    steps = max(int(horizon_steps), 1)
+    modes = int(mode_count)
+    if modes < 1:
+        raise ValueError("mode_count must be >= 1")
+    count = int(np.asarray(ped_positions).shape[0])
+    if count > int(max_pedestrians):
+        raise ValueError("ped_positions cannot exceed max_pedestrians")
+    expected_elements = int(max_pedestrians) * steps * modes * GRAPH_GAUSSIAN_PARAM_DIM
+    if raw_output.size != expected_elements:
+        raise ValueError(
+            f"graph-GRU output size {raw_output.size} does not match expected "
+            f"{expected_elements} (max_peds={max_pedestrians}, horizon={steps}, modes={modes})"
+        )
+    params = np.asarray(raw_output, dtype=float).reshape(
+        int(max_pedestrians),
+        steps,
+        modes,
+        GRAPH_GAUSSIAN_PARAM_DIM,
+    )
+    positions = np.asarray(ped_positions, dtype=float)[:count]
+    velocities = np.asarray(ped_velocities_world, dtype=float)[:count]
+    means = np.zeros((count, modes, steps, 2), dtype=float)
+    covariances = np.zeros((count, modes, steps, 2, 2), dtype=float)
+    for step in range(steps):
+        cv_positions = positions + velocities * ((step + 1) * float(dt))
+        for mode in range(modes):
+            mode_params = params[:count, step, mode]
+            means[:, mode, step, :] = cv_positions + mode_params[:, :2]
+            std = np.exp(np.clip(mode_params[:, 2:4], -10.0, 10.0))
+            covariances[:, mode, step, 0, 0] = std[:, 0] ** 2
+            covariances[:, mode, step, 1, 1] = std[:, 1] ** 2
+    weights = np.full((count, modes), 1.0 / modes, dtype=float)
+    return GaussianMixturePedestrianForecast(
+        means_world=means,
+        covariances_world=covariances,
+        mode_weights=weights,
+        dt=float(dt),
+        source=source,
+    )
+
+
 # ── predictor module builder ────────────────────────────────────────────────
 
 
@@ -418,7 +672,7 @@ class LearnedGmmPedestrianPredictor:
     """Learned K-mode GMM pedestrian predictor for chance-constrained MPC.
 
     Implements the ``GaussianMixturePedestrianPredictor`` protocol.  When a
-    checkpoint is provided the MLP loads its weights; otherwise, if
+    checkpoint is provided the selected model loads its weights; otherwise, if
     ``allow_untrained_smoke`` is set, the network is zero-initialised so every
     mode predicts a constant-velocity baseline with isotropic unit covariances
     and equal weights.  This enables end-to-end CPU validation of the
@@ -446,7 +700,7 @@ class LearnedGmmPedestrianPredictor:
         self._calls = 0
         self._last_source = "not_run"
         self._checkpoint_path = self._resolve_checkpoint_path(config)
-        self._model: _TinyGmmMlp | None = None
+        self._model: Any = None
 
         if self._checkpoint_path is not None:
             self._model = self._build_model()
@@ -505,30 +759,56 @@ class LearnedGmmPedestrianPredictor:
         if self._model is None:
             raise RuntimeError("learned GMM predictor model is unavailable")
 
-        features = encode_gmm_predictor_features(
-            observation,
-            ped_positions[:count],
-            ped_velocities_world[:count],
-            max_pedestrians=int(self.config.max_pedestrians),
-        )
-        raw_output = self._model.predict_numpy(features)
-        forecast = decode_gmm_forecast(
-            raw_output,
-            ped_positions[:count],
-            ped_velocities_world[:count],
-            dt=float(dt),
-            horizon_steps=steps,
-            mode_count=int(self.config.mode_count),
-            max_pedestrians=int(self.config.max_pedestrians),
-            source=self._evidence_tier,
-        )
+        model_type = self.config.model_type.strip().lower()
+        if model_type == "graph_gru":
+            node_features, node_mask, global_features = encode_graph_predictor_features(
+                observation,
+                ped_positions[:count],
+                ped_velocities_world[:count],
+                max_pedestrians=int(self.config.max_pedestrians),
+            )
+            raw_output = self._model.predict_numpy(
+                node_features,
+                node_mask,
+                global_features,
+            )
+            forecast = decode_graph_gmm_forecast(
+                raw_output,
+                ped_positions[:count],
+                ped_velocities_world[:count],
+                dt=float(dt),
+                horizon_steps=steps,
+                mode_count=int(self.config.mode_count),
+                max_pedestrians=int(self.config.max_pedestrians),
+                source=self._evidence_tier,
+            )
+        else:
+            features = encode_gmm_predictor_features(
+                observation,
+                ped_positions[:count],
+                ped_velocities_world[:count],
+                max_pedestrians=int(self.config.max_pedestrians),
+            )
+            raw_output = self._model.predict_numpy(features)
+            forecast = decode_gmm_forecast(
+                raw_output,
+                ped_positions[:count],
+                ped_velocities_world[:count],
+                dt=float(dt),
+                horizon_steps=steps,
+                mode_count=int(self.config.mode_count),
+                max_pedestrians=int(self.config.max_pedestrians),
+                source=self._evidence_tier,
+            )
         self._last_source = self._evidence_tier
         return forecast
 
     def diagnostics(self) -> dict[str, Any]:
         """Return claim-boundary metadata."""
         return {
-            "backend": "learned_gmm",
+            "backend": "learned_graph_gru"
+            if self.config.model_type.strip().lower() == "graph_gru"
+            else "learned_gmm",
             "mode_count": int(self.config.mode_count),
             "evidence_tier": self._evidence_tier,
             "diagnostic_only": self._evidence_tier.startswith("diagnostic_"),
@@ -537,7 +817,12 @@ class LearnedGmmPedestrianPredictor:
             "last_source": self._last_source,
             "max_pedestrians": int(self.config.max_pedestrians),
             "horizon_steps": int(self.config.horizon_steps),
-            "model_type": self.config.model_type,
+            "model_type": self.config.model_type.strip().lower(),
+            "feature_schema": (
+                "socnav_graph_nodes_v1"
+                if self.config.model_type.strip().lower() == "graph_gru"
+                else "socnav_flat_features_v1"
+            ),
         }
 
     def reset(self) -> None:
@@ -564,21 +849,30 @@ class LearnedGmmPedestrianPredictor:
             return resolve_model_path(config.model_id, allow_download=False)
         return None
 
-    def _build_model(self) -> _TinyGmmMlp:
-        """Build the configured tiny MLP.
+    def _build_model(self) -> Any:
+        """Build the configured tiny MLP or graph-GRU model.
 
         Returns:
-            The instantiated tiny GMM MLP wrapper.
+            The instantiated predictor model wrapper.
         """
-        if self.config.model_type.strip().lower() != "mlp":
-            raise ValueError("learned GMM predictor currently supports model_type='mlp' only")
-        input_dim, output_dim = predictor_io_dims(self.config)
-        return _TinyGmmMlp(
-            input_dim=input_dim,
-            output_dim=output_dim,
-            hidden_dim=int(self.config.hidden_dim),
-            device=self.config.device,
-        )
+        model_type = self.config.model_type.strip().lower()
+        if model_type == "mlp":
+            input_dim, output_dim = predictor_io_dims(self.config)
+            return _TinyGmmMlp(
+                input_dim=input_dim,
+                output_dim=output_dim,
+                hidden_dim=int(self.config.hidden_dim),
+                device=self.config.device,
+            )
+        if model_type == "graph_gru":
+            return _TinyGraphGmmGru(
+                max_pedestrians=int(self.config.max_pedestrians),
+                horizon_steps=int(self.config.horizon_steps),
+                mode_count=int(self.config.mode_count),
+                hidden_dim=int(self.config.hidden_dim),
+                device=self.config.device,
+            )
+        raise ValueError("model_type must be 'mlp' or 'graph_gru'")
 
     def _load_checkpoint(self, checkpoint_path: Path) -> None:
         """Load a PyTorch state-dict checkpoint."""
@@ -638,10 +932,16 @@ def build_learned_gmm_predictor_config(
 
 
 __all__ = [
+    "GRAPH_GAUSSIAN_PARAM_DIM",
+    "GRAPH_GLOBAL_FEATURE_DIM",
+    "GRAPH_NODE_FEATURE_DIM",
     "LearnedGmmPedestrianPredictor",
     "LearnedGmmPredictorConfig",
     "build_learned_gmm_predictor_config",
     "decode_gmm_forecast",
+    "decode_graph_gmm_forecast",
     "encode_gmm_predictor_features",
+    "encode_graph_predictor_features",
+    "graph_predictor_io_dims",
     "predictor_io_dims",
 ]

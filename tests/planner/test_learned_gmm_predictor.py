@@ -317,7 +317,7 @@ class TestLearnGmmPredictorConfig:
             model_type="transformer",
             allow_untrained_smoke=True,
         )
-        with pytest.raises(ValueError, match="model_type='mlp' only"):
+        with pytest.raises(ValueError, match="model_type.*mlp.*graph_gru"):
             LearnedGmmPedestrianPredictor(cfg)
 
     def test_invalid_values_fallback_to_defaults(self) -> None:

@@ -24,6 +24,27 @@ if TYPE_CHECKING:
     import gymnasium as gym
 
 
+def _fast_deepcopy_info(obj: Any) -> Any:
+    """A highly optimized deep copy helper for environment info dicts.
+
+    Avoids the slow introspection overhead of standard ``copy.deepcopy``.
+
+    Returns:
+        A recursively isolated copy of the supported container values.
+        Unsupported values use ``deepcopy`` to preserve the previous helper's
+        isolation contract.
+    """
+    if isinstance(obj, dict):
+        return {k: _fast_deepcopy_info(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_fast_deepcopy_info(x) for x in obj]
+    if type(obj) is tuple:
+        return tuple(_fast_deepcopy_info(x) for x in obj)
+    if isinstance(obj, np.ndarray):
+        return obj.copy()
+    return deepcopy(obj)
+
+
 class ThreadedVecEnv(DummyVecEnv):
     """Run independent Gymnasium environments concurrently in one process.
 
@@ -134,7 +155,7 @@ class ThreadedVecEnv(DummyVecEnv):
             self._obs_from_buf(),
             np.copy(self.buf_rews),
             np.copy(self.buf_dones),
-            deepcopy(self.buf_infos),
+            _fast_deepcopy_info(self.buf_infos),
         )
 
     def close(self) -> None:

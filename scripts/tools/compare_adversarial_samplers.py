@@ -338,14 +338,28 @@ def load_package_b_manifest(
     manifest_path: Path,
     *,
     repo_root: Path | None = None,
-) -> tuple[SearchConfig, tuple[str, ...], tuple[int, ...], tuple[int, ...]]:
+) -> tuple[
+    SearchConfig,
+    tuple[str, ...],
+    tuple[str, ...],
+    tuple[int, ...],
+    tuple[int, ...],
+]:
     """Load a Package-B manifest and derive the runner configuration.
 
     Returns:
         A base ``SearchConfig`` scoped to the first objective/budget/seed, the
-        sampler names, the budget grid, and the repeated seeds declared by the
-        manifest. All repository-relative paths are resolved against ``repo_root``
-        (or the current working directory when it is omitted).
+        list of objectives to compare, the sampler names, the budget grid, and
+        the repeated seeds declared by the manifest. All repository-relative
+        paths are resolved against ``repo_root`` (or the current working
+        directory when it is omitted).
+
+        The compared objectives come from the manifest's top-level ``objectives``
+        list when present (enabling multi-objective comparison such as issue
+        #5326, where ``temporal_robustness`` is compared against
+        ``worst_case_snqi``). When the top-level list is absent, the single
+        ``base_config.objective`` is used for backward compatibility with the
+        issue #3079 manifest.
     """
     root = (repo_root or Path.cwd()).resolve()
     manifest_path = (
@@ -374,11 +388,9 @@ def load_package_b_manifest(
         )
 
     policy = base_config.get("policy")
-    objective = base_config.get("objective")
+    objectives = _manifest_objectives(payload, base_config)
     if not isinstance(policy, str) or not policy.strip():
         raise ValueError("Package-B manifest base_config.policy must be a non-empty string")
-    if not isinstance(objective, str) or not objective.strip():
-        raise ValueError("Package-B manifest base_config.objective must be a non-empty string")
 
     budgets = _manifest_int_tuple(payload, "budget_grid")
     seeds = _manifest_int_tuple(payload, "repeated_seeds")
@@ -395,12 +407,181 @@ def load_package_b_manifest(
         policy=policy,
         scenario_template=_path("scenario_template"),
         search_space=_path("search_space"),
-        objective=objective,
+        objective=objectives[0],
         output_dir=output_dir,
         budget=budgets[0],
         seed=seeds[0],
     )
-    return config, samplers, budgets, seeds
+    return config, objectives, samplers, budgets, seeds
+
+
+def _manifest_objectives(payload: dict[str, Any], base_config: dict[str, Any]) -> tuple[str, ...]:
+    """Resolve the compared objective list from a Package-B manifest.
+
+    Prefers the top-level ``objectives`` list (multi-objective comparison, e.g.
+    issue #5326). Falls back to the single ``base_config.objective`` for the
+    issue #3079 manifest, which declares only one objective. Duplicate entries
+    are rejected so the comparison matrix cannot collapse a cell.
+    """
+    top_level = payload.get("objectives")
+    if isinstance(top_level, list) and top_level:
+        if any(not isinstance(item, str) or not item.strip() for item in top_level):
+            raise ValueError("Package-B manifest objectives must be a non-empty string list")
+        deduped = tuple(str(item) for item in dict.fromkeys(top_level))
+        if len(deduped) != len(top_level):
+            raise ValueError("Package-B manifest objectives must not contain duplicates")
+        return deduped
+
+    single = base_config.get("objective")
+    if not isinstance(single, str) or not single.strip():
+        raise ValueError(
+            "Package-B manifest must declare objectives (top-level list) or base_config.objective"
+        )
+    return (single,)
+
+
+def render_durable_comparison_table(
+    *,
+    report_path: Path | None,
+    rows: Sequence[SamplerComparisonRow],
+    objectives: Sequence[str],
+    budget_grid: Sequence[int],
+    seeds: Sequence[int],
+) -> str:
+    """Render the issue #5326 durable comparison table (exclusions, failures, stop-rule).
+
+    The table is diagnostic-tier only: it never asserts a benchmark claim and
+    fails closed when any row shows fallback/degraded execution or is missing
+    the required objective columns. The signed ``temporal_robustness`` rows are
+    annotated with the per-property violation count read from their
+    ``robustness_report.json`` sidecar; baseline objectives carry none.
+    """
+    required_objectives = set(objectives)
+    observed_objectives = {row.objective for row in rows}
+    missing_objectives = sorted(required_objectives - observed_objectives)
+
+    degraded_rows = [
+        row for row in rows if row.fallback_candidate_count or row.degraded_candidate_count
+    ]
+    any_degraded = bool(degraded_rows)
+
+    header_cols = [
+        "objective",
+        "sampler",
+        "budget",
+        "seed",
+        "best_valid_objective",
+        "certified_valid_failures",
+        "replayable_valid_failures",
+        "replay_success_rate",
+        "invalid_candidate_rate",
+        "signed_property_violations",
+        "held_out_family_status",
+        "fallback/degraded",
+    ]
+    lines: list[str] = []
+    lines.append("## Issue #5326 durable objective-comparison table (diagnostic tier)\n")
+    lines.append(
+        "> Claim scope: not paper-facing benchmark evidence. Synthesized on the"
+        " `--synthetic` CPU path; full matched-budget certification/replay/"
+        "independent-seed confirmation requires a SLURM-capable worker (out of"
+        " cheap-lane scope).\n"
+    )
+    lines.append("| " + " | ".join(header_cols) + " |")
+    lines.append("| " + " | ".join("---" for _ in header_cols) + " |")
+    for row in rows:
+        signed_violations = _read_signed_property_violations(
+            bundle_path=Path(row.best_bundle_path) if row.best_bundle_path else None,
+            objective=row.objective,
+        )
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    row.objective,
+                    row.sampler,
+                    str(row.budget),
+                    str(row.seed),
+                    _fmt_opt(row.best_valid_objective),
+                    str(row.certified_valid_failure_count),
+                    str(row.replayable_valid_failure_count),
+                    _fmt_opt(row.replay_success_rate),
+                    f"{row.invalid_candidate_rate:.3f}",
+                    str(signed_violations) if signed_violations is not None else "-",
+                    row.held_out_family_status,
+                    (
+                        f"fb={row.fallback_candidate_count},dg={row.degraded_candidate_count}"
+                        if (row.fallback_candidate_count or row.degraded_candidate_count)
+                        else "none"
+                    ),
+                ]
+            )
+            + " |"
+        )
+
+    lines.append("")
+    lines.append("### Stop-rule decision")
+    lines.append("")
+    if any_degraded:
+        decision = (
+            "**STOP / fail closed.** One or more comparison rows report"
+            " fallback/degraded candidate execution; those rows are excluded from any"
+            " success interpretation and cannot serve as matched-budget evidence."
+        )
+    elif missing_objectives:
+        decision = (
+            "**NARROW / incomplete.** Required objective(s) missing from the comparison:"
+            f" {', '.join(missing_objectives)}. Cannot discriminate objective lift until all"
+            " objectives are present under matched budgets."
+        )
+    else:
+        decision = (
+            "**DIRECTION NARROWED (diagnostic).** Both objectives compared under matched"
+            " CPU-synthetic budgets with no degraded execution. This is a contract/structure"
+            " check only; it does not constitute benchmark evidence for the signed-objective"
+            " hypothesis (requires SLURM campaign with certification/replay/independent-seed"
+            " confirmation)."
+        )
+    lines.append(decision)
+
+    lines.append("")
+    lines.append("### Exclusions and caveats")
+    lines.append("")
+    lines.extend(
+        (
+            "- learned failure proposal #2921: stretch/out of scope",
+            "- held-out-family yield: not evaluated (narrow archive caveat)",
+            "- paper-facing success claims: forbidden at this tier",
+            "- campaign evidence: requires SLURM-capable worker",
+        )
+    )
+    lines.append(
+        f"- report_status: diagnostic_local_nominal; schema"
+        f" adversarial-sampler-comparison.v3; budgets={list(budget_grid)};"
+        f" seeds={list(seeds)}"
+    )
+    if report_path is not None:
+        lines.append(f"- source report: {report_path.as_posix()}")
+    return "\n".join(lines) + "\n"
+
+
+def _read_signed_property_violations(*, bundle_path: Path | None, objective: str) -> int | None:
+    """Return the per-property violation count for a signed-objective row sidecar."""
+    if objective != "temporal_robustness" or bundle_path is None:
+        return None
+    sidecar = bundle_path / "robustness_report.json"
+    if not sidecar.exists():
+        return None
+    payload = json.loads(sidecar.read_text(encoding="utf-8"))
+    properties = payload.get("properties") if isinstance(payload, dict) else None
+    if not isinstance(properties, list):
+        return None
+    return sum(1 for prop in properties if prop.get("violated"))
+
+
+def _fmt_opt(value: float | None) -> str:
+    """Format an optional float for the markdown table."""
+    return f"{value:.4f}" if value is not None else "-"
 
 
 def _synthetic_evaluator(
@@ -521,6 +702,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Use a deterministic synthetic evaluator instead of running benchmark episodes.",
     )
     parser.add_argument("--out-json", type=Path, default=None)
+    parser.add_argument(
+        "--out-md",
+        type=Path,
+        default=None,
+        help=(
+            "Write the durable issue #5326 comparison table (markdown) with exclusions,"
+            " failures, and the stop-rule decision."
+        ),
+    )
     args = parser.parse_args(argv)
     if args.manifest is None and args.output_dir is None:
         parser.error("--output-dir is required unless --manifest is supplied")
@@ -532,12 +722,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if args.manifest is not None:
         repo_root = args.repo_root.resolve()
-        config, samplers, budgets, seeds = load_package_b_manifest(
+        config, objectives, samplers, budgets, seeds = load_package_b_manifest(
             args.manifest,
             repo_root=repo_root,
         )
         output_dir = config.output_dir
-        objectives = [config.objective]
         out_json = (
             args.out_json
             if args.out_json is None or args.out_json.is_absolute()
@@ -582,6 +771,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+    if args.out_md is not None:
+        out_md = (
+            args.out_md if args.out_md.is_absolute() else (args.repo_root.resolve() / args.out_md)
+        )
+        out_md.parent.mkdir(parents=True, exist_ok=True)
+        table_md = render_durable_comparison_table(
+            report_path=out_json,
+            rows=rows,
+            objectives=objectives,
+            budget_grid=budgets,
+            seeds=seeds,
+        )
+        out_md.write_text(table_md, encoding="utf-8")
     print(json.dumps(payload, sort_keys=True))
     return 0
 

@@ -367,15 +367,8 @@ def _evaluate_cells(
     critical_event: Mapping[str, Any],
 ) -> tuple[Any, Any]:
     if replay_data is not None:
-        if "cells" not in replay_info:
-            return [], [
-                {
-                    "timing_offset_s": float(timing_offsets[0]),
-                    "speed_delta_m_s": float(speed_deltas[0]),
-                    "reason": "precomputed replay result omitted perturbation cells",
-                }
-            ]
-        return replay_info["cells"], replay_info.get("missing_cell_reasons", [])
+        cells = _validate_precomputed_cells(replay_info, timing_offsets, speed_deltas)
+        return cells, []
     return evaluate_perturbation_grid(
         timing_offsets_s=timing_offsets,
         speed_deltas_m_s=speed_deltas,
@@ -384,6 +377,94 @@ def _evaluate_cells(
             critical_event=critical_event,
         ),
     )
+
+
+def _validate_precomputed_cells(
+    replay_info: Mapping[str, Any],
+    timing_offsets: Sequence[float],
+    speed_deltas: Sequence[float],
+) -> list[dict[str, Any]]:
+    if "cells" not in replay_info:
+        raise ValueError("precomputed replay result is missing 'cells' list")
+
+    cells = replay_info["cells"]
+    if not isinstance(cells, list):
+        raise ValueError("precomputed replay result 'cells' must be a list")
+
+    missing_cell_reasons = replay_info.get("missing_cell_reasons", [])
+    if not isinstance(missing_cell_reasons, list):
+        raise ValueError("precomputed replay result 'missing_cell_reasons' must be a list")
+    if missing_cell_reasons:
+        raise ValueError(
+            f"precomputed replay result contains explicitly missing cell reasons: {missing_cell_reasons}"
+        )
+
+    expected_coordinates = [(float(t), float(s)) for t in timing_offsets for s in speed_deltas]
+    matched_cells: dict[tuple[float, float], list[dict[str, Any]]] = {
+        coord: [] for coord in expected_coordinates
+    }
+    extra_cells: list[dict[str, Any]] = []
+
+    for idx, cell in enumerate(cells):
+        _validate_single_cell(cell, idx, expected_coordinates, matched_cells, extra_cells)
+
+    if extra_cells:
+        raise ValueError(
+            f"precomputed replay result contains extra/unregistered cells: {extra_cells}"
+        )
+
+    duplicate_coords = [coord for coord, matches in matched_cells.items() if len(matches) > 1]
+    if duplicate_coords:
+        raise ValueError(
+            f"precomputed replay result contains duplicate cells for coordinates: {duplicate_coords}"
+        )
+
+    missing_coords = [coord for coord, matches in matched_cells.items() if len(matches) == 0]
+    if missing_coords:
+        raise ValueError(
+            f"precomputed replay result is missing cells for coordinates: {missing_coords}"
+        )
+
+    return cells
+
+
+def _validate_single_cell(
+    cell: Any,
+    idx: int,
+    expected_coordinates: list[tuple[float, float]],
+    matched_cells: dict[tuple[float, float], list[dict[str, Any]]],
+    extra_cells: list[dict[str, Any]],
+) -> None:
+    if not isinstance(cell, dict):
+        raise ValueError(f"malformed precomputed cells: cell {idx}: not a dictionary")
+
+    if "timing_offset_s" not in cell or "speed_delta_m_s" not in cell or "verdict" not in cell:
+        raise ValueError(
+            f"malformed precomputed cells: cell {idx}: "
+            "missing required keys ('timing_offset_s', 'speed_delta_m_s', 'verdict')"
+        )
+
+    try:
+        cell_t = float(cell["timing_offset_s"])
+        cell_s = float(cell["speed_delta_m_s"])
+    except (ValueError, TypeError):
+        raise ValueError(
+            f"malformed precomputed cells: cell {idx}: "
+            "non-numeric timing_offset_s or speed_delta_m_s"
+        )
+
+    cell_verdict = cell["verdict"]
+    if not isinstance(cell_verdict, str) or cell_verdict not in ("pass", "fail", "unknown"):
+        raise ValueError(
+            f"malformed precomputed cells: cell {idx}: invalid verdict '{cell_verdict}'"
+        )
+
+    for t, s in expected_coordinates:
+        if math.isclose(cell_t, t, abs_tol=1e-7) and math.isclose(cell_s, s, abs_tol=1e-7):
+            matched_cells[(t, s)].append(cell)
+            return
+
+    extra_cells.append(cell)
 
 
 def _assess_exact_replay(

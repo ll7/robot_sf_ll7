@@ -283,8 +283,10 @@ def _check_pr_gate_staleness(
             f"Changed sensitive files:\n"
             f"  "
             + "\n  ".join(pr_check["changed_sensitive_files"])
-            + "\nRun: gh pr edit <number> --base main && "
-            "gh pr update-branch <number>",
+            + "\nRun: gh pr edit <number> --base main, then inspect the head with "
+            "gh pr view <number> --json headRefOid --jq .headRefOid and run "
+            "uv run python scripts/dev/update_pr_branch.py <number> "
+            "--expected-head-sha <head-sha>",
             file=sys.stderr,
         )
         overall["stale"] = True

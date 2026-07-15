@@ -10,6 +10,7 @@ import pytest
 
 from scripts.dev.check_pr_merge_staleness import (
     _detect_workflow_run_base_sha,
+    _fetch_pr_base_sha,
     check_merge_staleness,
     format_human,
     main,
@@ -22,6 +23,19 @@ def _gh_response(returncode: int = 0, stdout: str = "", stderr: str = "") -> Mag
 
 
 # ── check_merge_staleness ────────────────────────────────────────────────────
+
+
+def test_fetch_pr_base_sha_uses_rest_pull_endpoint() -> None:
+    """Fetch the base SHA without the unsupported gh ``baseRefOid`` field."""
+    with patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(
+            stdout=json.dumps({"base": {"sha": "base_sha"}, "number": 42})
+        )
+        base_sha, error = _fetch_pr_base_sha("42", repo="owner/repo")
+
+    assert base_sha == "base_sha"
+    assert error is None
+    assert mock_gh.call_args.args[0] == ["api", "repos/owner/repo/pulls/42"]
 
 
 def test_stale_when_main_sha_differs() -> None:
@@ -116,6 +130,8 @@ def test_detect_workflow_run_base_sha_uses_branch_and_pr_base_metadata() -> None
         result = _detect_workflow_run_base_sha("owner/repo", "42")
 
     assert result == "ci_base_sha"
+    head_args = mock_gh.call_args_list[0].args[0]
+    assert head_args[:5] == ["pr", "view", "42", "--repo", "owner/repo"]
     actions_args = mock_gh.call_args_list[1].args[0]
     assert "branch=feature/x" in actions_args
     assert "event=pull_request" in actions_args
@@ -301,8 +317,8 @@ def test_main_exit_0_when_fresh(capsys: pytest.CaptureFixture) -> None:
         mock_gh.side_effect = [
             # repo view
             _gh_response(stdout="ll7/robot_sf_ll7"),
-            # pr view base sha
-            _gh_response(stdout="same_sha"),
+            # REST pull request base SHA
+            _gh_response(stdout=json.dumps({"base": {"sha": "same_sha"}})),
             # main sha
             _gh_response(stdout="same_sha"),
         ]
@@ -323,7 +339,7 @@ def test_main_exit_1_when_stale(capsys: pytest.CaptureFixture) -> None:
     ):
         mock_gh.side_effect = [
             _gh_response(stdout="ll7/robot_sf_ll7"),
-            _gh_response(stdout="old_base"),
+            _gh_response(stdout=json.dumps({"base": {"sha": "old_base"}})),
             _gh_response(stdout="new_main"),
         ]
         rc = main(["42"])
@@ -343,7 +359,7 @@ def test_main_exit_2_on_error(capsys: pytest.CaptureFixture) -> None:
     ):
         mock_gh.side_effect = [
             _gh_response(stdout="ll7/robot_sf_ll7"),
-            _gh_response(stdout="abc"),
+            _gh_response(stdout=json.dumps({"base": {"sha": "abc"}})),
             _gh_response(returncode=1, stderr="network error"),
         ]
         rc = main(["1"])
@@ -363,7 +379,7 @@ def test_main_json_output(capsys: pytest.CaptureFixture) -> None:
     ):
         mock_gh.side_effect = [
             _gh_response(stdout="ll7/robot_sf_ll7"),
-            _gh_response(stdout="abc"),
+            _gh_response(stdout=json.dumps({"base": {"sha": "abc"}})),
             _gh_response(stdout="abc"),
         ]
         rc = main(["7", "--json"])
@@ -384,7 +400,7 @@ def test_main_repo_flag(capsys: pytest.CaptureFixture) -> None:
         ),
     ):
         mock_gh.side_effect = [
-            _gh_response(stdout="sha"),
+            _gh_response(stdout=json.dumps({"base": {"sha": "sha"}})),
             _gh_response(stdout="sha"),
         ]
         rc = main(["1", "--repo", "ll7/robot_sf_ll7"])
@@ -403,7 +419,7 @@ def test_main_pr_flag_alias(capsys: pytest.CaptureFixture) -> None:
         ),
     ):
         mock_gh.side_effect = [
-            _gh_response(stdout="sha"),
+            _gh_response(stdout=json.dumps({"base": {"sha": "sha"}})),
             _gh_response(stdout="sha"),
         ]
         rc = main(["--pr", "99", "--repo", "ll7/robot_sf_ll7"])

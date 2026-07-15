@@ -161,6 +161,34 @@ class TestBuildExport:
         with pytest.raises(TracePredicateExportError, match="scenario_id"):
             build_trace_predicate_export([record])
 
+    def test_malformed_identity_types_fail_closed(self) -> None:
+        """Required identity fields must be non-empty strings."""
+        # scenario_id = 0 (integer)
+        record = _record_with_all_predicates()
+        record["scenario_id"] = 0
+        with pytest.raises(TracePredicateExportError, match="scenario_id must be a string"):
+            build_trace_predicate_export([record])
+
+        # algo = False (boolean)
+        record = _record_with_all_predicates()
+        record["algo"] = False
+        with pytest.raises(TracePredicateExportError, match="planner must be a string"):
+            build_trace_predicate_export([record])
+
+        # episode_id = dict (mapping)
+        record = _record_with_all_predicates()
+        record["episode_id"] = {"id": "ep-001"}
+        with pytest.raises(TracePredicateExportError, match="episode_id must be a string"):
+            build_trace_predicate_export([record])
+
+        # blank scenario_id
+        record = _record_with_all_predicates()
+        record["scenario_id"] = "   "
+        with pytest.raises(
+            TracePredicateExportError, match="scenario_id must be a non-empty string"
+        ):
+            build_trace_predicate_export([record])
+
     def test_malformed_predicate_record_fails_closed(self) -> None:
         """Malformed producer payloads must not be promoted as exported evidence."""
         record = _record_with_all_predicates()

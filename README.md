@@ -17,11 +17,14 @@ pedestrian-filled environments.
 
 | I want to... | Go to |
 | --- | --- |
+| **Install and use Robot SF (newcomer path)** | [`docs/user-guide.md`](docs/user-guide.md) — task-oriented: install, run a demo, load a map, choose a planner, run a benchmark, visualize results, troubleshoot |
 | Understand the project quickly | [Why Robot SF?](#why-robot-sf) |
 | Decode an acronym or project term | [`docs/glossary.md`](docs/glossary.md) |
 | Install dependencies and run the first demos | [Quickstart](#quickstart) |
 | Browse runnable examples | [`examples/README.md`](examples/README.md) |
-| Find architecture, benchmark, and workflow docs | [`docs/README.md`](docs/README.md) |
+| Use benchmarks with evidence discipline | [`docs/research-guide.md`](docs/research-guide.md) |
+| Find architecture, contribution, and CI docs | [`docs/developer-guide.md`](docs/developer-guide.md) |
+| Browse all docs by audience | [`docs/README.md`](docs/README.md) |
 | Follow the contributor workflow | [`docs/dev_guide.md`](docs/dev_guide.md) |
 | Contribute docs, planners, scenarios, or fixes | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Review repository conventions for agents and contributors | [`AGENTS.md`](AGENTS.md) |

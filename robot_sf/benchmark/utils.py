@@ -15,6 +15,8 @@ import inspect
 import json
 import math
 import os
+import platform
+import socket
 import subprocess
 from numbers import Integral, Real
 from pathlib import Path
@@ -414,6 +416,65 @@ def _git_hash_fallback() -> str:
     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:  # pragma: no cover
         logger.debug("_git_hash_fallback failed: %s", exc)
         return "unknown"
+
+
+# Thread/parallel env vars that must be pinned to 1 for thread-deterministic
+# trace re-executions (issue #5816). ulp-level float differences from BLAS/OpenMP
+# thread scheduling are chaotically amplified in contact-rich scenarios.
+_PINNABLE_THREAD_ENV_VARS: tuple[str, ...] = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+)
+
+
+def capture_execution_context() -> dict[str, Any]:
+    """Capture host/CPU/thread-env provenance for cross-context comparison.
+
+    Returns a dict with ``hostname``, ``cpu_model`` (from ``/proc/cpuinfo`` when
+    available, else ``platform.processor()``), and ``thread_env`` mapping the
+    pinnable BLAS/OpenMP thread vars to their current values. Used by the
+    camera-ready runner so trace re-exports from divergent execution contexts are
+    detectable after the fact (issue #5816).
+
+    Returns:
+        Dict with ``hostname``, ``cpu_model``, and ``thread_env`` keys.
+    """
+    cpu_model = "Unknown CPU"
+    try:
+        with open("/proc/cpuinfo") as f:
+            for line in f:
+                if line.lower().startswith("model name"):
+                    cpu_model = line.split(":", 1)[1].strip()
+                    break
+    except (OSError, FileNotFoundError):
+        cpu_model = platform.processor() or "Unknown CPU"
+
+    thread_env = {var: os.environ.get(var) for var in _PINNABLE_THREAD_ENV_VARS}
+
+    return {
+        "hostname": socket.gethostname(),
+        "cpu_model": cpu_model,
+        "thread_env": thread_env,
+    }
+
+
+def pin_thread_env_for_determinism() -> dict[str, str]:
+    """Pin BLAS/OpenMP thread counts to 1 for thread-deterministic re-execution.
+
+    Sets each pinnable thread var to ``"1"`` only when unset, and returns the
+    resulting mapping. Idempotent: calling it again returns the same effective
+    values without overwriting an explicit user override (issue #5816).
+
+    Returns:
+        Mapping of each pinnable thread env var to its effective value.
+    """
+    pinned: dict[str, str] = {}
+    for var in _PINNABLE_THREAD_ENV_VARS:
+        if var not in os.environ:
+            os.environ[var] = "1"
+        pinned[var] = os.environ[var]
+    return pinned
 
 
 def _config_hash(obj: Any) -> str:

@@ -25,6 +25,7 @@ from robot_sf.benchmark.camera_ready_campaign import (
 )
 from robot_sf.benchmark.fallback_policy import campaign_exit_code
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
+from robot_sf.benchmark.utils import pin_thread_env_for_determinism
 from scripts.tools.record_post_campaign_stage_status import build_stage_status
 
 if TYPE_CHECKING:
@@ -36,6 +37,11 @@ if TYPE_CHECKING:
 import os
 
 os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
+
+# Pin BLAS/OpenMP thread counts to 1 for thread-deterministic trace re-execution
+# (issue #5816). ulp-level float differences from thread scheduling are chaotically
+# amplified in contact-rich scenarios, so re-exports must at least be thread-stable.
+pin_thread_env_for_determinism()
 
 
 def _build_parser() -> argparse.ArgumentParser:

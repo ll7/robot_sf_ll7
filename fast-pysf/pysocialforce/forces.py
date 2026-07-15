@@ -431,7 +431,7 @@ class ObstacleForce:
         return forces * self.config.factor
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, nogil=True)
 def all_obstacle_forces(
     out_forces: np.ndarray, ped_positions: np.ndarray, obstacles: np.ndarray, ped_radius: float
 ):
@@ -460,7 +460,7 @@ def all_obstacle_forces(
             out_forces[i, 1] += force_y
 
 
-@njit(fastmath=True)
+@njit(fastmath=True, nogil=True)
 def obstacle_force(
     obstacle: Line2D, ortho_vec: Point2D, ped_pos: Point2D, ped_radius: float
 ) -> tuple[float, float]:

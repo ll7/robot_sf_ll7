@@ -74,11 +74,29 @@ capture is documented in the fixture module.
 | Output conforms to a report contract and preserves every branch result | `last_avoidable_replay.v1.json`; `branches` preserved; `test_report_conforms_to_schema_and_records_provenance` |
 | Runtime reported, no online gate | `runtime_s` recorded by the CLI/engine |
 
-Note on the report contract: #5441's `collision_causal_report.v1` is not yet
-merged. This slice emits a self-contained `last_avoidable_replay.v1` whose field
-naming (`t_danger`/`t_uca`/`t_inevitable`/`t_contact` as available/unavailable,
-`normative_fault: not_assessed`) is forward-compatible, so it can be embedded as
-the counterfactual branch of that contract once #5441 lands — without re-running.
+Note on the report contract: #5441's `collision_causal_report.v1` is now merged,
+and the join described below embeds the replay result into that contract.
+
+## Join into `collision_causal_report.v1` (remaining item delivered)
+
+`robot_sf/benchmark/collision_causal_report.py` exposes
+`collide_causal_report_from_last_avoidable`, which wraps a `last_avoidable_replay.v1`
+result into the additive `collision_causal_report.v1` contract **without re-running**
+the engine. The fail-closed failure semantics survive the join:
+
+- `avoidable` replay → non-abstaining report, `verdict: avoidable`,
+  `supported_actual_cause: true`, the replay's `t_uca`/`t_inevitable` carried through
+  as available timestamps, and each minimal-sufficient preventing intervention recorded.
+- `already_unavoidable` replay → non-abstaining report, `verdict: unavoidable`,
+  `supported_actual_cause: false` (no planner action is the cause when contact was
+  already unavoidable at `t_danger`).
+- `unknown` replay (nondeterministic baseline or incomplete feasible-action
+  coverage) → **fully abstaining** report, `verdict: unknown`, every planner-internal
+  reconstruction element and unavailable timestamp declared in `missing_fields`. It
+  **never** becomes `unavoidable`.
+
+`normative_fault` is always `not_assessed`. The join is exercised by
+`tests/benchmark/test_collision_causal_report_join_5442.py`.
 
 ## Competing explanations carried from the issue
 

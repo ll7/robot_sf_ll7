@@ -25,11 +25,26 @@ from typing import Any
 import jsonschema
 
 from robot_sf.benchmark import last_avoidable_fixtures as fx
+from robot_sf.benchmark.collision_causal_report import (
+    CausalJoinMetadata,
+    collide_causal_report_from_last_avoidable,
+)
 from robot_sf.benchmark.last_avoidable_replay import (
     SUBSTITUTION_HOLD,
     LastAvoidableReport,
     ReplayConfig,
     locate_last_avoidable,
+)
+
+#: Shared causal-report provenance applied to every joined report. The mechanism
+#: label/location and STPA class describe a *frozen-state* avoidance localisation,
+#: not a planner-internal defect attribution (which stays out of scope here).
+_CAUSAL_METADATA = CausalJoinMetadata(
+    intervention_model="frozen_state_counterfactual_replay__replayed_pedestrians",
+    mechanism_label="guard_or_handoff_domination",
+    cause_location="candidate_scoring_selection",
+    unsafe_control_action_class="action_not_provided",
+    confidence_level="supported_hypothesis",
 )
 
 _SCHEMA_PATH = (
@@ -71,6 +86,11 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=20,
         help="Number of identical baseline replays used for the determinism check.",
+    )
+    parser.add_argument(
+        "--join-causal-report",
+        action="store_true",
+        help="Also emit a collision_causal_report.v1 for each fixture via the #5442->#5441 join.",
     )
     return parser
 
@@ -139,16 +159,27 @@ def main(argv: list[str] | None = None) -> int:
         jsonschema.validate(payload, schema)
         out_path = args.out_dir / f"{name}.json"
         out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        summary.append(
-            {
-                "fixture": name,
-                "verdict": payload["verdict"],
-                "t_uca": payload["t_uca"],
-                "t_inevitable": payload["t_inevitable"],
-                "abstain_reason": payload["abstain_reason"],
-                "report": str(out_path),
-            }
-        )
+        entry: dict[str, Any] = {
+            "fixture": name,
+            "verdict": payload["verdict"],
+            "t_uca": payload["t_uca"],
+            "t_inevitable": payload["t_inevitable"],
+            "abstain_reason": payload["abstain_reason"],
+            "report": str(out_path),
+        }
+        if args.join_causal_report:
+            # Embed the replay result into the additive collision_causal_report.v1
+            # contract (issue #5442 -> #5441 join) without re-running the engine.
+            causal = collide_causal_report_from_last_avoidable(
+                report_id=f"ccr-{name}",
+                case_id=name,
+                replay=report,
+                metadata=_CAUSAL_METADATA,
+            )
+            causal_path = args.out_dir / f"{name}__causal_report.json"
+            causal_path.write_text(json.dumps(causal, indent=2) + "\n", encoding="utf-8")
+            entry["causal_report"] = str(causal_path)
+        summary.append(entry)
 
     print(json.dumps({"schema_version": "last_avoidable_replay.v1", "results": summary}, indent=2))
     return 0

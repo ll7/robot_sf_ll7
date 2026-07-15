@@ -63,6 +63,12 @@ CANDIDATE_SCHEMA_VERSION = "seed_flip_inversion_candidates.v1"
 #: Schema tag of the trace export contract we resolve against.
 TRACE_SCHEMA_VERSION = "simulation_trace_export.v1"
 
+# Outcomes accepted by the targeted #5756 re-export contract.  These are
+# labels from the release episode rows, not a new metric or ranking semantic.
+WORKED_EXAMPLE_OUTCOMES = frozenset(
+    {"success", "collision_event", "route_complete", "timeout_event"}
+)
+
 #: Resolution statuses (fail-closed, never silently drop a candidate).
 ResolutionStatus = Literal[
     "resolved",
@@ -606,6 +612,373 @@ def resolve_candidate_trace_resolution(
     }
 
 
+def load_episode_requests(  # noqa: C901
+    path: Path,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Load and validate the concrete #5756 episode request manifest.
+
+    The request list is intentionally separate from the cell-level candidate
+    manifest: it is the explicit ``(scenario, planner, seed)`` expansion needed
+    to resolve real per-episode artifacts.  The list may carry an episode id
+    from the release bundle, or leave it null for a later rerun mapping.
+
+    Returns:
+        The source payload and normalized request rows.
+
+    Raises:
+        CandidateTraceResolutionError: If the request contract is malformed or
+            contains duplicate tuples.
+    """
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CandidateTraceResolutionError(f"episode request manifest unreadable: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise CandidateTraceResolutionError("episode request manifest must be a JSON object")
+    if payload.get("schema_version") != "issue_5446_trace_reexport_list.v1":
+        raise CandidateTraceResolutionError(
+            "episode request manifest schema_version must be 'issue_5446_trace_reexport_list.v1'"
+        )
+    raw_tuples = payload.get("tuples")
+    if not isinstance(raw_tuples, list) or not raw_tuples:
+        raise CandidateTraceResolutionError("episode request manifest has no tuples")
+    declared_count = payload.get("n_tuples")
+    if declared_count != len(raw_tuples):
+        raise CandidateTraceResolutionError(
+            f"episode request count mismatch: n_tuples={declared_count!r}, actual={len(raw_tuples)}"
+        )
+
+    normalized: list[dict[str, Any]] = []
+    seen_tuples: set[tuple[str, str, int]] = set()
+    for index, raw_request in enumerate(raw_tuples):
+        if not isinstance(raw_request, Mapping):
+            raise CandidateTraceResolutionError(f"episode request {index} must be an object")
+        scenario_id = _coerce_optional_text(raw_request.get("scenario_id"))
+        planner = _coerce_optional_text(raw_request.get("planner", raw_request.get("planner_id")))
+        seed = coerce_optional_id(raw_request.get("seed"))
+        if scenario_id is None or planner is None or seed is None:
+            raise CandidateTraceResolutionError(
+                f"episode request {index} is missing scenario_id, planner, or integer seed"
+            )
+        tuple_key = (scenario_id, planner, seed)
+        if tuple_key in seen_tuples:
+            raise CandidateTraceResolutionError(
+                "duplicate episode request tuple: "
+                f"scenario_id={scenario_id}, planner={planner}, seed={seed}"
+            )
+        seen_tuples.add(tuple_key)
+        episode_id = _coerce_optional_text(raw_request.get("episode_id"))
+        expected_outcome = _normalize_outcome(raw_request.get("expected_outcome"))
+        if raw_request.get("expected_outcome") is not None and expected_outcome is None:
+            raise CandidateTraceResolutionError(
+                f"episode request {index} has unsupported expected_outcome"
+            )
+        normalized.append(
+            {
+                "scenario_id": scenario_id,
+                "planner": planner,
+                "seed": seed,
+                "episode_id": episode_id,
+                "expected_outcome": expected_outcome,
+                "requested_by_candidates": list(raw_request.get("requested_by_candidates", [])),
+            }
+        )
+    return payload, normalized
+
+
+def load_episode_mapping(  # noqa: C901
+    path: Path,
+) -> dict[str, dict[str, Any]]:
+    """Load a rerun episode mapping indexed by episode id and tuple identity.
+
+    Accepted payloads are a JSON list or an object containing ``rows``,
+    ``episodes``, or ``mappings``.  Every row must identify the scenario,
+    planner, seed, and episode id.  Trace URI and outcome fields are checked by
+    :func:`resolve_episode_requests` so missing rerun outputs remain fail-closed.
+
+    Returns:
+        Mapping keyed by rerun ``episode_id``, release/request episode id, and
+        normalized tuple key.
+    """
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CandidateTraceResolutionError(f"episode mapping unreadable: {exc}") from exc
+    if isinstance(payload, list):
+        raw_rows = payload
+    elif isinstance(payload, Mapping):
+        raw_rows = next(
+            (payload[key] for key in ("rows", "episodes", "mappings") if key in payload),
+            None,
+        )
+        if raw_rows is None:
+            raw_rows = [
+                {"requested_episode_id": episode_id, "episode_id": episode_id, **dict(row)}
+                for episode_id, row in payload.items()
+                if isinstance(row, Mapping)
+            ]
+    else:
+        raw_rows = None
+    if not isinstance(raw_rows, list) or not raw_rows:
+        raise CandidateTraceResolutionError("episode mapping has no rows")
+
+    indexed: dict[str, dict[str, Any]] = {}
+    tuple_index: dict[str, dict[str, Any]] = {}
+    for index, raw_row in enumerate(raw_rows):
+        if not isinstance(raw_row, Mapping):
+            raise CandidateTraceResolutionError(f"episode mapping row {index} must be an object")
+        episode_id = _coerce_optional_text(raw_row.get("episode_id"))
+        request_episode_id = _coerce_optional_text(
+            raw_row.get(
+                "release_episode_id",
+                raw_row.get("requested_episode_id", raw_row.get("source_episode_id")),
+            )
+        )
+        scenario_id = _coerce_optional_text(raw_row.get("scenario_id"))
+        planner = _coerce_optional_text(raw_row.get("planner", raw_row.get("planner_id")))
+        seed = coerce_optional_id(raw_row.get("seed"))
+        if None in (episode_id, scenario_id, planner, seed):
+            raise CandidateTraceResolutionError(
+                f"episode mapping row {index} is missing episode identity fields"
+            )
+        assert episode_id is not None and scenario_id is not None and planner is not None
+        assert seed is not None
+        tuple_key = _episode_request_key(scenario_id, planner, seed)
+        row = {
+            **dict(raw_row),
+            "episode_id": episode_id,
+            "scenario_id": scenario_id,
+            "planner": planner,
+            "seed": seed,
+        }
+        if episode_id in indexed:
+            raise CandidateTraceResolutionError(f"duplicate mapped episode_id: {episode_id}")
+        if tuple_key in tuple_index:
+            raise CandidateTraceResolutionError(
+                "duplicate mapped episode tuple: "
+                f"scenario_id={scenario_id}, planner={planner}, seed={seed}"
+            )
+        indexed[episode_id] = row
+        if request_episode_id is not None and request_episode_id != episode_id:
+            if request_episode_id in indexed:
+                raise CandidateTraceResolutionError(
+                    f"duplicate mapped release episode_id: {request_episode_id}"
+                )
+            indexed[request_episode_id] = row
+        tuple_index[tuple_key] = row
+    return {**indexed, **tuple_index}
+
+
+def resolve_episode_requests(  # noqa: C901, PLR0915
+    request_manifest: Mapping[str, Any],
+    episode_mapping: Mapping[str, Mapping[str, Any]],
+    *,
+    trace_search_roots: Sequence[Path] | None = None,
+) -> dict[str, Any]:
+    """Resolve concrete #5756 requests against rerun rows and trace exports.
+
+    This is the per-episode bridge from the #5446 request list to the existing
+    # candidate-trace resolver contract.  It checks identity and release-row
+    outcome before accepting a trace, then validates the typed trace export and
+    its embedded source identity.  No row is silently dropped.
+
+    Returns:
+        A ``candidate_trace_resolution.v1`` manifest whose rows are keyed by
+        deterministic ``trace_request::<scenario>::<planner>::<seed>`` ids.
+    """
+    source_bytes = json.dumps(request_manifest, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    source_hash = hashlib.sha256(source_bytes).hexdigest()
+    raw_requests = request_manifest.get("tuples")
+    if not isinstance(raw_requests, list) or not raw_requests:
+        raise CandidateTraceResolutionError("request_manifest has no tuples")
+    rows: list[dict[str, Any]] = []
+    counts = dict.fromkeys(
+        ("resolved", "trace-missing", "schema-mismatch", "provenance-incomplete"), 0
+    )
+    roots = list(trace_search_roots or [])
+    for request in raw_requests:
+        if not isinstance(request, Mapping):
+            raise CandidateTraceResolutionError("request_manifest contains a non-object tuple")
+        scenario_id = _coerce_optional_text(request.get("scenario_id"))
+        planner = _coerce_optional_text(request.get("planner", request.get("planner_id")))
+        seed = coerce_optional_id(request.get("seed"))
+        if scenario_id is None or planner is None or seed is None:
+            raise CandidateTraceResolutionError("request tuple has incomplete identity")
+        request_key = _episode_request_key(scenario_id, planner, seed)
+        request_id = f"trace_request::{scenario_id}::{planner}::{seed}"
+        requested_episode_id = _coerce_optional_text(request.get("episode_id"))
+        mapped = episode_mapping.get(requested_episode_id) if requested_episode_id else None
+        if mapped is None and requested_episode_id is None:
+            mapped = episode_mapping.get(request_key)
+        base = {
+            "candidate_id": request_id,
+            "source_manifest_hash": source_hash,
+            "campaign_id": None,
+            "campaign_row_reference": None,
+            "artifact_uri": None,
+            "scenario_id": scenario_id,
+            "planner_id": planner,
+            "seed": seed,
+            "config_hash": None,
+            "episode_id": None,
+            "trace_artifact_uri": None,
+            "trace_content_hash": None,
+            "trace_schema_version": None,
+            "resolution_status": "provenance-incomplete",
+            "reason_code": "missing_episode_mapping",
+            "predicate_rows_available": None,
+            "critical_intervals_available": None,
+            "exact_repeat_determinism": None,
+        }
+        if mapped is None:
+            rows.append(base)
+            counts["provenance-incomplete"] += 1
+            continue
+
+        identity_mismatches = [
+            field
+            for field, expected in (
+                ("scenario_id", scenario_id),
+                ("planner", planner),
+                ("seed", seed),
+            )
+            if mapped.get(field) != expected
+        ]
+        if identity_mismatches:
+            base["reason_code"] = "mapping_identity_mismatch:" + ",".join(identity_mismatches)
+            rows.append(base)
+            counts["provenance-incomplete"] += 1
+            continue
+
+        observed_outcome = _mapping_outcome(mapped)
+        expected_outcome = _normalize_outcome(request.get("expected_outcome"))
+        if observed_outcome is None:
+            base["reason_code"] = "outcome_missing_or_invalid"
+            rows.append(base)
+            counts["provenance-incomplete"] += 1
+            continue
+        if expected_outcome is not None and observed_outcome != expected_outcome:
+            base["reason_code"] = (
+                f"outcome_mismatch:expected={expected_outcome},observed={observed_outcome}"
+            )
+            rows.append(base)
+            counts["provenance-incomplete"] += 1
+            continue
+
+        trace_uri = _coerce_optional_text(
+            mapped.get(
+                "trace_artifact_uri",
+                mapped.get("trace_uri", mapped.get("artifact_uri", mapped.get("trace_path"))),
+            )
+        )
+        episode_id = str(mapped["episode_id"])
+        episode_provenance = {"artifact_uri": trace_uri, "episode_id": episode_id}
+        trace_path = _locate_trace_path(episode_provenance, trace_search_roots=roots)
+        row = {**base, "episode_id": episode_id, "artifact_uri": trace_uri}
+        if trace_path is None:
+            row["reason_code"] = "trace_artifact_not_found"
+            row["resolution_status"] = "trace-missing"
+            rows.append(row)
+            counts["trace-missing"] += 1
+            continue
+        trace = _validate_trace_file(trace_path)
+        row.update(
+            {
+                "trace_artifact_uri": trace["trace_artifact_uri"],
+                "trace_content_hash": trace["trace_content_hash"],
+                "trace_schema_version": trace["trace_schema_version"],
+            }
+        )
+        if trace["resolution_status"] != "resolved":
+            row["resolution_status"] = trace["resolution_status"]
+            row["reason_code"] = trace["reason_code"]
+            rows.append(row)
+            counts[trace["resolution_status"]] += 1
+            continue
+        try:
+            typed_trace = load_simulation_trace_export(trace_path)
+        except (OSError, SimulationTraceExportValidationError) as exc:
+            row["resolution_status"] = "schema-mismatch"
+            row["reason_code"] = f"trace_load_failed:{exc}"
+            rows.append(row)
+            counts["schema-mismatch"] += 1
+            continue
+        source = typed_trace.source
+        source_mismatches = [
+            field
+            for field, actual, expected in (
+                ("scenario_id", source.scenario_id, scenario_id),
+                ("planner_id", source.planner_id, planner),
+                ("seed", source.seed, seed),
+                ("episode_id", source.episode_id, episode_id),
+            )
+            if actual != expected
+        ]
+        if source_mismatches:
+            row["resolution_status"] = "schema-mismatch"
+            row["reason_code"] = "trace_source_mismatch:" + ",".join(source_mismatches)
+            rows.append(row)
+            counts["schema-mismatch"] += 1
+            continue
+        row.update(
+            {
+                "resolution_status": "resolved",
+                "reason_code": f"trace_schema_valid:outcome={observed_outcome}",
+                "exact_repeat_determinism": "pinned_artifact",
+            }
+        )
+        rows.append(row)
+        counts["resolved"] += 1
+
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "issue": "#5756",
+        "generated_at_utc": "deterministic-not-a-clock",
+        "source_manifest_hash": source_hash,
+        "determinism": {
+            "policy": "requests are ordered by scenario_id, planner, seed; rerun identity and trace hashes are explicit",
+            "tool_version": "#5756-request-resolution.v1",
+        },
+        "summary": {
+            "n_candidates": len(rows),
+            "n_resolved": counts["resolved"],
+            "n_trace_missing": counts["trace-missing"],
+            "n_schema_mismatch": counts["schema-mismatch"],
+            "n_provenance_incomplete": counts["provenance-incomplete"],
+        },
+        "rows": sorted(rows, key=lambda row: row["candidate_id"]),
+    }
+
+
+def _episode_request_key(scenario_id: str, planner: str, seed: int) -> str:
+    return f"scenario_id={scenario_id}|planner={planner}|seed={seed}"
+
+
+def _normalize_outcome(value: Any) -> str | None:
+    if isinstance(value, Mapping):
+        for key in ("collision_event", "timeout_event", "route_complete", "success"):
+            if value.get(key) is True:
+                return key
+        return None
+    text = _coerce_optional_text(value)
+    if text in WORKED_EXAMPLE_OUTCOMES:
+        return text
+    if text in {"goal", "goal_reached", "completed"}:
+        return "route_complete"
+    return None
+
+
+def _mapping_outcome(row: Mapping[str, Any]) -> str | None:
+    for key in ("outcome", "episode_outcome", "status"):
+        if key in row:
+            outcome = _normalize_outcome(row[key])
+            if outcome is not None:
+                return outcome
+    return _normalize_outcome(row)
+
+
 def _merge_statuses(*statuses: str) -> ResolutionStatus:
     """Merge provenance and trace statuses fail-closed (worst status wins).
 
@@ -667,11 +1040,15 @@ __all__ = [
     "CANDIDATE_SCHEMA_VERSION",
     "SCHEMA_VERSION",
     "TRACE_SCHEMA_VERSION",
+    "WORKED_EXAMPLE_OUTCOMES",
     "CampaignResultStore",
     "CandidateTraceResolutionError",
     "load_campaign_result_store",
+    "load_episode_mapping",
+    "load_episode_requests",
     "resolve_candidate_to_episode",
     "resolve_candidate_trace_resolution",
+    "resolve_episode_requests",
     "resolve_trace_artifact",
     "resolve_trace_signals",
     "validate_candidate_trace_resolution",

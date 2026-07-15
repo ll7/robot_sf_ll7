@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 109,
+  "total_guards": 110,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 3,
@@ -92,9 +92,9 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 76,
+      "count_ceiling": 77,
       "has_as_count": 15,
-      "pragma_no_cover_count": 25,
+      "pragma_no_cover_count": 26,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
       "samples": [
@@ -104,7 +104,7 @@
         "robot_sf/baselines/dr_mpc.py:109",
         "robot_sf/baselines/dr_mpc.py:91",
         "robot_sf/baselines/drl_vo.py:24",
-        "robot_sf/baselines/ppo.py:41",
+        "robot_sf/baselines/ppo.py:59",
         "robot_sf/baselines/sac.py:14",
         "robot_sf/baselines/sicnav.py:420",
         "robot_sf/baselines/sicnav.py:298",
@@ -149,7 +149,8 @@
         "robot_sf/benchmark/visualization.py:1190",
         "robot_sf/common/matplotlib_utils.py:62",
         "robot_sf/common/optional_import.py:80",
-        "robot_sf/common/seed.py:47",
+        "robot_sf/common/seed.py:50",
+        "robot_sf/common/seed.py:77",
         "robot_sf/feature_extractors/mamba_extractor.py:98",
         "robot_sf/gym_env/env_config.py:302",
         "robot_sf/gym_env/environment_factory.py:57",
@@ -168,7 +169,7 @@
         "robot_sf/planner/socnav.py:45",
         "robot_sf/planner/socnav.py:65",
         "robot_sf/planner/socnav.py:3025",
-        "robot_sf/planner/theta_star_v2.py:33",
+        "robot_sf/planner/theta_star_v2.py:34",
         "robot_sf/render/sim_view.py:33",
         "robot_sf/sim/registry.py:145",
         "robot_sf/telemetry/gpu.py:11",

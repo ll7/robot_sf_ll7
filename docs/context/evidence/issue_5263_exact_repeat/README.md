@@ -57,8 +57,9 @@ not match the manifest, non-CPU or multi-worker metadata, absent NumPy/Numba ver
 absent `uv.lock` SHA-256 hashes, not-exactly-three repeats, malformed trajectory hashes, and unrecorded divergences. A
 repeat is identical only when its binary outcome and SHA-256 trajectory hash agree. Otherwise the
 host report must state the first differing repeat and field. `compare-hosts` accepts only distinct
-machine identifiers with matching pinned NumPy and Numba versions; a version mismatch is
-divergent, not a successful comparison.
+machine identifiers and marks a cell `divergent` unless the hosts have matching NumPy, Numba,
+Python, source-commit, and `uv.lock` identities as well as matching repeat fingerprints. Runtime
+or provenance drift is recorded in `provenance_mismatches`; it cannot become an `identical` row.
 
 ## Evidence status and remaining action
 

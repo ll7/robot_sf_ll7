@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -301,12 +302,48 @@ def _configure_machine_readable_logging() -> None:
     logger.add(sys.stderr, level="DEBUG")
 
 
+def _run_machine_readable_validation(packet: Path) -> int:
+    """Run JSON validation without mutating the caller's process-global Loguru sinks."""
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--packet",
+        str(packet),
+        "--json",
+        "--machine-readable-child",
+    ]
+    try:
+        completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    except OSError as exc:
+        print(f"isolated validation failed: {exc}", file=sys.stderr)
+        print(json.dumps({"status": "not_ready", "error": str(exc)}))
+        return 1
+
+    if completed.stderr:
+        sys.stderr.write(completed.stderr)
+    try:
+        json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        if completed.stdout:
+            sys.stderr.write(completed.stdout)
+        print(
+            json.dumps({"status": "not_ready", "error": "isolated validation emitted invalid JSON"})
+        )
+        return completed.returncode or 1
+
+    sys.stdout.write(completed.stdout)
+    return completed.returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     """Validate the packet and emit a compact JSON or text result."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet", type=Path, default=DEFAULT_PACKET)
     parser.add_argument("--json", action="store_true", dest="as_json")
+    parser.add_argument("--machine-readable-child", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.as_json and not args.machine_readable_child:
+        return _run_machine_readable_validation(args.packet)
     if args.as_json:
         _configure_machine_readable_logging()
     try:

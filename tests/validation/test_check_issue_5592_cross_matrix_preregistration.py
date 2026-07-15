@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
+from loguru import logger
 
 from scripts.validation import check_issue_5592_cross_matrix_preregistration as checker
 
@@ -68,3 +70,23 @@ def test_cli_emits_machine_readable_ready_status(capsys) -> None:
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["status"] == "ready"
     assert payload["campaign_execution_allowed"] is False
+
+
+def test_json_cli_preserves_caller_loguru_sink(capsys) -> None:
+    """JSON validation must not remove process-global sinks installed by callers."""
+    sink_id = logger.add(sys.stdout, format="{message}")
+    try:
+        exit_code = checker.main(["--json"])
+        captured = capsys.readouterr()
+
+        assert exit_code == 0
+        assert json.loads(captured.out)["status"] == "ready"
+        assert captured.err
+
+        logger.info("caller sink remains active")
+        assert capsys.readouterr().out.strip() == "caller sink remains active"
+    finally:
+        try:
+            logger.remove(sink_id)
+        except ValueError:
+            pass

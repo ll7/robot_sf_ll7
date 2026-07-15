@@ -9,6 +9,7 @@ and worker-lane labeling.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -38,6 +39,10 @@ CLOSING_PATTERN = re.compile(
     r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+`?(?:#(\d+)|https?://github\.com/[^/\s]+/[^/\s]+/issues/(\d+))\b",
     re.IGNORECASE,
 )
+EVIDENCE_PATH_PREFIX = "docs/context/evidence/"
+EVIDENCE_REVIEW_SIDECAR_SUFFIX = ".review.json"
+EVIDENCE_REVIEW_SCHEMA_VERSION = "evidence-review-marker.v1"
+LOWERCASE_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 
 def is_negated(text: str, match_start: int) -> bool:
@@ -243,6 +248,151 @@ def check_state_refresh_only(changed_files: list[str], title: str, body: str) ->
     return []
 
 
+def _evidence_relative_path(path: str) -> str | None:
+    """Return the repository-relative evidence path embedded in ``path``."""
+    normalized = path.replace("\\", "/").strip()
+    prefix_index = normalized.find(EVIDENCE_PATH_PREFIX)
+    if prefix_index == -1:
+        return None
+    return normalized[prefix_index:]
+
+
+def _is_safe_repository_relative_path(path: str) -> bool:
+    """Reject absolute, normalized, or traversal-bearing repository paths."""
+    if not path or path.startswith("/") or "\\" in path:
+        return False
+    return all(part not in {"", ".", ".."} for part in path.split("/"))
+
+
+def _path_matches_evidence_path(path: str, expected_path: str) -> bool:
+    """Match relative and temporary absolute paths to one evidence path."""
+    normalized = path.replace("\\", "/").strip()
+    return normalized == expected_path or _evidence_relative_path(normalized) == expected_path
+
+
+def _is_new_evidence_path(
+    path: str,
+    relative_path: str,
+    base_ref: str,
+    added_files: set[str] | None,
+    new_files: set[str],
+) -> bool:
+    """Resolve whether an evidence path was added, using the authoritative signal when present."""
+    if added_files is not None:
+        return any(
+            _path_matches_evidence_path(candidate, relative_path) for candidate in added_files
+        )
+    if any(_path_matches_evidence_path(candidate, relative_path) for candidate in new_files):
+        return True
+    return is_file_new(path, base_ref)
+
+
+def _collect_string_values(value: object) -> list[str]:
+    """Collect marker strings from the supported JSON scalar/container forms."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        values: list[str] = []
+        for item in value:
+            values.extend(_collect_string_values(item))
+        return values
+    if isinstance(value, dict):
+        values = []
+        for item in value.values():
+            values.extend(_collect_string_values(item))
+        return values
+    return []
+
+
+def _sidecar_contains_review_markers(sidecar: dict[str, object]) -> bool:
+    """Return whether the sidecar's explicit marker field contains both markers."""
+    marker_values: list[str] = []
+    for field in ("review_marker", "markers", "marker_values"):
+        marker_values.extend(_collect_string_values(sidecar.get(field)))
+    marker_text = " ".join(marker_values)
+    return "AI-GENERATED" in marker_text and "NEEDS-REVIEW" in marker_text
+
+
+def _check_evidence_review_sidecar(  # noqa: C901
+    artifact_path: str, artifact_filesystem_path: str, sidecar_filesystem_path: str
+) -> str | None:
+    """Validate the exact same-PR sidecar that can authorize marker-less evidence."""
+    if not _is_safe_repository_relative_path(artifact_path):
+        return (
+            f"BLOCKER: Evidence review sidecar for '{artifact_filesystem_path}' cannot use "
+            f"unsafe repository path '{artifact_path}'."
+        )
+
+    try:
+        with open(sidecar_filesystem_path, encoding="utf-8") as sidecar_file:
+            sidecar = json.load(sidecar_file)
+    except _BEST_EFFORT_ERRORS as exc:
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' is not valid JSON: "
+            f"{exc}."
+        )
+
+    if not isinstance(sidecar, dict):
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must contain a "
+            "JSON object."
+        )
+
+    if sidecar.get("schema_version") != EVIDENCE_REVIEW_SCHEMA_VERSION:
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must declare "
+            f"schema_version '{EVIDENCE_REVIEW_SCHEMA_VERSION}'."
+        )
+
+    declared_path = sidecar.get("artifact_path")
+    if (
+        not isinstance(declared_path, str)
+        or not _is_safe_repository_relative_path(declared_path)
+        or declared_path != artifact_path
+    ):
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must name the "
+            f"exact safe repository-relative artifact_path '{artifact_path}'."
+        )
+
+    declared_hash = sidecar.get("artifact_sha256")
+    if (
+        not isinstance(declared_hash, str)
+        or LOWERCASE_SHA256_PATTERN.fullmatch(declared_hash) is None
+    ):
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must contain "
+            "artifact_sha256 as 64 lowercase hexadecimal characters."
+        )
+
+    if sidecar.get("preserved_exact_bytes") is not True:
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must set "
+            "preserved_exact_bytes to true."
+        )
+
+    if not _sidecar_contains_review_markers(sidecar):
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must contain "
+            "the AI-GENERATED and NEEDS-REVIEW marker values."
+        )
+
+    try:
+        actual_hash = hashlib.sha256(Path(artifact_filesystem_path).read_bytes()).hexdigest()
+    except _BEST_EFFORT_ERRORS as exc:
+        return (
+            f"BLOCKER: Could not hash evidence artifact '{artifact_filesystem_path}' for "
+            f"review sidecar validation: {exc}."
+        )
+
+    if declared_hash != actual_hash:
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' has an "
+            f"artifact_sha256 that does not match '{artifact_filesystem_path}'."
+        )
+    return None
+
+
 def check_evidence_tree_hygiene(  # noqa: C901, PLR0912
     changed_files: list[str], base_ref: str, added_files: set[str] | None = None
 ) -> list[str]:
@@ -264,37 +414,56 @@ def check_evidence_tree_hygiene(  # noqa: C901, PLR0912
         if not f_norm:
             continue
 
-        # Determine relative path for validation checks
-        f_rel = f_norm
-        for pattern in ("docs/context/evidence/", "docs/context/"):
-            if pattern in f_norm:
-                f_rel = f_norm[f_norm.index(pattern) :]
-                break
-
-        if not f_rel.startswith("docs/context/evidence/"):
+        f_rel = _evidence_relative_path(f_norm)
+        if f_rel is None:
             continue
         if not os.path.exists(f):
             continue
 
         try:
-            with open(f, encoding="utf-8") as file_obj:
-                content = file_obj.read()
+            file_bytes = Path(f).read_bytes()
         except _BEST_EFFORT_ERRORS:
             continue
+        try:
+            content = file_bytes.decode("utf-8")
+        except ValueError:
+            # Marker and provenance text cannot be inspected in a non-text artifact, but a
+            # valid sidecar may still bind its exact bytes cryptographically.
+            content = ""
 
         # 1. Marker check for new evidence files
-        if added_files is not None:
-            # Authoritative GitHub-API signal: a file is new iff it was "added". This
-            # does not depend on origin/main being fetched in the runner (issue #5464).
-            is_new = f_norm in added_files
-        else:
-            is_new = (f in new_files) or is_file_new(f, base_ref)
+        is_new = _is_new_evidence_path(f, f_rel, base_ref, added_files, new_files)
         if is_new:
             if "AI-GENERATED" not in content or "NEEDS-REVIEW" not in content:
-                blockers.append(
-                    f"BLOCKER: New evidence file '{f}' is missing the required AI-GENERATED "
-                    f"and NEEDS-REVIEW marker convention."
-                )
+                if f_rel.endswith(EVIDENCE_REVIEW_SIDECAR_SUFFIX):
+                    blockers.append(
+                        f"BLOCKER: New evidence file '{f}' is missing the required AI-GENERATED "
+                        f"and NEEDS-REVIEW marker convention."
+                    )
+                else:
+                    sidecar_relative_path = f"{f_rel}{EVIDENCE_REVIEW_SIDECAR_SUFFIX}"
+                    sidecar_filesystem_path = f"{f}{EVIDENCE_REVIEW_SIDECAR_SUFFIX}"
+                    sidecar_is_new = os.path.exists(
+                        sidecar_filesystem_path
+                    ) and _is_new_evidence_path(
+                        sidecar_filesystem_path,
+                        sidecar_relative_path,
+                        base_ref,
+                        added_files,
+                        new_files,
+                    )
+                    if not sidecar_is_new:
+                        blockers.append(
+                            f"BLOCKER: New evidence file '{f}' is missing the required "
+                            "AI-GENERATED and NEEDS-REVIEW marker convention and has no "
+                            f"same-PR added review sidecar '{sidecar_relative_path}'."
+                        )
+                    else:
+                        sidecar_blocker = _check_evidence_review_sidecar(
+                            f_rel, f, sidecar_filesystem_path
+                        )
+                        if sidecar_blocker is not None:
+                            blockers.append(sidecar_blocker)
 
         # 2. Evidence README claims check
         if "README" in os.path.basename(f).upper():
@@ -324,7 +493,7 @@ def check_evidence_tree_hygiene(  # noqa: C901, PLR0912
         # 3. Distance-convention field on distance-like series (issue #5141).
         # Only enforced for NEW evidence files so the pre-existing evidence tree
         # (which predates the field) is not retroactively flagged.
-        if is_new:
+        if is_new and not f_rel.endswith(EVIDENCE_REVIEW_SIDECAR_SUFFIX):
             blocker = _check_distance_convention_for_file(f, content)
             if blocker is not None:
                 blockers.append(blocker)

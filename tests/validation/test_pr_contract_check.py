@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -16,6 +17,17 @@ import pytest
 from scripts.ci import pr_contract_check
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _valid_review_sidecar(artifact: Path, artifact_path: str) -> dict[str, object]:
+    """Build a valid immutable-evidence review sidecar payload for a fixture artifact."""
+    return {
+        "schema_version": "evidence-review-marker.v1",
+        "artifact_path": artifact_path,
+        "artifact_sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+        "review_marker": "AI-GENERATED NEEDS-REVIEW",
+        "preserved_exact_bytes": True,
+    }
 
 
 def test_find_closed_issues() -> None:
@@ -126,6 +138,92 @@ def test_check_evidence_tree_hygiene(
     )
     blockers = pr_contract_check.check_evidence_tree_hygiene([str(f4)], "origin/main")
     assert not blockers
+
+
+def test_markerless_new_evidence_accepts_valid_same_pr_review_sidecar(tmp_path: Path) -> None:
+    """Issue #5752: exact sidecar metadata authorizes immutable marker-less evidence."""
+    artifact = tmp_path / "docs/context/evidence/immutable_report.md"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_bytes(b"Historical evidence bytes\n")
+    artifact_path = "docs/context/evidence/immutable_report.md"
+    sidecar = Path(f"{artifact}.review.json")
+    sidecar.write_text(json.dumps(_valid_review_sidecar(artifact, artifact_path)), encoding="utf-8")
+    added_files = {str(artifact), str(sidecar)}
+
+    blockers = pr_contract_check.check_evidence_tree_hygiene(
+        [str(artifact), str(sidecar)], "origin/main", added_files
+    )
+
+    assert not blockers
+
+
+@pytest.mark.parametrize(
+    ("case", "expected_message"),
+    [
+        ("malformed_json", "not valid JSON"),
+        ("path_traversal", "artifact_path"),
+        ("missing_hash", "artifact_sha256"),
+        ("mismatched_hash", "does not match"),
+        ("uppercase_hash", "lowercase"),
+        ("wrong_artifact_path", "artifact_path"),
+        ("missing_markers", "marker values"),
+        ("wrong_schema", "schema_version"),
+        ("unpreserved_bytes", "preserved_exact_bytes"),
+    ],
+)
+def test_markerless_new_evidence_rejects_invalid_review_sidecars(
+    tmp_path: Path, case: str, expected_message: str
+) -> None:
+    """Issue #5752: malformed, unbound, or incomplete sidecars remain blockers."""
+    artifact = tmp_path / "docs/context/evidence/immutable_report.md"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_bytes(b"Historical evidence bytes\n")
+    artifact_path = "docs/context/evidence/immutable_report.md"
+    sidecar = Path(f"{artifact}.review.json")
+
+    if case == "malformed_json":
+        sidecar.write_text('{"review_marker": "AI-GENERATED NEEDS-REVIEW"', encoding="utf-8")
+    else:
+        payload = _valid_review_sidecar(artifact, artifact_path)
+        if case == "path_traversal":
+            payload["artifact_path"] = "../immutable_report.md"
+        elif case == "missing_hash":
+            payload.pop("artifact_sha256")
+        elif case == "mismatched_hash":
+            payload["artifact_sha256"] = "0" * 64
+        elif case == "uppercase_hash":
+            payload["artifact_sha256"] = str(payload["artifact_sha256"]).upper()
+        elif case == "wrong_artifact_path":
+            payload["artifact_path"] = "docs/context/evidence/other_report.md"
+        elif case == "missing_markers":
+            payload["review_marker"] = "AI-GENERATED"
+        elif case == "wrong_schema":
+            payload["schema_version"] = "evidence-review-marker.v2"
+        elif case == "unpreserved_bytes":
+            payload["preserved_exact_bytes"] = False
+        sidecar.write_text(json.dumps(payload), encoding="utf-8")
+
+    blockers = pr_contract_check.check_evidence_tree_hygiene(
+        [str(artifact), str(sidecar)], "origin/main", {str(artifact), str(sidecar)}
+    )
+
+    assert any(expected_message in blocker for blocker in blockers)
+
+
+def test_markerless_new_evidence_rejects_sidecar_not_added_to_same_pr(tmp_path: Path) -> None:
+    """Issue #5752: an existing or modified sidecar cannot waive a new artifact."""
+    artifact = tmp_path / "docs/context/evidence/immutable_report.md"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_bytes(b"Historical evidence bytes\n")
+    artifact_path = "docs/context/evidence/immutable_report.md"
+    sidecar = Path(f"{artifact}.review.json")
+    sidecar.write_text(json.dumps(_valid_review_sidecar(artifact, artifact_path)), encoding="utf-8")
+
+    blockers = pr_contract_check.check_evidence_tree_hygiene(
+        [str(artifact), str(sidecar)], "origin/main", {str(artifact)}
+    )
+
+    assert any("same-PR added review sidecar" in blocker for blocker in blockers)
 
 
 @patch("scripts.ci.pr_contract_check.is_file_new")

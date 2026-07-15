@@ -107,6 +107,7 @@ artifact_contract:
     - README.md
     - metadata.json
     - cross_matrix_agreement.csv
+    - integration_report.md
     - SHA256SUMS
   source_commit_required: true
   no_worktree_output_as_durable_evidence: true

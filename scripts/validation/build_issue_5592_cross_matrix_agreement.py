@@ -52,6 +52,7 @@ ALLOWED_AGREEMENT_STATUSES = {
     "blocked_incomparable_roster",
 }
 PRIMARY_OUTPUT = "cross_matrix_agreement.csv"
+INTEGRATION_REPORT = "integration_report.md"
 REQUIRED_COLUMNS = [
     "matrix",
     "structural_class",
@@ -324,11 +325,100 @@ Each supplied ranking CSV must include `structural_class`, `rank`, and a
 explicit agreement_status (`agreement`, `disagreement`, or a `blocked_*` status). Disagreement
 rows are always emitted when both matrices are present; they are not hidden in a merge.
 
+`integration_report.md` is the consolidation handoff. It records the frozen contract,
+remaining and intentional blockers, and the next empirical action in one durable report.
+
 Claim boundary: this is evidence about transfer to one additional geometry distribution, not a
 general-purpose generalization guarantee. No campaign, Slurm/GPU submission, or
 paper/dissertation claim is produced here.
 """
     (output_dir / "README.md").write_text(readme, encoding="utf-8")
+
+
+def _write_integration_report(
+    output_dir: Path,
+    *,
+    packet: Mapping[str, Any],
+    packet_path: Path,
+    status: str,
+    source_commit: str,
+    reference_present: bool,
+    candidate_present: bool,
+    next_action: str | None,
+) -> None:
+    """Write one durable consolidation handoff for the paired matrix evidence.
+
+    This report deliberately summarizes the existing contract and blocker state; it does not
+    replace the row-level agreement table or infer a ranking when an input is absent.
+    """
+    candidate = packet.get("candidate_contract", {})
+    pairing = packet.get("pairing_contract", {})
+    roster = packet.get("planner_roster", {}).get("structural_classes", {})
+    selected_rows = candidate.get("selected_rows", [])
+    scenario_ids = [str(row.get("scenario_id")) for row in selected_rows]
+    missing: list[str] = []
+    if not reference_present:
+        missing.append("reference (`classic_interactions`) structural ranking CSV")
+    if not candidate_present:
+        missing.append("candidate (`atomic_topology`) structural ranking CSV")
+    remaining = (
+        "- " + "; ".join(missing) + " (campaign input; no ranking is inferred)."
+        if missing
+        else "- None for the artifact builder; both ranking inputs are present and comparable."
+    )
+    empirical_action = next_action or (
+        "Review `cross_matrix_agreement.csv` for agreement/disagreement rows before any "
+        "claim-boundary decision; do not merge the matrices into one ranking."
+    )
+    report = f"""# Issue #5592 cross-matrix integration report
+
+status: {status}
+source_commit: `{source_commit}`
+
+This is the single consolidation handoff for the pre-registered second scenario matrix. The
+row-level agreement table remains the primary output; this report makes the contract and its
+current blocker state explicit for the campaign-capable successor lane.
+
+## Coherent frozen contract
+
+- Pre-registration: `{_public_path(packet_path)}`
+- Reference matrix: `{packet.get("reference_contract", {}).get("scenario_matrix")}`
+- Candidate matrix: `{candidate.get("scenario_matrix")}`
+- Candidate scenarios, in frozen order: {", ".join("`" + item + "`" for item in scenario_ids)}
+- Pairing: seeds `{pairing.get("seeds")}`, horizon `{pairing.get("horizon_steps")}` steps, `dt={pairing.get("dt_seconds")}` seconds
+- Comparability: same seed schedule, same planner roster, frozen scenario order, and no seed substitution
+- Planner roster: `{sum(len(value) for value in roster.values())}` planners across `{len(roster)}` structural classes
+- Primary output: `cross_matrix_agreement.csv`; ranks are compared independently, never merged
+
+## Blocker accounting
+
+### Remaining blockers
+
+{remaining}
+
+### New blockers introduced by this slice
+
+- None. This report only consolidates the existing pre-registration, metadata gate, and
+  artifact-first agreement builder.
+
+### Intentional boundaries
+
+- No benchmark campaign, Slurm/GPU submission, training run, or fallback/degraded success is
+  represented as evidence here.
+- The report does not promote a planner or structural ranking and does not edit paper or
+  dissertation claims.
+- The result can support transfer evidence only for these two evaluated geometry distributions;
+  it is not a general-purpose generalization guarantee.
+
+## Next empirical action
+
+{empirical_action}
+
+The durable artifact set is `README.md`, `metadata.json`, `cross_matrix_agreement.csv`,
+`integration_report.md`, and `SHA256SUMS`. Ranking CSVs must carry the preregistered roster
+signature before the builder will accept them.
+"""
+    (output_dir / INTEGRATION_REPORT).write_text(report, encoding="utf-8")
 
 
 def build_packet(
@@ -414,6 +504,16 @@ def build_packet(
     }
     _write_json(output_dir / "metadata.json", metadata)
     _write_readme(output_dir, status, next_action=next_action)
+    _write_integration_report(
+        output_dir,
+        packet=packet,
+        packet_path=packet_path,
+        status=status,
+        source_commit=source_commit,
+        reference_present=reference_present,
+        candidate_present=candidate_present,
+        next_action=next_action,
+    )
     _write_sha256sums(output_dir)
     return metadata
 

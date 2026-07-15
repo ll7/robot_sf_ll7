@@ -1,0 +1,8628 @@
+{
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "campaign_id": "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final",
+  "cells": [
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "goal",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.066667,
+          0.018477,
+          0.213235
+        ],
+        "success": [
+          0.933333,
+          0.786765,
+          0.981523
+        ]
+      },
+      "outcome_counts": {
+        "collision": 2,
+        "success": 28
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.968981,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 120
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.066667,
+          0.018477,
+          0.213235
+        ],
+        "success": [
+          0.933333,
+          0.786765,
+          0.981523
+        ]
+      },
+      "outcome_counts": {
+        "collision": 2,
+        "success": 28
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.566667,
+          0.391973,
+          0.726225
+        ],
+        "success": [
+          0.1,
+          0.0346,
+          0.256211
+        ],
+        "timeout": [
+          0.333333,
+          0.192305,
+          0.512199
+        ]
+      },
+      "outcome_counts": {
+        "collision": 17,
+        "success": 3,
+        "timeout": 10
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.9,
+          0.743789,
+          0.9654
+        ],
+        "timeout": [
+          0.1,
+          0.0346,
+          0.256211
+        ]
+      },
+      "outcome_counts": {
+        "collision": 27,
+        "timeout": 3
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "accompanying_peer"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.9,
+          0.833318,
+          0.941866
+        ],
+        "timeout": [
+          0.1,
+          0.058134,
+          0.166682
+        ]
+      },
+      "outcome_counts": {
+        "collision": 108,
+        "timeout": 12
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.8,
+          0.626943,
+          0.904949
+        ],
+        "success": [
+          0.2,
+          0.095051,
+          0.373057
+        ]
+      },
+      "outcome_counts": {
+        "collision": 24,
+        "success": 6
+      },
+      "planner": "orca",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.266667,
+          0.141827,
+          0.44448
+        ],
+        "success": [
+          0.733333,
+          0.55552,
+          0.858173
+        ]
+      },
+      "outcome_counts": {
+        "collision": 8,
+        "success": 22
+      },
+      "planner": "ppo",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.833333,
+          0.664356,
+          0.926635
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ],
+        "timeout": [
+          0.133333,
+          0.053097,
+          0.296813
+        ]
+      },
+      "outcome_counts": {
+        "collision": 25,
+        "success": 1,
+        "timeout": 4
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.9,
+          0.743789,
+          0.9654
+        ],
+        "success": [
+          0.1,
+          0.0346,
+          0.256211
+        ]
+      },
+      "outcome_counts": {
+        "collision": 27,
+        "success": 3
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "blind_corner"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.7,
+          0.612849,
+          0.774744
+        ],
+        "success": [
+          0.3,
+          0.225256,
+          0.387151
+        ]
+      },
+      "outcome_counts": {
+        "collision": 84,
+        "success": 36
+      },
+      "planner": "goal",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.466667,
+          0.379829,
+          0.555572
+        ],
+        "success": [
+          0.125,
+          0.077235,
+          0.196029
+        ],
+        "timeout": [
+          0.408333,
+          0.324561,
+          0.497792
+        ]
+      },
+      "outcome_counts": {
+        "collision": 56,
+        "success": 15,
+        "timeout": 49
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 480,
+      "outcome_ci": {
+        "collision": [
+          0.072917,
+          0.052894,
+          0.099721
+        ],
+        "success": [
+          0.927083,
+          0.900279,
+          0.947106
+        ]
+      },
+      "outcome_counts": {
+        "collision": 35,
+        "success": 445
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.316667,
+          0.240228,
+          0.404479
+        ],
+        "success": [
+          0.683333,
+          0.595521,
+          0.759772
+        ]
+      },
+      "outcome_counts": {
+        "collision": 38,
+        "success": 82
+      },
+      "planner": "orca",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.733333,
+          0.647876,
+          0.804315
+        ],
+        "success": [
+          0.266667,
+          0.195685,
+          0.352124
+        ]
+      },
+      "outcome_counts": {
+        "collision": 88,
+        "success": 32
+      },
+      "planner": "ppo",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.475,
+          0.387821,
+          0.56373
+        ],
+        "success": [
+          0.525,
+          0.43627,
+          0.612179
+        ]
+      },
+      "outcome_counts": {
+        "collision": 57,
+        "success": 63
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.991667,
+          0.954304,
+          0.998527
+        ],
+        "success": [
+          0.008333,
+          0.001473,
+          0.045696
+        ]
+      },
+      "outcome_counts": {
+        "collision": 119,
+        "success": 1
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.991667,
+          0.954304,
+          0.998527
+        ],
+        "success": [
+          0.008333,
+          0.001473,
+          0.045696
+        ]
+      },
+      "outcome_counts": {
+        "collision": 119,
+        "success": 1
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.766667,
+          0.683446,
+          0.833344
+        ],
+        "success": [
+          0.233333,
+          0.166656,
+          0.316554
+        ]
+      },
+      "outcome_counts": {
+        "collision": 92,
+        "success": 28
+      },
+      "planner": "sacadrl",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.633333,
+          0.544224,
+          0.714171
+        ],
+        "timeout": [
+          0.366667,
+          0.285829,
+          0.455776
+        ]
+      },
+      "outcome_counts": {
+        "collision": 76,
+        "timeout": 44
+      },
+      "planner": "social_force",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.758333,
+          0.674499,
+          0.826142
+        ],
+        "success": [
+          0.241667,
+          0.173858,
+          0.325501
+        ]
+      },
+      "outcome_counts": {
+        "collision": 91,
+        "success": 29
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "bottleneck"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "goal",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.333333,
+          0.192305,
+          0.512199
+        ],
+        "success": [
+          0.4,
+          0.245906,
+          0.576796
+        ],
+        "timeout": [
+          0.266667,
+          0.141827,
+          0.44448
+        ]
+      },
+      "outcome_counts": {
+        "collision": 10,
+        "success": 12,
+        "timeout": 8
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.166656,
+          0.316554
+        ],
+        "success": [
+          0.766667,
+          0.683446,
+          0.833344
+        ]
+      },
+      "outcome_counts": {
+        "collision": 28,
+        "success": 92
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "orca",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "ppo",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.733333,
+          0.55552,
+          0.858173
+        ],
+        "success": [
+          0.266667,
+          0.141827,
+          0.44448
+        ]
+      },
+      "outcome_counts": {
+        "collision": 22,
+        "success": 8
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.933333,
+          0.786765,
+          0.981523
+        ],
+        "success": [
+          0.066667,
+          0.018477,
+          0.213235
+        ]
+      },
+      "outcome_counts": {
+        "collision": 28,
+        "success": 2
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "sacadrl",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "timeout": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "timeout": 23
+      },
+      "planner": "social_force",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "circular_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.959064,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 90
+      },
+      "planner": "goal",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.888889,
+          0.807422,
+          0.938517
+        ],
+        "timeout": [
+          0.111111,
+          0.061483,
+          0.192578
+        ]
+      },
+      "outcome_counts": {
+        "collision": 80,
+        "timeout": 10
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 360,
+      "outcome_ci": {
+        "collision": [
+          0.336111,
+          0.289273,
+          0.38641
+        ],
+        "success": [
+          0.5,
+          0.448624,
+          0.551376
+        ],
+        "timeout": [
+          0.163889,
+          0.129236,
+          0.205639
+        ]
+      },
+      "outcome_counts": {
+        "collision": 121,
+        "success": 180,
+        "timeout": 59
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.288889,
+          0.205421,
+          0.38964
+        ],
+        "success": [
+          0.7,
+          0.598735,
+          0.784891
+        ],
+        "timeout": [
+          0.011111,
+          0.001964,
+          0.060284
+        ]
+      },
+      "outcome_counts": {
+        "collision": 26,
+        "success": 63,
+        "timeout": 1
+      },
+      "planner": "orca",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.133333,
+          0.077947,
+          0.218739
+        ],
+        "success": [
+          0.866667,
+          0.781261,
+          0.922053
+        ]
+      },
+      "outcome_counts": {
+        "collision": 12,
+        "success": 78
+      },
+      "planner": "ppo",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.755556,
+          0.657516,
+          0.832672
+        ],
+        "success": [
+          0.244444,
+          0.167328,
+          0.342484
+        ]
+      },
+      "outcome_counts": {
+        "collision": 68,
+        "success": 22
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.959064,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 90
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.959064,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 90
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.788889,
+          0.693652,
+          0.860474
+        ],
+        "success": [
+          0.211111,
+          0.139526,
+          0.306348
+        ]
+      },
+      "outcome_counts": {
+        "collision": 71,
+        "success": 19
+      },
+      "planner": "sacadrl",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.288889,
+          0.205421,
+          0.38964
+        ],
+        "timeout": [
+          0.711111,
+          0.61036,
+          0.794579
+        ]
+      },
+      "outcome_counts": {
+        "collision": 26,
+        "timeout": 64
+      },
+      "planner": "social_force",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.9,
+          0.820758,
+          0.946493
+        ],
+        "success": [
+          0.1,
+          0.053507,
+          0.179242
+        ]
+      },
+      "outcome_counts": {
+        "collision": 81,
+        "success": 9
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "cross_trap"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "goal",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.2,
+          0.095051,
+          0.373057
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ],
+        "timeout": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 6,
+        "success": 1,
+        "timeout": 23
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          0.925,
+          0.863591,
+          0.960043
+        ],
+        "timeout": [
+          0.075,
+          0.039957,
+          0.136409
+        ]
+      },
+      "outcome_counts": {
+        "success": 111,
+        "timeout": 9
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.0346,
+          0.256211
+        ],
+        "success": [
+          0.9,
+          0.743789,
+          0.9654
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "success": 27
+      },
+      "planner": "orca",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.0346,
+          0.256211
+        ],
+        "success": [
+          0.9,
+          0.743789,
+          0.9654
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "success": 27
+      },
+      "planner": "ppo",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.333333,
+          0.192305,
+          0.512199
+        ],
+        "success": [
+          0.666667,
+          0.487801,
+          0.807695
+        ]
+      },
+      "outcome_counts": {
+        "collision": 10,
+        "success": 20
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.933333,
+          0.786765,
+          0.981523
+        ],
+        "success": [
+          0.066667,
+          0.018477,
+          0.213235
+        ]
+      },
+      "outcome_counts": {
+        "collision": 28,
+        "success": 2
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "success": 1
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.933333,
+          0.786765,
+          0.981523
+        ],
+        "success": [
+          0.066667,
+          0.018477,
+          0.213235
+        ]
+      },
+      "outcome_counts": {
+        "collision": 28,
+        "success": 2
+      },
+      "planner": "sacadrl",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.833333,
+          0.664356,
+          0.926635
+        ],
+        "timeout": [
+          0.166667,
+          0.073365,
+          0.335644
+        ]
+      },
+      "outcome_counts": {
+        "collision": 25,
+        "timeout": 5
+      },
+      "planner": "social_force",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.566667,
+          0.391973,
+          0.726225
+        ],
+        "success": [
+          0.433333,
+          0.273775,
+          0.608027
+        ]
+      },
+      "outcome_counts": {
+        "collision": 17,
+        "success": 13
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.933333,
+          0.786765,
+          0.981523
+        ],
+        "success": [
+          0.066667,
+          0.018477,
+          0.213235
+        ]
+      },
+      "outcome_counts": {
+        "collision": 28,
+        "success": 2
+      },
+      "planner": "goal",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.133333,
+          0.053097,
+          0.296813
+        ],
+        "success": [
+          0.2,
+          0.095051,
+          0.373057
+        ],
+        "timeout": [
+          0.666667,
+          0.487801,
+          0.807695
+        ]
+      },
+      "outcome_counts": {
+        "collision": 4,
+        "success": 6,
+        "timeout": 20
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.083333,
+          0.045894,
+          0.146622
+        ],
+        "success": [
+          0.916667,
+          0.853378,
+          0.954106
+        ]
+      },
+      "outcome_counts": {
+        "collision": 10,
+        "success": 110
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.133333,
+          0.053097,
+          0.296813
+        ],
+        "success": [
+          0.866667,
+          0.703187,
+          0.946903
+        ]
+      },
+      "outcome_counts": {
+        "collision": 4,
+        "success": 26
+      },
+      "planner": "orca",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.066667,
+          0.018477,
+          0.213235
+        ],
+        "success": [
+          0.866667,
+          0.703187,
+          0.946903
+        ],
+        "timeout": [
+          0.066667,
+          0.018477,
+          0.213235
+        ]
+      },
+      "outcome_counts": {
+        "collision": 2,
+        "success": 26,
+        "timeout": 2
+      },
+      "planner": "ppo",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.7,
+          0.521242,
+          0.833353
+        ],
+        "success": [
+          0.3,
+          0.166647,
+          0.478758
+        ]
+      },
+      "outcome_counts": {
+        "collision": 21,
+        "success": 9
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.333333,
+          0.192305,
+          0.512199
+        ],
+        "success": [
+          0.166667,
+          0.073365,
+          0.335644
+        ],
+        "timeout": [
+          0.5,
+          0.331541,
+          0.668459
+        ]
+      },
+      "outcome_counts": {
+        "collision": 10,
+        "success": 5,
+        "timeout": 15
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.733333,
+          0.55552,
+          0.858173
+        ],
+        "success": [
+          0.066667,
+          0.018477,
+          0.213235
+        ],
+        "timeout": [
+          0.2,
+          0.095051,
+          0.373057
+        ]
+      },
+      "outcome_counts": {
+        "collision": 22,
+        "success": 2,
+        "timeout": 6
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.133333,
+          0.053097,
+          0.296813
+        ],
+        "success": [
+          0.866667,
+          0.703187,
+          0.946903
+        ]
+      },
+      "outcome_counts": {
+        "collision": 4,
+        "success": 26
+      },
+      "planner": "sacadrl",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "timeout": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "timeout": 1
+      },
+      "planner": "social_force",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "crowd_navigation"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.855556,
+          0.768401,
+          0.9136
+        ],
+        "success": [
+          0.144444,
+          0.0864,
+          0.231599
+        ]
+      },
+      "outcome_counts": {
+        "collision": 77,
+        "success": 13
+      },
+      "planner": "goal",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.933333,
+          0.862099,
+          0.96909
+        ],
+        "timeout": [
+          0.066667,
+          0.03091,
+          0.137901
+        ]
+      },
+      "outcome_counts": {
+        "collision": 84,
+        "timeout": 6
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 360,
+      "outcome_ci": {
+        "collision": [
+          0.777778,
+          0.732026,
+          0.817664
+        ],
+        "success": [
+          0.172222,
+          0.136732,
+          0.214634
+        ],
+        "timeout": [
+          0.05,
+          0.031858,
+          0.077644
+        ]
+      },
+      "outcome_counts": {
+        "collision": 280,
+        "success": 62,
+        "timeout": 18
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.422222,
+          0.325424,
+          0.525388
+        ],
+        "success": [
+          0.422222,
+          0.325424,
+          0.525388
+        ],
+        "timeout": [
+          0.155556,
+          0.094983,
+          0.244328
+        ]
+      },
+      "outcome_counts": {
+        "collision": 38,
+        "success": 38,
+        "timeout": 14
+      },
+      "planner": "orca",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.544444,
+          0.441846,
+          0.643404
+        ],
+        "success": [
+          0.455556,
+          0.356596,
+          0.558154
+        ]
+      },
+      "outcome_counts": {
+        "collision": 49,
+        "success": 41
+      },
+      "planner": "ppo",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.822222,
+          0.730561,
+          0.887503
+        ],
+        "success": [
+          0.177778,
+          0.112497,
+          0.269439
+        ]
+      },
+      "outcome_counts": {
+        "collision": 74,
+        "success": 16
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.888889,
+          0.807422,
+          0.938517
+        ],
+        "success": [
+          0.1,
+          0.053507,
+          0.179242
+        ],
+        "timeout": [
+          0.011111,
+          0.001964,
+          0.060284
+        ]
+      },
+      "outcome_counts": {
+        "collision": 80,
+        "success": 9,
+        "timeout": 1
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.955556,
+          0.891231,
+          0.982583
+        ],
+        "success": [
+          0.044444,
+          0.017417,
+          0.108769
+        ]
+      },
+      "outcome_counts": {
+        "collision": 86,
+        "success": 4
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.959064,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 90
+      },
+      "planner": "sacadrl",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.959064,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 90
+      },
+      "planner": "social_force",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.959064,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 90
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "goal",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.968981,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 120
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.0346,
+          0.256211
+        ],
+        "success": [
+          0.9,
+          0.743789,
+          0.9654
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "success": 27
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "timeout": [
+          0.533333,
+          0.361423,
+          0.697676
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 7,
+        "timeout": 16
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.466667,
+          0.302324,
+          0.638577
+        ],
+        "timeout": [
+          0.533333,
+          0.361423,
+          0.697676
+        ]
+      },
+      "outcome_counts": {
+        "collision": 14,
+        "timeout": 16
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "down_path"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "goal",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.266667,
+          0.141827,
+          0.44448
+        ],
+        "success": [
+          0.733333,
+          0.55552,
+          0.858173
+        ]
+      },
+      "outcome_counts": {
+        "collision": 8,
+        "success": 22
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.968981,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 120
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.0346,
+          0.256211
+        ],
+        "success": [
+          0.9,
+          0.743789,
+          0.9654
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "success": 27
+      },
+      "planner": "orca",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.266667,
+          0.141827,
+          0.44448
+        ],
+        "success": [
+          0.733333,
+          0.55552,
+          0.858173
+        ]
+      },
+      "outcome_counts": {
+        "collision": 8,
+        "success": 22
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.6,
+          0.423204,
+          0.754094
+        ],
+        "success": [
+          0.4,
+          0.245906,
+          0.576796
+        ]
+      },
+      "outcome_counts": {
+        "collision": 18,
+        "success": 12
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "entering_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "goal",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.025,
+          0.008538,
+          0.07093
+        ],
+        "success": [
+          0.975,
+          0.92907,
+          0.991462
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "success": 117
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.2,
+          0.095051,
+          0.373057
+        ],
+        "success": [
+          0.8,
+          0.626943,
+          0.904949
+        ]
+      },
+      "outcome_counts": {
+        "collision": 6,
+        "success": 24
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "entering_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.133333,
+          0.053097,
+          0.296813
+        ],
+        "timeout": [
+          0.633333,
+          0.455136,
+          0.781261
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 4,
+        "timeout": 19
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          0.975,
+          0.92907,
+          0.991462
+        ],
+        "timeout": [
+          0.025,
+          0.008538,
+          0.07093
+        ]
+      },
+      "outcome_counts": {
+        "success": 117,
+        "timeout": 3
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.3,
+          0.166647,
+          0.478758
+        ],
+        "success": [
+          0.7,
+          0.521242,
+          0.833353
+        ]
+      },
+      "outcome_counts": {
+        "collision": 9,
+        "success": 21
+      },
+      "planner": "orca",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.133333,
+          0.053097,
+          0.296813
+        ],
+        "success": [
+          0.666667,
+          0.487801,
+          0.807695
+        ],
+        "timeout": [
+          0.2,
+          0.095051,
+          0.373057
+        ]
+      },
+      "outcome_counts": {
+        "collision": 4,
+        "success": 20,
+        "timeout": 6
+      },
+      "planner": "ppo",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.333333,
+          0.192305,
+          0.512199
+        ],
+        "success": [
+          0.666667,
+          0.487801,
+          0.807695
+        ]
+      },
+      "outcome_counts": {
+        "collision": 10,
+        "success": 20
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.266667,
+          0.141827,
+          0.44448
+        ],
+        "success": [
+          0.733333,
+          0.55552,
+          0.858173
+        ]
+      },
+      "outcome_counts": {
+        "collision": 8,
+        "success": 22
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.033333,
+          0.005909,
+          0.166704
+        ],
+        "success": [
+          0.966667,
+          0.833296,
+          0.994091
+        ]
+      },
+      "outcome_counts": {
+        "collision": 1,
+        "success": 29
+      },
+      "planner": "sacadrl",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "exiting_elevator"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "goal",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.968981,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 120
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.066667,
+          0.018477,
+          0.213235
+        ],
+        "success": [
+          0.933333,
+          0.786765,
+          0.981523
+        ]
+      },
+      "outcome_counts": {
+        "collision": 2,
+        "success": 28
+      },
+      "planner": "orca",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.233333,
+          0.117924,
+          0.409283
+        ],
+        "success": [
+          0.766667,
+          0.590717,
+          0.882076
+        ]
+      },
+      "outcome_counts": {
+        "collision": 7,
+        "success": 23
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.633333,
+          0.455136,
+          0.781261
+        ],
+        "success": [
+          0.366667,
+          0.218739,
+          0.544864
+        ]
+      },
+      "outcome_counts": {
+        "collision": 19,
+        "success": 11
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "exiting_room"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "goal",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.666667,
+          0.487801,
+          0.807695
+        ],
+        "timeout": [
+          0.333333,
+          0.192305,
+          0.512199
+        ]
+      },
+      "outcome_counts": {
+        "collision": 20,
+        "timeout": 10
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.968981,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 120
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.733333,
+          0.55552,
+          0.858173
+        ],
+        "success": [
+          0.266667,
+          0.141827,
+          0.44448
+        ]
+      },
+      "outcome_counts": {
+        "collision": 22,
+        "success": 8
+      },
+      "planner": "orca",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.0346,
+          0.256211
+        ],
+        "success": [
+          0.9,
+          0.743789,
+          0.9654
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "success": 27
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.7,
+          0.521242,
+          0.833353
+        ],
+        "success": [
+          0.066667,
+          0.018477,
+          0.213235
+        ],
+        "timeout": [
+          0.233333,
+          0.117924,
+          0.409283
+        ]
+      },
+      "outcome_counts": {
+        "collision": 21,
+        "success": 2,
+        "timeout": 7
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "following_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "success": 1
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.008333,
+          0.001473,
+          0.045696
+        ],
+        "success": [
+          0.991667,
+          0.954304,
+          0.998527
+        ]
+      },
+      "outcome_counts": {
+        "collision": 1,
+        "success": 119
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.9,
+          0.743789,
+          0.9654
+        ],
+        "success": [
+          0.1,
+          0.0346,
+          0.256211
+        ]
+      },
+      "outcome_counts": {
+        "collision": 27,
+        "success": 3
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.2,
+          0.095051,
+          0.373057
+        ],
+        "success": [
+          0.466667,
+          0.302324,
+          0.638577
+        ],
+        "timeout": [
+          0.333333,
+          0.192305,
+          0.512199
+        ]
+      },
+      "outcome_counts": {
+        "collision": 6,
+        "success": 14,
+        "timeout": 10
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.266667,
+          0.141827,
+          0.44448
+        ],
+        "timeout": [
+          0.733333,
+          0.55552,
+          0.858173
+        ]
+      },
+      "outcome_counts": {
+        "collision": 8,
+        "timeout": 22
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.9,
+          0.743789,
+          0.9654
+        ],
+        "timeout": [
+          0.1,
+          0.0346,
+          0.256211
+        ]
+      },
+      "outcome_counts": {
+        "collision": 27,
+        "timeout": 3
+      },
+      "planner": "social_force",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "frontal_approach"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.144444,
+          0.0864,
+          0.231599
+        ],
+        "success": [
+          0.855556,
+          0.768401,
+          0.9136
+        ]
+      },
+      "outcome_counts": {
+        "collision": 13,
+        "success": 77
+      },
+      "planner": "goal",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.166667,
+          0.103685,
+          0.256939
+        ],
+        "success": [
+          0.411111,
+          0.315132,
+          0.514368
+        ],
+        "timeout": [
+          0.422222,
+          0.325424,
+          0.525388
+        ]
+      },
+      "outcome_counts": {
+        "collision": 15,
+        "success": 37,
+        "timeout": 38
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 360,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.989442,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 360
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.177778,
+          0.112497,
+          0.269439
+        ],
+        "success": [
+          0.822222,
+          0.730561,
+          0.887503
+        ]
+      },
+      "outcome_counts": {
+        "collision": 16,
+        "success": 74
+      },
+      "planner": "orca",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.166667,
+          0.103685,
+          0.256939
+        ],
+        "success": [
+          0.8,
+          0.705863,
+          0.869576
+        ],
+        "timeout": [
+          0.033333,
+          0.0114,
+          0.093473
+        ]
+      },
+      "outcome_counts": {
+        "collision": 15,
+        "success": 72,
+        "timeout": 3
+      },
+      "planner": "ppo",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.277778,
+          0.195797,
+          0.377952
+        ],
+        "success": [
+          0.722222,
+          0.622048,
+          0.804203
+        ]
+      },
+      "outcome_counts": {
+        "collision": 25,
+        "success": 65
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.955556,
+          0.891231,
+          0.982583
+        ],
+        "success": [
+          0.044444,
+          0.017417,
+          0.108769
+        ]
+      },
+      "outcome_counts": {
+        "collision": 86,
+        "success": 4
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.959064,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 90
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.053507,
+          0.179242
+        ],
+        "success": [
+          0.9,
+          0.820758,
+          0.946493
+        ]
+      },
+      "outcome_counts": {
+        "collision": 9,
+        "success": 81
+      },
+      "planner": "sacadrl",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.959064,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 90
+      },
+      "planner": "social_force",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.811111,
+          0.718164,
+          0.878587
+        ],
+        "success": [
+          0.188889,
+          0.121413,
+          0.281836
+        ]
+      },
+      "outcome_counts": {
+        "collision": 73,
+        "success": 17
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "group_crossing"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.633333,
+          0.50683,
+          0.743791
+        ],
+        "success": [
+          0.366667,
+          0.256209,
+          0.49317
+        ]
+      },
+      "outcome_counts": {
+        "collision": 38,
+        "success": 22
+      },
+      "planner": "goal",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.5,
+          0.37735,
+          0.62265
+        ],
+        "success": [
+          0.466667,
+          0.346279,
+          0.591066
+        ],
+        "timeout": [
+          0.033333,
+          0.009189,
+          0.113638
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30,
+        "success": 28,
+        "timeout": 2
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 240,
+      "outcome_ci": {
+        "collision": [
+          0.416667,
+          0.356086,
+          0.479873
+        ],
+        "success": [
+          0.583333,
+          0.520127,
+          0.643914
+        ]
+      },
+      "outcome_counts": {
+        "collision": 100,
+        "success": 140
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.433333,
+          0.315724,
+          0.558966
+        ],
+        "success": [
+          0.566667,
+          0.441034,
+          0.684276
+        ]
+      },
+      "outcome_counts": {
+        "collision": 26,
+        "success": 34
+      },
+      "planner": "orca",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.046643,
+          0.201495
+        ],
+        "success": [
+          0.883333,
+          0.778212,
+          0.942323
+        ],
+        "timeout": [
+          0.016667,
+          0.002948,
+          0.088551
+        ]
+      },
+      "outcome_counts": {
+        "collision": 6,
+        "success": 53,
+        "timeout": 1
+      },
+      "planner": "ppo",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.45,
+          0.330937,
+          0.575081
+        ],
+        "success": [
+          0.55,
+          0.424919,
+          0.669063
+        ]
+      },
+      "outcome_counts": {
+        "collision": 27,
+        "success": 33
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.166667,
+          0.093132,
+          0.280316
+        ],
+        "success": [
+          0.216667,
+          0.13123,
+          0.3362
+        ],
+        "timeout": [
+          0.616667,
+          0.490176,
+          0.729117
+        ]
+      },
+      "outcome_counts": {
+        "collision": 10,
+        "success": 13,
+        "timeout": 37
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.483333,
+          0.36175,
+          0.606922
+        ],
+        "success": [
+          0.033333,
+          0.009189,
+          0.113638
+        ],
+        "timeout": [
+          0.483333,
+          0.36175,
+          0.606922
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "success": 2,
+        "timeout": 29
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.416667,
+          0.300643,
+          0.542719
+        ],
+        "success": [
+          0.583333,
+          0.457281,
+          0.699357
+        ]
+      },
+      "outcome_counts": {
+        "collision": 25,
+        "success": 35
+      },
+      "planner": "sacadrl",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.666667,
+          0.540569,
+          0.772707
+        ],
+        "success": [
+          0.333333,
+          0.227293,
+          0.459431
+        ]
+      },
+      "outcome_counts": {
+        "collision": 40,
+        "success": 20
+      },
+      "planner": "social_force",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.45,
+          0.330937,
+          0.575081
+        ],
+        "success": [
+          0.55,
+          0.424919,
+          0.669063
+        ]
+      },
+      "outcome_counts": {
+        "collision": 27,
+        "success": 33
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "head_on_corridor"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "goal",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.6,
+          0.423204,
+          0.754094
+        ],
+        "timeout": [
+          0.4,
+          0.245906,
+          0.576796
+        ]
+      },
+      "outcome_counts": {
+        "collision": 18,
+        "timeout": 12
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          0.9,
+          0.833318,
+          0.941866
+        ],
+        "timeout": [
+          0.1,
+          0.058134,
+          0.166682
+        ]
+      },
+      "outcome_counts": {
+        "success": 108,
+        "timeout": 12
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.8,
+          0.626943,
+          0.904949
+        ],
+        "success": [
+          0.2,
+          0.095051,
+          0.373057
+        ]
+      },
+      "outcome_counts": {
+        "collision": 24,
+        "success": 6
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "success": 1
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.733333,
+          0.55552,
+          0.858173
+        ],
+        "timeout": [
+          0.266667,
+          0.141827,
+          0.44448
+        ]
+      },
+      "outcome_counts": {
+        "collision": 22,
+        "timeout": 8
+      },
+      "planner": "social_force",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "intersection_no_gesture"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "goal",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          0.9,
+          0.833318,
+          0.941866
+        ],
+        "timeout": [
+          0.1,
+          0.058134,
+          0.166682
+        ]
+      },
+      "outcome_counts": {
+        "success": 108,
+        "timeout": 12
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.8,
+          0.626943,
+          0.904949
+        ],
+        "success": [
+          0.2,
+          0.095051,
+          0.373057
+        ]
+      },
+      "outcome_counts": {
+        "collision": 24,
+        "success": 6
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "success": 1
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.733333,
+          0.55552,
+          0.858173
+        ],
+        "timeout": [
+          0.266667,
+          0.141827,
+          0.44448
+        ]
+      },
+      "outcome_counts": {
+        "collision": 22,
+        "timeout": 8
+      },
+      "planner": "social_force",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "intersection_proceed"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "goal",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          0.9,
+          0.833318,
+          0.941866
+        ],
+        "timeout": [
+          0.1,
+          0.058134,
+          0.166682
+        ]
+      },
+      "outcome_counts": {
+        "success": 108,
+        "timeout": 12
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.8,
+          0.626943,
+          0.904949
+        ],
+        "success": [
+          0.2,
+          0.095051,
+          0.373057
+        ]
+      },
+      "outcome_counts": {
+        "collision": 24,
+        "success": 6
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "success": 1
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.733333,
+          0.55552,
+          0.858173
+        ],
+        "timeout": [
+          0.266667,
+          0.141827,
+          0.44448
+        ]
+      },
+      "outcome_counts": {
+        "collision": 22,
+        "timeout": 8
+      },
+      "planner": "social_force",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "intersection_wait"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.266667,
+          0.195685,
+          0.352124
+        ],
+        "success": [
+          0.716667,
+          0.630298,
+          0.789594
+        ],
+        "timeout": [
+          0.016667,
+          0.004583,
+          0.058736
+        ]
+      },
+      "outcome_counts": {
+        "collision": 32,
+        "success": 86,
+        "timeout": 2
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "orca",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "success": 1
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "join_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "goal",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.066667,
+          0.018477,
+          0.213235
+        ],
+        "success": [
+          0.933333,
+          0.786765,
+          0.981523
+        ]
+      },
+      "outcome_counts": {
+        "collision": 2,
+        "success": 28
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.968981,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 120
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.0346,
+          0.256211
+        ],
+        "success": [
+          0.9,
+          0.743789,
+          0.9654
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "success": 27
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.5,
+          0.331541,
+          0.668459
+        ],
+        "success": [
+          0.1,
+          0.0346,
+          0.256211
+        ],
+        "timeout": [
+          0.4,
+          0.245906,
+          0.576796
+        ]
+      },
+      "outcome_counts": {
+        "collision": 15,
+        "success": 3,
+        "timeout": 12
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.9,
+          0.743789,
+          0.9654
+        ],
+        "timeout": [
+          0.1,
+          0.0346,
+          0.256211
+        ]
+      },
+      "outcome_counts": {
+        "collision": 27,
+        "timeout": 3
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "timeout": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "timeout": 1
+      },
+      "planner": "social_force",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "leading_human"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.266667,
+          0.141827,
+          0.44448
+        ],
+        "timeout": [
+          0.733333,
+          0.55552,
+          0.858173
+        ]
+      },
+      "outcome_counts": {
+        "collision": 8,
+        "timeout": 22
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.046643,
+          0.201495
+        ],
+        "success": [
+          0.716667,
+          0.592327,
+          0.814932
+        ],
+        "timeout": [
+          0.183333,
+          0.105578,
+          0.299198
+        ]
+      },
+      "outcome_counts": {
+        "collision": 6,
+        "success": 43,
+        "timeout": 11
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 90,
+      "outcome_ci": {
+        "collision": [
+          0.666667,
+          0.564223,
+          0.755465
+        ],
+        "success": [
+          0.333333,
+          0.244535,
+          0.435777
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60,
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.033333,
+          0.005909,
+          0.166704
+        ],
+        "success": [
+          0.966667,
+          0.833296,
+          0.994091
+        ]
+      },
+      "outcome_counts": {
+        "collision": 1,
+        "success": 29
+      },
+      "planner": "ppo",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.9,
+          0.743789,
+          0.9654
+        ],
+        "success": [
+          0.1,
+          0.0346,
+          0.256211
+        ]
+      },
+      "outcome_counts": {
+        "collision": 27,
+        "success": 3
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "success": 1
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.366667,
+          0.218739,
+          0.544864
+        ],
+        "success": [
+          0.633333,
+          0.455136,
+          0.781261
+        ]
+      },
+      "outcome_counts": {
+        "collision": 11,
+        "success": 19
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "leave_group"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "goal",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 240,
+      "outcome_ci": {
+        "collision": [
+          0.441667,
+          0.38025,
+          0.504921
+        ],
+        "success": [
+          0.433333,
+          0.372178,
+          0.496589
+        ],
+        "timeout": [
+          0.125,
+          0.088979,
+          0.172836
+        ]
+      },
+      "outcome_counts": {
+        "collision": 106,
+        "success": 104,
+        "timeout": 30
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.6,
+          0.473661,
+          0.714305
+        ],
+        "success": [
+          0.366667,
+          0.256209,
+          0.49317
+        ],
+        "timeout": [
+          0.033333,
+          0.009189,
+          0.113638
+        ]
+      },
+      "outcome_counts": {
+        "collision": 36,
+        "success": 22,
+        "timeout": 2
+      },
+      "planner": "orca",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "ppo",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "sacadrl",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.05,
+          0.01715,
+          0.137005
+        ],
+        "timeout": [
+          0.95,
+          0.862995,
+          0.98285
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "timeout": 57
+      },
+      "planner": "social_force",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.886362,
+          0.990811
+        ],
+        "success": [
+          0.033333,
+          0.009189,
+          0.113638
+        ]
+      },
+      "outcome_counts": {
+        "collision": 58,
+        "success": 2
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "merging"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.941667,
+          0.884474,
+          0.971459
+        ],
+        "timeout": [
+          0.058333,
+          0.028541,
+          0.115526
+        ]
+      },
+      "outcome_counts": {
+        "collision": 113,
+        "timeout": 7
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "orca",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "narrow_doorway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.766667,
+          0.590717,
+          0.882076
+        ],
+        "success": [
+          0.233333,
+          0.117924,
+          0.409283
+        ]
+      },
+      "outcome_counts": {
+        "collision": 23,
+        "success": 7
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.025,
+          0.008538,
+          0.07093
+        ],
+        "success": [
+          0.85,
+          0.775325,
+          0.902962
+        ],
+        "timeout": [
+          0.125,
+          0.077235,
+          0.196029
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "success": 102,
+        "timeout": 15
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.466667,
+          0.302324,
+          0.638577
+        ],
+        "success": [
+          0.533333,
+          0.361423,
+          0.697676
+        ]
+      },
+      "outcome_counts": {
+        "collision": 14,
+        "success": 16
+      },
+      "planner": "orca",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.9,
+          0.743789,
+          0.9654
+        ],
+        "success": [
+          0.1,
+          0.0346,
+          0.256211
+        ]
+      },
+      "outcome_counts": {
+        "collision": 27,
+        "success": 3
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "narrow_hallway"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.583333,
+          0.457281,
+          0.699357
+        ],
+        "success": [
+          0.416667,
+          0.300643,
+          0.542719
+        ]
+      },
+      "outcome_counts": {
+        "collision": 35,
+        "success": 25
+      },
+      "planner": "goal",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.933333,
+          0.840746,
+          0.973771
+        ],
+        "timeout": [
+          0.066667,
+          0.026229,
+          0.159254
+        ]
+      },
+      "outcome_counts": {
+        "collision": 56,
+        "timeout": 4
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 240,
+      "outcome_ci": {
+        "collision": [
+          0.079167,
+          0.051265,
+          0.120328
+        ],
+        "success": [
+          0.916667,
+          0.874797,
+          0.945409
+        ],
+        "timeout": [
+          0.004167,
+          0.000736,
+          0.02322
+        ]
+      },
+      "outcome_counts": {
+        "collision": 19,
+        "success": 220,
+        "timeout": 1
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.35,
+          0.241678,
+          0.476374
+        ],
+        "success": [
+          0.65,
+          0.523626,
+          0.758322
+        ]
+      },
+      "outcome_counts": {
+        "collision": 21,
+        "success": 39
+      },
+      "planner": "orca",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.046643,
+          0.201495
+        ],
+        "success": [
+          0.9,
+          0.798505,
+          0.953357
+        ]
+      },
+      "outcome_counts": {
+        "collision": 6,
+        "success": 54
+      },
+      "planner": "ppo",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.45,
+          0.330937,
+          0.575081
+        ],
+        "success": [
+          0.55,
+          0.424919,
+          0.669063
+        ]
+      },
+      "outcome_counts": {
+        "collision": 27,
+        "success": 33
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.666667,
+          0.540569,
+          0.772707
+        ],
+        "timeout": [
+          0.333333,
+          0.227293,
+          0.459431
+        ]
+      },
+      "outcome_counts": {
+        "collision": 40,
+        "timeout": 20
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.566667,
+          0.441034,
+          0.684276
+        ],
+        "timeout": [
+          0.433333,
+          0.315724,
+          0.558966
+        ]
+      },
+      "outcome_counts": {
+        "collision": 34,
+        "timeout": 26
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "sacadrl",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.033333,
+          0.009189,
+          0.113638
+        ],
+        "timeout": [
+          0.966667,
+          0.886362,
+          0.990811
+        ]
+      },
+      "outcome_counts": {
+        "collision": 2,
+        "timeout": 58
+      },
+      "planner": "social_force",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.516667,
+          0.393078,
+          0.63825
+        ],
+        "success": [
+          0.483333,
+          0.36175,
+          0.606922
+        ]
+      },
+      "outcome_counts": {
+        "collision": 31,
+        "success": 29
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.133333,
+          0.053097,
+          0.296813
+        ],
+        "success": [
+          0.866667,
+          0.703187,
+          0.946903
+        ]
+      },
+      "outcome_counts": {
+        "collision": 4,
+        "success": 26
+      },
+      "planner": "goal",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          0.2,
+          0.095051,
+          0.373057
+        ],
+        "timeout": [
+          0.8,
+          0.626943,
+          0.904949
+        ]
+      },
+      "outcome_counts": {
+        "success": 6,
+        "timeout": 24
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          0.991667,
+          0.954304,
+          0.998527
+        ],
+        "timeout": [
+          0.008333,
+          0.001473,
+          0.045696
+        ]
+      },
+      "outcome_counts": {
+        "success": 119,
+        "timeout": 1
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.066667,
+          0.018477,
+          0.213235
+        ],
+        "success": [
+          0.933333,
+          0.786765,
+          0.981523
+        ]
+      },
+      "outcome_counts": {
+        "collision": 2,
+        "success": 28
+      },
+      "planner": "orca",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.166667,
+          0.073365,
+          0.335644
+        ],
+        "success": [
+          0.833333,
+          0.664356,
+          0.926635
+        ]
+      },
+      "outcome_counts": {
+        "collision": 5,
+        "success": 25
+      },
+      "planner": "ppo",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.066667,
+          0.018477,
+          0.213235
+        ],
+        "success": [
+          0.933333,
+          0.786765,
+          0.981523
+        ]
+      },
+      "outcome_counts": {
+        "collision": 2,
+        "success": 28
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.0346,
+          0.256211
+        ],
+        "success": [
+          0.333333,
+          0.192305,
+          0.512199
+        ],
+        "timeout": [
+          0.566667,
+          0.391973,
+          0.726225
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "success": 10,
+        "timeout": 17
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.466667,
+          0.302324,
+          0.638577
+        ],
+        "timeout": [
+          0.533333,
+          0.361423,
+          0.697676
+        ]
+      },
+      "outcome_counts": {
+        "collision": 14,
+        "timeout": 16
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.5,
+          0.331541,
+          0.668459
+        ],
+        "success": [
+          0.5,
+          0.331541,
+          0.668459
+        ]
+      },
+      "outcome_counts": {
+        "collision": 15,
+        "success": 15
+      },
+      "planner": "sacadrl",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "success": 1
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "parallel_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.2,
+          0.095051,
+          0.373057
+        ],
+        "timeout": [
+          0.8,
+          0.626943,
+          0.904949
+        ]
+      },
+      "outcome_counts": {
+        "collision": 6,
+        "timeout": 24
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.025,
+          0.008538,
+          0.07093
+        ],
+        "success": [
+          0.975,
+          0.92907,
+          0.991462
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "success": 117
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.733333,
+          0.55552,
+          0.858173
+        ],
+        "success": [
+          0.266667,
+          0.141827,
+          0.44448
+        ]
+      },
+      "outcome_counts": {
+        "collision": 22,
+        "success": 8
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.2,
+          0.095051,
+          0.373057
+        ],
+        "success": [
+          0.433333,
+          0.273775,
+          0.608027
+        ],
+        "timeout": [
+          0.366667,
+          0.218739,
+          0.544864
+        ]
+      },
+      "outcome_counts": {
+        "collision": 6,
+        "success": 13,
+        "timeout": 11
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.4,
+          0.245906,
+          0.576796
+        ],
+        "timeout": [
+          0.6,
+          0.423204,
+          0.754094
+        ]
+      },
+      "outcome_counts": {
+        "collision": 12,
+        "timeout": 18
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "pedestrian_obstruction"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "goal",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.968981,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 120
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.033333,
+          0.005909,
+          0.166704
+        ],
+        "success": [
+          0.966667,
+          0.833296,
+          0.994091
+        ]
+      },
+      "outcome_counts": {
+        "collision": 1,
+        "success": 29
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ],
+        "timeout": [
+          0.966667,
+          0.833296,
+          0.994091
+        ]
+      },
+      "outcome_counts": {
+        "success": 1,
+        "timeout": 29
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.3,
+          0.166647,
+          0.478758
+        ],
+        "timeout": [
+          0.7,
+          0.521242,
+          0.833353
+        ]
+      },
+      "outcome_counts": {
+        "collision": 9,
+        "timeout": 21
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "sacadrl",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.4,
+          0.245906,
+          0.576796
+        ],
+        "timeout": [
+          0.6,
+          0.423204,
+          0.754094
+        ]
+      },
+      "outcome_counts": {
+        "collision": 12,
+        "timeout": 18
+      },
+      "planner": "social_force",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "pedestrian_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.466667,
+          0.302324,
+          0.638577
+        ],
+        "success": [
+          0.533333,
+          0.361423,
+          0.697676
+        ]
+      },
+      "outcome_counts": {
+        "collision": 14,
+        "success": 16
+      },
+      "planner": "goal",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.058134,
+          0.166682
+        ],
+        "success": [
+          0.85,
+          0.775325,
+          0.902962
+        ],
+        "timeout": [
+          0.05,
+          0.023114,
+          0.104803
+        ]
+      },
+      "outcome_counts": {
+        "collision": 12,
+        "success": 102,
+        "timeout": 6
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.333333,
+          0.192305,
+          0.512199
+        ],
+        "success": [
+          0.633333,
+          0.455136,
+          0.781261
+        ],
+        "timeout": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 10,
+        "success": 19,
+        "timeout": 1
+      },
+      "planner": "orca",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.066667,
+          0.018477,
+          0.213235
+        ],
+        "success": [
+          0.933333,
+          0.786765,
+          0.981523
+        ]
+      },
+      "outcome_counts": {
+        "collision": 2,
+        "success": 28
+      },
+      "planner": "ppo",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.266667,
+          0.141827,
+          0.44448
+        ],
+        "success": [
+          0.733333,
+          0.55552,
+          0.858173
+        ]
+      },
+      "outcome_counts": {
+        "collision": 8,
+        "success": 22
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.8,
+          0.626943,
+          0.904949
+        ],
+        "success": [
+          0.2,
+          0.095051,
+          0.373057
+        ]
+      },
+      "outcome_counts": {
+        "collision": 24,
+        "success": 6
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.566667,
+          0.391973,
+          0.726225
+        ],
+        "success": [
+          0.433333,
+          0.273775,
+          0.608027
+        ]
+      },
+      "outcome_counts": {
+        "collision": 17,
+        "success": 13
+      },
+      "planner": "sacadrl",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.766667,
+          0.590717,
+          0.882076
+        ],
+        "timeout": [
+          0.233333,
+          0.117924,
+          0.409283
+        ]
+      },
+      "outcome_counts": {
+        "collision": 23,
+        "timeout": 7
+      },
+      "planner": "social_force",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.8,
+          0.626943,
+          0.904949
+        ],
+        "success": [
+          0.2,
+          0.095051,
+          0.373057
+        ]
+      },
+      "outcome_counts": {
+        "collision": 24,
+        "success": 6
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "perpendicular_traffic"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.1,
+          0.0346,
+          0.256211
+        ],
+        "timeout": [
+          0.9,
+          0.743789,
+          0.9654
+        ]
+      },
+      "outcome_counts": {
+        "collision": 3,
+        "timeout": 27
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.166667,
+          0.11056,
+          0.243453
+        ],
+        "success": [
+          0.833333,
+          0.756547,
+          0.88944
+        ]
+      },
+      "outcome_counts": {
+        "collision": 20,
+        "success": 100
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.5,
+          0.331541,
+          0.668459
+        ],
+        "success": [
+          0.5,
+          0.331541,
+          0.668459
+        ]
+      },
+      "outcome_counts": {
+        "collision": 15,
+        "success": 15
+      },
+      "planner": "orca",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.266667,
+          0.141827,
+          0.44448
+        ],
+        "success": [
+          0.733333,
+          0.55552,
+          0.858173
+        ]
+      },
+      "outcome_counts": {
+        "collision": 8,
+        "success": 22
+      },
+      "planner": "ppo",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.8,
+          0.626943,
+          0.904949
+        ],
+        "success": [
+          0.2,
+          0.095051,
+          0.373057
+        ]
+      },
+      "outcome_counts": {
+        "collision": 24,
+        "success": 6
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "timeout": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "timeout": 1
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.833333,
+          0.664356,
+          0.926635
+        ],
+        "success": [
+          0.166667,
+          0.073365,
+          0.335644
+        ]
+      },
+      "outcome_counts": {
+        "collision": 25,
+        "success": 5
+      },
+      "planner": "sacadrl",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "social_force",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "robot_crowding"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "timeout": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "timeout": 30
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.968981,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 120
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "orca",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "success": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "success": 30
+      },
+      "planner": "ppo",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.6,
+          0.423204,
+          0.754094
+        ],
+        "success": [
+          0.4,
+          0.245906,
+          0.576796
+        ]
+      },
+      "outcome_counts": {
+        "collision": 18,
+        "success": 12
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.333333,
+          0.192305,
+          0.512199
+        ],
+        "success": [
+          0.433333,
+          0.273775,
+          0.608027
+        ],
+        "timeout": [
+          0.233333,
+          0.117924,
+          0.409283
+        ]
+      },
+      "outcome_counts": {
+        "collision": 10,
+        "success": 13,
+        "timeout": 7
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.433333,
+          0.273775,
+          0.608027
+        ],
+        "success": [
+          0.033333,
+          0.005909,
+          0.166704
+        ],
+        "timeout": [
+          0.533333,
+          0.361423,
+          0.697676
+        ]
+      },
+      "outcome_counts": {
+        "collision": 13,
+        "success": 1,
+        "timeout": 16
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.033333,
+          0.005909,
+          0.166704
+        ],
+        "success": [
+          0.966667,
+          0.833296,
+          0.994091
+        ]
+      },
+      "outcome_counts": {
+        "collision": 1,
+        "success": 29
+      },
+      "planner": "sacadrl",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.166667,
+          0.073365,
+          0.335644
+        ],
+        "timeout": [
+          0.833333,
+          0.664356,
+          0.926635
+        ]
+      },
+      "outcome_counts": {
+        "collision": 5,
+        "timeout": 25
+      },
+      "planner": "social_force",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.833333,
+          0.664356,
+          0.926635
+        ],
+        "success": [
+          0.166667,
+          0.073365,
+          0.335644
+        ]
+      },
+      "outcome_counts": {
+        "collision": 25,
+        "success": 5
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "robot_overtaking"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "goal",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.366667,
+          0.218739,
+          0.544864
+        ],
+        "timeout": [
+          0.633333,
+          0.455136,
+          0.781261
+        ]
+      },
+      "outcome_counts": {
+        "collision": 11,
+        "timeout": 19
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 120,
+      "outcome_ci": {
+        "collision": [
+          0.508333,
+          0.420025,
+          0.596124
+        ],
+        "success": [
+          0.175,
+          0.117405,
+          0.252757
+        ],
+        "timeout": [
+          0.316667,
+          0.240228,
+          0.404479
+        ]
+      },
+      "outcome_counts": {
+        "collision": 61,
+        "success": 21,
+        "timeout": 38
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.733333,
+          0.55552,
+          0.858173
+        ],
+        "success": [
+          0.133333,
+          0.053097,
+          0.296813
+        ],
+        "timeout": [
+          0.133333,
+          0.053097,
+          0.296813
+        ]
+      },
+      "outcome_counts": {
+        "collision": 22,
+        "success": 4,
+        "timeout": 4
+      },
+      "planner": "orca",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.7,
+          0.521242,
+          0.833353
+        ],
+        "timeout": [
+          0.3,
+          0.166647,
+          0.478758
+        ]
+      },
+      "outcome_counts": {
+        "collision": 21,
+        "timeout": 9
+      },
+      "planner": "ppo",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.866667,
+          0.703187,
+          0.946903
+        ],
+        "timeout": [
+          0.133333,
+          0.053097,
+          0.296813
+        ]
+      },
+      "outcome_counts": {
+        "collision": 26,
+        "timeout": 4
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.366667,
+          0.218739,
+          0.544864
+        ],
+        "timeout": [
+          0.633333,
+          0.455136,
+          0.781261
+        ]
+      },
+      "outcome_counts": {
+        "collision": 11,
+        "timeout": 19
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.6,
+          0.423204,
+          0.754094
+        ],
+        "timeout": [
+          0.4,
+          0.245906,
+          0.576796
+        ]
+      },
+      "outcome_counts": {
+        "collision": 18,
+        "timeout": 12
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.833296,
+          0.994091
+        ],
+        "timeout": [
+          0.033333,
+          0.005909,
+          0.166704
+        ]
+      },
+      "outcome_counts": {
+        "collision": 29,
+        "timeout": 1
+      },
+      "planner": "sacadrl",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          0.366667,
+          0.218739,
+          0.544864
+        ],
+        "timeout": [
+          0.633333,
+          0.455136,
+          0.781261
+        ]
+      },
+      "outcome_counts": {
+        "collision": 11,
+        "timeout": 19
+      },
+      "planner": "social_force",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 30,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.886487,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "station_platform"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "goal",
+      "scenario_family": "t_intersection"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.833333,
+          0.719684,
+          0.906868
+        ],
+        "success": [
+          0.166667,
+          0.093132,
+          0.280316
+        ]
+      },
+      "outcome_counts": {
+        "collision": 50,
+        "success": 10
+      },
+      "planner": "guarded_ppo",
+      "scenario_family": "t_intersection"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 240,
+      "outcome_ci": {
+        "collision": [
+          0.1375,
+          0.099611,
+          0.18681
+        ],
+        "success": [
+          0.804167,
+          0.749336,
+          0.849414
+        ],
+        "timeout": [
+          0.058333,
+          0.035062,
+          0.09552
+        ]
+      },
+      "outcome_counts": {
+        "collision": 33,
+        "success": 193,
+        "timeout": 14
+      },
+      "planner": "hybrid_rule_local_planner",
+      "scenario_family": "t_intersection"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.166667,
+          0.093132,
+          0.280316
+        ],
+        "success": [
+          0.833333,
+          0.719684,
+          0.906868
+        ]
+      },
+      "outcome_counts": {
+        "collision": 10,
+        "success": 50
+      },
+      "planner": "orca",
+      "scenario_family": "t_intersection"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.516667,
+          0.393078,
+          0.63825
+        ],
+        "success": [
+          0.483333,
+          0.36175,
+          0.606922
+        ]
+      },
+      "outcome_counts": {
+        "collision": 31,
+        "success": 29
+      },
+      "planner": "ppo",
+      "scenario_family": "t_intersection"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.516667,
+          0.393078,
+          0.63825
+        ],
+        "success": [
+          0.483333,
+          0.36175,
+          0.606922
+        ]
+      },
+      "outcome_counts": {
+        "collision": 31,
+        "success": 29
+      },
+      "planner": "prediction_planner",
+      "scenario_family": "t_intersection"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "predictive_mppi",
+      "scenario_family": "t_intersection"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.886362,
+          0.990811
+        ],
+        "timeout": [
+          0.033333,
+          0.009189,
+          0.113638
+        ]
+      },
+      "outcome_counts": {
+        "collision": 58,
+        "timeout": 2
+      },
+      "planner": "risk_dwa",
+      "scenario_family": "t_intersection"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.966667,
+          0.886362,
+          0.990811
+        ],
+        "success": [
+          0.033333,
+          0.009189,
+          0.113638
+        ]
+      },
+      "outcome_counts": {
+        "collision": 58,
+        "success": 2
+      },
+      "planner": "sacadrl",
+      "scenario_family": "t_intersection"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          1.0,
+          0.939828,
+          1.0
+        ]
+      },
+      "outcome_counts": {
+        "collision": 60
+      },
+      "planner": "social_force",
+      "scenario_family": "t_intersection"
+    },
+    {
+      "eligible": true,
+      "exemplar_episode_ids": [],
+      "ineligible_reason": null,
+      "n_total": 60,
+      "outcome_ci": {
+        "collision": [
+          0.5,
+          0.37735,
+          0.62265
+        ],
+        "success": [
+          0.5,
+          0.37735,
+          0.62265
+        ]
+      },
+      "outcome_counts": {
+        "collision": 30,
+        "success": 30
+      },
+      "planner": "socnav_sampling",
+      "scenario_family": "t_intersection"
+    }
+  ],
+  "event_anchor": null,
+  "metric_definitions": {},
+  "planners": [
+    "goal",
+    "guarded_ppo",
+    "hybrid_rule_local_planner",
+    "orca",
+    "ppo",
+    "prediction_planner",
+    "predictive_mppi",
+    "risk_dwa",
+    "sacadrl",
+    "social_force",
+    "socnav_sampling"
+  ],
+  "scenario_families": [
+    "accompanying_peer",
+    "blind_corner",
+    "bottleneck",
+    "circular_crossing",
+    "cross_trap",
+    "crossing",
+    "crowd_navigation",
+    "doorway",
+    "down_path",
+    "entering_elevator",
+    "entering_room",
+    "exiting_elevator",
+    "exiting_room",
+    "following_human",
+    "frontal_approach",
+    "group_crossing",
+    "head_on_corridor",
+    "intersection_no_gesture",
+    "intersection_proceed",
+    "intersection_wait",
+    "join_group",
+    "leading_human",
+    "leave_group",
+    "merging",
+    "narrow_doorway",
+    "narrow_hallway",
+    "overtaking",
+    "parallel_traffic",
+    "pedestrian_obstruction",
+    "pedestrian_overtaking",
+    "perpendicular_traffic",
+    "robot_crowding",
+    "robot_overtaking",
+    "station_platform",
+    "t_intersection"
+  ],
+  "schema_version": "campaign_atlas.v1",
+  "selection_manifest_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+}

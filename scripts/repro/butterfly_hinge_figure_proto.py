@@ -105,6 +105,8 @@ from robot_sf.analysis_workbench.trace_failure_predicates import (
 )
 from robot_sf.benchmark import figure_qa
 from robot_sf.benchmark import trace_scene_figure as tsf
+from robot_sf.benchmark.collision_definition_inventory import DEFAULT_PED_RADIUS
+from robot_sf.benchmark.constants import NEAR_MISS_DIST
 from robot_sf.benchmark.critical_intervals import (
     extract_critical_intervals,
     load_config,
@@ -743,6 +745,81 @@ def compute_delta_gutter(
     }
 
 
+def count_near_miss_steps(ep: EpisodeTrace) -> int:
+    """Steps whose minimum surface clearance to any pedestrian falls in
+    ``[0, NEAR_MISS_DIST)`` -- the exact benchmark near-miss definition
+    (``robot_sf.benchmark.metrics._compute_robot_ped_distance_summary``:
+    ``near_miss_definition = '0 <= min_clearance_m < near_miss_distance_m'`` with
+    surface clearance = center distance - (robot_radius + ped_radius), thresholds from
+    ``robot_sf.benchmark.constants.NEAR_MISS_DIST`` /
+    ``collision_definition_inventory.DEFAULT_PED_RADIUS`` /
+    ``robot_defaults.DEFAULT_ROBOT_RADIUS``). Verified to reproduce the doorway
+    re-export episodes.jsonl ``metrics.near_misses`` values for seeds 113 (13) and
+    114 (78) when the full trace is loaded.
+
+    Returns:
+        Near-miss step count over the loaded (possibly truncated) episode window.
+    """
+    surface = ep.metrics["clearance_m"] - (DEFAULT_ROBOT_RADIUS + DEFAULT_PED_RADIUS)
+    return int(np.count_nonzero((surface >= 0.0) & (surface < NEAR_MISS_DIST)))
+
+
+def compute_contrast_gutter(
+    ep_a: EpisodeTrace,
+    ep_b: EpisodeTrace,
+    focal_closest_a: dict[str, Any],
+    focal_closest_b: dict[str, Any],
+    events_a: dict[str, dict[str, Any]],
+    events_b: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Central A|B gutter for the matched seed-pair CONTRAST rendering mode (used when
+    the two episodes do not share a common start, so pivot-anchored deltas like
+    "Delta v_cmd at the pivot" would only measure start-state differences under
+    different spawn draws -- semantically weak). Every quantity is per-episode
+    well-defined regardless of differing starts, and every number is derived from the
+    two loaded traces (or their bundle metadata) -- nothing is invented:
+
+    - minimum clearance to the locked focal pedestrian (center-to-center, the same
+      quantity the panels' clearance lines draw),
+    - near-miss step counts (benchmark definition, see ``count_near_miss_steps``),
+    - steps to termination (``metadata.summary.step_count``, the full episode length),
+    - first-braking time per episode (``critical_intervals.first_braking_event``,
+      a per-episode deceleration-threshold event whose definition survives different
+      starts -- kept as two absolute times rather than a delta).
+
+    Returns:
+        Contrast-gutter dict (``mode`` == ``"contrast"``).
+    """
+    brake_a = events_a.get("first_braking_event")
+    brake_b = events_b.get("first_braking_event")
+    return {
+        "mode": "contrast",
+        "min_clearance_focal_m": {
+            "episode_a": focal_closest_a["distance_m"],
+            "episode_b": focal_closest_b["distance_m"],
+        },
+        "near_miss_steps": {
+            "episode_a": count_near_miss_steps(ep_a),
+            "episode_b": count_near_miss_steps(ep_b),
+            "definition": (
+                "steps with 0 <= min surface clearance < "
+                f"{NEAR_MISS_DIST:g} m (robot_radius {DEFAULT_ROBOT_RADIUS:g} m + "
+                f"ped_radius {DEFAULT_PED_RADIUS:g} m subtracted from center distance); "
+                "matches the benchmark metrics.near_misses definition"
+            ),
+            "window": "loaded episode window (full trace when no story-window truncation)",
+        },
+        "steps_to_termination": {
+            "episode_a": ep_a.metadata["summary"]["step_count"],
+            "episode_b": ep_b.metadata["summary"]["step_count"],
+        },
+        "first_braking_time_s": {
+            "episode_a": brake_a["time_s"] if brake_a else None,
+            "episode_b": brake_b["time_s"] if brake_b else None,
+        },
+    }
+
+
 def shared_world_bounds(
     ep_a: EpisodeTrace, ep_b: EpisodeTrace, *, margin_m: float = 1.5
 ) -> tuple[float, float, float, float]:
@@ -926,8 +1003,17 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     map_definition: Any | None = None,
     defer_labels: bool = False,
     pivot_label_text: str = "pivot",
+    contrast_mode: bool = False,
 ) -> list[tuple[tuple[float, float], str, dict[str, Any]]]:
     """Draw one spatial panel of the hinge figure. Mutates ``ax`` in place.
+
+    ``contrast_mode`` (matched seed-pair contrast framing, for pairs with no shared
+    start): the whole robot trajectory is drawn in the episode's own color/linestyle
+    (no gray "common prefix" segment -- there is none) and no pivot ring or pivot label
+    is drawn (``divergence_step`` / ``common_prefix_end`` / ``pivot_label_text`` are
+    ignored). Everything else (pedestrians, braking/clearance/outcome markers,
+    start/end glyphs) is unchanged. The default (hinge) mode is untouched for true
+    shared-prefix pairs.
 
     When ``defer_labels`` is True, the two dynamically-placed labels (pivot ring,
     clearance) are NOT placed here; instead their ``(anchor_xy, text, style_kwargs)``
@@ -1011,25 +1097,38 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
 
     # -- robot trajectory: common prefix gray, post-pivot in planner style ------------
     xy = ep.robot_xy
-    prefix_end = min(common_prefix_end + 1, len(xy))
-    ax.plot(
-        xy[:prefix_end, 0],
-        xy[:prefix_end, 1],
-        color=COLOR_COMMON_PREFIX,
-        linewidth=1.6,
-        zorder=3,
-        solid_capstyle="round",
-    )
-    if divergence_step is not None and divergence_step < len(xy) - 1:
+    if contrast_mode:
+        # Matched seed-pair contrast framing: no shared start, so no gray shared-prefix
+        # segment -- the whole trajectory is this episode's own.
         ax.plot(
-            xy[divergence_step:, 0],
-            xy[divergence_step:, 1],
+            xy[:, 0],
+            xy[:, 1],
             color=color,
             linewidth=1.8,
             linestyle=linestyle,
             zorder=4,
             solid_capstyle="round",
         )
+    else:
+        prefix_end = min(common_prefix_end + 1, len(xy))
+        ax.plot(
+            xy[:prefix_end, 0],
+            xy[:prefix_end, 1],
+            color=COLOR_COMMON_PREFIX,
+            linewidth=1.6,
+            zorder=3,
+            solid_capstyle="round",
+        )
+        if divergence_step is not None and divergence_step < len(xy) - 1:
+            ax.plot(
+                xy[divergence_step:, 0],
+                xy[divergence_step:, 1],
+                color=color,
+                linewidth=1.8,
+                linestyle=linestyle,
+                zorder=4,
+                solid_capstyle="round",
+            )
 
     # -- time dots every 0.5s ----------------------------------------------------------
     dot_idx = _time_dot_indices(ep.time_s, 0.5)
@@ -1046,8 +1145,10 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     # -- pivot ring (design spec: "a conspicuous pivot ring at the first persistent action
     # difference" -- the separator found by find_separator, not the raw geometric
     # divergence point). Label placement uses the same closed-loop figure_qa-driven search
-    # as the clearance label (_place_clear_label).
-    if divergence_step is not None and divergence_step < len(xy):
+    # as the clearance label (_place_clear_label). Skipped entirely in contrast mode
+    # (no shared prefix -> no pivot to ring; the start diamond glyph marks the trace
+    # start instead, named "trace start" in the contrast legend).
+    if not contrast_mode and divergence_step is not None and divergence_step < len(xy):
         px, py = xy[divergence_step]
         ax.scatter(
             [px],
@@ -1221,15 +1322,59 @@ def _format_gutter_lines(gutter: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _format_contrast_gutter_lines(gutter: dict[str, Any]) -> list[str]:
+    """Render the contrast-gutter dict (``compute_contrast_gutter``) as short text lines.
+
+    Contrast vocabulary only -- no pivot/hinge/common-prefix wording (matched seed-pair
+    contrast framing).
+
+    Returns:
+        Ordered list of one-line strings for the gutter panel.
+    """
+    clear_a = gutter["min_clearance_focal_m"]["episode_a"]
+    clear_b = gutter["min_clearance_focal_m"]["episode_b"]
+    near_a = gutter["near_miss_steps"]["episode_a"]
+    near_b = gutter["near_miss_steps"]["episode_b"]
+    steps_a = gutter["steps_to_termination"]["episode_a"]
+    steps_b = gutter["steps_to_termination"]["episode_b"]
+    brake_a = gutter["first_braking_time_s"]["episode_a"]
+    brake_b = gutter["first_braking_time_s"]["episode_b"]
+    # A/B values are stacked on separate lines (not "A .. / B .." on one line) to keep
+    # every gutter line narrow: the one-line variant collided with panel B's y-axis
+    # tick labels (a cross-axes overlap figure_qa.lint_figure does not check, caught by
+    # visual review of the first contrast render).
+    lines = ["A | B", ""]
+    lines.append(f"min clearance\n(focal ped)\nA {clear_a:.2f} m\nB {clear_b:.2f} m")
+    lines.append("")
+    lines.append(f"near-miss steps\nA {near_a} / B {near_b}")
+    lines.append("")
+    lines.append(f"steps to\ntermination\nA {steps_a} / B {steps_b}")
+    lines.append("")
+    if brake_a is not None and brake_b is not None:
+        lines.append(f"first braking\nA @{brake_a:.1f} s\nB @{brake_b:.1f} s")
+    elif brake_a is not None or brake_b is not None:
+        only = f"A @{brake_a:.1f} s" if brake_a is not None else f"B @{brake_b:.1f} s"
+        lines.append(f"first braking\n{only}\n(other side n/a)")
+    else:
+        lines.append("first braking\nn/a (neither\nside brakes)")
+    return lines
+
+
 def _draw_delta_gutter(ax: plt.Axes, gutter: dict[str, Any]) -> None:
-    """Draw the narrow central delta-gutter panel (design spec: "A narrow central delta
-    gutter containing only: Delta t_brake, Delta v_cmd at the pivot, minimum clearance over
-    the following horizon, first differing planner mode").
+    """Draw the narrow central gutter panel: the hinge-mode delta gutter (design spec:
+    "A narrow central delta gutter containing only: Delta t_brake, Delta v_cmd at the
+    pivot, minimum clearance over the following horizon, first differing planner mode")
+    or, when ``gutter["mode"] == "contrast"``, the matched seed-pair contrast gutter
+    (per-episode quantities that stay meaningful across different starts -- see
+    ``compute_contrast_gutter``).
     """
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis("off")
-    lines = _format_gutter_lines(gutter)
+    if gutter.get("mode") == "contrast":
+        lines = _format_contrast_gutter_lines(gutter)
+    else:
+        lines = _format_gutter_lines(gutter)
     n = len(lines)
     for i, text in enumerate(lines):
         y = 1.0 - (i + 0.5) / n
@@ -1269,8 +1414,18 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     out_pdf: Path,
     out_png: Path,
     pivot_label_text: str = "pivot",
+    contrast_mode: bool = False,
 ) -> list[Any]:
-    """Render + export the two-panel hinge figure (vector PDF + PNG preview).
+    """Render + export the two-panel figure (vector PDF + PNG preview).
+
+    Two rendering modes:
+    - hinge mode (default): the original pivot grammar -- gray common prefix, post-pivot
+      A/B styling, pivot ring, delta gutter. For true shared-prefix pairs (e.g. the
+      same-seed orca/social_force reference pair).
+    - ``contrast_mode``: matched seed-pair contrast framing (author ruling 2026-07-16),
+      for pairs with no shared start -- full per-episode trajectories, "trace start"
+      legend vocabulary instead of pivot/prefix vocabulary, and a contrast gutter
+      (``compute_contrast_gutter``) instead of pivot-anchored deltas.
 
     Returns:
         The list of ``figure_qa.lint_figure`` defects found on the rendered figure (before
@@ -1324,6 +1479,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
         map_definition=map_definition,
         defer_labels=True,
         pivot_label_text=pivot_label_text,
+        contrast_mode=contrast_mode,
     )
     pending_b = _draw_panel(
         ax_b,
@@ -1343,48 +1499,85 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
         map_definition=map_definition,
         defer_labels=True,
         pivot_label_text=pivot_label_text,
+        contrast_mode=contrast_mode,
     )
     ax_b.set_ylabel("")
     ax_a.set_ylabel("y (m)", fontsize=8)
     _draw_delta_gutter(ax_gutter, gutter)
 
-    legend_elements = [
-        Line2D([0], [0], color=COLOR_COMMON_PREFIX, lw=1.6, label="common prefix (both)"),
-        Line2D(
-            [0],
-            [0],
-            color=COLOR_A,
-            lw=1.8,
-            marker=MARKER_A,
-            markersize=5,
-            label="A post-pivot",
-        ),
-        Line2D(
-            [0],
-            [0],
-            color=COLOR_B,
-            lw=1.8,
-            linestyle="--",
-            marker=MARKER_B,
-            markersize=5,
-            markerfacecolor="none",
-            label="B post-pivot",
-        ),
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            color="none",
-            markeredgecolor="black",
-            markerfacecolor="none",
-            markersize=11,
-            label="pivot (separator)",
-        ),
-    ]
+    if contrast_mode:
+        # Contrast vocabulary only: no pivot/hinge/common-prefix wording anywhere in the
+        # rendered output (matched seed-pair contrast framing, author ruling 2026-07-16).
+        legend_elements = [
+            Line2D(
+                [0],
+                [0],
+                color=COLOR_A,
+                lw=1.8,
+                marker=MARKER_A,
+                markersize=5,
+                label="episode A trajectory",
+            ),
+            Line2D(
+                [0],
+                [0],
+                color=COLOR_B,
+                lw=1.8,
+                linestyle="--",
+                marker=MARKER_B,
+                markersize=5,
+                markerfacecolor="none",
+                label="episode B trajectory",
+            ),
+            Line2D(
+                [0],
+                [0],
+                marker="D",
+                color="none",
+                markeredgecolor="black",
+                markerfacecolor="white",
+                markersize=7,
+                label="trace start",
+            ),
+        ]
+    else:
+        legend_elements = [
+            Line2D([0], [0], color=COLOR_COMMON_PREFIX, lw=1.6, label="common prefix (both)"),
+            Line2D(
+                [0],
+                [0],
+                color=COLOR_A,
+                lw=1.8,
+                marker=MARKER_A,
+                markersize=5,
+                label="A post-pivot",
+            ),
+            Line2D(
+                [0],
+                [0],
+                color=COLOR_B,
+                lw=1.8,
+                linestyle="--",
+                marker=MARKER_B,
+                markersize=5,
+                markerfacecolor="none",
+                label="B post-pivot",
+            ),
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                color="none",
+                markeredgecolor="black",
+                markerfacecolor="none",
+                markersize=11,
+                label="pivot (separator)",
+            ),
+        ]
     fig.legend(
         handles=legend_elements,
         loc="lower center",
-        ncol=4,
+        ncol=len(legend_elements),
         fontsize=7,
         frameon=False,
         bbox_to_anchor=(0.5, -0.005),
@@ -1588,10 +1781,13 @@ def build_provenance_sidecar(  # noqa: PLR0913 - every argument is a distinct pr
     figure_png: Path,
     qa_defects_before: int,
     qa_defects_after: int,
+    framing: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Provenance sidecar (item 4): episode ids, planners, seeds, source commits,
     config/trace hashes -- everything needed to reproduce or audit the shipped still
     independent of the (much larger) ``butterfly_hinge_report.json`` analysis dump.
+    ``framing`` records which rendering mode produced the figure (hinge/pivot vs
+    matched seed-pair contrast) and, for contrast mode, the author ruling that chose it.
 
     Returns:
         JSON-serializable provenance dict.
@@ -1603,6 +1799,7 @@ def build_provenance_sidecar(  # noqa: PLR0913 - every argument is a distinct pr
     return {
         "schema_version": "butterfly-hinge-provenance.v1",
         "generated_at_utc": datetime.now(UTC).isoformat(),
+        "framing": framing or {"mode": "hinge_pivot"},
         "script": {
             "path": str(script_path.relative_to(robot_sf_repo)),
             "repo": str(robot_sf_repo),
@@ -1652,6 +1849,80 @@ def build_provenance_sidecar(  # noqa: PLR0913 - every argument is a distinct pr
             "this_render_error_defects": qa_defects_after,
         },
     }
+
+
+def _compose_contrast_headline(
+    ep_a: EpisodeTrace, ep_b: EpisodeTrace, gutter: dict[str, Any], start_sep_m: float
+) -> str:
+    """Contrast-framing headline: descriptive only, no causal claim, no pivot/hinge/
+    common-prefix vocabulary (matched seed-pair contrast framing, author ruling
+    2026-07-16). Every number is derived from the loaded traces or their bundle
+    metadata.
+
+    Returns:
+        Two-sentence headline string.
+    """
+    return (
+        f"Same planner ({ep_a.metadata['planner']}), same scenario "
+        f"({ep_a.metadata['scenario_id']}), adjacent seeds "
+        f"{ep_a.metadata['seed']} vs {ep_b.metadata['seed']}: the seed changes both "
+        f"the pedestrian realization and the robot spawn draw "
+        f"(starts {start_sep_m:.1f} m apart). "
+        f"The outcome flips from {ep_a.metadata['episode_status']} "
+        f"({gutter['steps_to_termination']['episode_a']} steps, "
+        f"{gutter['near_miss_steps']['episode_a']} near-miss steps) to "
+        f"{ep_b.metadata['episode_status']} "
+        f"({gutter['steps_to_termination']['episode_b']} steps, "
+        f"{gutter['near_miss_steps']['episode_b']} near-miss steps)."
+    )
+
+
+def _compose_hinge_headline(
+    separator: dict[str, Any],
+    onset: dict[str, Any],
+    focal_closest_a: dict[str, Any],
+    focal_closest_b: dict[str, Any],
+) -> str:
+    """Hinge-mode headline (original pivot grammar, unchanged behavior -- extracted from
+    ``main`` verbatim): separator clause per tier + D(t) persistence + clearance contrast.
+
+    Returns:
+        Headline string.
+    """
+    d_clearance = focal_closest_a["distance_m"] - focal_closest_b["distance_m"]
+    if separator["tier"] == "command_jump":
+        who = separator["jump_in"]
+        kind = separator["jump_kind"]
+        mag = separator["jump_v_mps"] if kind == "v" else separator["jump_omega_rad_s"]
+        unit = "m/s" if kind == "v" else "rad/s"
+        separator_clause = (
+            f"First separator at t={separator['time_s']:.2f} s: {who} commands a "
+            f"{mag:.2f} {unit} {kind}-command jump. "
+        )
+    elif separator["tier"] == "braking_onset":
+        separator_clause = (
+            f"First separator at t={separator['time_s']:.2f} s: {separator['braking_in']} "
+            f"begins braking (critical_intervals.first_braking_event). "
+        )
+    else:  # largest_risk_rise
+        separator_clause = (
+            f"No discrete command jump or braking onset found in the "
+            f"{SEPARATOR_SEARCH_BACK_S:g} s window before the divergence became persistent; "
+            f"the separator is reported as the step of largest single-step rise in the "
+            f"joint-state divergence D(t), at t={separator['time_s']:.2f} s (this pair's "
+            f"divergence accumulates smoothly rather than from one sharp decision -- see "
+            f"the report's `pivot.separator` for the full tier trail). "
+        )
+    return (
+        f"{separator_clause}"
+        f"D(t) becomes persistently divergent (threshold {onset['threshold']:.2f}, "
+        f"{DIVERGENCE_THRESHOLD_MARGIN:g}x the {onset['floor']:.2f} pre-divergence floor) "
+        f"by t={onset['time_s']:.2f} s. "
+        f"B's subsequent minimum clearance to the focal pedestrian "
+        f"({focal_closest_b['distance_m']:.2f} m at t={focal_closest_b['time_s']:.1f} s) "
+        f"is {d_clearance:.2f} m lower than A's ({focal_closest_a['distance_m']:.2f} m at "
+        f"t={focal_closest_a['time_s']:.1f} s)."
+    )
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1760,7 +2031,19 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
     focal_closest_a = closest_approach_to_focal_ped(ep_a, focal_ped_id)
     focal_closest_b = closest_approach_to_focal_ped(ep_b, focal_ped_id)
 
-    gutter = compute_delta_gutter(ep_a, ep_b, separator["step"], focal_ped_id, events_a, events_b)
+    # Contrast mode (matched seed-pair contrast framing, author ruling 2026-07-16):
+    # pivot-anchored deltas at "pivot = step 0" would only measure start-state
+    # differences under different spawn draws, so the gutter switches to per-episode
+    # contrast quantities that stay meaningful across different starts.
+    contrast_mode = no_shared_prefix
+    if contrast_mode:
+        gutter = compute_contrast_gutter(
+            ep_a, ep_b, focal_closest_a, focal_closest_b, events_a, events_b
+        )
+    else:
+        gutter = compute_delta_gutter(
+            ep_a, ep_b, separator["step"], focal_ped_id, events_a, events_b
+        )
 
     outcome_a = "success" if ep_a.metadata["episode_status"] == "success" else "unknown"
     b_status = ep_b.metadata["episode_status"]
@@ -1779,55 +2062,11 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
         else None
     )
 
-    d_clearance = focal_closest_a["distance_m"] - focal_closest_b["distance_m"]
     pivot_label_text = "pivot"
-    if separator["tier"] == "no_shared_prefix":
-        pivot_label_text = "start\n(no shared prefix)"
-        headline = (
-            f"A and B start {start_sep_m:.1f} m apart (different per-seed spawn draws under "
-            f"the scenario's spawn randomization) -- there is no shared prefix. D(t) is "
-            f"elevated from t=0 and never returns to a genuine pre-interaction floor, "
-            f"so the trace start is shown as the reference point instead of a "
-            f"persistence-onset pivot. "
-            f"B's minimum clearance to the focal pedestrian "
-            f"({focal_closest_b['distance_m']:.2f} m at t={focal_closest_b['time_s']:.1f} s) "
-            f"is {d_clearance:.2f} m lower than A's ({focal_closest_a['distance_m']:.2f} m at "
-            f"t={focal_closest_a['time_s']:.1f} s)."
-        )
+    if contrast_mode:
+        headline = _compose_contrast_headline(ep_a, ep_b, gutter, start_sep_m)
     else:
-        if separator["tier"] == "command_jump":
-            who = separator["jump_in"]
-            kind = separator["jump_kind"]
-            mag = separator["jump_v_mps"] if kind == "v" else separator["jump_omega_rad_s"]
-            unit = "m/s" if kind == "v" else "rad/s"
-            separator_clause = (
-                f"First separator at t={separator['time_s']:.2f} s: {who} commands a "
-                f"{mag:.2f} {unit} {kind}-command jump. "
-            )
-        elif separator["tier"] == "braking_onset":
-            separator_clause = (
-                f"First separator at t={separator['time_s']:.2f} s: {separator['braking_in']} "
-                f"begins braking (critical_intervals.first_braking_event). "
-            )
-        else:  # largest_risk_rise
-            separator_clause = (
-                f"No discrete command jump or braking onset found in the "
-                f"{SEPARATOR_SEARCH_BACK_S:g} s window before the divergence became persistent; "
-                f"the separator is reported as the step of largest single-step rise in the "
-                f"joint-state divergence D(t), at t={separator['time_s']:.2f} s (this pair's "
-                f"divergence accumulates smoothly rather than from one sharp decision -- see "
-                f"the report's `pivot.separator` for the full tier trail). "
-            )
-        headline = (
-            f"{separator_clause}"
-            f"D(t) becomes persistently divergent (threshold {onset['threshold']:.2f}, "
-            f"{DIVERGENCE_THRESHOLD_MARGIN:g}x the {onset['floor']:.2f} pre-divergence floor) "
-            f"by t={onset['time_s']:.2f} s. "
-            f"B's subsequent minimum clearance to the focal pedestrian "
-            f"({focal_closest_b['distance_m']:.2f} m at t={focal_closest_b['time_s']:.1f} s) "
-            f"is {d_clearance:.2f} m lower than A's ({focal_closest_a['distance_m']:.2f} m at "
-            f"t={focal_closest_a['time_s']:.1f} s)."
-        )
+        headline = _compose_hinge_headline(separator, onset, focal_closest_a, focal_closest_b)
 
     scenario_id = str(ep_a.metadata["scenario_id"])
     try:
@@ -1859,10 +2098,24 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
         out_pdf=out_pdf,
         out_png=out_png,
         pivot_label_text=pivot_label_text,
+        contrast_mode=contrast_mode,
     )
     qa_errors = [d for d in qa_defects if getattr(d, "severity", "") == "error"]
 
+    framing = (
+        {
+            "mode": "matched_seed_pair_contrast",
+            "author_ruling_2026-07-16": (
+                "matched seed-pair contrast framing; hinge/pivot framing not applicable "
+                "(no shared prefix); spawn-pinned diagnostic deferred"
+            ),
+        }
+        if contrast_mode
+        else {"mode": "hinge_pivot"}
+    )
+
     report: dict[str, Any] = {
+        "framing": framing,
         "episode_a": {
             "bundle": str(args.episode_a),
             "planner": ep_a.metadata["planner"],
@@ -1922,6 +2175,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
         figure_png=out_png,
         qa_defects_before=FIRST_CUT_LINT_ERROR_COUNT,
         qa_defects_after=len(qa_errors),
+        framing=framing,
     )
     provenance_path = out_dir / "butterfly_hinge_provenance.json"
     provenance_path.write_text(json.dumps(provenance, indent=2, default=str), encoding="utf-8")

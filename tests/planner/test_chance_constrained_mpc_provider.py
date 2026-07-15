@@ -200,6 +200,7 @@ def test_calibration_closes_loop_over_the_planners_claimed_risk() -> None:
     assert 0.0 <= result["observed_collision_rate"] <= 1.0
     assert 0.0 <= result["completion_rate"] <= 1.0
     assert 0.0 <= result["mean_compute_time_ms"]
+    assert result["max_compute_time_ms"] >= result["mean_compute_time_ms"]
     assert result["sample_count"] == pytest.approx(6.0)
 
 
@@ -311,7 +312,7 @@ def _light_sweep() -> tuple[dict, CalibrationSweep]:
     sweep = CalibrationSweep(
         risk_budgets=(0.05, 0.10, 0.20),
         formulations=("marginal",),
-        scenario=CalibrationScenario(num_episodes=3, steps_per_episode=6, num_pedestrians=2),
+        scenario=CalibrationScenario(num_episodes=1, steps_per_episode=3, num_pedestrians=2),
     )
     return base_algo_config, sweep
 
@@ -336,7 +337,11 @@ def test_calibration_sweep_returns_claimed_vs_observed_curve_across_budgets() ->
     assert claimed == [0.05, 0.10, 0.20]
     for point, budget in zip(points, sweep.risk_budgets, strict=True):
         assert point["formulation"] == "marginal"
+        assert point["requested_risk_budget"] == pytest.approx(float(budget))
         assert point["claimed_risk"] == pytest.approx(float(budget))
+        assert point["claim_unit"] == "planner_risk_budget_per_horizon"
+        assert point["observed_unit"] == "episode_any_collision_rate"
+        assert point["calibration_comparability"] == "pending_issue_5737"
         # calibration_error is the issue's primary measure: observed - claimed.
         assert point["calibration_error"] == pytest.approx(
             point["observed_collision_rate"] - point["claimed_risk"]
@@ -346,6 +351,7 @@ def test_calibration_sweep_returns_claimed_vs_observed_curve_across_budgets() ->
         assert 0.0 <= point["infeasible_rate"] <= 1.0
         assert 0.0 <= point["completion_rate"] <= 1.0
         assert point["sample_count"] == pytest.approx(float(sweep.scenario.num_episodes))
+        assert point["max_compute_time_ms"] >= point["mean_compute_time_ms"]
 
 
 def test_calibration_sweep_compares_formulations_at_matched_budgets() -> None:
@@ -447,6 +453,18 @@ def test_calibration_sweep_rejects_invalid_budgets_and_formulations() -> None:
     with pytest.raises(ValueError, match="Unsupported formulation"):
         realized_collision_risk_calibration_sweep(base_algo_config, bad_formulations, seed=0)
 
+    with pytest.raises(ValueError, match="strictly increasing"):
+        realized_collision_risk_calibration_sweep(
+            base_algo_config,
+            CalibrationSweep(risk_budgets=(0.10, 0.05), formulations=("marginal",)),
+            seed=0,
+        )
+
+    with pytest.raises(ValueError, match="num_episodes must be positive"):
+        CalibrationScenario(num_episodes=0)
+    with pytest.raises(ValueError, match="steps_per_episode must be positive"):
+        CalibrationScenario(steps_per_episode=0)
+
 
 def test_calibration_sweep_yaml_config_runs_end_to_end() -> None:
     """The shipped sweep config parses into base+grid and produces a finite curve."""
@@ -464,6 +482,7 @@ def test_calibration_sweep_yaml_config_runs_end_to_end() -> None:
     assert sweep.formulations == ("marginal", "joint_horizon", "cvar_tail")
 
     result = realized_collision_risk_calibration_sweep(base, sweep, seed=0)
+    assert result["sweep"]["base_algo_config"]["solver_max_iterations"] == 40
     assert len(result["points"]) == 3 * 3
     for point in result["points"]:
         assert np.isfinite(point["observed_collision_rate"])

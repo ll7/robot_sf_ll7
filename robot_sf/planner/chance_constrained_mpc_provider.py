@@ -299,6 +299,30 @@ class CalibrationScenario:
     max_ped_speed_mps: float = 0.7
     collision_radius_m: float = 0.85
 
+    def __post_init__(self) -> None:
+        """Reject empty or physically invalid diagnostic scenarios."""
+        if int(self.num_episodes) <= 0:
+            raise ValueError("CalibrationScenario.num_episodes must be positive")
+        if int(self.steps_per_episode) <= 0:
+            raise ValueError("CalibrationScenario.steps_per_episode must be positive")
+        if not np.isfinite(float(self.dt)) or float(self.dt) <= 0.0:
+            raise ValueError("CalibrationScenario.dt must be finite and positive")
+        if int(self.num_pedestrians) < 0:
+            raise ValueError("CalibrationScenario.num_pedestrians must be non-negative")
+        for name in (
+            "robot_goal_distance_m",
+            "spawn_radius_m",
+            "max_ped_speed_mps",
+            "collision_radius_m",
+        ):
+            value = float(getattr(self, name))
+            if not np.isfinite(value) or value < 0.0:
+                raise ValueError(f"CalibrationScenario.{name} must be finite and non-negative")
+        if float(self.spawn_radius_m) < 0.8:
+            raise ValueError("CalibrationScenario.spawn_radius_m must be at least 0.8 m")
+        if float(self.collision_radius_m) <= 0.0:
+            raise ValueError("CalibrationScenario.collision_radius_m must be positive")
+
 
 def realized_collision_risk_calibration(
     planner: ChanceConstrainedMPCPlannerAdapter,
@@ -335,7 +359,8 @@ def realized_collision_risk_calibration(
         Mapping with ``claimed_risk_per_horizon``, ``observed_collision_rate``,
         ``calibration_error`` (observed - claimed, the issue's primary measure),
         ``infeasible_rate``, ``freeze_rate``, ``completion_rate``,
-        ``mean_tail_clearance_m``, ``mean_compute_time_ms``, and a
+        ``mean_tail_clearance_m``, ``mean_compute_time_ms``,
+        ``max_compute_time_ms``, and a
         ``claim_boundary`` marking the diagnostic scope.
     """
 
@@ -354,6 +379,7 @@ def realized_collision_risk_calibration(
     freezes = 0
     completions = 0
     claimed = float(getattr(planner, "claimed_risk", float("nan")))
+    max_compute_time_ms = 0.0
     for _ in range(int(scenario.num_episodes)):
         planner.reset()
         observation = _spawn_scenario(
@@ -371,6 +397,7 @@ def realized_collision_risk_calibration(
             command = (float(raw_command[0]), float(raw_command[1]))
             elapsed_ms = (time.perf_counter_ns() - start_ns) / 1e6
             compute_times_ms.append(float(elapsed_ms))
+            max_compute_time_ms = max(max_compute_time_ms, float(elapsed_ms))
             speed = float(command[0])
             episode_moved = episode_moved or speed > 1e-3
             tail_clearances.append(
@@ -419,6 +446,7 @@ def realized_collision_risk_calibration(
         "mean_compute_time_ms": float(np.mean(compute_times_ms))
         if compute_times_ms
         else float("nan"),
+        "max_compute_time_ms": float(max_compute_time_ms) if compute_times_ms else float("nan"),
         "sample_count": float(n),
         "claim_boundary": (
             "closed-loop self-consistency diagnostic under matched constant-velocity "
@@ -517,7 +545,9 @@ def realized_collision_risk_calibration_sweep(
         Mapping with ``sweep`` (grid + seed + scenario provenance), ``points``
         (flat list of per-budget-per-formulation calibration records), ``points_by_formulation``
         (grouped), and ``reliability_summary`` (per-formulation curve statistics and
-        stop-rule observables). A ``claim_boundary`` marks the diagnostic scope.
+        stop-rule observables). The output records the current claim/observation
+        units explicitly; unit alignment is tracked by follow-up issue #5737.
+        A ``claim_boundary`` marks the diagnostic scope.
 
     Raises:
         ValueError: If the budget grid is empty, any budget is outside ``(0, 1)``,
@@ -538,6 +568,8 @@ def realized_collision_risk_calibration_sweep(
         raise ValueError("CalibrationSweep.risk_budgets must be non-empty")
     if not all(0.0 < b < 1.0 for b in budgets):
         raise ValueError("CalibrationSweep.risk_budgets must lie in (0, 1)")
+    if tuple(sorted(set(budgets))) != budgets:
+        raise ValueError("CalibrationSweep.risk_budgets must be strictly increasing")
 
     valid_formulations = {"marginal", "joint_horizon", "cvar_tail"}
     formulations = tuple(str(f) for f in sweep.formulations)
@@ -567,7 +599,11 @@ def realized_collision_risk_calibration_sweep(
             result = realized_collision_risk_calibration(planner, scenario, seed=seed)
             point = {
                 "formulation": formulation,
-                "claimed_risk": float(budget),
+                "requested_risk_budget": float(budget),
+                "claimed_risk": float(result["claimed_risk_per_horizon"]),
+                "claim_unit": "planner_risk_budget_per_horizon",
+                "observed_unit": "episode_any_collision_rate",
+                "calibration_comparability": "pending_issue_5737",
                 "observed_collision_rate": float(result["observed_collision_rate"]),
                 "calibration_error": float(result["calibration_error"]),
                 "freeze_rate": float(result["freeze_rate"]),
@@ -576,6 +612,7 @@ def realized_collision_risk_calibration_sweep(
                 "mean_tail_clearance_m": float(result["mean_tail_clearance_m"]),
                 "mean_compute_time_ms": float(result["mean_compute_time_ms"]),
                 "sample_count": float(result["sample_count"]),
+                "max_compute_time_ms": float(result["max_compute_time_ms"]),
             }
             points.append(point)
         points_by_formulation[formulation] = points
@@ -584,7 +621,7 @@ def realized_collision_risk_calibration_sweep(
     for formulation, points in points_by_formulation.items():
         abs_errors = [abs(float(p["calibration_error"])) for p in points]
         observed = [float(p["observed_collision_rate"]) for p in points]
-        compute_times = [float(p["mean_compute_time_ms"]) for p in points]
+        compute_times = [float(p["max_compute_time_ms"]) for p in points]
         freeze_rates = [float(p["freeze_rate"]) for p in points]
         # The tightest (lowest) budget sits first because budgets sweep small->large.
         freeze_at_tightest = freeze_rates[0] if freeze_rates else 0.0
@@ -614,6 +651,7 @@ def realized_collision_risk_calibration_sweep(
     all_points = [p for pts in points_by_formulation.values() for p in pts]
     return {
         "sweep": {
+            "base_algo_config": dict(base),
             "risk_budgets": list(budgets),
             "formulations": list(formulations),
             "seed": int(seed),
@@ -634,10 +672,11 @@ def realized_collision_risk_calibration_sweep(
         "claim_boundary": (
             "closed-loop self-consistency calibration curve under matched "
             "constant-velocity surrogate dynamics; not a matched-arm benchmark "
-            "calibration result and makes no planner-value or real-world risk "
-            "claim; replace the surrogate with the learned #2844 predictor and "
-            "run the ops-queue campaign before any benchmark-facing calibration "
-            "or planner-superiority claim"
+            "calibration result; the current risk/observation units are recorded "
+            "but require alignment under follow-up issue #5737. This makes no "
+            "planner-value or real-world risk claim; replace the surrogate with "
+            "the learned #2844 predictor and run the ops-queue campaign before "
+            "any benchmark-facing calibration or planner-superiority claim"
         ),
     }
 

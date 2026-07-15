@@ -9,7 +9,7 @@
 # Issue #5307's primary measure is realized collision-risk CALIBRATION (claimed
 # vs. observed). Calibration is a *curve* over the risk budget, not a single
 # point. This config makes that curve CPU-reproducible TODAY: it sweeps
-# max_collision_risk across four budgets and across all three
+# max_collision_risk across three budgets and across all three
 # chance-constraint formulations (marginal per-time-step, joint_horizon Boole
 # union bound, cvar_tail Conditional Value-at-Risk tail-risk) over matched
 # constant-velocity scenarios, and surfaces the issue's pre-registered stop-rule
@@ -55,10 +55,10 @@ calibration_sweep:
   formulations: ["marginal", "joint_horizon", "cvar_tail"]
   scenario:
     # CPU-light reproducible grid (diagnostic self-consistency only; not a
-    # benchmark sample size). At 3 episodes x 6 steps x 3 budgets x 3
-    # formulations the full sweep completes in well under a minute on CPU.
-    num_episodes: 3
-    steps_per_episode: 6
+    # benchmark sample size). At 1 episode x 3 steps x 3 budgets x 3
+    # formulations the full sweep stays below the focused-test soft limit.
+    num_episodes: 1
+    steps_per_episode: 3
     dt: 0.25
     num_pedestrians: 2
     robot_goal_distance_m: 6.0

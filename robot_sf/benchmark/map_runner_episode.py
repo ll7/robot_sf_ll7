@@ -1703,6 +1703,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
     single_pedestrian_intent_metadata: Any,
     single_pedestrian_vru_metadata: Any,
     pedestrian_control_trace_label_builder: PedestrianControlTraceLabelBuilder | None = None,
+    expected_population_size: int | None = None,
 ) -> _EpisodeStepLoopResult:
     """Run the env reset, the per-step episode loop, and planner/env teardown.
 
@@ -1742,10 +1743,25 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
             policy_fn = active_harness.wrap_policy(policy_fn)
 
         obs, _ = env.reset(seed=int(seed))
+        instantiated_count: int | None = None
+        if expected_population_size is not None:
+            if scenario is None:
+                raise ValueError("population-size validation requires the episode scenario")
+            instantiated_count = int(np.asarray(env.simulator.ped_pos).reshape(-1, 2).shape[0])
+            # Issue #5666 acceptance: a forced population must instantiate exactly
+            # the declared count. A silent divergence is what wasted a full compute
+            # cycle, so fail loudly instead of letting the mismatch propagate.
+            if instantiated_count != expected_population_size:
+                raise AssertionError(
+                    f"instantiated pedestrian count {instantiated_count} does not match forced "
+                    f"population_size {expected_population_size}; the declared population was not "
+                    "realized by the simulator"
+                )
         if pedestrian_control_trace_label_builder is not None:
             if scenario is None:
                 raise ValueError("runtime trace label building requires the episode scenario")
-            instantiated_count = int(np.asarray(env.simulator.ped_pos).reshape(-1, 2).shape[0])
+            if instantiated_count is None:
+                instantiated_count = int(np.asarray(env.simulator.ped_pos).reshape(-1, 2).shape[0])
             runtime_labels = pedestrian_control_trace_label_builder(instantiated_count)
             if len(runtime_labels) != instantiated_count:
                 raise ValueError(
@@ -1754,9 +1770,14 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     f"{instantiated_count})"
                 )
             scenario["pedestrian_control_trace_labels"] = runtime_labels
+        if expected_population_size is not None and scenario is not None:
             simulation_config = scenario.get("simulation_config")
             if isinstance(simulation_config, dict):
+                # Record the *instantiated* count so the readiness gate and any
+                # future triage can see declared-vs-actual without re-running.
                 simulation_config["population_size"] = instantiated_count
+                simulation_config["instantiated_population_size"] = instantiated_count
+                simulation_config["declared_population_size"] = expected_population_size
         if callable(planner_bind_env):
             planner_bind_env(env)
         if callable(planner_reset):
@@ -2702,8 +2723,22 @@ def run_map_episode(  # noqa: PLR0913
     robot_command_mode = ctx.robot_command_mode
     algo = ctx.algo
     policy_cfg = ctx.policy_cfg
+    # When a control-trace label builder is supplied the population is *forced* to
+    # the declared ``population_size`` (issue #5666): the simulator honors it as an
+    # exact ``force_population_size`` so the scenario instantiates exactly the
+    # declared pedestrians regardless of map area or ``ped_density``. We must NOT
+    # reset ``config.sim_config.population_size`` to ``None`` here (the prior bug):
+    # doing so silently dropped the forced count and let ``ped_density * area`` win.
+    simulation_config = scenario.get("simulation_config")
+    expected_population_size = (
+        int(simulation_config["population_size"])
+        if isinstance(simulation_config, dict)
+        and simulation_config.get("population_size") is not None
+        else None
+    )
     if pedestrian_control_trace_label_builder is not None:
-        config.sim_config.population_size = None
+        # Labels are rebuilt from the actually instantiated count after reset, so
+        # the pre-reset labels must not leak in and misalign the trace.
         config.sim_config.pedestrian_control_trace_labels = None
     policy_contract = _prepare_policy_and_observation_contract(
         scenario=scenario,
@@ -2748,6 +2783,7 @@ def run_map_episode(  # noqa: PLR0913
         single_pedestrian_intent_metadata=policy_contract.single_pedestrian_intent_metadata,
         single_pedestrian_vru_metadata=policy_contract.single_pedestrian_vru_metadata,
         pedestrian_control_trace_label_builder=pedestrian_control_trace_label_builder,
+        expected_population_size=expected_population_size,
     )
     post_loop = _compute_post_loop_metrics(
         robot_positions=loop_result.robot_positions,

@@ -65,6 +65,45 @@ def _training_ready_registry() -> dict[str, object]:
     }
 
 
+def _private_training_ready_registry(tmp_path: Path) -> tuple[dict[str, object], Path]:
+    """Build private-artifact fixtures whose trace, manifest, and inventory hashes are real."""
+    root = tmp_path / "private-artifacts"
+    traces = []
+    for split in ("train", "validation", "evaluation"):
+        artifacts: dict[str, tuple[str, str]] = {}
+        for field, filename in (
+            ("trace", "trace.jsonl"),
+            ("source_manifest", "manifest.json"),
+            ("checksum_inventory", "checksums.sha256"),
+        ):
+            relative = f"oracle-imitation/demo/{split}/{filename}"
+            path = root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"{split}-{field}\n", encoding="utf-8")
+            artifacts[field] = (relative, hashlib.sha256(path.read_bytes()).hexdigest())
+        trace_relative, trace_sha = artifacts["trace"]
+        manifest_relative, manifest_sha = artifacts["source_manifest"]
+        inventory_relative, inventory_sha = artifacts["checksum_inventory"]
+        traces.append(
+            {
+                "split": split,
+                "trace_id": f"{split}__private_demo",
+                "uri": f"private-artifact://{trace_relative}",
+                "sha256": trace_sha,
+                "retrieval_status": "resolvable",
+                "source_manifest_uri": f"private-artifact://{manifest_relative}",
+                "source_manifest_sha256": manifest_sha,
+                "checksum_inventory_uri": f"private-artifact://{inventory_relative}",
+                "checksum_inventory_sha256": inventory_sha,
+            }
+        )
+    return {
+        "schema_version": "oracle-trace-uri-registry.v1",
+        "dataset_id": "private_demo_oracle_imitation_v1",
+        "traces": traces,
+    }, root
+
+
 def test_complete_registry_is_training_ready(tmp_path: Path) -> None:
     """A registry with concrete durable resolvable traces for all splits is training-ready."""
     registry = _training_ready_registry()
@@ -78,6 +117,64 @@ def test_complete_registry_is_training_ready(tmp_path: Path) -> None:
     assert report["trace_count"] == 3
     assert report["retrieval_status"]["train__demo_v1"] == "resolvable"
     assert report["source_manifests"]["train__demo_v1"].endswith("/train_manifest:v1")
+
+
+def test_private_artifacts_require_explicit_root_for_strict_readiness(tmp_path: Path) -> None:
+    """Resolvable metadata alone cannot make private artifacts training-ready."""
+    registry, _ = _private_training_ready_registry(tmp_path)
+
+    report = validate_trace_uri_registry(_write_registry(tmp_path, registry))
+    assert report["training_ready"] is False
+
+    with pytest.raises(OracleTraceUriRegistryError, match="no private artifact root"):
+        validate_trace_uri_registry(
+            _write_registry(tmp_path, registry),
+            require_training_ready=True,
+        )
+
+
+def test_private_artifacts_are_hashed_from_explicit_root(tmp_path: Path) -> None:
+    """Strict readiness succeeds only after all private trace provenance bytes verify."""
+    registry, private_root = _private_training_ready_registry(tmp_path)
+
+    report = validate_trace_uri_registry(
+        _write_registry(tmp_path, registry),
+        private_artifact_root=private_root,
+        require_training_ready=True,
+    )
+
+    assert report["training_ready"] is True
+    assert all(report["splits"].values())
+
+
+def test_missing_private_artifact_fails_closed(tmp_path: Path) -> None:
+    """A missing required private file prevents strict readiness."""
+    registry, private_root = _private_training_ready_registry(tmp_path)
+    missing_uri = registry["traces"][1]["uri"]
+    (private_root / missing_uri.removeprefix("private-artifact://")).unlink()
+
+    with pytest.raises(OracleTraceUriRegistryError, match="private artifact is missing"):
+        validate_trace_uri_registry(
+            _write_registry(tmp_path, registry),
+            private_artifact_root=private_root,
+            require_training_ready=True,
+        )
+
+
+def test_private_artifact_checksum_mismatch_fails_closed(tmp_path: Path) -> None:
+    """Private bytes that disagree with the registry checksum prevent strict readiness."""
+    registry, private_root = _private_training_ready_registry(tmp_path)
+    trace_uri = registry["traces"][2]["uri"]
+    (private_root / trace_uri.removeprefix("private-artifact://")).write_text(
+        "corrupted\n", encoding="utf-8"
+    )
+
+    with pytest.raises(OracleTraceUriRegistryError, match="private artifact checksum mismatch"):
+        validate_trace_uri_registry(
+            _write_registry(tmp_path, registry),
+            private_artifact_root=private_root,
+            require_training_ready=True,
+        )
 
 
 def test_missing_uri_fails_closed(tmp_path: Path) -> None:
@@ -234,26 +331,29 @@ def test_example_registry_fails_training_ready_gate() -> None:
         validate_trace_uri_registry(EXAMPLE_REGISTRY, require_training_ready=True)
 
 
-def test_issue_1470_registry_is_valid_but_not_training_ready() -> None:
-    """Issue #1470 packet records tracked train evidence while keeping strict gate closed."""
+def test_issue_1470_registry_requires_private_root_for_training_readiness() -> None:
+    """Recovered #1470 metadata is public, while private byte verification is explicit."""
     report = validate_trace_uri_registry(ISSUE_1470_REGISTRY)
 
     assert report["status"] == "valid"
     assert report["dataset_id"] == "issue_1397_oracle_imitation_v1"
     assert report["training_ready"] is False
-    assert report["splits"]["train"] == ["train__issue1470_job12911_tracked_mirror"]
-    assert report["retrieval_status"]["train__issue1470_job12911_tracked_mirror"] == "resolvable"
-    assert (
-        report["retrieval_status"]["validation__issue1470_missing_durable_trace_uri"] == "blocked"
-    )
-    assert (
-        report["retrieval_status"]["evaluation__issue1470_missing_durable_trace_uri"] == "blocked"
-    )
+    assert report["splits"] == {
+        "train": ["train__issue1470_job12911_recovered_original"],
+        "validation": ["validation__issue1470_job12763_recovered_original"],
+        "evaluation": ["evaluation__issue1470_job12764_recovered_original"],
+    }
+    assert set(report["retrieval_status"].values()) == {"resolvable"}
+
+    registry = load_trace_uri_registry(ISSUE_1470_REGISTRY)
+    assert [trace["source_job"] for trace in registry["traces"]] == [12911, 12763, 12764]
+    assert registry["retained_duplicate_runs"][0]["source_job"] == 12765
+    assert "not the canonical evaluation" in registry["retained_duplicate_runs"][0]["purpose"]
 
 
 def test_issue_1470_registry_fails_training_ready_gate() -> None:
-    """Strict downstream gate fails closed until validation/evaluation URIs are durable."""
-    with pytest.raises(OracleTraceUriRegistryError, match="not resolvable: evaluation, validation"):
+    """Strict downstream gate fails closed when the private artifact root is absent."""
+    with pytest.raises(OracleTraceUriRegistryError, match="no private artifact root"):
         validate_trace_uri_registry(ISSUE_1470_REGISTRY, require_training_ready=True)
 
 
@@ -296,4 +396,22 @@ def test_cli_succeeds_for_training_ready_registry(tmp_path: Path) -> None:
     registry = _training_ready_registry()
     path = _write_registry(tmp_path, copy.deepcopy(registry))
     exit_code = validate_cli_main(["--config", str(path), "--json", "--require-training-ready"])
+    assert exit_code == 0
+
+
+def test_cli_resolves_private_artifact_root(tmp_path: Path) -> None:
+    """The CLI exposes the explicit private-data-plane root contract."""
+    registry, private_root = _private_training_ready_registry(tmp_path)
+    path = _write_registry(tmp_path, registry)
+
+    exit_code = validate_cli_main(
+        [
+            "--config",
+            str(path),
+            "--private-artifact-root",
+            str(private_root),
+            "--json",
+            "--require-training-ready",
+        ]
+    )
     assert exit_code == 0

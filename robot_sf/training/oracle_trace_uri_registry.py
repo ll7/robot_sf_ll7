@@ -17,7 +17,7 @@ split has a concrete durable URI, a valid checksum, and ``retrieval_status: reso
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -28,7 +28,15 @@ from robot_sf.errors import RobotSfError
 _SCHEMA_VERSION = "oracle-trace-uri-registry.v1"
 _REQUIRED_SPLITS = ("train", "validation", "evaluation")
 _RETRIEVAL_STATES = ("resolvable", "pending", "blocked")
-_DURABLE_URI_PREFIXES = ("wandb-artifact://", "artifact://", "s3://", "gs://", "https://")
+_PRIVATE_ARTIFACT_URI_PREFIX = "private-artifact://"
+_DURABLE_URI_PREFIXES = (
+    "wandb-artifact://",
+    "artifact://",
+    _PRIVATE_ARTIFACT_URI_PREFIX,
+    "s3://",
+    "gs://",
+    "https://",
+)
 _HEX_SHA256_LENGTH = 64
 _HEX_DIGITS = frozenset("0123456789abcdef")
 # Sentinel sha256 value allowed only while a trace is not yet resolvable.
@@ -68,6 +76,7 @@ def validate_trace_uri_registry(
     registry_path: Path,
     *,
     repo_root: Path | None = None,
+    private_artifact_root: Path | None = None,
     require_training_ready: bool = False,
 ) -> dict[str, Any]:
     """Validate a durable trace-URI registry and return a compact report.
@@ -76,6 +85,9 @@ def validate_trace_uri_registry(
         registry_path: YAML registry path.
         repo_root: Repository root used to resolve any optional local-mirror paths. Defaults to
             the current working directory.
+        private_artifact_root: Explicit data-plane root used to resolve ``private-artifact://``
+            URIs. Relative roots are resolved against ``repo_root``. Without this root, private
+            URI metadata may validate but cannot satisfy the training-ready integrity gate.
         require_training_ready: Fail closed unless every required split is durably resolvable
             (concrete durable URI, valid checksum, and ``retrieval_status: resolvable``).
 
@@ -87,6 +99,9 @@ def validate_trace_uri_registry(
         OracleTraceUriRegistryError: If any fail-closed registry invariant is violated.
     """
     root = (repo_root or Path.cwd()).resolve()
+    private_root = (
+        _resolve_path(private_artifact_root, root) if private_artifact_root is not None else None
+    )
     registry_path = _resolve_path(registry_path, root)
     registry = load_trace_uri_registry(registry_path)
     errors: list[str] = []
@@ -95,7 +110,13 @@ def validate_trace_uri_registry(
         errors.append(f"schema_version must be {_SCHEMA_VERSION!r}")
     _require_non_empty_string(registry, "dataset_id", errors)
 
-    traces = _validate_traces(registry, root, errors)
+    traces = _validate_traces(
+        registry,
+        root,
+        private_artifact_root=private_root,
+        require_private_resolution=require_training_ready or private_root is not None,
+        errors=errors,
+    )
     splits_to_trace_ids, retrieval_status, resolvable_required, source_manifests = (
         _summarize_traces(traces)
     )
@@ -127,6 +148,9 @@ def validate_trace_uri_registry(
 def _validate_traces(
     registry: dict[str, Any],
     repo_root: Path,
+    *,
+    private_artifact_root: Path | None,
+    require_private_resolution: bool,
     errors: list[str],
 ) -> list[dict[str, Any]]:
     """Validate the ``traces`` list and return the entries that parsed as mappings.
@@ -145,7 +169,15 @@ def _validate_traces(
         if not isinstance(raw, dict):
             errors.append(f"traces[{index}] must be a mapping")
             continue
-        _validate_single_trace(index, raw, seen_trace_ids, repo_root, errors)
+        _validate_single_trace(
+            index,
+            raw,
+            seen_trace_ids,
+            repo_root,
+            private_artifact_root=private_artifact_root,
+            require_private_resolution=require_private_resolution,
+            errors=errors,
+        )
         parsed.append(raw)
     return parsed
 
@@ -155,6 +187,9 @@ def _validate_single_trace(
     trace: dict[str, Any],
     seen_trace_ids: set[str],
     repo_root: Path,
+    *,
+    private_artifact_root: Path | None,
+    require_private_resolution: bool,
     errors: list[str],
 ) -> None:
     """Validate one registry trace entry, appending fail-closed errors in place."""
@@ -179,9 +214,32 @@ def _validate_single_trace(
     uri = _validate_trace_uri(label, trace.get("uri"), errors)
     _validate_trace_checksum(label, trace.get("sha256"), status, errors)
     _validate_local_mirror(label, trace.get("local_mirror"), trace.get("sha256"), repo_root, errors)
-    _validate_source_manifest_metadata(label, trace, status, repo_root, errors)
+    _validate_source_manifest_metadata(
+        label,
+        trace,
+        status,
+        repo_root,
+        private_artifact_root=private_artifact_root,
+        require_private_resolution=require_private_resolution,
+        errors=errors,
+    )
+    _validate_checksum_inventory_metadata(
+        label,
+        trace,
+        private_artifact_root=private_artifact_root,
+        require_private_resolution=require_private_resolution,
+        errors=errors,
+    )
     # Mark the concrete-durable check result so the gate logic can reuse it.
     trace["_uri_is_concrete_durable"] = uri is not None and _is_concrete_durable_uri(uri)
+    trace["_trace_integrity_verified"] = _verify_private_artifact_uri(
+        label,
+        uri,
+        trace.get("sha256"),
+        private_artifact_root,
+        require_resolution=require_private_resolution,
+        errors=errors,
+    )
 
 
 def _validate_trace_uri(label: str, raw_uri: Any, errors: list[str]) -> str | None:
@@ -281,6 +339,9 @@ def _validate_source_manifest_metadata(
     trace: dict[str, Any],
     status: Any,
     repo_root: Path,
+    *,
+    private_artifact_root: Path | None,
+    require_private_resolution: bool,
     errors: list[str],
 ) -> None:
     """Validate provenance metadata for the source manifest behind a trace JSONL."""
@@ -308,6 +369,132 @@ def _validate_source_manifest_metadata(
     trace["_source_manifest_is_concrete_durable"] = uri is not None and _is_concrete_durable_uri(
         uri
     )
+    trace["_source_manifest_integrity_verified"] = _verify_private_artifact_uri(
+        f"{label}.source_manifest",
+        uri,
+        raw_sha,
+        private_artifact_root,
+        require_resolution=require_private_resolution,
+        errors=errors,
+    )
+
+
+def _validate_checksum_inventory_metadata(
+    label: str,
+    trace: dict[str, Any],
+    *,
+    private_artifact_root: Path | None,
+    require_private_resolution: bool,
+    errors: list[str],
+) -> None:
+    """Validate optional checksum-inventory provenance and verify private bytes when supplied."""
+    raw_uri = trace.get("checksum_inventory_uri")
+    raw_sha = trace.get("checksum_inventory_sha256")
+    if raw_uri is None and raw_sha is None:
+        trace["_checksum_inventory_is_concrete_durable"] = True
+        trace["_checksum_inventory_integrity_verified"] = True
+        return
+    if raw_uri is None:
+        errors.append(f"{label}.checksum_inventory_uri required when checksum hash is provided")
+    if raw_sha is None:
+        errors.append(f"{label}.checksum_inventory_sha256 required when inventory URI is provided")
+
+    uri = None
+    if raw_uri is not None:
+        uri = _validate_trace_uri(f"{label}.checksum_inventory", raw_uri, errors)
+    _validate_trace_checksum(f"{label}.checksum_inventory", raw_sha, "resolvable", errors)
+    trace["_checksum_inventory_is_concrete_durable"] = uri is not None and _is_concrete_durable_uri(
+        uri
+    )
+    trace["_checksum_inventory_integrity_verified"] = _verify_private_artifact_uri(
+        f"{label}.checksum_inventory",
+        uri,
+        raw_sha,
+        private_artifact_root,
+        require_resolution=require_private_resolution,
+        errors=errors,
+    )
+
+
+def _verify_private_artifact_uri(
+    label: str,
+    uri: str | None,
+    raw_sha: Any,
+    private_artifact_root: Path | None,
+    *,
+    require_resolution: bool,
+    errors: list[str],
+) -> bool:
+    """Resolve and hash a private artifact, or preserve existing remote-URI semantics.
+
+    Returns:
+        Whether the artifact is concrete and its integrity is established for readiness.
+    """
+    if uri is None or not _is_concrete_durable_uri(uri):
+        return False
+    if not uri.startswith(_PRIVATE_ARTIFACT_URI_PREFIX):
+        return True
+    if private_artifact_root is None:
+        if require_resolution:
+            errors.append(
+                f"{label} uses private-artifact URI but no private artifact root was configured"
+            )
+        return False
+    if not private_artifact_root.is_dir():
+        errors.append(f"{label} private artifact root is not a directory: {private_artifact_root}")
+        return False
+
+    artifact_path = _resolve_private_artifact_uri(label, uri, private_artifact_root, errors=errors)
+    if artifact_path is None:
+        return False
+    if not artifact_path.is_file():
+        errors.append(f"{label} private artifact is missing: {uri}")
+        return False
+    if not isinstance(raw_sha, str) or not _is_sha256(raw_sha):
+        return False
+
+    expected = raw_sha.strip().lower()
+    actual = sha256_file(artifact_path)
+    if actual != expected:
+        errors.append(
+            f"{label} private artifact checksum mismatch for {uri}: "
+            f"expected {expected}, got {actual}"
+        )
+        return False
+    return True
+
+
+def _resolve_private_artifact_uri(
+    label: str,
+    uri: str,
+    private_artifact_root: Path,
+    *,
+    errors: list[str],
+) -> Path | None:
+    """Resolve a private URI beneath its configured root without allowing traversal.
+
+    Returns:
+        Resolved artifact path, or ``None`` when the URI violates the root contract.
+    """
+    relative_text = uri.removeprefix(_PRIVATE_ARTIFACT_URI_PREFIX)
+    segments = relative_text.split("/")
+    if (
+        not relative_text
+        or relative_text.startswith("/")
+        or "\\" in relative_text
+        or any(segment in {"", ".", ".."} for segment in segments)
+    ):
+        errors.append(f"{label} has invalid private-artifact relative path: {uri}")
+        return None
+
+    root = private_artifact_root.resolve()
+    artifact_path = (root / PurePosixPath(relative_text)).resolve()
+    try:
+        artifact_path.relative_to(root)
+    except ValueError:
+        errors.append(f"{label} private-artifact URI escapes configured root: {uri}")
+        return None
+    return artifact_path
 
 
 def _summarize_traces(
@@ -342,6 +529,10 @@ def _summarize_traces(
             and status == "resolvable"
             and trace.get("_uri_is_concrete_durable", False)
             and trace.get("_source_manifest_is_concrete_durable", False)
+            and trace.get("_checksum_inventory_is_concrete_durable", False)
+            and trace.get("_trace_integrity_verified", False)
+            and trace.get("_source_manifest_integrity_verified", False)
+            and trace.get("_checksum_inventory_integrity_verified", False)
         ):
             resolvable_required[split] = True
     return splits_to_trace_ids, retrieval_status, resolvable_required, source_manifests
@@ -405,6 +596,11 @@ def _is_pending_durable_uri(uri: str) -> bool:
 
 def _is_concrete_durable_uri(uri: str) -> bool:
     return _is_durable_uri(uri) and not _is_pending_durable_uri(uri)
+
+
+def _is_sha256(raw_sha: str) -> bool:
+    digest = raw_sha.strip().lower()
+    return len(digest) == _HEX_SHA256_LENGTH and all(ch in _HEX_DIGITS for ch in digest)
 
 
 __all__ = [

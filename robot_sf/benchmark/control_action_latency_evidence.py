@@ -15,8 +15,8 @@ This module runs **no episodes** and makes **no benchmark / simulator-realism /
 sim-to-real / paper-facing claim**. It is the deterministic promoter that turns a
 raw campaign row file into a durable compact evidence bundle. It fails closed when
 the raw rows do not cover the required action-latency step set (0, 1, 3) among
-native result rows, so a partial or non-latency run cannot be silently promoted as
-the latency sweep. When given the serialized fixed-scope run plan, it additionally
+eligible native/adapter result rows, so a partial or non-latency run cannot be silently
+promoted as the latency sweep. When given the serialized fixed-scope run plan, it additionally
 requires exact planner-group / variant / seed / scenario coverage before promotion.
 
 Episode row contract (the shape :func:`run_episode` in
@@ -81,7 +81,8 @@ AVAILABLE_AVAILABILITY_STATUSES: frozenset[str] = frozenset({"available"})
 CLAIM_BOUNDARY = (
     "control-action-latency metric-evidence promotion only: reads raw fidelity-campaign episode "
     "rows, isolates the control_action_latency axis, and reports action-latency metadata plus "
-    "success / collision / minimum-clearance metrics per native latency cell. It runs no episode "
+    "success / collision / minimum-clearance metrics per eligible native/adapter latency cell. "
+    "It runs no episode "
     "and promotes no claim beyond the declared campaign evidence tier; it is not "
     "simulator-realism evidence, not sim-to-real evidence, and not paper-facing evidence."
 )
@@ -361,7 +362,7 @@ def aggregate_latency_metrics(cells: Sequence[LatencyCell]) -> list[dict[str, An
 def _required_step_coverage(
     aggregates: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
-    """Return which required latency steps are covered by native result aggregates.
+    """Return which required latency steps are covered by eligible result aggregates.
 
     Returns:
         Coverage dict with ``required_latency_steps``, ``observed_latency_steps``,
@@ -625,7 +626,7 @@ def validate_fixed_scope_latency_coverage(
     The ordinary promoter intentionally accepts compact representative fixtures.
     Supplying the issue #3207 fixed-scope plan enables the stricter #5034 contract:
     every expected planner-group/variant/seed/scenario cell must appear exactly once,
-    carry structured action-latency metadata, and classify as a native result. Any
+    carry structured action-latency metadata, and classify as an eligible native/adapter result. Any
     missing, duplicate, unexpected, fallback, degraded, or malformed expected cell
     fails closed before a durable summary can be written.
 
@@ -706,7 +707,7 @@ def build_latency_evidence(
     """Build the durable compact control-action-latency evidence packet.
 
     Fails closed (:class:`LatencyEvidenceError`) when the latency preflight is not
-    ``ready`` or when native result rows do not cover every required action-latency
+    ``ready`` or when eligible result rows do not cover every required action-latency
     step (0, 1, 3), so a partial or non-latency run cannot be promoted as the
     latency sweep.
 
@@ -755,7 +756,7 @@ def build_latency_evidence(
     coverage = _required_step_coverage(aggregates)
     if not coverage["coverage_complete"]:
         raise LatencyEvidenceError(
-            "native latency result rows do not cover every required action-latency step. "
+            "eligible latency result rows do not cover every required action-latency step. "
             f"required={list(REQUIRED_LATENCY_STEPS)} "
             f"observed={coverage['observed_latency_steps']} "
             f"missing={coverage['missing_latency_steps']}"
@@ -810,6 +811,13 @@ def _format_markdown(packet: Mapping[str, Any]) -> str:
     scope = packet["scope"]
     coverage = packet["latency_coverage"]
     exclusions = packet["exclusions"]
+    result_modes = sorted(
+        {
+            str(row.get("execution_mode") or "unknown")
+            for row in packet.get("per_cell_metrics", [])
+            if row.get("classification") == "result"
+        }
+    )
     lines = [
         review_marker("robot_sf#5034", marker_date=str(packet.get("date") or "") or None),
         f"# Issue #{ISSUE} Control-action-latency sweep evidence {packet.get('date') or ''}",
@@ -833,6 +841,7 @@ def _format_markdown(packet: Mapping[str, Any]) -> str:
         f"- Latency rows: `{scope['latency_row_count']}` (results `{scope['result_row_count']}`, "
         f"excluded `{scope['excluded_row_count']}`)",
         f"- Planners: `{', '.join(scope['planners']) or 'none'}`",
+        f"- Execution modes: `{', '.join(result_modes) or 'none'}`",
         f"- Seeds: `{', '.join(str(seed) for seed in scope['seeds']) or 'none'}`",
         f"- Latency-step coverage: required `{coverage['required_latency_steps']}`, "
         f"observed `{coverage['observed_latency_steps']}`, "

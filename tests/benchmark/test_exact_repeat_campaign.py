@@ -267,10 +267,36 @@ def test_cross_host_comparison_requires_pinned_versions_and_exact_fingerprints(m
     second = verify_host_report(manifest, _host_report(manifest, "host-b"))
     comparison = compare_verified_hosts(manifest, first, second)
     assert comparison["summary"]["all_cells_bitwise_identical"] is True
+    assert comparison["provenance_match"] is True
+    assert comparison["provenance_mismatches"] == {}
 
     second["environment"]["numba_version"] = "different"
     comparison = compare_verified_hosts(manifest, first, second)
     assert comparison["pinned_runtime_versions_match"] is False
+    assert comparison["provenance_match"] is False
+    assert comparison["provenance_mismatches"]["numba_version"] == {
+        "first": "0.65.1",
+        "second": "different",
+    }
+    assert comparison["summary"]["all_cells_bitwise_identical"] is False
+
+
+@pytest.mark.parametrize("field", ["python_version", "git_commit", "lockfile_sha256"])
+def test_cross_host_comparison_rejects_provenance_drift_as_identical(manifest, field):
+    """Matching NumPy/Numba is insufficient when another execution identity drifts."""
+    first = verify_host_report(manifest, _host_report(manifest, "host-a"))
+    second = verify_host_report(manifest, _host_report(manifest, "host-b"))
+    second["environment"][field] = "drifted"
+
+    comparison = compare_verified_hosts(manifest, first, second)
+
+    assert comparison["pinned_runtime_versions_match"] is True
+    assert comparison["provenance_match"] is False
+    assert comparison["provenance_mismatches"][field] == {
+        "first": first["environment"][field],
+        "second": "drifted",
+    }
+    assert all(row["comparison_status"] == "divergent" for row in comparison["matrix"])
     assert comparison["summary"]["all_cells_bitwise_identical"] is False
 
 

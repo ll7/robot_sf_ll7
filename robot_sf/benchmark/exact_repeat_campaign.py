@@ -11,7 +11,8 @@ Every requested ``(scenario, planner, seed)`` target needs exactly three
 repeats.  A target is bitwise-identical only when its binary outcome and
 SHA-256 trajectory digest agree for all repeats.  A differing target must name
 its first divergence.  Two verified host reports can then be compared only when
-their pinned NumPy and Numba versions agree.
+their execution provenance agrees; NumPy and Numba mismatches remain separately
+visible for the predeclared near-miss comparison.
 """
 
 from __future__ import annotations
@@ -44,6 +45,13 @@ CROSS_HOST_SCHEMA_VERSION = "scenario_exact_repeat_cross_host.v1"
 RESOLVED_DEFINITIONS_SCHEMA_VERSION = "scenario_exact_repeat_resolved_definitions.v1"
 DEFAULT_REPEATS = 3
 SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
+_CROSS_HOST_PROVENANCE_FIELDS = (
+    "numpy_version",
+    "numba_version",
+    "python_version",
+    "git_commit",
+    "lockfile_sha256",
+)
 
 # Explicit per-cell disposition for planners the exact-repeat ``execute`` path
 # cannot construct on current main (for example, a planner registered only in a
@@ -683,8 +691,9 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     """Build the fail-closed two-host exact-repeat comparison matrix.
 
     Returns:
-        A matrix whose cells are identical only with matching runtime versions
-        and matching repeat fingerprints.
+        A matrix whose cells are identical only with matching execution provenance
+        and matching repeat fingerprints. Provenance drift is returned explicitly
+        so it cannot be mistaken for a native determinism result.
     """
     targets, _ = _check_manifest(manifest)
     for report in (first, second):
@@ -701,6 +710,12 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     version_match = all(
         first_env.get(key) == second_env.get(key) for key in ("numpy_version", "numba_version")
     )
+    provenance_mismatches = {
+        key: {"first": first_env.get(key), "second": second_env.get(key)}
+        for key in _CROSS_HOST_PROVENANCE_FIELDS
+        if first_env.get(key) != second_env.get(key)
+    }
+    provenance_match = not provenance_mismatches
 
     def index(report: Mapping[str, Any]) -> dict[tuple[str, str, int], Mapping[str, Any]]:
         rows = report.get("targets")
@@ -750,7 +765,7 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
             )
             continue
         target_matches = cells[cell_key]
-        identical = version_match and all(target_matches)
+        identical = provenance_match and all(target_matches)
         matrix.append(
             {
                 "scenario_id": scenario_id,
@@ -769,6 +784,8 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
         "manifest_sha256": manifest["manifest_sha256"],
         "hosts": [first_machine, second_machine],
         "pinned_runtime_versions_match": version_match,
+        "provenance_match": provenance_match,
+        "provenance_mismatches": provenance_mismatches,
         "matrix": matrix,
         "summary": {
             "n_cells": len(matrix),

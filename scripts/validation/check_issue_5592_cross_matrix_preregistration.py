@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
+from loguru import logger
 
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -293,12 +295,20 @@ def validate_packet(packet: dict[str, Any], *, repo_root: Path | None = None) ->
     }
 
 
+def _configure_machine_readable_logging() -> None:
+    """Route validation diagnostics to stderr so JSON stdout stays parseable."""
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Validate the packet and emit a compact JSON or text result."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet", type=Path, default=DEFAULT_PACKET)
     parser.add_argument("--json", action="store_true", dest="as_json")
     args = parser.parse_args(argv)
+    if args.as_json:
+        _configure_machine_readable_logging()
     try:
         result = validate_packet(load_packet(args.packet))
     except (OSError, PacketError, ValueError, TypeError, KeyError, yaml.YAMLError) as exc:

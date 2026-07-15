@@ -201,7 +201,7 @@ def test_issue_5326_manifest_loads_both_objectives() -> None:
     )
     assert set(objectives) == {"worst_case_snqi", "temporal_robustness"}
     assert "temporal_robustness" in config.objective or config.objective in objectives
-    assert samplers == ("random", "coordinate", "optuna")
+    assert samplers == ("random", "coordinate", "optuna", "cmaes")
     assert budgets == (16, 32, 64)
     assert seeds == (1101, 2202, 3303)
 
@@ -222,8 +222,8 @@ def test_issue_5326_manifest_drives_multi_objective_synthetic_run(tmp_path: Path
     )
     observed = {row.objective for row in rows}
     assert observed == set(objectives)
-    # 2 objectives x 3 samplers x 3 budgets x 3 seeds == 54 diagnostic cells.
-    assert len(rows) == 54
+    # 2 objectives x 4 samplers x 3 budgets x 3 seeds == 72 diagnostic cells.
+    assert len(rows) == 72
     for row in rows:
         assert Path(row.manifest_path).exists()
         assert row.best_valid_objective is not None
@@ -271,7 +271,7 @@ def test_issue_5326_canonical_example_command_emits_durable_table(tmp_path: Path
 
     report = json.loads(report_json.read_text(encoding="utf-8"))
     assert set(report["objectives"]) == {"worst_case_snqi", "temporal_robustness"}
-    assert len(report["rows"]) == 54
+    assert len(report["rows"]) == 72
 
     table = table_md.read_text(encoding="utf-8")
     assert "## Issue #5326 durable objective-comparison table" in table

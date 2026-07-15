@@ -229,6 +229,87 @@ def test_issue_5326_manifest_drives_multi_objective_synthetic_run(tmp_path: Path
         assert row.best_valid_objective is not None
 
 
+def test_issue_5326_canonical_example_command_emits_durable_table(tmp_path: Path) -> None:
+    """The canonical issue #5326 example_command emits the durable comparison table artifact.
+
+    The issue Definition of Done requires a durable table that records exclusions, failures,
+    and the stop-rule decision. This exercises the exact command the committed config declares
+    (``--manifest ... --repo-root . --out-json ... --out-md ...``) on a temporary repo-shaped
+    copy and asserts both the JSON report and the markdown table are written with both
+    objectives, the stop-rule decision, and signed-property annotations.
+    """
+    # 5326 manifest reuses the same scenario/search-space/template assets as 3079.
+    shutil.copy2(
+        REPO_ROOT / "configs/adversarial/issue_5326_objective_comparison.yaml",
+        tmp_path / "configs/adversarial/issue_5326_objective_comparison.yaml",
+    )
+    report_json = tmp_path / "out/report.json"
+    table_md = tmp_path / "out/comparison_table.md"
+
+    from scripts.tools.compare_adversarial_samplers import main as compare_main
+
+    argv = [
+        "--manifest",
+        "configs/adversarial/issue_5326_objective_comparison.yaml",
+        "--repo-root",
+        str(tmp_path),
+        "--out-json",
+        str(report_json),
+        "--out-md",
+        str(table_md),
+    ]
+    assert compare_main(argv) == 0
+    assert report_json.is_file()
+    assert table_md.is_file()
+
+    report = json.loads(report_json.read_text(encoding="utf-8"))
+    assert set(report["objectives"]) == {"worst_case_snqi", "temporal_robustness"}
+    assert len(report["rows"]) == 54
+
+    table = table_md.read_text(encoding="utf-8")
+    assert "## Issue #5326 durable objective-comparison table" in table
+    assert "Stop-rule decision" in table
+    assert "not paper-facing benchmark evidence" in table
+    assert "| temporal_robustness |" in table
+    assert "| worst_case_snqi |" in table
+    # Baseline objective shows no signed sidecar; signed objective is annotated.
+    assert "| - |" in table
+
+
+def test_issue_5326_orchestrator_writes_durable_table_when_declared(tmp_path: Path) -> None:
+    """The Package-B orchestrator emits the durable markdown table when the manifest declares it.
+
+    Closes the last CPU-achievable DoD item: the canonical durable report artifact must include
+    the comparison table, not only the JSON report. The 3079 manifest now declares
+    ``durable_table_md``; the orchestrator must pass ``--out-md`` through and surface the path.
+    """
+    from scripts.tools.run_adversarial_package_b import main as run_package_b_main
+
+    manifest = _copy_pipeline_fixture(tmp_path)
+    summary_path = tmp_path / "pipeline-summary.json"
+    assert (
+        run_package_b_main(
+            [
+                "--manifest",
+                str(manifest),
+                "--repo-root",
+                str(tmp_path),
+                "--output",
+                str(summary_path),
+                "--fail-closed",
+            ]
+        )
+        == 0
+    )
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["stage"] == "complete"
+    table_md = tmp_path / summary["durable_table_md"]
+    assert table_md.is_file()
+    assert "## Issue #5326 durable objective-comparison table" in table_md.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_3079_manifest_still_single_objective_backward_compatible() -> None:
     """The issue #3079 manifest (base_config.objective only) still loads one objective."""
     config, objectives, _samplers, _budgets, _seeds = load_package_b_manifest(

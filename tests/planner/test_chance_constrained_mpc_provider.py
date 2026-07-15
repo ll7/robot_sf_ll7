@@ -30,6 +30,7 @@ from robot_sf.planner.chance_constrained_mpc_provider import (
     CalibrationScenario,
     CalibrationSweep,
     ConstantVelocityGmmPredictor,
+    _aggregate_observed_risk,
     _min_robot_pedestrian_clearance,
     build_calibration_sweep_config,
     build_constant_velocity_gmm_forecast,
@@ -160,10 +161,10 @@ def test_calibration_closes_loop_over_the_planners_claimed_risk() -> None:
     """Issue #5307 measure #1: pair the planner's claimed risk with observed.
 
     The harness rolls the chance-constrained MPC planner through episodes whose
-    pedestrian dynamics match the surrogate's own forecast, then reports the
-    planner's claimed per-horizon risk next to the observed collision rate and
-    the other named measures (infeasibility, freezing, completion, tail
-    clearance, compute time).
+    pedestrian dynamics match the surrogate's own forecast, then reports
+    formulation-matched claimed and observed risks plus the other named
+    measures (infeasibility, freezing, completion, tail clearance, compute
+    time).
     """
 
     adapter = build_chance_constrained_mpc_adapter(
@@ -180,8 +181,13 @@ def test_calibration_closes_loop_over_the_planners_claimed_risk() -> None:
         seed=1,
     )
     required = {
-        "claimed_risk_per_horizon",
-        "observed_collision_rate",
+        "claimed_risk",
+        "observed_risk",
+        "claimed_risk_unit",
+        "observed_risk_unit",
+        "observation_window",
+        "observation_window_steps",
+        "episode_collision_rate",
         "calibration_error",
         "infeasible_rate",
         "freeze_rate",
@@ -192,12 +198,15 @@ def test_calibration_closes_loop_over_the_planners_claimed_risk() -> None:
     }
     assert required <= result.keys()
     # The planner's claimed risk is read straight from the control law config.
-    assert result["claimed_risk_per_horizon"] == pytest.approx(0.05)
+    assert result["claimed_risk"] == pytest.approx(0.05)
+    assert result["claimed_risk_unit"] == "per_pedestrian_timestep"
+    assert result["observed_risk_unit"] == "per_pedestrian_timestep"
+    assert result["observation_window"] == "control_step"
     # Calibration error is the issue's primary measure: observed minus claimed.
     assert result["calibration_error"] == pytest.approx(
-        result["observed_collision_rate"] - result["claimed_risk_per_horizon"]
+        result["observed_risk"] - result["claimed_risk"]
     )
-    assert 0.0 <= result["observed_collision_rate"] <= 1.0
+    assert 0.0 <= result["observed_risk"] <= 1.0
     assert 0.0 <= result["completion_rate"] <= 1.0
     assert 0.0 <= result["mean_compute_time_ms"]
     assert result["sample_count"] == pytest.approx(6.0)
@@ -215,7 +224,7 @@ def test_calibration_is_reproducible_under_fixed_seed() -> None:
     scenario = CalibrationScenario(num_episodes=4, steps_per_episode=10, num_pedestrians=3)
     first = realized_collision_risk_calibration(adapter, scenario, seed=7)
     second = realized_collision_risk_calibration(adapter, scenario, seed=7)
-    assert first["observed_collision_rate"] == second["observed_collision_rate"]
+    assert first["observed_risk"] == second["observed_risk"]
     assert first["mean_tail_clearance_m"] == second["mean_tail_clearance_m"]
 
 
@@ -237,10 +246,15 @@ def test_calibration_runs_end_to_end_for_cvar_tail_formulation() -> None:
         CalibrationScenario(num_episodes=4, steps_per_episode=8, num_pedestrians=3),
         seed=3,
     )
-    assert result["claimed_risk_per_horizon"] == pytest.approx(0.05)
-    assert 0.0 <= result["observed_collision_rate"] <= 1.0
+    assert result["claimed_risk"] == pytest.approx(0.05)
+    assert result["claimed_risk_unit"] == "mpc_horizon_cvar_tail"
+    assert result["observed_risk_unit"] == "mpc_horizon_cvar_tail"
+    assert result["observation_window"] == "mpc_horizon"
+    assert result["observation_window_steps"] == 6
+    assert result["cvar_alpha"] == pytest.approx(0.9)
+    assert 0.0 <= result["observed_risk"] <= 1.0
     assert result["calibration_error"] == pytest.approx(
-        result["observed_collision_rate"] - result["claimed_risk_per_horizon"]
+        result["observed_risk"] - result["claimed_risk"]
     )
     assert 0.0 <= result["mean_compute_time_ms"]
 
@@ -256,7 +270,8 @@ def test_calibration_runs_end_to_end_without_pedestrians() -> None:
         CalibrationScenario(num_episodes=4, steps_per_episode=8, num_pedestrians=0),
         seed=2,
     )
-    assert result["observed_collision_rate"] == pytest.approx(0.0)
+    assert result["observed_risk"] == pytest.approx(0.0)
+    assert result["episode_collision_rate"] == pytest.approx(0.0)
     # No pedestrians => every clearance is +inf, so the mean is +inf (not finite).
     assert result["mean_tail_clearance_m"] == pytest.approx(float("inf"))
     assert result["completion_rate"] >= 0.0
@@ -316,6 +331,49 @@ def _light_sweep() -> tuple[dict, CalibrationSweep]:
     return base_algo_config, sweep
 
 
+def test_calibration_aggregation_distinguishes_step_horizon_and_episode_units() -> None:
+    """Comparable units differ from the diagnostic episode-level event rate."""
+
+    samples = [
+        [
+            np.asarray([False, True]),
+            np.asarray([False, False]),
+            np.asarray([True, False]),
+        ]
+    ]
+    marginal, marginal_count, marginal_windows = _aggregate_observed_risk(
+        samples, formulation="marginal", horizon_steps=1, cvar_alpha=None
+    )
+    joint, joint_count, _ = _aggregate_observed_risk(
+        samples, formulation="joint_horizon", horizon_steps=2, cvar_alpha=None
+    )
+    tail, tail_count, _ = _aggregate_observed_risk(
+        samples, formulation="cvar_tail", horizon_steps=2, cvar_alpha=0.5
+    )
+
+    assert marginal == pytest.approx(2.0 / 6.0)
+    assert marginal_count == 6
+    assert marginal_windows == 3
+    assert joint == pytest.approx(1.0)
+    assert joint_count == 2
+    assert tail == pytest.approx(0.5)
+    assert tail_count == 2
+    # Episode-level any-collision is 1.0, but is not the marginal calibration unit.
+    assert marginal < 1.0
+
+
+def test_horizon_calibration_fails_closed_without_a_full_observation_window() -> None:
+    """Joint/CVaR claims cannot silently fall back to episode-level aggregation."""
+
+    with pytest.raises(ValueError, match="requires at least 4 observed steps"):
+        _aggregate_observed_risk(
+            [[np.asarray([False]), np.asarray([False]), np.asarray([False])]],
+            formulation="joint_horizon",
+            horizon_steps=4,
+            cvar_alpha=None,
+        )
+
+
 def test_calibration_sweep_returns_claimed_vs_observed_curve_across_budgets() -> None:
     """Issue #5307 primary measure as a *curve*: pair claimed risk with observed.
 
@@ -336,12 +394,14 @@ def test_calibration_sweep_returns_claimed_vs_observed_curve_across_budgets() ->
     assert claimed == [0.05, 0.10, 0.20]
     for point, budget in zip(points, sweep.risk_budgets, strict=True):
         assert point["formulation"] == "marginal"
+        assert point["observed_risk_unit"] == "per_pedestrian_timestep"
+        assert point["observation_window"] == "control_step"
         assert point["claimed_risk"] == pytest.approx(float(budget))
-        # calibration_error is the issue's primary measure: observed - claimed.
+        # calibration_error is the issue's primary measure in the declared unit.
         assert point["calibration_error"] == pytest.approx(
-            point["observed_collision_rate"] - point["claimed_risk"]
+            point["observed_risk"] - point["claimed_risk"]
         )
-        assert 0.0 <= point["observed_collision_rate"] <= 1.0
+        assert 0.0 <= point["observed_risk"] <= 1.0
         assert 0.0 <= point["freeze_rate"] <= 1.0
         assert 0.0 <= point["infeasible_rate"] <= 1.0
         assert 0.0 <= point["completion_rate"] <= 1.0
@@ -365,6 +425,19 @@ def test_calibration_sweep_compares_formulations_at_matched_budgets() -> None:
     for formulation, points in by_formulation.items():
         assert [p["claimed_risk"] for p in points] == [0.05, 0.10, 0.20]
         assert all(p["formulation"] == formulation for p in points)
+        expected_unit = (
+            "per_pedestrian_timestep"
+            if formulation == "marginal"
+            else "mpc_horizon_any_collision"
+            if formulation == "joint_horizon"
+            else "mpc_horizon_cvar_tail"
+        )
+        assert all(p["observed_risk_unit"] == expected_unit for p in points)
+        assert all(
+            p["observation_window"]
+            == ("control_step" if formulation == "marginal" else "mpc_horizon")
+            for p in points
+        )
 
 
 def test_calibration_sweep_replays_same_scenarios_across_budgets() -> None:
@@ -380,8 +453,8 @@ def test_calibration_sweep_replays_same_scenarios_across_budgets() -> None:
     base_algo_config, sweep = _light_sweep()
     first = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=11)
     second = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=11)
-    first_observed = [p["observed_collision_rate"] for p in first["points"]]
-    second_observed = [p["observed_collision_rate"] for p in second["points"]]
+    first_observed = [p["observed_risk"] for p in first["points"]]
+    second_observed = [p["observed_risk"] for p in second["points"]]
     assert first_observed == second_observed
 
     # The sweep point at a given budget must equal a direct single-point run.
@@ -394,9 +467,7 @@ def test_calibration_sweep_replays_same_scenarios_across_budgets() -> None:
     )
     direct = realized_collision_risk_calibration(adapter, sweep.scenario, seed=11)
     sweep_point = first["points_by_formulation"]["marginal"][1]
-    assert sweep_point["observed_collision_rate"] == pytest.approx(
-        direct["observed_collision_rate"]
-    )
+    assert sweep_point["observed_risk"] == pytest.approx(direct["observed_risk"])
     assert sweep_point["calibration_error"] == pytest.approx(direct["calibration_error"])
 
 
@@ -466,7 +537,12 @@ def test_calibration_sweep_yaml_config_runs_end_to_end() -> None:
     result = realized_collision_risk_calibration_sweep(base, sweep, seed=0)
     assert len(result["points"]) == 3 * 3
     for point in result["points"]:
-        assert np.isfinite(point["observed_collision_rate"])
+        assert np.isfinite(point["observed_risk"])
+        assert point["observed_risk_unit"] in {
+            "per_pedestrian_timestep",
+            "mpc_horizon_any_collision",
+            "mpc_horizon_cvar_tail",
+        }
         assert np.isfinite(point["mean_compute_time_ms"])
     assert set(result["reliability_summary"]) == {
         "marginal",

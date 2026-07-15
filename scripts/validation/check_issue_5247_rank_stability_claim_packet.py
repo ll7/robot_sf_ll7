@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -48,6 +49,39 @@ def _expect(problems: list[str], label: str, actual: Any, expected: Any) -> None
     """Record a mismatch between a packet field and its contract value."""
     if actual != expected:
         problems.append(f"{label}: expected {expected!r}, got {actual!r}")
+
+
+def _is_recorded_spearman(value: Any) -> bool:
+    """Accept only a finite numeric value within tolerance of the recorded -0.2 result."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and math.isclose(value, -0.2, rel_tol=0.0, abs_tol=1e-9)
+    )
+
+
+def _check_output_hashes(bundle: Path, provenance: dict[str, Any], problems: list[str]) -> None:
+    """Check preserved output hashes while converting I/O failures to blockers."""
+    output_hashes = provenance.get("output_sha256")
+    if not isinstance(output_hashes, dict):
+        problems.append("analysis_provenance.json: output_sha256 must be an object")
+        return
+    for filename in ("result.json", "report.md"):
+        path = bundle / filename
+        expected = output_hashes.get(filename)
+        if not path.is_file():
+            problems.append(f"{path}: required preserved output is missing")
+        elif not isinstance(expected, str):
+            problems.append(f"{path}: SHA-256 hash in provenance must be a string")
+        else:
+            try:
+                hash_matches = _sha256(path) == expected
+            except OSError as exc:
+                problems.append(f"{path}: cannot read file to compute SHA-256: {exc}")
+            else:
+                if not hash_matches:
+                    problems.append(f"{path}: SHA-256 does not match analysis_provenance.json")
 
 
 def _headline_counts(result: dict[str, Any], problems: list[str]) -> dict[str, int]:
@@ -139,24 +173,14 @@ def _check_provenance(
         if not isinstance(failed_checks, list) or not any(
             isinstance(check, dict)
             and check.get("check") == "rank_alignment_spearman"
-            and check.get("value") == -0.19999999999999998
+            and _is_recorded_spearman(check.get("value"))
             for check in failed_checks
         ):
             problems.append(
                 "analysis_provenance.json: missing the recorded rank_alignment_spearman=-0.2 failure"
             )
 
-    output_hashes = provenance.get("output_sha256")
-    if not isinstance(output_hashes, dict):
-        problems.append("analysis_provenance.json: output_sha256 must be an object")
-        return
-    for filename in ("result.json", "report.md"):
-        path = bundle / filename
-        expected = output_hashes.get(filename)
-        if not path.is_file():
-            problems.append(f"{path}: required preserved output is missing")
-        elif not isinstance(expected, str) or _sha256(path) != expected:
-            problems.append(f"{path}: SHA-256 does not match analysis_provenance.json")
+    _check_output_hashes(bundle, provenance, problems)
 
     _expect(problems, "result.schema_version", result.get("schema_version"), EXPECTED_RESULT_SCHEMA)
 

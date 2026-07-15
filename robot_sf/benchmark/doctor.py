@@ -25,6 +25,32 @@ OPTIONAL_IMPORTS = ("gymnasium", "pygame", "matplotlib", "numpy")
 OPTIONAL_ENV_VARS = ("MPLBACKEND", "SDL_VIDEODRIVER", "DISPLAY")
 DEFAULT_WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
+# Optional dependency groups that unlock larger feature slices of the project.
+OPTIONAL_EXTRAS = ("training", "gpu", "orca", "socnav", "rllib", "analysis")
+# Map deps are pulled in by osmnx-based OSM map authoring examples.
+MAP_DEP_IMPORTS = ("osmnx", "shapely")
+# Bundled model artifacts the quickstart examples rely on.
+MODEL_ARTIFACTS = (
+    Path("model/pedestrian/ppo_ped_01.zip"),
+    Path("model/pedestrian/ppo_ped_02.zip"),
+    Path("model/pedestrian/ppo_corner.zip"),
+    Path("model/pedestrian/ppo_headon.zip"),
+    Path("model/pedestrian/ppo_intersection.zip"),
+)
+# Quickstart examples the doctor can sanity-check for presence/runnability.
+QUICKSTART_EXAMPLES = (
+    Path("examples/quickstart/01_basic_robot.py"),
+    Path("examples/quickstart/02_trained_model.py"),
+    Path("examples/quickstart/03_custom_map.py"),
+    Path("examples/quickstart/04_occupancy_grid.py"),
+)
+UV_BOOTSTRAP_HINT = (
+    "Install uv (https://docs.astral.sh/uv/getting-started/) with one of:\n"
+    "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
+    "  python -m pip install uv\n"
+    "  brew install uv"
+)
+
 
 @dataclass(frozen=True)
 class DoctorCheck:
@@ -217,6 +243,103 @@ def _run_env_smoke() -> DoctorCheck:
     )
 
 
+def _check_model_artifacts(workspace_root: Path) -> DoctorCheck:
+    """Report whether bundled model artifacts the quickstart relies on are present.
+
+    Returns:
+        DoctorCheck: Model-artifact presence check result.
+    """
+    missing = [str(rel) for rel in MODEL_ARTIFACTS if not (workspace_root / rel).is_file()]
+    status = "ok" if not missing else "missing_optional"
+    return DoctorCheck(
+        name="model_artifacts",
+        status=status,
+        required=False,
+        details={
+            "present": [str(rel) for rel in MODEL_ARTIFACTS if (workspace_root / rel).is_file()],
+            "missing": missing,
+            "hint": "Restore model artifacts from the release bundle or run without the pre-trained PPO demo."
+            if missing
+            else "Bundled model artifacts present.",
+        },
+    )
+
+
+def _check_optional_extras() -> DoctorCheck:
+    """Report which optional dependency groups are importable.
+
+    Returns:
+        DoctorCheck: Optional-extras availability check result.
+    """
+    details: dict[str, Any] = {}
+    for extra in OPTIONAL_EXTRAS:
+        # Each extra is dominated by a flagship import we can probe cheaply.
+        probe = {
+            "training": "stable_baselines3",
+            "gpu": "torch",
+            "orca": "rvo2",
+            "socnav": "cv2",
+            "rllib": "ray",
+            "analysis": "seaborn",
+        }[extra]
+        available = importlib_util.find_spec(probe) is not None
+        details[extra] = {"available": available, "probe": probe}
+    map_imports = {name: importlib_util.find_spec(name) is not None for name in MAP_DEP_IMPORTS}
+    details["map_deps"] = {"available": all(map_imports.values()), "imports": map_imports}
+    status = "ok" if all(v["available"] for v in details.values()) else "missing_optional"
+    return DoctorCheck(
+        name="optional_extras",
+        status=status,
+        required=False,
+        details={
+            "extras": details,
+            "hint": "Enable extras with: uv sync --extra <group>  (e.g. uv sync --extra training)",
+        },
+    )
+
+
+def _check_quickstart(workspace_root: Path) -> DoctorCheck:
+    """Report whether the quickstart examples are present and importable.
+
+    Returns:
+        DoctorCheck: Quickstart readiness check result.
+    """
+    missing = [str(rel) for rel in QUICKSTART_EXAMPLES if not (workspace_root / rel).is_file()]
+    status = "ok" if not missing else "failed"
+    return DoctorCheck(
+        name="quickstart",
+        status=status,
+        required=True,
+        details={
+            "present": [
+                str(rel) for rel in QUICKSTART_EXAMPLES if (workspace_root / rel).is_file()
+            ],
+            "missing": missing,
+            "hint": "Quickstart examples are missing from the checkout."
+            if missing
+            else "Quickstart examples present; run with: uv run python examples/quickstart/01_basic_robot.py",
+        },
+    )
+
+
+def _check_uv_bootstrap() -> DoctorCheck:
+    """Report uv presence with a beginner-friendly bootstrap hint when absent.
+
+    Returns:
+        DoctorCheck: uv bootstrap check result.
+    """
+    path = shutil.which("uv")
+    return DoctorCheck(
+        name="uv_bootstrap",
+        status="ok" if path else "failed",
+        required=True,
+        details={
+            "path": path,
+            "hint": UV_BOOTSTRAP_HINT if not path else "uv is available on PATH.",
+        },
+    )
+
+
 def collect_doctor_report(
     *,
     artifact_root: Path = Path("output"),
@@ -235,12 +358,16 @@ def collect_doctor_report(
     checks: list[DoctorCheck] = [
         _check_python_version(),
         _check_package_source(),
+        _check_uv_bootstrap(),
         *[_check_binary(name, required=True) for name in CRITICAL_BINARIES],
         *[_check_binary(name, required=False) for name in OPTIONAL_BINARIES],
         *[_check_optional_import(name) for name in OPTIONAL_IMPORTS],
         _check_environment_variables(),
         _check_git_worktree(resolved_workspace_root),
         _check_artifact_root(resolved_artifact_root),
+        _check_model_artifacts(resolved_workspace_root),
+        _check_optional_extras(),
+        _check_quickstart(resolved_workspace_root),
     ]
     if run_env_smoke:
         checks.append(_run_env_smoke())
@@ -271,13 +398,59 @@ def doctor_exit_code(report: dict[str, Any]) -> int:
     return 1 if report.get("status") == "failed" else 0
 
 
+_STATUS_SYMBOL = {"ok": "PASS", "skipped": "SKIP", "missing_optional": "WARN", "failed": "FAIL"}
+
+
+def _format_human(report: dict[str, Any]) -> str:
+    """Render a doctor report as a categorized pass/warn/fail summary with remedies.
+
+    Returns:
+        str: Human-readable doctor report.
+    """
+    lines: list[str] = ["Robot SF environment check", ""]
+    failures: list[str] = []
+    for check in report["checks"]:
+        symbol = _STATUS_SYMBOL.get(check["status"], check["status"].upper())
+        lines.append(f"[{symbol}] {check['name']}")
+        details = check.get("details", {}) or {}
+        hint = details.get("hint")
+        if hint and check["status"] in {"failed", "missing_optional"}:
+            for hint_line in str(hint).splitlines():
+                lines.append(f"      -> {hint_line}")
+        if check["status"] == "failed":
+            failures.append(check["name"])
+    lines.append("")
+    overall = report["status"]
+    if overall == "ok":
+        lines.append("All required checks passed.")
+    elif overall == "warning":
+        lines.append("Finished with warnings (optional capabilities missing).")
+    else:
+        lines.append("Hard failures detected; resolve the FAIL items above before continuing.")
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run doctor diagnostics as a standalone helper entrypoint.
 
     Returns:
         int: Process-style exit code.
     """
+    args = list(argv) if argv is not None else sys.argv[1:]
+    fmt = "friendly"
+    rest: list[str] = []
+    if "--format" in args:
+        idx = args.index("--format")
+        fmt = args[idx + 1]
+        rest = args[:idx] + args[idx + 2 :]
+    skip_smoke = "--skip-env-smoke" in rest
+    rest = [a for a in rest if a != "--skip-env-smoke"]
     del argv
-    report = collect_doctor_report()
-    sys.stdout.write(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    report = collect_doctor_report(run_env_smoke=not skip_smoke)
+    text = (
+        json.dumps(report, indent=2, sort_keys=True) + "\n"
+        if fmt == "json"
+        else _format_human(report)
+    )
+    sys.stdout.write(text)
     return doctor_exit_code(report)

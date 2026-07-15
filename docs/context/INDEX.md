@@ -73,6 +73,9 @@ Recent serial benchmark GPU memory closure audit:
 Recent camera-ready GPU lifecycle and cross-arm VRAM leak fix:
 [issue_4826_camera_ready_gpu_lifecycle.md](issue_4826_camera_ready_gpu_lifecycle.md).
 
+Soft Social Navigation Quality Index (SNQI) warning exit-lane integration state:
+[issue_5244_state.yaml](issue_5244_state.yaml).
+
 Recent hard-guarded hybrid-learning synthesis closure audit:
 [issue_1489_closure_audit_2026-07-05.md](evidence/issue_1489_closure_audit_2026-07-05.md).
 

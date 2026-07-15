@@ -155,45 +155,40 @@ def _has_ignored_output(path: str) -> bool:
     return False
 
 
-def _has_active_pr_gate_lease(path: str) -> bool:
-    """Check if a worktree has an active PR-gate lease.
+def _check_worktree_lease_state(path: str) -> str | None:
+    """Check lease state for a worktree.
 
-    Checks for a .pr-gate-lease.json file in the worktree's Git common directory
-    and verifies the lease is not expired.
+    Returns:
+        "active" if there is an active lease.
+        "unreadable" if a lease file exists but cannot be read/parsed.
+        None if there is no lease file or if the lease has expired.
     """
     try:
-        from scripts.dev.pr_gate_lease import load_lease
+        from scripts.dev.pr_gate_lease import lease_path, legacy_lease_path, load_lease
 
-        # Get the git common dir for this worktree
-        result = _run_command(["git", "rev-parse", "--git-common-dir"], cwd=path)
-        if result.returncode != 0:
-            return False
+        lease_paths = [lease_path(Path(path))]
+        legacy_path = legacy_lease_path()
+        if legacy_path not in lease_paths:
+            # Older gate processes used one shared lease file. Treat any still-live
+            # legacy record as protecting this worktree until that process releases it.
+            lease_paths.append(legacy_path)
 
-        common_dir = result.stdout.strip()
-        if not Path(common_dir).is_absolute():
-            common_dir = str(Path(path) / common_dir)
+        for l_path in lease_paths:
+            if not l_path.exists():
+                continue
+            lease = load_lease(l_path)
+            if lease is not None and not lease.is_expired():
+                return "active"
+        return None
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError):
+        # File exists but could not be loaded/parsed successfully, or lease
+        # discovery failed. Both cases must fail closed.
+        return "unreadable"
 
-        lease_file = Path(common_dir) / ".pr-gate-lease.json"
-        if not lease_file.exists():
-            return False
 
-        # Temporarily swap the lease path to check this worktree's lease
-        import scripts.dev.pr_gate_lease as lease_module
-
-        original_lease_path = lease_module.lease_path
-
-        def temp_lease_path() -> Path:
-            return lease_file
-
-        lease_module.lease_path = temp_lease_path  # type: ignore[assignment]
-        try:
-            lease = load_lease()
-            return lease is not None and not lease.is_expired()
-        finally:
-            lease_module.lease_path = original_lease_path  # type: ignore[assignment]
-
-    except (ImportError, RuntimeError, AttributeError):
-        return False
+def _has_active_pr_gate_lease(path: str) -> bool:
+    """Check if a worktree has an active PR-gate lease."""
+    return _check_worktree_lease_state(path) == "active"
 
 
 def classify_worktree(
@@ -234,6 +229,8 @@ def classify_worktree(
 
     if _has_active_pr_gate_lease(path):
         risk_flags.append("active_pr_gate_lease")
+    elif _check_worktree_lease_state(path) == "unreadable":
+        risk_flags.append("unreadable_pr_gate_lease")
 
     if risk_flags:
         return WorktreeCandidate(

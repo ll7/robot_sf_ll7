@@ -15,6 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -39,6 +40,40 @@ from robot_sf.planner.chance_constrained_mpc_provider import (
     realized_collision_risk_calibration,
     realized_collision_risk_calibration_sweep,
 )
+
+
+class MockPlanner:
+    """Deterministic, CPU-light mock planner for provider calibration contract tests."""
+
+    def __init__(self, config: dict[str, Any]) -> None:
+        """Initialize the mock planner with basic configuration mapping."""
+        formulation = config.get("chance_constraint_formulation", "marginal")
+        cvar_alpha = float(config.get("cvar_alpha", 0.9))
+        horizon_steps = int(config.get("horizon_steps", 1))
+        max_collision_risk = float(config.get("max_collision_risk", 0.05))
+        self.config = SimpleNamespace(
+            rollout_dt=float(config.get("rollout_dt", 0.25)),
+            horizon_steps=horizon_steps,
+            chance_constraint_formulation=formulation,
+            max_collision_risk=max_collision_risk,
+        )
+        self.chance_config = SimpleNamespace(
+            chance_constraint_formulation=formulation,
+            cvar_alpha=cvar_alpha,
+            max_collision_risk=max_collision_risk,
+        )
+        self.claimed_risk = max_collision_risk
+
+    def reset(self) -> None:
+        pass
+
+    def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+        # Return a deterministic, simple forward command.
+        # This keeps the planner CPU-light and fast while satisfying the runner.
+        return (0.5, 0.0)
+
+    def diagnostics(self) -> dict[str, int]:
+        return {"solver_failures": 0}
 
 
 def _observation(
@@ -169,12 +204,11 @@ def test_calibration_closes_loop_over_the_planners_claimed_risk() -> None:
     time).
     """
 
-    adapter = build_chance_constrained_mpc_adapter(
+    adapter = MockPlanner(
         {
             "predictor_backend": "constant_velocity_gmm",
             "horizon_steps": 6,
             "max_collision_risk": 0.05,
-            "solver_max_iterations": 20,
         }
     )
     result = realized_collision_risk_calibration(
@@ -214,13 +248,63 @@ def test_calibration_closes_loop_over_the_planners_claimed_risk() -> None:
     assert result["sample_count"] == pytest.approx(6.0)
 
 
-def test_calibration_is_reproducible_under_fixed_seed() -> None:
-    """Monte-Carlo closed-loop calibration must be deterministic for a given seed."""
+def test_calibration_closes_loop_over_the_planners_claimed_risk_real_solver() -> None:
+    """One bounded end-to-end smoke test for the real solver path."""
 
     adapter = build_chance_constrained_mpc_adapter(
         {
             "predictor_backend": "constant_velocity_gmm",
-            "solver_max_iterations": 20,
+            "horizon_steps": 4,
+            "max_collision_risk": 0.05,
+            "solver_max_iterations": 5,
+        }
+    )
+    result = realized_collision_risk_calibration(
+        adapter,
+        CalibrationScenario(num_episodes=1, steps_per_episode=3, num_pedestrians=2),
+        seed=1,
+    )
+    assert result["claimed_risk"] == pytest.approx(0.05)
+    assert "observed_risk" in result
+    assert "calibration_error" in result
+    required = {
+        "claimed_risk",
+        "observed_risk",
+        "claimed_risk_unit",
+        "observed_risk_unit",
+        "observation_window",
+        "observation_window_steps",
+        "episode_collision_rate",
+        "calibration_error",
+        "infeasible_rate",
+        "freeze_rate",
+        "completion_rate",
+        "mean_tail_clearance_m",
+        "mean_compute_time_ms",
+        "sample_count",
+    }
+    assert required <= result.keys()
+    # The planner's claimed risk is read straight from the control law config.
+    assert result["claimed_risk"] == pytest.approx(0.05)
+    assert result["claimed_risk_unit"] == "per_pedestrian_timestep"
+    assert result["observed_risk_unit"] == "per_pedestrian_timestep"
+    assert result["observation_window"] == "control_step"
+    # Calibration error is the issue's primary measure: observed minus claimed.
+    assert result["calibration_error"] == pytest.approx(
+        result["observed_risk"] - result["claimed_risk"]
+    )
+    assert 0.0 <= result["observed_risk"] <= 1.0
+    assert 0.0 <= result["completion_rate"] <= 1.0
+    assert 0.0 <= result["mean_compute_time_ms"]
+    assert result["sample_count"] == pytest.approx(1.0)
+
+
+def test_calibration_is_reproducible_under_fixed_seed() -> None:
+    """Monte-Carlo closed-loop calibration must be deterministic for a given seed."""
+
+    adapter = MockPlanner(
+        {
+            "predictor_backend": "constant_velocity_gmm",
         }
     )
     scenario = CalibrationScenario(num_episodes=4, steps_per_episode=10, num_pedestrians=3)
@@ -235,12 +319,12 @@ def test_calibration_runs_end_to_end_for_cvar_tail_formulation() -> None:
     to end through the realized-risk calibration harness via the surrogate
     constant_velocity_gmm provider."""
 
-    adapter = build_chance_constrained_mpc_adapter(
+    adapter = MockPlanner(
         {
             "predictor_backend": "constant_velocity_gmm",
             "chance_constraint_formulation": "cvar_tail",
             "cvar_alpha": 0.9,
-            "solver_max_iterations": 20,
+            "horizon_steps": 6,
         }
     )
     result = realized_collision_risk_calibration(
@@ -264,9 +348,7 @@ def test_calibration_runs_end_to_end_for_cvar_tail_formulation() -> None:
 def test_calibration_runs_end_to_end_without_pedestrians() -> None:
     """A pedestrian-free episode still reports finite, well-formed diagnostics."""
 
-    adapter = build_chance_constrained_mpc_adapter(
-        {"predictor_backend": "constant_velocity_gmm", "horizon_steps": 4}
-    )
+    adapter = MockPlanner({"predictor_backend": "constant_velocity_gmm", "horizon_steps": 4})
     result = realized_collision_risk_calibration(
         adapter,
         CalibrationScenario(num_episodes=4, steps_per_episode=8, num_pedestrians=0),
@@ -445,7 +527,9 @@ def test_calibration_sweep_returns_claimed_vs_observed_curve_across_budgets() ->
     """
 
     base_algo_config, sweep = _light_sweep()
-    result = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=1)
+    result = realized_collision_risk_calibration_sweep(
+        base_algo_config, sweep, adapter_builder=MockPlanner, seed=1
+    )
     assert result["sweep"]["risk_budgets"] == [0.05, 0.10, 0.20]
     assert result["sweep"]["formulations"] == ["marginal"]
     assert result["sweep"]["seed"] == 1
@@ -478,7 +562,9 @@ def test_calibration_sweep_compares_formulations_at_matched_budgets() -> None:
         formulations=("marginal", "joint_horizon", "cvar_tail"),
         scenario=sweep.scenario,
     )
-    result = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=2)
+    result = realized_collision_risk_calibration_sweep(
+        base_algo_config, sweep, adapter_builder=MockPlanner, seed=2
+    )
     by_formulation = result["points_by_formulation"]
     assert set(by_formulation) == {"marginal", "joint_horizon", "cvar_tail"}
     assert len(result["points"]) == 3 * 3
@@ -512,14 +598,18 @@ def test_calibration_sweep_replays_same_scenarios_across_budgets() -> None:
     """
 
     base_algo_config, sweep = _light_sweep()
-    first = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=11)
-    second = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=11)
+    first = realized_collision_risk_calibration_sweep(
+        base_algo_config, sweep, adapter_builder=MockPlanner, seed=11
+    )
+    second = realized_collision_risk_calibration_sweep(
+        base_algo_config, sweep, adapter_builder=MockPlanner, seed=11
+    )
     first_observed = [p["observed_risk"] for p in first["points"]]
     second_observed = [p["observed_risk"] for p in second["points"]]
     assert first_observed == second_observed
 
     # The sweep point at a given budget must equal a direct single-point run.
-    adapter = build_chance_constrained_mpc_adapter(
+    adapter = MockPlanner(
         {
             **base_algo_config,
             "max_collision_risk": sweep.risk_budgets[1],
@@ -544,7 +634,9 @@ def test_calibration_sweep_reliability_summary_reports_stop_rule_observables() -
     """
 
     base_algo_config, sweep = _light_sweep()
-    result = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=3)
+    result = realized_collision_risk_calibration_sweep(
+        base_algo_config, sweep, adapter_builder=MockPlanner, seed=3
+    )
     summary = result["reliability_summary"]["marginal"]
     assert isinstance(summary["observed_monotone_non_decreasing_in_claimed"], bool)
     assert summary["control_period_ms"] == pytest.approx(float(sweep.scenario.dt) * 1000.0)
@@ -595,7 +687,9 @@ def test_calibration_sweep_yaml_config_runs_end_to_end() -> None:
     assert sweep.risk_budgets == (0.05, 0.10, 0.20)
     assert sweep.formulations == ("marginal", "joint_horizon", "cvar_tail")
 
-    result = realized_collision_risk_calibration_sweep(base, sweep, seed=0)
+    result = realized_collision_risk_calibration_sweep(
+        base, sweep, adapter_builder=MockPlanner, seed=0
+    )
     assert len(result["points"]) == 3 * 3
     for point in result["points"]:
         assert np.isfinite(point["observed_risk"])
@@ -610,6 +704,21 @@ def test_calibration_sweep_yaml_config_runs_end_to_end() -> None:
         "joint_horizon",
         "cvar_tail",
     }
+
+    # Separately validate the shipped diagnostic sweep config with the real solver
+    # over a minimal slice to keep tests fast.
+    light_scenario = CalibrationScenario(num_episodes=1, steps_per_episode=2, num_pedestrians=1)
+    light_sweep = CalibrationSweep(
+        risk_budgets=(0.05,),
+        formulations=("marginal",),
+        scenario=light_scenario,
+    )
+    light_base = dict(base)
+    light_base["solver_max_iterations"] = 5
+
+    real_result = realized_collision_risk_calibration_sweep(light_base, light_sweep, seed=0)
+    assert len(real_result["points"]) == 1
+    assert np.isfinite(real_result["points"][0]["observed_risk"])
 
 
 def test_build_calibration_sweep_config_defaults_when_subkey_absent() -> None:

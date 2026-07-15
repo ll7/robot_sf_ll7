@@ -34,6 +34,7 @@ from pathlib import Path
 SCHEMA_VERSION = "pr_gate_lease.v1"
 DEFAULT_TTL_HOURS = 2
 LEASE_FILENAME = ".pr-gate-lease.json"
+LEGACY_LEASE_FILENAME = LEASE_FILENAME
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +48,7 @@ class PRGateLease:
     gate_id: str | None
     owner: str | None  # e.g., username, session ID
     last_heartbeat: str  # ISO 8601 timestamp
+    worktree_path: str | None = None
 
     def is_expired(self) -> bool:
         """Check if the lease has expired."""
@@ -94,9 +96,40 @@ def _repo_root() -> Path:
     return Path(result.stdout.strip()).resolve()
 
 
-def lease_path() -> Path:
+def _validate_duration(val: float, name: str) -> None:
+    """Validate that a duration is positive, finite, and a valid number."""
+    import math
+
+    if val is None:
+        raise ValueError(f"{name} cannot be None")
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"{name} must be a numeric value")
+    if math.isnan(val) or not math.isfinite(val):
+        raise ValueError(f"{name} must be finite")
+    if val <= 0:
+        raise ValueError(f"{name} must be strictly positive")
+
+
+def lease_path(worktree_path: Path | None = None) -> Path:
     """Return the path to the lease file in the Git common directory."""
-    return _git_common_dir() / LEASE_FILENAME
+    import hashlib
+
+    if worktree_path is None:
+        try:
+            worktree_path = _repo_root()
+        except RuntimeError:
+            worktree_path = Path.cwd()
+
+    resolved = Path(worktree_path).resolve()
+    path_bytes = str(resolved).encode("utf-8")
+    h = hashlib.sha256(path_bytes).hexdigest()
+    filename = f".pr-gate-lease-{h}.json"
+    return _git_common_dir() / filename
+
+
+def legacy_lease_path() -> Path:
+    """Return the pre-isolation lease path used by older gate processes."""
+    return _git_common_dir() / LEGACY_LEASE_FILENAME
 
 
 def create_lease(
@@ -106,10 +139,17 @@ def create_lease(
     ttl_hours: float = DEFAULT_TTL_HOURS,
 ) -> PRGateLease:
     """Create a new PR-gate lease."""
+    _validate_duration(ttl_hours, "ttl_hours")
+
     now = datetime.now(UTC)
     from datetime import timedelta
 
     expires = now + timedelta(hours=ttl_hours)
+
+    try:
+        wt_path = str(_repo_root().resolve())
+    except RuntimeError:
+        wt_path = str(Path.cwd().resolve())
 
     lease = PRGateLease(
         schema=SCHEMA_VERSION,
@@ -119,28 +159,62 @@ def create_lease(
         gate_id=gate_id,
         owner=owner,
         last_heartbeat=now.isoformat(),
+        worktree_path=wt_path,
     )
 
-    lease_path().write_text(json.dumps(asdict(lease), indent=2) + "\n")
+    save_lease(lease)
     return lease
 
 
-def load_lease() -> PRGateLease | None:
+def load_lease(path: Path | None = None) -> PRGateLease | None:
     """Load the current lease if it exists."""
-    path = lease_path()
+    if path is None:
+        path = lease_path()
     if not path.exists():
         return None
 
     try:
         data = json.loads(path.read_text())
-        return PRGateLease(**data)
-    except (json.JSONDecodeError, TypeError, KeyError) as exc:
+        if not isinstance(data, dict):
+            raise TypeError("lease JSON must be an object")
+        import inspect
+
+        valid_keys = inspect.signature(PRGateLease).parameters.keys()
+        filtered_data = {k: v for k, v in data.items() if k in valid_keys}
+        lease = PRGateLease(**filtered_data)
+        for timestamp in (lease.created_at, lease.expires_at, lease.last_heartbeat):
+            parsed = datetime.fromisoformat(timestamp)
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
+                raise ValueError("lease timestamps must be timezone-aware")
+        return lease
+    except (json.JSONDecodeError, TypeError, KeyError, ValueError) as exc:
         raise RuntimeError(f"Invalid lease file: {exc}") from exc
 
 
-def save_lease(lease: PRGateLease) -> None:
-    """Save a lease to disk."""
-    lease_path().write_text(json.dumps(asdict(lease), indent=2) + "\n")
+def save_lease(lease: PRGateLease, path: Path | None = None) -> None:
+    """Save a lease to disk atomically."""
+    import tempfile
+
+    if path is None:
+        path = lease_path()
+
+    parent = path.parent
+    parent.mkdir(parents=True, exist_ok=True)
+
+    fd, temp_path_str = tempfile.mkstemp(dir=parent, prefix=".pr-gate-lease-tmp-")
+    temp_path = Path(temp_path_str)
+    try:
+        with open(fd, "w", encoding="utf-8") as f:
+            json.dump(asdict(lease), f, indent=2)
+            f.write("\n")
+        temp_path.replace(path)
+    except (OSError, TypeError, ValueError):
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+        raise
 
 
 def heartbeat(
@@ -159,6 +233,9 @@ def heartbeat(
     Raises:
         RuntimeError: If no lease exists.
     """
+    if extend_hours is not None:
+        _validate_duration(extend_hours, "extend_hours")
+
     lease = load_lease()
     if lease is None:
         raise RuntimeError("No active lease to refresh")
@@ -174,6 +251,11 @@ def heartbeat(
     else:
         expires_at = lease.expires_at
 
+    try:
+        wt_path = lease.worktree_path or str(_repo_root().resolve())
+    except RuntimeError:
+        wt_path = lease.worktree_path or str(Path.cwd().resolve())
+
     updated = PRGateLease(
         schema=lease.schema,
         created_at=lease.created_at,
@@ -182,6 +264,7 @@ def heartbeat(
         gate_id=lease.gate_id,
         owner=lease.owner,
         last_heartbeat=new_heartbeat,
+        worktree_path=wt_path,
     )
     save_lease(updated)
     return updated

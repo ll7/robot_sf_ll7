@@ -1,12 +1,16 @@
 """Prototype: matched success-vs-failure "hinge figure" (the butterfly worked example).
 
-STATUS: first-cut prototype for Stage 5-6 of the "butterfly worked-example pipeline" plan
+STATUS: second-cut prototype for Stage 5-6 of the "butterfly worked-example pipeline" plan
 (diss repo: docs/context/plan/2026-07-15_butterfly_worked_example_pipeline.md), built on the
 adopted UI spec (diss repo: docs/context/research/2026-07-15_visualization_scenarios.md,
-"The butterfly moment in one still"). Builds on the Stage 0-2 prototype in this worktree
-(``scripts/repro/butterfly_trace_to_video_proto.py``): reuses ``trace_series_to_jsonl``,
-``_render_scene_frames``, and ``compute_trace_metrics`` from that module rather than
-re-implementing trace loading / rendering.
+"The butterfly moment in one still" / "Automatic pivotal-frame selection"). Builds on the
+Stage 0-2 prototype in this worktree (``scripts/repro/butterfly_trace_to_video_proto.py``):
+reuses ``trace_series_to_jsonl``, ``_render_scene_frames``, and ``compute_trace_metrics``
+from that module, plus ``robot_sf.benchmark.trace_scene_figure``'s ``_focal_pedestrian_id``
+(focal-pedestrian selection), ``_contiguous_segments`` (teleport-safe polylines),
+``_load_map_definition`` / ``_draw_obstacles`` (map geometry), and
+``robot_sf.benchmark.figure_qa.lint_figure`` (the QA gate) rather than re-implementing any
+of them.
 
 Chosen matched pair (see the diss-side report for the full selection rationale): SAME
 scenario (``classic_head_on_corridor_medium``) + SAME seed (24), DIFFERENT planner --
@@ -15,16 +19,41 @@ start from an (almost) identical robot pose and an *exactly* identical 4-pedestr
 (same seed), so the shared prefix is a genuine "same start, different outcome" butterfly,
 not an artifact of re-seeding.
 
-What this script does NOT implement (first-cut scope, see the diss report for the gap list):
-- The full ``D(t)`` normalized joint-state divergence algorithm from the design spec.
-  Divergence is detected with a simple threshold-on-separation instead (first index where
-  robot-to-robot position separation exceeds ``DEFAULT_ROBOT_RADIUS`` and stays above it for
-  the remainder of the shared time window) -- explicitly permitted as a first cut.
-- The central delta gutter / 2x3 contact sheet layout.
-- Routing the still through ``robot_sf.benchmark.trace_scene_figure`` / the shipped
-  ``figure_qa`` catalog pipeline (this is a standalone prototype renderer that borrows the
-  same color/style conventions and runs the same collision linter, ``figure_qa.lint_figure``,
-  as a smoke check).
+Implemented since the first cut (see the diss report for verification evidence):
+- ``select_focal_pedestrian``: locks ONE focal pedestrian, shared by both panels, reusing
+  ``trace_scene_figure._focal_pedestrian_id`` -- fixes the first cut's "focal p3 floats
+  disconnected from the interaction" bug (that bug was ``nearest_pedestrian_id[step=0]``).
+- ``compute_joint_state_divergence`` / ``find_persistence_onset``: the design spec's D(t)
+  normalized joint-state divergence detector (robot pose + commanded v/omega + clearance to
+  the locked focal pedestrian, physically-scaled), replacing the first cut's threshold on
+  raw robot-robot separation.
+- ``find_separator``: the design spec's tiered backward search (mode / command jump /
+  braking onset / largest risk rise) for the pivot, with an honest "unavailable" report for
+  the mode tier (this trace schema has no per-step categorical planner-mode field).
+- ``compute_delta_gutter`` / ``_draw_delta_gutter``: the design spec's central ``A | Delta |
+  B`` gutter (Delta t_brake, Delta v_cmd at pivot, min clearance over the following horizon,
+  first differing mode).
+- Map obstacles reused from ``trace_scene_figure`` (item 4); for this pair's tight
+  trajectory-based crop the scenario's only obstacles are far-field corridor boundary walls
+  outside the crop, so nothing additional renders -- a genuine finding, not a wiring bug.
+- ``figure_qa.lint_figure`` error-severity defects: 4 (first cut) -> 0 (this render); see
+  ``_place_clear_label`` for the closed-loop, render-and-check label placement that got
+  there (three prior heuristic attempts are documented in its docstring as a paper trail).
+- ``build_provenance_sidecar``: episode ids/planners/seeds/source commits, trace file
+  hashes, script commit, detector config, and figure hash, written to
+  ``butterfly_hinge_provenance.json`` alongside the analysis-dump ``butterfly_hinge_report.json``.
+
+Still NOT implemented (remaining gap vs the full spec, see the diss report):
+- The 2x3 contact sheet layout (this pair reads as geometry-dominant, not timing-dominant --
+  see the design spec's own guidance on when to prefer one over the other).
+- Counterfactual-replay validation (would upgrade the pivot label from "explanatory pivot
+  candidate" to "counterfactually validated pivot"); no checkpointed replay is available.
+- Rendering directly through ``trace_scene_figure.render_comparison`` (it lacks the hinge
+  grammar -- common-prefix/post-pivot A/B styling, pivot ring, delta gutter -- and its own
+  color scheme is per-pedestrian, not Okabe-Ito planner-comparison; see the diss report for
+  the concrete evaluation). This module remains the standalone hinge composer per the plan's
+  documented fallback, but now reuses more of ``trace_scene_figure`` (see above) than the
+  first cut did.
 
 Usage::
 
@@ -43,9 +72,11 @@ import hashlib
 import json
 import math
 import os
+import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +91,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+from matplotlib.collections import PathCollection
 from matplotlib.lines import Line2D
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -68,13 +100,18 @@ from butterfly_trace_to_video_proto import (
     trace_series_to_jsonl,
 )
 
+from robot_sf.analysis_workbench.trace_failure_predicates import (
+    DEFAULT_CLEARANCE_THRESHOLD_M,
+)
 from robot_sf.benchmark import figure_qa
+from robot_sf.benchmark import trace_scene_figure as tsf
 from robot_sf.benchmark.critical_intervals import (
     extract_critical_intervals,
     load_config,
 )
 from robot_sf.benchmark.trace_scene_figure import _contiguous_segments
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
+from robot_sf.robot.differential_drive import DifferentialDriveSettings
 
 # ---------------------------------------------------------------------------
 # Color / style spec (Okabe-Ito, redundant with shape+line style; no red/green
@@ -97,17 +134,59 @@ MARKER_B = "s"  # open square
 #: a fix for that lint signal -- see the "gap to full spec" note in the module docstring).
 _LABEL_BBOX = {"facecolor": "white", "edgecolor": "none", "alpha": 0.72, "pad": 0.5}
 
-#: Divergence threshold: first-cut proxy for the design spec's D(t) pivot detector.
-#: "> robot radius" per the task brief; sourced from the repo's own default (1.0 m,
-#: robot_sf/common/robot_defaults.py), not re-invented here.
-DIVERGENCE_THRESHOLD_M: float = DEFAULT_ROBOT_RADIUS
+#: --------------------------------------------------------------------------------------
+#: D(t) normalized joint-state divergence -- physical scales.
+#: Design spec (diss docs/context/research/2026-07-15_visualization_scenarios.md,
+#: "Automatic pivotal-frame selection", step 2): "Use physically meaningful scales s_k,
+#: such as robot radius, nominal speed, and clearance threshold." All four scales below are
+#: read from the repo's own authoritative defaults, not re-invented:
+#:   - pose separation   -> DEFAULT_ROBOT_RADIUS (robot_sf/common/robot_defaults.py)
+#:   - commanded v        -> DifferentialDriveSettings.max_linear_speed (robot/differential_drive.py)
+#:   - commanded omega     -> DifferentialDriveSettings.max_angular_speed (robot/differential_drive.py)
+#:   - clearance-to-focal-ped -> DEFAULT_CLEARANCE_THRESHOLD_M (analysis_workbench/trace_failure_predicates.py)
+#: --------------------------------------------------------------------------------------
+_ROBOT_DEFAULTS = DifferentialDriveSettings()
 
-#: Minimum sustained separation window (design spec: 0.3-0.5 s hold before calling a
-#: divergence persistent). At dt=0.1 s this is 3-5 steps; we use "stays above threshold
-#: for the rest of the shared trace window" instead, which is strictly stronger and holds
-#: exactly for this pair (see the diss report -- separation is monotonically increasing
-#: after the crossing, no re-convergence).
+POSE_SCALE_M: float = DEFAULT_ROBOT_RADIUS
+NOMINAL_LINEAR_SPEED_MPS: float = _ROBOT_DEFAULTS.max_linear_speed
+NOMINAL_ANGULAR_SPEED_RAD_S: float = _ROBOT_DEFAULTS.max_angular_speed
+CLEARANCE_SCALE_M: float = DEFAULT_CLEARANCE_THRESHOLD_M
+
+#: D(t) component weights. Equal weighting (w_k=1 for all four terms) -- the simplest,
+#: least hand-tuned choice; not adjusted to force any particular t_d. See
+#: ``compute_joint_state_divergence`` docstring for the per-component breakdown that makes
+#: this choice auditable rather than opaque.
+DIVERGENCE_WEIGHTS: tuple[float, float, float, float] = (1.0, 1.0, 1.0, 1.0)
+
+#: Persistence hold duration: design spec's own range is "0.3-0.5 s"; 0.4 s is the midpoint,
+#: not tuned to hit a particular t_d for this pair.
+DIVERGENCE_HOLD_S: float = 0.4
+
+#: Threshold *margin* over the empirically observed pre-divergence noise floor of D(t)
+#: (see ``find_persistence_onset``): the two planners' commanded turn-rate already differs
+#: at t=0 (different control laws for the same "turn toward goal" behavior, not evidence of
+#: an interaction-driven divergence), so a literal small threshold (e.g. the design spec's
+#: own D(t) *value* is left unspecified -- only the 0.3-0.5 s *hold duration* is given) would
+#: fire trivially at step 0. Instead the threshold is derived from the trace itself: 1.25x
+#: the maximum D(t) observed over the first second (the "control-law-only" floor), so any
+#: crossing is provably above ordinary cross-planner baseline noise, not hand-picked to land
+#: on a particular timestamp.
+DIVERGENCE_THRESHOLD_MARGIN: float = 1.25
+DIVERGENCE_FLOOR_WINDOW_S: float = 1.0
+
+#: Backward search window for the separator (design spec: "search approximately one second
+#: backward").
+SEPARATOR_SEARCH_BACK_S: float = 1.0
+
+#: "Materially different command" jump thresholds (backward-search tier 2): a *jump*
+#: (step-to-step change), not a raw cross-episode difference -- see
+#: ``find_separator`` docstring for why raw differences are the wrong test here (the two
+#: planners' commands differ from t=0 by construction; only a discrete jump is evidence of
+#: a new decision). omega threshold reused from the first-cut script unchanged; the v
+#: threshold is new, chosen the same way (50% of NOMINAL_ANGULAR_SPEED_RAD_S vs.
+#: 15% of NOMINAL_LINEAR_SPEED_MPS -- see module-level note in ``find_separator``).
 COMMAND_DIFF_OMEGA_THRESHOLD_RAD_S: float = 0.5
+COMMAND_DIFF_LINEAR_THRESHOLD_MPS: float = 0.15 * NOMINAL_LINEAR_SPEED_MPS
 
 
 @dataclass(frozen=True)
@@ -248,83 +327,313 @@ def compute_critical_events(ep: EpisodeTrace) -> dict[str, dict[str, Any]]:
     return events
 
 
-def compute_divergence(
-    ep_a: EpisodeTrace, ep_b: EpisodeTrace, threshold_m: float
-) -> dict[str, Any]:
-    """First-cut pivot detector: first step where robot-robot separation exceeds
-    ``threshold_m`` and stays above it for the rest of the shared trace window.
+def select_focal_pedestrian(episode_a_bundle: Path, ep_b: EpisodeTrace) -> dict[str, Any]:
+    """Lock ONE focal pedestrian id, shared by both panels (design spec: "Lock the focal
+    pedestrian at conflict entry -- never switch to whichever is currently nearest").
+
+    Fixes the first-cut bug: the previous script set ``focal_ped_id =
+    nearest_pedestrian_id[step=0]``, i.e. whichever pedestrian happened to be closest at
+    the very first trace step. In this exemplar pair that pedestrian (p3) starts near the
+    robot's spawn point but is never actually close (min separation ~4.2 m, well above both
+    the near-miss and collision thresholds) before it teleports away to join the far
+    pedestrian cluster the robot actually interacts with (respawn-at-goal artifact, see
+    ``_draw_panel``'s teleport-segmenting note) -- so the "focal" label rendered on a
+    trajectory segment with no real interaction, while the clearance line (correctly)
+    pointed at whichever pedestrian the *global closest approach* used instead. Hence:
+    "focal p3 renders as a floating segment disconnected from the interaction."
+
+    Fix: reuse ``robot_sf.benchmark.trace_scene_figure._focal_pedestrian_id`` -- the
+    shipped, tested selection rule already used by the single-episode paper-figure
+    renderer: the pedestrian nearest the robot at the episode's global-minimum-distance
+    step (``metadata.summary.global_min_distance_step``). We reuse episode A (the
+    "success" / reference trajectory both episodes share an identical start with) as the
+    anchor so both panels label the SAME pedestrian id, then verify that id is actually
+    present -- and a genuine, non-trivial close approach -- in episode B too, so the
+    labelled focal pedestrian is provably the one every clearance line in the figure
+    measures to.
 
     Returns:
-        Dict with ``step``, ``time_s``, ``separation_m`` at the divergence step, or
-        ``step: None`` if no persistent divergence is found in the shared window.
+        Dict with ``ped_id`` (int), ``source`` (how it was picked), and a
+        ``verification`` sub-dict comparing the locked pedestrian's closest approach in B
+        against B's own true (any-pedestrian) global closest approach, so a bad lock would
+        be visible in the report rather than silently accepted.
     """
-    n = min(len(ep_a.robot_xy), len(ep_b.robot_xy))
-    sep = np.linalg.norm(ep_a.robot_xy[:n] - ep_b.robot_xy[:n], axis=1)
-    for i in range(n):
-        if np.all(sep[i:] > threshold_m):
-            return {
-                "step": i,
-                "time_s": float(ep_a.time_s[i]),
-                "separation_m": float(sep[i]),
-                "shared_window_steps": n,
-                "monotonic_after_crossing": bool(np.all(np.diff(sep[i:]) >= -1e-9)),
-            }
-    return {"step": None, "time_s": None, "separation_m": None, "shared_window_steps": n}
+    ep_a_tsf = tsf.load_episode(episode_a_bundle)
+    focal_str = tsf._focal_pedestrian_id(ep_a_tsf)
+    if focal_str is None:
+        raise RuntimeError(
+            f"trace_scene_figure._focal_pedestrian_id found no pedestrian for {episode_a_bundle}"
+        )
+    focal_id = int(focal_str)
+    if focal_id not in ep_b.ped_ids:
+        raise RuntimeError(
+            f"focal pedestrian {focal_id} (locked from episode A's closest approach) is not "
+            f"present in episode B's pedestrian ids {ep_b.ped_ids} -- cannot lock a shared "
+            "focal pedestrian across this pair; this would be a genuine data limitation, not "
+            "papered over."
+        )
+    dist_b_to_focal = clearance_to_ped(ep_b, focal_id)
+    b_locked_min_step = int(np.argmin(dist_b_to_focal))
+    b_true_min_step = int(np.nanargmin(ep_b.metrics["clearance_m"]))
+    b_true_min_ped = ep_b.metrics["nearest_pedestrian_id"][b_true_min_step]
+    return {
+        "ped_id": focal_id,
+        "source": "trace_scene_figure._focal_pedestrian_id(episode_a) -- pedestrian nearest "
+        "the robot at episode A's metadata.summary.global_min_distance_step",
+        "verification": {
+            "episode_b_locked_focal_min_distance_m": float(dist_b_to_focal[b_locked_min_step]),
+            "episode_b_locked_focal_min_step": b_locked_min_step,
+            "episode_b_true_global_min_distance_m": float(
+                ep_b.metrics["clearance_m"][b_true_min_step]
+            ),
+            "episode_b_true_global_min_ped_id": (
+                int(b_true_min_ped) if not math.isnan(b_true_min_ped) else None
+            ),
+            "note": (
+                "the locked focal pedestrian's own closest approach in B is compared "
+                "against B's true (any-pedestrian) global closest approach; a large gap "
+                "here would mean the locked pedestrian is NOT part of B's real interaction "
+                "and the lock should be treated as suspect"
+            ),
+        },
+    }
 
 
-def find_first_command_separator(
+def clearance_to_ped(ep: EpisodeTrace, ped_id: int) -> np.ndarray:
+    """Per-step robot-to-``ped_id`` center-to-center distance (not "nearest of any
+    pedestrian" -- a fixed single pedestrian's distance, used to lock the clearance line to
+    the same pedestrian the figure labels as focal).
+
+    Returns:
+        ``(T,)`` array of distances in meters.
+    """
+    col = ep.ped_ids.index(ped_id)
+    return np.linalg.norm(ep.robot_xy - ep.ped_xy[:, col, :], axis=1)
+
+
+def compute_joint_state_divergence(
     ep_a: EpisodeTrace,
     ep_b: EpisodeTrace,
-    divergence_step: int,
+    focal_ped_id: int,
     *,
-    search_back_s: float = 1.0,
-    jump_threshold: float = COMMAND_DIFF_OMEGA_THRESHOLD_RAD_S,
+    scales: tuple[float, float, float, float] = (
+        POSE_SCALE_M,
+        NOMINAL_LINEAR_SPEED_MPS,
+        NOMINAL_ANGULAR_SPEED_RAD_S,
+        CLEARANCE_SCALE_M,
+    ),
+    weights: tuple[float, float, float, float] = DIVERGENCE_WEIGHTS,
 ) -> dict[str, Any]:
-    """Search backward from the geometric divergence step for the first *discrete* command
-    change (a step-to-step jump in commanded angular velocity in either trace), the
-    design spec's "first differing mode / first materially different command" heuristic.
+    """Design spec's ``D(t)`` normalized joint-state divergence (replaces the first cut's
+    threshold-on-robot-robot-separation): a physically-scaled combination of robot pose,
+    commanded linear/angular velocity, and clearance-to-the-locked-focal-pedestrian.
 
-    NOTE on the simplification: the two planners' commanded omega already differ by a
-    near-constant ~0.6-0.8 rad/s from step 0 (different control laws, not a discrete
-    "separator" event) -- a plain ``|omega_A - omega_B| > threshold`` test would fire
-    trivially at step 0 and say nothing useful. This function instead looks for a *jump*
-    (``|omega[i] - omega[i-1]| > jump_threshold``) in either agent's own command sequence,
-    which captures a genuine maneuver onset (e.g. a hard-turn command kicking in) rather
-    than the planners' baseline behavioral gap.
+        D(t) = sqrt( sum_k w_k * ((z_k^A(t) - z_k^B(t)) / s_k)^2 )
+
+    with z_k in {robot pose separation, commanded v, commanded omega, clearance-to-focal-ped}
+    and s_k the matching physical scale (module-level ``POSE_SCALE_M`` /
+    ``NOMINAL_LINEAR_SPEED_MPS`` / ``NOMINAL_ANGULAR_SPEED_RAD_S`` / ``CLEARANCE_SCALE_M``).
+    Equal weights (``DIVERGENCE_WEIGHTS``) -- not tuned per-component.
+
+    Note on scope: this trace schema (issue-4891-exemplar-trace.v1) carries no per-step
+    categorical "planner mode" field (only ``planner.selected_action`` {linear_velocity,
+    angular_velocity} and, for social_force, an auxiliary ``ammv.pedestrian_force_vectors``
+    array) -- so the design spec's "planner-mode mismatch" ``z_k`` term is not available for
+    this pair and is honestly omitted (also see ``find_separator`` tier 1, which reports
+    this same limitation explicitly rather than fabricating a mode signal).
 
     Returns:
-        Dict with ``step``, ``time_s``, ``omega_a``, ``omega_b``, and ``jump_in`` (``"A"``
-        or ``"B"``) at the separator step (falls back to the divergence step itself if no
-        jump is found within the search window).
+        Dict with the ``D`` array plus every per-component array (``pose_sep_m``,
+        ``dv_cmd_mps``, ``domega_cmd_rad_s``, ``dclearance_m``) so the eventual pivot
+        selection stays explainable (design spec: "preserve their individual values").
+    """
+    n = min(len(ep_a.robot_xy), len(ep_b.robot_xy))
+    pose_sep = np.linalg.norm(ep_a.robot_xy[:n] - ep_b.robot_xy[:n], axis=1)
+    dv = np.abs(ep_a.cmd_v[:n] - ep_b.cmd_v[:n])
+    domega = np.abs(ep_a.cmd_omega[:n] - ep_b.cmd_omega[:n])
+    clear_a = clearance_to_ped(ep_a, focal_ped_id)[:n]
+    clear_b = clearance_to_ped(ep_b, focal_ped_id)[:n]
+    dclear = np.abs(clear_a - clear_b)
+
+    s_pose, s_v, s_omega, s_clear = scales
+    w_pose, w_v, w_omega, w_clear = weights
+    d_squared = (
+        w_pose * (pose_sep / s_pose) ** 2
+        + w_v * (dv / s_v) ** 2
+        + w_omega * (domega / s_omega) ** 2
+        + w_clear * (dclear / s_clear) ** 2
+    )
+    return {
+        "D": np.sqrt(d_squared),
+        "n": n,
+        "pose_sep_m": pose_sep,
+        "dv_cmd_mps": dv,
+        "domega_cmd_rad_s": domega,
+        "dclearance_m": dclear,
+        "scales": {"pose_m": s_pose, "v_mps": s_v, "omega_rad_s": s_omega, "clearance_m": s_clear},
+        "weights": {"pose": w_pose, "v": w_v, "omega": w_omega, "clearance": w_clear},
+    }
+
+
+def find_persistence_onset(
+    divergence: dict[str, Any],
+    dt: float,
+    *,
+    hold_s: float = DIVERGENCE_HOLD_S,
+    floor_window_s: float = DIVERGENCE_FLOOR_WINDOW_S,
+    margin: float = DIVERGENCE_THRESHOLD_MARGIN,
+) -> dict[str, Any]:
+    """``t_d``: first time ``D(t)`` remains above threshold for ``hold_s`` seconds
+    (design spec, step 2: "Define t_d as the first time D(t) remains above a threshold for
+    0.3-0.5 s").
+
+    Threshold derivation (data-driven, not hand-picked -- see the module-level
+    ``DIVERGENCE_THRESHOLD_MARGIN`` docstring): ``margin`` times the maximum D(t) observed
+    over the first ``floor_window_s`` seconds, i.e. the "two different control laws, no
+    interaction yet" baseline noise floor for this pair.
+
+    Returns:
+        Dict with ``step`` (``None`` if no persistent crossing is found), ``time_s``,
+        ``threshold``, ``floor``, ``hold_steps``, and ``floor_window_steps`` -- every input
+        to the decision, so it is auditable from the report alone.
+    """
+    d = divergence["D"]
+    n = len(d)
+    floor_steps = max(1, round(floor_window_s / dt))
+    floor = float(np.max(d[: min(floor_steps, n)]))
+    threshold = margin * floor
+    hold_steps = max(1, round(hold_s / dt))
+    for i in range(n):
+        if i + hold_steps <= n and np.all(d[i : i + hold_steps] > threshold):
+            return {
+                "step": i,
+                "time_s": None,  # filled in by the caller (needs ep.time_s)
+                "threshold": threshold,
+                "floor": floor,
+                "hold_steps": hold_steps,
+                "floor_window_steps": floor_steps,
+            }
+    return {
+        "step": None,
+        "time_s": None,
+        "threshold": threshold,
+        "floor": floor,
+        "hold_steps": hold_steps,
+        "floor_window_steps": floor_steps,
+    }
+
+
+def find_separator(  # noqa: PLR0913 - every argument is a distinct input to the tiered search
+    ep_a: EpisodeTrace,
+    ep_b: EpisodeTrace,
+    divergence: dict[str, Any],
+    t_d_step: int,
+    events_a: dict[str, dict[str, Any]],
+    events_b: dict[str, dict[str, Any]],
+    *,
+    search_back_s: float = SEPARATOR_SEARCH_BACK_S,
+    jump_threshold_omega: float = COMMAND_DIFF_OMEGA_THRESHOLD_RAD_S,
+    jump_threshold_v: float = COMMAND_DIFF_LINEAR_THRESHOLD_MPS,
+) -> dict[str, Any]:
+    """Backward search from ``t_d`` for the separator (design spec, step 2): "search
+    approximately one second backward for: 1. the first differing mode; 2. the first
+    materially different command; 3. braking or yielding onset; 4. otherwise, the largest
+    rise in risk."
+
+    Tier 1 (planner mode) is unavailable for this trace schema (see
+    ``compute_joint_state_divergence`` docstring) and is reported as such, not skipped
+    silently. Tier 2 tests for a *jump* (``|cmd[i] - cmd[i-1]| > threshold``) in either
+    agent's own command sequence, not a raw cross-episode difference -- the two planners'
+    commands differ from t=0 by construction (different control laws for the same
+    "turn/accelerate toward goal" behavior), so a raw-difference test would fire trivially
+    at step 0 and explain nothing (this is exactly the failure mode the first cut's
+    ``find_first_command_separator`` already worked around for omega; this version applies
+    the same jump test to both v and omega and makes it tier-ordered per the design spec).
+    Tier 3 checks whether either episode's ``first_braking_event`` critical-interval anchor
+    (already computed by ``compute_critical_events``, reused not reinvented) falls inside
+    the backward window. Tier 4 falls back to the step with the largest single-step rise in
+    ``D(t)`` inside the window -- i.e. "this pair's divergence has no single discrete
+    decision point in the lookback window; the closest thing to one is where the aggregate
+    signal itself accelerates fastest."
+
+    Returns:
+        Dict with ``step``, ``time_s``, ``tier`` (one of ``"command_jump"``,
+        ``"braking_onset"``, ``"largest_risk_rise"`` -- ``"mode"`` is never returned since
+        it is structurally unavailable), and tier-specific detail fields.
     """
     dt = float(ep_a.time_s[1] - ep_a.time_s[0]) if len(ep_a.time_s) > 1 else 0.1
     back_steps = max(1, round(search_back_s / dt))
-    start = max(1, divergence_step - back_steps)
-    for i in range(start, divergence_step + 1):
-        jump_a = abs(ep_a.cmd_omega[i] - ep_a.cmd_omega[i - 1])
-        jump_b = abs(ep_b.cmd_omega[i] - ep_b.cmd_omega[i - 1])
-        if max(jump_a, jump_b) > jump_threshold:
+    start = max(1, t_d_step - back_steps)
+    tier1_note = (
+        "tier 1 (first differing planner mode) is unavailable: this trace schema "
+        "(issue-4891-exemplar-trace.v1) carries no per-step categorical planner-mode "
+        "field, only continuous commanded linear/angular velocity -- a genuine data "
+        "limitation, not a detector gap"
+    )
+
+    # Tier 2: first materially different command (a discrete jump, in either agent, in
+    # either v or omega) within the backward window.
+    for i in range(start, t_d_step + 1):
+        jump_v_a = abs(ep_a.cmd_v[i] - ep_a.cmd_v[i - 1])
+        jump_v_b = abs(ep_b.cmd_v[i] - ep_b.cmd_v[i - 1])
+        jump_o_a = abs(ep_a.cmd_omega[i] - ep_a.cmd_omega[i - 1])
+        jump_o_b = abs(ep_b.cmd_omega[i] - ep_b.cmd_omega[i - 1])
+        v_hit = max(jump_v_a, jump_v_b) > jump_threshold_v
+        o_hit = max(jump_o_a, jump_o_b) > jump_threshold_omega
+        if v_hit or o_hit:
             return {
                 "step": i,
                 "time_s": float(ep_a.time_s[i]),
-                "omega_a": float(ep_a.cmd_omega[i]),
-                "omega_b": float(ep_b.cmd_omega[i]),
-                "jump_in": "A" if jump_a >= jump_b else "B",
-                "jump_rad_s": float(max(jump_a, jump_b)),
+                "tier": "command_jump",
+                "tier1_note": tier1_note,
+                "search_window_steps": [start, t_d_step],
+                "jump_kind": "v" if v_hit else "omega",
+                "jump_in": "A" if max(jump_v_a, jump_o_a) >= max(jump_v_b, jump_o_b) else "B",
+                "jump_v_mps": float(max(jump_v_a, jump_v_b)),
+                "jump_omega_rad_s": float(max(jump_o_a, jump_o_b)),
             }
-    i = divergence_step
+
+    # Tier 3: braking/yield onset (either agent's critical_intervals anchor) inside window.
+    for label, events in (("A", events_a), ("B", events_b)):
+        brake = events.get("first_braking_event")
+        if brake is not None and start <= brake["step"] <= t_d_step:
+            return {
+                "step": brake["step"],
+                "time_s": brake["time_s"],
+                "tier": "braking_onset",
+                "tier1_note": tier1_note,
+                "search_window_steps": [start, t_d_step],
+                "braking_in": label,
+            }
+
+    # Tier 4 fallback: largest single-step rise in D(t) within the window.
+    d = divergence["D"]
+    window_start = max(1, start)
+    deltas = d[window_start : t_d_step + 1] - d[window_start - 1 : t_d_step]
+    if len(deltas) == 0:
+        best_step = t_d_step
+        best_delta = 0.0
+    else:
+        best_step = window_start + int(np.argmax(deltas))
+        best_delta = float(np.max(deltas))
     return {
-        "step": i,
-        "time_s": float(ep_a.time_s[i]),
-        "omega_a": float(ep_a.cmd_omega[i]),
-        "omega_b": float(ep_b.cmd_omega[i]),
-        "jump_in": None,
-        "jump_rad_s": 0.0,
+        "step": best_step,
+        "time_s": float(ep_a.time_s[best_step]),
+        "tier": "largest_risk_rise",
+        "tier1_note": tier1_note,
+        "search_window_steps": [start, t_d_step],
+        "tier2_note": "no discrete command jump (v or omega) found in the backward window",
+        "tier3_note": "no braking/yield onset (critical_intervals.first_braking_event) "
+        "found in the backward window",
+        "delta_d": best_delta,
     }
 
 
 def closest_approach(ep: EpisodeTrace) -> dict[str, Any]:
-    """Global closest robot-pedestrian approach within the (possibly truncated) episode.
+    """Global closest robot-pedestrian approach within the (possibly truncated) episode,
+    to WHICHEVER pedestrian is nearest at that step (may differ from the locked focal
+    pedestrian -- kept for the report's cross-check, see ``select_focal_pedestrian``, not
+    used to draw the figure's clearance line).
 
     Returns:
         Dict with ``step``, ``time_s``, ``distance_m``, ``ped_id``, ``robot_xy``, ``ped_xy``.
@@ -341,6 +650,96 @@ def closest_approach(ep: EpisodeTrace) -> dict[str, Any]:
         "ped_id": int(ped_id) if not math.isnan(ped_id) else None,
         "robot_xy": ep.robot_xy[step].tolist(),
         "ped_xy": ped_xy.tolist() if ped_xy is not None else None,
+    }
+
+
+def closest_approach_to_focal_ped(ep: EpisodeTrace, focal_ped_id: int) -> dict[str, Any]:
+    """Closest robot approach to the LOCKED focal pedestrian specifically (not "nearest of
+    any pedestrian" -- see ``closest_approach``). This is what the figure's clearance line
+    and label are drawn from, so the labelled focal pedestrian is provably the one the
+    clearance line measures to (the task's item-1 verification requirement).
+
+    Returns:
+        Dict with ``step``, ``time_s``, ``distance_m``, ``ped_id`` (== ``focal_ped_id``),
+        ``robot_xy``, ``ped_xy``.
+    """
+    dist = clearance_to_ped(ep, focal_ped_id)
+    step = int(np.argmin(dist))
+    col = ep.ped_ids.index(focal_ped_id)
+    return {
+        "step": step,
+        "time_s": float(ep.time_s[step]),
+        "distance_m": float(dist[step]),
+        "ped_id": focal_ped_id,
+        "robot_xy": ep.robot_xy[step].tolist(),
+        "ped_xy": ep.ped_xy[step, col].tolist(),
+    }
+
+
+def compute_delta_gutter(
+    ep_a: EpisodeTrace,
+    ep_b: EpisodeTrace,
+    pivot_step: int,
+    focal_ped_id: int,
+    events_a: dict[str, dict[str, Any]],
+    events_b: dict[str, dict[str, Any]],
+    *,
+    horizon_s: float = 2.0,
+) -> dict[str, Any]:
+    """The hinge figure's central delta gutter (design spec: "A narrow central delta gutter
+    containing only: Delta t_brake, Delta v_cmd at the pivot, minimum clearance over the
+    following horizon, first differing planner mode").
+
+    All four quantities are computed directly from the traces at the pivot found by
+    ``find_separator`` -- none are hand-tuned. ``first differing planner mode`` is reported
+    as unavailable (same data-schema limitation as ``find_separator`` tier 1) rather than
+    fabricated.
+
+    Returns:
+        Dict with ``dt_brake_s`` (B's first-braking time minus A's, ``None`` if either is
+        unavailable), ``dv_cmd_at_pivot_mps`` / ``domega_cmd_at_pivot_rad_s`` (A minus B at
+        ``pivot_step``), ``min_clearance_horizon_m`` per episode (min clearance-to-focal-ped
+        over the ``horizon_s`` seconds following the pivot), and ``first_differing_mode``
+        (``None`` with a ``reason``).
+    """
+    dt = float(ep_a.time_s[1] - ep_a.time_s[0]) if len(ep_a.time_s) > 1 else 0.1
+    horizon_steps = max(1, round(horizon_s / dt))
+
+    brake_a = events_a.get("first_braking_event")
+    brake_b = events_b.get("first_braking_event")
+    dt_brake = (
+        brake_b["time_s"] - brake_a["time_s"]
+        if brake_a is not None and brake_b is not None
+        else None
+    )
+
+    dv_at_pivot = float(ep_a.cmd_v[pivot_step] - ep_b.cmd_v[pivot_step])
+    domega_at_pivot = float(ep_a.cmd_omega[pivot_step] - ep_b.cmd_omega[pivot_step])
+
+    def _min_clearance_over_horizon(ep: EpisodeTrace) -> dict[str, Any]:
+        end = min(len(ep.robot_xy), pivot_step + horizon_steps + 1)
+        window = clearance_to_ped(ep, focal_ped_id)[pivot_step:end]
+        idx = pivot_step + int(np.argmin(window))
+        return {"distance_m": float(np.min(window)), "step": idx, "time_s": float(ep.time_s[idx])}
+
+    return {
+        "dt_brake_s": dt_brake,
+        "dt_brake_detail": {
+            "episode_a_first_braking_time_s": brake_a["time_s"] if brake_a else None,
+            "episode_b_first_braking_time_s": brake_b["time_s"] if brake_b else None,
+        },
+        "dv_cmd_at_pivot_mps": dv_at_pivot,
+        "domega_cmd_at_pivot_rad_s": domega_at_pivot,
+        "min_clearance_horizon_m": {
+            "episode_a": _min_clearance_over_horizon(ep_a),
+            "episode_b": _min_clearance_over_horizon(ep_b),
+        },
+        "horizon_s": horizon_s,
+        "first_differing_mode": None,
+        "first_differing_mode_reason": (
+            "unavailable: this trace schema carries no per-step categorical planner-mode "
+            "field (see find_separator tier 1 note)"
+        ),
     }
 
 
@@ -389,7 +788,113 @@ def _time_dot_indices(time_s: np.ndarray, interval_s: float = 0.5) -> list[int]:
     return indices
 
 
-def _draw_panel(  # noqa: C901, PLR0913 - one-panel figure assembly, mirrors
+def _text_overlaps_lines_or_markers(
+    ax: plt.Axes, text_artist: Any, renderer: Any, tolerance: float = 2.0
+) -> bool:
+    """Item 4 / figure_qa gate: check ONE text artist against the exact criterion
+    ``figure_qa.lint_figure`` uses (its own private ``_line_bbox_overlaps_text`` /
+    ``_point_in_bbox`` helpers, reused verbatim rather than reimplemented), so label
+    placement is judged by the same rule the QA gate will apply -- not a separate
+    geometric heuristic that might disagree with it.
+
+    Returns:
+        True if the text artist's rendered bounding box overlaps any visible Line2D or
+        scatter-marker offset already drawn in ``ax``.
+    """
+    text_bbox = text_artist.get_window_extent(renderer)
+    for child in ax.get_children():
+        if isinstance(child, Line2D) and child.get_visible():
+            if figure_qa._line_bbox_overlaps_text(child, text_bbox, ax, renderer, tolerance):
+                return True
+        elif isinstance(child, PathCollection) and child.get_visible():
+            offsets = child.get_offsets()
+            if len(offsets) == 0:
+                continue
+            transform = ax.transData
+            for point in offsets:
+                px, py = transform.transform((float(point[0]), float(point[1])))
+                if figure_qa._point_in_bbox(px, py, text_bbox, tolerance):
+                    return True
+    return False
+
+
+def _place_clear_label(  # noqa: PLR0913 - every argument is a distinct annotate() control
+    ax: plt.Axes,
+    anchor_xy: tuple[float, float],
+    text: str,
+    *,
+    color: str,
+    fontsize: float,
+    weight: str = "normal",
+    radii_points: tuple[float, ...] = (52.0, 68.0, 86.0, 106.0, 128.0),
+    n_directions: int = 16,
+    draw_leader: bool = True,
+) -> None:
+    """Place an annotation near ``anchor_xy``, trying ``n_directions`` candidate radial
+    offsets at each of ``radii_points`` (nearest radius first) and keeping the first whose
+    rendered bbox does not overlap any line/marker already drawn in ``ax`` (checked with
+    ``_text_overlaps_lines_or_markers`` -- the exact figure_qa criterion, not a proxy for
+    it). Falls back to the very first candidate tried if every direction at every radius
+    overlaps something (better than silently placing on top of a line without trying).
+
+    This closed-loop, render-and-check placement replaces several earlier heuristic
+    attempts in this module's history (a fixed perpendicular offset; an offset chosen by
+    distance-to-trajectory-vertices only; a single-radius direction search) -- the first
+    two cleared the specific line they were designed around but not every artist actually
+    drawn in the panel. The single-radius search then failed outright: at radius 52 pt
+    every one of 16 directions overlapped something, so the loop always fell back to its
+    first, overlapping, candidate, and figure_qa.lint_figure kept reporting the *same*
+    defect at the *same* pixel location no matter how the direction heuristic upstream of
+    it changed -- which is what exposed the real cause: ``Annotation.get_window_extent()``
+    (what both this function and figure_qa's own checker call) includes the CONNECTOR ARROW
+    when ``arrowprops`` is set, not just the text glyph box. With a leader arrow drawn back
+    to an anchor point sitting inside a dense pedestrian cluster, the reported bbox always
+    reached back into that clutter regardless of how far the text itself was pushed away --
+    so ``draw_leader=False`` is required for anchors in cluttered regions (the caller
+    already draws a separate, deliberate dotted clearance line for that visual link; the
+    text doesn't need its own second connector).
+    """
+    fig = ax.figure
+    fig.canvas.draw()
+
+    arrowprops = (
+        {"arrowstyle": "-", "color": color, "linewidth": 0.5, "shrinkA": 2, "shrinkB": 2}
+        if draw_leader
+        else None
+    )
+    fallback_artist = None
+    for radius_points in radii_points:
+        for k in range(n_directions):
+            theta = 2.0 * math.pi * k / n_directions
+            dx, dy = math.cos(theta) * radius_points, math.sin(theta) * radius_points
+            artist = ax.annotate(
+                text,
+                anchor_xy,
+                fontsize=fontsize,
+                color=color,
+                weight=weight,
+                xytext=(dx, dy),
+                textcoords="offset points",
+                ha="left" if dx >= 0 else "right",
+                va="center",
+                zorder=9,
+                arrowprops=arrowprops,
+                bbox=_LABEL_BBOX,
+            )
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            overlap = _text_overlaps_lines_or_markers(ax, artist, renderer)
+            if not overlap:
+                if fallback_artist is not None:
+                    fallback_artist.remove()
+                return
+            if fallback_artist is None:
+                fallback_artist = artist
+            else:
+                artist.remove()
+
+
+def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure assembly, mirrors
     # robot_sf.benchmark.trace_scene_figure._draw_scene_panel's own noqa'd complexity for
     # the same reason (many independent drawing layers, not a single indivisible piece of
     # logic worth further splitting for a first-cut prototype).
@@ -408,9 +913,34 @@ def _draw_panel(  # noqa: C901, PLR0913 - one-panel figure assembly, mirrors
     collision_or_near_miss_step: int | None,
     outcome_kind: str,  # "success" | "collision" | "near_miss" | "non_completion"
     bounds: tuple[float, float, float, float],
-) -> None:
-    """Draw one spatial panel of the hinge figure. Mutates ``ax`` in place."""
+    map_definition: Any | None = None,
+    defer_labels: bool = False,
+) -> list[tuple[tuple[float, float], str, dict[str, Any]]]:
+    """Draw one spatial panel of the hinge figure. Mutates ``ax`` in place.
+
+    When ``defer_labels`` is True, the two dynamically-placed labels (pivot ring,
+    clearance) are NOT placed here; instead their ``(anchor_xy, text, style_kwargs)``
+    specs are collected and returned, so the caller can place them AFTER
+    ``fig.tight_layout()`` runs (tight_layout moves/rescales the axes, which invalidates
+    any text-vs-line overlap check performed before it -- see ``render_hinge_figure`` for
+    why this two-pass placement is necessary: an earlier single-pass version placed labels
+    that measurably cleared every line/marker at draw time, yet figure_qa.lint_figure still
+    reported the same overlaps because tight_layout ran afterward and shifted geometry
+    under the already-fixed label positions).
+
+    Returns:
+        Empty list unless ``defer_labels`` is True, in which case up to two
+        ``(anchor_xy, text, style_kwargs)`` tuples for the caller to place later.
+    """
     xmin, xmax, ymin, ymax = bounds
+    pending_labels: list[tuple[tuple[float, float], str, dict[str, Any]]] = []
+
+    # -- map obstacles (reused verbatim from the shipped single-episode paper-figure
+    # renderer -- item 4: ground the hinge panels in the real corridor geometry instead of
+    # a blank background, without reimplementing obstacle drawing). Drawn first / lowest
+    # zorder so trajectories and markers stay on top.
+    if map_definition is not None:
+        tsf._draw_obstacles(ax, map_definition, ((xmin, xmax), (ymin, ymax)))
 
     # -- context (non-focal) pedestrians, dimmed, stable IDs --------------------------
     # Pedestrians respawn under the same id at their goal (a ~25 m same-step position
@@ -492,7 +1022,10 @@ def _draw_panel(  # noqa: C901, PLR0913 - one-panel figure assembly, mirrors
         zorder=5,
     )
 
-    # -- divergence ring -----------------------------------------------------------------
+    # -- pivot ring (design spec: "a conspicuous pivot ring at the first persistent action
+    # difference" -- the separator found by find_separator, not the raw geometric
+    # divergence point). Label placement uses the same closed-loop figure_qa-driven search
+    # as the clearance label (_place_clear_label).
     if divergence_step is not None and divergence_step < len(xy):
         px, py = xy[divergence_step]
         ax.scatter(
@@ -504,15 +1037,15 @@ def _draw_panel(  # noqa: C901, PLR0913 - one-panel figure assembly, mirrors
             linewidth=1.4,
             zorder=6,
         )
-        ax.annotate(
-            "divergence",
+        pivot_label_spec = (
             (px, py),
-            fontsize=6.5,
-            xytext=(10, -14),
-            textcoords="offset points",
-            zorder=6,
-            bbox=_LABEL_BBOX,
+            "pivot",
+            {"color": "#111111", "fontsize": 6.5, "draw_leader": False},
         )
+        if defer_labels:
+            pending_labels.append(pivot_label_spec)
+        else:
+            _place_clear_label(ax, *pivot_label_spec[:2], **pivot_label_spec[2])
 
     # -- critical-interval markers (closest_approach / first_braking_event) ------------
     for anchor, info in critical_events.items():
@@ -543,20 +1076,23 @@ def _draw_panel(  # noqa: C901, PLR0913 - one-panel figure assembly, mirrors
             )
 
     # -- closest-approach line, labelled with clearance ----------------------------------
+    # Label placement uses the closed-loop figure_qa-driven search (_place_clear_label,
+    # see its docstring for the two heuristic attempts this replaced): the first cut's
+    # fixed diagonal offset put both clearance labels directly on their own dotted line
+    # (figure_qa.lint_figure text_line_overlap / text_marker_overlap).
     if closest["ped_xy"] is not None:
         rx, ry = closest["robot_xy"]
         pxg, pyg = closest["ped_xy"]
         ax.plot([rx, pxg], [ry, pyg], color=color, linewidth=0.8, linestyle=":", zorder=5)
-        ax.annotate(
-            f"clearance {closest['distance_m']:.2f} m\n@t={closest['time_s']:.1f}s",
+        clearance_label_spec = (
             (pxg, pyg),
-            fontsize=6.5,
-            color=color,
-            xytext=(-9, -22),
-            textcoords="offset points",
-            zorder=9,
-            bbox=_LABEL_BBOX,
+            f"clearance {closest['distance_m']:.2f} m\n@t={closest['time_s']:.1f}s",
+            {"color": color, "fontsize": 6.5, "draw_leader": False},
         )
+        if defer_labels:
+            pending_labels.append(clearance_label_spec)
+        else:
+            _place_clear_label(ax, *clearance_label_spec[:2], **clearance_label_spec[2])
 
     # -- outcome marker: collision (x) / near-miss (triangle) --------------------------
     if collision_or_near_miss_step is not None and collision_or_near_miss_step < len(xy):
@@ -634,6 +1170,58 @@ def _draw_panel(  # noqa: C901, PLR0913 - one-panel figure assembly, mirrors
     ax.tick_params(labelsize=7.5)
     ax.set_xlabel("x (m)", fontsize=8)
     ax.grid(alpha=0.15, linewidth=0.5)
+    return pending_labels
+
+
+def _format_gutter_lines(gutter: dict[str, Any]) -> list[str]:
+    """Render the delta-gutter dict (``compute_delta_gutter``) as short text lines.
+
+    Returns:
+        Ordered list of one-line strings for the gutter panel.
+    """
+    lines = ["A | Δ | B", ""]
+    if gutter["dt_brake_s"] is not None:
+        lines.append(f"Δt_brake\n{gutter['dt_brake_s']:+.2f} s")
+    else:
+        lines.append("Δt_brake\nn/a (one side\nnever brakes)")
+    lines.append("")
+    lines.append(f"Δv_cmd @pivot\n{gutter['dv_cmd_at_pivot_mps']:+.2f} m/s")
+    lines.append("")
+    lines.append(f"Δω_cmd @pivot\n{gutter['domega_cmd_at_pivot_rad_s']:+.2f} rad/s")
+    lines.append("")
+    min_a = gutter["min_clearance_horizon_m"]["episode_a"]["distance_m"]
+    min_b = gutter["min_clearance_horizon_m"]["episode_b"]["distance_m"]
+    lines.append(
+        f"min clearance\n(+{gutter['horizon_s']:g}s horizon)\nA {min_a:.2f}m / B {min_b:.2f}m"
+    )
+    lines.append("")
+    lines.append("first differing mode\nn/a (no per-step\nmode field)")
+    return lines
+
+
+def _draw_delta_gutter(ax: plt.Axes, gutter: dict[str, Any]) -> None:
+    """Draw the narrow central delta-gutter panel (design spec: "A narrow central delta
+    gutter containing only: Delta t_brake, Delta v_cmd at the pivot, minimum clearance over
+    the following horizon, first differing planner mode").
+    """
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    lines = _format_gutter_lines(gutter)
+    n = len(lines)
+    for i, text in enumerate(lines):
+        y = 1.0 - (i + 0.5) / n
+        weight = "bold" if text and "\n" not in text and "|" in text else "normal"
+        ax.text(
+            0.5,
+            y,
+            text,
+            fontsize=6.3,
+            ha="center",
+            va="center",
+            weight=weight,
+            color=COLOR_COMMON_PREFIX if "n/a" in text else "#222222",
+        )
 
 
 def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argument is a
@@ -645,6 +1233,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     label_b: str,
     divergence: dict[str, Any],
     separator: dict[str, Any],
+    gutter: dict[str, Any],
     focal_ped_id: int,
     events_a: dict[str, dict[str, Any]],
     events_b: dict[str, dict[str, Any]],
@@ -654,10 +1243,16 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     outcome_b: str,
     b_outcome_step: int | None,
     headline: str,
+    map_definition: Any | None,
     out_pdf: Path,
     out_png: Path,
-) -> None:
-    """Render + export the two-panel hinge figure (vector PDF + PNG preview)."""
+) -> list[Any]:
+    """Render + export the two-panel hinge figure (vector PDF + PNG preview).
+
+    Returns:
+        The list of ``figure_qa.lint_figure`` defects found on the rendered figure (before
+        the caller closes it), so the CLI can report an exact before/after lint count.
+    """
     plt.rcParams.update(
         {
             "font.family": "sans-serif",
@@ -672,18 +1267,30 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     aspect = (ymax - ymin) / (xmax - xmin)
     panel_w = 4.4
     fig_h = panel_w * aspect + 1.0
-    fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(panel_w * 2 + 0.6, fig_h))
+    fig = plt.figure(figsize=(panel_w * 2 + 1.5, fig_h))
+    grid = fig.add_gridspec(1, 3, width_ratios=(1.0, 0.34, 1.0), wspace=0.06)
+    ax_a = fig.add_subplot(grid[0, 0])
+    ax_gutter = fig.add_subplot(grid[0, 1])
+    ax_b = fig.add_subplot(grid[0, 2])
 
-    common_prefix_end = divergence["step"] if divergence["step"] is not None else 0
+    # Pivot ring position = the separator found by find_separator (design spec: "a
+    # conspicuous pivot ring at the first persistent action difference"), NOT the raw D(t)
+    # persistence-onset step t_d -- the separator is t_d itself or up to ~1s earlier.
+    pivot_step = separator["step"]
+    common_prefix_end = pivot_step
 
-    _draw_panel(
+    # defer_labels=True: draw geometry now, place the two dynamic labels (pivot,
+    # clearance) AFTER fig.tight_layout() below -- see _draw_panel's docstring for why a
+    # single-pass placement measurably cleared every line/marker at draw time yet still
+    # showed up in figure_qa.lint_figure (tight_layout moves the axes afterward).
+    pending_a = _draw_panel(
         ax_a,
         ep_a,
         color=COLOR_A,
         marker=MARKER_A,
         linestyle="-",
         label=f"A -- {label_a}",
-        divergence_step=divergence["step"],
+        divergence_step=pivot_step,
         common_prefix_end=common_prefix_end,
         focal_ped_id=focal_ped_id,
         critical_events=events_a,
@@ -691,15 +1298,17 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
         collision_or_near_miss_step=None,
         outcome_kind=outcome_a,
         bounds=bounds,
+        map_definition=map_definition,
+        defer_labels=True,
     )
-    _draw_panel(
+    pending_b = _draw_panel(
         ax_b,
         ep_b,
         color=COLOR_B,
         marker=MARKER_B,
         linestyle="--",
         label=f"B -- {label_b}",
-        divergence_step=divergence["step"],
+        divergence_step=pivot_step,
         common_prefix_end=common_prefix_end,
         focal_ped_id=focal_ped_id,
         critical_events=events_b,
@@ -707,9 +1316,12 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
         collision_or_near_miss_step=b_outcome_step,
         outcome_kind=outcome_b,
         bounds=bounds,
+        map_definition=map_definition,
+        defer_labels=True,
     )
     ax_b.set_ylabel("")
     ax_a.set_ylabel("y (m)", fontsize=8)
+    _draw_delta_gutter(ax_gutter, gutter)
 
     legend_elements = [
         Line2D([0], [0], color=COLOR_COMMON_PREFIX, lw=1.6, label="common prefix (both)"),
@@ -720,7 +1332,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
             lw=1.8,
             marker=MARKER_A,
             markersize=5,
-            label="A post-divergence",
+            label="A post-pivot",
         ),
         Line2D(
             [0],
@@ -731,7 +1343,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
             marker=MARKER_B,
             markersize=5,
             markerfacecolor="none",
-            label="B post-divergence",
+            label="B post-pivot",
         ),
         Line2D(
             [0],
@@ -741,7 +1353,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
             markeredgecolor="black",
             markerfacecolor="none",
             markersize=11,
-            label="divergence",
+            label="pivot (separator)",
         ),
     ]
     fig.legend(
@@ -754,7 +1366,13 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     )
 
     fig.suptitle(headline, fontsize=9, wrap=True, y=0.995)
-    fig.tight_layout(rect=(0, 0.035, 1, 0.975))
+    fig.tight_layout(rect=(0, 0.045, 1, 0.975))
+
+    # Place the two dynamic labels per panel now that the final axes layout is fixed
+    # (see the defer_labels note above).
+    for ax, pending in ((ax_a, pending_a), (ax_b, pending_b)):
+        for anchor_xy, text, style_kwargs in pending:
+            _place_clear_label(ax, anchor_xy, text, **style_kwargs)
 
     out_pdf.parent.mkdir(parents=True, exist_ok=True)
     # Pin CreationDate so re-renders with identical inputs are byte-identical (matplotlib
@@ -763,7 +1381,8 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     fig.savefig(out_pdf, metadata={"CreationDate": None})
     fig.savefig(out_png, dpi=200)
 
-    # QA smoke check: reuse the repo's own text/marker-collision linter.
+    # QA gate: reuse the repo's own text/marker-collision linter (item 4 -- report the
+    # exact before/after defect count, not just "pass/fail").
     defects = figure_qa.lint_figure(fig)
     errors = [d for d in defects if getattr(d, "severity", "") == "error"]
     if errors:
@@ -774,6 +1393,7 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
         print(f"figure_qa.lint_figure: clean ({len(defects)} non-error defect(s))")
 
     plt.close(fig)
+    return defects
 
 
 # ---------------------------------------------------------------------------
@@ -900,6 +1520,115 @@ def _sha256_of_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+#: Lint defect count from the first-cut prototype's output, captured for the record 2026-07-15
+#: (``output/butterfly_hinge_proto/butterfly_hinge_figure_proto.pdf``, commit 5124e9faf):
+#: 3x ``text_line_overlap`` + 1x ``text_marker_overlap``, all error-severity, all from the
+#: divergence/clearance annotation offsets. Kept as a literal here (not re-derived at
+#: runtime) so the before/after comparison in the report is against the actual prior
+#: artifact, not a re-run of deleted code.
+FIRST_CUT_LINT_ERROR_COUNT: int = 4
+
+
+def _git_commit(repo_dir: Path) -> str | None:
+    """Best-effort ``git rev-parse HEAD`` for provenance; ``None`` if unavailable.
+
+    Returns:
+        The 40-character commit hash, or ``None`` if git is unavailable or the directory
+        is not a git repository.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_dir), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def build_provenance_sidecar(  # noqa: PLR0913 - every argument is a distinct provenance fact
+    *,
+    ep_a: EpisodeTrace,
+    ep_b: EpisodeTrace,
+    episode_a_bundle: Path,
+    episode_b_bundle: Path,
+    focal_selection: dict[str, Any],
+    divergence: dict[str, Any],
+    separator: dict[str, Any],
+    gutter: dict[str, Any],
+    figure_pdf: Path,
+    figure_png: Path,
+    qa_defects_before: int,
+    qa_defects_after: int,
+) -> dict[str, Any]:
+    """Provenance sidecar (item 4): episode ids, planners, seeds, source commits,
+    config/trace hashes -- everything needed to reproduce or audit the shipped still
+    independent of the (much larger) ``butterfly_hinge_report.json`` analysis dump.
+
+    Returns:
+        JSON-serializable provenance dict.
+    """
+    script_path = Path(__file__).resolve()
+    robot_sf_repo = script_path.parents[2]  # scripts/repro/<this file> -> repo root
+    trace_a_path = episode_a_bundle / "trace_series.json"
+    trace_b_path = episode_b_bundle / "trace_series.json"
+    return {
+        "schema_version": "butterfly-hinge-provenance.v1",
+        "generated_at_utc": datetime.now(UTC).isoformat(),
+        "script": {
+            "path": str(script_path.relative_to(robot_sf_repo)),
+            "repo": str(robot_sf_repo),
+            "git_commit": _git_commit(robot_sf_repo),
+        },
+        "episode_a": {
+            "bundle_dir": str(episode_a_bundle),
+            "episode_id": ep_a.metadata.get("episode_id"),
+            "planner": ep_a.metadata.get("planner"),
+            "scenario_id": ep_a.metadata.get("scenario_id"),
+            "seed": ep_a.metadata.get("seed"),
+            "episode_status": ep_a.metadata.get("episode_status"),
+            "source_git_commit": ep_a.metadata.get("git_commit"),
+            "trace_series_sha256": _sha256_of_file(trace_a_path),
+            "n_steps_used": len(ep_a.robot_xy),
+        },
+        "episode_b": {
+            "bundle_dir": str(episode_b_bundle),
+            "episode_id": ep_b.metadata.get("episode_id"),
+            "planner": ep_b.metadata.get("planner"),
+            "scenario_id": ep_b.metadata.get("scenario_id"),
+            "seed": ep_b.metadata.get("seed"),
+            "episode_status": ep_b.metadata.get("episode_status"),
+            "source_git_commit": ep_b.metadata.get("git_commit"),
+            "trace_series_sha256": _sha256_of_file(trace_b_path),
+            "n_steps_used": len(ep_b.robot_xy),
+        },
+        "focal_pedestrian_selection": focal_selection,
+        "divergence_detector_config": {
+            "scales": divergence["scales"],
+            "weights": divergence["weights"],
+            "hold_s": DIVERGENCE_HOLD_S,
+            "floor_window_s": DIVERGENCE_FLOOR_WINDOW_S,
+            "threshold_margin": DIVERGENCE_THRESHOLD_MARGIN,
+            "separator_search_back_s": SEPARATOR_SEARCH_BACK_S,
+            "command_jump_threshold_omega_rad_s": COMMAND_DIFF_OMEGA_THRESHOLD_RAD_S,
+            "command_jump_threshold_v_mps": COMMAND_DIFF_LINEAR_THRESHOLD_MPS,
+        },
+        "pivot": {"separator": separator, "delta_gutter": gutter},
+        "figure": {
+            "pdf": str(figure_pdf),
+            "pdf_sha256": _sha256_of_file(figure_pdf),
+            "png": str(figure_png),
+        },
+        "figure_qa": {
+            "first_cut_error_defects": qa_defects_before,
+            "this_render_error_defects": qa_defects_after,
+        },
+    }
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -924,7 +1653,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI orchestration
     """CLI entry point.
 
     Returns:
@@ -937,18 +1666,36 @@ def main(argv: list[str] | None = None) -> int:
     ep_a = load_episode(args.episode_a, args.label_a)
     ep_b = load_episode(args.episode_b, args.label_b, max_steps=args.b_story_steps)
 
-    divergence = compute_divergence(ep_a, ep_b, DIVERGENCE_THRESHOLD_M)
-    if divergence["step"] is None:
-        print("error: no persistent divergence found in the shared trace window", file=sys.stderr)
+    # Item 1: lock ONE focal pedestrian, shared by both panels, reusing the shipped
+    # trace_scene_figure selection rule (see select_focal_pedestrian docstring).
+    focal_selection = select_focal_pedestrian(args.episode_a, ep_b)
+    focal_ped_id = focal_selection["ped_id"]
+
+    # Item 2: D(t) normalized joint-state divergence detector (replaces the first cut's
+    # threshold-on-robot-robot-separation).
+    divergence = compute_joint_state_divergence(ep_a, ep_b, focal_ped_id)
+    dt = float(ep_a.time_s[1] - ep_a.time_s[0]) if len(ep_a.time_s) > 1 else 0.1
+    onset = find_persistence_onset(divergence, dt)
+    if onset["step"] is None:
+        print(
+            "error: D(t) never stays persistently above threshold in the shared trace "
+            "window -- no butterfly divergence detected for this pair",
+            file=sys.stderr,
+        )
         return 1
-    separator = find_first_command_separator(ep_a, ep_b, divergence["step"])
+    onset["time_s"] = float(ep_a.time_s[onset["step"]])
+    divergence["onset"] = onset
 
     events_a = compute_critical_events(ep_a)
     events_b = compute_critical_events(ep_b)
+    separator = find_separator(ep_a, ep_b, divergence, onset["step"], events_a, events_b)
+
     closest_a = closest_approach(ep_a)
     closest_b = closest_approach(ep_b)
+    focal_closest_a = closest_approach_to_focal_ped(ep_a, focal_ped_id)
+    focal_closest_b = closest_approach_to_focal_ped(ep_b, focal_ped_id)
 
-    focal_ped_id = int(ep_a.metrics["nearest_pedestrian_id"][0])
+    gutter = compute_delta_gutter(ep_a, ep_b, separator["step"], focal_ped_id, events_a, events_b)
 
     outcome_a = "success" if ep_a.metadata["episode_status"] == "success" else "unknown"
     b_status = ep_b.metadata["episode_status"]
@@ -967,49 +1714,72 @@ def main(argv: list[str] | None = None) -> int:
         else None
     )
 
-    d_clearance = closest_a["distance_m"] - closest_b["distance_m"]
-    if separator["jump_in"] is not None:
-        who = "A" if separator["jump_in"] == "A" else "B"
+    d_clearance = focal_closest_a["distance_m"] - focal_closest_b["distance_m"]
+    if separator["tier"] == "command_jump":
+        who = separator["jump_in"]
+        kind = separator["jump_kind"]
+        mag = separator["jump_v_mps"] if kind == "v" else separator["jump_omega_rad_s"]
+        unit = "m/s" if kind == "v" else "rad/s"
         separator_clause = (
             f"First separator at t={separator['time_s']:.2f} s: {who} commands a "
-            f"{separator['jump_rad_s']:.2f} rad/s turn-rate jump "
-            f"(omega_A={separator['omega_a']:.2f}, omega_B={separator['omega_b']:.2f} rad/s) "
+            f"{mag:.2f} {unit} {kind}-command jump. "
         )
-    else:
+    elif separator["tier"] == "braking_onset":
         separator_clause = (
-            f"No discrete command jump found in the 1 s window before divergence "
-            f"(omega_A={separator['omega_a']:.2f}, omega_B={separator['omega_b']:.2f} rad/s at "
-            f"t={separator['time_s']:.2f} s) "
+            f"First separator at t={separator['time_s']:.2f} s: {separator['braking_in']} "
+            f"begins braking (critical_intervals.first_braking_event). "
+        )
+    else:  # largest_risk_rise
+        separator_clause = (
+            f"No discrete command jump or braking onset found in the {SEPARATOR_SEARCH_BACK_S:g} s "
+            f"window before the divergence became persistent; the separator is reported as the "
+            f"step of largest single-step rise in the joint-state divergence D(t), at "
+            f"t={separator['time_s']:.2f} s (this pair's divergence accumulates smoothly rather "
+            f"than from one sharp decision -- see the report's `pivot.separator` for the full "
+            f"tier trail). "
         )
     headline = (
         f"{separator_clause}"
-        f"while the other continues near-unchanged; positions diverge beyond "
-        f"{DIVERGENCE_THRESHOLD_M:.1f} m by t={divergence['time_s']:.2f} s. "
-        f"B's subsequent minimum clearance ({closest_b['distance_m']:.2f} m at t={closest_b['time_s']:.1f} s) "
-        f"is {d_clearance:.2f} m lower than A's ({closest_a['distance_m']:.2f} m at t={closest_a['time_s']:.1f} s)."
+        f"D(t) becomes persistently divergent (threshold {onset['threshold']:.2f}, "
+        f"{DIVERGENCE_THRESHOLD_MARGIN:g}x the {onset['floor']:.2f} pre-divergence floor) "
+        f"by t={onset['time_s']:.2f} s. "
+        f"B's subsequent minimum clearance to the focal pedestrian "
+        f"({focal_closest_b['distance_m']:.2f} m at t={focal_closest_b['time_s']:.1f} s) "
+        f"is {d_clearance:.2f} m lower than A's ({focal_closest_a['distance_m']:.2f} m at "
+        f"t={focal_closest_a['time_s']:.1f} s)."
     )
+
+    scenario_id = str(ep_a.metadata["scenario_id"])
+    try:
+        map_definition = tsf._load_map_definition(scenario_id)
+    except Exception as exc:  # noqa: BLE001 - obstacles are a visual enhancement, not required
+        print(f"warning: could not load map definition for obstacles: {exc}", file=sys.stderr)
+        map_definition = None
 
     out_pdf = out_dir / "butterfly_hinge_figure_proto.pdf"
     out_png = out_dir / "butterfly_hinge_figure_proto.png"
-    render_hinge_figure(
+    qa_defects = render_hinge_figure(
         ep_a,
         ep_b,
         label_a=args.label_a,
         label_b=args.label_b,
         divergence=divergence,
         separator=separator,
+        gutter=gutter,
         focal_ped_id=focal_ped_id,
         events_a=events_a,
         events_b=events_b,
-        closest_a=closest_a,
-        closest_b=closest_b,
+        closest_a=focal_closest_a,
+        closest_b=focal_closest_b,
         outcome_a=outcome_a,
         outcome_b=outcome_b,
         b_outcome_step=b_outcome_step,
         headline=headline,
+        map_definition=map_definition,
         out_pdf=out_pdf,
         out_png=out_png,
     )
+    qa_errors = [d for d in qa_defects if getattr(d, "severity", "") == "error"]
 
     report: dict[str, Any] = {
         "episode_a": {
@@ -1027,17 +1797,25 @@ def main(argv: list[str] | None = None) -> int:
                 json.loads((args.episode_b / "trace_series.json").read_text())["frames"]
             ),
         },
-        "divergence": divergence,
-        "first_command_separator": separator,
-        "focal_pedestrian_id": focal_ped_id,
+        "focal_pedestrian_selection": focal_selection,
+        "divergence": {k: v for k, v in divergence.items() if k != "D"}
+        | {"D": divergence["D"].tolist()},
+        "pivot": {"separator": separator, "delta_gutter": gutter},
         "critical_events_a": events_a,
         "critical_events_b": events_b,
-        "closest_approach_a": closest_a,
-        "closest_approach_b": closest_b,
+        "closest_approach_any_ped_a": closest_a,
+        "closest_approach_any_ped_b": closest_b,
+        "closest_approach_focal_ped_a": focal_closest_a,
+        "closest_approach_focal_ped_b": focal_closest_b,
         "headline": headline,
         "figure_pdf": str(out_pdf),
         "figure_png": str(out_png),
         "figure_pdf_sha256": _sha256_of_file(out_pdf),
+        "figure_qa": {
+            "first_cut_error_defects": FIRST_CUT_LINT_ERROR_COUNT,
+            "this_render_error_defects": len(qa_errors),
+            "this_render_all_defects": len(qa_defects),
+        },
     }
 
     if not args.no_video:
@@ -1050,7 +1828,25 @@ def main(argv: list[str] | None = None) -> int:
     report_path = out_dir / "butterfly_hinge_report.json"
     report_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
 
+    provenance = build_provenance_sidecar(
+        ep_a=ep_a,
+        ep_b=ep_b,
+        episode_a_bundle=args.episode_a,
+        episode_b_bundle=args.episode_b,
+        focal_selection=focal_selection,
+        divergence=divergence,
+        separator=separator,
+        gutter=gutter,
+        figure_pdf=out_pdf,
+        figure_png=out_png,
+        qa_defects_before=FIRST_CUT_LINT_ERROR_COUNT,
+        qa_defects_after=len(qa_errors),
+    )
+    provenance_path = out_dir / "butterfly_hinge_provenance.json"
+    provenance_path.write_text(json.dumps(provenance, indent=2, default=str), encoding="utf-8")
+
     print(json.dumps(report, indent=2, default=str))
+    print(f"provenance sidecar: {provenance_path}")
     return 0
 
 

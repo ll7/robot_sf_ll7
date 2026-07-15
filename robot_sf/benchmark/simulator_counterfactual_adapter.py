@@ -22,6 +22,7 @@ This adapter captures:
 * per-pedestrian mutable behavior runtimes (single-pedestrian waypoint/hold state and
   route-group navigators) so a resumed replay follows the recorded path;
 * the robot pose/velocity state;
+* robot route-navigator progress;
 * the **global** numpy RNG via :func:`numpy.random.get_state` /
   :func:`numpy.random.set_state` — this is the seam the issue's stop rule flagged:
   ``robot_sf`` pedestrian goal/zone sampling draws from the global RNG, so a
@@ -66,6 +67,7 @@ class _SimulatorSnapshot:
         ped_angular_velocities: Copy of per-pedestrian angular velocities.
         robot_poses: Copy of each robot's ``((x, y), heading)`` pose.
         robot_velocities: Copy of each robot's ``(linear, angular)`` velocity.
+        robot_navigators: Deep copy of robot route-navigator progress.
         single_runtimes: Deep copy of single-pedestrian behavior runtimes.
         route_navigators: Deep copy of route-group navigators' mutable state.
         global_rng_state: Numpy global RNG state captured via ``get_state``.
@@ -78,6 +80,7 @@ class _SimulatorSnapshot:
     ped_angular_velocities: np.ndarray
     robot_poses: list[Any]
     robot_velocities: list[Any]
+    robot_navigators: list[Any]
     single_runtimes: list[Any]
     route_navigators: dict[int, Any]
     global_rng_state: Any
@@ -159,12 +162,22 @@ def _restore_route_navigators(peds_behaviors: list[Any], navigators: dict[int, A
         captured = navigators.get(id(behavior))
         if not captured:
             continue
-            for gid, nav in navs.items():
-                state = captured.get(gid)
-                if state is None:
-                    continue
-                nav.waypoint_id = state["waypoint_id"]
-                nav.reached_waypoint = state["reached_waypoint"]
+        for gid, nav in navs.items():
+            state = captured.get(gid)
+            if state is None:
+                continue
+            nav.waypoint_id = state["waypoint_id"]
+            nav.reached_waypoint = state["reached_waypoint"]
+
+
+def _restore_robot_navigators(robot_navigators: list[Any], saved: list[Any]) -> None:
+    """Restore mutable robot route-navigator state from a snapshot."""
+    for navigator, saved_navigator in zip(robot_navigators, saved, strict=True):
+        navigator.waypoints = deepcopy(saved_navigator.waypoints)
+        navigator.waypoint_id = saved_navigator.waypoint_id
+        navigator.proximity_threshold = saved_navigator.proximity_threshold
+        navigator.pos = deepcopy(saved_navigator.pos)
+        navigator.reached_waypoint = saved_navigator.reached_waypoint
 
 
 class SimulatorCounterfactualModel:
@@ -195,6 +208,10 @@ class SimulatorCounterfactualModel:
         capture_rng: bool = True,
     ) -> None:
         """Initialize the adapter at step 0 of the simulator."""
+        if len(simulator.robots) != 1:
+            raise ValueError(
+                "SimulatorCounterfactualModel requires a simulator with exactly one robot."
+            )
         self.sim = simulator
         self.collision_radius = float(collision_radius)
         self.capture_rng = bool(capture_rng)
@@ -223,6 +240,7 @@ class SimulatorCounterfactualModel:
             ped_angular_velocities=self.sim.ped_angular_velocities.copy(),
             robot_poses=[deepcopy(r.pose) for r in self.sim.robots],
             robot_velocities=[deepcopy(getattr(r, "state", None)) for r in self.sim.robots],
+            robot_navigators=deepcopy(self.sim.robot_navs),
             single_runtimes=_capture_single_runtimes(self.sim.peds_behaviors),
             route_navigators=_capture_route_navigators(self.sim.peds_behaviors),
             global_rng_state=_copy_global_rng_state() if self.capture_rng else None,
@@ -239,8 +257,10 @@ class SimulatorCounterfactualModel:
             self.sim.robots, snapshot.robot_poses, snapshot.robot_velocities, strict=True
         ):
             robot.state = deepcopy(vel_state)
+        _restore_robot_navigators(self.sim.robot_navs, snapshot.robot_navigators)
         _restore_single_runtimes(self.sim.peds_behaviors, snapshot.single_runtimes)
         _restore_route_navigators(self.sim.peds_behaviors, snapshot.route_navigators)
+        self.sim.peds_have_obstacle_forces = snapshot.peds_have_obstacle_forces
         if snapshot.global_rng_state is not None:
             key, state, pos, has_gauss, cached_gauss = snapshot.global_rng_state
             np.random.set_state((key, state.copy(), pos, has_gauss, cached_gauss))
@@ -259,20 +279,45 @@ class SimulatorCounterfactualModel:
     def feasible_actions(self) -> Sequence[Any]:
         """Return the admissible robot action set at the current state.
 
-        The default feasible set is a lattice of constant-velocity (maintain-speed)
-        commands along ``+x`` and a set of decelerating/idle commands, sufficient to
-        probe whether a slower or halted robot avoids contact. Callers requiring a
-        planner-specific action lattice may subclass and override this method.
+        The default set follows the native action semantics of the configured robot.
+        Acceleration-controlled robots receive neutral, partial-braking, and full-
+        braking controls; velocity-controlled robots receive the current velocity
+        and a stop control. Callers requiring a planner-specific action lattice may
+        subclass and override this method. Unknown robot action semantics return an
+        empty set so the replay engine fails closed with incomplete coverage.
         """
-        return (
-            (1.0, 0.0),
-            (0.5, 0.0),
-            (0.1, 0.0),
-            (0.0, 0.0),
-        )
+        robot = self.sim.robots[0]
+        config = robot.config
+        if hasattr(config, "max_linear_decel"):
+            max_decel = float(config.max_linear_decel)
+            return (
+                (0.0, 0.0),
+                (-0.5 * max_decel, 0.0),
+                (-max_decel, 0.0),
+            )
+        if hasattr(config, "max_decel"):
+            max_decel = float(config.max_decel)
+            return (
+                (0.0, 0.0),
+                (-0.5 * max_decel, 0.0),
+                (-max_decel, 0.0),
+            )
+        command_mode = getattr(config, "command_mode", None)
+        if command_mode == "vx_vy":
+            vx, vy = robot.state.velocity_xy
+            return ((float(vx), float(vy)), (0.0, 0.0))
+        if command_mode == "unicycle_vw":
+            velocity, angular_velocity = robot.state.velocity_vw
+            return ((float(velocity), float(angular_velocity)), (0.0, 0.0))
+        return ()
 
     def action_label(self, action: Any) -> str:
         """Return a stable label for a robot action (for provenance)."""
-        vx = float(getattr(action, "__getitem__", lambda i: action[i])(0))
-        vy = float(getattr(action, "__getitem__", lambda i: action[i])(1))
-        return f"robot_cmd=(vx={vx:g},vy={vy:g})"
+        first = float(action[0])
+        second = float(action[1])
+        config = self.sim.robots[0].config
+        if hasattr(config, "max_linear_decel") or hasattr(config, "max_decel"):
+            return f"robot_accel=(first={first:g},second={second:g})"
+        if getattr(config, "command_mode", None) in {"vx_vy", "unicycle_vw"}:
+            return f"robot_velocity=(first={first:g},second={second:g})"
+        return f"robot_cmd=(first={first:g},second={second:g})"

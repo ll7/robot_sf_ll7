@@ -469,6 +469,25 @@ def locate_last_avoidable(
             notes=("baseline replay did not reproduce a stable contact outcome",),
         )
 
+    if all(contact_step is None for contact_step in determinism.observed_contact_steps):
+        return LastAvoidableReport(
+            verdict=VERDICT_UNKNOWN,
+            config=config,
+            determinism=determinism,
+            branches=(),
+            t_uca=None,
+            t_inevitable=None,
+            feasible_coverage=0.0,
+            minimal_sufficient_interventions=(),
+            runtime_s=runtime_s,
+            abstained=True,
+            abstain_reason="baseline_no_contact",
+            notes=(
+                "baseline replay did not contact within the configured horizon; "
+                "avoidability is untested",
+            ),
+        )
+
     snapshots = _capture_window_snapshots(model, initial_snapshot, baseline_actions, config)
     branches, interventions = _branch_over_window(model, snapshots, baseline_actions, config)
 

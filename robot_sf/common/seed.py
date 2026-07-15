@@ -72,6 +72,9 @@ def _configure_torch_213_runtime() -> bool:
             return False
         if not str(version).split("+", 1)[0].startswith("2.13.0"):
             return False
+        if any(m in sys.modules for m in ("tensorflow", "tensorboard", "keras")):
+            os.environ["TORCH_COMPILE_DISABLE"] = "1"
+            return True
         try:
             importlib.import_module("triton")
         except ImportError:  # pragma: no cover - triton is optional on CPU-only installs

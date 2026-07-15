@@ -59,23 +59,12 @@ _OUTPUT_PATH_RE = re.compile(
     r"(?<!\w)(?:output/[^\s`'\"<>)\]}]+|/home/[^\s`'\"<>)\]}]*/output/[^\s`'\"<>)\]}]+|/Users/[^\s`'\"<>)\]}]*/output/[^\s`'\"<>)\]}]+)"
 )
 _TEXT_EVIDENCE_SUFFIXES = {".md", ".json", ".yaml", ".yml", ".txt"}
-# Declarative contract output fields name a *future* runner output location
-# (a runtime contract spec), not a durable artifact pointer.  Evidence files
-# that carry these fields are not claiming the ignored output/ file is durable,
-# so they must be exempt from the ignored-output-pointer rejection.  See issue
-# #5627 — the fidelity fixed-scope plan embeds
-# ``post_run_contract_specs[].output_path`` for a not-yet-run campaign.
-_CONTRACT_OUTPUT_KEYS = frozenset(
-    {
-        "output_path",
-        "output_dir",
-        "expected_output_path",
-        "declarative_output_path",
-        "contract_output_path",
-        "report_path",
-        "run_plan_output_path",
-    }
-)
+# A post-run contract output names a future runner location, not a durable
+# artifact pointer. Only this exact plan-contract pointer is exempt; identical
+# keys elsewhere remain evidence pointers and must still be checked (issue
+# #5627).
+_POST_RUN_CONTRACT_SPECS_KEY = "post_run_contract_specs"
+_POST_RUN_CONTRACT_OUTPUT_PATH_KEY = "output_path"
 _VALIDATION_SKIP_RE = re.compile(r"\bno validation commands were run\b", re.IGNORECASE)
 _COMMAND_HINT_RE = re.compile(
     r"(`[^`\n]*(?:uv run|pytest|ruff|scripts/dev/|python )[^`\n]*`|```(?:bash|sh)?[\s\S]*?(?:uv run|pytest|ruff|scripts/dev/|python )[\s\S]*?```)",
@@ -301,23 +290,17 @@ def _context_index_link_diagnostics(
     return diagnostics
 
 
-def _redact_contract_output_paths(node: object) -> None:
-    """Recursively blank string values of declarative contract output keys.
-
-    Walks ``dict``/``list`` nodes and clears any string value whose key is in
-    :data:`_CONTRACT_OUTPUT_KEYS`, so downstream regex scans see only real
-    artifact pointers, not future runner output contract locations.
-    """
-    if isinstance(node, dict):
-        for key, value in node.items():
-            if isinstance(key, str) and key in _CONTRACT_OUTPUT_KEYS and isinstance(value, str):
-                node[key] = ""
-            elif isinstance(value, (dict, list)):
-                _redact_contract_output_paths(value)
-    elif isinstance(node, list):
-        for item in node:
-            if isinstance(item, (dict, list)):
-                _redact_contract_output_paths(item)
+def _redact_contract_output_paths(document: dict[str, object]) -> None:
+    """Blank only ``post_run_contract_specs[].output_path`` string values."""
+    contract_specs = document.get(_POST_RUN_CONTRACT_SPECS_KEY)
+    if not isinstance(contract_specs, list):
+        return
+    for contract_spec in contract_specs:
+        if not isinstance(contract_spec, dict):
+            continue
+        output_path = contract_spec.get(_POST_RUN_CONTRACT_OUTPUT_PATH_KEY)
+        if isinstance(output_path, str):
+            contract_spec[_POST_RUN_CONTRACT_OUTPUT_PATH_KEY] = ""
 
 
 def _json_without_contract_output_paths(text: str) -> str:
@@ -327,9 +310,10 @@ def _json_without_contract_output_paths(text: str) -> str:
     *future* output location (for example ``post_run_contract_specs[].output_path``
     pointing at ``output/fidelity_sensitivity/<campaign>/rank_identifiability.json``).
     That value is a runtime contract, not a durable artifact pointer, so it must
-    not trip the ignored-output rejection (issue #5627).  We redact the string
-    values of known contract output keys so the regex sees only real artifact
-    pointers.  Non-JSON or unparseable input is returned unchanged.
+    not trip the ignored-output rejection (issue #5627). We redact only that
+    exact pointer so matching keys outside the declarative contract container
+    remain visible to the regex. Non-JSON or unparseable input is returned
+    unchanged.
     """
     try:
         data = json.loads(text)

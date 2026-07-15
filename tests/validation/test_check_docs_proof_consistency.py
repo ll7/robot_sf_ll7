@@ -1,5 +1,7 @@
 """Tests for the docs/proof consistency checker."""
 
+# evidence-writer-exempt: tests write temporary evidence fixtures for checker diagnostics.
+
 from __future__ import annotations
 
 import argparse
@@ -903,10 +905,11 @@ entries:
 def test_catalog_evidence_real_output_pointer_still_rejected_with_contract_field(
     tmp_path: Path,
 ) -> None:
-    """Real artifact pointers are still flagged even when a contract field coexists.
+    """A real top-level output path is flagged when a contract field coexists.
 
     Regression for issue #5627: the contract-field exemption must not suppress
-    genuine ignored-output evidence in the same file.
+    a genuine ignored-output pointer that uses the same key outside the
+    ``post_run_contract_specs`` container.
     """
     repo_root = tmp_path
     (repo_root / "docs/context/evidence").mkdir(parents=True)
@@ -921,7 +924,7 @@ def test_catalog_evidence_real_output_pointer_still_rejected_with_contract_field
                         )
                     }
                 ],
-                "artifact_pointer": "output/local/real_run.json",
+                "output_path": "output/local/real_run.json",
             }
         )
         + "\n",

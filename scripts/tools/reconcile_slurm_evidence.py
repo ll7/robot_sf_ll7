@@ -188,7 +188,9 @@ class FinalizerReport:
     claim_boundary: str | None
     durable_pointer: str | None
     output_pointers: tuple[str, ...]
-    source_path: str
+    exit_code_lanes: dict[str, Any] | None = None
+    post_campaign_stage_status: dict[str, Any] | None = None
+    source_path: str = ""
 
 
 @dataclass(frozen=True)
@@ -428,6 +430,53 @@ def _extract_finalizer_output_pointers(payload: dict[str, Any]) -> tuple[str, ..
     return tuple(sorted(set(pointers)))
 
 
+def _extract_exit_code_lanes(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Adopt the #5244 separated campaign/post-campaign exit lanes from a finalizer.
+
+    The ``robot-sf-slurm-job-finalization.v1`` report carries ``exit_code_lanes`` when a
+    ``post_campaign_stage_status`` envelope was supplied to the finalizer. The ledger must
+    consume these lanes rather than re-deriving status from the overall ``classification``
+    alone: a job whose campaign lane completed (exit 0) but whose post-campaign report stage
+    failed (e.g. the job-13274 exit-5 candidate) is a ``warn_success`` with an isolated
+    ``report_stage_failed`` lane, not a flat failure.
+    """
+    lanes = payload.get("exit_code_lanes")
+    if not isinstance(lanes, dict):
+        return None
+    campaign = lanes.get("campaign")
+    stage = lanes.get("post_campaign_stage")
+    job_exit_code = lanes.get("job_exit_code")
+    if not isinstance(campaign, dict) or not isinstance(stage, dict):
+        return None
+    if not isinstance(job_exit_code, int):
+        return None
+    return {
+        "campaign": {
+            "status": campaign.get("status"),
+            "exit_code": campaign.get("exit_code"),
+            "soft_contract_warning": campaign.get("soft_contract_warning", False),
+        },
+        "post_campaign_stage": {
+            "name": stage.get("name"),
+            "status": stage.get("status"),
+            "exit_code": stage.get("exit_code"),
+        },
+        "job_exit_code": job_exit_code,
+    }
+
+
+def _extract_post_campaign_stage_status(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Carry the finalizer's envelope-load metadata without re-reading the file."""
+    status = payload.get("post_campaign_stage_status")
+    if not isinstance(status, dict):
+        return None
+    return {
+        "path": status.get("path"),
+        "load_status": status.get("load_status"),
+        "error": status.get("error"),
+    }
+
+
 def _has_checksum(payload: dict[str, Any]) -> bool:
     """Return whether the payload row carries at least one checksum/checksum-like field."""
     for key in payload.keys():
@@ -483,6 +532,8 @@ def _load_finalizer_report(path: Path) -> list[FinalizerReport]:
             claim_boundary=_extract_claim_boundary(payload),
             durable_pointer=_extract_finalizer_durable_pointer(payload),
             output_pointers=_extract_finalizer_output_pointers(payload),
+            exit_code_lanes=_extract_exit_code_lanes(payload),
+            post_campaign_stage_status=_extract_post_campaign_stage_status(payload),
             source_path=str(path),
         )
     ]
@@ -652,7 +703,20 @@ def _load_evidence_from_path(path: Path) -> list[EvidenceRow]:
 def _infer_finalizer_issue_transition(
     finalizer: FinalizerReport, *, queue_status: str | None
 ) -> str:
-    """Infer issue transition target status from finalizer status and durability."""
+    """Infer issue transition target status from finalizer status and durability.
+
+    Issue #5244: when a finalizer adopted the post-campaign status envelope, a job whose
+    campaign lane completed (exit 0) but whose post-campaign report stage failed (the
+    job-13274 exit-5 candidate) is a ``warn_success`` — the rows stay usable for diagnosis
+    but are not promoted as benchmark evidence. This lane is read from ``exit_code_lanes``
+    so the ledger never relabels a completed campaign as a flat failure.
+    """
+    lanes = finalizer.exit_code_lanes
+    if lanes is not None:
+        campaign = lanes.get("campaign") or {}
+        stage = lanes.get("post_campaign_stage") or {}
+        if campaign.get("exit_code") == 0 and stage.get("exit_code") not in (0, None):
+            return "warn_success"
     if finalizer.classification == "success":
         if finalizer.artifact_status == "all_required_present":
             if finalizer.durable_pointer:
@@ -807,6 +871,30 @@ def _finalizer_rows_from_payloads(  # noqa: C901, PLR0912, PLR0915
         if not finalizer.output_pointers:
             warnings.append(f"finalizer job {finalizer.job_id}: no output pointers found")
 
+        if finalizer.exit_code_lanes is not None:
+            lanes = finalizer.exit_code_lanes
+            campaign = lanes.get("campaign") or {}
+            job_exit = lanes.get("job_exit_code")
+            if campaign.get("exit_code") != job_exit:
+                # The envelope contract requires job_exit_code == campaign.exit_code; a
+                # violated invariant means a downstream layer remapped the campaign exit and
+                # must not be trusted by the ledger.
+                warnings.append(
+                    f"finalizer job {finalizer.job_id}: envelope invariant violated "
+                    f"(job_exit_code={job_exit} != campaign.exit_code={campaign.get('exit_code')})"
+                )
+            if campaign.get("exit_code") != 0 and finalizer.classification != "failed":
+                warnings.append(
+                    f"finalizer job {finalizer.job_id}: envelope reports a failed campaign "
+                    f"(exit {campaign.get('exit_code')}) but classification is "
+                    f"'{finalizer.classification}'; treat as failed"
+                )
+
+        report_stage_status = (
+            finalizer.exit_code_lanes.get("post_campaign_stage", {}).get("status")
+            if finalizer.exit_code_lanes is not None
+            else None
+        )
         rows.append(
             {
                 "issue": finalizer.issue_number,
@@ -827,6 +915,9 @@ def _finalizer_rows_from_payloads(  # noqa: C901, PLR0912, PLR0915
                 "claim_boundary": finalizer.claim_boundary,
                 "durable_pointer": finalizer.durable_pointer,
                 "output_pointers": list(finalizer.output_pointers),
+                "exit_code_lanes": finalizer.exit_code_lanes,
+                "post_campaign_stage_status": finalizer.post_campaign_stage_status,
+                "report_stage_status": report_stage_status,
                 "issue_transition": {
                     "from": issue_transition_from,
                     "to": issue_transition_to,

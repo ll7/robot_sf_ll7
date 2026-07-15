@@ -30,14 +30,17 @@ container is reused for every forecast this module emits.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, field
+from itertools import pairwise
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
 from robot_sf.planner.chance_constrained_mpc import GaussianMixturePedestrianForecast
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from robot_sf.planner.chance_constrained_mpc import ChanceConstrainedMPCPlannerAdapter
 
 
@@ -426,8 +429,280 @@ def realized_collision_risk_calibration(
     }
 
 
+@dataclass(frozen=True)
+class CalibrationSweep:
+    """Risk-budget grid for the calibration-sweep reliability curve.
+
+    Issue #5307's primary measure is realized collision-risk CALIBRATION
+    (claimed vs. observed). Calibration is inherently a *curve* over the risk
+    budget the planner is allowed to claim, not a single point: a well-built
+    chance-constraint control law should observe a collision frequency that
+    tracks the claimed ``max_collision_risk`` as that budget is swept, and the
+    curve should be monotone non-decreasing (loosening the bound admits more
+    risk). This dataclass holds the configuration of that sweep.
+
+    The closed-loop scenarios at every budget point come from the same RNG seed,
+    so each point replays identical pedestrian spawn/motion sequences
+    (apples-to-apples across risk budgets and across chance-constraint
+    formulations).
+    """
+
+    risk_budgets: tuple[float, ...] = (0.01, 0.05, 0.10, 0.20)
+    formulations: tuple[str, ...] = ("marginal",)
+    scenario: CalibrationScenario = field(default_factory=CalibrationScenario)
+
+
+def _is_nondecreasing(values: list[float], *, atol: float = 1e-9) -> bool:
+    """True when ``values`` is monotone non-decreasing within ``atol``.
+
+    Returns:
+        ``True`` when every successive pair is non-decreasing within ``atol``.
+    """
+
+    for a, b in pairwise(values):
+        if b < a - atol:
+            return False
+    return True
+
+
+def realized_collision_risk_calibration_sweep(
+    base_algo_config: dict[str, Any] | None,
+    sweep: CalibrationSweep | None = None,
+    *,
+    adapter_builder: Callable[[dict[str, Any]], ChanceConstrainedMPCPlannerAdapter] | None = None,
+    seed: int = 0,
+) -> dict[str, object]:
+    """Issue #5307 primary measure as a calibration *curve* over the risk budget.
+
+    Sweeps ``max_collision_risk`` across a configurable budget grid and, for
+    each budget, across the requested chance-constraint formulations
+    (``marginal``, ``joint_horizon`` Boole-union bound, or ``cvar_tail``
+    Conditional Value-at-Risk tail-risk). At every grid point the planner is
+    rebuilt with the patched ``max_collision_risk`` / formulation and rolled
+    out through :func:`realized_collision_risk_calibration` over the *same*
+    matched-constant-velocity scenarios (same ``seed``), so the
+    claimed-vs-observed pairs are directly comparable across the budget and
+    across formulations.
+
+    The routine assembles the claimed-vs-observed reliability curve plus a
+    per-formulation reliability summary. The summary surfaces the issue's
+    pre-registered stop-rule *observables*: the per-step compute time against
+    the MPC control period (``stop if the solver cannot meet the control
+    period``) and the freeze rate at the tightest risk budget (``stop if
+    safety gains come with the zero-progress behavior already observed for
+    stream_gap``). These are exposed as observables for inspection, not as a
+    gate verdict: the cheap-lane slice does not make a campaign-routing
+    decision.
+
+    This slice is CPU-runnable today over the surrogate
+    ``constant_velocity_gmm`` provider. It is an API/self-consistency
+    diagnostic under matched surrogate dynamics and is **not** a benchmark
+    calibration result: replacing the surrogate with the learned ``#2844``
+    predictor is required before any matched-arm benchmark calibration claim.
+
+    Args:
+        base_algo_config: Base YAML-style config mapping for the chance
+            constrained MPC adapter. ``max_collision_risk`` and
+            ``chance_constraint_formulation`` are overridden per grid point.
+        sweep: :class:`CalibrationSweep` controlling the risk-budget grid, the
+            formulations to compare, and the closed-loop scenario. Defaults to a
+            single-formulation four-point grid over :class:`CalibrationScenario`.
+        adapter_builder: Callable that builds the planner from a config mapping;
+            defaults to lazily-imported
+            :func:`build_chance_constrained_mpc_adapter`. Injected for testability.
+        seed: RNG seed shared across every grid point so the same scenario
+            sequence replays at every budget and formulation.
+
+    Returns:
+        Mapping with ``sweep`` (grid + seed + scenario provenance), ``points``
+        (flat list of per-budget-per-formulation calibration records), ``points_by_formulation``
+        (grouped), and ``reliability_summary`` (per-formulation curve statistics and
+        stop-rule observables). A ``claim_boundary`` marks the diagnostic scope.
+
+    Raises:
+        ValueError: If the budget grid is empty, any budget is outside ``(0, 1)``,
+            the formulation list is empty, or a formulation is not one of
+            ``marginal``/``joint_horizon``/``cvar_tail``.
+    """
+
+    sweep = sweep or CalibrationSweep()
+    if adapter_builder is None:
+        from robot_sf.planner.chance_constrained_mpc import (  # noqa: PLC0415
+            build_chance_constrained_mpc_adapter,
+        )
+
+        adapter_builder = build_chance_constrained_mpc_adapter
+
+    budgets: tuple[float, ...] = tuple(float(b) for b in sweep.risk_budgets)
+    if not budgets:
+        raise ValueError("CalibrationSweep.risk_budgets must be non-empty")
+    if not all(0.0 < b < 1.0 for b in budgets):
+        raise ValueError("CalibrationSweep.risk_budgets must lie in (0, 1)")
+
+    valid_formulations = {"marginal", "joint_horizon", "cvar_tail"}
+    formulations = tuple(str(f) for f in sweep.formulations)
+    if not formulations:
+        raise ValueError("CalibrationSweep.formulations must be non-empty")
+    unsupported = [f for f in formulations if f not in valid_formulations]
+    if unsupported:
+        raise ValueError(
+            f"Unsupported formulation(s) {unsupported!r}; "
+            f"expected one of {sorted(valid_formulations)}"
+        )
+
+    base = dict(base_algo_config or {})
+    base.setdefault("predictor_backend", "constant_velocity_gmm")
+
+    scenario = sweep.scenario
+    control_period_ms = float(scenario.dt) * 1000.0
+
+    points_by_formulation: dict[str, list[dict[str, Any]]] = {}
+    for formulation in formulations:
+        points: list[dict[str, Any]] = []
+        for budget in budgets:
+            cfg = dict(base)
+            cfg["max_collision_risk"] = float(budget)
+            cfg["chance_constraint_formulation"] = formulation
+            planner = adapter_builder(cfg)
+            result = realized_collision_risk_calibration(planner, scenario, seed=seed)
+            point = {
+                "formulation": formulation,
+                "claimed_risk": float(budget),
+                "observed_collision_rate": float(result["observed_collision_rate"]),
+                "calibration_error": float(result["calibration_error"]),
+                "freeze_rate": float(result["freeze_rate"]),
+                "infeasible_rate": float(result["infeasible_rate"]),
+                "completion_rate": float(result["completion_rate"]),
+                "mean_tail_clearance_m": float(result["mean_tail_clearance_m"]),
+                "mean_compute_time_ms": float(result["mean_compute_time_ms"]),
+                "sample_count": float(result["sample_count"]),
+            }
+            points.append(point)
+        points_by_formulation[formulation] = points
+
+    reliability_summary: dict[str, dict[str, Any]] = {}
+    for formulation, points in points_by_formulation.items():
+        abs_errors = [abs(float(p["calibration_error"])) for p in points]
+        observed = [float(p["observed_collision_rate"]) for p in points]
+        compute_times = [float(p["mean_compute_time_ms"]) for p in points]
+        freeze_rates = [float(p["freeze_rate"]) for p in points]
+        # The tightest (lowest) budget sits first because budgets sweep small->large.
+        freeze_at_tightest = freeze_rates[0] if freeze_rates else 0.0
+        reliability_summary[formulation] = {
+            "mean_abs_calibration_error": float(np.mean(abs_errors))
+            if abs_errors
+            else float("nan"),
+            "max_abs_calibration_error": float(np.max(abs_errors)) if abs_errors else float("nan"),
+            # A well-calibrated risk bound should make observed collision rate
+            # rise with the claimed budget; a non-monotone curve, beyond
+            # sparse-sample noise, signals that the bound is not translating to
+            # realized risk (a calibration defect the issue asks to surface).
+            "observed_monotone_non_decreasing_in_claimed": bool(_is_nondecreasing(observed)),
+            # Issue #5307 pre-registered stop rules, surfaced as observables
+            # (not a routing decision): compute time vs the MPC control period,
+            # and zero-progress freeze at the tightest budget.
+            "control_period_ms": float(control_period_ms),
+            "max_per_step_compute_time_ms": float(np.max(compute_times))
+            if compute_times
+            else float("nan"),
+            "compute_exceeds_control_period": bool(
+                bool(compute_times) and float(np.max(compute_times)) > control_period_ms
+            ),
+            "freeze_rate_at_tightest_budget": float(freeze_at_tightest),
+        }
+
+    all_points = [p for pts in points_by_formulation.values() for p in pts]
+    return {
+        "sweep": {
+            "risk_budgets": list(budgets),
+            "formulations": list(formulations),
+            "seed": int(seed),
+            "scenario": {
+                "num_episodes": int(scenario.num_episodes),
+                "steps_per_episode": int(scenario.steps_per_episode),
+                "dt": float(scenario.dt),
+                "num_pedestrians": int(scenario.num_pedestrians),
+                "robot_goal_distance_m": float(scenario.robot_goal_distance_m),
+                "spawn_radius_m": float(scenario.spawn_radius_m),
+                "max_ped_speed_mps": float(scenario.max_ped_speed_mps),
+                "collision_radius_m": float(scenario.collision_radius_m),
+            },
+        },
+        "points": all_points,
+        "points_by_formulation": points_by_formulation,
+        "reliability_summary": reliability_summary,
+        "claim_boundary": (
+            "closed-loop self-consistency calibration curve under matched "
+            "constant-velocity surrogate dynamics; not a matched-arm benchmark "
+            "calibration result and makes no planner-value or real-world risk "
+            "claim; replace the surrogate with the learned #2844 predictor and "
+            "run the ops-queue campaign before any benchmark-facing calibration "
+            "or planner-superiority claim"
+        ),
+    }
+
+
+def build_calibration_sweep_config(
+    raw: dict[str, Any] | None,
+) -> tuple[dict[str, Any], CalibrationSweep]:
+    """Split a sweep YAML into the base adapter config and the sweep grid.
+
+    The config-first reproducibility contract (``configs/`` carries stable
+    experiments) is kept by letting a single YAML describe both the base
+    chance-constrained MPC settings and the calibration-sweep grid. The
+    optional ``calibration_sweep`` mapping carries ``risk_budgets`` and
+    ``formulations``; everything else is forwarded as the base ``algo`` config.
+
+    Args:
+        raw: Parsed YAML mapping. If ``calibration_sweep`` is absent the default
+            :class:`CalibrationSweep` is used and the whole mapping is treated
+            as the base config.
+
+    Returns:
+        ``(base_algo_config, sweep)``: the base adapter config (with the
+        ``calibration_sweep`` sub-key removed) and the parsed sweep grid.
+    """
+
+    src = dict(raw or {})
+    sweep_raw = src.pop("calibration_sweep", None) or {}
+    budgets_raw = sweep_raw.get("risk_budgets")
+    if budgets_raw is None:
+        risk_budgets: tuple[float, ...] = CalibrationSweep().risk_budgets
+    else:
+        risk_budgets = tuple(float(b) for b in budgets_raw)
+    formulations_raw = sweep_raw.get("formulations")
+    if formulations_raw is None:
+        formulations: tuple[str, ...] = CalibrationSweep().formulations
+    else:
+        formulations = tuple(str(f) for f in formulations_raw)
+    scenario_raw = sweep_raw.get("scenario") or {}
+    scenario_kwargs: dict[str, Any] = {}
+    for key in (
+        "num_episodes",
+        "steps_per_episode",
+        "dt",
+        "num_pedestrians",
+        "robot_goal_distance_m",
+        "spawn_radius_m",
+        "max_ped_speed_mps",
+        "collision_radius_m",
+    ):
+        if key in scenario_raw:
+            scenario_kwargs[key] = scenario_raw[key]
+    scenario = CalibrationScenario(**scenario_kwargs)  # type: ignore[arg-type]
+    sweep = CalibrationSweep(
+        risk_budgets=risk_budgets,
+        formulations=formulations,
+        scenario=scenario,
+    )
+    return src, sweep
+
+
 __all__ = [
+    "CalibrationSweep",
     "ConstantVelocityGmmPredictor",
+    "build_calibration_sweep_config",
     "build_constant_velocity_gmm_forecast",
     "realized_collision_risk_calibration",
+    "realized_collision_risk_calibration_sweep",
 ]

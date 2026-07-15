@@ -28,10 +28,13 @@ from robot_sf.planner.chance_constrained_mpc import (
 )
 from robot_sf.planner.chance_constrained_mpc_provider import (
     CalibrationScenario,
+    CalibrationSweep,
     ConstantVelocityGmmPredictor,
     _min_robot_pedestrian_clearance,
+    build_calibration_sweep_config,
     build_constant_velocity_gmm_forecast,
     realized_collision_risk_calibration,
+    realized_collision_risk_calibration_sweep,
 )
 
 
@@ -295,3 +298,187 @@ def test_calibration_integrates_robot_command_and_declared_collision_radius() ->
     assert _min_robot_pedestrian_clearance(observation, collision_radius_m=0.5) == pytest.approx(
         0.3
     )
+
+
+def _light_sweep() -> tuple[dict, CalibrationSweep]:
+    """Compact sweep config used by the calibration-curve tests."""
+
+    base_algo_config = {
+        "predictor_backend": "constant_velocity_gmm",
+        "horizon_steps": 6,
+        "solver_max_iterations": 20,
+    }
+    sweep = CalibrationSweep(
+        risk_budgets=(0.05, 0.10, 0.20),
+        formulations=("marginal",),
+        scenario=CalibrationScenario(num_episodes=3, steps_per_episode=6, num_pedestrians=2),
+    )
+    return base_algo_config, sweep
+
+
+def test_calibration_sweep_returns_claimed_vs_observed_curve_across_budgets() -> None:
+    """Issue #5307 primary measure as a *curve*: pair claimed risk with observed.
+
+    The sweep rebuilds the planner per risk budget and rolls out over the same
+    matched scenarios (shared seed), assembling one claimed-vs-observed record
+    per budget point. This is the calibration reliability curve, not a single
+    point, and is new capability relative to the single-point PR #5662 harness.
+    """
+
+    base_algo_config, sweep = _light_sweep()
+    result = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=1)
+    assert result["sweep"]["risk_budgets"] == [0.05, 0.10, 0.20]
+    assert result["sweep"]["formulations"] == ["marginal"]
+    assert result["sweep"]["seed"] == 1
+    points = result["points"]
+    assert len(points) == 3
+    claimed = [p["claimed_risk"] for p in points]
+    assert claimed == [0.05, 0.10, 0.20]
+    for point, budget in zip(points, sweep.risk_budgets, strict=True):
+        assert point["formulation"] == "marginal"
+        assert point["claimed_risk"] == pytest.approx(float(budget))
+        # calibration_error is the issue's primary measure: observed - claimed.
+        assert point["calibration_error"] == pytest.approx(
+            point["observed_collision_rate"] - point["claimed_risk"]
+        )
+        assert 0.0 <= point["observed_collision_rate"] <= 1.0
+        assert 0.0 <= point["freeze_rate"] <= 1.0
+        assert 0.0 <= point["infeasible_rate"] <= 1.0
+        assert 0.0 <= point["completion_rate"] <= 1.0
+        assert point["sample_count"] == pytest.approx(float(sweep.scenario.num_episodes))
+
+
+def test_calibration_sweep_compares_formulations_at_matched_budgets() -> None:
+    """All three chance-constraint formulations compare at matched budgets."""
+
+    base_algo_config, sweep = _light_sweep()
+    sweep = CalibrationSweep(
+        risk_budgets=sweep.risk_budgets,
+        formulations=("marginal", "joint_horizon", "cvar_tail"),
+        scenario=sweep.scenario,
+    )
+    result = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=2)
+    by_formulation = result["points_by_formulation"]
+    assert set(by_formulation) == {"marginal", "joint_horizon", "cvar_tail"}
+    assert len(result["points"]) == 3 * 3
+    # Each formulation has one point per budget, grouped in budget order.
+    for formulation, points in by_formulation.items():
+        assert [p["claimed_risk"] for p in points] == [0.05, 0.10, 0.20]
+        assert all(p["formulation"] == formulation for p in points)
+
+
+def test_calibration_sweep_replays_same_scenarios_across_budgets() -> None:
+    """A shared seed replays identical scenarios across budgets (apples-to-apples).
+
+    Because every budget point re-seeds its closed-loop RNG with the same seed,
+    two sweeps over the same budgets and seed must reproduce the exact observed
+    curve, and the underlying single-point harness at matched budget/seed must
+    match the sweep point. This is the reproducibility contract that makes the
+    claimed-vs-observed curve directly comparable across budgets.
+    """
+
+    base_algo_config, sweep = _light_sweep()
+    first = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=11)
+    second = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=11)
+    first_observed = [p["observed_collision_rate"] for p in first["points"]]
+    second_observed = [p["observed_collision_rate"] for p in second["points"]]
+    assert first_observed == second_observed
+
+    # The sweep point at a given budget must equal a direct single-point run.
+    adapter = build_chance_constrained_mpc_adapter(
+        {
+            **base_algo_config,
+            "max_collision_risk": sweep.risk_budgets[1],
+            "chance_constraint_formulation": "marginal",
+        }
+    )
+    direct = realized_collision_risk_calibration(adapter, sweep.scenario, seed=11)
+    sweep_point = first["points_by_formulation"]["marginal"][1]
+    assert sweep_point["observed_collision_rate"] == pytest.approx(
+        direct["observed_collision_rate"]
+    )
+    assert sweep_point["calibration_error"] == pytest.approx(direct["calibration_error"])
+
+
+def test_calibration_sweep_reliability_summary_reports_stop_rule_observables() -> None:
+    """The issue's pre-registered stop rules surface as observables per formulation.
+
+    The summary reports whether observed collision rate rises monotonically with
+    the claimed risk budget (a reliability/curve-defect signal), the per-step
+    compute time against the MPC control period (``stop if the solver cannot meet
+    the control period``), and the freeze rate at the tightest budget
+    (``stop if safety gains come with the zero-progress behavior seen for
+    stream_gap``). These are inspection observables, not a routing verdict.
+    """
+
+    base_algo_config, sweep = _light_sweep()
+    result = realized_collision_risk_calibration_sweep(base_algo_config, sweep, seed=3)
+    summary = result["reliability_summary"]["marginal"]
+    assert isinstance(summary["observed_monotone_non_decreasing_in_claimed"], bool)
+    assert summary["control_period_ms"] == pytest.approx(float(sweep.scenario.dt) * 1000.0)
+    assert 0.0 <= summary["max_abs_calibration_error"] <= 1.0
+    assert summary["max_per_step_compute_time_ms"] >= 0.0
+    assert isinstance(summary["compute_exceeds_control_period"], bool)
+    assert summary["freeze_rate_at_tightest_budget"] >= 0.0
+
+
+def test_calibration_sweep_rejects_invalid_budgets_and_formulations() -> None:
+    """The sweep grid validates budget range and formulation names up front."""
+
+    base_algo_config, _ = _light_sweep()
+    bad_budgets = CalibrationSweep(
+        risk_budgets=(0.0, 0.5),
+        formulations=("marginal",),
+    )
+    with pytest.raises(ValueError, match="risk_budgets must lie in"):
+        realized_collision_risk_calibration_sweep(base_algo_config, bad_budgets, seed=0)
+
+    empty_budgets = CalibrationSweep(
+        risk_budgets=(),
+        formulations=("marginal",),
+    )
+    with pytest.raises(ValueError, match="risk_budgets must be non-empty"):
+        realized_collision_risk_calibration_sweep(base_algo_config, empty_budgets, seed=0)
+
+    bad_formulations = CalibrationSweep(
+        risk_budgets=(0.05, 0.10),
+        formulations=("not_a_formulation",),
+    )
+    with pytest.raises(ValueError, match="Unsupported formulation"):
+        realized_collision_risk_calibration_sweep(base_algo_config, bad_formulations, seed=0)
+
+
+def test_calibration_sweep_yaml_config_runs_end_to_end() -> None:
+    """The shipped sweep config parses into base+grid and produces a finite curve."""
+
+    config_path = (
+        Path(__file__).resolve().parents[2]
+        / "configs"
+        / "algos"
+        / "chance_constrained_mpc_calibration_sweep_diagnostic.yaml"
+    )
+    base, sweep = build_calibration_sweep_config(yaml.safe_load(config_path.read_text()))
+    assert base["predictor_backend"] == "constant_velocity_gmm"
+    assert "calibration_sweep" not in base
+    assert sweep.risk_budgets == (0.05, 0.10, 0.20)
+    assert sweep.formulations == ("marginal", "joint_horizon", "cvar_tail")
+
+    result = realized_collision_risk_calibration_sweep(base, sweep, seed=0)
+    assert len(result["points"]) == 3 * 3
+    for point in result["points"]:
+        assert np.isfinite(point["observed_collision_rate"])
+        assert np.isfinite(point["mean_compute_time_ms"])
+    assert set(result["reliability_summary"]) == {
+        "marginal",
+        "joint_horizon",
+        "cvar_tail",
+    }
+
+
+def test_build_calibration_sweep_config_defaults_when_subkey_absent() -> None:
+    """Without a calibration_sweep sub-key the grid falls back to defaults."""
+
+    base, sweep = build_calibration_sweep_config({"predictor_backend": "constant_velocity_gmm"})
+    assert base == {"predictor_backend": "constant_velocity_gmm"}
+    assert sweep.risk_budgets == CalibrationSweep().risk_budgets
+    assert sweep.formulations == CalibrationSweep().formulations

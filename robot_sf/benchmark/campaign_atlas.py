@@ -281,9 +281,7 @@ class AtlasConfig:
                 raise CampaignAtlasError(f"{field_name} cannot contain empty labels")
 
 
-def _cell_key(
-    scenario_family: str, planner: str, release_arm_id: str | None
-) -> str:
+def _cell_key(scenario_family: str, planner: str, release_arm_id: str | None) -> str:
     """Return a deterministic cell key string honoring release-arm identity.
 
     When a row carries a ``release_arm_id`` the key includes it so architecturally
@@ -317,9 +315,7 @@ def _validate_arm_identity(rows: Sequence[EpisodeInventoryRow]) -> None:
         assert row.release_arm_id is not None
         arm_to_planners.setdefault(row.release_arm_id, set()).add(row.planner)
     inconsistent = {
-        arm: sorted(planners)
-        for arm, planners in arm_to_planners.items()
-        if len(planners) > 1
+        arm: sorted(planners) for arm, planners in arm_to_planners.items() if len(planners) > 1
     }
     if inconsistent:
         detail = "; ".join(
@@ -396,9 +392,7 @@ def build_atlas_summary(
                             "(scenario-family, planner, release-arm) cell"
                         )
                     else:
-                        reason = (
-                            "no eligible episodes for this (scenario-family, planner) cell"
-                        )
+                        reason = "no eligible episodes for this (scenario-family, planner) cell"
                 elif not eligible:
                     reason = f"cell below minimum cell size ({n_total} < {config.min_cell_size})"
                 outcome_ci = {
@@ -433,15 +427,19 @@ def build_atlas_summary(
     )
 
 
-def _arm_ids_for(
-    rows: Sequence[EpisodeInventoryRow], planner: str
-) -> list[str | None]:
+def _arm_ids_for(rows: Sequence[EpisodeInventoryRow], planner: str) -> list[str | None]:
     """Return the sorted release-arm ids observed for *planner* (``None`` if arm-less).
 
     When no row carries a ``release_arm_id`` the atlas is planner-keyed
     (single ``None`` arm), preserving pre-#5784 behavior for arm-less inventory.
     """
-    armed = sorted({row.release_arm_id for row in rows if row.planner == planner and row.release_arm_id is not None})
+    armed = sorted(
+        {
+            row.release_arm_id
+            for row in rows
+            if row.planner == planner and row.release_arm_id is not None
+        }
+    )
     if armed:
         return armed
     if any(row.planner == planner and row.release_arm_id is None for row in rows):
@@ -1260,8 +1258,7 @@ def build_campaign_atlas(
             result = render_ensemble_context_view(
                 cell_rows,
                 anchor=ensemble_anchor,
-                out=out_dir
-                / f"ensemble__{scenario_family}__{planner}__{release_arm_id}.svg",
+                out=out_dir / f"ensemble__{scenario_family}__{planner}__{release_arm_id}.svg",
             )
             ensemble_views.append(result)
 
@@ -1293,9 +1290,7 @@ def _group_rows_by_cell(
     """Group inventory rows by (scenario-family, planner, release-arm) cell."""
     grouped: dict[tuple[str, str, str | None], list[EpisodeInventoryRow]] = {}
     for row in rows:
-        grouped.setdefault(
-            (row.scenario_family, row.planner, row.release_arm_id), []
-        ).append(row)
+        grouped.setdefault((row.scenario_family, row.planner, row.release_arm_id), []).append(row)
     return grouped
 
 

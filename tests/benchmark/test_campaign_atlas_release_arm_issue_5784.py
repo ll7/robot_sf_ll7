@@ -99,11 +99,15 @@ class TestReleaseArmIdentity:
                 "hybrid_rule_v3_fast_progress_static_escape_continuous",
             ),
             _row("c", "hybrid_rule_local_planner", "scenario_adaptive_hybrid_orca_v1"),
-            _row("d", "hybrid_rule_local_planner", "scenario_adaptive_hybrid_orca_v2_collision_guard"),
+            _row(
+                "d", "hybrid_rule_local_planner", "scenario_adaptive_hybrid_orca_v2_collision_guard"
+            ),
         ]
         summary = build_atlas_summary(rows, config=AtlasConfig(campaign_id="c1"))
         counts = {(c.planner, c.release_arm_id): c.n_total for c in summary.cells}
-        assert counts[("hybrid_rule_local_planner", "hybrid_rule_v3_fast_progress_static_escape")] == 1
+        assert (
+            counts[("hybrid_rule_local_planner", "hybrid_rule_v3_fast_progress_static_escape")] == 1
+        )
         assert counts[("hybrid_rule_local_planner", "scenario_adaptive_hybrid_orca_v1")] == 1
         assert len(counts) == 4
 

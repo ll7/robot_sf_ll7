@@ -84,6 +84,31 @@ class _LidarEnv(gym.Env):
         return observation, 0.0, False, False, {}
 
 
+class _MutableInfoPayload:
+    """Mutable fallback payload used to verify deepcopy isolation."""
+
+    def __init__(self) -> None:
+        self.value = 1
+
+
+def test_fast_deepcopy_info_preserves_nested_mutable_isolation() -> None:
+    """The optimized info copy must retain deepcopy semantics for nested values."""
+    source_array = np.array([1.0, 2.0])
+    source_payload = _MutableInfoPayload()
+    source = {
+        "tuple": ({"array": source_array},),
+        "fallback": source_payload,
+    }
+
+    copied = threaded_vec_env_module._fast_deepcopy_info(source)
+
+    copied["tuple"][0]["array"][0] = 9.0
+    copied["fallback"].value = 9
+    assert source_array[0] == 1.0
+    assert source_payload.value == 1
+    assert copied["fallback"] is not source_payload
+
+
 def test_threaded_vec_env_steps_sibling_environments_concurrently() -> None:
     """Threaded mode must complete mutually waiting sibling steps and batch their results."""
     barrier = Barrier(2)

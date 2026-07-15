@@ -25,6 +25,11 @@ Environment variables:
   PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES
                       Set to "0" to skip open-state verification for linked
                       follow-up issues when PR_READY_PR_BODY_FILE is set.
+  PR_READY_SERIAL_FALLBACK
+                      Set to "1" to auto-rerun serially when parallel pytest
+                      workers crash (issue #5633), separating an env crash from
+                      real failures. Disabled by default; the gate stays
+                      fail-closed and only reports the crash diagnostic.
 EOF
 }
 

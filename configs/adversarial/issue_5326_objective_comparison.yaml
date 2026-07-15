@@ -35,7 +35,14 @@ explicit_exclusions:
 output_artifacts:
   output_dir: output/adversarial/issue_5326_objective_comparison
   report_json: output/adversarial/issue_5326_objective_comparison/report.json
+  durable_table_md: output/adversarial/issue_5326_objective_comparison/comparison_table.md
 example_command: >
+  uv run python scripts/tools/compare_adversarial_samplers.py
+  --manifest configs/adversarial/issue_5326_objective_comparison.yaml
+  --repo-root .
+  --out-json output/adversarial/issue_5326_objective_comparison/report.json
+  --out-md output/adversarial/issue_5326_objective_comparison/comparison_table.md
+example_command_cli_flag_equivalent: >
   uv run python scripts/tools/compare_adversarial_samplers.py
   --objective worst_case_snqi --objective temporal_robustness
   --package-b-budget-grid

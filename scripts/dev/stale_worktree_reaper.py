@@ -180,7 +180,7 @@ def _check_worktree_lease_state(path: str) -> str | None:
             if lease is not None and not lease.is_expired():
                 return "active"
         return None
-    except Exception:
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError):
         # File exists but could not be loaded/parsed successfully, or lease
         # discovery failed. Both cases must fail closed.
         return "unreadable"

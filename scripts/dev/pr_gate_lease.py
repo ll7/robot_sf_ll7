@@ -208,7 +208,7 @@ def save_lease(lease: PRGateLease, path: Path | None = None) -> None:
             json.dump(asdict(lease), f, indent=2)
             f.write("\n")
         temp_path.replace(path)
-    except Exception:
+    except (OSError, TypeError, ValueError):
         if temp_path.exists():
             try:
                 temp_path.unlink()

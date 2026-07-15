@@ -39,6 +39,13 @@ EXPECTED_ROSTER = {
     "predictive": ("prediction_planner", "prediction_mpc", "prediction_mpc_cbf"),
     "baseline_reactive": ("goal", "social_force", "orca", "socnav_sampling", "sacadrl"),
 }
+EXPECTED_ARTIFACT_FILES = (
+    "README.md",
+    "metadata.json",
+    "cross_matrix_agreement.csv",
+    "integration_report.md",
+    "SHA256SUMS",
+)
 FORBIDDEN_TRANSIENT_KEYS = {
     "target_host",
     "packet_lineage",
@@ -269,8 +276,8 @@ def validate_packet(packet: dict[str, Any], *, repo_root: Path | None = None) ->
     )
     required_files = artifact.get("required_files")
     _require(
-        isinstance(required_files, list) and "SHA256SUMS" in required_files,
-        "artifact checksum contract missing",
+        tuple(required_files or ()) == EXPECTED_ARTIFACT_FILES,
+        "artifact contract must declare the complete integration artifact set",
     )
 
     readiness = _mapping(packet, "readiness_decision")

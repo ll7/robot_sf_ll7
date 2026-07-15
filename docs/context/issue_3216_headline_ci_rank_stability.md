@@ -88,6 +88,13 @@ returns a completed campaign as successful when only reporting failed while keep
 outside benchmark evidence. Missing, malformed, or mismatched envelopes fail closed for manual
 decision rather than guessing which downstream exit code to trust.
 
+The ledger reconciler consumes that exact finalizer report through
+`scripts/tools/reconcile_slurm_evidence.py`. It maps a completed campaign plus a failed report
+stage to `warn_success` for diagnostic recovery, not benchmark success; it retains all three
+exit-code lanes and keeps a hard campaign failure nonzero. The integration regression in
+`tests/tools/test_issue3216_campaign_stage_handoff.py` drives the same on-disk campaign summary,
+status envelope, and finalizer report through the full public launcher-to-ledger boundary.
+
 ## Reuse of canonical owners (no reinvention)
 
 Per AGENTS.md "Canonical Owner Check", the statistics are **composed**, not

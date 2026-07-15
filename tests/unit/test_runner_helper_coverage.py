@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -137,6 +138,201 @@ def test_load_baseline_planner_covers_import_and_config_branches(
     assert planner.config == {"speed": 1.5, "label": "demo"}
     assert observation_cls is object
     assert config == {"speed": 1.5, "label": "demo"}
+
+
+def test_load_baseline_planner_defers_ppo_loading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The PPO branch passes the native-loading deferral flag to the planner."""
+    observed: dict[str, object] = {}
+
+    class _PpoPlanner:
+        def __init__(
+            self,
+            config: dict[str, object],
+            *,
+            seed: int,
+            defer_model_loading: bool,
+        ) -> None:
+            observed.update(config)
+            observed["seed"] = seed
+            observed["defer_model_loading"] = defer_model_loading
+
+    monkeypatch.setattr(runner_mod, "Observation", object)
+    monkeypatch.setattr(runner_mod, "get_baseline", lambda _: _PpoPlanner)
+
+    planner, observation_cls, config = runner_mod._load_baseline_planner("ppo", None, seed=13)
+
+    assert isinstance(planner, _PpoPlanner)
+    assert observation_cls is object
+    assert config == {}
+    assert observed == {"seed": 13, "defer_model_loading": True}
+
+
+def test_planner_step_worker_covers_initialization_and_command_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The child worker initializes lazily and serves a step before close."""
+
+    class _Torch:
+        def __init__(self) -> None:
+            self.thread_count: int | None = None
+
+        def set_num_threads(self, count: int) -> None:
+            self.thread_count = count
+
+    class _Connection:
+        def __init__(self) -> None:
+            self.messages = iter([("step", {"observation": 1}), ("close", None)])
+            self.sent: list[object] = []
+            self.closed = False
+
+        def send(self, payload: object) -> None:
+            self.sent.append(payload)
+
+        def recv(self) -> object:
+            return next(self.messages)
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _Planner:
+        def __init__(self) -> None:
+            self.loaded = False
+
+        def _ensure_model_loaded(self) -> None:
+            self.loaded = True
+
+        def step(self, payload: object) -> dict[str, object]:
+            return {"payload": payload}
+
+    torch = _Torch()
+    connection = _Connection()
+    planner = _Planner()
+    monkeypatch.setattr(runner_mod, "try_import", lambda _: torch)
+
+    runner_mod._planner_step_worker(connection, planner)
+
+    assert planner.loaded is True
+    assert torch.thread_count == 1
+    assert connection.sent == [
+        ("init_ok", None),
+        ("ok", {"payload": {"observation": 1}}),
+    ]
+    assert connection.closed is True
+
+
+@pytest.mark.parametrize("broken_pipe", [False, True])
+def test_planner_step_worker_reports_initialization_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    broken_pipe: bool,
+) -> None:
+    """Initialization errors are reported when the parent pipe is available or closed."""
+
+    class _Connection:
+        def __init__(self) -> None:
+            self.sent: list[object] = []
+            self.closed = False
+
+        def send(self, payload: object) -> None:
+            if broken_pipe:
+                raise BrokenPipeError("parent closed")
+            self.sent.append(payload)
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _Planner:
+        def _ensure_model_loaded(self) -> None:
+            raise ValueError("model load failed")
+
+    connection = _Connection()
+    monkeypatch.setattr(runner_mod, "try_import", lambda _: None)
+
+    runner_mod._planner_step_worker(connection, _Planner())
+
+    if broken_pipe:
+        assert connection.sent == []
+    else:
+        assert connection.sent == [("init_error", ("ValueError", "model load failed"))]
+    assert connection.closed is True
+
+
+class _HandshakeConnection:
+    """Small parent-pipe stub for deterministic worker handshake tests."""
+
+    def __init__(self, *, poll_result: bool, recv_error: Exception | None = None) -> None:
+        self.poll_result = poll_result
+        self.recv_error = recv_error
+        self.closed = False
+
+    def poll(self, timeout: float) -> bool:
+        return self.poll_result
+
+    def recv(self) -> object:
+        if self.recv_error is not None:
+            raise self.recv_error
+        return ("init_ok", None)
+
+    def send(self, payload: object) -> None:
+        pass
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _HandshakeProcess:
+    """Minimal process stub used by parent-side handshake error tests."""
+
+    def __init__(self) -> None:
+        self.alive = True
+
+    def start(self) -> None:
+        pass
+
+    def is_alive(self) -> bool:
+        return self.alive
+
+    def join(self, timeout: float | None = None) -> None:
+        pass
+
+    def terminate(self) -> None:
+        self.alive = False
+
+    def kill(self) -> None:
+        self.alive = False
+
+
+def _handshake_runner(connection: _HandshakeConnection) -> object:
+    """Build a step-process instance with a fake context and parent connection."""
+    process = _HandshakeProcess()
+    context = SimpleNamespace(
+        Pipe=lambda duplex: (connection, _HandshakeConnection(poll_result=True)),
+        Process=lambda target, args: process,
+    )
+    step_runner = object.__new__(runner_mod._PlannerStepProcess)
+    step_runner._planner = object()
+    step_runner._timeout_s = 1.0
+    step_runner._ctx = context
+    step_runner._process = None
+    step_runner._conn = None
+    return step_runner
+
+
+def test_planner_step_process_handshake_timeout_fails_closed() -> None:
+    """A worker that never acknowledges initialization is rejected and reaped."""
+    step_runner = _handshake_runner(_HandshakeConnection(poll_result=False))
+
+    with pytest.raises(RuntimeError, match="initialization timed out"):
+        step_runner._ensure_worker()
+
+
+def test_planner_step_process_handshake_receive_error_fails_closed() -> None:
+    """A broken handshake pipe is converted into a clear startup error."""
+    step_runner = _handshake_runner(_HandshakeConnection(poll_result=True, recv_error=EOFError()))
+
+    with pytest.raises(RuntimeError, match="failed to start"):
+        step_runner._ensure_worker()
 
 
 def test_load_scenario_matrix_and_small_helpers_cover_default_branches(

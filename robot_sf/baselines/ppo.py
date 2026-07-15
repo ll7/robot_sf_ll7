@@ -43,6 +43,7 @@ from robot_sf.baselines.interface import (
 )
 from robot_sf.benchmark.local_model_artifacts import validate_no_local_model_path_value
 from robot_sf.common.errors import raise_fatal_with_remedy, warn_soft_degrade
+from robot_sf.common.optional_import import try_import
 from robot_sf.common.seed import _configure_torch_213_runtime
 from robot_sf.models import resolve_model_path
 from robot_sf.planner.predictive_foresight import (
@@ -112,13 +113,20 @@ class PPOPlanner:
         config: PPOPlannerConfig | dict[str, Any],
         *,
         seed: int | None = None,
+        defer_model_loading: bool = False,
     ):
-        """Initialize the PPO planner and load the model if available.
+        """Initialize the PPO planner and load the model unless explicitly deferred.
 
         Args:
             config: Planner configuration or dict payload.
             seed: Optional seed for reproducibility.
+            defer_model_loading: Defer model and predictive-foresight loading until
+                ``step``. The benchmark fork worker uses this to avoid loading native
+                libraries in the parent process.
         """
+        torch = try_import("torch")
+        if torch is not None:
+            torch.set_num_threads(1)
         self.config = self._parse_config(config)
         self._seed = seed
         self._model = None
@@ -126,8 +134,10 @@ class PPOPlanner:
         self._fallback_reason: str | None = None
         self._predictive_foresight: PredictiveForesightEncoder | None = None
         self._runtime_observation_space: gym_spaces.Space | None = None
-        self._load_model()
-        self._init_predictive_foresight()
+        self._defer_model_loading = defer_model_loading
+        self._initialized = False
+        if not defer_model_loading:
+            self._ensure_model_loaded()
 
     # --- Lifecycle -----------------------------------------------------
     def _parse_config(self, cfg: PPOPlannerConfig | dict[str, Any]) -> PPOPlannerConfig:
@@ -250,9 +260,20 @@ class PPOPlanner:
     def configure(self, config: PPOPlannerConfig | dict[str, Any]) -> None:
         """Update the planner's configuration."""
         self.config = self._parse_config(config)
-        # Need to reload the model if model_path changed
+        self._model = None
+        self._initialized = False
+        if not self._defer_model_loading:
+            self._ensure_model_loaded()
+
+    def _ensure_model_loaded(self) -> None:
+        """Lazily load model and init predictive foresight if not done yet."""
+        if getattr(self, "_initialized", False):
+            return
         self._load_model()
         self._init_predictive_foresight()
+        if self._model is not None and self._runtime_observation_space is not None:
+            self._validate_runtime_observation_space()
+        self._initialized = True
 
     def _init_predictive_foresight(self) -> None:
         """(Re)build the optional predictive foresight encoder from current config."""
@@ -275,6 +296,7 @@ class PPOPlanner:
         Returns:
             Action dict in either velocity or unicycle format.
         """
+        self._ensure_model_loaded()
         if is_observation_mapping(obs) and self._uses_dict_observation():
             return self._step_dict_obs(obs)
 

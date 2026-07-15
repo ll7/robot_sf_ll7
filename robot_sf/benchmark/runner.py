@@ -89,6 +89,7 @@ from robot_sf.benchmark.utils import (
     normalize_track_field,
     validate_episode_success_integrity,
 )
+from robot_sf.common.optional_import import try_import
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import is_task_bundle_reference
@@ -166,7 +167,12 @@ def _load_baseline_planner(algo: str, algo_config_path: str | None, seed: int):
                 raise TypeError("Algorithm config must be a mapping (YAML dict).")
             validate_no_local_model_artifacts(cfg, config_path=config_path)
             config = cfg
-    planner = planner_class(config, seed=seed)
+    if algo == "ppo":
+        # Keep direct PPOPlanner construction fail-closed while the fork worker
+        # performs native model loading after process creation.
+        planner = planner_class(config, seed=seed, defer_model_loading=True)
+    else:
+        planner = planner_class(config, seed=seed)
     return planner, Observation, config
 
 
@@ -288,6 +294,22 @@ _episode_identity_hash = episode_identity_hash
 def _planner_step_worker(conn: Any, planner: Any) -> None:
     """Run planner steps in an isolated child process."""
     try:
+        torch = try_import("torch")
+        if torch is not None:
+            torch.set_num_threads(1)
+        ensure_load = getattr(planner, "_ensure_model_loaded", None)
+        if callable(ensure_load):
+            ensure_load()
+        conn.send(("init_ok", None))
+    except Exception as exc:
+        try:
+            conn.send(("init_error", (type(exc).__name__, str(exc))))
+        except (BrokenPipeError, EOFError, OSError):
+            pass
+        conn.close()
+        return
+
+    try:
         while True:
             try:
                 command, payload = conn.recv()
@@ -388,6 +410,23 @@ class _PlannerStepProcess:
         child_conn.close()
         self._process = process
         self._conn = parent_conn
+
+        # Handshake: wait for initialization inside child process
+        try:
+            if parent_conn.poll(30.0):
+                status, payload = parent_conn.recv()
+            else:
+                status, payload = "timeout", None
+        except (EOFError, OSError, ValueError) as exc:
+            self.close()
+            raise RuntimeError("planner step worker failed to start") from exc
+
+        if status != "init_ok":
+            self.close()
+            if status == "timeout":
+                raise RuntimeError("planner step worker initialization timed out")
+            error_type, msg = payload
+            raise RuntimeError(f"planner step worker failed to initialize ({error_type}: {msg})")
 
     def _terminate_worker(self) -> None:
         """Terminate the current worker after a timeout."""

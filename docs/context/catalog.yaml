@@ -4496,6 +4496,10 @@ entries:
   status: evidence
   freshness: evidence
   area: predictive_planner
+- path: docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/issue_5355_factorial_readiness_receipt.json
+  status: evidence
+  freshness: evidence
+  area: predictive_planner
 - path: docs/context/evidence/issue_5366_cold_start_reproduction_2026-07-12/cold_start_reproduction_report.json
   status: evidence
   freshness: evidence

@@ -316,6 +316,7 @@ def _resolve_quickstart_examples(
     manifest_path = workspace_root / "examples" / "examples_manifest.yaml"
     try:
         manifest = load_manifest(manifest_path=manifest_path, validate_paths=False)
+    # Any loader exception, including malformed YAML, must become a readiness failure.
     except Exception as exc:
         return (), f"{type(exc).__name__}: {exc}"
 

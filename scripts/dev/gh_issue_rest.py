@@ -69,11 +69,21 @@ PROJECT_CARDS_ERROR_MARKER = "repository.issue.projectCards"
 # markers classify that class of failure as REST-fallback-eligible (issue #5896):
 # GraphQL quota exhaustion and GraphQL deprecation notices. They must NOT cover
 # authentication, authorization, or repository-resolution failures, which stay fail-closed.
-FALLBACK_ELIGIBLE_MARKERS = (
-    PROJECT_CARDS_ERROR_MARKER,
-    "API rate limit already exceeded",
-    "secondary rate limit",
-    "GraphQL:",
+FALLBACK_ELIGIBLE_MARKERS = (PROJECT_CARDS_ERROR_MARKER, "graphql:")
+
+# ``gh issue view`` reports authentication, authorization, and repository lookup
+# failures through its GraphQL client too. These errors must win over the generic
+# ``GraphQL:`` fallback marker so REST never masks a fail-closed failure.
+FAIL_CLOSED_ERROR_MARKERS = (
+    "bad credentials",
+    "requires authentication",
+    "authentication required",
+    "resource not accessible by integration",
+    "forbidden",
+    "permission denied",
+    "could not resolve to a repository",
+    "could not resolve to an issue",
+    "repository not found",
 )
 
 # Fields exposed in the normalized issue payload, in a stable order.
@@ -360,7 +370,10 @@ def _is_fallback_eligible(native_error: str) -> bool:
     deliberately NOT fallback-eligible so they fail closed instead of masking a
     real problem behind an unrelated REST read.
     """
-    return any(marker in native_error for marker in FALLBACK_ELIGIBLE_MARKERS)
+    normalized_error = native_error.casefold()
+    if any(marker in normalized_error for marker in FAIL_CLOSED_ERROR_MARKERS):
+        return False
+    return any(marker.casefold() in normalized_error for marker in FALLBACK_ELIGIBLE_MARKERS)
 
 
 def read_complete_issue_thread(

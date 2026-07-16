@@ -323,6 +323,27 @@ def test_complete_thread_fails_closed_on_bad_credentials() -> None:
     mock_rest.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    "native_error",
+    [
+        "GraphQL: Resource not accessible by integration (repository.issue)",
+        "GraphQL: Could not resolve to a Repository with the name 'missing/repo'.",
+    ],
+)
+def test_complete_thread_fails_closed_on_graphql_access_errors(native_error: str) -> None:
+    """GraphQL authorization and repository errors must not be masked by REST (#5896)."""
+    with (
+        patch("scripts.dev.gh_issue_rest._gh_issue_view") as mock_view,
+        patch("scripts.dev.gh_issue_rest.fetch_issue_with_comments") as mock_rest,
+    ):
+        mock_view.return_value = _proc(returncode=1, stderr=native_error)
+        result = read_complete_issue_thread(5896)
+    assert result["status"] == "error"
+    assert result["source"] == "gh_issue_view"
+    assert native_error in result["error"]
+    mock_rest.assert_not_called()
+
+
 def test_complete_thread_reports_rest_fallback_failure() -> None:
     """A failed fallback must report both the triggering path and REST error."""
     with (

@@ -44,6 +44,10 @@ class FastPysfWrapper:
         Args:
             simulator: Active PySocialForce simulator instance to query.
         """
+        n_agents = simulator.peds.size()
+        if n_agents <= 0:
+            raise ValueError(f"n_agents must be positive (got {n_agents})")
+
         self.sim = simulator
         # Named caches for precomputed force grids. Each cache is a dict with
         # keys: 'xs' (1D array), 'ys' (1D array), 'field' (H,W,2 array).

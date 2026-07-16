@@ -1,0 +1,22 @@
+id: scenario-thumbnail-generation
+title: Generate scenario thumbnail figures
+purpose: >
+  Produce scenario thumbnail figures from a bundled golden episodes fixture using
+  the figure-generation script. This is the cheapest way to exercise the
+  thumbnail / figure pipeline without running a fresh campaign. Pareto plotting is
+  skipped because the fixture holds a single algorithm family.
+runtime: "< 1 min CPU"
+category: visualization
+command: >
+  uv run python scripts/generate_figures.py
+  --episodes tests/fixtures/benchmark/golden/aggregate_episodes.jsonl
+  --out-dir output/recipes/scenario-thumbnail-generation
+  --no-pareto
+  --thumbs-matrix configs/baselines/example_matrix.yaml
+configs:
+  - tests/fixtures/benchmark/golden/aggregate_episodes.jsonl
+  - configs/baselines/example_matrix.yaml
+  - scripts/generate_figures.py
+outputs:
+  - output/recipes/scenario-thumbnail-generation/
+docs: docs/recipes/README.md

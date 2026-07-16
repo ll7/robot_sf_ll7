@@ -207,6 +207,64 @@ def test_none_fields_do_not_stringify_to_none_or_crash() -> None:
     assert recommendation["review_feedback"]["issue_comments"] == 0
 
 
+def test_superseded_cancelled_run_recommends_wait_ci_not_diagnose() -> None:
+    """A superseded cancelled run with a newer pending replacement must not diagnose."""
+    pr_payload = {
+        "number": 5869,
+        "title": "superseded cancelled PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/5869",
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc111",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "ci",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-07-01T00:00:00Z",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "ci",
+                "status": "in_progress",
+                "conclusion": "",
+                "startedAt": "2026-07-01T00:05:00Z",
+            },
+        ],
+        "reviews": [],
+        "comments": [],
+    }
+    thread_payload = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {"totalCount": 0, "nodes": []},
+                }
+            }
+        }
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.side_effect = [
+            MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr=""),
+            MagicMock(returncode=0, stdout=json.dumps(thread_payload), stderr=""),
+        ]
+        payload = build_babysitter_snapshot(
+            [5869], repo="ll7/robot_sf_ll7", retry_state=load_retry_state(None)
+        )
+
+    pr = payload["prs"][0]
+    assert pr["checks"]["overall"] == "pending"
+    assert pr["recommendation"]["action"] == "wait"
+    assert "ci_pending" in pr["recommendation"]["reasons"]
+    assert pr["recommendation"]["after_diagnosis_action"] is None
+
+
 def test_build_snapshot_wraps_compact_pr_queue_and_records_retry(tmp_path) -> None:  # type: ignore[no-untyped-def]
     """The wrapper should reuse compact queue snapshots and persist retry accounting."""
     state_file = tmp_path / "retry-state.json"

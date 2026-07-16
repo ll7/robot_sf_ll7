@@ -502,6 +502,98 @@ def test_regression_last_20_merged_prs() -> None:
         assert not blockers, f"PR #{number} ('{title}') triggered false blockers: {blockers}"
 
 
+class TestPlaceholderDocstringRatchet:
+    """Issue #5856: reject NEW placeholder docstrings added in the PR diff.
+
+    These tests exercise the git-diff-backed ratchet in an isolated throwaway git
+    repository so they do not depend on the surrounding robot_sf_ll7 history.
+    """
+
+    def _init_repo(self, tmp_path: Path) -> Path:
+        """Create and initialize a throwaway git repo rooted at ``tmp_path``."""
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.email", "ci@example.com"], cwd=repo, check=True)
+        subprocess.run(["git", "config", "user.name", "CI"], cwd=repo, check=True)
+        # A base commit with a pre-existing (grandfathered) stub.
+        legacy = repo / "tool.py"
+        legacy.write_text(
+            'def legacy():\n    """TODO docstring. Document this function."""\n    return 1\n',
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "add", "."], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=repo, check=True)
+        return repo
+
+    def _commit_change(self, repo: Path, filename: str, content: str) -> None:
+        """Write a tracked file at ``repo`` and commit it as a new HEAD."""
+        (repo / filename).write_text(content, encoding="utf-8")
+        subprocess.run(["git", "add", "."], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "change"], cwd=repo, check=True)
+
+    def test_adds_placeholder_docstring_fails(self, tmp_path: Path) -> None:
+        """A PR that ADDS a 'TODO docstring' line is blocked with file:line."""
+        repo = self._init_repo(tmp_path)
+        self._commit_change(
+            repo,
+            "new.py",
+            'def do_thing():\n    """TODO docstring. Document this function."""\n    return 0\n',
+        )
+        blockers = pr_contract_check.check_placeholder_docstrings("HEAD~1", repo_root=str(repo))
+        blocker = next((b for b in blockers if "new.py" in b), None)
+        assert blocker is not None, f"expected blocker for new.py, got: {blockers}"
+        assert "new.py:2" in blocker
+
+    def test_adds_empty_docstring_fails(self, tmp_path: Path) -> None:
+        """A PR that ADDS a trivially-empty '\"\"\".\"\"\"' line is blocked."""
+        repo = self._init_repo(tmp_path)
+        self._commit_change(
+            repo,
+            "new.py",
+            'def do_thing():\n    """."""\n    return 0\n',
+        )
+        blockers = pr_contract_check.check_placeholder_docstrings("HEAD~1", repo_root=str(repo))
+        assert any("new.py:2" in b for b in blockers)
+
+    def test_touching_legacy_stub_passes(self, tmp_path: Path) -> None:
+        """Touching a file that already has a stub (without adding new ones) passes."""
+        repo = self._init_repo(tmp_path)
+        # Only modify a non-docstring line; the old stub remains but is not ADDED.
+        legacy = repo / "tool.py"
+        legacy.write_text(
+            'def legacy():\n    """TODO docstring. Document this function."""\n    return 2\n',
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "add", "."], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-q", "-m", "touch"], cwd=repo, check=True)
+        blockers = pr_contract_check.check_placeholder_docstrings("HEAD~1", repo_root=str(repo))
+        assert not blockers
+
+    def test_real_docstring_passes(self, tmp_path: Path) -> None:
+        """Adding a genuine one-line docstring is accepted."""
+        repo = self._init_repo(tmp_path)
+        self._commit_change(
+            repo,
+            "new.py",
+            'def do_thing():\n    """Compute the thing and return a result."""\n    return 0\n',
+        )
+        assert not pr_contract_check.check_placeholder_docstrings("HEAD~1", repo_root=str(repo))
+
+    def test_diff_added_line_parser(self, tmp_path: Path) -> None:
+        """_diff_added_python_lines maps added line numbers per file."""
+        repo = self._init_repo(tmp_path)
+        self._commit_change(
+            repo,
+            "new.py",
+            'def a():\n    """real."""\n    return 0\n\ndef b():\n    """TODO docstring."""\n    return 1\n',
+        )
+        added = pr_contract_check._diff_added_python_lines("HEAD~1", repo_root=str(repo))
+        # The fixture file has a blank line between the two functions, so 7 lines
+        # are added; the parser must enumerate every added line number.
+        assert added.get("new.py") == [1, 2, 3, 4, 5, 6, 7]
+
+
 class TestWorkflowFetchFallback:
     """Validate the PR contract-check workflow tolerates fetch failure.
 

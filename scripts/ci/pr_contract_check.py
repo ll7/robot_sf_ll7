@@ -44,6 +44,21 @@ EVIDENCE_REVIEW_SIDECAR_SUFFIX = ".review.json"
 EVIDENCE_REVIEW_SCHEMA_VERSION = "evidence-review-marker.v1"
 LOWERCASE_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 
+# Issue #5856: ratchet against NEW placeholder docstrings introduced in a PR diff.
+# Only ADDED lines count (pre-existing stubs are grandfathered), so unrelated PRs
+# that merely touch a file already carrying old stubs still pass.
+PLACEHOLDER_DOCSTRING_PATTERNS = [
+    re.compile(r"TODO docstring", re.IGNORECASE),
+    re.compile(r"Document this (?:function|class|module|method)", re.IGNORECASE),
+    re.compile(r'^\s*"""\."""\s*$'),  # trivially-empty docstring """."""
+    re.compile(r"^\s*'''\.'''\\s*$", re.IGNORECASE),  # trivially-empty docstring '''.
+]
+PLACEHOLDER_LINE_HINT = re.compile(
+    r"TODO docstring|Document this (?:function|class|module|method)"
+    r'|^\s*"""\."""\s*$|^\s*\'\'\'\.\'\'\'\s*$',
+    re.IGNORECASE,
+)
+
 
 def is_negated(text: str, match_start: int) -> bool:
     """Check if the matched word is negated in the preceding context."""
@@ -711,6 +726,114 @@ def post_or_update_comment(pr_number: str, repo: str, comment_body: str) -> None
             print(f"Error creating comment: {e}", file=sys.stderr)
 
 
+def _diff_added_python_lines(base_ref: str, repo_root: str | None = None) -> dict[str, list[int]]:
+    """Return the set of NEW-file line numbers added per Python file vs ``base_ref``.
+
+    Parses zero-context ``git diff`` hunk headers and keeps only ``+``-prefixed
+    new-file line numbers. This is the ratchet signal: only ADDED content can
+    introduce new placeholder docstrings; removed/context lines are ignored so
+    pre-existing stubs are grandfathered (issue #5856). When ``repo_root`` is
+    given, the diff runs scoped to that git repository so callers (notably tests
+    in a nested throwaway repo) are not polluted by a parent checkout's history.
+    """
+    added: dict[str, list[int]] = {}
+    git_cmd = ["git"]
+    if repo_root is not None:
+        git_cmd += [f"--git-dir={repo_root}/.git", f"--work-tree={repo_root}"]
+    try:
+        res = subprocess.run(
+            git_cmd + ["diff", "--unified=0", f"{base_ref}...HEAD", "--", "*.py"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode != 0:
+            return added
+        current_file: str | None = None
+        for line in res.stdout.splitlines():
+            if line.startswith("+++ b/"):
+                current_file = line[len("+++ b/") :].strip()
+                added.setdefault(current_file, [])
+                continue
+            if current_file is None or not line.startswith("@@"):
+                continue
+            span = _parse_added_line_span(line)
+            if span is None:
+                continue
+            start, count = span
+            added[current_file].extend(range(start, start + count))
+    except _BEST_EFFORT_ERRORS:
+        return {}
+    return added
+
+
+def _parse_added_line_span(hunk_header: str) -> tuple[int, int] | None:
+    """Parse the ``+c,d`` part of a ``git diff --unified=0`` hunk header.
+
+    Returns ``(start, count)`` for the added lines, or ``None`` when the header
+    cannot be parsed. A missing ``,count`` means a single added line.
+    """
+    try:
+        new_part = hunk_header.split("+", 1)[1].split("@@", 1)[0].strip()
+    except IndexError:
+        return None
+    try:
+        if "," in new_part:
+            start = int(new_part.split(",", 1)[0])
+            count = int(new_part.split(",", 1)[1])
+        else:
+            start = int(new_part)
+            count = 1
+    except ValueError:
+        return None
+    if count <= 0:
+        return None
+    return start, count
+
+
+def check_placeholder_docstrings(base_ref: str, repo_root: str | None = None) -> list[str]:
+    """Rule 8: Reject NEW placeholder docstrings added in the PR diff (issue #5856).
+
+    Only ADDED lines (vs ``base_ref``) are inspected. Pre-existing stubs that the
+    PR merely touches are grandfathered and do not fail. Returns BLOCKER messages
+    that name the exact added file:line for each flagged placeholder. When
+    ``repo_root`` is given the scan is scoped to that repository (used by tests).
+    """
+    blockers: list[str] = []
+    added = _diff_added_python_lines(base_ref, repo_root)
+    for rel_path, line_numbers in sorted(added.items()):
+        if not line_numbers:
+            continue
+        path = rel_path.replace("\\", "/").strip()
+        # When the diff was scoped to a throwaway repo (tests), resolve the file
+        # against that root; otherwise open relative to the current working dir.
+        fs_path = os.path.join(repo_root, path) if repo_root else path
+        try:
+            with open(fs_path, encoding="utf-8") as handle:
+                file_lines = handle.readlines()
+        except _BEST_EFFORT_ERRORS:
+            continue
+        for lineno in line_numbers:
+            idx = lineno - 1
+            if idx < 0 or idx >= len(file_lines):
+                continue
+            text = file_lines[idx].rstrip("\n")
+            matched = None
+            for pattern in PLACEHOLDER_DOCSTRING_PATTERNS:
+                if pattern.search(text):
+                    matched = pattern.pattern
+                    break
+            if matched is not None:
+                blockers.append(
+                    f"BLOCKER: PR diff adds placeholder docstring content at "
+                    f"'{path}:{lineno}' matching /{matched}/. New placeholder docstrings "
+                    f"('TODO docstring', 'Document this function/class/module/method', "
+                    f'or trivially-empty \'"""."""\') are rejected by the issue #5856 ratchet. '
+                    f"Replace it with a real one-line docstring."
+                )
+    return blockers
+
+
 def run_all_checks(
     title: str,
     body: str,
@@ -752,6 +875,9 @@ def run_all_checks(
     lane_info, _ = check_worker_lane_provenance(body, pr_number, repo)
     infos.append(lane_info)
 
+    # 8. Placeholder docstring ratchet (issue #5856): reject NEW placeholder docstrings.
+    blockers.extend(check_placeholder_docstrings(base_ref))
+
     return blockers, warnings, infos
 
 
@@ -788,6 +914,11 @@ def build_comment_body(
     lane_detected = "Added 'cheap-lane' label" in "".join(infos)
     rows.append(
         f"| 7. Worker-lane label | {'🏷️ cheap-lane' if lane_detected else '⚪ None'} | Label PRs from cheap worker lane |"
+    )
+    rows.append(
+        f"| 8. Placeholder docstring ratchet | "
+        f"{get_status_str(any('placeholder docstring' in b.lower() for b in blockers))} | "
+        f"Reject NEW TODO/empty docstrings in added diff lines |"
     )
 
     comment = [

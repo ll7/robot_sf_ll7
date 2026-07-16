@@ -97,6 +97,17 @@ def test_validate_config_rejects_primary_metric_alias_mismatch() -> None:
         validate_fidelity_sensitivity_config(config)
 
 
+def test_validate_config_isolates_nested_ranking_metadata() -> None:
+    """Normalized ranking metadata must not alias the caller's nested mappings."""
+    config = load_fidelity_sensitivity_config("configs/research/fidelity_sensitivity_v1.yaml")
+    config["ranking"]["review"] = {"notes": ["original"]}
+
+    validated = validate_fidelity_sensitivity_config(config)
+    validated["ranking"]["review"]["notes"].append("normalized-only")
+
+    assert config["ranking"]["review"]["notes"] == ["original"]
+
+
 def test_validate_config_rejects_too_few_axes() -> None:
     """Issue #3207 requires at least three fidelity axes."""
     config = load_fidelity_sensitivity_config("configs/research/fidelity_sensitivity_v1.yaml")

@@ -7,6 +7,7 @@ not run benchmark episodes or promote any planner-ranking claim by themselves.
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 from pathlib import Path
@@ -55,7 +56,7 @@ def validate_fidelity_sensitivity_config(config: Mapping[str, Any]) -> dict[str,
         raise ValueError(f"schema_version must be {SCHEMA_VERSION!r}")
     _validate_axes(normalized.get("axes"))
     _validate_fixed_scope(normalized.get("fixed_scope"))
-    ranking = dict(normalized.get("ranking") or {})
+    ranking = copy.deepcopy(normalized.get("ranking") or {})
     primary_metric = _validate_metrics(
         ranking,
         normalized.get("metrics"),

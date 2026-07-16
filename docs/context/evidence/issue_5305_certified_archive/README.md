@@ -8,7 +8,8 @@ the circular-input failure that blocked the next #3275/#2921 stage.
 ## Evidence boundary
 
 Certified archive input only; no proposal-model, held-out-yield, benchmark, or paper-facing claim.
-This registration does not run, unpark, or classify #3275 or #2921.
+This registration clears #3275's archive-input blocker and that issue is now Project `In progress`;
+it does not execute or classify #3275 or #2921, whose downstream gates remain open.
 
 ## Provenance
 

@@ -6,12 +6,14 @@ import hashlib
 import json
 from pathlib import Path
 
-from robot_sf.adversarial.disjoint_evaluation import compute_overlap_provenance
+from robot_sf.adversarial.disjoint_evaluation import archive_sha256, compute_overlap_provenance
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUNDLE = REPO_ROOT / "docs/context/evidence/issue_5305_certified_archive"
 ARCHIVE = BUNDLE / "archive.json"
 REGISTRATION = BUNDLE / "registration.json"
+ACCEPTANCE_REPORT = BUNDLE / "acceptance_report.json"
+REPOSITORY_READINESS = BUNDLE / "repository_readiness.json"
 REFERENCE_ARCHIVES = (
     REPO_ROOT / "docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json",
     REPO_ROOT / "docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/archive.json",
@@ -41,6 +43,16 @@ def test_registered_archive_preserves_accepted_source_provenance() -> None:
     assert (
         registration["registration_transformation"]["candidate_or_metric_values_changed"] is False
     )
+
+
+def test_readiness_reports_bind_the_registered_archive_content() -> None:
+    """Standalone and embedded readiness hashes must match the tracked archive projection."""
+    expected_hash = archive_sha256(_load(ARCHIVE))
+    acceptance_report = _load(ACCEPTANCE_REPORT)
+    repository_readiness = _load(REPOSITORY_READINESS)
+
+    assert acceptance_report["repository_readiness"]["archive_sha256"] == expected_hash
+    assert repository_readiness["archive_sha256"] == expected_hash
 
 
 def test_archive_entries_are_certified_and_partition_disjoint() -> None:

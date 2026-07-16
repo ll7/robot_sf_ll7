@@ -27,7 +27,7 @@
   "registration_transformation": "private path prefixes replaced with private-campaign://job-13518/ URIs; evidence semantics unchanged",
   "repository_readiness": {
     "archive_id_overlap_count": 0,
-    "archive_sha256": "93164fc1fe68a2b94d4924861a5811aa570fe08953629e08ea7586dbe6cdd57c",
+    "archive_sha256": "1d8db3638e3539dca2e06849c0727150aff41ea85a71ee2d22cb1a343bc6d57e",
     "blocking_reasons": [],
     "disjoint_split_possible": true,
     "distinct_family_count": 2,

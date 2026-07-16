@@ -305,7 +305,7 @@ def test_force_population_scatter_spawn_has_radius_clearance(
 ) -> None:
     """Synthesized backgrounds start clear of static geometry and every t=0 agent."""
     ped_radius = 0.4
-    _, (ped_states, _groups, _behaviors) = _forced_francis_population(
+    _, (ped_states, groups, _behaviors) = _forced_francis_population(
         _geometryless_francis_map,
         seed=219,
     )
@@ -319,6 +319,7 @@ def test_force_population_scatter_spawn_has_radius_clearance(
             *_geometryless_francis_map.robot_goal_zones,
         ]
     ]
+    assert any(len(group) > 1 for group in groups.groups.values())
 
     for position in background_positions:
         point = Point(position)

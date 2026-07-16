@@ -887,11 +887,17 @@ def _populate_scattered_background(
         groups.append(set(ped_ids))
         zone_id = int(rng.integers(len(zones)))
         zone = zones[zone_id]
-        spawn_points = [
-            _sample_scatter_point(zone, rng, exclusions, accepted_positions, ped_radius)
-            for _ in ped_ids
-        ]
-        accepted_positions.extend(spawn_points)
+        spawn_points = []
+        for _ped_id in ped_ids:
+            spawn_point = _sample_scatter_point(
+                zone,
+                rng,
+                exclusions,
+                accepted_positions,
+                ped_radius,
+            )
+            spawn_points.append(spawn_point)
+            accepted_positions.append(spawn_point)
         group_goal = _sample_scatter_point(zone, rng, exclusions, [], ped_radius)
         centroid = np.mean(spawn_points, axis=0)
         heading = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])

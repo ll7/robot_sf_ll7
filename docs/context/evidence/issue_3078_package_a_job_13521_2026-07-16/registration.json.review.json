@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/registration.json",
+  "artifact_sha256": "962c775496a34930696c3b5c735d4e0d5162e92ff09f14334b86e4bf9428a0db",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

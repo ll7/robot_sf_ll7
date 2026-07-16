@@ -3737,6 +3737,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_3556_seed_sufficiency_handoff_2026-07-03/README.md
   status: evidence
   freshness: evidence
@@ -3822,6 +3826,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5034_parent_4977_classification_2026-07-15
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5034_parent_4977_classification_2026-07-16
   status: evidence
   freshness: evidence
   area: benchmark_evidence

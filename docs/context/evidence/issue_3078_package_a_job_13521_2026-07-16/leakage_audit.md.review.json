@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/leakage_audit.md",
+  "artifact_sha256": "bed248399764372c9c1ccdad99c978bec1882e1a2017dff5763dec6b196e872a",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

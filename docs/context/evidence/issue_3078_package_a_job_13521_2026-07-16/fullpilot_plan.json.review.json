@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/fullpilot_plan.json",
+  "artifact_sha256": "c7c67dc8f46af5b0a598dc33133e725fe5865d89abdba9b6ce1e2e5c1bc8b0f0",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

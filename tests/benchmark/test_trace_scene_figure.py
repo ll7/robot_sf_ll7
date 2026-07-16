@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from matplotlib import pyplot as plt
+from matplotlib.text import Text
 
 from robot_sf.benchmark.figure_qa import lint_figure
 from robot_sf.benchmark.trace_scene_figure import (
@@ -17,6 +18,7 @@ from robot_sf.benchmark.trace_scene_figure import (
     TEAL,
     EpisodeTrace,
     _choose_scale_bar_corner,
+    _clamp_texts_to_canvas,
     _compute_scene_extent,
     _contiguous_segments,
     _draw_robot_time_markers,
@@ -177,6 +179,80 @@ def test_extent_and_synthetic_pdf(synthetic_episode: EpisodeTrace, tmp_path: Pat
     output = render_scene(synthetic_episode, tmp_path / "synthetic.pdf", timeline=False)
     assert output.exists()
     assert output.stat().st_size > 5_000
+
+
+def test_default_render_preserves_screen_layout(
+    synthetic_episode: EpisodeTrace, tmp_path: Path
+) -> None:
+    """Default sizing must not activate print-only wrapping or density adaptations."""
+
+    _, figure = render_scene(
+        synthetic_episode,
+        tmp_path / "default-screen.pdf",
+        return_figure=True,
+    )
+    try:
+        assert figure.get_figwidth() == pytest.approx(7.2)
+        assert figure.axes[1].get_ylabel() == "min robot-ped distance (m)"
+    finally:
+        plt.close(figure)
+
+
+def test_print_render_uses_requested_width_and_minimum_font(
+    synthetic_episode: EpisodeTrace, tmp_path: Path
+) -> None:
+    """Print sizing should keep the requested canvas width and fonts at least 8.25 pt."""
+
+    output, figure = render_scene(
+        synthetic_episode,
+        tmp_path / "print-sized.pdf",
+        figure_width_in=3.43,
+        base_font_pt=9.0,
+        return_figure=True,
+    )
+    try:
+        visible_font_sizes = [
+            text.get_fontsize()
+            for text in figure.findobj(Text)
+            if text.get_visible() and text.get_text().strip()
+        ]
+        assert output.exists()
+        assert figure.get_figwidth() == pytest.approx(3.43)
+        assert visible_font_sizes
+        assert min(visible_font_sizes) >= 8.25
+    finally:
+        plt.close(figure)
+
+
+@pytest.mark.parametrize(
+    ("sizing", "message"),
+    [
+        ({"figure_width_in": 0.0}, "figure_width_in must be greater than zero"),
+        ({"base_font_pt": -1.0}, "base_font_pt must be greater than zero"),
+    ],
+)
+def test_print_render_rejects_non_positive_sizing(
+    synthetic_episode: EpisodeTrace,
+    tmp_path: Path,
+    sizing: dict[str, float],
+    message: str,
+) -> None:
+    """Print sizing should fail closed before rendering invalid dimensions."""
+
+    with pytest.raises(ValueError, match=message):
+        render_scene(synthetic_episode, tmp_path / "invalid.pdf", **sizing)
+
+
+def test_canvas_clamp_tolerates_missing_renderer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Canvas clamping should return safely when a backend has no initialized renderer."""
+
+    figure, _ = plt.subplots()
+    monkeypatch.setattr(figure.canvas, "draw", lambda: None)
+    monkeypatch.setattr(figure.canvas, "get_renderer", lambda: None)
+    try:
+        _clamp_texts_to_canvas(figure)
+    finally:
+        plt.close(figure)
 
 
 @pytest.mark.skipif(not SOCIAL_FORCE_EPISODE.is_dir(), reason="real exemplar bundle unavailable")

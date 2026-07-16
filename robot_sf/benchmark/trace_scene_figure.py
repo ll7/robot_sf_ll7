@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
 from itertools import pairwise
@@ -18,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
-from matplotlib.transforms import Bbox, IdentityTransform
+from matplotlib.transforms import Bbox
 
 from robot_sf.analysis_workbench.simulation_trace_export import (
     SimulationTraceExportValidationError,
@@ -26,7 +27,7 @@ from robot_sf.analysis_workbench.simulation_trace_export import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Iterator, Mapping, Sequence
 
     from matplotlib.axes import Axes
     from matplotlib.figure import Figure
@@ -69,6 +70,111 @@ _RC_PARAMS = {
     "pdf.fonttype": 42,
     "ps.fonttype": 42,
 }
+
+#: ------------------------------------------------------------------------------------
+#: Design-at-final-size print support (2026-07-16, diss issue ll7/diss#438).
+#:
+#: The screen design above renders 7.2-10.8 in wide; when such a PDF is included in the
+#: dissertation at <= \textwidth, LaTeX silently downscales it and the ~11 pt fonts print
+#: at ~4 pt. ``render_scene``/``render_comparison`` therefore accept two optional print
+#: parameters (defaults preserve the screen behavior exactly):
+#:
+#: * ``figure_width_in`` -- the canvas is designed at this width and saved WITHOUT the
+#:   tight-bbox crop, so the PDF's natural (MediaBox) width equals it exactly. It must
+#:   equal the TRUE included width: measure \textwidth from the build log (the diss text
+#:   block is 426.79135 pt / 72.27 = 5.906 in -- NOT the nominal 6.3 in an earlier proto
+#:   assumed), then matplotlib pt == on-page pt with no LaTeX rescaling.
+#: * ``base_font_pt`` -- rescales every hardcoded font size by ``base_font_pt / 12``
+#:   (12 pt is the screen base). The smallest screen font is 11 pt, so a base of 9 pt
+#:   keeps every rendered font >= 8.25 pt at final size. The print title/label hierarchy
+#:   is deliberately flatter than the screen 15/13/12 ratios: panel titles at
+#:   ``base + 1`` pt still fit side-by-side panels at dissertation column widths.
+#: ------------------------------------------------------------------------------------
+
+_FONT_SCALE = 1.0
+
+#: How much larger text is *relative to the panel* than in the screen design.
+#: Nominally font scale / canvas scale, squared in practice: the axes shrink
+#: faster than the canvas because fixed-size decorations (tick labels, axis
+#: labels, titles) eat a larger share of the smaller figure, so data-space
+#: label-density thresholds (the marker-label thinning gap) must grow more than
+#: the nominal ratio for the smaller print canvas not to be asked to hold the
+#: screen design's label count.
+_LABEL_GAP_SCALE = 1.0
+
+
+def _fs(size_pt: float) -> float:
+    """Scale a screen-design font size by the active print font scale.
+
+    Returns:
+        float: Font size in pt (identity while ``_FONT_SCALE`` is 1.0).
+    """
+
+    return size_pt * _FONT_SCALE
+
+
+@contextmanager
+def _design_scales(font_scale: float, canvas_scale: float) -> Iterator[None]:
+    """Activate the print font/label-density scales for one render call.
+
+    This context manager mutates module-level rendering state and is not thread-safe.
+    Callers must serialize render calls within a process; separate processes are safe.
+    """
+
+    global _FONT_SCALE, _LABEL_GAP_SCALE
+    previous = (_FONT_SCALE, _LABEL_GAP_SCALE)
+    _FONT_SCALE = font_scale
+    # Squared ratio plus a 2x margin -- tuned on the four §7.4 worked-example
+    # episodes (diss issue ll7/diss#438) so that dense clusters (a robot circling
+    # near its goal, a slow climb up a narrow corridor panel) thin down to
+    # non-colliding label counts. Markers keep the full cadence; only labels thin.
+    # Preserve the legacy screen layout exactly when neither sizing dimension changes.
+    # Without this identity case, ordinary renders silently enabled every print-only
+    # label-thinning and wrapping adaptation despite using the public defaults.
+    _LABEL_GAP_SCALE = (
+        1.0
+        if math.isclose(font_scale, 1.0) and math.isclose(canvas_scale, 1.0)
+        else 2.0 * (font_scale / canvas_scale) ** 2
+    )
+    try:
+        yield
+    finally:
+        _FONT_SCALE, _LABEL_GAP_SCALE = previous
+
+
+def _print_rc_params(base_font_pt: float) -> dict[str, Any]:
+    """Derive rc params for a design-at-final-size render.
+
+    Returns:
+        dict[str, Any]: ``_RC_PARAMS`` with a flatter print font hierarchy.
+    """
+
+    return {
+        **_RC_PARAMS,
+        "font.size": base_font_pt,
+        "axes.titlesize": base_font_pt + 1.0,
+        "axes.labelsize": base_font_pt + 0.5,
+    }
+
+
+def _sizing(
+    figure_width_in: float | None, base_font_pt: float | None, design_width_in: float
+) -> tuple[float, float, dict[str, Any]]:
+    """Validate the print parameters against the screen design width.
+
+    Returns:
+        tuple: (canvas scale, font scale, rc params) -- all identity for screen renders.
+    """
+
+    if figure_width_in is not None and figure_width_in <= 0:
+        raise ValueError("figure_width_in must be greater than zero")
+    if base_font_pt is not None and base_font_pt <= 0:
+        raise ValueError("base_font_pt must be greater than zero")
+    canvas_scale = 1.0 if figure_width_in is None else figure_width_in / design_width_in
+    font_scale = 1.0 if base_font_pt is None else base_font_pt / float(_RC_PARAMS["font.size"])
+    rc_params = _RC_PARAMS if base_font_pt is None else _print_rc_params(base_font_pt)
+    return canvas_scale, font_scale, rc_params
+
 
 PedestrianSample = tuple[float, float, float]
 AxisLimits = tuple[tuple[float, float], tuple[float, float]]
@@ -793,28 +899,35 @@ def _place_scene_annotations(ax: Axes) -> None:
     labels = [text for text in ax.texts if text.get_visible() and text.get_text().strip()]
     labels.sort(key=lambda text: (_scene_label_priority(text.get_text()), ax.texts.index(text)))
     placed_bboxes: list[Bbox] = []
-    candidate_offsets = (
-        (0.0, 0.0),
-        (0.0, 12.0),
-        (12.0, 0.0),
-        (0.0, -12.0),
-        (-12.0, 0.0),
-        (12.0, 12.0),
-        (12.0, -12.0),
-        (-12.0, -12.0),
-        (-12.0, 12.0),
-        (0.0, 24.0),
-        (24.0, 0.0),
-        (0.0, -24.0),
-        (-24.0, 0.0),
-        (24.0, 24.0),
-        (24.0, -24.0),
-        (-24.0, -24.0),
-        (-24.0, 24.0),
-        (0.0, 40.0),
-        (40.0, 0.0),
-        (0.0, -40.0),
-        (-40.0, 0.0),
+    # Print layouts search proportionally farther: the same px offset covers a larger
+    # fraction of the smaller canvas, but the (font-scaled) labels are also wider in px
+    # relative to it, so the escape distances must grow with the label-density scale.
+    offset_scale = _LABEL_GAP_SCALE
+    candidate_offsets = tuple(
+        (dx * offset_scale, dy * offset_scale)
+        for dx, dy in (
+            (0.0, 0.0),
+            (0.0, 12.0),
+            (12.0, 0.0),
+            (0.0, -12.0),
+            (-12.0, 0.0),
+            (12.0, 12.0),
+            (12.0, -12.0),
+            (-12.0, -12.0),
+            (-12.0, 12.0),
+            (0.0, 24.0),
+            (24.0, 0.0),
+            (0.0, -24.0),
+            (-24.0, 0.0),
+            (24.0, 24.0),
+            (24.0, -24.0),
+            (-24.0, -24.0),
+            (-24.0, 24.0),
+            (0.0, 40.0),
+            (40.0, 0.0),
+            (0.0, -40.0),
+            (-40.0, 0.0),
+        )
     )
 
     for text in labels:
@@ -860,11 +973,16 @@ def _place_scene_annotations(ax: Axes) -> None:
                 final_bbox.x0 + final_bbox.width / 2,
                 final_bbox.y0 + final_bbox.height / 2,
             )
+            # Anchor the leader in DATA coordinates: raw display pixels are only valid
+            # at the layout pass's canvas dpi, so a leader kept in display space lands
+            # in the wrong place in the saved PDF (72 dpi) or a high-dpi PNG.
+            data_from_display = ax.transData.inverted().transform
+            original_data = data_from_display(original_center)
+            final_data = data_from_display(final_center)
             ax.add_line(
                 Line2D(
-                    [original_center[0], final_center[0]],
-                    [original_center[1], final_center[1]],
-                    transform=IdentityTransform(),
+                    [original_data[0], final_data[0]],
+                    [original_data[1], final_data[1]],
                     color=GRAY,
                     linewidth=0.45,
                     alpha=0.65,
@@ -879,9 +997,27 @@ def _draw_robot_time_markers(
     episode: EpisodeTrace,
     marker_indices: Sequence[int],
     marker_interval_s: float,
+    zone_label_centers: Sequence[tuple[float, float]] = (),
 ) -> tuple[_MarkerLabelSpec, ...]:
     marker_points = [episode.robot_xy[index] for index in marker_indices]
-    label_specs = _marker_label_specs(marker_points, marker_interval_s)
+    label_specs = _marker_label_specs(
+        marker_points,
+        marker_interval_s,
+        label_min_gap_m=LABEL_MIN_GAP_M * _LABEL_GAP_SCALE,
+    )
+    if _LABEL_GAP_SCALE > 1.0 and zone_label_centers:
+        # Print layouts: drop time labels whose marker sits on a start/goal zone label
+        # (e.g. a robot circling inside its goal zone) -- the escape offsets cannot
+        # clear a zone label on the narrow final-size panel.
+        suppression_radius = _ZONE_LABEL_SUPPRESSION_RADIUS_M * _LABEL_GAP_SCALE
+        label_specs = tuple(
+            spec
+            for spec in label_specs
+            if all(
+                math.dist(marker_points[spec.marker_position], center) > suppression_radius
+                for center in zone_label_centers
+            )
+        )
     for x, y in marker_points:
         ax.plot(x, y, marker="o", markersize=3.5, color=INK, linestyle="none", zorder=8)
     for label_spec in label_specs:
@@ -894,7 +1030,7 @@ def _draw_robot_time_markers(
             (x, y),
             xytext=offset,
             textcoords="offset points",
-            fontsize=12,
+            fontsize=_fs(12),
             color=GRAY,
             ha=horizontal_alignment,
             va=vertical_alignment,
@@ -1025,7 +1161,7 @@ def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tu
                         center_y,
                         label,
                         color=GRAY,
-                        fontsize=11,
+                        fontsize=_fs(11),
                         ha="center",
                         va="center",
                     )
@@ -1080,7 +1216,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
         (start_x, start_y),
         xytext=(5, -10),
         textcoords="offset points",
-        fontsize=12,
+        fontsize=_fs(12),
         color=GREEN,
     )
 
@@ -1113,7 +1249,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
             ((robot_x + ped_x) / 2, (robot_y + ped_y) / 2),
             xytext=(0, 10),
             textcoords="offset points",
-            fontsize=12,
+            fontsize=_fs(12),
             color=RED,
             ha="center",
         )
@@ -1151,7 +1287,7 @@ def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
         (terminal_x, terminal_y),
         xytext=terminal_offset,
         textcoords="offset points",
-        fontsize=12,
+        fontsize=_fs(12),
         color=terminal_color,
         va="bottom" if status.lower() in _SUCCESS_STATUSES else "top",
     )
@@ -1198,14 +1334,16 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
     marker_indices = _snap_marker_indices(episode.time_s, marker_interval_s)
     marker_times = [episode.time_s[index] for index in marker_indices]
     _draw_obstacles(ax, map_definition, limits)
-    _draw_zones(ax, map_definition, episode)
+    zone_label_centers = _draw_zones(ax, map_definition, episode)
 
     robot_x = [point[0] for point in episode.robot_xy]
     robot_y = [point[1] for point in episode.robot_xy]
     for seg_x, seg_y in _contiguous_segments(robot_x, robot_y):
         ax.plot(seg_x, seg_y, color=INK, linewidth=1.8, zorder=5)
     marker_points = [episode.robot_xy[index] for index in marker_indices]
-    marker_label_specs = _draw_robot_time_markers(ax, episode, marker_indices, marker_interval_s)
+    marker_label_specs = _draw_robot_time_markers(
+        ax, episode, marker_indices, marker_interval_s, zone_label_centers
+    )
     labeled_robot_points = [
         marker_points[label_spec.marker_position] for label_spec in marker_label_specs
     ]
@@ -1248,7 +1386,7 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
             nearest_robot_label = min(
                 labeled_robot_points, key=lambda point: math.dist(label_anchor, point)
             )
-            if math.dist(label_anchor, nearest_robot_label) < LABEL_MIN_GAP_M:
+            if math.dist(label_anchor, nearest_robot_label) < LABEL_MIN_GAP_M * _LABEL_GAP_SCALE:
                 direction_x = label_anchor[0] - nearest_robot_label[0]
                 direction_y = label_anchor[1] - nearest_robot_label[1]
                 offset_x = 12 if direction_x >= 0 else -12
@@ -1258,7 +1396,7 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
             label_anchor,
             xytext=(offset_x, offset_y),
             textcoords="offset points",
-            fontsize=11,
+            fontsize=_fs(11),
             color=style.color,
             ha="left" if offset_x >= 0 else "right",
             va="bottom" if offset_y >= 0 else "top",
@@ -1274,7 +1412,7 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
             transform=ax.transAxes,
             ha="left",
             va="bottom",
-            fontsize=11,
+            fontsize=_fs(11),
             color=GRAY,
         )
     _draw_key_frames(ax, episode)
@@ -1285,7 +1423,7 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
     ax.set_xlabel("x (m)")
     ax.set_ylabel("y (m)")
     ax.set_title(title, pad=8)
-    ax.tick_params(colors=GRAY, width=0.6, labelsize=11)
+    ax.tick_params(colors=GRAY, width=0.6, labelsize=_fs(11))
     for spine in ax.spines.values():
         spine.set_color(GRAY)
         spine.set_linewidth(0.6)
@@ -1328,7 +1466,7 @@ def _draw_timeline(
         textcoords="offset points",
         color=RED,
         alpha=0.7,
-        fontsize=11,
+        fontsize=_fs(11),
         ha="right",
         va="bottom",
     )
@@ -1346,21 +1484,29 @@ def _draw_timeline(
             alpha=0.5,
             zorder=1,
         )
+        # Print layouts drop the label below its line: on a narrow final-size panel the
+        # two above-line reference labels would meet mid-panel (text_text_overlap).
+        below_line = _LABEL_GAP_SCALE > 1.0
         ax.annotate(
             "personal space",
             (0.01, comfort_distance_m),
             xycoords=ax.get_yaxis_transform(),
-            xytext=(0, 3),
+            xytext=(0, -3) if below_line else (0, 3),
             textcoords="offset points",
             color=GRAY,
             alpha=0.7,
-            fontsize=11,
+            fontsize=_fs(11),
             ha="left",
-            va="bottom",
+            va="top" if below_line else "bottom",
         )
     ax.set_xlabel("time (s)")
-    ax.set_ylabel("min robot-ped distance (m)", color=INK, labelpad=7)
-    ax.tick_params(axis="both", labelsize=11, width=0.6, pad=2)
+    # Print layouts wrap the y-label: the rotated one-line form is taller than the
+    # final-size timeline panel and would be clipped at the exact-width canvas edge.
+    distance_label = (
+        "min robot-ped\ndistance (m)" if _LABEL_GAP_SCALE > 1.0 else "min robot-ped distance (m)"
+    )
+    ax.set_ylabel(distance_label, color=INK, labelpad=7)
+    ax.tick_params(axis="both", labelsize=_fs(11), width=0.6, pad=2)
     for marker_index in marker_indices:
         ax.axvline(time[marker_index], color=GRAY, linestyle="--", linewidth=0.6, alpha=0.7)
     # Start at t=0 (no negative-time margin) and put ticks at the same interval as the scene
@@ -1374,6 +1520,11 @@ def _draw_timeline(
     while tick <= time[-1] + 1e-6:
         ticks.append(round(tick, 6))
         tick += interval
+    # Print layouts label at most ~7 ticks: a long episode's per-marker labels collide
+    # on a narrow final-size panel. The unlabeled marker gridlines remain.
+    if _LABEL_GAP_SCALE > 1.0 and len(ticks) > 7:
+        stride = math.ceil(len(ticks) / 7)
+        ticks = ticks[::stride]
     ax.set_xticks(ticks)
     min_index = _global_min_index(episode)
     ax.axvline(time[min_index], color=RED, linewidth=0.9, alpha=0.8)
@@ -1388,13 +1539,38 @@ def _draw_timeline(
     speed_ax.plot(time, episode.executed_speed_m_s, color=BLUE, linewidth=1.1)
     speed_ax.set_ylim(bottom=0.0)  # start the speed axis at 0
     speed_ax.set_ylabel("speed (m/s)", color=BLUE)
-    speed_ax.tick_params(axis="y", colors=BLUE, labelsize=11, width=0.6)
+    speed_ax.tick_params(axis="y", colors=BLUE, labelsize=_fs(11), width=0.6)
     for spine in ax.spines.values():
         spine.set_color(GRAY)
         spine.set_linewidth(0.6)
     for spine in speed_ax.spines.values():
         spine.set_color(GRAY)
         spine.set_linewidth(0.6)
+
+
+def _clamp_texts_to_canvas(figure: Figure, margin_px: float = 2.0) -> None:
+    """Nudge figure-level/axes-title texts back inside the exact-width print canvas.
+
+    Print renders skip the tight-bbox crop, so any text whose bbox pokes past the
+    canvas edge (a centered panel title a few px wider than its panel) would be
+    CLIPPED on the page. Screen renders never call this (the tight crop grows the
+    canvas instead).
+    """
+
+    figure.canvas.draw()
+    renderer = figure.canvas.get_renderer()
+    if renderer is None:
+        return
+    width, height = figure.bbox.width, figure.bbox.height
+    for ax in figure.axes:
+        title = ax.title
+        if not title.get_text().strip():
+            continue
+        bbox = title.get_window_extent(renderer)
+        shift_x = max(margin_px - bbox.x0, 0.0) + min(width - margin_px - bbox.x1, 0.0)
+        shift_y = max(margin_px - bbox.y0, 0.0) + min(height - margin_px - bbox.y1, 0.0)
+        if shift_x or shift_y:
+            _move_text_in_display_space(title, shift_x, shift_y)
 
 
 def _prepare_output(out: Path) -> Path:
@@ -1407,9 +1583,13 @@ def _prepare_output(out: Path) -> Path:
     return out
 
 
-def _save_figure(figure: Figure, out: Path, dpi: int, *, close: bool = True) -> Path:
+def _save_figure(
+    figure: Figure, out: Path, dpi: int, *, close: bool = True, tight: bool = True
+) -> Path:
     out = _prepare_output(out)
-    save_options: dict[str, Any] = {"bbox_inches": "tight"}
+    # Design-at-final-size renders skip the tight-bbox crop so the PDF's natural
+    # (MediaBox) width stays EXACTLY the requested figure width.
+    save_options: dict[str, Any] = {"bbox_inches": "tight"} if tight else {}
     if out.suffix.lower() == ".png":
         save_options["dpi"] = dpi
     figure.savefig(out, **save_options)
@@ -1430,8 +1610,14 @@ def render_scene(  # noqa: PLR0913 - public rendering controls are explicit keyw
     timeline: bool = True,
     dpi: int = 300,
     return_figure: bool = False,
+    figure_width_in: float | None = None,
+    base_font_pt: float | None = None,
 ) -> Path | tuple[Path, Figure]:
     """Render one top-down exemplar trace figure and return the output path.
+
+    ``figure_width_in``/``base_font_pt`` switch on the design-at-final-size print
+    mode documented next to ``_print_rc_params`` (exact-width canvas, no tight-bbox
+    crop, print font hierarchy). Defaults keep the screen behavior unchanged.
 
     Returns:
         Path | tuple[Path, Figure]: Output path, plus the open Figure when requested.
@@ -1441,6 +1627,7 @@ def render_scene(  # noqa: PLR0913 - public rendering controls are explicit keyw
         raise ValueError("dpi must be greater than zero")
     if collision_envelope_m <= 0 or comfort_distance_m <= 0:
         raise ValueError("timeline distance references must be greater than zero")
+    canvas_scale, font_scale, rc_params = _sizing(figure_width_in, base_font_pt, 7.2)
     effective_marker_interval_s = _effective_marker_interval([episode], marker_interval_s)
     map_definition = _load_map_definition(str(episode.metadata["scenario_id"]))
     focused, filtered_count = _focused_pedestrian_tracks(episode, ped_focus_radius_m)
@@ -1451,47 +1638,60 @@ def render_scene(  # noqa: PLR0913 - public rendering controls are explicit keyw
     )
     limits = _compute_scene_extent([episode], [focused], map_definition)
     status = str(episode.metadata["episode_status"])
+    # Print canvases are saved without the tight-bbox crop, so a one-line title wider
+    # than the canvas would be CLIPPED at the page edge -- wrap it at the seed segment.
+    title_break = "\n" if figure_width_in is not None or base_font_pt is not None else " "
     title = (
-        f"{episode.metadata['planner']} -- {episode.metadata['scenario_id']} "
+        f"{episode.metadata['planner']} -- {episode.metadata['scenario_id']}{title_break}"
         f"(seed {episode.metadata['seed']}) -- {status}"
     )
 
     width = 7.2
     scene_ratio = (limits[1][1] - limits[1][0]) / max(limits[0][1] - limits[0][0], 1.0)
     scene_height = min(8.6, max(4.8, width * scene_ratio))
-    with plt.rc_context(_RC_PARAMS):
-        if timeline:
-            figure = plt.figure(figsize=(width, scene_height + 2.0), constrained_layout=True)
-            grid = figure.add_gridspec(2, 1, height_ratios=(3.6, 1.0))
-            scene_ax = figure.add_subplot(grid[0])
-            timeline_ax = figure.add_subplot(grid[1])
-        else:
-            figure, scene_ax = plt.subplots(figsize=(width, scene_height))
-            timeline_ax = None
-        marker_indices = _draw_scene_panel(
-            scene_ax,
-            episode,
-            map_definition,
-            pedestrian_selection,
-            effective_marker_interval_s,
-            limits,
-            title,
-            highlight_focal=highlight_focal,
-        )
-        if timeline_ax is not None:
-            _draw_timeline(
-                timeline_ax,
+    with _design_scales(font_scale, canvas_scale):
+        with plt.rc_context(rc_params):
+            if timeline:
+                figure = plt.figure(
+                    figsize=(width * canvas_scale, (scene_height + 2.0) * canvas_scale),
+                    constrained_layout=True,
+                )
+                grid = figure.add_gridspec(2, 1, height_ratios=(3.6, 1.0))
+                scene_ax = figure.add_subplot(grid[0])
+                timeline_ax = figure.add_subplot(grid[1])
+            else:
+                figure, scene_ax = plt.subplots(
+                    figsize=(width * canvas_scale, scene_height * canvas_scale)
+                )
+                timeline_ax = None
+            marker_indices = _draw_scene_panel(
+                scene_ax,
                 episode,
-                marker_indices,
-                collision_envelope_m=collision_envelope_m,
-                comfort_distance_m=comfort_distance_m,
+                map_definition,
+                pedestrian_selection,
+                effective_marker_interval_s,
+                limits,
+                title,
+                highlight_focal=highlight_focal,
             )
-        else:
-            figure.subplots_adjust(left=0.12, right=0.96, bottom=0.09, top=0.93)
-        _place_scene_annotations(scene_ax)
-        figure.set_layout_engine("none")
-        output = _save_figure(figure, out, dpi, close=not return_figure)
-        return (output, figure) if return_figure else output
+            if timeline_ax is not None:
+                _draw_timeline(
+                    timeline_ax,
+                    episode,
+                    marker_indices,
+                    collision_envelope_m=collision_envelope_m,
+                    comfort_distance_m=comfort_distance_m,
+                )
+            else:
+                figure.subplots_adjust(left=0.12, right=0.96, bottom=0.09, top=0.93)
+            _place_scene_annotations(scene_ax)
+            figure.set_layout_engine("none")
+            if figure_width_in is not None:
+                _clamp_texts_to_canvas(figure)
+            output = _save_figure(
+                figure, out, dpi, close=not return_figure, tight=figure_width_in is None
+            )
+            return (output, figure) if return_figure else output
 
 
 def render_comparison(  # noqa: PLR0913 - mirrors the single-scene rendering controls
@@ -1506,8 +1706,14 @@ def render_comparison(  # noqa: PLR0913 - mirrors the single-scene rendering con
     timeline: bool = True,
     dpi: int = 300,
     return_figure: bool = False,
+    figure_width_in: float | None = None,
+    base_font_pt: float | None = None,
 ) -> Path | tuple[Path, Figure]:
     """Render two same-scenario exemplar traces with shared scene limits.
+
+    ``figure_width_in``/``base_font_pt`` switch on the design-at-final-size print
+    mode documented next to ``_print_rc_params`` (exact-width canvas, no tight-bbox
+    crop, print font hierarchy). Defaults keep the screen behavior unchanged.
 
     Returns:
         Path | tuple[Path, Figure]: Output path, plus the open Figure when requested.
@@ -1519,6 +1725,7 @@ def render_comparison(  # noqa: PLR0913 - mirrors the single-scene rendering con
         raise ValueError("dpi must be greater than zero")
     if collision_envelope_m <= 0 or comfort_distance_m <= 0:
         raise ValueError("timeline distance references must be greater than zero")
+    canvas_scale, font_scale, rc_params = _sizing(figure_width_in, base_font_pt, 10.8)
     effective_marker_interval_s = _effective_marker_interval(episodes, marker_interval_s)
     scenario_ids = {str(episode.metadata["scenario_id"]) for episode in episodes}
     if len(scenario_ids) != 1:
@@ -1538,9 +1745,53 @@ def render_comparison(  # noqa: PLR0913 - mirrors the single-scene rendering con
         episodes, [selection.tracks for selection in focused_results], map_definition
     )
 
-    with plt.rc_context(_RC_PARAMS):
+    with _design_scales(font_scale, canvas_scale):
+        return _render_comparison_figure(
+            episodes,
+            out,
+            rc_params=rc_params,
+            canvas_scale=canvas_scale,
+            effective_marker_interval_s=effective_marker_interval_s,
+            map_definition=map_definition,
+            focused_results=focused_results,
+            limits=limits,
+            highlight_focal=highlight_focal,
+            collision_envelope_m=collision_envelope_m,
+            comfort_distance_m=comfort_distance_m,
+            timeline=timeline,
+            dpi=dpi,
+            return_figure=return_figure,
+            tight=figure_width_in is None,
+        )
+
+
+def _render_comparison_figure(  # noqa: PLR0913 - internal split of render_comparison
+    episodes: Sequence[EpisodeTrace],
+    out: Path,
+    *,
+    rc_params: Mapping[str, Any],
+    canvas_scale: float,
+    effective_marker_interval_s: float,
+    map_definition: Any,
+    focused_results: Sequence[_PedestrianSelection],
+    limits: AxisLimits,
+    highlight_focal: bool,
+    collision_envelope_m: float,
+    comfort_distance_m: float,
+    timeline: bool,
+    dpi: int,
+    return_figure: bool,
+    tight: bool,
+) -> Path | tuple[Path, Figure]:
+    """Draw and save the comparison figure under the active font scale.
+
+    Returns:
+        Path | tuple[Path, Figure]: Output path, plus the open Figure when requested.
+    """
+
+    with plt.rc_context(rc_params):
         figure = plt.figure(
-            figsize=(10.8, 8.0 if timeline else 6.2),
+            figsize=(10.8 * canvas_scale, (8.0 if timeline else 6.2) * canvas_scale),
             constrained_layout=True,
         )
         if timeline:
@@ -1592,13 +1843,15 @@ def render_comparison(  # noqa: PLR0913 - mirrors the single-scene rendering con
             handles=[legend_handle],
             loc="outside lower center",
             frameon=False,
-            fontsize=12,
+            fontsize=_fs(12),
         )
         figure.canvas.draw()
         for scene_ax in scene_axes:
             _place_scene_annotations(scene_ax)
         figure.set_layout_engine("none")
-        output = _save_figure(figure, out, dpi, close=not return_figure)
+        if not tight:
+            _clamp_texts_to_canvas(figure)
+        output = _save_figure(figure, out, dpi, close=not return_figure, tight=tight)
         return (output, figure) if return_figure else output
 
 

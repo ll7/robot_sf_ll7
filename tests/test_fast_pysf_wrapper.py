@@ -129,10 +129,13 @@ def test_get_forces_at_points_matches_pointwise_without_pedestrians():
             for point in points
         ],
     )
+    obstacle_only = wrapper.get_forces_at_points(points)
 
     assert batched.shape == (len(points), 2)
     assert batched == pytest.approx(pointwise)
-    assert np.linalg.norm(batched[0]) > 0, "Obstacle force must remain active without pedestrians"
+    assert np.linalg.norm(obstacle_only[0]) > 0, (
+        "Obstacle force must remain active without pedestrians"
+    )
 
 
 def test_wrapper_init_raises_value_error_for_negative_agents(monkeypatch):

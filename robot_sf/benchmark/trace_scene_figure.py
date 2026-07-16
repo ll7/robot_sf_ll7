@@ -959,6 +959,25 @@ def _polyline_hits_bbox(points: np.ndarray, bbox: Bbox, tolerance: float) -> boo
     )
 
 
+def _finite_polyline_runs(xdata: Any, ydata: Any) -> list[np.ndarray]:
+    """Return contiguous finite ``(x, y)`` runs with at least two points.
+
+    Non-finite points split a line instead of being dropped and bridging the
+    surrounding finite points with an artificial obstacle segment.
+    """
+    x = np.ma.asarray(xdata, dtype=float).filled(np.nan).reshape(-1)
+    y = np.ma.asarray(ydata, dtype=float).filled(np.nan).reshape(-1)
+    if x.shape != y.shape or x.size < 2:
+        return []
+    finite = np.isfinite(x) & np.isfinite(y)
+    transitions = np.flatnonzero(np.diff(np.concatenate(([False], finite, [False]))))
+    return [
+        np.column_stack((x[start:end], y[start:end]))
+        for start, end in zip(transitions[::2], transitions[1::2], strict=True)
+        if end - start >= 2
+    ]
+
+
 def _collect_line_obstacles(ax: Axes) -> list[np.ndarray]:
     """Collect display-space polylines of the visible data lines and zone outlines.
 
@@ -970,21 +989,17 @@ def _collect_line_obstacles(ax: Axes) -> list[np.ndarray]:
         list[np.ndarray]: One (N, 2) display-space point array per polyline.
     """
 
-    transform = ax.transData
     polylines: list[np.ndarray] = []
     for child in ax.get_children():
         if not child.get_visible():
             continue
         if isinstance(child, Line2D):
-            xdata = np.asarray(child.get_xdata(), dtype=float)
-            if xdata.size < 2:
-                continue
-            ydata = np.asarray(child.get_ydata(), dtype=float)
-            polylines.append(transform.transform(np.column_stack((xdata, ydata))))
+            for run in _finite_polyline_runs(child.get_xdata(), child.get_ydata()):
+                polylines.append(child.get_transform().transform(run))
         elif isinstance(child, Polygon) and not child.get_fill():
-            vertices = np.asarray(child.get_xy(), dtype=float)
-            if len(vertices) >= 2:
-                polylines.append(transform.transform(vertices))
+            vertices = np.ma.asarray(child.get_xy(), dtype=float).filled(np.nan)
+            for run in _finite_polyline_runs(vertices[:, 0], vertices[:, 1]):
+                polylines.append(child.get_transform().transform(run))
     return polylines
 
 
@@ -997,22 +1012,27 @@ def _collect_marker_obstacles(ax: Axes) -> np.ndarray:
 
     from matplotlib.collections import PathCollection  # noqa: PLC0415
 
-    transform = ax.transData
     points: list[np.ndarray] = []
     for child in ax.get_children():
         if isinstance(child, PathCollection) and child.get_visible():
-            offsets = np.asarray(child.get_offsets(), dtype=float)
+            offsets = np.ma.asarray(child.get_offsets(), dtype=float).filled(np.nan)
             if offsets.size:
-                points.append(transform.transform(offsets))
+                finite_offsets = offsets[np.all(np.isfinite(offsets), axis=1)]
+                if finite_offsets.size:
+                    points.append(child.get_offset_transform().transform(finite_offsets))
         elif (
             isinstance(child, Line2D)
             and child.get_visible()
             and child.get_marker() not in (None, "None", "none", "")
         ):
-            xdata = np.asarray(child.get_xdata(), dtype=float)
-            if xdata.size:
-                ydata = np.asarray(child.get_ydata(), dtype=float)
-                points.append(transform.transform(np.column_stack((xdata, ydata))))
+            xdata = np.ma.asarray(child.get_xdata(), dtype=float).filled(np.nan).reshape(-1)
+            ydata = np.ma.asarray(child.get_ydata(), dtype=float).filled(np.nan).reshape(-1)
+            if xdata.shape != ydata.shape:
+                continue
+            finite = np.isfinite(xdata) & np.isfinite(ydata)
+            if finite.any():
+                marker_data = np.column_stack((xdata[finite], ydata[finite]))
+                points.append(child.get_transform().transform(marker_data))
     if not points:
         return np.empty((0, 2))
     return np.vstack(points)

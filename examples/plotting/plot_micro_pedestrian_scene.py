@@ -57,6 +57,7 @@ from matplotlib.patches import Circle, FancyArrow
 from pysocialforce import Simulator
 
 from robot_sf.common.artifact_paths import resolve_artifact_path
+from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 
 # --- robot_sf SimulationView semantics (RGB 0-255 -> matplotlib 0-1) ----------
 ROBOT_COLOR = (0 / 255, 0 / 255, 200 / 255)
@@ -64,11 +65,8 @@ ROBOT_ENVELOPE_FACE = (0.72, 0.82, 0.93)  # light blue: collision envelope, not 
 PED_COLOR = (255 / 255, 50 / 255, 50 / 255)
 GOAL_COLOR = (0 / 255, 204 / 255, 102 / 255)
 OBSTACLE_COLOR = (20 / 255, 30 / 255, 20 / 255)
-# Collision RADIUS used by the simulator's physics/metrics (the authoritative
-# default: DifferentialDriveSettings.radius = DEFAULT_ROBOT_RADIUS = 1.0 m).
-# The config defines no separate physical body radius, so the render shows the
-# envelope disc plus a centre marker instead of a fictitious body circle.
-ROBOT_ENVELOPE_RADIUS = 1.0
+ROBOT_ENVELOPE_RADIUS = DEFAULT_ROBOT_RADIUS
+"""Authoritative collision radius; no separate physical body radius is configured."""
 PED_RADIUS = 0.4
 
 # Print contract: design at the final included width so LaTeX never rescales the
@@ -165,10 +163,12 @@ class _FancyArrowLegendHandler(HandlerPatch):
 
 
 def main() -> None:
-    """Build the micro scene, advance pedestrians, and export PDF + PNG."""
-    # LaTeX-friendly export settings (see docs/dev_guide.md). No tight-bbox crop:
-    # the canvas is designed at the final print width, so the saved PDF's natural
-    # width must equal the figure width exactly.
+    """Build the micro scene, advance pedestrians, and export PDF + PNG.
+
+    The LaTeX-friendly canvas is designed at its final print width and saved
+    without a tight-bbox crop, so the PDF's natural width must equal
+    :data:`FIGURE_WIDTH_IN` instead of relying on downstream rescaling.
+    """
     plt.rcParams.update(
         {
             "pdf.fonttype": 42,

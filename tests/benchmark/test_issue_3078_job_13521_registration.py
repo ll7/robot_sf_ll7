@@ -83,3 +83,13 @@ def test_registration_preserves_private_row_store_checksum_without_committing_ro
     assert store["committed"] is False
     assert not (BUNDLE / "episodes.parquet").exists()
     assert registration["supersedes"]["job_id"] == 13506
+
+
+def test_reproduction_documents_local_hydration_boundary() -> None:
+    """The reproduction command hydrates private evidence before using local Path inputs."""
+    reproduction = (BUNDLE / "reproduction.md").read_text(encoding="utf-8")
+
+    assert "private-campaign://job-13521/result_store" in reproduction
+    assert '"$JOB_13521_RESULT_STORE"' in reproduction
+    assert "--result-store private-campaign://" not in reproduction
+    assert "--output-dir output/issue_3078_package_a_job_13521_transfer_report" in reproduction

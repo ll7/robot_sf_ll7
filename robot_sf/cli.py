@@ -138,7 +138,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--sample-rollout-root",
         default=None,
         help=(
-            "Optional directory searched for per-scenario sample rollouts (<id>.mp4/.jsonl/.html)"
+            "Optional directory searched for per-scenario sample rollouts "
+            "(<id>.mp4/.webm/.jsonl/.html)"
         ),
     )
     g_build.add_argument(

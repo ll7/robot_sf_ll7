@@ -200,7 +200,7 @@ def _resolve_sample_rollout(
 ) -> Path | None:
     """Discover an optional sample rollout file for a scenario.
 
-    Looks for ``<sample_rollout_root>/<scenario_id>.(mp4|jsonl|html)``. Returns
+    Looks for ``<sample_rollout_root>/<scenario_id>.(mp4|webm|jsonl|html)``. Returns
     the first match or ``None``.
 
     Args:
@@ -220,12 +220,13 @@ def _resolve_sample_rollout(
     return None
 
 
-def _build_run_command(matrix_path: str, scenario_id: str) -> str:
+def _build_run_command(matrix_path: str, scenario_id: str, horizon_steps: int) -> str:
     """Build a copy-pasteable ``robot_sf_bench run`` command for one scenario.
 
     Args:
         matrix_path: Repository-root-relative scenario matrix path.
         scenario_id: Resolved scenario identifier.
+        horizon_steps: Horizon used for the runtime estimate and runner command.
 
     Returns:
         Shell command string selecting a single scenario from the matrix.
@@ -234,7 +235,7 @@ def _build_run_command(matrix_path: str, scenario_id: str) -> str:
     return (
         f"uv run robot_sf_bench run --matrix {shlex.quote(matrix_path)} "
         f"--out {shlex.quote(output_path)} --scenario-id {shlex.quote(scenario_id)} "
-        "--algo simple_policy --horizon 100"
+        f"--algo simple_policy --horizon {horizon_steps}"
     )
 
 
@@ -290,6 +291,67 @@ def _stage_sample_rollout(
         logger.exception("Could not stage sample rollout {}", source)
         return None
     return str(target.relative_to(out_dir_abs))
+
+
+def _thumbnail_render_state(
+    *,
+    requested: bool,
+    rendered: int,
+    total: int,
+) -> tuple[str, list[str]]:
+    """Summarize thumbnail rendering as an honest manifest status.
+
+    Returns:
+        Tuple of status (``disabled``, ``rendered``, or ``degraded``) and
+        human-readable caveats.
+    """
+    if not requested:
+        return "disabled", []
+    if rendered == total:
+        return "rendered", []
+    return (
+        "degraded",
+        [
+            "Thumbnail rendering was incomplete; cards without a thumbnail use placeholders. "
+            f"Rendered {rendered} of {total} scenarios."
+        ],
+    )
+
+
+def _render_gallery_thumbnails(
+    scenarios: Sequence[Mapping[str, Any]],
+    *,
+    thumbnail_dir: Path,
+    base_seed: int,
+    requested: bool,
+) -> tuple[dict[str, str], Path, int]:
+    """Render gallery thumbnails through the existing thumbnail renderer.
+
+    Returns:
+        Tuple of scenario-id-to-relative-path mappings, absolute thumbnail
+        directory, and the number of thumbnails rendered.
+    """
+    thumbnail_dir_abs = thumbnail_dir.resolve()
+    if not requested:
+        return {}, thumbnail_dir_abs, 0
+
+    render_payloads: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        payload = dict(scenario)
+        payload["id"] = sanitize_scenario_label(resolve_scenario_label(scenario))
+        render_payloads.append(payload)
+    try:
+        metas = save_scenario_thumbnails(
+            render_payloads,
+            out_dir=thumbnail_dir,
+            base_seed=base_seed,
+            out_pdf=False,
+        )
+    except (OSError, ValueError, RuntimeError):  # pragma: no cover - rendering boundary
+        logger.exception("Thumbnail rendering failed; gallery cards will omit thumbnails")
+        metas = []
+    relative_paths = {meta.scenario_id: "thumbnails/" + Path(meta.png).name for meta in metas}
+    return relative_paths, thumbnail_dir_abs, len(metas)
 
 
 def _card_html(
@@ -468,7 +530,7 @@ def _render_html(
 """
 
 
-def build_gallery(  # noqa: C901, PLR0913
+def build_gallery(  # noqa: PLR0913
     scenarios: Sequence[Mapping[str, Any]],
     *,
     matrix_path: str,
@@ -500,7 +562,7 @@ def build_gallery(  # noqa: C901, PLR0913
             thumbnails as base64 data URIs so the page is fully portable. When
             False, thumbnails are referenced by relative path.
         sample_rollout_root: Optional directory searched for per-scenario sample
-            rollouts (``<id>.mp4/.jsonl/.html``).
+            rollouts (``<id>.mp4/.webm/.jsonl/.html``).
         title: Optional page title. Defaults to a name derived from the matrix.
 
     Returns:
@@ -538,31 +600,18 @@ def build_gallery(  # noqa: C901, PLR0913
         unique_scenarios.append(sc)
 
     # Render thumbnails via the existing renderer (no new rendering).
-    thumbnail_relpath_by_id: dict[str, str] = {}
-    if render_thumbnails:
-        # Ensure deterministic ids match save_scenario_thumbnails' internal
-        # resolution by injecting the sanitized id as the scenario ``id``.
-        render_payloads: list[dict[str, Any]] = []
-        for sc in unique_scenarios:
-            payload = dict(sc)
-            sid = sanitize_scenario_label(resolve_scenario_label(sc))
-            payload["id"] = sid
-            render_payloads.append(payload)
-        try:
-            metas = save_scenario_thumbnails(
-                render_payloads,
-                out_dir=thumbnail_dir,
-                base_seed=base_seed,
-                out_pdf=False,
-            )
-        except (OSError, ValueError, RuntimeError):  # pragma: no cover - rendering boundary
-            logger.exception("Thumbnail rendering failed; gallery cards will omit thumbnails")
-            metas = []
-        thumbnail_dir_abs = thumbnail_dir.resolve()
-        for meta in metas:
-            thumbnail_relpath_by_id[meta.scenario_id] = "thumbnails/" + Path(meta.png).name
-    else:
-        thumbnail_dir_abs = thumbnail_dir.resolve()
+    thumbnail_relpath_by_id, thumbnail_dir_abs, thumbnails_rendered = _render_gallery_thumbnails(
+        unique_scenarios,
+        thumbnail_dir=thumbnail_dir,
+        base_seed=base_seed,
+        requested=render_thumbnails,
+    )
+
+    thumbnail_render_status, thumbnail_warnings = _thumbnail_render_state(
+        requested=render_thumbnails,
+        rendered=thumbnails_rendered,
+        total=len(unique_scenarios),
+    )
 
     supported = resolve_supported_planners()
     rollout_root = Path(sample_rollout_root) if sample_rollout_root is not None else None
@@ -575,7 +624,7 @@ def build_gallery(  # noqa: C901, PLR0913
         difficulty = estimate_initial_difficulty(sc)
         map_name = _resolve_map_name(sc)
         runtime = estimate_expected_runtime_seconds(ped_count, horizon_steps=horizon_steps)
-        run_cmd = _build_run_command(matrix_path, sid)
+        run_cmd = _build_run_command(matrix_path, sid, horizon_steps)
         thumb_rel = thumbnail_relpath_by_id.get(sid)
 
         sample_rel: str | None = None
@@ -625,8 +674,12 @@ def build_gallery(  # noqa: C901, PLR0913
         "matrix_path": matrix_path,
         "scenario_count": len(cards),
         "horizon_steps": horizon_steps,
-        "render_thumbnails": render_thumbnails,
-        "embed_thumbnails": render_thumbnails and embed_thumbnails,
+        "render_thumbnails_requested": render_thumbnails,
+        "render_thumbnails": thumbnail_render_status == "rendered",
+        "thumbnails_rendered": thumbnails_rendered,
+        "thumbnail_render_status": thumbnail_render_status,
+        "embed_thumbnails": render_thumbnails and embed_thumbnails and thumbnails_rendered > 0,
+        "warnings": thumbnail_warnings,
         "supported_planners": list(supported),
         "cards": [asdict(c) for c in cards],
     }

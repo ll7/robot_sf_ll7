@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+import robot_sf.gallery.builder as gallery_builder
 from robot_sf.cli import main as robot_sf_main
 from robot_sf.gallery.builder import (
     GALLERY_HTML_SCHEMA_VERSION,
@@ -63,14 +64,19 @@ SAMPLE_SCENARIOS = [
 ]
 
 
-def _build(tmp_path: Path, *, render_thumbnails: bool = True) -> GalleryBuildResult:
+def _build(
+    tmp_path: Path,
+    *,
+    render_thumbnails: bool = True,
+    horizon_steps: int = 100,
+) -> GalleryBuildResult:
     """Build a gallery from the inline sample scenarios into a tmp dir."""
     return build_gallery(
         SAMPLE_SCENARIOS,
         matrix_path="configs/baselines/example_matrix.yaml",
         out_dir=tmp_path / "gallery",
         base_seed=0,
-        horizon_steps=100,
+        horizon_steps=horizon_steps,
         render_thumbnails=render_thumbnails,
         embed_thumbnails=True,
     )
@@ -109,6 +115,7 @@ def test_each_card_has_required_metadata_fields(tmp_path: Path) -> None:
         assert "simple_policy" in card.run_command
         assert "--out" in card.run_command
         assert f"--scenario-id {card.scenario_id}" in card.run_command
+        assert "--horizon 100" in card.run_command
         # Pedestrian count is a non-negative int derived from density.
         assert isinstance(card.pedestrian_count, int)
         assert card.pedestrian_count >= 0
@@ -183,6 +190,32 @@ def test_sanitized_scenario_id_collisions_fail_closed() -> None:
             matrix_path="matrix.yaml",
             render_thumbnails=False,
         )
+
+
+def test_run_commands_match_requested_horizon(tmp_path: Path) -> None:
+    """Keep card commands aligned with runtime estimates for non-default horizons."""
+    result = _build(tmp_path, render_thumbnails=False, horizon_steps=250)
+
+    assert all("--horizon 250" in card.run_command for card in result.cards)
+
+
+def test_thumbnail_failure_is_marked_degraded(tmp_path: Path, monkeypatch) -> None:
+    """Expose failed thumbnail rendering as a manifest caveat, not a false success."""
+
+    def fail_thumbnail_rendering(*_args, **_kwargs):
+        raise RuntimeError("renderer unavailable")
+
+    monkeypatch.setattr(gallery_builder, "save_scenario_thumbnails", fail_thumbnail_rendering)
+    result = _build(tmp_path)
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+
+    assert manifest["render_thumbnails_requested"] is True
+    assert manifest["render_thumbnails"] is False
+    assert manifest["thumbnails_rendered"] == 0
+    assert manifest["thumbnail_render_status"] == "degraded"
+    assert manifest["embed_thumbnails"] is False
+    assert manifest["warnings"]
+    assert all(card.thumbnail_relpath is None for card in result.cards)
 
 
 def test_cli_gallery_build_against_real_example_matrix(tmp_path: Path) -> None:

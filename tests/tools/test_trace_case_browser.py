@@ -72,6 +72,8 @@ def _episode(
         },
         "result_provenance": {
             "repo_commit": "a307ef276d701f8d14dead1aa0513f44ee97c0b0",
+            "scenario_id": "classic_doorway_medium",
+            "seed": seed,
             "config_hash": f"{arm}-config",
             "simulator_settings": {
                 "dt": 0.1,
@@ -80,6 +82,7 @@ def _episode(
                 "record_forces": True,
             },
         },
+        "git_hash": "a307ef276d701f8d14dead1aa0513f44ee97c0b0",
         "seed": seed,
         "status": outcome,
         "termination_reason": outcome,
@@ -221,9 +224,33 @@ def test_pairs_finds_seed_flip_and_planner_upset_with_commands(
         assert compatibility["same_scenario_contract"] is True
         assert compatibility["same_runtime_contract"] is True
         assert compatibility["caveats"] == []
-        commands = "\n".join(pair["command_hint"]["commands"])
-        assert "scripts/repro/butterfly_reexport_to_trace_series.py" in commands
-        assert "scripts/repro/butterfly_hinge_figure_proto.py" in commands
+        assert pair["command_hint"]["status"] == "adapter_required"
+        assert pair["command_hint"]["commands"] == []
+        assert "Issue #5883" in pair["command_hint"]["note"]
+
+
+def test_pairs_emit_commands_only_for_the_pinned_doorway_converter_contract(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pinned PPO doorway rows receive commands that their converter accepts."""
+    episodes_path = tmp_path / "episodes.jsonl"
+    rows = [
+        _episode("ppo", 113, "success", near_misses=2, min_clearance=0.25),
+        _episode("ppo", 114, "collision", near_misses=9, min_clearance=-0.05),
+    ]
+    episodes_path.write_text(
+        "".join(f"{json.dumps(row)}\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    assert main(["pairs", str(episodes_path), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    hint = payload["seed_flips"][0]["command_hint"]
+    assert hint["status"] == "ready"
+    commands = "\n".join(hint["commands"])
+    assert "scripts/repro/butterfly_reexport_to_trace_series.py" in commands
+    assert "scripts/repro/butterfly_hinge_figure_proto.py" in commands
 
 
 def test_pairs_expose_provenance_mismatch(

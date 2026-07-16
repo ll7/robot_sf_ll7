@@ -33,6 +33,11 @@ Pair output includes execution-commit, scenario-contract, and runtime-contract
 compatibility. Missing or mismatched provenance remains visible as a caveat;
 such a pair is a discovery lead, not comparison-ready evidence.
 
+Executable figure commands are emitted only when both rows satisfy the pinned
+PPO doorway converter contract. Other discovery pairs return
+``command_hint.status=adapter_required`` and no commands; Issue #5883 tracks a
+generic fail-closed adapter.
+
 Examples:
     uv run python scripts/tools/trace_case_browser.py list RUNS_DIR --sort=-near
     uv run python scripts/tools/trace_case_browser.py list EPISODES --filter outcome=collision
@@ -166,6 +171,10 @@ DEFAULT_CRITICAL_CONFIG: dict[str, Any] = {
         },
     }
 }
+
+_PINNED_DOORWAY_CONVERTER_COMMIT = "a307ef276d701f8d14dead1aa0513f44ee97c0b0"
+_PINNED_DOORWAY_CONVERTER_ARM = "ppo"
+_PINNED_DOORWAY_CONVERTER_SCENARIO = "classic_doorway_medium"
 
 
 class CaseBrowserError(ValueError):
@@ -806,8 +815,50 @@ def _slug(value: str) -> str:
     return normalized or "case"
 
 
+def _doorway_converter_gaps(episode: Episode) -> list[str]:
+    """Return reasons the pinned doorway converter would reject an episode."""
+    gaps: list[str] = []
+    if episode.arm != _PINNED_DOORWAY_CONVERTER_ARM:
+        gaps.append(f"planner {episode.arm!r}")
+    if episode.scenario != _PINNED_DOORWAY_CONVERTER_SCENARIO:
+        gaps.append(f"scenario {episode.scenario!r}")
+    if episode.record.get("git_hash") != _PINNED_DOORWAY_CONVERTER_COMMIT:
+        gaps.append("top-level execution commit")
+    provenance = episode.record.get("result_provenance")
+    if not isinstance(provenance, dict):
+        gaps.append("result provenance")
+    else:
+        if provenance.get("repo_commit") != _PINNED_DOORWAY_CONVERTER_COMMIT:
+            gaps.append("provenance execution commit")
+        if provenance.get("scenario_id") != _PINNED_DOORWAY_CONVERTER_SCENARIO:
+            gaps.append("provenance scenario")
+        if provenance.get("seed") != episode.seed:
+            gaps.append("provenance seed")
+    return gaps
+
+
 def _command_hint(kind: str, episode_a: Episode, episode_b: Episode) -> dict[str, Any]:
     """Build bundle-preparation and hinge-figure commands for one matched pair."""
+    gaps_a = _doorway_converter_gaps(episode_a)
+    gaps_b = _doorway_converter_gaps(episode_b)
+    if gaps_a or gaps_b:
+        reasons = []
+        if gaps_a:
+            reasons.append("episode A: " + ", ".join(gaps_a))
+        if gaps_b:
+            reasons.append("episode B: " + ", ".join(gaps_b))
+        return {
+            "status": "adapter_required",
+            "working_directory": "repository root",
+            "commands": [],
+            "note": (
+                "No executable command is emitted: the available bundle converter is pinned "
+                "to one PPO doorway re-export and would reject this pair ("
+                + "; ".join(reasons)
+                + "). Use the generic fail-closed adapter tracked in Issue #5883."
+            ),
+        }
+
     case_name = (
         f"{kind}__{_slug(episode_a.scenario)}"
         f"__{_slug(episode_a.arm)}-seed{episode_a.seed}"
@@ -843,6 +894,7 @@ def _command_hint(kind: str, episode_a: Episode, episode_b: Episode) -> dict[str
         ),
     ]
     return {
+        "status": "ready",
         "working_directory": "repository root",
         "commands": commands,
         "note": (

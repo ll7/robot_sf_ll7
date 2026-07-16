@@ -12,6 +12,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from robot_sf.adversarial.provenance import (
     ExecutionContext,
     ReceiptItem,
@@ -29,6 +31,7 @@ from robot_sf.adversarial.transfer_matrix import (
 )
 
 _TARGET_PLANNER = DEFAULT_TRANSFER_ROSTER[0]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _certified_candidate(start_x: float, *, seed: int, objective: float) -> dict:
@@ -94,10 +97,11 @@ def _built_matrix(tmp_path: Path, *, robustness: float, failed: bool):
 
 
 def test_gather_execution_context_records_thread_env_and_schema():
-    ctx = gather_execution_context()
+    ctx = gather_execution_context(repo_root=_REPO_ROOT)
     assert isinstance(ctx, ExecutionContext)
     assert ctx.schema_version == "adversarial_execution_context.v1"
     assert ctx.hostname
+    assert ctx.commit_sha
     assert "OMP_NUM_THREADS" in ctx.thread_env
     # When unset, the contract records "unset" rather than dropping the key.
     assert ctx.thread_env["OMP_NUM_THREADS"] in (None, "unset") or isinstance(
@@ -144,7 +148,12 @@ def test_write_receipt_manifest_records_digests(tmp_path):
 
 def test_archive_transfer_run_writes_pinned_artifacts(tmp_path):
     matrix = _built_matrix(tmp_path, robustness=-1.0, failed=True)
-    run_dir = archive_transfer_run(matrix, archive_root=tmp_path / "archive", repo_root=tmp_path)
+    run_dir = archive_transfer_run(
+        matrix,
+        archive_root=tmp_path / "archive",
+        run_id="test-run",
+        repo_root=_REPO_ROOT,
+    )
 
     # Durable artifacts all present, under the adversarial archive subpath.
     assert run_dir.relative_to(tmp_path / "archive").parts[0] == "transfer_matrix"
@@ -159,9 +168,16 @@ def test_archive_transfer_run_writes_pinned_artifacts(tmp_path):
     by_artifact = {item["artifact"]: item for item in receipt["items"]}
     assert by_artifact["transfer_matrix_json"]["digest"] == sha256_of_file(
         run_dir / "transfer_matrix.json"
+    ), "transfer_matrix_json digest mismatch"
+    assert by_artifact["transfer_report_md"]["digest"] == sha256_of_file(
+        run_dir / "transfer_report.md"
+    ), "transfer_report_md digest mismatch"
+    assert by_artifact["execution_context"]["digest"] == sha256_of_file(context_path), (
+        "execution_context digest mismatch"
     )
-    assert by_artifact["execution_context"]["digest"] == sha256_of_file(context_path)
-    assert receipt["execution_context_path"] == context_path.name
+    assert receipt["execution_context_path"] == context_path.name, "execution_context_path mismatch"
+    context = json.loads(context_path.read_text(encoding="utf-8"))
+    assert context["commit_sha"], "archive execution context must pin a git commit"
 
 
 def test_archive_transfer_run_rejects_under_sized_matrix(tmp_path):
@@ -182,3 +198,47 @@ def test_archive_transfer_run_rejects_under_sized_matrix(tmp_path):
         raise AssertionError("expected ValueError for under-sized matrix")
     except ValueError:
         pass
+
+
+def test_archive_transfer_run_rejects_unsafe_and_duplicate_run_ids(tmp_path):
+    """Durable run IDs stay contained and never overwrite an existing archive."""
+    matrix = _built_matrix(tmp_path, robustness=-1.0, failed=True)
+    archive_root = tmp_path / "archive"
+
+    with pytest.raises(ValueError, match="single 1-128 character path component"):
+        archive_transfer_run(
+            matrix,
+            archive_root=archive_root,
+            run_id="../outside",
+            repo_root=_REPO_ROOT,
+        )
+
+    archive_transfer_run(
+        matrix,
+        archive_root=archive_root,
+        run_id="immutable-run",
+        repo_root=_REPO_ROOT,
+    )
+    with pytest.raises(FileExistsError):
+        archive_transfer_run(
+            matrix,
+            archive_root=archive_root,
+            run_id="immutable-run",
+            repo_root=_REPO_ROOT,
+        )
+
+
+def test_archive_transfer_run_requires_resolved_git_commit(tmp_path):
+    """Provenance-pinned archival fails before writing when commit lookup fails."""
+    matrix = _built_matrix(tmp_path, robustness=-1.0, failed=True)
+    archive_root = tmp_path / "archive"
+
+    with pytest.raises(RuntimeError, match="without a resolved git commit"):
+        archive_transfer_run(
+            matrix,
+            archive_root=archive_root,
+            run_id="missing-commit",
+            repo_root=tmp_path,
+        )
+
+    assert not (archive_root / "transfer_matrix" / "missing-commit").exists()

@@ -102,12 +102,12 @@ class ExecutionContext:
         }
 
 
-def gather_execution_context(*, repo_root: Path | None = None) -> ExecutionContext:
+def gather_execution_context(*, repo_root: Path | str | None = None) -> ExecutionContext:
     """Collect the host execution context for reproducible provenance.
 
     Parameters
     ----------
-    repo_root : Path | None
+    repo_root : Path | str | None
         Repository root used to resolve the git commit. Defaults to the current
         working directory.
 
@@ -116,7 +116,7 @@ def gather_execution_context(*, repo_root: Path | None = None) -> ExecutionConte
     ExecutionContext
         Pinned hostname, CPU model, python/platform, commit sha, and thread env.
     """
-    root = repo_root or Path.cwd()
+    root = Path(repo_root) if repo_root else Path.cwd()
     thread_env = {
         var: (os.environ.get(var) if os.environ.get(var) is not None else "unset")
         for var in _THREAD_ENV_VARS
@@ -131,7 +131,11 @@ def gather_execution_context(*, repo_root: Path | None = None) -> ExecutionConte
     )
 
 
-def write_execution_context(out_dir: Path, *, repo_root: Path | None = None) -> Path:
+def write_execution_context(
+    out_dir: Path | str,
+    *,
+    repo_root: Path | str | None = None,
+) -> Path:
     """Write ``execution_context.txt`` (JSON) into ``out_dir`` and return its path."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -141,7 +145,7 @@ def write_execution_context(out_dir: Path, *, repo_root: Path | None = None) -> 
     return path
 
 
-def sha256_of_file(path: Path) -> str:
+def sha256_of_file(path: Path | str) -> str:
     """Return the SHA-256 hex digest of a file, streaming to bound memory."""
     path = Path(path)
     digest = hashlib.sha256()
@@ -190,7 +194,7 @@ class ReceiptManifest:
 
 
 def write_receipt_manifest(
-    out_dir: Path,
+    out_dir: Path | str,
     *,
     run_id: str,
     items: list[ReceiptItem],

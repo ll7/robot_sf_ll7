@@ -30,6 +30,7 @@ import datetime as _dt
 import json
 import math
 import random
+import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +42,7 @@ from robot_sf.adversarial.archive import (
 )
 from robot_sf.adversarial.provenance import (
     ReceiptItem,
+    gather_execution_context,
     sha256_of_file,
     write_execution_context,
     write_receipt_manifest,
@@ -52,9 +54,22 @@ _TRANSFER_MATRIX_SCHEMA_VERSION = "adversarial_transfer_matrix.v1"
 # archive. The issue pins "adversarial archive path — never the release
 # evidence store", so results live here, not in the release evidence tree.
 _TRANSFER_ARCHIVE_DIRNAME = "transfer_matrix"
+_RUN_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 
 # Benchmark eligibility tiers that count as "certified / repliable" for slice 1.
 _CERTIFIED_ELIGIBILITY = frozenset({"eligible", "stress_only"})
+
+
+def _validated_run_id(run_id: str) -> str:
+    """Return one safe archive path component or fail closed."""
+    if run_id in {".", ".."} or _RUN_ID_PATTERN.fullmatch(run_id) is None:
+        raise ValueError(
+            "run_id must be a single 1-128 character path component containing only "
+            "letters, digits, '.', '_', or '-'"
+        )
+    return run_id
+
+
 _ELIGIBILITY_SEVERITY = {"eligible": 0, "stress_only": 1, "excluded": 2}
 
 # Default 3-planner mechanism-stratified roster for slice 1: the issue asks for
@@ -761,7 +776,7 @@ def archive_transfer_run(
         Root of the adversarial archive. The run is written under
         ``<archive_root>/transfer_matrix/<run_id>/``.
     run_id : str | None
-        Stable run identifier. Defaults to a UTC timestamped uuid1 string.
+        Stable run identifier. Defaults to a UTC timestamped UUIDv4 string.
     repo_root : str | Path | None
         Repository root for commit resolution in the execution context.
 
@@ -774,15 +789,23 @@ def archive_transfer_run(
         raise ValueError("Cannot archive a transfer matrix with zero configs")
     if len(matrix.planners) < 3:
         raise ValueError("Transfer matrix must cover the target planner plus 2 others")
-    run_id = run_id or _dt.datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid1().hex[:8]
+    run_id = _validated_run_id(
+        run_id or _dt.datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex[:8]
+    )
+    context = gather_execution_context(repo_root=repo_root)
+    if context.commit_sha is None:
+        raise RuntimeError(
+            "Cannot archive a provenance-pinned transfer run without a resolved git commit"
+        )
     run_dir = Path(archive_root) / _TRANSFER_ARCHIVE_DIRNAME / run_id
-    run_dir.mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=False)
 
     matrix_path = write_transfer_artifact(matrix, out_dir=run_dir)
 
     context_path = write_execution_context(run_dir, repo_root=repo_root)
     context_digest = sha256_of_file(context_path)
     matrix_digest = sha256_of_file(matrix_path)
+    report_digest = sha256_of_file(run_dir / "transfer_report.md")
     items = [
         ReceiptItem(
             artifact="transfer_matrix_json",
@@ -793,6 +816,7 @@ def archive_transfer_run(
         ReceiptItem(
             artifact="transfer_report_md",
             path="transfer_report.md",
+            digest=report_digest,
             note="one-page capability-only transfer report",
         ),
         ReceiptItem(

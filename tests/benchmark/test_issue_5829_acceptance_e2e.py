@@ -27,7 +27,7 @@ from robot_sf.ped_npc.ped_archetypes import assign_archetype_labels
 from robot_sf.ped_npc.ped_population import PedSpawnConfig, populate_simulation
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_CONFIG = (
+_CONFIG_PATH = (
     _REPO_ROOT / "configs" / "benchmarks" / "issue_5829_geometryless_forced_population_smoke.yaml"
 )
 _FRANCIS_SVG = _REPO_ROOT / "maps" / "svg_maps" / "francis2023" / "francis2023_blind_corner.svg"
@@ -42,19 +42,20 @@ def test_geometryless_forced_population_builds_valid_manifest_row():
     simulation hour N. The manifest build must return a ``ready`` status with a
     realized population_size of 12 and no blockers.
     """
-    with open(_CONFIG) as handle:
-        config = yaml.safe_load(handle)
+    config = yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8"))
+    assert isinstance(config, dict)
     manifest = build_mean_matched_harness_manifest(
         config,
-        config_path=str(_CONFIG),
+        config_path=str(_CONFIG_PATH),
     )
 
     # The cell must build successfully: no build-time blocker and no "not realizable"
     # rejection. ``pending_runtime_capture`` is the expected pre-run state because the
     # pedestrian control trace is only captured during an actual campaign run.
-    assert manifest["status"] != "blocked_pending_control_trace"
+    assert isinstance(manifest, dict)
+    assert manifest["status"] == "pending_runtime_capture"
     assert manifest["blockers"] == []
-    assert manifest["row_count"] > 0
+    assert manifest["row_count"] == 2
 
     scenario_rows = manifest["scenario_rows"]
     assert len(scenario_rows) == 1

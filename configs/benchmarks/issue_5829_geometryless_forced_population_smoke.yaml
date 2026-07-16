@@ -1,5 +1,5 @@
 schema_version: mean_matched_heterogeneity_harness.config.v1
-issue: 3574
+issue: 5829
 claim_boundary: harness_only_no_ablation_result
 trace_metric_keys:
   - clearance_m

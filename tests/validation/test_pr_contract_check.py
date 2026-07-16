@@ -533,7 +533,7 @@ class TestPlaceholderDocstringRatchet:
         subprocess.run(["git", "commit", "-q", "-m", "change"], cwd=repo, check=True)
 
     def test_adds_placeholder_docstring_fails(self, tmp_path: Path) -> None:
-        """A PR that ADDS a 'TODO docstring' line is blocked with file:line."""
+        """A PR that adds a placeholder stub is blocked with its file and line."""
         repo = self._init_repo(tmp_path)
         self._commit_change(
             repo,

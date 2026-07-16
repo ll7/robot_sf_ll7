@@ -13,8 +13,8 @@
       "occurrences": 587
     },
     "tests": {
-      "files": 183,
-      "occurrences": 1257
+      "files": 182,
+      "occurrences": 1255
     }
   },
   "files": {
@@ -57,7 +57,6 @@
     "tests/benchmark_full/test_integration_adaptive_stop.py": 3,
     "tests/benchmark_full/test_integration_aggregate_effect_sizes.py": 4,
     "tests/benchmark_full/test_integration_effect_sizes_present.py": 2,
-    "tests/benchmark_full/test_integration_performance_smoke.py": 2,
     "tests/benchmark_full/test_integration_precision_report.py": 2,
     "tests/benchmark_full/test_integration_resume.py": 14,
     "tests/benchmark_full/test_integration_smoke_run.py": 3,
@@ -234,7 +233,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 207,
-    "total_occurrences": 1844
+    "files": 206,
+    "total_occurrences": 1842
   }
 }

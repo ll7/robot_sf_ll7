@@ -3674,14 +3674,23 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         Returns:
             np.ndarray: Trajectory ``(steps, 2)`` in local robot frame.
         """
-        pos = np.zeros(2, dtype=float)
-        heading = 0.0
-        traj = np.zeros((steps, 2), dtype=float)
-        for i in range(steps):
-            heading += float(w) * dt
-            pos[0] += float(v) * np.cos(heading) * dt
-            pos[1] += float(v) * np.sin(heading) * dt
-            traj[i] = pos
+        if steps < 0:
+            raise ValueError("negative dimensions are not allowed")
+        v = float(v)
+        w = float(w)
+        dt = float(dt)
+
+        # Closed-form cumulative unicycle integration that reproduces the legacy
+        # sequential scalar recurrence (heading is not wrapped here, so the
+        # per-step angles are w*dt*(k+1) for k=0..steps-1). cumsum reorders the
+        # float additions, producing last-ULP drift (<1e-15) versus the scalar
+        # loop. Per issue #5412 that residual is accepted under atol=1e-12 (no
+        # version bump); the scalar loop remains the numeric-parity reference.
+        k = np.arange(1, steps + 1, dtype=float)
+        angles = w * dt * k
+        dx = v * dt * np.cos(angles)
+        dy = v * dt * np.sin(angles)
+        traj = np.stack([np.cumsum(dx), np.cumsum(dy)], axis=-1)
         return traj
 
     def _goal_progress(

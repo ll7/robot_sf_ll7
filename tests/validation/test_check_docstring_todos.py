@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import textwrap
 
 from scripts.validation import check_docstring_todos
@@ -171,28 +170,21 @@ def test_count_from_source_matches_file_count(tmp_path):
     assert from_file == from_source == 3
 
 
-def test_verify_baseline_detects_drift(tmp_path, capsys):
+def test_verify_baseline_detects_drift():
     """A stale baseline must be reported as drift, not passed silently (issue #5858)."""
-    baseline = {"files": {"scripts/tool.py": 1}}
-    baseline_path = tmp_path / "docstring_todo_baseline.json"
-    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+    baseline = {"files": {"scripts/removed.py": 2, "scripts/tool.py": 1}}
 
     stale_report = {
         "totals": {"files": 1, "total_occurrences": 3},
         "files": {"scripts/tool.py": 3},
     }
-    increases = check_docstring_todos.compare_backlog_to_baseline(stale_report, baseline)
-    reverse = [
-        line
-        for line in check_docstring_todos.compare_backlog_to_baseline(baseline, stale_report)
-        if line not in increases
-    ]
+    drift, reverse = check_docstring_todos.compare_baseline_drift(stale_report, baseline)
 
-    assert increases == ["scripts/tool.py: 3 TODO docstring occurrences (baseline 1, +2)"]
-    assert reverse == []
+    assert drift == ["scripts/tool.py: base has 3, baseline has 1 (stale by +2)"]
+    assert reverse == ["scripts/removed.py: base has 0, baseline has 2 (exceeds by 2)"]
 
 
-def test_verify_baseline_docs_only_branch_does_not_fail(tmp_path, capsys):
+def test_verify_baseline_docs_only_branch_does_not_fail():
     """A docs-only branch identical to base for Python must not fail readiness.
 
     Reproduces issue #5858: when the base ref and committed baseline agree, a
@@ -202,19 +194,11 @@ def test_verify_baseline_docs_only_branch_does_not_fail(tmp_path, capsys):
         "totals": {"files": 1, "total_occurrences": 2},
         "files": {"scripts/tool.py": 2},
     }
-    baseline_path = tmp_path / "docstring_todo_baseline.json"
-    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
-
     ref_report = {
         "totals": {"files": 1, "total_occurrences": 2},
         "files": {"scripts/tool.py": 2},
     }
-    increases = check_docstring_todos.compare_backlog_to_baseline(ref_report, baseline)
-    reverse = [
-        line
-        for line in check_docstring_todos.compare_backlog_to_baseline(baseline, ref_report)
-        if line not in increases
-    ]
+    drift, reverse = check_docstring_todos.compare_baseline_drift(ref_report, baseline)
 
-    assert increases == []
+    assert drift == []
     assert reverse == []

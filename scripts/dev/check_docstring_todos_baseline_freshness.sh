@@ -7,4 +7,6 @@ source "$SCRIPT_DIR/common_setup.sh"
 
 BASE_REF="${BASE_REF:-origin/main}"
 
-uv run python scripts/validation/check_docstring_todos.py --mode verify-baseline --base "$BASE_REF"
+uv run python "$SCRIPT_DIR/../validation/check_docstring_todos.py" \
+  --mode verify-baseline \
+  --base "$BASE_REF"

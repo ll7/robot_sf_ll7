@@ -285,6 +285,35 @@ def compare_backlog_to_baseline(
     return increases
 
 
+def compare_baseline_drift(
+    ref_report: Mapping[str, Any],
+    baseline: Mapping[str, Any],
+) -> tuple[list[str], list[str]]:
+    """Return directional differences between a ref report and its baseline.
+
+    Returns:
+        A pair containing stale-baseline lines and baseline-exceeds-ref lines.
+    """
+    ref_files = _files_payload(ref_report)
+    baseline_files = _files_payload(baseline)
+    drift: list[str] = []
+    reverse_drift: list[str] = []
+    for path in sorted(set(ref_files) | set(baseline_files)):
+        ref_count = ref_files.get(path, 0)
+        baseline_count = baseline_files.get(path, 0)
+        if ref_count > baseline_count:
+            drift.append(
+                f"{path}: base has {ref_count}, baseline has {baseline_count} "
+                f"(stale by +{ref_count - baseline_count})"
+            )
+        elif baseline_count > ref_count:
+            reverse_drift.append(
+                f"{path}: base has {ref_count}, baseline has {baseline_count} "
+                f"(exceeds by {baseline_count - ref_count})"
+            )
+    return drift, reverse_drift
+
+
 def _count_todo_docstrings(path: Path) -> int:
     """Count TODO-docstring placeholder occurrences in definition docstrings."""
     return sum(info.docstring.count(_PLACEHOLDER) for info in _read_defs(path))
@@ -457,10 +486,7 @@ def _run_verify_baseline(args: argparse.Namespace, repo_root: Path) -> int:
         return 1
     roots = tuple(args.roots or DEFAULT_BACKLOG_ROOTS)
     ref_report = build_backlog_report_for_ref(repo_root, args.base, roots=roots)
-    drift = compare_backlog_to_baseline(ref_report, baseline)
-    reverse_drift = [
-        line for line in compare_backlog_to_baseline(baseline, ref_report) if line not in drift
-    ]
+    drift, reverse_drift = compare_baseline_drift(ref_report, baseline)
     if drift or reverse_drift:
         print(f"TODO-docstring baseline drift detected against base '{args.base}':")
         for line in drift:

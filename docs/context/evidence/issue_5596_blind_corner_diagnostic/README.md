@@ -22,6 +22,12 @@ uv run python scripts/tools/run_blind_corner_diagnostic_issue_5596.py \
 
 Determinism check (the report is reproducible): run the command twice and compare the
 normalized JSON / checksums. The rollout seed is pinned (blind-corner manifest seed 219).
+This is now locked by an automated test
+(`tests/scenario_certification/test_blind_corner_diagnostic_issue_5596.py::test_issue_5596_diagnostic_is_deterministic_across_repeated_runs`),
+which builds the report twice and asserts the normalized verdict payload (all blocks except
+the per-run `source_commit`) is byte-identical. Verified in this repo: two consecutive runs
+produce an identical normalized SHA-256 (`83a7cc79…`), satisfying the issue Definition-of-Done
+"repeated runs are deterministic" item.
 
 ## What the report contains
 

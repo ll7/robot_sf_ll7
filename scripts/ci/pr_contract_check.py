@@ -48,16 +48,15 @@ LOWERCASE_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 # Only ADDED lines count (pre-existing stubs are grandfathered), so unrelated PRs
 # that merely touch a file already carrying old stubs still pass.
 PLACEHOLDER_DOCSTRING_PATTERNS = [
-    re.compile(r"TODO docstring", re.IGNORECASE),
-    re.compile(r"Document this (?:function|class|module|method)", re.IGNORECASE),
+    re.compile(r"^\s*(?:[ru]{0,2})?(?:\"\"\"|''')\s*TODO docstring", re.IGNORECASE),
+    re.compile(
+        r"^\s*(?:[ru]{0,2})?(?:\"\"\"|''')\s*Document this "
+        r"(?:function|class|module|method)",
+        re.IGNORECASE,
+    ),
     re.compile(r'^\s*"""\."""\s*$'),  # trivially-empty docstring """."""
-    re.compile(r"^\s*'''\.'''\\s*$", re.IGNORECASE),  # trivially-empty docstring '''.
+    re.compile(r"^\s*'''\.'''\s*$", re.IGNORECASE),  # trivially-empty docstring '''.
 ]
-PLACEHOLDER_LINE_HINT = re.compile(
-    r"TODO docstring|Document this (?:function|class|module|method)"
-    r'|^\s*"""\."""\s*$|^\s*\'\'\'\.\'\'\'\s*$',
-    re.IGNORECASE,
-)
 
 
 def is_negated(text: str, match_start: int) -> bool:
@@ -742,7 +741,16 @@ def _diff_added_python_lines(base_ref: str, repo_root: str | None = None) -> dic
         git_cmd += [f"--git-dir={repo_root}/.git", f"--work-tree={repo_root}"]
     try:
         res = subprocess.run(
-            git_cmd + ["diff", "--unified=0", f"{base_ref}...HEAD", "--", "*.py"],
+            git_cmd
+            + [
+                "diff",
+                "--unified=0",
+                "--src-prefix=a/",
+                "--dst-prefix=b/",
+                f"{base_ref}...HEAD",
+                "--",
+                "*.py",
+            ],
             capture_output=True,
             text=True,
             check=False,

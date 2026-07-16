@@ -556,6 +556,40 @@ class TestPlaceholderDocstringRatchet:
         blockers = pr_contract_check.check_placeholder_docstrings("HEAD~1", repo_root=str(repo))
         assert any("new.py:2" in b for b in blockers)
 
+    def test_adds_single_quoted_empty_docstring_fails(self, tmp_path: Path) -> None:
+        """A PR that ADDS a trivially-empty triple-single-quoted line is blocked."""
+        repo = self._init_repo(tmp_path)
+        self._commit_change(
+            repo,
+            "new.py",
+            "def do_thing():\n    '''.'''\n    return 0\n",
+        )
+        blockers = pr_contract_check.check_placeholder_docstrings("HEAD~1", repo_root=str(repo))
+        assert any("new.py:2" in b for b in blockers)
+
+    def test_noprefix_config_cannot_bypass_ratchet(self, tmp_path: Path) -> None:
+        """Explicit diff prefixes keep the ratchet active with ``diff.noprefix``."""
+        repo = self._init_repo(tmp_path)
+        subprocess.run(["git", "config", "diff.noprefix", "true"], cwd=repo, check=True)
+        self._commit_change(
+            repo,
+            "new.py",
+            'def do_thing():\n    """TODO docstring."""\n    return 0\n',
+        )
+        blockers = pr_contract_check.check_placeholder_docstrings("HEAD~1", repo_root=str(repo))
+        assert any("new.py:2" in b for b in blockers)
+
+    def test_placeholder_text_inside_fixture_string_passes(self, tmp_path: Path) -> None:
+        """Placeholder examples inside non-docstring source strings are allowed."""
+        repo = self._init_repo(tmp_path)
+        self._commit_change(
+            repo,
+            "test_example.py",
+            'SOURCE = \'def f():\\n    """TODO docstring."""\\n\'\n',
+        )
+        blockers = pr_contract_check.check_placeholder_docstrings("HEAD~1", repo_root=str(repo))
+        assert not blockers
+
     def test_touching_legacy_stub_passes(self, tmp_path: Path) -> None:
         """Touching a file that already has a stub (without adding new ones) passes."""
         repo = self._init_repo(tmp_path)

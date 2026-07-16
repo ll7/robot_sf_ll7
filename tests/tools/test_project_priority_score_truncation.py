@@ -69,47 +69,29 @@ def test_targeted_lookup_finds_issue_beyond_cap(monkeypatch: pytest.MonkeyPatch)
 
     Issue #5870: a project with more items than the default cap must not force a
     full untruncated page for a targeted ``--issue-number`` lookup. The helper
-    pages in bounded chunks and stops at the first match.
+    uses the bounded project query surface and verifies the exact issue number.
     """
 
-    pages = {
-        0: [
-            {"id": f"item{index}", "content": {"type": "Issue", "number": index}}
-            for index in range(100)
-        ],
-        1: [
-            {"id": f"item{index}", "content": {"type": "Issue", "number": index}}
-            for index in range(100, 200)
-        ],
-        2: [
-            {"id": f"item{index}", "content": {"type": "Issue", "number": index}}
-            for index in range(200, 300)
-        ],
-    }
-    call_index = {"n": 0}
+    calls: list[list[str]] = []
 
     def _fake_run(
         args: list[str], *, check: bool, capture_output: bool, text: bool
     ) -> subprocess.CompletedProcess[str]:
-        # Return each full page in turn, then an empty page to signal exhaustion.
-        if call_index["n"] < len(pages):
-            page = pages[call_index["n"]]
-        else:
-            page = []
-        call_index["n"] += 1
+        calls.append(args)
+        items = [{"id": "item250", "content": {"type": "Issue", "number": 250}}]
         return subprocess.CompletedProcess(
-            args=args, returncode=0, stdout=json.dumps({"items": page}), stderr=""
+            args=args, returncode=0, stdout=json.dumps({"items": items}), stderr=""
         )
 
     monkeypatch.setattr(subprocess, "run", _fake_run)
     client = GhProjectClient()
-    found = client.item_list_until_issue(
-        owner="ll7", project_number=5, issue_number=250, page_limit=100
-    )
+    found = client.item_list_until_issue(owner="ll7", project_number=5, issue_number=250, limit=25)
     assert len(found) == 1
     assert found[0]["content"]["number"] == 250
-    # Stopped at the matching page, not after exhaustively paging a huge project.
-    assert call_index["n"] == 3
+    assert len(calls) == 1
+    assert "--query" in calls[0]
+    assert calls[0][calls[0].index("--query") + 1] == "250"
+    assert calls[0][calls[0].index("--limit") + 1] == "25"
 
 
 def test_targeted_lookup_missing_issue_returns_empty(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -125,11 +107,27 @@ def test_targeted_lookup_missing_issue_returns_empty(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(subprocess, "run", _fake_run)
     client = GhProjectClient()
     assert (
-        client.item_list_until_issue(
-            owner="ll7", project_number=5, issue_number=999, page_limit=100
-        )
+        client.item_list_until_issue(owner="ll7", project_number=5, issue_number=999, limit=100)
         == []
     )
+
+
+def test_targeted_lookup_fails_closed_when_query_is_capped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A capped query cannot claim that a missing exact issue is absent."""
+
+    def _fake_run(
+        args: list[str], *, check: bool, capture_output: bool, text: bool
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout=_items_payload(2), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    client = GhProjectClient()
+    with pytest.raises(GhListTruncated):
+        client.item_list_until_issue(owner="ll7", project_number=5, issue_number=999, limit=2)
 
 
 def test_full_project_sync_still_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:

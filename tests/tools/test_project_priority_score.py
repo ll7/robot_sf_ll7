@@ -68,19 +68,14 @@ class FakeGhProjectClient:
         owner: str,
         project_number: int,
         issue_number: int,
-        page_limit: int = 100,
-        max_pages: int | None = 50,
+        limit: int = 100,
     ) -> list[dict]:
-        """Simulate bounded pagination that stops at the matching issue."""
+        """Simulate an exact issue query over the fake project items."""
 
-        for start in range(0, max(len(self._items), 1), max(page_limit, 1)):
-            chunk = self._items[start : start + page_limit]
-            for item in chunk:
-                content = item.get("content") or {}
-                if content.get("type") == "Issue" and content.get("number") == issue_number:
-                    return [item]
-            if len(chunk) < page_limit:
-                break
+        for item in self._items:
+            content = item.get("content") or {}
+            if content.get("type") == "Issue" and content.get("number") == issue_number:
+                return [item]
         return []
 
     def update_number_field(
@@ -317,7 +312,7 @@ def test_sync_scores_targeted_finds_issue_beyond_default_limit() -> None:
     Issue #5870: the targeted sync must not call the full fail-closed
     ``item_list`` (which raises at the cap) before applying the issue filter.
     Here the project holds 2,300+ items; the targeted pass must find issue
-    2299 using bounded pagination without needing a full untruncated page.
+    2299 using a bounded server-side query without needing a full project list.
     """
 
     items = [

@@ -337,8 +337,8 @@ class GhProjectClient:
         Fails closed when the result reaches the ``limit`` cap: because this list
         drives score write-backs, a page at the cap (indistinguishable from a full
         page) could silently skip items beyond the limit. Callers that cannot
-        bound the project size should use :meth:`item_list_until_issue` or
-        :meth:`item_list_paginated` instead (issue #5870 / #5048 / #4991).
+        bound the project size should use :meth:`item_list_until_issue` instead
+        (issue #5870 / #5048 / #4991).
         """
 
         payload = self._run_project_command(
@@ -364,98 +364,43 @@ class GhProjectClient:
         owner: str,
         project_number: int,
         issue_number: int,
-        page_limit: int = 100,
-        max_pages: int | None = 50,
+        limit: int = 100,
     ) -> list[dict[str, Any]]:
-        """Return the single issue-backed item without requiring a full untruncated page.
+        """Return one issue-backed item through the project query surface.
 
-        ``gh project item-list`` has no server-side issue filter, so the targeted
-        ``--issue-number`` sync used to call the full ``item_list`` at the default
-        cap and fail closed before it could apply the filter (issue #5870). This
-        helper walks the project in bounded pages and stops as soon as the matching
-        issue-backed item is found, so a targeted sync stays cheap and bounded no
-        matter how many items the project contains.
-
-        Each page is read at ``page_limit`` rows; because we stop at the first match
-        we never need a complete page, so the per-page truncation guard is not
-        required here. When the issue is not found after ``max_pages`` pages, an
-        empty list is returned (a clear bounded result, not an ambiguous scan).
+        The numeric query narrows discovery before ``gh`` applies ``--limit``;
+        the exact-number check then rejects textual false positives. If the
+        bounded query reaches its cap without finding the issue, fail closed
+        because the exact match may have been truncated.
         """
 
-        if max_pages is not None and max_pages <= 0:
-            raise ValueError("max_pages must be positive or None")
-        seen: set[int] = set()
-        for page in range(max_pages if max_pages is not None else 1 << 62):
-            payload = self._run_project_command(
-                "item-list",
-                owner=owner,
-                project_number=project_number,
-                extra_args=(
-                    "--limit",
-                    str(page_limit),
-                ),
-                as_json=True,
-            )
-            chunk = list(payload["items"])
-            for item in chunk:
-                content = item.get("content")
-                if not isinstance(content, dict) or content.get("type") != "Issue":
-                    continue
-                number = content.get("number")
-                if not isinstance(number, int) or number < 0 or number in seen:
-                    continue
-                seen.add(number)
-                if number == issue_number:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        payload = self._run_project_command(
+            "item-list",
+            owner=owner,
+            project_number=project_number,
+            extra_args=(
+                "--query",
+                str(issue_number),
+                "--limit",
+                str(limit),
+            ),
+            as_json=True,
+        )
+        items = list(payload["items"])
+        for item in items:
+            content = item.get("content")
+            if isinstance(content, dict) and content.get("type") == "Issue":
+                if content.get("number") == issue_number:
                     return [item]
-            # No match in this page; if the page came back shorter than the cap the
-            # project is exhausted, otherwise continue paging.
-            if len(chunk) < page_limit:
-                return []
+
+        assert_not_truncated(
+            items,
+            limit=limit,
+            context=f"gh project item-list query for issue #{issue_number}",
+        )
         return []
-
-    def item_list_paginated(
-        self,
-        *,
-        owner: str,
-        project_number: int,
-        page_limit: int = 100,
-        max_pages: int | None = None,
-    ) -> list[dict[str, Any]]:
-        """Return all project items by paging past the truncation cap.
-
-        Unlike :meth:`item_list`, this does not fail closed at the cap: it keeps
-        fetching bounded pages until a short page signals exhaustion (or
-        ``max_pages`` is reached). A ``max_pages`` bound keeps full-project syncs
-        from running unbounded; ``None`` means page until exhaustion with no extra
-        guard beyond the natural short-page stop.
-        """
-
-        items: list[dict[str, Any]] = []
-        seen: set[int] = set()
-        for page in range(max_pages if max_pages is not None else 1 << 62):
-            payload = self._run_project_command(
-                "item-list",
-                owner=owner,
-                project_number=project_number,
-                extra_args=(
-                    "--limit",
-                    str(page_limit),
-                ),
-                as_json=True,
-            )
-            chunk = list(payload["items"])
-            for item in chunk:
-                content = item.get("content")
-                if not isinstance(content, dict) or content.get("type") != "Issue":
-                    continue
-                number = content.get("number")
-                if not isinstance(number, int) or number < 0 or number in seen:
-                    continue
-                seen.add(number)
-                items.append(item)
-            if len(chunk) < page_limit:
-                return items
-        return items
 
     def update_number_field(
         self,
@@ -607,8 +552,8 @@ def sync_scores(
     project_id = client.project_id(owner=options.owner, project_number=options.project_number)
     if options.issue_number is not None:
         # Targeted sync: locate the single issue-backed item without requiring a
-        # full untruncated project page. Paginate in bounded chunks and stop at the
-        # first match so the lookup stays cheap regardless of project size
+        # full untruncated project page. Query before applying the cap, then verify
+        # the exact issue number so textual false positives cannot be updated
         # (issue #5870). The original fail-closed full-project guard is preserved
         # for unscoped sync below.
         items = client.item_list_until_issue(

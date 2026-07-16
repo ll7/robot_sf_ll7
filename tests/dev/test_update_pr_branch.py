@@ -73,3 +73,70 @@ def test_main_json_reports_guard_failure(capsys) -> None:  # type: ignore[no-unt
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "head_mismatch"
     assert payload["updated"] is False
+
+
+def test_gate_worktree_missing_fails_closed_before_update(capsys) -> None:  # type: ignore[no-untyped-def]
+    """A missing gate worktree must fail closed before any branch update request."""
+    missing_health = {
+        "exists": False,
+        "classification": "missing",
+        "cleanup_owner": "owner=auto-smart-routing; pr=#5819; gate=gate-5819",
+        "lease_owner": "auto-smart-routing",
+        "lease_pr_number": 5819,
+        "lease_gate_id": "gate-5819",
+    }
+    with patch(
+        "scripts.dev.update_pr_branch._verify_gate_worktree", return_value=missing_health
+    ) as mock_verify:
+        rc = main(
+            [
+                "5819",
+                "--repo",
+                "owner/repo",
+                "--expected-head-sha",
+                "head_sha",
+                "--gate-worktree-path",
+                "/abs/missing-wt",
+                "--json",
+            ]
+        )
+
+    assert rc == 1
+    mock_verify.assert_called_once_with("/abs/missing-wt")
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "gate_worktree_missing"
+    assert payload["updated"] is False
+    assert "5819" in (payload["gate_worktree_health"]["cleanup_owner"] or "")
+
+
+def test_gate_worktree_present_allows_update(capsys) -> None:  # type: ignore[no-untyped-def]
+    """A present gate worktree lets the normal guarded update proceed."""
+    present_health = {"exists": True, "classification": "healthy", "cleanup_owner": None}
+    with (
+        patch(
+            "scripts.dev.update_pr_branch._verify_gate_worktree", return_value=present_health
+        ),
+        patch("scripts.dev.update_pr_branch._gh") as mock_gh,
+    ):
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps({"head": {"sha": "head_sha"}})),
+            _gh_response(stdout=json.dumps({"message": "queued"})),
+        ]
+        rc = main(
+            [
+                "5819",
+                "--repo",
+                "owner/repo",
+                "--expected-head-sha",
+                "head_sha",
+                "--gate-worktree-path",
+                "/abs/present-wt",
+                "--json",
+            ]
+        )
+
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "update_requested"
+    assert payload["updated"] is True
+

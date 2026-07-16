@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -20,7 +21,9 @@ from robot_sf.benchmark.campaign_atlas import (
     AtlasConfig,
     CampaignAtlasError,
     EpisodeInventoryRow,
+    _altair_cell_data,
     build_atlas_summary,
+    build_campaign_atlas,
 )
 
 FIXTURE_PATH = (
@@ -153,6 +156,57 @@ class TestReleaseArmIdentityFailClosed:
         summary = build_atlas_summary(rows, config=AtlasConfig(campaign_id="c1"))
         assert all(c.release_arm_id is None for c in summary.cells)
         assert len(summary.cells) == 2
+
+    @pytest.mark.parametrize("bad_arm_id", [123, [], {}, ""])
+    def test_malformed_model_arm_id_raises(self, bad_arm_id: Any) -> None:
+        """Direct model construction rejects malformed arm identities."""
+        rows = [_row("a", "orca", cast("str | None", bad_arm_id))]
+        with pytest.raises(CampaignAtlasError, match="non-empty string"):
+            build_atlas_summary(rows, config=AtlasConfig(campaign_id="c1"))
+
+
+def test_altair_data_uses_planner_for_legacy_arm_key() -> None:
+    """Legacy armless planners remain distinct in the optional HTML chart data."""
+    cells = [
+        {"planner": "orca", "release_arm_id": None, "exemplar_episode_ids": ()},
+        {"planner": "ppo", "release_arm_id": None, "exemplar_episode_ids": ()},
+        {"planner": "hybrid", "release_arm_id": "hybrid_v1", "exemplar_episode_ids": ()},
+    ]
+    data = _altair_cell_data(cells)
+    assert [item["atlas_arm_key"] for item in data] == ["orca", "ppo", "hybrid_v1"]
+
+
+def test_armless_ensemble_output_preserves_legacy_filename(tmp_path: Path) -> None:
+    """Armless ensemble output keeps the pre-arm filename without a ``None`` suffix."""
+    rows = [_row("a", "orca", None)]
+    result = build_campaign_atlas(
+        rows,
+        out_dir=tmp_path,
+        config=AtlasConfig(campaign_id="c1"),
+        ensemble_anchor="near_miss_start",
+    )
+    assert [view.output_path.name for view in result.ensemble_views] == [
+        "ensemble__doorway__orca.svg"
+    ]
+
+
+def test_inventory_loader_rejects_malformed_arm_id(tmp_path: Path) -> None:
+    """JSON inventory values are not stringified into invalid arm identities."""
+    from scripts.analysis.build_campaign_atlas_issue_5616 import load_inventory
+
+    inventory = tmp_path / "inv.jsonl"
+    record = {
+        "episode_id": "e1",
+        "planner": "orca",
+        "release_arm_id": {"unexpected": "object"},
+        "scenario_id": "doorway_s1",
+        "scenario_family": "doorway",
+        "seed": 111,
+        "outcome": "success",
+    }
+    inventory.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="release_arm_id must be a non-empty string"):
+        load_inventory(inventory)
 
 
 def test_inventory_record_accepts_release_arm_id_field(tmp_path: Path) -> None:

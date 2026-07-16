@@ -295,6 +295,8 @@ def _validate_arm_identity(rows: Sequence[EpisodeInventoryRow]) -> None:
     """Fail closed when release-arm identity is missing, ambiguous, or inconsistent.
 
     Rules (issue #5784):
+    - A present ``release_arm_id`` must be a non-empty string. Malformed values
+      are rejected before they can influence grouping or serialization.
     - If any row carries a ``release_arm_id``, all rows must carry one (a mix of
       armed and arm-less rows is ambiguous about intent and is rejected).
     - A single ``release_arm_id`` must map to exactly one ``planner`` (``algo``)
@@ -302,6 +304,11 @@ def _validate_arm_identity(rows: Sequence[EpisodeInventoryRow]) -> None:
       identity is inconsistent and the artifact is incomplete, never silently
       merged under one planner.
     """
+    for row in rows:
+        arm_id = row.release_arm_id
+        if arm_id is not None and (not isinstance(arm_id, str) or not arm_id.strip()):
+            raise CampaignAtlasError("release_arm_id must be a non-empty string or None")
+
     armed = {row.release_arm_id for row in rows if row.release_arm_id is not None}
     if not armed:
         return
@@ -1117,22 +1124,32 @@ def _render_table_html(cells: Sequence[dict[str, Any]]) -> str:
     )
 
 
-def _render_altair_html(cells: Sequence[dict[str, Any]], alt: Any) -> str:
-    """Return an Altair/Vega-Lite HTML block for the exploration atlas."""
-    data = [
+def _altair_cell_data(cells: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Add chart-only fields while preserving legacy planner separation."""
+    return [
         {
             **cell,
+            "atlas_arm_key": (
+                cell["release_arm_id"]
+                if cell.get("release_arm_id") is not None
+                else cell["planner"]
+            ),
             "exemplars": len(cell["exemplar_episode_ids"]),
         }
         for cell in cells
     ]
+
+
+def _render_altair_html(cells: Sequence[dict[str, Any]], alt: Any) -> str:
+    """Return an Altair/Vega-Lite HTML block for the exploration atlas."""
+    data = _altair_cell_data(cells)
     chart = (
         alt.Chart(alt.Data(values=data))
         .mark_bar()
         .encode(
-            x=alt.X("release_arm_id:N"),
+            x=alt.X("atlas_arm_key:N"),
             y=alt.Y("n_total:Q"),
-            color=alt.Color("release_arm_id:N"),
+            color=alt.Color("planner:N"),
             column=alt.Column("scenario_family:N"),
         )
     )
@@ -1252,10 +1269,11 @@ def build_campaign_atlas(
         for (scenario_family, planner, release_arm_id), cell_rows in sorted(cells.items()):
             if (scenario_family, planner, release_arm_id) not in eligible_cells:
                 continue
+            arm_suffix = f"__{release_arm_id}" if release_arm_id is not None else ""
             result = render_ensemble_context_view(
                 cell_rows,
                 anchor=ensemble_anchor,
-                out=out_dir / f"ensemble__{scenario_family}__{planner}__{release_arm_id}.svg",
+                out=out_dir / f"ensemble__{scenario_family}__{planner}{arm_suffix}.svg",
             )
             ensemble_views.append(result)
 

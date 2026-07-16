@@ -449,7 +449,7 @@ class TestAtlasHtmlParity:
         summary_path.write_text(
             json.dumps(
                 {
-                    "schema_version": "campaign_atlas.v1",
+                    "schema_version": CAMPAIGN_ATLAS_SCHEMA_VERSION,
                     "campaign_id": summary.campaign_id,
                     "scenario_families": list(summary.scenario_families),
                     "planners": list(summary.planners),

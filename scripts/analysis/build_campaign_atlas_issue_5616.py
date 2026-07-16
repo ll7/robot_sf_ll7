@@ -43,6 +43,13 @@ def _row_from_record(record: dict[str, Any]) -> EpisodeInventoryRow:
     missing = [key for key in _INVENTORY_REQUIRED if key not in record]
     if missing:
         raise ValueError(f"inventory record missing required keys: {', '.join(missing)}")
+    raw_release_arm_id = record.get("release_arm_id")
+    if raw_release_arm_id is None or raw_release_arm_id == "":
+        release_arm_id = None
+    elif not isinstance(raw_release_arm_id, str) or not raw_release_arm_id.strip():
+        raise ValueError("inventory record release_arm_id must be a non-empty string or null")
+    else:
+        release_arm_id = raw_release_arm_id
     trajectory = tuple(
         TrajectoryPoint(
             t=float(point["t"]),
@@ -67,9 +74,7 @@ def _row_from_record(record: dict[str, Any]) -> EpisodeInventoryRow:
         scenario_family=str(record["scenario_family"]),
         seed=int(record["seed"]),
         outcome=str(record["outcome"]),
-        release_arm_id=str(record["release_arm_id"])
-        if record.get("release_arm_id") not in (None, "")
-        else None,
+        release_arm_id=release_arm_id,
         metrics=dict(record.get("metrics", {})),
         trajectory=trajectory,
         event_anchors=event_anchors,

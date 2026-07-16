@@ -25,7 +25,7 @@
       "reason": "successor-release inputs are missing",
       "status": "blocked_analysis_not_run"
     },
-    "manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/cheap-issue-5355-20260716T162334Z/configs/benchmarks/releases/hierarchical_paired_release_analysis_issue_5351.yaml",
+    "manifest": "configs/benchmarks/releases/hierarchical_paired_release_analysis_issue_5351.yaml",
     "present": true,
     "status": "blocked_missing_successor_release_rows"
   },
@@ -43,6 +43,7 @@
     "preregistration_config_valid": true
   },
   "ready": false,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "robot_sf.issue_5355_factorial_readiness_receipt.v1",
   "successor_slice_required": {
     "issue": 4364,

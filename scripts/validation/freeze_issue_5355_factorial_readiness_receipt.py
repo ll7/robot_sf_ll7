@@ -15,7 +15,6 @@ campaign RUN (compute) remains downstream work and is never performed here.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
@@ -28,6 +27,7 @@ from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
     DEFAULT_HIERARCHICAL_INPUT_MANIFEST_RELATIVE_PATH,
     assess_campaign_readiness,
 )
+from robot_sf.evidence.writers import write_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
@@ -40,6 +40,15 @@ RECEIPT_RELATIVE_PATH = (
 def _resolve(repo_root: Path, relative: str) -> Path:
     candidate = repo_root / relative
     return candidate if candidate.is_file() else Path(relative)
+
+
+def _portable_path(path: Path, *, repo_root: Path) -> str:
+    """Return a repository-relative path when the input belongs to this checkout."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return str(resolved)
 
 
 def freeze_receipt(
@@ -63,7 +72,7 @@ def freeze_receipt(
         evaluation = evaluate_hierarchical_paired_release_inputs(manifest, repo_root=root)
         input_gate = {
             "present": True,
-            "manifest": str(input_manifest),
+            "manifest": _portable_path(Path(input_manifest), repo_root=root),
             "status": str(evaluation.get("status")),
             "blocking_prerequisites": evaluation.get("blocking_prerequisites", []),
             "claim_gate": evaluation.get("claim_gate", {}),
@@ -112,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
 
     out = args.out or (root / RECEIPT_RELATIVE_PATH)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(out, receipt)
 
     print(f"issue #5355 factorial readiness receipt -> {out}")
     print(f"  ready: {receipt['ready']}")

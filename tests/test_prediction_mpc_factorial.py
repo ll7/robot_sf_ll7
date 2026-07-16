@@ -4,6 +4,8 @@ Validates config parsing, toggle behavior, and preregistration harness
 for the prediction on/off x constraint-handling on/off factorial.
 """
 
+# evidence-writer-exempt: temporary config/registry fixtures exercise fail-closed readers only.
+
 from __future__ import annotations
 
 import hashlib

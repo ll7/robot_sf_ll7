@@ -98,13 +98,12 @@ def register_env(entry: EnvEntry, *, override: bool = False) -> None:
             f"Unknown stability '{entry.stability}' for '{env_id}'; "
             f"expected one of {sorted(_STABILITY_ORDER)}"
         )
-    if env_id in _REGISTRY and not override:
+    already_registered = env_id in _REGISTRY
+    if already_registered and not override:
         raise KeyError(f"env_id '{env_id}' already registered; pass override=True to replace")
     _REGISTRY[env_id] = entry
-    if override and env_id in _REGISTRY:
+    if override and already_registered:
         logger.debug("Re-registered environment (override): {}", env_id)
-    else:
-        logger.info("Registered environment: {}", env_id)
 
 
 def get_env(env_id: str) -> EnvEntry:
@@ -190,7 +189,7 @@ def _register_default_envs() -> None:
             factory="robot_sf.gym_env.environment_factory.make_crowd_sim_env",
             env_class="robot_sf.gym_env.crowd_sim_env.CrowdSimEnv",
             agent_count="none",
-            default_config="robot_sf.gym_env.unified_config.CrowdSimulationConfig",
+            default_config="robot_sf.gym_env.crowd_sim_env.CrowdSimulationConfig",
             stability=STABLE,
             notes="step(action=None) accepted for Gymnasium compatibility; actions ignored.",
         ),

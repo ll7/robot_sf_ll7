@@ -35,9 +35,10 @@ Beta (issue #5801): `envs list`, `envs describe <env-id>`.
 * `robot_sf.sim.registry` — `register_backend`, `get_backend`, `list_backends`,
   `select_best_backend`.
 * `robot_sf.sensor.registry` — `register_sensor`, `get_sensor`, `list_sensors`.
-* `robot_sf.unified_config` — config dataclasses
+* `robot_sf.gym_env.unified_config` — config dataclasses
   (`RobotSimulationConfig`, `ImageRobotConfig`, `PedestrianSimulationConfig`,
-  `CrowdSimulationConfig`, `MultiRobotConfig`).
+  `MultiRobotConfig`).
+* `robot_sf.gym_env.crowd_sim_env` — `CrowdSimulationConfig`.
 * `robot_sf.telemetry` — run tracking exports (`RunRegistry`,
   `ManifestWriter`, `RunTrackerConfig`, `generate_run_id`).
 

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
 from robot_sf import cli_envs
-from robot_sf.cli import main
+from robot_sf.cli import _HANDLERS, main
 from robot_sf.cli_envs import describe_env_payload
 from robot_sf.gym_env.env_registry import (
     BETA,
@@ -34,8 +36,17 @@ def test_list_envs_ordered_by_stability_then_id() -> None:
         else True
     )
     # Ids within the same stability level are lexicographic.
-    stable_ids = sorted(e.env_id for e in rows if e.stability == STABLE)
+    stable_ids = [e.env_id for e in rows if e.stability == STABLE]
     assert stable_ids == sorted(stable_ids)
+
+
+def test_default_registry_dotted_symbols_resolve() -> None:
+    """Every advertised factory, environment class, and config must be importable."""
+    for entry in list_envs():
+        for dotted_path in (entry.factory, entry.env_class, entry.default_config):
+            module_name, symbol_name = dotted_path.rsplit(".", 1)
+            module = importlib.import_module(module_name)
+            assert hasattr(module, symbol_name), dotted_path
 
 
 def test_describe_returns_full_entry_dict() -> None:
@@ -160,3 +171,11 @@ def test_top_level_cli_envs_list_and_describe(capsys) -> None:
     assert main(["envs", "list"]) == 0
     assert main(["envs", "describe", "robot"]) == 0
     assert main(["envs", "describe", "missing"]) == 2
+
+
+def test_envs_registration_preserves_main_cli_handlers(capsys) -> None:
+    """Adding env discovery must not shadow command handlers already on main."""
+    assert "gallery" in _HANDLERS
+    assert main(["envs", "list", "--format", "json"]) == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""

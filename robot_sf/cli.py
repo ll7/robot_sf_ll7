@@ -570,14 +570,6 @@ def _handle_gallery(args: argparse.Namespace) -> int:
     return _handle_gallery_build(args)
 
 
-_HANDLERS = {
-    "doctor": _handle_doctor,
-    "models": _handle_models,
-    "datasets": _handle_datasets,
-    "gallery": _handle_gallery,
-}
-
-
 def _handle_examples(extra_args: Sequence[str]) -> int:
     """Forward to the examples discovery CLI.
 
@@ -611,6 +603,7 @@ _HANDLERS = {
     "models": _handle_models,
     "datasets": _handle_datasets,
     "envs": _handle_envs,
+    "gallery": _handle_gallery,
 }
 
 

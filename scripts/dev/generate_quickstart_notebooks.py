@@ -531,6 +531,7 @@ def build_notebook_03() -> nbf.notebooknode:
             """
             from robot_sf.gym_env.environment_factory import make_robot_env
             from robot_sf.gym_env.robot_env import RobotEnv
+            from robot_sf.common.artifact_paths import resolve_artifact_path
             from robot_sf.training.scenario_loader import load_scenarios, build_robot_config_from_scenario
             from robot_sf.baselines.random_policy import RandomPlanner
 
@@ -542,6 +543,7 @@ def build_notebook_03() -> nbf.notebooknode:
                 s for s in load_scenarios(SCENARIO_PATH) if s["name"] == SCENARIO_NAME
             )
             config = build_robot_config_from_scenario(scenario, scenario_path=SCENARIO_PATH)
+            recording_dir = resolve_artifact_path(OUTPUT_DIR / "recordings")
 
             env: RobotEnv = make_robot_env(
                 config=config,
@@ -549,7 +551,7 @@ def build_notebook_03() -> nbf.notebooknode:
                 debug=False,
                 recording_enabled=True,
                 use_jsonl_recording=True,
-                recording_dir=str(OUTPUT_DIR / "recordings"),
+                recording_dir=str(recording_dir),
                 suite_name="notebook",
                 scenario_name=SCENARIO_NAME,
                 algorithm_name="random",
@@ -579,7 +581,7 @@ def build_notebook_03() -> nbf.notebooknode:
         _code(
             """
             # Locate the recorded JSONL (the recorder names it with suite/scenario/algorithm/seed).
-            candidates = sorted((OUTPUT_DIR / "recordings").glob("*.jsonl"))
+            candidates = sorted(recording_dir.glob("*.jsonl"))
             episode_jsonl = candidates[-1]
             # Promote a stable copy next to the other artifacts.
             stable_jsonl = OUTPUT_DIR / "episode.jsonl"

@@ -10,6 +10,7 @@ import pytest
 from robot_sf.benchmark.result_provenance import (
     SCHEMA_VERSION,
     ProvenanceRequiredFieldError,
+    build_execution_context_provenance,
     build_result_provenance_manifest,
     build_row_result_provenance,
     manifest_path_for_result_jsonl,
@@ -47,6 +48,44 @@ def test_build_manifest_has_correct_schema_version() -> None:
         active_observation_level="full",
     )
     assert manifest["schema_version"] == SCHEMA_VERSION
+
+
+def test_build_manifest_records_execution_context() -> None:
+    """The manifest must record hostname/cpu/thread-env so cross-context runs are comparable (issue #5817)."""
+    manifest = build_result_provenance_manifest(
+        out_path=Path("episodes.jsonl"),
+        episode_records=[],
+        schema_path="schema.json",
+        scenario_path=Path("scenarios.yaml"),
+        scenarios=[],
+        algo="goal",
+        algo_config_path=None,
+        benchmark_profile="baseline-safe",
+        suite_key="test_suite",
+        total_jobs=0,
+        written=0,
+        horizon=100,
+        dt=0.1,
+        record_forces=True,
+        active_observation_mode="lidar",
+        active_observation_level="full",
+    )
+    ctx = manifest["run"]["execution_context"]
+    assert set(ctx) >= {"hostname", "cpu_model", "python_version", "platform", "thread_env"}
+    assert isinstance(ctx["hostname"], str) and ctx["hostname"]
+    assert isinstance(ctx["thread_env"], dict)
+    assert set(ctx["thread_env"]) >= {"OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"}
+
+
+def test_execution_context_captures_thread_env(monkeypatch) -> None:
+    """Thread-env snapshot reflects the active environment so pinned runs are recordable."""
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    monkeypatch.setenv("MKL_NUM_THREADS", "4")
+    monkeypatch.delenv("OPENBLAS_NUM_THREADS", raising=False)
+    ctx = build_execution_context_provenance()
+    assert ctx["thread_env"]["OMP_NUM_THREADS"] == "1"
+    assert ctx["thread_env"]["MKL_NUM_THREADS"] == "4"
+    assert ctx["thread_env"]["OPENBLAS_NUM_THREADS"] is None
 
 
 def test_build_manifest_records_optional_algo_config_absence() -> None:

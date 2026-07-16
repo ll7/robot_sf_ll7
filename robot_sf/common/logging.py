@@ -24,8 +24,61 @@ Usage (in modules):
 from __future__ import annotations
 
 import sys
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+def safe_sink(
+    stream: Any,
+    *,
+    closed_message: str = "I/O operation on closed file",
+) -> Callable[[str], None]:
+    """Wrap a writable sink so writes after *stream* closes never raise.
+
+    Loguru sinks that bind to a transient stream (a ``capsys``/``capfd``
+    captured ``sys.stdout``/``sys.stderr``, or an explicitly ``close()``-d file
+    object) raise ``ValueError: I/O operation on closed file`` when a record is
+    flushed after pytest tears the capture stream down. Under ``pytest-xdist``
+    that diagnostic is emitted by benchmark workers during teardown and is noisy
+    without being actionable.
+
+    Wrap the sink callable passed to ``logger.add`` with this helper to swallow
+    the closed-stream write while preserving every ordinary log write, so the
+    sink lifecycle is safe across teardown without hiding unrelated logging
+    failures (e.g. real ``OSError`` from a live sink still propagates).
+
+    Args:
+        stream: The underlying writable object the sink writes to. Its ``closed``
+            attribute (if present) is consulted before each write; the write is
+            skipped once the stream is closed.
+        closed_message: Substring matched against ``ValueError`` messages so only
+            the benign "closed file" class is swallowed.
+
+    Returns:
+        A sink callable compatible with ``logger.add``.
+
+    Example:
+        >>> handle = logger.add(safe_sink(sys.stdout), format="{message}")
+    """
+
+    def _sink(message: str) -> None:
+        closed = getattr(stream, "closed", False)
+        if closed:
+            return
+        try:
+            stream.write(message)
+        except ValueError as exc:
+            if closed_message and closed_message in str(exc):
+                # The capture stream was closed during teardown; the log
+                # record is intentionally dropped rather than raised.
+                return
+            raise
+
+    return _sink
 
 
 def configure_logging(verbose: bool = False) -> None:

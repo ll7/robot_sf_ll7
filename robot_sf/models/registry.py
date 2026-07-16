@@ -279,6 +279,18 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def sha256_of_file(path: str | Path) -> str:
+    """Return the lowercase-hex SHA256 digest of a local file.
+
+    Public wrapper over the registry's checksum helper, used by the
+    ``robot-sf models verify`` UX so callers do not depend on a private name.
+
+    Returns:
+        str: Lowercase-hex SHA256 digest of the file at ``path``.
+    """
+    return _sha256(Path(path))
+
+
 def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:
     """Download a model artifact from a GitHub release asset.
 

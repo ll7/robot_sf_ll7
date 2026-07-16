@@ -1,0 +1,15 @@
+id: first-demo
+title: First Robot SF rollout (random policy)
+purpose: >
+  The shortest path to seeing Robot SF run: a headless random-policy rollout on
+  the default map. Use this as your very first command to confirm the install
+  works before trying recipes that need a trained model or a custom map.
+runtime: "< 30s CPU"
+category: getting-started
+command: >
+  uv run python examples/quickstart/01_basic_robot.py
+configs:
+  - examples/quickstart/01_basic_robot.py
+outputs:
+  - "(stdout only: per-step reward and termination status)"
+docs: docs/recipes/README.md

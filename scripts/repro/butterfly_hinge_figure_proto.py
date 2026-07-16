@@ -1,10 +1,8 @@
-"""Prototype: matched success-vs-failure "hinge figure" (the butterfly worked example).
+"""Prototype: matched success-vs-failure hinge figure for benchmark trace review.
 
-STATUS: second-cut prototype for Stage 5-6 of the "butterfly worked-example pipeline" plan
-(diss repo: docs/context/plan/2026-07-15_butterfly_worked_example_pipeline.md), built on the
-adopted UI spec (diss repo: docs/context/research/2026-07-15_visualization_scenarios.md,
-"The butterfly moment in one still" / "Automatic pivotal-frame selection"). Builds on the
-Stage 0-2 prototype in this worktree (``scripts/repro/butterfly_trace_to_video_proto.py``):
+STATUS: second-cut trace-tooling prototype for an A/B episode comparison pipeline.
+Builds on the Stage 0-2 prototype in this worktree
+(``scripts/repro/butterfly_trace_to_video_proto.py``):
 reuses ``trace_series_to_jsonl``, ``_render_scene_frames``, and ``compute_trace_metrics``
 from that module, plus ``robot_sf.benchmark.trace_scene_figure``'s ``_focal_pedestrian_id``
 (focal-pedestrian selection), ``_contiguous_segments`` (teleport-safe polylines),
@@ -12,14 +10,14 @@ from that module, plus ``robot_sf.benchmark.trace_scene_figure``'s ``_focal_pede
 ``robot_sf.benchmark.figure_qa.lint_figure`` (the QA gate) rather than re-implementing any
 of them.
 
-Chosen matched pair (see the diss-side report for the full selection rationale): SAME
+The reference matched pair uses the SAME
 scenario (``classic_head_on_corridor_medium``) + SAME seed (24), DIFFERENT planner --
 ``orca`` (success) vs ``social_force`` (failure, non-completion/timeout). Both episodes
 start from an (almost) identical robot pose and an *exactly* identical 4-pedestrian layout
 (same seed), so the shared prefix is a genuine "same start, different outcome" butterfly,
 not an artifact of re-seeding.
 
-Implemented since the first cut (see the diss report for verification evidence):
+Implemented since the first cut:
 - ``select_focal_pedestrian``: locks ONE focal pedestrian, shared by both panels, reusing
   ``trace_scene_figure._focal_pedestrian_id`` -- fixes the first cut's "focal p3 floats
   disconnected from the interaction" bug (that bug was ``nearest_pedestrian_id[step=0]``).
@@ -43,17 +41,14 @@ Implemented since the first cut (see the diss report for verification evidence):
   hashes, script commit, detector config, and figure hash, written to
   ``butterfly_hinge_provenance.json`` alongside the analysis-dump ``butterfly_hinge_report.json``.
 
-Still NOT implemented (remaining gap vs the full spec, see the diss report):
-- The 2x3 contact sheet layout (this pair reads as geometry-dominant, not timing-dominant --
-  see the design spec's own guidance on when to prefer one over the other).
+Still NOT implemented:
+- The 2x3 contact sheet layout; this geometry-dominant pair currently uses two panels.
 - Counterfactual-replay validation (would upgrade the pivot label from "explanatory pivot
   candidate" to "counterfactually validated pivot"); no checkpointed replay is available.
 - Rendering directly through ``trace_scene_figure.render_comparison`` (it lacks the hinge
   grammar -- common-prefix/post-pivot A/B styling, pivot ring, delta gutter -- and its own
-  color scheme is per-pedestrian, not Okabe-Ito planner-comparison; see the diss report for
-  the concrete evaluation). This module remains the standalone hinge composer per the plan's
-  documented fallback, but now reuses more of ``trace_scene_figure`` (see above) than the
-  first cut did.
+  color scheme is per-pedestrian, not Okabe-Ito planner-comparison). This module remains a
+  standalone hinge composer while reusing the shared trace loaders and map helpers.
 
 Usage::
 
@@ -190,10 +185,8 @@ PRINT_FIG_WIDTH_IN: float = 6.3
 
 #: --------------------------------------------------------------------------------------
 #: D(t) normalized joint-state divergence -- physical scales.
-#: Design spec (diss docs/context/research/2026-07-15_visualization_scenarios.md,
-#: "Automatic pivotal-frame selection", step 2): "Use physically meaningful scales s_k,
-#: such as robot radius, nominal speed, and clearance threshold." All four scales below are
-#: read from the repo's own authoritative defaults, not re-invented:
+#: The divergence detector uses physically meaningful repository scales rather than
+#: values tuned to one trace pair:
 #:   - pose separation   -> DEFAULT_ROBOT_RADIUS (robot_sf/common/robot_defaults.py)
 #:   - commanded v        -> DifferentialDriveSettings.max_linear_speed (robot/differential_drive.py)
 #:   - commanded omega     -> DifferentialDriveSettings.max_angular_speed (robot/differential_drive.py)
@@ -2339,7 +2332,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
     scenario_id = str(ep_a.metadata["scenario_id"])
     try:
         map_definition = tsf._load_map_definition(scenario_id)
-    except Exception as exc:  # noqa: BLE001 - obstacles are a visual enhancement, not required
+    except (tsf.TraceSchemaError, OSError, KeyError, ValueError, SyntaxError) as exc:
         print(f"warning: could not load map definition for obstacles: {exc}", file=sys.stderr)
         map_definition = None
 

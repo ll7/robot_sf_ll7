@@ -365,7 +365,10 @@ prevents merging a PR whose CI ran against a stale main:
   checker falls back to the PR base-vs-main comparison. The author must update the branch and
   re-run CI before the PR becomes mergeable again. Because the installed `gh` version does not
   provide `gh pr update-branch`, use the guarded repository helper after recording the current
-  head SHA: `uv run python scripts/dev/update_pr_branch.py <number> --expected-head-sha <sha>`.
+  head SHA. The drop-in `scripts/dev/update_pr_branch_safely.sh <number> --expected-head-sha <sha>`
+  tries `gh`/`gh api` update-branch first and falls back to a lease-protected local rebase/push when
+  that path is unavailable (issue #5775). The older REST-only `scripts/dev/update_pr_branch.py` is
+  kept for environments where the REST `update-branch` endpoint works.
 
 **Why not GitHub merge queue?** The native merge queue is the ideal solution — it re-validates each
 PR against the up-to-date prospective main before merging automatically. We chose the gate-side rule
@@ -398,6 +401,7 @@ scripts/dev/local_signoff.sh --no-setup lint test
 scripts/dev/check_docs_proof_consistency_diff.sh
 scripts/dev/sbatch_use_max_time.sh --partition <partition> --qos <qos> --sbatch-arg --partition=<partition> --sbatch-arg --qos=<qos> SLURM/templates/gpu_training.sl
 uv run python scripts/dev/update_pr_branch.py <pr-number> --expected-head-sha <head-sha>
+scripts/dev/update_pr_branch_safely.sh <pr-number> --expected-head-sha <head-sha>
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests

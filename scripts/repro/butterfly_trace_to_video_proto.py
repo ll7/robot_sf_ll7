@@ -1,7 +1,6 @@
-"""Prototype: render one job-13334 exemplar trace episode to a watchable video.
+"""Prototype: render one benchmark trace episode to a watchable video.
 
-STATUS: prototype for Stages 0-2 of the "butterfly worked-example pipeline" plan
-(diss repo: docs/context/plan/2026-07-15_butterfly_worked_example_pipeline.md).
+STATUS: trace-tooling prototype for the A/B episode comparison pipeline.
 Not wired into any benchmark/CI path. Reuses existing robot_sf render components:
 
 - ``robot_sf.render.jsonl_playback.JSONLPlaybackLoader`` to parse a JSONL episode
@@ -110,6 +109,8 @@ def trace_series_to_jsonl(trace_series_path: Path, jsonl_out: Path) -> int:
         payload = json.load(f)
 
     frames = payload["frames"]
+    if not isinstance(frames, list) or not frames:
+        raise ValueError("trace_series.frames must be a non-empty array")
     episode_id = payload.get("metadata", {}).get("episode_id", 0)
 
     written = 0
@@ -210,6 +211,8 @@ def compute_trace_metrics(trace_series_path: Path) -> dict[str, np.ndarray]:
         payload = json.load(f)
 
     frames = payload["frames"]
+    if not isinstance(frames, list) or not frames:
+        raise ValueError("trace_series.frames must be a non-empty array")
     n = len(frames)
     time_s = np.empty(n, dtype=np.float64)
     speed_mps = np.empty(n, dtype=np.float64)
@@ -295,7 +298,7 @@ def render_minimap_frames(
         color="#ff7f0e",
         linestyle="--",
         linewidth=0.9,
-        label=f"near-miss <= {near_miss_threshold_m:g} m",
+        label=f"near-contact diagnostic <= {near_miss_threshold_m:g} m",
         zorder=2,
     )
     ax_clear.axhline(
@@ -303,7 +306,7 @@ def render_minimap_frames(
         color="#d62728",
         linestyle="--",
         linewidth=0.9,
-        label=f"collision <= {collision_threshold_m:g} m",
+        label=f"collision-proximity diagnostic <= {collision_threshold_m:g} m",
         zorder=2,
     )
     if np.any(near_miss_mask):
@@ -313,7 +316,7 @@ def render_minimap_frames(
             color="#ff7f0e",
             s=14,
             zorder=5,
-            label="near-miss step",
+            label="near-contact diagnostic step",
         )
     if np.any(collision_mask):
         ax_clear.scatter(
@@ -322,7 +325,7 @@ def render_minimap_frames(
             color="#d62728",
             s=18,
             zorder=6,
-            label="collision step",
+            label="collision-proximity diagnostic step",
         )
     ax_clear.set_ylabel("clearance (m)", fontsize=8)
     ax_clear.set_xlabel("time (s)", fontsize=8)
@@ -431,8 +434,8 @@ def render_episode_with_minimap(
     min_step = int(np.nanargmin(clearance))
     return {
         "n_frames": len(composed),
-        "near_miss_steps": int(np.sum(clearance <= config.near_miss_threshold_m)),
-        "collision_steps": int(np.sum(clearance <= config.collision_threshold_m)),
+        "near_contact_steps": int(np.sum(clearance <= config.near_miss_threshold_m)),
+        "collision_proximity_steps": int(np.sum(clearance <= config.collision_threshold_m)),
         "min_clearance_step": min_step,
         "min_clearance_m": float(clearance[min_step]),
     }
@@ -521,10 +524,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"frames rendered: {summary['n_frames']}")
     if not args.no_minimap:
         print(
-            f"near-miss steps (<= {args.near_miss_threshold_m:g} m): {summary['near_miss_steps']}"
+            f"near-contact diagnostic steps (center distance <= "
+            f"{args.near_miss_threshold_m:g} m): {summary['near_contact_steps']}"
         )
         print(
-            f"collision steps (<= {args.collision_threshold_m:g} m): {summary['collision_steps']}"
+            f"collision-proximity diagnostic steps (center distance <= "
+            f"{args.collision_threshold_m:g} m): {summary['collision_proximity_steps']}"
         )
         print(
             f"global min clearance: {summary['min_clearance_m']:.6f} m "

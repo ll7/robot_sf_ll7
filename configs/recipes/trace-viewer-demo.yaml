@@ -1,0 +1,16 @@
+id: trace-viewer-demo
+title: JSONL episode recording + playback demo
+purpose: >
+  Demonstrate the per-episode JSONL recording and playback system end to end:
+  record short episodes to a temp directory and replay their trajectories. This
+  is the entry point for inspecting recorded trajectories before using the
+  full figure-generation pipeline.
+runtime: "< 1 min CPU"
+category: visualization
+command: >
+  uv run python scripts/demo_jsonl_recording.py
+configs:
+  - scripts/demo_jsonl_recording.py
+outputs:
+  - (temp JSONL recording files + stdout playback summary)
+docs: docs/recipes/README.md

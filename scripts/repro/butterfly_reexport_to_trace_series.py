@@ -166,6 +166,8 @@ RELEASE_SEED_114_NEAR_MISSES_SOURCE: str = (
 )
 FLIPPED_SEEDS: tuple[int, ...] = (128, 130)
 OUTCOME_FIDELITY: str = "28/30"
+EXPECTED_ALGO: str = "ppo"
+EXPECTED_SCENARIO_ID: str = "classic_doorway_medium"
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +196,39 @@ def _load_row(episodes_jsonl: Path, seed: int) -> dict[str, Any]:
     if len(matches) > 1:
         raise ValueError(f"{len(matches)} rows with seed={seed} found in {episodes_jsonl}")
     return matches[0]
+
+
+def _validate_source_row(row: dict[str, Any]) -> None:
+    """Fail closed when an episode does not match the pinned re-export campaign."""
+    expected = {
+        "git_hash": EXEC_COMMIT,
+        "algo": EXPECTED_ALGO,
+        "scenario_id": EXPECTED_SCENARIO_ID,
+    }
+    mismatches = [
+        f"{key}={row.get(key)!r} (expected {value!r})"
+        for key, value in expected.items()
+        if row.get(key) != value
+    ]
+    result_provenance = row.get("result_provenance")
+    if not isinstance(result_provenance, dict):
+        mismatches.append("result_provenance is missing or not an object")
+    else:
+        provenance_expectations = {
+            "repo_commit": EXEC_COMMIT,
+            "scenario_id": EXPECTED_SCENARIO_ID,
+            "seed": row.get("seed"),
+        }
+        mismatches.extend(
+            f"result_provenance.{key}={result_provenance.get(key)!r} (expected {value!r})"
+            for key, value in provenance_expectations.items()
+            if result_provenance.get(key) != value
+        )
+    if mismatches:
+        raise ValueError(
+            "episode row does not match pinned doorway re-export provenance: "
+            + "; ".join(mismatches)
+        )
 
 
 def _nearest_pedestrian(frame: dict[str, Any]) -> tuple[float, int | None]:
@@ -318,12 +353,15 @@ def build_bundle(episodes_jsonl: Path, seed: int, out_dir: Path) -> dict[str, An
         Small summary dict (paths written, step count, outcome) for CLI reporting.
     """
     row = _load_row(episodes_jsonl, seed)
+    _validate_source_row(row)
     sst = row["algorithm_metadata"]["simulation_step_trace"]
     if sst.get("schema_version") != "simulation-step-trace.v1":
         raise ValueError(
             f"unexpected simulation_step_trace schema_version: {sst.get('schema_version')!r}"
         )
     frames = sst["steps"]  # already {pedestrians, planner, rl, robot, step, time_s} -- verbatim
+    if not isinstance(frames, list) or not frames:
+        raise ValueError("simulation_step_trace.steps must be a non-empty array")
     derived_rows = _build_derived_rows(frames)
     metadata = _build_metadata(row, derived_rows)
 

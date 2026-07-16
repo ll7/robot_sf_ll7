@@ -25,6 +25,7 @@ response_law_fractions:
   - 0.5
 scenarios:
   - id: issue_3574_classic_crossing_density_002
+    map_file: maps/svg_maps/classic_crossing.svg
     density: 0.02
     pedestrian_control_trace_near_field_clearance_m: 1.0
     population_size: 12

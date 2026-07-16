@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import json
+import platform
+from io import StringIO
 from pathlib import Path
 
 import pytest
 
+from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
 from robot_sf.benchmark.result_provenance import (
     SCHEMA_VERSION,
     ProvenanceRequiredFieldError,
+    _cpu_model,
+    build_execution_context_provenance,
     build_result_provenance_manifest,
     build_row_result_provenance,
     manifest_path_for_result_jsonl,
@@ -47,6 +52,68 @@ def test_build_manifest_has_correct_schema_version() -> None:
         active_observation_level="full",
     )
     assert manifest["schema_version"] == SCHEMA_VERSION
+
+
+def test_build_manifest_records_execution_context() -> None:
+    """The manifest must record hostname/cpu/thread-env so cross-context runs are comparable (issue #5817)."""
+    manifest = build_result_provenance_manifest(
+        out_path=Path("episodes.jsonl"),
+        episode_records=[],
+        schema_path="schema.json",
+        scenario_path=Path("scenarios.yaml"),
+        scenarios=[],
+        algo="goal",
+        algo_config_path=None,
+        benchmark_profile="baseline-safe",
+        suite_key="test_suite",
+        total_jobs=0,
+        written=0,
+        horizon=100,
+        dt=0.1,
+        record_forces=True,
+        active_observation_mode="lidar",
+        active_observation_level="full",
+    )
+    ctx = manifest["run"]["execution_context"]
+    assert set(ctx) >= {"hostname", "cpu_model", "python_version", "platform", "thread_env"}
+    assert isinstance(ctx["hostname"], str) and ctx["hostname"]
+    assert isinstance(ctx["thread_env"], dict)
+    assert set(ctx["thread_env"]) >= {"OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"}
+
+
+def test_execution_context_captures_thread_env(monkeypatch) -> None:
+    """Thread-env snapshot reflects the active environment so pinned runs are recordable."""
+    monkeypatch.setenv("OMP_NUM_THREADS", "1")
+    monkeypatch.setenv("MKL_NUM_THREADS", "4")
+    monkeypatch.delenv("OPENBLAS_NUM_THREADS", raising=False)
+    ctx = build_execution_context_provenance()
+    assert ctx["thread_env"]["OMP_NUM_THREADS"] == "1"
+    assert ctx["thread_env"]["MKL_NUM_THREADS"] == "4"
+    assert ctx["thread_env"]["OPENBLAS_NUM_THREADS"] is None
+
+
+def test_pin_thread_env_forces_one_over_inherited_values(monkeypatch) -> None:
+    """The camera-ready determinism contract overrides inherited thread counts."""
+    monkeypatch.setenv("OMP_NUM_THREADS", "8")
+    monkeypatch.setenv("OPENBLAS_NUM_THREADS", "32")
+    monkeypatch.delenv("MKL_NUM_THREADS", raising=False)
+    assert pin_thread_env_for_determinism() == {
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+    }
+    assert build_execution_context_provenance()["thread_env"] == {
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+    }
+
+
+def test_cpu_model_malformed_proc_line_uses_platform_fallback(monkeypatch) -> None:
+    """A colon-free proc model line cannot crash provenance capture."""
+    monkeypatch.setattr(Path, "open", lambda *_args, **_kwargs: StringIO("model name malformed\n"))
+    monkeypatch.setattr(platform, "processor", lambda: "Fallback CPU")
+    assert _cpu_model() == "Fallback CPU"
 
 
 def test_build_manifest_records_optional_algo_config_absence() -> None:

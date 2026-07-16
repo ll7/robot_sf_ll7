@@ -1,0 +1,19 @@
+id: benchmark-mini-run
+title: Mini benchmark batch run
+purpose: >
+  Run a small headless batch of episodes through the benchmark CLI
+  (robot_sf_bench run) on the planner-sanity scenario matrix and write the
+  episode JSONL plus aggregate metrics. A minimal end-to-end benchmark run with
+  no training and no model checkpoint.
+runtime: "< 2 min CPU"
+category: benchmark
+command: >
+  uv run robot_sf_bench run
+  --matrix configs/scenarios/single/planner_sanity_simple.yaml
+  --out output/recipes/benchmark-mini-run/episodes.jsonl
+  --algo simple_policy --horizon 120 --no-video
+configs:
+  - configs/scenarios/single/planner_sanity_simple.yaml
+outputs:
+  - output/recipes/benchmark-mini-run/episodes.jsonl
+docs: docs/recipes/README.md

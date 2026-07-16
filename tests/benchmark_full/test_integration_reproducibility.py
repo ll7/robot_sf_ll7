@@ -156,9 +156,14 @@ def test_reproducibility_same_seed(
     )
     assert len(ids1) == len(set(ids1)), "Duplicate episode_ids encountered within a run."
 
-    # Soft timing guard (currently enforced as hard assert per spec envelope)
+    # Soft timing guard (currently enforced as hard assert per spec envelope).
+    # The envelope is contention-aware: under pytest-xdist the soft budget is
+    # multiplied so an unrelated full-suite worker (CPU/I/O starvation) does not
+    # fail this deterministic contract. The hard boundary is never scaled, so a
+    # genuine benchmark runtime regression still fails (issue #5836).
     ci = os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS")
-    limit = 20.0 if ci else 10.0
+    under_xdist = perf_policy.is_under_xdist()
+    limit = perf_policy.effective_soft_threshold(ci=bool(ci))
     classification = perf_policy.classify(elapsed)
     assert classification != "hard", (
         f"Elapsed {elapsed:.2f}s breached hard threshold {perf_policy.hard_timeout_seconds}s."
@@ -166,13 +171,19 @@ def test_reproducibility_same_seed(
 
     if elapsed >= limit:  # stricter accelerated envelope
         # T042: richer guidance message
+        xdist_note = (
+            " Running under pytest-xdist; soft envelope was widened to absorb sibling-worker "
+            "contention. A genuine regression would still breach the hard threshold."
+            if under_xdist
+            else ""
+        )
         guidance = (
             "Exceeded time budget. Mitigations: verify smoke=True, bootstrap_samples=0, "
             "workers=1, only 2 seeds, horizon_override minimal. If environment is legitimately slow, "
             "consider raising CI threshold (specs/123-reduce-runtime-of/spec.md)."
         )
         raise AssertionError(
-            f"Repro test exceeded time budget: {elapsed:.2f}s (limit {limit}s). {guidance}",
+            f"Repro test exceeded time budget: {elapsed:.2f}s (limit {limit}s). {guidance}{xdist_note}",
         )
 
     base_root = Path(cfg.output_root)

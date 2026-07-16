@@ -1,0 +1,20 @@
+id: planner-comparison
+title: Compare planners on a sanity scenario
+purpose: >
+  Run the one-command smoke benchmark that exercises both the simple-policy and
+  social-force planners on the planner-sanity scenario and writes a Markdown
+  comparison table plus aggregate metrics. The cheapest way to see planner-vs-
+  planner behaviour side by side.
+runtime: "< 2 min CPU"
+category: planners
+command: >
+  uv run python scripts/demo/run_robot_sf_smoke.py
+configs:
+  - configs/scenarios/single/planner_sanity_simple.yaml
+  - scripts/demo/run_robot_sf_smoke.py
+outputs:
+  - output/demo/smoke_benchmark/summary.json
+  - output/demo/smoke_benchmark/report.md
+  - output/demo/smoke_benchmark/episodes/simple_policy.jsonl
+  - output/demo/smoke_benchmark/episodes/social_force.jsonl
+docs: docs/recipes/README.md

@@ -102,6 +102,16 @@ class _Proposal:
     reason: str | None = None
 
 
+@dataclass(frozen=True)
+class _StepContext:
+    """Observation values shared by all proposal scores in one planner step."""
+
+    robot_pos: np.ndarray
+    heading: float
+    goal: np.ndarray
+    min_ped_clearance: float
+
+
 class PolicyStackV1Adapter:
     """Score a small portfolio of native and adapter proposal sources."""
 
@@ -140,15 +150,25 @@ class PolicyStackV1Adapter:
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return the selected unicycle command and record step diagnostics."""
-        proposals = self._collect_proposals(observation)
+        # Goal proposal generation needs shared values immediately. Other source sets preserve
+        # the established no-candidate diagnostic before parsing scoring-only fields.
+        needs_proposal_context = any(
+            _normalize_source(source) == "goal" for source in self.config.proposal_sources
+        )
+        step_context = self._build_step_context(observation) if needs_proposal_context else None
+        proposals = self._collect_proposals(observation, step_context=step_context)
         candidates = [
             p for p in proposals if p.command is not None and p.status in _COMMAND_STATUSES
         ]
         if not candidates:
             self._raise_no_candidate(proposals)
+        if step_context is None:
+            step_context = self._build_step_context(observation)
 
         scores = {
-            proposal.key: self._score_command(proposal.command, observation)
+            proposal.key: self._score_command(
+                proposal.command, observation, step_context=step_context
+            )
             for proposal in candidates
             if proposal.command is not None
         }
@@ -176,7 +196,7 @@ class PolicyStackV1Adapter:
         selected_key = selected.key
         selected_mode = selected.status
         shield_intervened = False
-        if self._violates_hard_stop(observation, command):
+        if self._violates_hard_stop(observation, command, step_context=step_context):
             command = (0.0, 0.0)
             selected_key = "shield_stop"
             selected_mode = "fallback"
@@ -313,7 +333,12 @@ class PolicyStackV1Adapter:
             "trace": diagnostics,
         }
 
-    def _collect_proposals(self, observation: dict[str, Any]) -> list[_Proposal]:
+    def _collect_proposals(
+        self,
+        observation: dict[str, Any],
+        *,
+        step_context: _StepContext | None,
+    ) -> list[_Proposal]:
         """Collect one normalized proposal from each configured source.
 
         Returns:
@@ -322,7 +347,7 @@ class PolicyStackV1Adapter:
         proposals: list[_Proposal] = []
         for source in self.config.proposal_sources:
             key = _normalize_source(source)
-            proposal = self._proposal_from_source(key, observation)
+            proposal = self._proposal_from_source(key, observation, step_context=step_context)
             if (
                 proposal.status in {"failed", "not_available", "rejected"}
                 and key in self.config.mandatory_sources
@@ -332,7 +357,13 @@ class PolicyStackV1Adapter:
             proposals.append(proposal)
         return proposals
 
-    def _proposal_from_source(self, key: str, observation: dict[str, Any]) -> _Proposal:
+    def _proposal_from_source(
+        self,
+        key: str,
+        observation: dict[str, Any],
+        *,
+        step_context: _StepContext | None,
+    ) -> _Proposal:
         """Build a proposal from one named source.
 
         Returns:
@@ -341,7 +372,9 @@ class PolicyStackV1Adapter:
         status = self._source_mode(key)
         if key == "goal":
             return self._command_proposal(
-                key=key, status=status, command=self._goal_command(observation)
+                key=key,
+                status=status,
+                command=self._goal_command(observation, step_context=step_context),
             )
         if key == "risk_dwa":
             try:
@@ -400,13 +433,25 @@ class PolicyStackV1Adapter:
             return "native"
         return "adapter"
 
-    def _goal_command(self, observation: dict[str, Any]) -> tuple[float, float]:
+    def _goal_command(
+        self,
+        observation: dict[str, Any],
+        *,
+        step_context: _StepContext | None = None,
+    ) -> tuple[float, float]:
         """Compute the native goal-seeking proposal command.
 
         Returns:
             tuple[float, float]: Linear and angular command.
         """
-        robot_pos, heading, goal = _robot_goal_heading(observation)
+        if step_context is None:
+            robot_pos, heading, goal = _robot_goal_heading(observation)
+        else:
+            robot_pos, heading, goal = (
+                step_context.robot_pos,
+                step_context.heading,
+                step_context.goal,
+            )
         to_goal = goal - robot_pos
         distance = float(np.linalg.norm(to_goal))
         if distance <= float(self.config.goal_tolerance):
@@ -428,13 +473,24 @@ class PolicyStackV1Adapter:
         self,
         command: tuple[float, float],
         observation: dict[str, Any],
+        *,
+        step_context: _StepContext | None = None,
     ) -> dict[str, float]:
         """Score one candidate command by progress, heading, clearance, and smoothness.
 
         Returns:
             dict[str, float]: Total score and component diagnostics.
         """
-        robot_pos, heading, goal = _robot_goal_heading(observation)
+        if step_context is None:
+            robot_pos, heading, goal = _robot_goal_heading(observation)
+            min_clearance = _min_ped_clearance(observation, robot_pos=robot_pos)
+        else:
+            robot_pos, heading, goal = (
+                step_context.robot_pos,
+                step_context.heading,
+                step_context.goal,
+            )
+            min_clearance = step_context.min_ped_clearance
         goal_vec = goal - robot_pos
         distance = float(np.linalg.norm(goal_vec))
         if distance <= 1e-9:
@@ -449,7 +505,6 @@ class PolicyStackV1Adapter:
         command_heading = _wrap_angle(heading + float(command[1]) * 0.2)
         target_heading = float(np.arctan2(goal_dir[1], goal_dir[0]))
         heading_alignment = float(np.cos(_wrap_angle(target_heading - command_heading)))
-        min_clearance = _min_ped_clearance(observation)
         clearance_bonus = min(min_clearance, 2.0) if np.isfinite(min_clearance) else 2.0
         angular_penalty = abs(float(command[1]))
         total = (
@@ -493,6 +548,8 @@ class PolicyStackV1Adapter:
         self,
         observation: dict[str, Any],
         command: tuple[float, float],
+        *,
+        step_context: _StepContext | None = None,
     ) -> bool:
         """Return whether a moving command violates hard-stop clearance."""
         if float(self.config.hard_stop_clearance) <= 0.0:
@@ -500,7 +557,27 @@ class PolicyStackV1Adapter:
         moving = abs(float(command[0])) > 1e-6 or abs(float(command[1])) > 1e-6
         if not moving:
             return False
-        return _min_ped_clearance(observation) < float(self.config.hard_stop_clearance)
+        min_clearance = (
+            _min_ped_clearance(observation)
+            if step_context is None
+            else step_context.min_ped_clearance
+        )
+        return min_clearance < float(self.config.hard_stop_clearance)
+
+    @staticmethod
+    def _build_step_context(observation: dict[str, Any]) -> _StepContext:
+        """Extract observation values once for the current plan step.
+
+        Returns:
+            _StepContext: Shared values for proposal generation, scoring, and shielding.
+        """
+        robot_pos, heading, goal = _robot_goal_heading(observation)
+        return _StepContext(
+            robot_pos=robot_pos,
+            heading=heading,
+            goal=goal,
+            min_ped_clearance=_min_ped_clearance(observation, robot_pos=robot_pos),
+        )
 
     def _raise_no_candidate(self, proposals: list[_Proposal]) -> None:
         """Raise an error summarizing why no proposal could be selected."""
@@ -575,7 +652,9 @@ def _robot_goal_heading(observation: dict[str, Any]) -> tuple[np.ndarray, float,
     return robot_pos, heading, goal
 
 
-def _min_ped_clearance(observation: dict[str, Any]) -> float:
+def _min_ped_clearance(
+    observation: dict[str, Any], *, robot_pos: np.ndarray | None = None
+) -> float:
     """Return nearest pedestrian distance from the robot.
 
     Returns:
@@ -585,7 +664,8 @@ def _min_ped_clearance(observation: dict[str, Any]) -> float:
     pedestrians = (
         observation.get("pedestrians") if isinstance(observation.get("pedestrians"), dict) else {}
     )
-    robot_pos = _as_vector(robot.get("position"), pad=2)[:2]
+    if robot_pos is None:
+        robot_pos = _as_vector(robot.get("position"), pad=2)[:2]
     positions = np.asarray(pedestrians.get("positions", []), dtype=float)
     if positions.ndim == 1 and positions.size % 2 == 0:
         positions = positions.reshape(-1, 2)

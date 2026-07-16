@@ -115,7 +115,11 @@ def _fs(size_pt: float) -> float:
 
 @contextmanager
 def _design_scales(font_scale: float, canvas_scale: float) -> Iterator[None]:
-    """Activate the print font/label-density scales for one render call."""
+    """Activate the print font/label-density scales for one render call.
+
+    This context manager mutates module-level rendering state and is not thread-safe.
+    Callers must serialize render calls within a process; separate processes are safe.
+    """
 
     global _FONT_SCALE, _LABEL_GAP_SCALE
     previous = (_FONT_SCALE, _LABEL_GAP_SCALE)
@@ -124,7 +128,14 @@ def _design_scales(font_scale: float, canvas_scale: float) -> Iterator[None]:
     # episodes (diss issue ll7/diss#438) so that dense clusters (a robot circling
     # near its goal, a slow climb up a narrow corridor panel) thin down to
     # non-colliding label counts. Markers keep the full cadence; only labels thin.
-    _LABEL_GAP_SCALE = 2.0 * (font_scale / canvas_scale) ** 2
+    # Preserve the legacy screen layout exactly when neither sizing dimension changes.
+    # Without this identity case, ordinary renders silently enabled every print-only
+    # label-thinning and wrapping adaptation despite using the public defaults.
+    _LABEL_GAP_SCALE = (
+        1.0
+        if math.isclose(font_scale, 1.0) and math.isclose(canvas_scale, 1.0)
+        else 2.0 * (font_scale / canvas_scale) ** 2
+    )
     try:
         yield
     finally:
@@ -1548,6 +1559,8 @@ def _clamp_texts_to_canvas(figure: Figure, margin_px: float = 2.0) -> None:
 
     figure.canvas.draw()
     renderer = figure.canvas.get_renderer()
+    if renderer is None:
+        return
     width, height = figure.bbox.width, figure.bbox.height
     for ax in figure.axes:
         title = ax.title

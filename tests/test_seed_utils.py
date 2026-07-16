@@ -253,3 +253,50 @@ def test_torch_determinism_reports_unavailable_setter(monkeypatch):
     assert report.to_dict()["seed"] == 11
     assert report.torch_deterministic is None
     assert report.notes == "torch deterministic algorithm flag could not be applied"
+
+
+torch = _import_torch()
+_HAS_CUDA = torch is not None and torch.cuda.is_available()
+requires_cuda = pytest.mark.skipif(
+    not _HAS_CUDA,
+    reason="CUDA device required to exercise the Torch 2.13.0 GPU determinism path (issue #5556)",
+)
+
+
+@requires_cuda
+def test_torch_213_determinism_guard_runs_on_cuda_device():
+    """Exercise the merged Torch 2.13.0 determinism helpers on a real CUDA device.
+
+    This is the remaining Definition-of-DoD item for issue #5556: prove the
+    ``_set_torch_deterministic_algorithms`` C-level path does not segfault and
+    actually enables deterministic algorithms when ``set_global_seed`` runs on a
+    GPU. Skipped when no CUDA device is present, so it stays cheap-lane safe on
+    CPU-only runners (it does not duplicate the mocked CPU-path coverage).
+    """
+    assert torch is not None and torch.cuda.is_available()
+
+    report = set_global_seed(42, deterministic=True)
+    assert report.has_torch is True
+    assert report.torch_deterministic is True
+    # The C-level setter must have flipped the global flag on, not silently no-op'd.
+    assert torch.are_deterministic_algorithms_enabled() is True
+    if hasattr(torch.backends, "cudnn"):
+        assert torch.backends.cudnn.deterministic is True
+
+
+@requires_cuda
+def test_torch_213_cuda_seed_is_reproducible_across_calls():
+    """A seeded CUDA RNG must produce identical tensors across two seeded calls.
+
+    Reproduces the original regression contract (deterministic benchmark RNG) on
+    the GPU without importing the Dynamo/Triton wrapper that segfaulted before the
+    Torch 2.13.0 fix landed.
+    """
+    assert torch is not None
+    set_global_seed(7, deterministic=True)
+    a = torch.randn(4, 4, device="cuda")
+
+    set_global_seed(7, deterministic=True)
+    b = torch.randn(4, 4, device="cuda")
+
+    assert torch.equal(a, b)

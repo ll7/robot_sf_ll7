@@ -92,6 +92,201 @@ def test_snapshot_prs_pending_next_action() -> None:
     assert payload["route_health_overview"]["healthy"] == 1
 
 
+def test_snapshot_prs_suppresses_superseded_cancelled_run() -> None:
+    """An older cancelled run must not override a newer pending replacement."""
+    pr_payload = {
+        "number": 5869,
+        "title": "superseded cancelled PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc111",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "ci",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-07-01T00:00:00Z",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "ci",
+                "status": "in_progress",
+                "conclusion": "",
+                "startedAt": "2026-07-01T00:05:00Z",
+            },
+        ],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([5869], repo="ll7/robot_sf_ll7", expected_head_sha="abc111")
+
+    pr = payload["prs"][0]
+    assert pr["checks"]["overall"] == "pending"
+    assert pr["checks"]["superseded"] == 1
+    assert pr["checks"]["total"] == 1
+
+
+def test_snapshot_prs_suppresses_superseded_cancelled_for_newer_success() -> None:
+    """A newer successful replacement should suppress an older cancellation."""
+    pr_payload = {
+        "number": 5869,
+        "title": "superseded cancelled then success",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc222",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "ci",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-07-01T00:00:00Z",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "ci",
+                "status": "completed",
+                "conclusion": "success",
+                "startedAt": "2026-07-01T00:05:00Z",
+            },
+        ],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([5869], repo="ll7/robot_sf_ll7", expected_head_sha="abc222")
+
+    pr = payload["prs"][0]
+    assert pr["checks"]["overall"] == "success"
+    assert pr["checks"]["superseded"] == 1
+    assert pr["checks"]["total"] == 1
+
+
+def test_snapshot_prs_current_cancellation_stays_fail_closed() -> None:
+    """A current, non-superseded cancellation must remain a failure."""
+    pr_payload = {
+        "number": 5869,
+        "title": "current cancellation PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc333",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "ci",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-07-01T00:00:00Z",
+            }
+        ],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([5869], repo="ll7/robot_sf_ll7", expected_head_sha="abc333")
+
+    pr = payload["prs"][0]
+    assert pr["checks"]["overall"] == "failure"
+    assert pr["checks"]["superseded"] == 0
+
+
+def test_snapshot_prs_ignores_non_mapping_rollup_entries_before_deduplication() -> None:
+    """Malformed rollup entries must not crash the latest-run filter."""
+    pr_payload = {
+        "number": 5869,
+        "title": "mixed malformed rollup",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc-malformed",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [
+            None,
+            "not-a-check",
+            {"name": "ci", "status": "completed", "conclusion": "success"},
+        ],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([5869], repo="ll7/robot_sf_ll7", expected_head_sha="abc-malformed")
+
+    checks = payload["prs"][0]["checks"]
+    assert checks["overall"] == "success"
+    assert checks["total"] == 1
+    assert checks["superseded"] == 0
+    assert checks["names"] == ["ci"]
+
+
+def test_snapshot_prs_keeps_independent_legacy_status_entries() -> None:
+    """Legacy statuses and timestamp-less runs stay independently classified."""
+    pr_payload = {
+        "number": 5869,
+        "title": "mixed legacy and actions runs",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc444",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [
+            {
+                "name": "legacy-status",
+                "status": "completed",
+                "conclusion": "success",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "ci",
+                "status": "completed",
+                "conclusion": "cancelled",
+                "startedAt": "2026-07-01T00:00:00Z",
+            },
+            {
+                "__typename": "CheckRun",
+                "name": "ci",
+                "workflowName": "ci",
+                "status": "completed",
+                "conclusion": "success",
+                "startedAt": "2026-07-01T00:05:00Z",
+            },
+        ],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([5869], repo="ll7/robot_sf_ll7", expected_head_sha="abc444")
+
+    pr = payload["prs"][0]
+    assert pr["checks"]["overall"] == "success"
+    assert pr["checks"]["superseded"] == 1
+    assert pr["checks"]["total"] == 2
+    assert pr["checks"]["names"] == ["ci", "legacy-status"]
+
+
 def test_snapshot_prs_details_url_none_falls_back_without_none_string() -> None:
     """Explicit null detailsUrl should not become the literal string None."""
     pr_payload = {

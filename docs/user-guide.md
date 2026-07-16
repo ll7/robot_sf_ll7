@@ -5,7 +5,7 @@ for a robot moving through pedestrian-filled environments. This guide is the **t
 entry point for anyone who wants to *install, run, and use* Robot SF without diving into
 internals or research methodology.
 
-> New to the terminology? Start with the [Glossary](../glossary.md) — canonical definitions for
+> New to the terminology? Start with the [Glossary](./glossary.md) — canonical definitions for
 > acronyms and project terms (VRU, AMV, AMMV, SNQI, occluder, the evidence ladder, and more).
 
 ## 1. Install and first run
@@ -15,7 +15,7 @@ internals or research methodology.
   pre-commit hooks.
 - [Runtime Requirements](./dev_runtime_requirements.md) — non-`uv` host tools, Docker, GPU/SLURM,
   and the local capability checker.
-- [Environment Configuration](../ENVIRONMENT.md) — detailed host environment setup and usage.
+- [Environment Configuration](./ENVIRONMENT.md) — detailed host environment setup and usage.
 
 ## 2. Run a demo
 

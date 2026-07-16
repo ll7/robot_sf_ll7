@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import platform
+from io import StringIO
 from pathlib import Path
 
 import pytest
 
+from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
 from robot_sf.benchmark.result_provenance import (
     SCHEMA_VERSION,
     ProvenanceRequiredFieldError,
+    _cpu_model,
     build_execution_context_provenance,
     build_result_provenance_manifest,
     build_row_result_provenance,
@@ -86,6 +90,30 @@ def test_execution_context_captures_thread_env(monkeypatch) -> None:
     assert ctx["thread_env"]["OMP_NUM_THREADS"] == "1"
     assert ctx["thread_env"]["MKL_NUM_THREADS"] == "4"
     assert ctx["thread_env"]["OPENBLAS_NUM_THREADS"] is None
+
+
+def test_pin_thread_env_forces_one_over_inherited_values(monkeypatch) -> None:
+    """The camera-ready determinism contract overrides inherited thread counts."""
+    monkeypatch.setenv("OMP_NUM_THREADS", "8")
+    monkeypatch.setenv("OPENBLAS_NUM_THREADS", "32")
+    monkeypatch.delenv("MKL_NUM_THREADS", raising=False)
+    assert pin_thread_env_for_determinism() == {
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+    }
+    assert build_execution_context_provenance()["thread_env"] == {
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+    }
+
+
+def test_cpu_model_malformed_proc_line_uses_platform_fallback(monkeypatch) -> None:
+    """A colon-free proc model line cannot crash provenance capture."""
+    monkeypatch.setattr(Path, "open", lambda *_args, **_kwargs: StringIO("model name malformed\n"))
+    monkeypatch.setattr(platform, "processor", lambda: "Fallback CPU")
+    assert _cpu_model() == "Fallback CPU"
 
 
 def test_build_manifest_records_optional_algo_config_absence() -> None:

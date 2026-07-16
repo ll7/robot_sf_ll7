@@ -69,6 +69,32 @@ class CandidateSpec:
 
 
 @dataclass(frozen=True)
+class WarmStartCandidate:
+    """A knife-edge initial candidate for optimizer-backed adversarial samplers.
+
+    These are high-value seeds surfaced by seed-sensitivity analysis (#5816/#5817):
+    scenario points sitting on decision boundaries (small ``|outcome_margin|``)
+    where the optimizer should prefer to begin rather than cold random sampling.
+    """
+
+    candidate: CandidateSpec
+    scenario: str = ""
+    planner: str = ""
+    outcome_margin: float | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        """Return a JSON-serializable warm-start payload."""
+        payload: dict[str, Any] = {
+            "candidate": self.candidate.to_json(),
+            "scenario": str(self.scenario),
+            "planner": str(self.planner),
+        }
+        if self.outcome_margin is not None:
+            payload["outcome_margin"] = float(self.outcome_margin)
+        return payload
+
+
+@dataclass(frozen=True)
 class MultiPedCandidateSpec:
     """One pedestrian in a scripted multi-pedestrian adversarial candidate."""
 
@@ -516,6 +542,7 @@ class SearchConfig:
     benchmark_profile: str = "baseline-safe"
     snqi_weights_path: Path | None = None
     snqi_baseline_path: Path | None = None
+    warm_start: tuple[WarmStartCandidate, ...] = ()
 
     @classmethod
     def from_files(
@@ -537,6 +564,7 @@ class SearchConfig:
         benchmark_profile: str = "baseline-safe",
         snqi_weights_path: Path | None = None,
         snqi_baseline_path: Path | None = None,
+        warm_start: tuple[WarmStartCandidate, ...] = (),
     ) -> SearchConfig:
         """Create a search config by loading the search-space YAML."""
         return cls(
@@ -557,6 +585,7 @@ class SearchConfig:
             benchmark_profile=benchmark_profile,
             snqi_weights_path=Path(snqi_weights_path) if snqi_weights_path else None,
             snqi_baseline_path=Path(snqi_baseline_path) if snqi_baseline_path else None,
+            warm_start=tuple(warm_start),
         )
 
     def validate(self) -> None:
@@ -571,6 +600,17 @@ class SearchConfig:
             raise FileNotFoundError(f"Scenario template not found: {self.scenario_template}")
         if self.algo_config_path is not None and not self.algo_config_path.exists():
             raise FileNotFoundError(f"Algorithm config not found: {self.algo_config_path}")
+        for warm in self.warm_start:
+            if not warm.scenario.strip():
+                raise ValueError("warm-start scenario must be non-empty")
+            if not warm.planner.strip():
+                raise ValueError("warm-start planner must be non-empty")
+            candidate_errors = self.search_space.validate_candidate(warm.candidate)
+            if candidate_errors:
+                raise ValueError(
+                    f"warm-start candidate for scenario {warm.scenario!r} is outside "
+                    f"the search space: {'; '.join(candidate_errors)}"
+                )
 
     def load_optional_json(self, path: Path | None) -> dict[str, Any] | None:
         """Load an optional JSON config file."""
@@ -602,4 +642,5 @@ class SearchConfig:
             "snqi_baseline_path": self.snqi_baseline_path.as_posix()
             if self.snqi_baseline_path
             else None,
+            "warm_start": [warm.to_json() for warm in self.warm_start],
         }

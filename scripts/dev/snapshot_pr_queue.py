@@ -257,7 +257,9 @@ def _checks(pr: dict[str, Any]) -> dict[str, Any]:
     `_latest_check_runs` semantics used by `check_pr_ci_status`.  A current,
     non-superseded cancellation remains fail-closed.
     """
-    raw_rollup = pr.get("statusCheckRollup", []) or []
+    raw_rollup = [
+        check for check in (pr.get("statusCheckRollup", []) or []) if isinstance(check, dict)
+    ]
     rollup, superseded_count = _latest_check_runs(raw_rollup)
     conclusions: dict[str, int] = {}
     statuses: dict[str, int] = {}

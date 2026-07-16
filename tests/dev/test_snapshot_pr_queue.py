@@ -209,6 +209,36 @@ def test_snapshot_prs_current_cancellation_stays_fail_closed() -> None:
     assert pr["checks"]["superseded"] == 0
 
 
+def test_snapshot_prs_ignores_non_mapping_rollup_entries_before_deduplication() -> None:
+    """Malformed rollup entries must not crash the latest-run filter."""
+    pr_payload = {
+        "number": 5869,
+        "title": "mixed malformed rollup",
+        "state": "OPEN",
+        "isDraft": False,
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc-malformed",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [
+            None,
+            "not-a-check",
+            {"name": "ci", "status": "completed", "conclusion": "success"},
+        ],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        payload = snapshot_prs([5869], repo="ll7/robot_sf_ll7", expected_head_sha="abc-malformed")
+
+    checks = payload["prs"][0]["checks"]
+    assert checks["overall"] == "success"
+    assert checks["total"] == 1
+    assert checks["superseded"] == 0
+    assert checks["names"] == ["ci"]
+
+
 def test_snapshot_prs_keeps_independent_legacy_status_entries() -> None:
     """Legacy statuses and timestamp-less runs stay independently classified."""
     pr_payload = {

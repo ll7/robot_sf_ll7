@@ -57,8 +57,9 @@ not match the manifest, non-CPU or multi-worker metadata, absent NumPy/Numba ver
 absent `uv.lock` SHA-256 hashes, not-exactly-three repeats, malformed trajectory hashes, and unrecorded divergences. A
 repeat is identical only when its binary outcome and SHA-256 trajectory hash agree. Otherwise the
 host report must state the first differing repeat and field. `compare-hosts` accepts only distinct
-machine identifiers with matching pinned NumPy and Numba versions; a version mismatch is
-divergent, not a successful comparison.
+machine identifiers and marks a cell `divergent` unless the hosts have matching NumPy, Numba,
+Python, source-commit, and `uv.lock` identities as well as matching repeat fingerprints. Runtime
+or provenance drift is recorded in `provenance_mismatches`; it cannot become an `identical` row.
 
 ## Evidence status and remaining action
 
@@ -87,9 +88,37 @@ Evidence grade: observed single-host diagnostic. NOT benchmark or paper-facing e
 degradation is a host/runner isolation defect, not a determinism verdict; it is recorded, not
 promoted.
 
+### Issue #5498 Native-PPO Primary-Host Registration (2026-07-15)
+
+The native-PPO planner-step worker-isolation defect was fixed in #5740 and the exact-repeat
+disposition regression in #5790; PPO now runs natively through the `run_episode` exact-repeat path.
+The PPO cells (60 targets across 3 cells) were re-executed natively on the **primary host**, closing
+the degraded-PPO gap left by #5499. Artifacts registered under this directory:
+
+- `issue_5498_native_ppo_host_result.json` — raw `scenario_exact_repeat_host_result.v1` payload
+  (PPO-only bundle, 60 targets x 3 repeats, single worker, CPU-only).
+- `issue_5498_native_ppo_verified_host_result.json` — `scenario_exact_repeat_verified_host_result.v1`
+  after `verify-host` against the re-hashed PPO-only manifest slice.
+- `issue_5498_native_ppo_provenance.json` — reproducible command, source/generation commit, artifact
+  SHA-256, and machine identity.
+
+Coverage: **60/60 PPO targets runnable** on the primary host (`machine_id` `auxme-imech036`,
+NumPy 2.4.6, Numba 0.66.0, Python 3.13.13, `uv.lock` identity present), **no missing or silently
+skipped targets**. All 3 PPO cells are **bitwise-identical** across their three repeats
+(SHA-256 outcome+metric trajectory hashes agree) — the first registered native-PPO primary-host
+exact-repeat determinism result for this campaign. This is precisely the fail-closed behavior #5498
+requires: ppo is no longer counted as `unrunnable`/`degraded`, and no fallback row was promoted.
+
+Evidence grade: observed single-host primary-host diagnostic. NOT benchmark or paper-facing
+evidence. This registration satisfies the in-scope, single-host-achievable capability for #5498; it
+is not a duplicate of the #5499 single-host orca+goal run, the #5740 worker-isolation fix, or the
+Issue #5778 cross-host provenance matcher.
+
 ### Remaining Action After #5498
 
 The predeclared **second-host near-miss comparison** is not yet run. It requires a second
 distinct host with matching pinned NumPy/Numba versions; register `cross_host_matrix.json` via
-`compare-hosts` once that run exists. The ppo cells must remain unrunnable/degraded in any
-cross-host matrix until the planner-step worker isolation defect is fixed so ppo can run natively.
+`compare-hosts` once that run exists. `compare-hosts` hard-raises when both inputs share a
+`machine_id` (`exact_repeat_campaign.py`), so the cross-host matrix is structurally impossible on a
+single machine and is reserved for a two-host campaign owner. The native-PPO primary-host artifact
+registered above is the input the second-host run will be compared against.

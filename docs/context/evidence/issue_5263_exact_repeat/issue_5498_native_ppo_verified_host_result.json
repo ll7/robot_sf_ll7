@@ -1,0 +1,1561 @@
+{
+  "cells": [
+    {
+      "exact_repeat_determinism": true,
+      "first_divergence": null,
+      "mixed": false,
+      "n_runnable_targets": 20,
+      "n_targets": 20,
+      "n_unrunnable_targets": 0,
+      "planner": "ppo",
+      "scenario_id": "classic_cross_trap_high",
+      "unrunnable": false
+    },
+    {
+      "exact_repeat_determinism": true,
+      "first_divergence": null,
+      "mixed": false,
+      "n_runnable_targets": 20,
+      "n_targets": 20,
+      "n_unrunnable_targets": 0,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_low",
+      "unrunnable": false
+    },
+    {
+      "exact_repeat_determinism": true,
+      "first_divergence": null,
+      "mixed": false,
+      "n_runnable_targets": 20,
+      "n_targets": 20,
+      "n_unrunnable_targets": 0,
+      "planner": "ppo",
+      "scenario_id": "classic_doorway_medium",
+      "unrunnable": false
+    }
+  ],
+  "environment": {
+    "cpu_only": true,
+    "git_commit": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+    "lockfile_sha256": "0396e93c54bf7a4dd1feebc10f282b3d398c34158d6b5b2295e2c2abaccf0156",
+    "machine_id": "auxme-imech036",
+    "numba_version": "0.66.0",
+    "numpy_version": "2.4.6",
+    "python_version": "3.13.13",
+    "workers": 1
+  },
+  "manifest_sha256": "2fb8352f0cc12fcfe0f50ba621bdd70ba25df59c0be3a38a51e79c5a639483c7",
+  "schema_version": "scenario_exact_repeat_verified_host_result.v1",
+  "summary": {
+    "all_cells_bitwise_identical": true,
+    "n_cells": 3,
+    "n_mixed_cells": 0,
+    "n_runnable_cells": 3,
+    "n_runnable_targets": 60,
+    "n_targets": 60,
+    "n_unrunnable_cells": 0,
+    "n_unrunnable_targets": 0
+  },
+  "targets": [
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "84b5050954e33d1df2a8b690e778be222d7deb79c1c75457e9d8cbc27488b515",
+          25
+        ],
+        [
+          0,
+          "84b5050954e33d1df2a8b690e778be222d7deb79c1c75457e9d8cbc27488b515",
+          25
+        ],
+        [
+          0,
+          "84b5050954e33d1df2a8b690e778be222d7deb79c1c75457e9d8cbc27488b515",
+          25
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 111,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "d4e353b4c1d8829ef2370a899dbe8803f362bcc3b0a273985c4b7dc6af0848da",
+          26
+        ],
+        [
+          0,
+          "d4e353b4c1d8829ef2370a899dbe8803f362bcc3b0a273985c4b7dc6af0848da",
+          26
+        ],
+        [
+          0,
+          "d4e353b4c1d8829ef2370a899dbe8803f362bcc3b0a273985c4b7dc6af0848da",
+          26
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 112,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "b3ce67e8ec2e7c37af31a925d8d4a93a72b3858ae0e2151be2868c60f105bbbe",
+          22
+        ],
+        [
+          0,
+          "b3ce67e8ec2e7c37af31a925d8d4a93a72b3858ae0e2151be2868c60f105bbbe",
+          22
+        ],
+        [
+          0,
+          "b3ce67e8ec2e7c37af31a925d8d4a93a72b3858ae0e2151be2868c60f105bbbe",
+          22
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 113,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "c4ca05d44b90506f98d43dcee3a903ceba1bd7db3cbb0b9f22141b42dd73a496",
+          23
+        ],
+        [
+          0,
+          "c4ca05d44b90506f98d43dcee3a903ceba1bd7db3cbb0b9f22141b42dd73a496",
+          23
+        ],
+        [
+          0,
+          "c4ca05d44b90506f98d43dcee3a903ceba1bd7db3cbb0b9f22141b42dd73a496",
+          23
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 114,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "da28091f8a5bdfa1f096d312b62a7e9800428761cae557aa8228c0bb5dd1a729",
+          35
+        ],
+        [
+          0,
+          "da28091f8a5bdfa1f096d312b62a7e9800428761cae557aa8228c0bb5dd1a729",
+          35
+        ],
+        [
+          0,
+          "da28091f8a5bdfa1f096d312b62a7e9800428761cae557aa8228c0bb5dd1a729",
+          35
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 115,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "2b46683b1527db1136358f322aca32191d20123106d531e7b7c3d44f2cdcd35a",
+          29
+        ],
+        [
+          0,
+          "2b46683b1527db1136358f322aca32191d20123106d531e7b7c3d44f2cdcd35a",
+          29
+        ],
+        [
+          0,
+          "2b46683b1527db1136358f322aca32191d20123106d531e7b7c3d44f2cdcd35a",
+          29
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 116,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "48555c303d27aa47f06343fdf5f58d93323489ee1d138cd7b12175006465fc80",
+          39
+        ],
+        [
+          0,
+          "48555c303d27aa47f06343fdf5f58d93323489ee1d138cd7b12175006465fc80",
+          39
+        ],
+        [
+          0,
+          "48555c303d27aa47f06343fdf5f58d93323489ee1d138cd7b12175006465fc80",
+          39
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 117,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "ebc4ded350ede17e17b91a3cac7ee05e1ded51540bbae82702cae1471433a826",
+          22
+        ],
+        [
+          0,
+          "ebc4ded350ede17e17b91a3cac7ee05e1ded51540bbae82702cae1471433a826",
+          22
+        ],
+        [
+          0,
+          "ebc4ded350ede17e17b91a3cac7ee05e1ded51540bbae82702cae1471433a826",
+          22
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 118,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "c4add903e05a3bad96b968b83319a4ec04ea1df25ffbbf59ff2bb00a5d1f1b7e",
+          21
+        ],
+        [
+          0,
+          "c4add903e05a3bad96b968b83319a4ec04ea1df25ffbbf59ff2bb00a5d1f1b7e",
+          21
+        ],
+        [
+          0,
+          "c4add903e05a3bad96b968b83319a4ec04ea1df25ffbbf59ff2bb00a5d1f1b7e",
+          21
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 119,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "a1238e5efbf10bf20db2de0220c68d6410e86067013f7617de1f22e4c0d491e2",
+          38
+        ],
+        [
+          0,
+          "a1238e5efbf10bf20db2de0220c68d6410e86067013f7617de1f22e4c0d491e2",
+          38
+        ],
+        [
+          0,
+          "a1238e5efbf10bf20db2de0220c68d6410e86067013f7617de1f22e4c0d491e2",
+          38
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 120,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "decb981733ca5253847aa6246c114ff06ff9219abc48d0305dd4cffb4a2724c4",
+          21
+        ],
+        [
+          0,
+          "decb981733ca5253847aa6246c114ff06ff9219abc48d0305dd4cffb4a2724c4",
+          21
+        ],
+        [
+          0,
+          "decb981733ca5253847aa6246c114ff06ff9219abc48d0305dd4cffb4a2724c4",
+          21
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 121,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "2ffd68f7b9e592075631c2d7d289003a71bd3d4b661aa60b9a4230c73c7e3de1",
+          32
+        ],
+        [
+          0,
+          "2ffd68f7b9e592075631c2d7d289003a71bd3d4b661aa60b9a4230c73c7e3de1",
+          32
+        ],
+        [
+          0,
+          "2ffd68f7b9e592075631c2d7d289003a71bd3d4b661aa60b9a4230c73c7e3de1",
+          32
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 122,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "0f808252d9a12d428e12905d6c66f0bdc2449091da0a57733fae6e6cf08d3134",
+          16
+        ],
+        [
+          0,
+          "0f808252d9a12d428e12905d6c66f0bdc2449091da0a57733fae6e6cf08d3134",
+          16
+        ],
+        [
+          0,
+          "0f808252d9a12d428e12905d6c66f0bdc2449091da0a57733fae6e6cf08d3134",
+          16
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 123,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "4f2023d4099f80a980a7056b452c0fcb1ca601a217c9ad73604253a8100d3c1b",
+          46
+        ],
+        [
+          0,
+          "4f2023d4099f80a980a7056b452c0fcb1ca601a217c9ad73604253a8100d3c1b",
+          46
+        ],
+        [
+          0,
+          "4f2023d4099f80a980a7056b452c0fcb1ca601a217c9ad73604253a8100d3c1b",
+          46
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 124,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "202e0fa7346d760fa5a62c89ef2a488404a77729799894bfea4e99ca013b4d42",
+          38
+        ],
+        [
+          0,
+          "202e0fa7346d760fa5a62c89ef2a488404a77729799894bfea4e99ca013b4d42",
+          38
+        ],
+        [
+          0,
+          "202e0fa7346d760fa5a62c89ef2a488404a77729799894bfea4e99ca013b4d42",
+          38
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 125,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "7dd162a3eea3c06ca9782f5c5d811fa88146fedb25a4abe28291b07f32e98e59",
+          25
+        ],
+        [
+          0,
+          "7dd162a3eea3c06ca9782f5c5d811fa88146fedb25a4abe28291b07f32e98e59",
+          25
+        ],
+        [
+          0,
+          "7dd162a3eea3c06ca9782f5c5d811fa88146fedb25a4abe28291b07f32e98e59",
+          25
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 126,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "abd3a20d53f65f33c049c52ae53ebb8fcbae70e1b1c141996dd9b0ee06714330",
+          16
+        ],
+        [
+          0,
+          "abd3a20d53f65f33c049c52ae53ebb8fcbae70e1b1c141996dd9b0ee06714330",
+          16
+        ],
+        [
+          0,
+          "abd3a20d53f65f33c049c52ae53ebb8fcbae70e1b1c141996dd9b0ee06714330",
+          16
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 127,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "9b740b738b9feae38d59b5c539c74cf7529085a297bbbeea1a7cd508710ea242",
+          32
+        ],
+        [
+          0,
+          "9b740b738b9feae38d59b5c539c74cf7529085a297bbbeea1a7cd508710ea242",
+          32
+        ],
+        [
+          0,
+          "9b740b738b9feae38d59b5c539c74cf7529085a297bbbeea1a7cd508710ea242",
+          32
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 128,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "a32024002782de9c27064cb282a58fb94f7b877fcb6b84948bbc47f6aa92966f",
+          12
+        ],
+        [
+          0,
+          "a32024002782de9c27064cb282a58fb94f7b877fcb6b84948bbc47f6aa92966f",
+          12
+        ],
+        [
+          0,
+          "a32024002782de9c27064cb282a58fb94f7b877fcb6b84948bbc47f6aa92966f",
+          12
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 129,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "dcea95e01b5c538c8c082c0028504385f76d250249b026d327523d785da71767",
+          18
+        ],
+        [
+          0,
+          "dcea95e01b5c538c8c082c0028504385f76d250249b026d327523d785da71767",
+          18
+        ],
+        [
+          0,
+          "dcea95e01b5c538c8c082c0028504385f76d250249b026d327523d785da71767",
+          18
+        ]
+      ],
+      "scenario_id": "classic_cross_trap_high",
+      "seed": 130,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "84b5050954e33d1df2a8b690e778be222d7deb79c1c75457e9d8cbc27488b515",
+          25
+        ],
+        [
+          0,
+          "84b5050954e33d1df2a8b690e778be222d7deb79c1c75457e9d8cbc27488b515",
+          25
+        ],
+        [
+          0,
+          "84b5050954e33d1df2a8b690e778be222d7deb79c1c75457e9d8cbc27488b515",
+          25
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 111,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "d4e353b4c1d8829ef2370a899dbe8803f362bcc3b0a273985c4b7dc6af0848da",
+          26
+        ],
+        [
+          0,
+          "d4e353b4c1d8829ef2370a899dbe8803f362bcc3b0a273985c4b7dc6af0848da",
+          26
+        ],
+        [
+          0,
+          "d4e353b4c1d8829ef2370a899dbe8803f362bcc3b0a273985c4b7dc6af0848da",
+          26
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 112,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "b3ce67e8ec2e7c37af31a925d8d4a93a72b3858ae0e2151be2868c60f105bbbe",
+          22
+        ],
+        [
+          0,
+          "b3ce67e8ec2e7c37af31a925d8d4a93a72b3858ae0e2151be2868c60f105bbbe",
+          22
+        ],
+        [
+          0,
+          "b3ce67e8ec2e7c37af31a925d8d4a93a72b3858ae0e2151be2868c60f105bbbe",
+          22
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 113,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "c4ca05d44b90506f98d43dcee3a903ceba1bd7db3cbb0b9f22141b42dd73a496",
+          23
+        ],
+        [
+          0,
+          "c4ca05d44b90506f98d43dcee3a903ceba1bd7db3cbb0b9f22141b42dd73a496",
+          23
+        ],
+        [
+          0,
+          "c4ca05d44b90506f98d43dcee3a903ceba1bd7db3cbb0b9f22141b42dd73a496",
+          23
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 114,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "da28091f8a5bdfa1f096d312b62a7e9800428761cae557aa8228c0bb5dd1a729",
+          35
+        ],
+        [
+          0,
+          "da28091f8a5bdfa1f096d312b62a7e9800428761cae557aa8228c0bb5dd1a729",
+          35
+        ],
+        [
+          0,
+          "da28091f8a5bdfa1f096d312b62a7e9800428761cae557aa8228c0bb5dd1a729",
+          35
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 115,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "2b46683b1527db1136358f322aca32191d20123106d531e7b7c3d44f2cdcd35a",
+          29
+        ],
+        [
+          0,
+          "2b46683b1527db1136358f322aca32191d20123106d531e7b7c3d44f2cdcd35a",
+          29
+        ],
+        [
+          0,
+          "2b46683b1527db1136358f322aca32191d20123106d531e7b7c3d44f2cdcd35a",
+          29
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 116,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "48555c303d27aa47f06343fdf5f58d93323489ee1d138cd7b12175006465fc80",
+          39
+        ],
+        [
+          0,
+          "48555c303d27aa47f06343fdf5f58d93323489ee1d138cd7b12175006465fc80",
+          39
+        ],
+        [
+          0,
+          "48555c303d27aa47f06343fdf5f58d93323489ee1d138cd7b12175006465fc80",
+          39
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 117,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "ebc4ded350ede17e17b91a3cac7ee05e1ded51540bbae82702cae1471433a826",
+          22
+        ],
+        [
+          0,
+          "ebc4ded350ede17e17b91a3cac7ee05e1ded51540bbae82702cae1471433a826",
+          22
+        ],
+        [
+          0,
+          "ebc4ded350ede17e17b91a3cac7ee05e1ded51540bbae82702cae1471433a826",
+          22
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 118,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "c4add903e05a3bad96b968b83319a4ec04ea1df25ffbbf59ff2bb00a5d1f1b7e",
+          21
+        ],
+        [
+          0,
+          "c4add903e05a3bad96b968b83319a4ec04ea1df25ffbbf59ff2bb00a5d1f1b7e",
+          21
+        ],
+        [
+          0,
+          "c4add903e05a3bad96b968b83319a4ec04ea1df25ffbbf59ff2bb00a5d1f1b7e",
+          21
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 119,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "a1238e5efbf10bf20db2de0220c68d6410e86067013f7617de1f22e4c0d491e2",
+          38
+        ],
+        [
+          0,
+          "a1238e5efbf10bf20db2de0220c68d6410e86067013f7617de1f22e4c0d491e2",
+          38
+        ],
+        [
+          0,
+          "a1238e5efbf10bf20db2de0220c68d6410e86067013f7617de1f22e4c0d491e2",
+          38
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 120,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "decb981733ca5253847aa6246c114ff06ff9219abc48d0305dd4cffb4a2724c4",
+          21
+        ],
+        [
+          0,
+          "decb981733ca5253847aa6246c114ff06ff9219abc48d0305dd4cffb4a2724c4",
+          21
+        ],
+        [
+          0,
+          "decb981733ca5253847aa6246c114ff06ff9219abc48d0305dd4cffb4a2724c4",
+          21
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 121,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "2ffd68f7b9e592075631c2d7d289003a71bd3d4b661aa60b9a4230c73c7e3de1",
+          32
+        ],
+        [
+          0,
+          "2ffd68f7b9e592075631c2d7d289003a71bd3d4b661aa60b9a4230c73c7e3de1",
+          32
+        ],
+        [
+          0,
+          "2ffd68f7b9e592075631c2d7d289003a71bd3d4b661aa60b9a4230c73c7e3de1",
+          32
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 122,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "0f808252d9a12d428e12905d6c66f0bdc2449091da0a57733fae6e6cf08d3134",
+          16
+        ],
+        [
+          0,
+          "0f808252d9a12d428e12905d6c66f0bdc2449091da0a57733fae6e6cf08d3134",
+          16
+        ],
+        [
+          0,
+          "0f808252d9a12d428e12905d6c66f0bdc2449091da0a57733fae6e6cf08d3134",
+          16
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 123,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "4f2023d4099f80a980a7056b452c0fcb1ca601a217c9ad73604253a8100d3c1b",
+          46
+        ],
+        [
+          0,
+          "4f2023d4099f80a980a7056b452c0fcb1ca601a217c9ad73604253a8100d3c1b",
+          46
+        ],
+        [
+          0,
+          "4f2023d4099f80a980a7056b452c0fcb1ca601a217c9ad73604253a8100d3c1b",
+          46
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 124,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "202e0fa7346d760fa5a62c89ef2a488404a77729799894bfea4e99ca013b4d42",
+          38
+        ],
+        [
+          0,
+          "202e0fa7346d760fa5a62c89ef2a488404a77729799894bfea4e99ca013b4d42",
+          38
+        ],
+        [
+          0,
+          "202e0fa7346d760fa5a62c89ef2a488404a77729799894bfea4e99ca013b4d42",
+          38
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 125,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "7dd162a3eea3c06ca9782f5c5d811fa88146fedb25a4abe28291b07f32e98e59",
+          25
+        ],
+        [
+          0,
+          "7dd162a3eea3c06ca9782f5c5d811fa88146fedb25a4abe28291b07f32e98e59",
+          25
+        ],
+        [
+          0,
+          "7dd162a3eea3c06ca9782f5c5d811fa88146fedb25a4abe28291b07f32e98e59",
+          25
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 126,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "abd3a20d53f65f33c049c52ae53ebb8fcbae70e1b1c141996dd9b0ee06714330",
+          16
+        ],
+        [
+          0,
+          "abd3a20d53f65f33c049c52ae53ebb8fcbae70e1b1c141996dd9b0ee06714330",
+          16
+        ],
+        [
+          0,
+          "abd3a20d53f65f33c049c52ae53ebb8fcbae70e1b1c141996dd9b0ee06714330",
+          16
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 127,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "9b740b738b9feae38d59b5c539c74cf7529085a297bbbeea1a7cd508710ea242",
+          32
+        ],
+        [
+          0,
+          "9b740b738b9feae38d59b5c539c74cf7529085a297bbbeea1a7cd508710ea242",
+          32
+        ],
+        [
+          0,
+          "9b740b738b9feae38d59b5c539c74cf7529085a297bbbeea1a7cd508710ea242",
+          32
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 128,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "a32024002782de9c27064cb282a58fb94f7b877fcb6b84948bbc47f6aa92966f",
+          12
+        ],
+        [
+          0,
+          "a32024002782de9c27064cb282a58fb94f7b877fcb6b84948bbc47f6aa92966f",
+          12
+        ],
+        [
+          0,
+          "a32024002782de9c27064cb282a58fb94f7b877fcb6b84948bbc47f6aa92966f",
+          12
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 129,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "dcea95e01b5c538c8c082c0028504385f76d250249b026d327523d785da71767",
+          18
+        ],
+        [
+          0,
+          "dcea95e01b5c538c8c082c0028504385f76d250249b026d327523d785da71767",
+          18
+        ],
+        [
+          0,
+          "dcea95e01b5c538c8c082c0028504385f76d250249b026d327523d785da71767",
+          18
+        ]
+      ],
+      "scenario_id": "classic_doorway_low",
+      "seed": 130,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "84b5050954e33d1df2a8b690e778be222d7deb79c1c75457e9d8cbc27488b515",
+          25
+        ],
+        [
+          0,
+          "84b5050954e33d1df2a8b690e778be222d7deb79c1c75457e9d8cbc27488b515",
+          25
+        ],
+        [
+          0,
+          "84b5050954e33d1df2a8b690e778be222d7deb79c1c75457e9d8cbc27488b515",
+          25
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 111,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "d4e353b4c1d8829ef2370a899dbe8803f362bcc3b0a273985c4b7dc6af0848da",
+          26
+        ],
+        [
+          0,
+          "d4e353b4c1d8829ef2370a899dbe8803f362bcc3b0a273985c4b7dc6af0848da",
+          26
+        ],
+        [
+          0,
+          "d4e353b4c1d8829ef2370a899dbe8803f362bcc3b0a273985c4b7dc6af0848da",
+          26
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 112,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "b3ce67e8ec2e7c37af31a925d8d4a93a72b3858ae0e2151be2868c60f105bbbe",
+          22
+        ],
+        [
+          0,
+          "b3ce67e8ec2e7c37af31a925d8d4a93a72b3858ae0e2151be2868c60f105bbbe",
+          22
+        ],
+        [
+          0,
+          "b3ce67e8ec2e7c37af31a925d8d4a93a72b3858ae0e2151be2868c60f105bbbe",
+          22
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 113,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "c4ca05d44b90506f98d43dcee3a903ceba1bd7db3cbb0b9f22141b42dd73a496",
+          23
+        ],
+        [
+          0,
+          "c4ca05d44b90506f98d43dcee3a903ceba1bd7db3cbb0b9f22141b42dd73a496",
+          23
+        ],
+        [
+          0,
+          "c4ca05d44b90506f98d43dcee3a903ceba1bd7db3cbb0b9f22141b42dd73a496",
+          23
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 114,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "da28091f8a5bdfa1f096d312b62a7e9800428761cae557aa8228c0bb5dd1a729",
+          35
+        ],
+        [
+          0,
+          "da28091f8a5bdfa1f096d312b62a7e9800428761cae557aa8228c0bb5dd1a729",
+          35
+        ],
+        [
+          0,
+          "da28091f8a5bdfa1f096d312b62a7e9800428761cae557aa8228c0bb5dd1a729",
+          35
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 115,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "2b46683b1527db1136358f322aca32191d20123106d531e7b7c3d44f2cdcd35a",
+          29
+        ],
+        [
+          0,
+          "2b46683b1527db1136358f322aca32191d20123106d531e7b7c3d44f2cdcd35a",
+          29
+        ],
+        [
+          0,
+          "2b46683b1527db1136358f322aca32191d20123106d531e7b7c3d44f2cdcd35a",
+          29
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 116,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "48555c303d27aa47f06343fdf5f58d93323489ee1d138cd7b12175006465fc80",
+          39
+        ],
+        [
+          0,
+          "48555c303d27aa47f06343fdf5f58d93323489ee1d138cd7b12175006465fc80",
+          39
+        ],
+        [
+          0,
+          "48555c303d27aa47f06343fdf5f58d93323489ee1d138cd7b12175006465fc80",
+          39
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 117,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "ebc4ded350ede17e17b91a3cac7ee05e1ded51540bbae82702cae1471433a826",
+          22
+        ],
+        [
+          0,
+          "ebc4ded350ede17e17b91a3cac7ee05e1ded51540bbae82702cae1471433a826",
+          22
+        ],
+        [
+          0,
+          "ebc4ded350ede17e17b91a3cac7ee05e1ded51540bbae82702cae1471433a826",
+          22
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 118,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "c4add903e05a3bad96b968b83319a4ec04ea1df25ffbbf59ff2bb00a5d1f1b7e",
+          21
+        ],
+        [
+          0,
+          "c4add903e05a3bad96b968b83319a4ec04ea1df25ffbbf59ff2bb00a5d1f1b7e",
+          21
+        ],
+        [
+          0,
+          "c4add903e05a3bad96b968b83319a4ec04ea1df25ffbbf59ff2bb00a5d1f1b7e",
+          21
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 119,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "a1238e5efbf10bf20db2de0220c68d6410e86067013f7617de1f22e4c0d491e2",
+          38
+        ],
+        [
+          0,
+          "a1238e5efbf10bf20db2de0220c68d6410e86067013f7617de1f22e4c0d491e2",
+          38
+        ],
+        [
+          0,
+          "a1238e5efbf10bf20db2de0220c68d6410e86067013f7617de1f22e4c0d491e2",
+          38
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 120,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "decb981733ca5253847aa6246c114ff06ff9219abc48d0305dd4cffb4a2724c4",
+          21
+        ],
+        [
+          0,
+          "decb981733ca5253847aa6246c114ff06ff9219abc48d0305dd4cffb4a2724c4",
+          21
+        ],
+        [
+          0,
+          "decb981733ca5253847aa6246c114ff06ff9219abc48d0305dd4cffb4a2724c4",
+          21
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 121,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "2ffd68f7b9e592075631c2d7d289003a71bd3d4b661aa60b9a4230c73c7e3de1",
+          32
+        ],
+        [
+          0,
+          "2ffd68f7b9e592075631c2d7d289003a71bd3d4b661aa60b9a4230c73c7e3de1",
+          32
+        ],
+        [
+          0,
+          "2ffd68f7b9e592075631c2d7d289003a71bd3d4b661aa60b9a4230c73c7e3de1",
+          32
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 122,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "0f808252d9a12d428e12905d6c66f0bdc2449091da0a57733fae6e6cf08d3134",
+          16
+        ],
+        [
+          0,
+          "0f808252d9a12d428e12905d6c66f0bdc2449091da0a57733fae6e6cf08d3134",
+          16
+        ],
+        [
+          0,
+          "0f808252d9a12d428e12905d6c66f0bdc2449091da0a57733fae6e6cf08d3134",
+          16
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 123,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "4f2023d4099f80a980a7056b452c0fcb1ca601a217c9ad73604253a8100d3c1b",
+          46
+        ],
+        [
+          0,
+          "4f2023d4099f80a980a7056b452c0fcb1ca601a217c9ad73604253a8100d3c1b",
+          46
+        ],
+        [
+          0,
+          "4f2023d4099f80a980a7056b452c0fcb1ca601a217c9ad73604253a8100d3c1b",
+          46
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 124,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "202e0fa7346d760fa5a62c89ef2a488404a77729799894bfea4e99ca013b4d42",
+          38
+        ],
+        [
+          0,
+          "202e0fa7346d760fa5a62c89ef2a488404a77729799894bfea4e99ca013b4d42",
+          38
+        ],
+        [
+          0,
+          "202e0fa7346d760fa5a62c89ef2a488404a77729799894bfea4e99ca013b4d42",
+          38
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 125,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "7dd162a3eea3c06ca9782f5c5d811fa88146fedb25a4abe28291b07f32e98e59",
+          25
+        ],
+        [
+          0,
+          "7dd162a3eea3c06ca9782f5c5d811fa88146fedb25a4abe28291b07f32e98e59",
+          25
+        ],
+        [
+          0,
+          "7dd162a3eea3c06ca9782f5c5d811fa88146fedb25a4abe28291b07f32e98e59",
+          25
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 126,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "abd3a20d53f65f33c049c52ae53ebb8fcbae70e1b1c141996dd9b0ee06714330",
+          16
+        ],
+        [
+          0,
+          "abd3a20d53f65f33c049c52ae53ebb8fcbae70e1b1c141996dd9b0ee06714330",
+          16
+        ],
+        [
+          0,
+          "abd3a20d53f65f33c049c52ae53ebb8fcbae70e1b1c141996dd9b0ee06714330",
+          16
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 127,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "9b740b738b9feae38d59b5c539c74cf7529085a297bbbeea1a7cd508710ea242",
+          32
+        ],
+        [
+          0,
+          "9b740b738b9feae38d59b5c539c74cf7529085a297bbbeea1a7cd508710ea242",
+          32
+        ],
+        [
+          0,
+          "9b740b738b9feae38d59b5c539c74cf7529085a297bbbeea1a7cd508710ea242",
+          32
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 128,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "a32024002782de9c27064cb282a58fb94f7b877fcb6b84948bbc47f6aa92966f",
+          12
+        ],
+        [
+          0,
+          "a32024002782de9c27064cb282a58fb94f7b877fcb6b84948bbc47f6aa92966f",
+          12
+        ],
+        [
+          0,
+          "a32024002782de9c27064cb282a58fb94f7b877fcb6b84948bbc47f6aa92966f",
+          12
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 129,
+      "unrunnable": false
+    },
+    {
+      "bitwise_identical": true,
+      "first_divergence": null,
+      "planner": "ppo",
+      "repeat_fingerprints": [
+        [
+          0,
+          "dcea95e01b5c538c8c082c0028504385f76d250249b026d327523d785da71767",
+          18
+        ],
+        [
+          0,
+          "dcea95e01b5c538c8c082c0028504385f76d250249b026d327523d785da71767",
+          18
+        ],
+        [
+          0,
+          "dcea95e01b5c538c8c082c0028504385f76d250249b026d327523d785da71767",
+          18
+        ]
+      ],
+      "scenario_id": "classic_doorway_medium",
+      "seed": 130,
+      "unrunnable": false
+    }
+  ]
+}

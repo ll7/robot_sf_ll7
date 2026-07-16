@@ -11,7 +11,8 @@ Every requested ``(scenario, planner, seed)`` target needs exactly three
 repeats.  A target is bitwise-identical only when its binary outcome and
 SHA-256 trajectory digest agree for all repeats.  A differing target must name
 its first divergence.  Two verified host reports can then be compared only when
-their pinned NumPy and Numba versions agree.
+their execution provenance agrees; NumPy and Numba mismatches remain separately
+visible for the predeclared near-miss comparison.
 """
 
 from __future__ import annotations
@@ -44,6 +45,13 @@ CROSS_HOST_SCHEMA_VERSION = "scenario_exact_repeat_cross_host.v1"
 RESOLVED_DEFINITIONS_SCHEMA_VERSION = "scenario_exact_repeat_resolved_definitions.v1"
 DEFAULT_REPEATS = 3
 SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
+_CROSS_HOST_PROVENANCE_FIELDS = (
+    "numpy_version",
+    "numba_version",
+    "python_version",
+    "git_commit",
+    "lockfile_sha256",
+)
 
 # Explicit per-cell disposition for planners the exact-repeat ``execute`` path
 # cannot construct on current main (for example, a planner registered only in a
@@ -66,10 +74,10 @@ def _record_is_degraded(record: Any) -> bool:
     """Return True when an episode record is a degraded fallback rather than native output.
 
     A target is degraded when the planner step fell back to a zero-velocity action
-    inside the isolation worker. Two signals are checked: the planner
-    ``algorithm_metadata.status`` prefix and the outcome ``timeout_event`` that the
-    runner sets when every step fell back. Either one is sufficient evidence that the
-    repeats do not represent native planner behavior.
+    inside the isolation worker. The runner reports that through the planner status
+    and the explicit ``policy_step_timeout.fallback_actions`` counter. Episode-level
+    ``outcome.timeout_event`` is deliberately not used: it also represents a native
+    episode reaching its configured horizon and is not planner-degradation evidence.
     """
     if not isinstance(record, Mapping):
         return False
@@ -78,9 +86,15 @@ def _record_is_degraded(record: Any) -> bool:
         status = metadata.get("status")
         if isinstance(status, str) and status.startswith(_DEGRADED_STATUS_PREFIXES):
             return True
-    outcome = record.get("outcome")
-    if isinstance(outcome, Mapping) and outcome.get("timeout_event") is True:
-        return True
+        timeout_metadata = metadata.get("policy_step_timeout")
+        if isinstance(timeout_metadata, Mapping):
+            fallback_actions = timeout_metadata.get("fallback_actions")
+            if not isinstance(fallback_actions, bool):
+                try:
+                    if float(fallback_actions) > 0:
+                        return True
+                except (TypeError, ValueError):
+                    pass
     return False
 
 
@@ -683,8 +697,9 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     """Build the fail-closed two-host exact-repeat comparison matrix.
 
     Returns:
-        A matrix whose cells are identical only with matching runtime versions
-        and matching repeat fingerprints.
+        A matrix whose cells are identical only with matching execution provenance
+        and matching repeat fingerprints. Provenance drift is returned explicitly
+        so it cannot be mistaken for a native determinism result.
     """
     targets, _ = _check_manifest(manifest)
     for report in (first, second):
@@ -701,6 +716,12 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     version_match = all(
         first_env.get(key) == second_env.get(key) for key in ("numpy_version", "numba_version")
     )
+    provenance_mismatches = {
+        key: {"first": first_env.get(key), "second": second_env.get(key)}
+        for key in _CROSS_HOST_PROVENANCE_FIELDS
+        if first_env.get(key) != second_env.get(key)
+    }
+    provenance_match = not provenance_mismatches
 
     def index(report: Mapping[str, Any]) -> dict[tuple[str, str, int], Mapping[str, Any]]:
         rows = report.get("targets")
@@ -750,7 +771,7 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
             )
             continue
         target_matches = cells[cell_key]
-        identical = version_match and all(target_matches)
+        identical = provenance_match and all(target_matches)
         matrix.append(
             {
                 "scenario_id": scenario_id,
@@ -769,13 +790,15 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
         "manifest_sha256": manifest["manifest_sha256"],
         "hosts": [first_machine, second_machine],
         "pinned_runtime_versions_match": version_match,
+        "provenance_match": provenance_match,
+        "provenance_mismatches": provenance_mismatches,
         "matrix": matrix,
         "summary": {
             "n_cells": len(matrix),
             "n_runnable_cells": len(runnable_rows),
             "n_unrunnable_cells": len(unrunnable_rows),
             "n_mixed_cells": len(mixed_rows),
-            "all_cells_bitwise_identical": version_match
+            "all_cells_bitwise_identical": provenance_match
             and bool(runnable_rows)
             and all(row["bitwise_identical"] for row in runnable_rows),
         },

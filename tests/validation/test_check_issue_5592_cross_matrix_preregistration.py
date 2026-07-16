@@ -36,6 +36,15 @@ def test_packet_rejects_transient_routing_state() -> None:
         checker.validate_packet(packet)
 
 
+def test_packet_rejects_malformed_required_files_type() -> None:
+    """Malformed artifact file collections fail as packet errors, not TypeError."""
+    packet = checker.load_packet(PACKET)
+    packet["artifact_contract"]["required_files"] = 42
+
+    with pytest.raises(checker.PacketError, match="complete integration artifact set"):
+        checker.validate_packet(packet)
+
+
 def test_packet_rejects_candidate_metadata_drift() -> None:
     """The selected-row table cannot silently drift from the loaded scenarios."""
     packet = checker.load_packet(PACKET)

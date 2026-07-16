@@ -58,7 +58,9 @@ _LONG_EPISODE_THRESHOLD_S = 25.0
 _STATIONARY_MARKER_DISPLACEMENT_M = 0.5
 _ZONE_LABEL_SUPPRESSION_RADIUS_M = 2.0
 _LABEL_AXES_MARGIN_PX = 4.0
-_LABEL_COLLISION_PADDING_PX = 1.5
+# Strictly above the figure-QA text-overlap tolerance (2.0 px): two labels that the
+# placement pass considers clear must also be clear for the linter.
+_LABEL_COLLISION_PADDING_PX = 2.5
 _LABEL_LEADER_THRESHOLD_PX = 18.0
 _TELEPORT_STEP_M = (
     3.0  # a walking ped moves <0.3 m/0.1s step; respawns jump ~25 m -> break the line
@@ -1170,16 +1172,18 @@ def _select_label_position(
         tuple[float, float, Bbox]: Chosen (shift_x, shift_y) and the shifted bbox.
     """
 
-    def _cost(candidate: tuple[float, float, Bbox]) -> tuple[int, int, int, float, float]:
+    def _cost(candidate: tuple[float, float, Bbox]) -> tuple[int, int, int, int, float, float]:
         shift_x, shift_y, bbox = candidate
         label_collisions = sum(_bboxes_collide(bbox, placed) for placed in obstacles.placed_bboxes)
         text_overlap = sum(_bbox_overlap_area(bbox, placed) for placed in obstacles.placed_bboxes)
+        marker_hits = 0
         line_hits = 0
         if avoid_obstacles:
-            # Markers draw at a higher zorder than annotation text, so a marker
-            # inside the bbox HIDES glyphs -- weigh it like a label collision.
+            # Markers draw above data lines and can sit under a label, so they get
+            # their own cost tier: worse than a line crossing, but never worth
+            # trading for a label-on-label overlap (the one hard defect class).
             if _bbox_contains_markers(bbox, obstacles.marker_obstacles, _LABEL_MARKER_PADDING_PX):
-                label_collisions += 1
+                marker_hits = 1
             line_hits = _count_bbox_line_hits(
                 bbox, obstacles.line_obstacles, obstacles.leader_segments
             )
@@ -1191,6 +1195,7 @@ def _select_label_position(
             )
         return (
             label_collisions,
+            marker_hits,
             leader_crossings,
             line_hits,
             text_overlap,
@@ -1211,7 +1216,7 @@ def _select_label_position(
         cost = _cost(candidate)
         if cost < best_cost:
             best_candidate, best_cost = candidate, cost
-        if cost[0] == 0 and cost[1] == 0 and cost[2] == 0:
+        if cost[0] == 0 and cost[1] == 0 and cost[2] == 0 and cost[3] == 0:
             return candidate
     return best_candidate
 

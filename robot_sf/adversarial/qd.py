@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass, field
+from itertools import count
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -42,11 +43,8 @@ from robot_sf.adversarial.samplers import (
     CoordinateRefinementSampler,
     RandomCandidateSampler,
 )
-from robot_sf.adversarial.search import production_candidate_evaluator
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-
     from robot_sf.adversarial.certification import CertificationStatus
 
 QD_ARCHIVE_SCHEMA_VERSION = "adversarial_qd_archive.v1"
@@ -485,13 +483,16 @@ def production_qd_evaluator(
         candidate_evaluator: Optional injected four-argument production evaluator.
         certifier: Optional injected production certifier.
     """
+    search_config.validate()
+    from robot_sf.adversarial.search import production_candidate_evaluator  # noqa: PLC0415
+
     production_step = production_candidate_evaluator(
         evaluator=candidate_evaluator, certifier=certifier
     )
-    counter: Iterator[int] = iter(range(search_config.budget))
+    counter = count()
 
     def _evaluate(qd_config: QDSearchConfig, candidate: CandidateSpec) -> CandidateEvaluation:
-        index = next(counter, search_config.budget)
+        index = next(counter)
         return production_step(search_config, candidate, index)
 
     return _evaluate

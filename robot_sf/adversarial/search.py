@@ -320,13 +320,18 @@ def production_candidate_evaluator(
         if not candidate_allowed(
             certification_status, require_certification=config.require_certification
         ):
-            return _invalid_evaluation(
+            evaluation = _invalid_evaluation(
                 candidate=candidate,
                 certification_status=certification_status,
                 scenario_yaml_path=scenario_yaml_path,
                 bundle_path=candidate_dir,
                 reason=certification_status.reason,
             )
+            write_json(
+                candidate_dir / "failure_attribution.json",
+                evaluation.failure_attribution.to_json(),
+            )
+            return evaluation
 
         active_evaluator = evaluator or _default_evaluator
         objective = get_objective(config.objective)

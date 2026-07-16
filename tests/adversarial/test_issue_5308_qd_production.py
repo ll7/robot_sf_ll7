@@ -17,7 +17,7 @@ from pathlib import Path
 import yaml
 
 from robot_sf.adversarial.attribution import attribution_from_episode_record
-from robot_sf.adversarial.certification import passed_status
+from robot_sf.adversarial.certification import failed_status, passed_status
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
     CandidateSpec,
@@ -85,7 +85,7 @@ def _record(min_distance: float, critical_time: float, failure: str = "collision
     }
 
 
-def _production_evaluator(tmp_root: Path) -> object:
+def _production_evaluator() -> object:
     """Injected four-argument production evaluator that writes a real bundle + record.
 
     Mirrors the contract of ``search._default_evaluator``: write the scenario-derived
@@ -178,7 +178,7 @@ def test_production_evaluator_populates_archive_with_real_bundles(tmp_path: Path
     )
     evaluator = production_qd_evaluator(
         search_config,
-        candidate_evaluator=_production_evaluator(tmp_path),
+        candidate_evaluator=_production_evaluator(),
         certifier=_passing_certifier(),
     )
 
@@ -202,7 +202,7 @@ def test_production_evaluator_writes_archive_artifact(tmp_path: Path) -> None:
     )
     evaluator = production_qd_evaluator(
         search_config,
-        candidate_evaluator=_production_evaluator(tmp_path),
+        candidate_evaluator=_production_evaluator(),
         certifier=_passing_certifier(),
     )
     result = run_map_elites(qd_config, evaluator=evaluator)
@@ -228,7 +228,7 @@ def test_production_evaluator_is_reproducible(tmp_path: Path) -> None:
         )
         evaluator = production_qd_evaluator(
             search_config,
-            candidate_evaluator=_production_evaluator(tmp_path),
+            candidate_evaluator=_production_evaluator(),
             certifier=_passing_certifier(),
         )
         return run_map_elites(qd_config, evaluator=evaluator).to_json()
@@ -273,7 +273,7 @@ def test_production_evaluator_handles_invalid_candidate(tmp_path: Path) -> None:
         output_dir=tmp_path / "out",
     )
     step = production_candidate_evaluator(
-        evaluator=_production_evaluator(tmp_path),
+        evaluator=_production_evaluator(),
         certifier=_passing_certifier(),
     )
     out_of_range = CandidateSpec(
@@ -288,3 +288,81 @@ def test_production_evaluator_handles_invalid_candidate(tmp_path: Path) -> None:
     assert evaluation.error is not None
     assert evaluation.certification_status.status == "failed"
     assert evaluation.episode_record_path is None
+
+
+def test_production_qd_evaluator_validates_config_before_first_candidate(
+    tmp_path: Path,
+) -> None:
+    """Invalid production inputs fail before the QD evaluation loop starts."""
+    qd_config = _qd_config(
+        GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4),
+        budget=1,
+    )
+    search_config = qd_config.to_search_config(
+        policy="social_force",
+        scenario_template=tmp_path / "missing-template.yaml",
+        output_dir=tmp_path / "out",
+    )
+
+    try:
+        production_qd_evaluator(search_config)
+    except FileNotFoundError as exc:
+        assert "missing-template.yaml" in str(exc)
+    else:
+        raise AssertionError("production_qd_evaluator accepted a missing scenario template")
+
+
+def test_production_qd_evaluator_never_reuses_candidate_directory(tmp_path: Path) -> None:
+    """Adapter reuse beyond the nominal budget keeps bundle indices monotonic."""
+    qd_config = _qd_config(
+        GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4),
+        budget=1,
+    )
+    template = _write_template(tmp_path / "template.yaml")
+    search_config = qd_config.to_search_config(
+        policy="social_force",
+        scenario_template=template,
+        output_dir=tmp_path / "out",
+    )
+    evaluator = production_qd_evaluator(
+        search_config,
+        candidate_evaluator=_production_evaluator(),
+        certifier=_passing_certifier(),
+    )
+
+    evaluator(qd_config, _candidate(0))
+    evaluator(qd_config, _candidate(1))
+
+    assert (search_config.output_dir / "candidate_0000").is_dir()
+    assert (search_config.output_dir / "candidate_0001").is_dir()
+
+
+def test_production_candidate_rejection_writes_failure_attribution(
+    tmp_path: Path,
+) -> None:
+    """Certification rejection preserves canonical failure-attribution provenance."""
+    qd_config = _qd_config(
+        GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4),
+        budget=1,
+    )
+    template = _write_template(tmp_path / "template.yaml")
+    search_config = qd_config.to_search_config(
+        policy="social_force",
+        scenario_template=template,
+        output_dir=tmp_path / "out",
+    )
+
+    def _reject(candidate, scenario_yaml_path, require_certification):
+        return failed_status("fixture certification rejection")
+
+    evaluator = production_candidate_evaluator(
+        evaluator=_production_evaluator(),
+        certifier=_reject,
+    )
+    evaluation = evaluator(search_config, _candidate(0), 0)
+    attribution_path = search_config.output_dir / "candidate_0000" / "failure_attribution.json"
+
+    assert evaluation.failure_attribution is not None
+    assert json.loads(attribution_path.read_text(encoding="utf-8")) == (
+        evaluation.failure_attribution.to_json()
+    )

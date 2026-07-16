@@ -1,0 +1,78 @@
+{
+  "data_collection_only": true,
+  "dataset_id": "expert_traj_v1",
+  "dt": 0.1,
+  "expected_head": "9d65072ecd9d04e2f664a4299665dbff718401d9",
+  "horizon": 500,
+  "launch_packet_validation": {
+    "artifact_paths": {
+      "dry_run_fixture": "docs/context/evidence/issue_1397_oracle_imitation_launch_packet_2026-05-24/dry_run_dataset_stub.json",
+      "future_dataset_manifest_uri": "wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_manifest:pending",
+      "future_dataset_npz_uri": "wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_npz:pending"
+    },
+    "collection_roots": {
+      "dataset_output_root": "wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_raw_traces:pending",
+      "log_root": "wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_logs:pending",
+      "manifest_destination": "wandb-artifact://robot-sf/oracle-imitation/issue_1397_oracle_imitation_v1_manifest:pending"
+    },
+    "dataset_id": "issue_1397_oracle_imitation_v1",
+    "episode_count": 12,
+    "scenario_count": 6,
+    "schema_version": "oracle-imitation-launch-packet.v1",
+    "seeds_by_split": {
+      "evaluation": [
+        111,
+        112,
+        113
+      ],
+      "train": [
+        201,
+        202,
+        203,
+        204,
+        205,
+        206
+      ],
+      "validation": [
+        101,
+        102,
+        103
+      ]
+    },
+    "source_candidate": "hybrid_rule_v3_static_margin0_waypoint2",
+    "status": "valid",
+    "trace_uri_registry": null,
+    "training_ready": false
+  },
+  "scenario_source": "configs/policy_search/nominal_sanity_matrix.yaml",
+  "schema_version": "issue1496.oracle_trace_collection_plan.v1",
+  "source_candidate": "hybrid_rule_v3_static_margin0_waypoint2",
+  "source_dataset_id": "issue_1397_oracle_imitation_v1",
+  "split_counts": {
+    "evaluation": 3,
+    "train": 6,
+    "validation": 3
+  },
+  "split_episode_ids": {
+    "evaluation": [
+      "evaluation__planner_sanity_simple__seed111",
+      "evaluation__classic_crossing_low__seed112",
+      "evaluation__classic_doorway_low__seed113"
+    ],
+    "train": [
+      "train__planner_sanity_simple__seed201",
+      "train__classic_head_on_corridor_low__seed202",
+      "train__classic_crossing_low__seed203",
+      "train__classic_doorway_low__seed204",
+      "train__classic_overtaking_low__seed205",
+      "train__francis2023_following_human__seed206"
+    ],
+    "validation": [
+      "validation__planner_sanity_simple__seed101",
+      "validation__classic_crossing_low__seed102",
+      "validation__classic_doorway_low__seed103"
+    ]
+  },
+  "total_episodes": 12,
+  "training_allowed": false
+}

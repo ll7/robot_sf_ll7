@@ -27,6 +27,10 @@ This directory hosts configuration files used by the expert-policy, trajectory c
   The strict downstream gate intentionally fails closed until every split has a concrete durable
   raw-trace URI:
   `uv run python scripts/validation/validate_oracle_trace_uri_registry.py --config configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1470.yaml --json --require-training-ready`.
+* `oracle_trace_uri_registry_issue_1496_collection.yaml` – job 13520 BC-compatible trace and NPZ
+  pointer registry. It records the private `expert_traj_v1.npz` checksum and all three split
+  pointers without committing data. Metadata validation is public-safe; strict
+  `--require-training-ready` validation also needs the authorized `--private-artifact-root`.
 * Additional files describe scenario coverage manifests referenced by trajectory collection commands.
 
 ## Usage Notes

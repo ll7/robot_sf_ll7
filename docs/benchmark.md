@@ -315,3 +315,42 @@ Initial recipes:
 
 Recipe outputs are derived analysis artifacts. Use them as inputs to table or figure generation
 only together with the source Parquet export metadata and the original JSONL provenance.
+
+## Native-Command Execution Contract
+
+The benchmark runner supports a first-class `native_command` execution arm (Issue #5887) to run external planner binaries as subprocesses. This arm bypasses python-level adapters, providing direct integration for compiled planner implementations (such as the SIPP four-geometry planner).
+
+### Execution Modes
+
+The runner supports two execution modes configured in the algorithm configuration payload:
+
+- **Per-Episode Process (`per_episode`)**: Spawns a fresh process for each simulated episode.
+- **Persistent Process (`persistent`)**: Spawns a single process at the start of the episode and keeps it alive, communicating via stdin/stdout request-response lines.
+
+### Subprocess Contract
+
+- **Arguments & Environment**: The process is started with a declared `argv` list and an `env` dictionary.
+- **Template Substitution**: Template tokens in `argv` and `env` are dynamically replaced at runtime per episode:
+  - `{scenario_id}`: Resolved scenario name or ID.
+  - `{seed}`: Active simulation seed.
+  - `{horizon}`: Maximum timesteps for the episode.
+  - `{dt}`: Simulation timestep duration in seconds.
+- **I/O Protocol**: At each step, the runner writes a single-line JSON payload to stdin, terminated by a newline:
+  ```json
+  {"robot": {"position": [x, y], "heading": [h]}, "goal": {"current": [gx, gy]}, "pedestrians": [...] }
+  ```
+  The process must respond on stdout with a single-line JSON payload, terminated by a newline:
+  ```json
+  {"linear_velocity": v, "angular_velocity": w}
+  ```
+- **Timeouts & Exit Codes**: Each step is bounded by a configurable `step_timeout_sec` (defaults to 30.0s). If a process times out, exits with a non-zero code, or writes invalid JSON, the runner falls back to zero velocity `(0.0, 0.0)` for that step and increments the diagnostic fallback counters.
+
+### Diagnostics & Metrics
+
+Every native-command episode record includes additive fields:
+
+- `metrics.deadlock`: A boolean flag indicating whether the robot stalled (failed to make goal progress over a sliding step window).
+- `metrics.deadlock_stall`: A detailed diagnostic block detailing the parameters and statistics of the deadlock check.
+- `planner_diagnostics`: High-resolution stats detailing subprocess runtimes (`planner_step_runtime_seconds`), exit codes (`exit_codes` / `last_exit_code`), timeouts (`runtime_bound_exits`), and fallbacks (`fallback_count`).
+- `algorithm_metadata.native_command`: Subprocess launch configuration and binary content hash provenance.
+

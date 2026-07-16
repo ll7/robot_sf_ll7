@@ -69,6 +69,9 @@ from robot_sf.benchmark.map_runner_metrics import (
 from robot_sf.benchmark.map_runner_metrics import (
     normalize_pedestrian_impact_controls as _normalize_pedestrian_impact_controls,
 )
+from robot_sf.benchmark.map_runner_native_command import (
+    native_command_metadata_for_record,
+)
 from robot_sf.benchmark.map_runner_observations import normalize_xy_rows as _normalize_xy_rows
 from robot_sf.benchmark.map_runner_policy_metadata import (
     finalize_feasibility_metadata as _finalize_feasibility_metadata,
@@ -1574,12 +1577,25 @@ def _prepare_policy_and_observation_contract(  # noqa: PLR0913
         observation_mode=active_observation_mode,
         observation_level=observation_level,
     )
+    extra_kwargs = {}
+    if algo.lower().strip() == "native_command":
+        sim_cfg = getattr(config, "sim_config", None)
+        extra_kwargs = {
+            "scenario_id": scenario.get("name", "unknown"),
+            "seed": int(getattr(sim_cfg, "seed", 0) or 0),
+            "horizon": int(getattr(sim_cfg, "max_episode_steps", 120) or 120),
+            "dt": float(getattr(sim_cfg, "time_per_step_in_secs", 0.1) or 0.1),
+            "observation_mode": active_observation_mode,
+            "observation_level": resolved_observation_level,
+        }
+
     policy_fn, algo_meta = policy_builder(
         algo,
         policy_cfg,
         robot_kinematics=robot_kinematics,
         robot_command_mode=robot_command_mode,
         adapter_impact_eval=adapter_impact_eval,
+        **extra_kwargs,
     )
     algo_meta = enrich_algorithm_metadata(
         algo=algo,
@@ -2600,6 +2616,13 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
     )
     attach_pedestrian_model_fields(record, pedestrian_model_provenance)
     record.update(static_deadlock_fields)
+
+    # Extract native-command deadlock + diagnostics fields from algo metadata
+    is_native_nc, deadlock_field, planner_diag = native_command_metadata_for_record(algo_meta)
+    if is_native_nc:
+        record["planner_diagnostics"] = planner_diag
+        record["deadlock"] = deadlock_field
+
     # Write-time episode-row instrumentation for issue #4242 AC #2: emit native
     # failure-mechanism (fail-closed unknown) and interaction-exposure (computed
     # from this episode's trajectory) schema blocks so new campaigns carry them.

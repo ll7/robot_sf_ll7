@@ -1975,6 +1975,105 @@ def failure_to_progress(
     return float(failure_count_val)
 
 
+def compute_deadlock_stall(
+    data: EpisodeData,
+    *,
+    window_steps: int = 15,
+    progress_eps_m: float = 0.05,
+) -> dict[str, Any]:
+    """Detect per-episode deadlock/stall as no-progress-over-window.
+
+    A stall window is a run of ``window_steps`` consecutive trajectory samples in
+    which the robot's distance to goal does not decrease by more than
+    ``progress_eps_m``. A deadlock is recorded when at least one such window
+    occurs while the episode still had steps remaining (the robot neither reached
+    the goal nor collided, yet made no measurable progress). This is distinct
+    from ``timeout``/``max_steps`` (which only triggers at the horizon) and from
+    the centroid ``failure_to_progress`` metric (which slides a fixed window over
+    distance only).
+
+    Args:
+        data: Episode trajectory data.
+        window_steps: Consecutive-sample window length over which to test progress.
+        progress_eps_m: Minimum required distance-to-goal reduction per window.
+
+    Returns:
+        Mapping with ``deadlock`` (bool) plus typed diagnostics: ``window_steps``,
+        ``progress_eps_m``, ``stall_window_count`` (number of detected stall
+        windows), and ``max_no_progress_run`` (longest consecutive stalled-sample
+        run). All diagnostics are finite and JSON-safe.
+    """
+    if not math.isfinite(data.dt) or data.dt <= 0.0:
+        return {
+            "deadlock": False,
+            "window_steps": int(window_steps),
+            "progress_eps_m": float(progress_eps_m),
+            "stall_window_count": 0,
+            "max_no_progress_run": 0,
+        }
+    n_steps = int(data.robot_pos.shape[0]) if data.robot_pos.ndim >= 2 else 0
+    reached = data.reached_goal_step is not None
+    if n_steps < 2:
+        return {
+            "deadlock": False,
+            "window_steps": int(window_steps),
+            "progress_eps_m": float(progress_eps_m),
+            "stall_window_count": 0,
+            "max_no_progress_run": 0,
+        }
+
+    dist_to_goal = np.linalg.norm(data.robot_pos - np.asarray(data.goal, dtype=float), axis=1)
+    win = int(window_steps) if int(window_steps) > 1 else 2
+
+    # Per-sample stalled flag: distance-to-goal did not improve beyond eps vs the
+    # previous sample. The final sample cannot start a stall window because the
+    # episode ended there (no following window), so progress is judged on windows
+    # fully inside the trajectory.
+    stalled_per_sample = np.zeros(n_steps, dtype=bool)
+    for t in range(1, n_steps):
+        if (dist_to_goal[t - 1] - dist_to_goal[t]) < float(progress_eps_m):
+            stalled_per_sample[t] = True
+
+    # Count stall windows fully inside the trajectory (cannot end at last sample).
+    stall_window_count = 0
+    for start in range(0, max(0, n_steps - win + 1)):
+        end = start + win
+        if end > n_steps:
+            break
+        if bool(np.all(stalled_per_sample[start:end])):
+            stall_window_count += 1
+
+    # Longest consecutive run of stalled samples (for diagnostics).
+    max_run = 0
+    run = 0
+    for flag in stalled_per_sample:
+        if flag:
+            run += 1
+            max_run = max(max_run, run)
+        else:
+            run = 0
+
+    # Deadlock/stall requires a full no-progress window while steps remained.
+    # The final step is excluded from window starts, so a genuine internal stall
+    # (not merely ending at the goal/horizon) is what triggers this.
+    deadlock = stall_window_count > 0 and not reached
+
+    return {
+        "deadlock": bool(deadlock),
+        "schema_version": "deadlock-stall.v1",
+        "window_steps": int(win),
+        "progress_eps_m": float(progress_eps_m),
+        "stall_window_count": int(stall_window_count),
+        "max_no_progress_run": int(max_run),
+        "status": "ok",
+        "interpretation": (
+            "Per-episode no-progress-over-window stall detector, parameterized and "
+            "distinct from timeout/max_steps; additive diagnostic, not a benchmark "
+            "superiority or safety claim."
+        ),
+    }
+
+
 def stalled_time(data: EpisodeData, *, velocity_threshold: float = 0.05) -> float:
     """Total time robot speed is below threshold.
 
@@ -2985,6 +3084,7 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     values["clearing_distance_avg"] = clearing_distance_avg(data)
     values["failure_to_progress"] = failure_to_progress(data)
     values["stalled_time"] = stalled_time(data)
+    _attach_deadlock_stall_block(values, data)
     if experimental_ped_impact:
         values.update(
             experimental_ped_impact_metrics(
@@ -3298,6 +3398,22 @@ def _attach_group_space_block(metrics: dict[str, Any]) -> None:
             "validated human-comfort or safety evidence."
         ),
     }
+
+
+def _attach_deadlock_stall_block(metrics: dict[str, Any], data: EpisodeData) -> None:
+    """Attach a typed deadlock/stall block and the flat ``deadlock`` boolean.
+
+    The flat ``deadlock`` boolean is consumed directly by the issue #5416
+    analyzer probe (``metrics.deadlock`` must be present and boolean). The typed
+    block carries the parameterized window semantics so the detector is
+    reproducible and distinct from ``timeout``/``max_steps``.
+    """
+    block = compute_deadlock_stall(data)
+    metrics["deadlock"] = bool(block["deadlock"])
+    # Filter out deadlock key so deadlock_stall block matches schema properties perfectly
+    block_copy = dict(block)
+    block_copy.pop("deadlock", None)
+    metrics["deadlock_stall"] = block_copy
 
 
 def _social_mini_game_metric_row(

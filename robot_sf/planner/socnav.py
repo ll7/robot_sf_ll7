@@ -3272,7 +3272,6 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 state[:count, 8] = goal_dist
             if schema_metadata["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
                 extractor = self._obstacle_feature_extractor
-                extractor.precompute(self._bound_obstacle_lines)
                 obstacle_lines = obstacle_lines_from_observation(observation)
                 if not obstacle_lines:
                     obstacle_lines = self._bound_obstacle_lines

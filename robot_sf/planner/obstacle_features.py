@@ -108,6 +108,7 @@ class LocalObstacleFeatureExtractor:
         # Precomputed, static line geometry built once via :meth:`precompute`.
         # Stored outside the frozen fields so the extractor stays hashable/comparable.
         object.__setattr__(self, "_precomputed_lines_key", None)
+        object.__setattr__(self, "_precomputed_lines_raw", None)
         object.__setattr__(self, "_precomputed_starts", None)
         object.__setattr__(self, "_precomputed_segments", None)
         object.__setattr__(self, "_precomputed_length_sq", None)
@@ -122,6 +123,14 @@ class LocalObstacleFeatureExtractor:
         skipped. Calling with a different line set rebuilds the cache.
         """
         lines = list(obstacle_lines)
+        cached_raw = self._precomputed_lines_raw
+        try:
+            if cached_raw is not None and lines == cached_raw:
+                return
+        except ValueError:
+            # Non-canonical array-backed endpoints can produce an array-valued
+            # equality result. Fall back to the immutable numeric key below.
+            pass
         key = (
             len(lines),
             tuple(
@@ -133,9 +142,11 @@ class LocalObstacleFeatureExtractor:
             ),
         )
         if key == self._precomputed_lines_key:
+            object.__setattr__(self, "_precomputed_lines_raw", lines.copy())
             return
         if not lines:
             object.__setattr__(self, "_precomputed_lines_key", key)
+            object.__setattr__(self, "_precomputed_lines_raw", [])
             object.__setattr__(self, "_precomputed_starts", None)
             object.__setattr__(self, "_precomputed_segments", None)
             object.__setattr__(self, "_precomputed_length_sq", None)
@@ -150,6 +161,7 @@ class LocalObstacleFeatureExtractor:
         length_sq = np.einsum("ij,ij->i", segments, segments)
         valid_indices = np.where(length_sq > 0.0)[0] if lines else np.empty((0,), dtype=int)
         object.__setattr__(self, "_precomputed_lines_key", key)
+        object.__setattr__(self, "_precomputed_lines_raw", lines.copy())
         object.__setattr__(self, "_precomputed_starts", starts)
         object.__setattr__(self, "_precomputed_segments", segments)
         object.__setattr__(self, "_precomputed_length_sq", length_sq)

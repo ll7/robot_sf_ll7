@@ -413,20 +413,26 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
         """
         if cache_key is None:
             return None
-        # Grid content + shape signature (cheap relative to A*/BFS rebuild).
-        grid_shape = tuple(grid.shape)
-        grid_sig = (grid_shape, hash(grid.tobytes()) if grid.size else 0)
+        # Keep the exact bytes rather than a lossy hash: a collision must never
+        # reuse a route for different occupancy semantics. The cache retains only
+        # the latest key, so this costs one grid-sized byte string rather than an
+        # unbounded content cache.
+        grid_sig = (grid.dtype.str, tuple(grid.shape), grid.tobytes(order="C"))
         meta_sig = (
             tuple(
                 float(value)
-                for value in np.asarray(meta.get("origin", [0.0, 0.0]), dtype=float)[:2]
+                for value in self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)[:2]
             ),
             float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0]),
+            tuple(
+                float(value) for value in self._as_1d_float(meta.get("size", [0.0, 0.0]), pad=2)[:2]
+            ),
             bool(self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5),
             tuple(
                 float(value)
-                for value in np.asarray(meta.get("robot_pose", [0.0, 0.0, 0.0]), dtype=float)[:3]
+                for value in self._as_1d_float(meta.get("robot_pose", [0.0, 0.0, 0.0]), pad=3)[:3]
             ),
+            tuple(float(value) for value in self._as_1d_float(meta.get("channel_indices", []))),
         )
         return (
             grid_sig,

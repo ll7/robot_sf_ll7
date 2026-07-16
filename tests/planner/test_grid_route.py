@@ -355,6 +355,37 @@ def test_grid_route_reuses_cached_path_across_distinct_observations() -> None:
     assert planner.plan_calls == 2
 
 
+def test_grid_route_cache_key_covers_exact_grid_and_consumed_metadata() -> None:
+    """Cache keys must invalidate for every input that changes route semantics."""
+    planner = GridRoutePlannerAdapter()
+    observation = _observation()
+    grid, meta = planner._extract_grid_payload(observation) or (None, None)
+    assert grid is not None
+    assert meta is not None
+
+    kwargs = {
+        "cache_key": object(),
+        "robot_pos": np.asarray([0.0, 0.0]),
+        "goal": np.asarray([2.0, 0.0]),
+        "radius": 0.3,
+        "grid": grid,
+    }
+    base_key = planner._route_path_cache_key(meta=meta, **kwargs)
+    changed_grid = grid.copy()
+    changed_grid[0, 0, 0] = 1.0
+    grid_key = planner._route_path_cache_key(meta=meta, **{**kwargs, "grid": changed_grid})
+    size_key = planner._route_path_cache_key(meta={**meta, "size": [3.0, 4.2]}, **kwargs)
+    channel_key = planner._route_path_cache_key(
+        meta={**meta, "channel_indices": [0, 1, 1]}, **kwargs
+    )
+
+    assert base_key is not None
+    assert base_key[0] == (grid.dtype.str, tuple(grid.shape), grid.tobytes(order="C"))
+    assert grid_key != base_key
+    assert size_key != base_key
+    assert channel_key != base_key
+
+
 def test_build_grid_route_config_clearance_penalty() -> None:
     """build_grid_route_config should round-trip clearance_penalty_weight."""
     cfg = build_grid_route_config({"clearance_penalty_weight": 0.75})

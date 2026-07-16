@@ -305,7 +305,10 @@ def test_precompute_reuses_static_geometry_and_matches_uncached():
     cached = LocalObstacleFeatureExtractor()
     cached.precompute(lines)
 
-    uncached_rows = vanilla.extract_many(query_points, lines)
+    uncached_rows = np.asarray(
+        [vanilla.extract(point, lines) for point in query_points], dtype=np.float32
+    )
+    precomputed_starts = cached._precomputed_starts
     cached_rows = cached.extract_many(query_points, lines)
 
     # Recompute again with the same cached extractor: still byte-identical (no drift).
@@ -313,6 +316,7 @@ def test_precompute_reuses_static_geometry_and_matches_uncached():
 
     np.testing.assert_array_equal(uncached_rows, cached_rows)
     np.testing.assert_array_equal(cached_rows, cached_rows_again)
+    assert cached._precomputed_starts is precomputed_starts
 
 
 def test_precompute_rebuilds_on_different_line_set():
@@ -322,9 +326,12 @@ def test_precompute_rebuilds_on_different_line_set():
     lines_b = [((0.0, 0.0), (0.0, 2.0))]
 
     extractor.precompute(lines_a)
-    out_a = extractor.extract((1.0, 1.0), lines_a)
+    starts_a = extractor._precomputed_starts
+    out_a = extractor.extract_many([(1.0, 1.0)], lines_a)[0]
     extractor.precompute(lines_b)
-    out_b = extractor.extract((1.0, 1.0), lines_b)
+    starts_b = extractor._precomputed_starts
+    out_b = extractor.extract_many([(1.0, 1.0)], lines_b)[0]
 
     np.testing.assert_allclose(out_a, [1.0, 0.0, 1.0, 1.0, 0.0, 1.0])
     np.testing.assert_allclose(out_b, [1.0, 1.0, 0.0, 0.0, 1.0, 1.0])
+    assert starts_b is not starts_a

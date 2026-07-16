@@ -19,6 +19,7 @@ from robot_sf.benchmark.issue_5578_speed_tier_synthesis import (
     NOMINAL_TIER_ID,
     NON_NOMINAL_TIERS,
     PRIMARY_METRICS,
+    _build_decision_table,
     _classify_interval,
     _holm_adjust,
     _holm_adjust_by_planner,
@@ -346,6 +347,40 @@ def test_holm_families_are_independent_per_planner() -> None:
     assert confidence["b0"] == pytest.approx(1.0 - 0.05 / 6.0)
 
 
+def test_holm_step_down_blocks_decisive_later_classifications() -> None:
+    """A failed ordered comparison makes every later family row inconclusive."""
+    raw_p_values = (0.001, 0.011, 0.012, 0.5, 0.6, 0.7)
+    bootstrap_distributions = (
+        [0.1] * 100,
+        [-0.01] * 50 + [0.05] * 50,
+        *([0.1] * 100 for _ in range(4)),
+    )
+    summaries = [
+        {
+            "test_id": f"orca__test_{index}",
+            "planner_id": "orca",
+            "speed_tier_id": "cap_3_0",
+            "metric": "collision_rate",
+            "n_scenarios": len(SCENARIOS),
+            "pooled_delta_mean": 0.1,
+            "pooled_delta_se": 0.01,
+            "ci_low_unadjusted": 0.08,
+            "ci_high_unadjusted": 0.12,
+            "p_value_raw": p_value,
+            "typed_collision_breakdown": {},
+            "_bootstrap_distribution": bootstrap_distributions[index],
+        }
+        for index, p_value in enumerate(raw_p_values)
+    ]
+    decision_table, _ = _build_decision_table(summaries)
+    assert decision_table[0]["holm_step_down_eligible"] is True
+    assert decision_table[0]["classification"] == "materially_harmful"
+    assert decision_table[1]["holm_step_down_eligible"] is True
+    assert decision_table[1]["classification"] == "inconclusive"
+    assert all(row["holm_step_down_eligible"] is False for row in decision_table[2:])
+    assert all(row["classification"] == "inconclusive" for row in decision_table[2:])
+
+
 def test_synthesis_rejects_incomplete_duplicate_and_drifted_grids() -> None:
     """Incomplete, duplicate, and dimension-drifted inputs cannot become evidence."""
     cells = _full_native_grid(nominal_metrics={}, tier_metrics={})
@@ -357,6 +392,29 @@ def test_synthesis_rejects_incomplete_duplicate_and_drifted_grids() -> None:
     drifted[0]["speed_cap_m_s"] = 2.1
     with pytest.raises(ValueError, match="speed cap drift"):
         synthesize_speed_tier_sweep(drifted)
+
+
+def test_custom_declared_dimensions_remain_smoke_not_benchmark_evidence() -> None:
+    """A complete caller-defined mini-grid cannot impersonate the frozen suite."""
+    cells = [
+        _cell(
+            "classic_doorway_medium",
+            tier_id,
+            cap,
+            "orca",
+            111,
+            metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
+        )
+        for tier_id, cap in ((NOMINAL_TIER_ID, 2.0), ("cap_3_0", 3.0), ("cap_4_2", 4.2))
+    ]
+    result = synthesize_speed_tier_sweep(
+        cells,
+        declared_scenarios={"classic_doorway_medium"},
+        declared_planners={"orca"},
+        declared_seeds={111},
+    )
+    assert result.grid_complete is True
+    assert result.evidence_status == "smoke_or_incomplete_not_benchmark_evidence"
 
 
 def test_cli_demo_is_explicit_smoke_not_benchmark_evidence(

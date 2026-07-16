@@ -531,6 +531,9 @@ def synthesize_speed_tier_sweep(
         require_complete_grid
         and grid_complete
         and all_native
+        and scenarios == set(DECLARED_SCENARIOS)
+        and planners == set(DECLARED_PLANNERS)
+        and seeds == set(DECLARED_SEEDS)
         and len(decision_table) == len(planners) * len(NON_NOMINAL_TIERS) * len(PRIMARY_METRICS)
         and all(row["n_scenarios"] == len(scenarios) for row in decision_table)
     )
@@ -822,7 +825,7 @@ def _aggregate_per_tier(
 def _holm_adjust_by_planner(
     p_values: Sequence[tuple[str, str, float]],
 ) -> tuple[dict[str, float], dict[str, float]]:
-    """Adjust six-test families independently and return adjusted confidences.
+    """Compute per-planner Holm p-values and rank-local confidence levels.
 
     Returns:
         Holm-adjusted p-values and per-test adjusted confidence levels.
@@ -836,14 +839,15 @@ def _holm_adjust_by_planner(
         adjusted.update(_holm_adjust(family))
         m = len(family)
         for rank, (test_id, _) in enumerate(sorted(family, key=lambda item: item[1]), start=1):
-            confidence[test_id] = 1.0 - (1.0 - CONFIDENCE_LEVEL) / (m - rank + 1)
+            local_alpha = (1.0 - CONFIDENCE_LEVEL) / (m - rank + 1)
+            confidence[test_id] = 1.0 - local_alpha
     return adjusted, confidence
 
 
 def _build_decision_table(
     per_tier_summary: Sequence[Mapping[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, float]]:
-    """Classify each pooled delta and collect the Holm p-value family.
+    """Classify pooled deltas with Holm step-down stopping per planner.
 
     Returns:
         ``(decision_table, holm_adjusted)`` with six-test families kept
@@ -853,13 +857,28 @@ def _build_decision_table(
         (entry["planner_id"], entry["test_id"], entry["p_value_raw"]) for entry in per_tier_summary
     ]
     holm_adjusted, adjusted_confidence = _holm_adjust_by_planner(p_values)
+    entries_by_planner: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    for entry in per_tier_summary:
+        entries_by_planner[entry["planner_id"]].append(entry)
+    interval_decisions: dict[str, tuple[float, float, bool, str]] = {}
+    for family in entries_by_planner.values():
+        step_down_open = True
+        for entry in sorted(family, key=lambda item: item["p_value_raw"]):
+            test_id = entry["test_id"]
+            confidence = adjusted_confidence[test_id]
+            ci_low, ci_high = _bootstrap_interval(entry["_bootstrap_distribution"], confidence)
+            candidate = _classify_interval(entry["metric"], ci_low, ci_high, entry["n_scenarios"])
+            eligible = step_down_open
+            classification = candidate if eligible else "inconclusive"
+            interval_decisions[test_id] = (ci_low, ci_high, eligible, classification)
+            if candidate == "inconclusive":
+                step_down_open = False
     decision_table: list[dict[str, Any]] = []
     for entry in per_tier_summary:
         test_id = entry["test_id"]
         n = entry["n_scenarios"]
         confidence = adjusted_confidence[test_id]
-        ci_low, ci_high = _bootstrap_interval(entry["_bootstrap_distribution"], confidence)
-        classification = _classify_interval(entry["metric"], ci_low, ci_high, n)
+        ci_low, ci_high, eligible, classification = interval_decisions[test_id]
         decision_table.append(
             {
                 "test_id": test_id,
@@ -874,6 +893,7 @@ def _build_decision_table(
                 "ci_low": ci_low,
                 "ci_high": ci_high,
                 "adjusted_confidence_level": confidence,
+                "holm_step_down_eligible": eligible,
                 "classification": classification,
                 "p_value_raw": entry["p_value_raw"],
                 "p_value_holm": holm_adjusted[test_id],

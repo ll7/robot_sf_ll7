@@ -21,6 +21,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from robot_sf._numerical_thread_env import THREAD_ENV_VARS as _THREAD_ENV_VARS
 from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 
 if TYPE_CHECKING:
@@ -70,9 +71,6 @@ def _sha256_of_file(path: str | Path) -> str | None:
         return None
 
 
-_THREAD_ENV_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")
-
-
 def _thread_env_snapshot() -> dict[str, str | None]:
     """Capture the numerical-thread environment used by BLAS/OpenMP.
 
@@ -90,17 +88,16 @@ def _cpu_model() -> str:
     Returns:
         CPU model string, or ``"Unknown CPU"`` when not determinable.
     """
-    model = platform.processor()
-    if model:
-        return model
     try:
         with Path("/proc/cpuinfo").open(encoding="utf-8", errors="ignore") as handle:
             for line in handle:
-                if line.lower().startswith("model name"):
-                    return line.split(":", 1)[1].strip()
-    except (OSError, FileNotFoundError):
+                if line.lower().startswith("model name") and ":" in line:
+                    model = line.split(":", 1)[1].strip()
+                    if model:
+                        return model
+    except OSError:
         pass
-    return "Unknown CPU"
+    return platform.processor() or "Unknown CPU"
 
 
 def build_execution_context_provenance() -> dict[str, Any]:

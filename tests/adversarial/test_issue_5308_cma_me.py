@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.adversarial import cma_me
 from robot_sf.adversarial.attribution import attribution_from_episode_record
 from robot_sf.adversarial.certification import not_available_status, passed_status
 from robot_sf.adversarial.cma_me import CMaMeEmitter
@@ -143,6 +144,11 @@ class _GaussianCellOptimizer:
         """Return the current mean vector."""
         return list(self._mean)
 
+    @property
+    def popsize(self) -> int:
+        """Return the population size of the test optimizer."""
+        return 3
+
 
 def _stub_optimizer_factory() -> object:
     """Return a Gaussian-optimizer factory for CPU tests (no cma dependency)."""
@@ -163,33 +169,34 @@ def test_emitter_targets_least_filled_cells(tmp_path: Path) -> None:
     """Emitter seeds distinct empty cells instead of the same one repeatedly."""
     space = _space()
     archive = _runnable_archive()
+    target_cell = (archive.grid.bins - 1, archive.grid.bins - 1)
+    for ix in range(archive.grid.bins):
+        for iy in range(archive.grid.bins):
+            if (ix, iy) == target_cell:
+                continue
+            candidate = _candidate(ix * 0.5)
+            evaluation = _make_evaluation(
+                candidate=candidate,
+                min_distance=2.5 * (ix / 3.0),
+                critical_time=3.0 * (iy / 3.0),
+                objective=1.0,
+                cert_status=passed_status("ok"),
+                temp_root=tmp_path,
+            )
+            archive.try_insert(
+                descriptor=(2.5 * (ix / 3.0), 3.0 * (iy / 3.0)),
+                evaluation=evaluation,
+                certification_status=evaluation.certification_status,
+            )
     emitter = CMaMeEmitter(
         space,
         archive,
         seed=0,
         optimizer_factory=_stub_optimizer_factory(),
     )
-    seen_cells: set[tuple[int, int]] = set()
-    for _ in range(8):
-        candidate = emitter.sample()
-        evaluation = _make_evaluation(
-            candidate=candidate,
-            min_distance=1.0,
-            critical_time=1.0,
-            objective=1.0,
-            cert_status=passed_status("ok"),
-            temp_root=tmp_path,
-        )
-        descriptor = (1.0, 1.0)  # all proposals target the same cell for this test
-        admitted = archive.try_insert(
-            descriptor=descriptor,
-            evaluation=evaluation,
-            certification_status=evaluation.certification_status,
-        )
-        emitter.observe(evaluation)
-        if admitted:
-            seen_cells.add(archive.grid.cell_index(descriptor))
-    assert (1, 1) in seen_cells
+    emitter.sample()
+
+    assert emitter._current_cell == target_cell
 
 
 def test_emitter_proposes_within_bounds(tmp_path: Path) -> None:
@@ -241,9 +248,15 @@ def test_emitter_fills_more_cells_than_random_baseline(tmp_path: Path) -> None:
     archive = QDArchive(grid=grid, require_certification=True)
     emitter = CMaMeEmitter(space, archive, seed=7, optimizer_factory=_stub_optimizer_factory())
     config = QDSearchConfig(
-        search_space=space, objective="worst_case_snqi", grid=grid, budget=48, seed=7
+        search_space=space,
+        objective="worst_case_snqi",
+        grid=grid,
+        budget=48,
+        seed=7,
+        require_certification=True,
     )
-    result = run_map_elites(config, evaluator=_evaluator, emitters=[emitter])
+    result = run_map_elites(config, evaluator=_evaluator, emitters=[emitter], archive=archive)
+    assert result.archive is archive
     assert result.archive.filled_cell_count() >= 4
     assert result.num_evaluated == 48
     assert result.num_admitted >= result.archive.filled_cell_count()
@@ -284,3 +297,104 @@ def test_emitter_handles_full_grid_gracefully(tmp_path: Path) -> None:
     emitter = CMaMeEmitter(space, archive, seed=1, optimizer_factory=_stub_optimizer_factory())
     candidate = emitter.sample()
     assert 0.0 <= candidate.start.x <= 4.0
+
+
+def test_emitter_waits_for_full_population(tmp_path: Path) -> None:
+    """Sequential observations must produce exactly one full-population tell."""
+    built: list[_GaussianCellOptimizer] = []
+
+    def _factory(*, lower, upper, x0, seed):
+        optimizer = _GaussianCellOptimizer(lower=lower, upper=upper, x0=x0, seed=seed)
+        built.append(optimizer)
+        return optimizer
+
+    emitter = CMaMeEmitter(_space(), _runnable_archive(), seed=4, optimizer_factory=_factory)
+    for index in range(3):
+        candidate = emitter.sample()
+        emitter.observe(
+            _make_evaluation(
+                candidate=candidate,
+                min_distance=1.0,
+                critical_time=1.0,
+                objective=float(index),
+                cert_status=passed_status("ok"),
+                temp_root=tmp_path,
+            )
+        )
+        assert built[0]._generation == (1 if index == 2 else 0)
+
+
+def test_cma_adapter_queues_population_and_converts_maximization(monkeypatch) -> None:
+    """The production adapter must drain one population and negate maximize scores."""
+
+    class _FakeEs:
+        def __init__(self, x0, _sigma, _opts):
+            self.mean = list(x0)
+            self.popsize = 2
+            self.ask_calls = 0
+            self.told_values: list[float] | None = None
+
+        def ask(self):
+            self.ask_calls += 1
+            return [[0.25], [0.75]]
+
+        def tell(self, _vectors, values):
+            self.told_values = list(values)
+
+        def stop(self):
+            return {}
+
+    class _FakeCma:
+        CMAEvolutionStrategy = _FakeEs
+
+    monkeypatch.setattr(cma_me, "_import_cma", lambda: _FakeCma)
+    optimizer = cma_me._CmaCellOptimizer(lower=[0.0], upper=[1.0], x0=[0.5], seed=1, popsize=2)
+
+    assert optimizer.ask() == [0.25]
+    assert optimizer.ask() == [0.75]
+    assert optimizer._es.ask_calls == 1
+    optimizer.tell([[0.25], [0.75]], [4.0, 1.0])
+    assert optimizer._es.told_values == [-4.0, -1.0]
+
+
+def test_run_map_elites_rejects_mismatched_shared_archive() -> None:
+    """A stateful emitter archive must match the runner grid fail-closed."""
+    config = QDSearchConfig(
+        search_space=_space(),
+        objective="worst_case_snqi",
+        grid=GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4),
+        budget=1,
+    )
+    mismatched = QDArchive(
+        grid=GridSpec(x_min=0.0, x_max=1.0, y_min=0.0, y_max=1.0, bins=2),
+        require_certification=False,
+    )
+
+    with pytest.raises(ValueError, match="archive grid"):
+        run_map_elites(config, evaluator=lambda _config, _candidate: None, archive=mismatched)
+
+
+def test_emitter_bypasses_optimizer_for_fixed_space() -> None:
+    """A zero-dimensional continuous space must still return a valid candidate."""
+    fixed = SearchSpaceConfig(
+        start_x=RangeConfig(1.0, 1.0),
+        start_y=RangeConfig(2.0, 2.0),
+        goal_x=RangeConfig(3.0, 3.0),
+        goal_y=RangeConfig(4.0, 4.0),
+        spawn_time_s=RangeConfig(0.0, 0.0),
+        pedestrian_speed_mps=RangeConfig(1.0, 1.0),
+        pedestrian_delay_s=RangeConfig(0.0, 0.0),
+        scenario_seed=RangeConfig(5, 5),
+    )
+
+    def _unexpected_optimizer(**_kwargs):
+        raise AssertionError("fixed search spaces must not construct CMA")
+
+    emitter = CMaMeEmitter(
+        fixed, _runnable_archive(), seed=1, optimizer_factory=_unexpected_optimizer
+    )
+    candidate = emitter.sample()
+
+    assert candidate.start == Pose2D(1.0, 2.0)
+    assert candidate.goal == Pose2D(3.0, 4.0)
+    assert candidate.scenario_seed == 5

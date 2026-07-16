@@ -54,6 +54,10 @@ class CellOptimizer(Protocol):
     def mean(self) -> list[float]:
         """Return the current distribution mean (active-dimension vector)."""
 
+    @property
+    def popsize(self) -> int:
+        """Return the optimizer population size."""
+
 
 class OptimizerFactory(Protocol):
     """Protocol for building a per-cell optimizer on demand."""
@@ -126,16 +130,27 @@ class _CmaCellOptimizer:
         self._es = cma.CMAEvolutionStrategy(list(x0), sigma0, opts)
         self._lower = list(lower)
         self._upper = list(upper)
+        self._pending: list[list[float]] = []
 
     def ask(self) -> list[float]:
         """Return one CMA-ES proposal."""
-        population = self._es.ask()
-        self._pending = list(population)
-        return list(population[0])
+        if not self._pending:
+            population = [list(vector) for vector in self._es.ask()]
+            if len(population) != self.popsize:
+                raise RuntimeError(
+                    f"CMA-ES returned {len(population)} proposals; expected {self.popsize}"
+                )
+            self._pending = population
+        return self._pending.pop(0)
 
     def tell(self, vectors: list[list[float]], values: list[float]) -> None:
-        """Feed a finished population to CMA-ES."""
-        self._es.tell(vectors, values)
+        """Feed one maximize-oriented population to minimizing CMA-ES."""
+        if len(vectors) != self.popsize or len(values) != self.popsize:
+            raise ValueError(
+                f"CMA-ES tell requires one full population ({self.popsize}); "
+                f"got {len(vectors)} vectors and {len(values)} values"
+            )
+        self._es.tell(vectors, [-float(value) for value in values])
 
     def stop(self) -> bool:
         """Return True when CMA-ES converged and should be restarted."""
@@ -145,6 +160,11 @@ class _CmaCellOptimizer:
     def mean(self) -> list[float]:
         """Return the current CMA-ES mean vector."""
         return list(self._es.mean)
+
+    @property
+    def popsize(self) -> int:
+        """Return the CMA-ES population size."""
+        return int(self._es.popsize)
 
 
 def _import_cma() -> Any:
@@ -252,7 +272,6 @@ class CMaMeEmitter:
         }
         self._current_cell: tuple[int, int] | None = None
         self._optimizer: CellOptimizer | None = None
-        self._pending_vec: list[float] | None = None
         self._in_flight: list[tuple[CandidateSpec, list[float]]] = []
         self._observed: list[tuple[list[float], float]] = []
 
@@ -320,15 +339,14 @@ class CMaMeEmitter:
 
     def sample(self) -> CandidateSpec:
         """Return the next CMA-ME proposal, reseeding on a full grid or restart."""
+        if not self._active_dims:
+            return self._random_fallback()
         if self._current_cell is None or self._optimizer is None:
             cell = self._select_target_cell()
             if cell is None:
                 return self._random_fallback()
             self._start_cell_optimizer(cell)
-        if self._pending_vec is not None:
-            vec = self._pending_vec
-            self._pending_vec = None
-        elif self._optimizer.stop():
+        if self._optimizer.stop():
             cell = self._select_target_cell()
             if cell is None:
                 return self._random_fallback()
@@ -359,17 +377,26 @@ class CMaMeEmitter:
                 score = evaluation.objective_value
                 value = float(score) if score is not None and math.isfinite(float(score)) else -1e9
                 self._observed.append((list(vec), value))
-                if not self._in_flight:
+                if len(self._observed) >= self._optimizer.popsize:
                     self._flush_generation()
                 return
 
     def _flush_generation(self) -> None:
         """Feed the buffered generation to the optimizer once fully observed."""
+        if self._optimizer is None:
+            raise RuntimeError("cannot flush a CMA-ME generation without an active optimizer")
+        if len(self._observed) != self._optimizer.popsize:
+            raise RuntimeError(
+                f"cannot flush partial CMA-ME generation: expected {self._optimizer.popsize}, "
+                f"observed {len(self._observed)}"
+            )
         vectors = [vec for vec, _value in self._observed]
         values = [value for _vec, value in self._observed]
-        if vectors:
-            self._optimizer.tell(vectors, values)
+        self._optimizer.tell(vectors, values)
         self._observed = []
+        if self._current_cell in self._archive.cells:
+            self._current_cell = None
+            self._optimizer = None
 
 
 def _Pose2D(x: float, y: float) -> Any:

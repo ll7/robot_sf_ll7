@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from robot_sf.benchmark import cli as benchmark_cli
 from robot_sf.benchmark.cli import cli_main
 
 if TYPE_CHECKING:
@@ -86,3 +87,36 @@ def test_cli_run_subcommand(tmp_path: Path, capsys):
         "observation_level": "tracked_agents_no_noise",
         "observation_mode": "socnav_state",
     }
+
+
+def test_cli_run_scenario_id_filters_to_one_matrix_row(tmp_path: Path, monkeypatch):
+    """The per-card scenario selector must pass exactly one row to the real runner."""
+    matrix_path = tmp_path / "matrix.yaml"
+    matrix_path.write_text(
+        "- id: a/b\n  density: low\n- id: other\n  density: low\n",
+        encoding="utf-8",
+    )
+    seen: dict[str, object] = {}
+
+    def fake_run_batch(scenarios_or_path, **_kwargs):
+        seen["scenarios"] = scenarios_or_path
+        return {"total_jobs": 1, "written": 1, "failed_jobs": 0}
+
+    monkeypatch.setattr(benchmark_cli, "run_batch", fake_run_batch)
+    rc = cli_main(
+        [
+            "run",
+            "--matrix",
+            str(matrix_path),
+            "--out",
+            str(tmp_path / "episodes.jsonl"),
+            "--scenario-id",
+            "a_b",
+            "--schema",
+            SCHEMA_PATH,
+        ],
+    )
+
+    assert rc == 0
+    assert isinstance(seen["scenarios"], list)
+    assert [row["id"] for row in seen["scenarios"]] == ["a/b"]

@@ -56,6 +56,22 @@ def _parser() -> argparse.ArgumentParser:
         help="personal-space reference distance in metres",
     )
     parser.add_argument("--no-timeline", action="store_true", help="omit timeline panels")
+    parser.add_argument(
+        "--figure-width",
+        type=float,
+        default=None,
+        help="design-at-final-size print mode: canvas width in inches, saved without the "
+        "tight-bbox crop so the PDF's natural width equals it exactly -- pass the TRUE "
+        "\\includegraphics width (e.g. the diss \\textwidth is 5.906 in, measured from the "
+        "build log, not a nominal 6.3)",
+    )
+    parser.add_argument(
+        "--base-font",
+        type=float,
+        default=None,
+        help="base font size in pt at final size (screen design default: 12 pt; 9 pt keeps "
+        "the smallest rendered font >= 8 pt)",
+    )
     parser.add_argument("--png", action="store_true", help="also render a PNG beside the PDF")
     parser.add_argument(
         "--qa",
@@ -99,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
             comfort_distance_m=args.comfort_distance,
             timeline=not args.no_timeline,
             return_figure=args.qa,
+            figure_width_in=args.figure_width,
+            base_font_pt=args.base_font,
         )
         if args.qa:
             if not isinstance(render_result, tuple):
@@ -125,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
                 collision_envelope_m=args.collision_envelope,
                 comfort_distance_m=args.comfort_distance,
                 timeline=not args.no_timeline,
+                figure_width_in=args.figure_width,
+                base_font_pt=args.base_font,
             )
     except (TraceSchemaError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

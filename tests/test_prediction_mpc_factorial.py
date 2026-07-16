@@ -4,7 +4,9 @@ Validates config parsing, toggle behavior, and preregistration harness
 for the prediction on/off x constraint-handling on/off factorial.
 """
 
-# evidence-writer-exempt: temporary config/registry fixtures exercise fail-closed readers only.
+# evidence-writer-exempt: every write in this file targets tmp_path fixtures
+# (never docs/context/evidence), so no durable evidence can be produced; they
+# only exercise the fail-closed readiness-gate readers (issue #5903).
 
 from __future__ import annotations
 

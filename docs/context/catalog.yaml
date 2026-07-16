@@ -3872,6 +3872,10 @@ entries:
   status: evidence
   freshness: evidence
   area: training_evidence
+- path: docs/context/evidence/issue_1496_oracle_trace_collection_job_13520
+  status: evidence
+  freshness: evidence
+  area: training_evidence
 - path: docs/context/evidence/issue_1490_closure_audit_2026-07-04/summary.json
   status: evidence
   freshness: evidence

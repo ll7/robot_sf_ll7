@@ -202,3 +202,24 @@ def test_verify_baseline_docs_only_branch_does_not_fail():
 
     assert drift == []
     assert reverse == []
+
+
+def test_committed_baseline_matches_base_ref_no_phantom_keys():
+    """The tracked baseline must not over-count files the base ref has already cleaned.
+
+    Regression for issue #5908: the baseline recorded a stale phantom key for
+    ``tests/validation/test_pr_contract_check.py`` (baseline 1, base 0) after the
+    placeholder cleanup in #5897, which made ``verify-baseline`` fail unrelated
+    docs-only PRs. The committed baseline must agree with the base ref so no
+    reverse-drift (baseline exceeds base) lines remain.
+    """
+    repo_root = check_docstring_todos._repo_root()
+    baseline = check_docstring_todos._read_backlog_baseline(
+        repo_root / check_docstring_todos.DEFAULT_BASELINE_PATH, repo_root
+    )
+    ref_report = check_docstring_todos.build_backlog_report_for_ref(repo_root, "origin/main")
+
+    drift, reverse = check_docstring_todos.compare_baseline_drift(ref_report, baseline)
+
+    assert drift == [], f"baseline is stale vs base ref: {drift}"
+    assert reverse == [], f"baseline exceeds base ref (phantom keys): {reverse}"

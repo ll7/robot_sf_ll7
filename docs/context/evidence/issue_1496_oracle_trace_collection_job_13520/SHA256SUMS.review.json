@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_1496_oracle_trace_collection_job_13520/SHA256SUMS",
+  "artifact_sha256": "da98b3eab29d6a5ae3cffbfc53bf9f3cd2d20c90149294d4c5c9e3c965a6d2dc",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_1496_oracle_trace_collection_job_13520/strict_registry_validation.json",
+  "artifact_sha256": "501b2c601da109593e8637b5c4d22e5ce5bd4e41ca0b0c922e9455b867b9684a",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

@@ -13,7 +13,11 @@ import yaml
 from robot_sf.adversarial.attribution import attribution_from_episode_record
 from robot_sf.adversarial.bundle import write_trajectory_csv
 from robot_sf.adversarial.certification import passed_status
-from robot_sf.adversarial.config import CandidateEvaluation, SearchConfig
+from robot_sf.adversarial.config import (
+    CandidateEvaluation,
+    SearchConfig,
+    WarmStartCandidate,
+)
 from robot_sf.adversarial.samplers import (
     CandidateSampler,
     CmaEsCandidateSampler,
@@ -57,17 +61,23 @@ class SamplerComparisonRow:
     caveats: tuple[str, ...]
 
 
-def build_sampler(name: str, search_space: SearchSpaceConfig, *, seed: int) -> CandidateSampler:
+def build_sampler(
+    name: str,
+    search_space: SearchSpaceConfig,
+    *,
+    seed: int,
+    warm_start: tuple[WarmStartCandidate, ...] = (),
+) -> CandidateSampler:
     """Build a named adversarial sampler."""
     key = name.strip().lower()
     if key == "random":
-        return RandomCandidateSampler(search_space, seed=seed)
+        return RandomCandidateSampler(search_space, seed=seed, warm_start=warm_start)
     if key == "coordinate":
-        return CoordinateRefinementSampler(search_space, seed=seed)
+        return CoordinateRefinementSampler(search_space, seed=seed, warm_start=warm_start)
     if key == "optuna":
-        return OptunaCandidateSampler(search_space, seed=seed)
+        return OptunaCandidateSampler(search_space, seed=seed, warm_start=warm_start)
     if key == "cmaes":
-        return CmaEsCandidateSampler(search_space, seed=seed)
+        return CmaEsCandidateSampler(search_space, seed=seed, warm_start=warm_start)
     raise ValueError("sampler must be one of: random, coordinate, optuna, cmaes")
 
 

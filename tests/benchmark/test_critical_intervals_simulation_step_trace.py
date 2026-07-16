@@ -103,3 +103,12 @@ def test_adapter_rejects_changing_pedestrian_id_sets() -> None:
 
     with pytest.raises(ValueError, match="stable pedestrian IDs"):
         adapt_simulation_step_trace(trace)
+
+
+def test_adapter_rejects_unknown_nested_trace_schema() -> None:
+    """Nested rows from an unknown schema must not be silently reinterpreted."""
+    trace = _nested_trace()
+    trace["schema_version"] = "simulation-step-trace.v2"
+
+    with pytest.raises(ValueError, match="Unknown schema_version"):
+        adapt_simulation_step_trace(trace)

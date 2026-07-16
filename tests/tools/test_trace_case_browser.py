@@ -64,6 +64,22 @@ def _episode(
         "algorithm_metadata": metadata,
         "episode_id": f"doorway--{arm}--{seed}",
         "scenario_id": "classic_doorway_medium",
+        "scenario_params": {
+            "id": "classic_doorway_medium",
+            "algo": arm,
+            "algo_config_hash": f"{arm}-config",
+            "simulation_config": {"route_spawn_seed": seed, "dt": 0.1},
+        },
+        "result_provenance": {
+            "repo_commit": "a307ef276d701f8d14dead1aa0513f44ee97c0b0",
+            "config_hash": f"{arm}-config",
+            "simulator_settings": {
+                "dt": 0.1,
+                "horizon": 600,
+                "observation_mode": f"{arm}-mode",
+                "record_forces": True,
+            },
+        },
         "seed": seed,
         "status": outcome,
         "termination_reason": outcome,
@@ -199,9 +215,34 @@ def test_pairs_finds_seed_flip_and_planner_upset_with_commands(
         "beta",
     }
     for pair in (seed_flip, planner_upset):
+        compatibility = pair["provenance_compatibility"]
+        assert compatibility["comparison_ready"] is True
+        assert compatibility["same_execution_commit"] is True
+        assert compatibility["same_scenario_contract"] is True
+        assert compatibility["same_runtime_contract"] is True
+        assert compatibility["caveats"] == []
         commands = "\n".join(pair["command_hint"]["commands"])
         assert "scripts/repro/butterfly_reexport_to_trace_series.py" in commands
         assert "scripts/repro/butterfly_hinge_figure_proto.py" in commands
+
+
+def test_pairs_expose_provenance_mismatch(
+    runs_dir: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Pair output must flag mixed execution commits instead of implying comparability."""
+    beta_path = runs_dir / "beta__differential_drive" / "episodes.jsonl"
+    beta_record = json.loads(beta_path.read_text(encoding="utf-8"))
+    beta_record["result_provenance"]["repo_commit"] = "different-commit"
+    beta_path.write_text(f"{json.dumps(beta_record)}\n", encoding="utf-8")
+
+    assert main(["pairs", str(runs_dir), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    compatibility = payload["planner_upsets"][0]["provenance_compatibility"]
+    assert compatibility["comparison_ready"] is False
+    assert compatibility["same_execution_commit"] is False
+    assert compatibility["caveats"] == ["execution_commit mismatch"]
+    assert "Verify provenance" in payload["planner_upsets"][0]["command_hint"]["note"]
 
 
 def test_critical_reports_terminal_collision_and_trace_windows(

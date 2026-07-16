@@ -210,9 +210,20 @@ def _trace_xy(value: Any, *, field_name: str) -> list[float]:
     Returns:
         Finite ``[x, y]`` values as plain floats.
     """
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        if any(isinstance(component, bool) for component in value):
+            raise ValueError(f"{field_name} must be a finite numeric [x, y] vector")
+        try:
+            x, y = float(value[0]), float(value[1])
+        except (TypeError, ValueError, KeyError, IndexError) as exc:
+            raise ValueError(f"{field_name} must be a numeric [x, y] vector") from exc
+        if math.isfinite(x) and math.isfinite(y):
+            return [x, y]
+        raise ValueError(f"{field_name} must be a finite numeric [x, y] vector")
+
     try:
         array = np.asarray(value, dtype=float)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, KeyError, IndexError) as exc:
         raise ValueError(f"{field_name} must be a numeric [x, y] vector") from exc
     if array.shape != (2,) or not np.all(np.isfinite(array)):
         raise ValueError(f"{field_name} must be a finite numeric [x, y] vector")
@@ -260,7 +271,12 @@ def adapt_simulation_step_trace(  # noqa: C901, PLR0912, PLR0915
 
     steps = trace.get("steps")
     schema_version = trace.get("schema_version")
-    if schema_version != SIMULATION_STEP_TRACE_SCHEMA_VERSION and not isinstance(steps, list):
+    if schema_version != SIMULATION_STEP_TRACE_SCHEMA_VERSION:
+        if isinstance(steps, list):
+            raise ValueError(
+                f"Unknown schema_version {schema_version!r}; expected "
+                f"{SIMULATION_STEP_TRACE_SCHEMA_VERSION!r}"
+            )
         return trace
     if not isinstance(steps, list):
         raise ValueError(
@@ -334,7 +350,7 @@ def adapt_simulation_step_trace(  # noqa: C901, PLR0912, PLR0915
                     f"simulation step {step_index} contains duplicate pedestrian ID {key[1]!r}"
                 )
             by_key[key] = pedestrian
-        if set(by_key) != set(pedestrian_keys):
+        if len(by_key) != len(pedestrian_keys) or any(key not in by_key for key in pedestrian_keys):
             raise ValueError(
                 "simulation-step-trace.v1 adaptation requires stable pedestrian IDs "
                 f"across steps; mismatch at step {step_index}"

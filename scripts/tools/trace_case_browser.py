@@ -29,16 +29,22 @@ bounded adapter requires stable pedestrian IDs across recorded steps. Critical
 trace distances remain center-to-center because this trace schema does not carry
 actor radii; list/summary clearance values come from the episode metrics.
 
+Pair output includes execution-commit, scenario-contract, and runtime-contract
+compatibility. Missing or mismatched provenance remains visible as a caveat;
+such a pair is a discovery lead, not comparison-ready evidence.
+
 Examples:
     uv run python scripts/tools/trace_case_browser.py list RUNS_DIR --sort=-near
     uv run python scripts/tools/trace_case_browser.py list EPISODES --filter outcome=collision
     uv run python scripts/tools/trace_case_browser.py pairs RUNS_DIR --json
+    uv run python scripts/tools/trace_case_browser.py pairs GOAL.jsonl PPO.jsonl --json
     uv run python scripts/tools/trace_case_browser.py critical EPISODES --seed 114
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -181,6 +187,10 @@ class Episode:
     min_clearance: float | None
     has_trace: bool
     episode_id: str
+    git_commit: str | None
+    config_hash: str | None
+    scenario_fingerprint: str | None
+    runtime_fingerprint: str | None
     record: dict[str, Any] = field(repr=False, compare=False)
 
 
@@ -285,6 +295,56 @@ def _trace_from_record(record: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _canonical_fingerprint(value: Any) -> str | None:
+    """Hash a JSON-compatible provenance contract deterministically."""
+    if value is None:
+        return None
+    try:
+        encoded = json.dumps(
+            value,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode()
+    except (TypeError, ValueError):
+        return None
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _scenario_fingerprint(record: dict[str, Any]) -> str | None:
+    """Hash scenario semantics while excluding planner and sampled seed fields."""
+    scenario_params = record.get("scenario_params")
+    if not isinstance(scenario_params, dict):
+        return None
+    comparison_params = {
+        key: value
+        for key, value in scenario_params.items()
+        if key not in {"algo", "algo_config_hash", "observation_level", "observation_mode"}
+    }
+    simulation_config = comparison_params.get("simulation_config")
+    if isinstance(simulation_config, dict):
+        comparison_params["simulation_config"] = {
+            key: value for key, value in simulation_config.items() if key != "route_spawn_seed"
+        }
+    return _canonical_fingerprint(comparison_params)
+
+
+def _runtime_fingerprint(record: dict[str, Any]) -> str | None:
+    """Hash simulator settings shared across planner arms."""
+    provenance = record.get("result_provenance")
+    if not isinstance(provenance, dict):
+        return None
+    settings = provenance.get("simulator_settings")
+    if not isinstance(settings, dict):
+        return None
+    comparison_settings = {
+        key: value
+        for key, value in settings.items()
+        if key not in {"observation_level", "observation_mode"}
+    }
+    return _canonical_fingerprint(comparison_settings)
+
+
 def _normalize_episode(record: dict[str, Any], source: Path, line_number: int) -> Episode:
     """Normalize one schema-variable JSONL row."""
     arm_value = _first_value(record, "arm")
@@ -295,6 +355,10 @@ def _normalize_episode(record: dict[str, Any], source: Path, line_number: int) -
     steps = _integer(_first_value(record, "steps"))
     if steps is None and isinstance(trace_steps, list):
         steps = len(trace_steps)
+    provenance = record.get("result_provenance")
+    provenance = provenance if isinstance(provenance, dict) else {}
+    git_commit = provenance.get("repo_commit", record.get("git_hash"))
+    config_hash = provenance.get("config_hash", record.get("config_hash"))
 
     return Episode(
         source=source,
@@ -312,6 +376,10 @@ def _normalize_episode(record: dict[str, Any], source: Path, line_number: int) -
             if episode_id_value is not None
             else f"{source.name}:{line_number}"
         ),
+        git_commit=str(git_commit) if git_commit is not None else None,
+        config_hash=str(config_hash) if config_hash is not None else None,
+        scenario_fingerprint=_scenario_fingerprint(record),
+        runtime_fingerprint=_runtime_fingerprint(record),
         record=record,
     )
 
@@ -378,6 +446,10 @@ def _episode_dict(episode: Episode) -> dict[str, Any]:
         "min_clearance": episode.min_clearance,
         "has_trace": episode.has_trace,
         "episode_id": episode.episode_id,
+        "git_commit": episode.git_commit,
+        "config_hash": episode.config_hash,
+        "scenario_fingerprint": episode.scenario_fingerprint,
+        "runtime_fingerprint": episode.runtime_fingerprint,
         "source": str(episode.source),
         "line_number": episode.line_number,
     }
@@ -432,8 +504,8 @@ def _parse_bool(value: str) -> bool:
     raise CaseBrowserError(f"invalid trace boolean {value!r}; use true or false")
 
 
-def _matches_filter(episode: Episode, expression: str) -> bool:  # noqa: C901
-    """Evaluate one documented filter expression against an episode."""
+def _compile_filter(expression: str) -> Callable[[Episode], bool]:  # noqa: C901
+    """Parse one filter once and return its episode predicate."""
     match = _FILTER_RE.fullmatch(expression.strip())
     if match is None:
         raise CaseBrowserError(
@@ -446,50 +518,55 @@ def _matches_filter(episode: Episode, expression: str) -> bool:  # noqa: C901
     if field_name == "outcome":
         if operator not in {"=", "!="}:
             raise CaseBrowserError("outcome filters support only = and !=")
-        expected = {
+        expected = frozenset(
             _canonical_outcome_token(token) or token.strip().lower()
             for token in raw_expected.split(",")
-        }
-        matches = episode.outcome in expected
-        return matches if operator == "=" else not matches
+        )
+        return lambda episode: (episode.outcome in expected) == (operator == "=")
 
     if field_name in {"arm", "scenario"}:
         if operator not in {"=", "!="}:
             raise CaseBrowserError(f"{field_name} filters support only = and !=")
-        actual = getattr(episode, field_name).lower()
-        matches = actual == raw_expected.lower()
-        return matches if operator == "=" else not matches
+        expected_text = raw_expected.lower()
+        return lambda episode: (
+            (getattr(episode, field_name).lower() == expected_text) == (operator == "=")
+        )
 
     if field_name == "seed" and operator in {"=", "!="}:
-        matches = episode.seed in _parse_seed_ranges(raw_expected)
-        return matches if operator == "=" else not matches
+        expected_seeds = frozenset(_parse_seed_ranges(raw_expected))
+        return lambda episode: (episode.seed in expected_seeds) == (operator == "=")
 
     if field_name in {"trace", "has_trace"}:
         if operator not in {"=", "!="}:
             raise CaseBrowserError("trace filters support only = and !=")
-        matches = episode.has_trace is _parse_bool(raw_expected)
-        return matches if operator == "=" else not matches
+        expected_trace = _parse_bool(raw_expected)
+        return lambda episode: (episode.has_trace == expected_trace) == (operator == "=")
 
+    if field_name not in {"seed", "near", "near_misses"}:
+        raise CaseBrowserError(f"unsupported numeric filter field {field_name!r}")
     try:
         expected_number = float(raw_expected)
     except ValueError as exc:
         raise CaseBrowserError(f"filter value must be numeric: {raw_expected!r}") from exc
     if not math.isfinite(expected_number):
         raise CaseBrowserError(f"filter value must be finite: {raw_expected!r}")
-    actual_number: float | int | None
-    if field_name == "seed":
-        actual_number = episode.seed
-    else:
-        actual_number = episode.near_misses
-    return _numeric_compare(actual_number, operator, expected_number)
+
+    def matches_numeric(episode: Episode) -> bool:
+        actual = episode.seed if field_name == "seed" else episode.near_misses
+        return _numeric_compare(actual, operator, expected_number)
+
+    return matches_numeric
+
+
+def _matches_filter(episode: Episode, expression: str) -> bool:
+    """Evaluate one filter outside the compiled multi-episode path."""
+    return _compile_filter(expression)(episode)
 
 
 def filter_episodes(episodes: Sequence[Episode], expressions: Sequence[str]) -> list[Episode]:
     """Apply all repeated filters with AND semantics."""
-    selected = list(episodes)
-    for expression in expressions:
-        selected = [episode for episode in selected if _matches_filter(episode, expression)]
-    return selected
+    predicates = [_compile_filter(expression) for expression in expressions]
+    return [episode for episode in episodes if all(predicate(episode) for predicate in predicates)]
 
 
 _SORT_ACCESSORS: dict[str, Callable[[Episode], SortValue]] = {
@@ -775,6 +852,40 @@ def _command_hint(kind: str, episode_a: Episode, episode_b: Episode) -> dict[str
     }
 
 
+def _provenance_compatibility(episode_a: Episode, episode_b: Episode) -> dict[str, Any]:
+    """Report whether a pair shares the contracts needed for comparison."""
+    fields = {
+        "execution_commit": (episode_a.git_commit, episode_b.git_commit),
+        "scenario_contract": (
+            episode_a.scenario_fingerprint,
+            episode_b.scenario_fingerprint,
+        ),
+        "runtime_contract": (
+            episode_a.runtime_fingerprint,
+            episode_b.runtime_fingerprint,
+        ),
+    }
+    checks: dict[str, bool | None] = {}
+    caveats: list[str] = []
+    values: dict[str, dict[str, str | None]] = {}
+    for name, (value_a, value_b) in fields.items():
+        values[name] = {"episode_a": value_a, "episode_b": value_b}
+        if value_a is None or value_b is None:
+            checks[f"same_{name}"] = None
+            caveats.append(f"{name} missing for one or both episodes")
+        elif value_a != value_b:
+            checks[f"same_{name}"] = False
+            caveats.append(f"{name} mismatch")
+        else:
+            checks[f"same_{name}"] = True
+    return {
+        **values,
+        **checks,
+        "comparison_ready": all(value is True for value in checks.values()),
+        "caveats": caveats,
+    }
+
+
 def _pair_payload(kind: str, first: Episode, second: Episode) -> dict[str, Any]:
     """Build one ranked pair with rationale and ready-to-paste commands."""
     episode_a, episode_b = _ordered_pair(first, second)
@@ -797,6 +908,14 @@ def _pair_payload(kind: str, first: Episode, second: Episode) -> dict[str, Any]:
         f"max near misses {_display_number(near_max)}; "
         f"closest |clearance| {_display_number(closest_boundary)} m"
     )
+    provenance_compatibility = _provenance_compatibility(episode_a, episode_b)
+    command_hint = _command_hint(kind, episode_a, episode_b)
+    if not provenance_compatibility["comparison_ready"]:
+        command_hint["note"] += (
+            " Verify provenance before interpreting the pair: "
+            + "; ".join(provenance_compatibility["caveats"])
+            + "."
+        )
     return {
         "kind": kind,
         "episode_a": _episode_dict(episode_a),
@@ -804,7 +923,8 @@ def _pair_payload(kind: str, first: Episode, second: Episode) -> dict[str, Any]:
         "seed_distance": seed_distance,
         **scores,
         "why": why,
-        "command_hint": _command_hint(kind, episode_a, episode_b),
+        "provenance_compatibility": provenance_compatibility,
+        "command_hint": command_hint,
     }
 
 

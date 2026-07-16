@@ -369,7 +369,11 @@ def test_materialize_issue_5447_writes_pinned_artifact_set(tmp_path, monkeypatch
     cand_rel.write_text(
         json.dumps(
             _candidate_manifest(
-                [_seed_flip_candidate("sf1", "sA", "p1"), _upset_candidate("up1", "sB", "p2")]
+                [
+                    _seed_flip_candidate("sf1", "sA", "p1"),
+                    _upset_candidate("up1", "sB", "p2"),
+                    {"candidate_id": "missing-archetype"},
+                ]
             )
         ),
         encoding="utf-8",
@@ -395,7 +399,8 @@ def test_materialize_issue_5447_writes_pinned_artifact_set(tmp_path, monkeypatch
 
     ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
     # Pre-selection ledger retains the full candidate pool, not just chosen rows.
-    assert len(ledger["candidate_pool"]) == 2
+    assert len(ledger["candidate_pool"]) == 3
+    assert ledger["candidate_manifest"]["archetypes"] == ["planner_upset", "seed_flip"]
     assert ledger["selection_result"]["n_admitted"] == 2
 
     # Sidecar names every emitted file with a checksum.

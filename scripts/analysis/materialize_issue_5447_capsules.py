@@ -94,7 +94,13 @@ def materialize() -> int:
             "sha256_canonical_dict": canonical_sha256(candidate_manifest),
             "schema_version": candidate_manifest.get("schema_version"),
             "n_candidates": len(candidates),
-            "archetypes": sorted({c.get("archetype") for c in candidates}),
+            "archetypes": sorted(
+                {
+                    archetype
+                    for archetype in (candidate.get("archetype") for candidate in candidates)
+                    if archetype is not None
+                }
+            ),
         },
         "selection_result": {
             "status": manifest["status"],

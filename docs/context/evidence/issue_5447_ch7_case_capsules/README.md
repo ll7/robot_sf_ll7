@@ -65,8 +65,8 @@ uv run python scripts/analysis/materialize_issue_5447_capsules.py
    `robot_sf.benchmark.figures`; requires the #5615/#5446 trace resolution).
 3. One independent pinned-SHA visual/evidence review before dissertation
    integration.
-4. If #5441–#5445 deliver validated causal/risk reports, re-run the materialize
-   driver with `--causal`/`--risk`; the causal/risk archetypes flip from
-   `unavailable` to admitted.
+4. If #5441–#5445 deliver validated causal/risk reports, first extend the
+   materialize driver with explicit, validated report-input paths, then regenerate
+   the set; this slice intentionally exposes no causal/risk CLI options.
 
 <!-- /AI-GENERATED -->

@@ -244,6 +244,23 @@ def perf_policy():  # type: ignore[missing-return-type-doc]
         hard_timeout_seconds = 60.0
         report_count = 10
         relax_env_var = "ROBOT_SF_PERF_RELAX"
+        xdist_contention_multiplier = 3.0
+
+        def is_under_xdist(self) -> bool:
+            """TODO docstring. Document this function."""
+            worker = os.environ.get("PYTEST_XDIST_WORKER")
+            return bool(worker) and worker.strip() != ""
+
+        def effective_soft_threshold(self, *, ci: bool = False) -> float:
+            """TODO docstring. Document this function.
+
+            Args:
+                ci: TODO docstring.
+            """
+            base = self.soft_threshold_seconds if ci else (self.soft_threshold_seconds / 2.0)
+            if self.is_under_xdist():
+                return min(base * self.xdist_contention_multiplier, self.hard_timeout_seconds * 0.9)
+            return base
 
         def classify(self, duration_seconds: float):
             """TODO docstring. Document this function.

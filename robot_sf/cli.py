@@ -21,9 +21,10 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from robot_sf import cli_datasets, cli_models
+from robot_sf import cli_datasets, cli_envs, cli_models
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
 from robot_sf.examples_cli import examples_cli_main
+from robot_sf.recipes import cli as recipes_cli
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -74,6 +75,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_models_subparser(subparsers)
     _add_datasets_subparser(subparsers)
+    _add_envs_subparser(subparsers)
     # The ``examples`` subcommand owns its own sub-subcommand parser
     # (``list``/``run``); it is registered here only so the top-level parser
     # recognises the token. Remaining args are forwarded by the handler.
@@ -148,6 +150,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional page title (defaults to a name derived from the matrix)",
     )
     g_build.set_defaults(gallery_cmd="build")
+
+    # Curated recipe catalog (issue #5795): list / run / explain blessed workflows.
+    recipes_cli.build_subparser(subparsers)
     return parser
 
 
@@ -285,6 +290,32 @@ def _add_datasets_subparser(sub: argparse._SubParsersAction) -> None:
         help="Override the local source path to verify (default: the resolved asset path).",
     )
     dprepare.add_argument(
+        "--format",
+        choices=("friendly", "json"),
+        default="friendly",
+        help="Output format (default: friendly).",
+    )
+
+
+def _add_envs_subparser(sub: argparse._SubParsersAction) -> None:
+    """Register the ``robot-sf envs`` subcommand tree (issue #5801)."""
+    envs = sub.add_parser(
+        "envs",
+        help="List and describe registered public environments (uv run robot-sf envs ...)",
+    )
+    envs_sub = envs.add_subparsers(dest="envs_cmd", required=True)
+
+    elist = envs_sub.add_parser("list", help="List registered public environments.")
+    elist.add_argument(
+        "--format",
+        choices=("friendly", "json"),
+        default="friendly",
+        help="Output format (default: friendly).",
+    )
+
+    edescribe = envs_sub.add_parser("describe", help="Describe one registered environment by id.")
+    edescribe.add_argument("env_id", help="Registered environment id to describe.")
+    edescribe.add_argument(
         "--format",
         choices=("friendly", "json"),
         default="friendly",
@@ -543,14 +574,6 @@ def _handle_gallery(args: argparse.Namespace) -> int:
     return _handle_gallery_build(args)
 
 
-_HANDLERS = {
-    "doctor": _handle_doctor,
-    "models": _handle_models,
-    "datasets": _handle_datasets,
-    "gallery": _handle_gallery,
-}
-
-
 def _handle_examples(extra_args: Sequence[str]) -> int:
     """Forward to the examples discovery CLI.
 
@@ -561,6 +584,32 @@ def _handle_examples(extra_args: Sequence[str]) -> int:
         int: Process-style exit code from the examples CLI.
     """
     return examples_cli_main(list(extra_args))
+
+
+def _handle_envs(args: argparse.Namespace) -> int:
+    """Dispatch the ``robot-sf envs`` subcommand.
+
+    Returns:
+        int: Process-style exit code (0 success, 2 unknown env id).
+    """
+    cmd = args.envs_cmd
+    if cmd == "list":
+        return cli_envs._handle_envs_list(args)
+    if cmd == "describe":
+        return cli_envs._handle_envs_describe(args)
+    parser = _build_parser()  # pragma: no cover - defensive
+    parser.error(f"unknown envs command: {cmd}")
+    return 2
+
+
+_HANDLERS = {
+    "doctor": _handle_doctor,
+    "models": _handle_models,
+    "datasets": _handle_datasets,
+    "envs": _handle_envs,
+    "gallery": _handle_gallery,
+    "recipe": recipes_cli.handle,
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:

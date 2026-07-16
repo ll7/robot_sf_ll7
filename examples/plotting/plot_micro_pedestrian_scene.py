@@ -9,7 +9,12 @@ Purpose:
 
     Visual conventions (colours, radii) mirror robot_sf's pygame ``SimulationView``
     so the matplotlib render reads as the same simulator:
-        - robot   : blue,  radius 1.0 m   (robot_sf ROBOT_COLOR / robot_radius)
+        - robot   : dark-blue centre marker + light-blue collision envelope disc of
+          RADIUS 1.0 m, annotated explicitly. The 1.0 m is the collision radius used
+          by the simulator's physics/metrics (``DifferentialDriveSettings.radius`` /
+          ``DEFAULT_ROBOT_RADIUS``); the configuration carries no separate physical
+          body radius, so no smaller body disc is drawn -- inventing one would
+          suggest a validated vehicle footprint that the simulator does not model.
         - ped     : red,   radius 0.4 m   (robot_sf PED_COLOR  / ped_radius)
         - goal    : green                  (robot_sf ROBOT_GOAL_COLOR)
         - obstacle: dark grey wall         (robot_sf OBSTACLE_COLOR)
@@ -31,9 +36,14 @@ Figure-quality note:
       HandlerPatch) so it carries the same arrowhead as the velocity arrows drawn
       on the pedestrians, instead of a plain line.
     - The dashed green robot-to-goal vector has its own legend entry.
-    - The plot keeps metric axes (x/y in metres) and drops the separate scale
-      bar, since the axes already make the spatial scale explicit and the two
-      were redundant.
+    - The plot keeps metric axes (x/y in metres, equal aspect) and drops the
+      separate scale bar, since the axes already make the spatial scale explicit
+      and the two were redundant.
+    - Design-at-final-size print contract: the canvas is 5.2 in wide and the PDF
+      is saved WITHOUT a tight-bbox crop, so its natural width equals the print
+      column width exactly (no silent downscaling) and every font stays >= 8 pt
+      on the page. A radius tick with an "r = 1.0 m" annotation makes the
+      envelope's radius (not diameter) unambiguous.
 """
 
 from __future__ import annotations
@@ -47,14 +57,22 @@ from matplotlib.patches import Circle, FancyArrow
 from pysocialforce import Simulator
 
 from robot_sf.common.artifact_paths import resolve_artifact_path
+from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 
 # --- robot_sf SimulationView semantics (RGB 0-255 -> matplotlib 0-1) ----------
 ROBOT_COLOR = (0 / 255, 0 / 255, 200 / 255)
+ROBOT_ENVELOPE_FACE = (0.72, 0.82, 0.93)  # light blue: collision envelope, not a body
 PED_COLOR = (255 / 255, 50 / 255, 50 / 255)
 GOAL_COLOR = (0 / 255, 204 / 255, 102 / 255)
 OBSTACLE_COLOR = (20 / 255, 30 / 255, 20 / 255)
-ROBOT_RADIUS = 1.0
+ROBOT_ENVELOPE_RADIUS = DEFAULT_ROBOT_RADIUS
+"""Authoritative collision radius; no separate physical body radius is configured."""
 PED_RADIUS = 0.4
+
+# Print contract: design at the final included width so LaTeX never rescales the
+# PDF and the fonts below print at their nominal sizes (>= 8 pt).
+FIGURE_WIDTH_IN = 5.2
+FIGURE_HEIGHT_IN = 4.75  # scene panel + the two-column legend row above it
 
 # Velocity-vector lookahead: arrow length = velocity (m/s) * VEL_LOOKAHEAD_S.
 VEL_LOOKAHEAD_S = 0.7
@@ -145,11 +163,14 @@ class _FancyArrowLegendHandler(HandlerPatch):
 
 
 def main() -> None:
-    """Build the micro scene, advance pedestrians, and export PDF + PNG."""
-    # LaTeX-friendly export settings (see docs/dev_guide.md).
+    """Build the micro scene, advance pedestrians, and export PDF + PNG.
+
+    The LaTeX-friendly canvas is designed at its final print width and saved
+    without a tight-bbox crop, so the PDF's natural width must equal
+    :data:`FIGURE_WIDTH_IN` instead of relying on downstream rescaling.
+    """
     plt.rcParams.update(
         {
-            "savefig.bbox": "tight",
             "pdf.fonttype": 42,
             "ps.fonttype": 42,
             "font.size": 9,
@@ -182,7 +203,7 @@ def main() -> None:
         robot_heading = np.zeros_like(robot_heading)
     robot_speed = 1.0  # m/s
 
-    fig, ax = plt.subplots(figsize=(7.0, 5.2))
+    fig, ax = plt.subplots(figsize=(FIGURE_WIDTH_IN, FIGURE_HEIGHT_IN), constrained_layout=True)
 
     # Wall obstacle(s).
     for x1, x2, y1, y2 in obstacles:
@@ -205,9 +226,49 @@ def main() -> None:
     ax.add_patch(Circle(tuple(robot_goal), 0.5, fill=False, ec=GOAL_COLOR, lw=2.5, zorder=4))
     ax.plot(*robot_goal, marker="*", color=GOAL_COLOR, ms=12, zorder=5)
 
-    # Robot: blue disk at true radius + heading arrow.
+    # Robot: light-blue collision-envelope disc at the config-backed collision
+    # RADIUS (1.0 m) + dark-blue centre marker + heading arrow. The simulator
+    # config carries no separate physical body radius, so no smaller body disc
+    # is drawn; the envelope is annotated as what it is.
     ax.add_patch(
-        Circle(tuple(robot_pos), ROBOT_RADIUS, color=ROBOT_COLOR, ec="black", lw=0.8, zorder=4)
+        Circle(
+            tuple(robot_pos),
+            ROBOT_ENVELOPE_RADIUS,
+            facecolor=ROBOT_ENVELOPE_FACE,
+            edgecolor=ROBOT_COLOR,
+            linewidth=1.1,
+            zorder=4,
+        )
+    )
+    ax.plot(
+        robot_pos[0],
+        robot_pos[1],
+        marker="o",
+        markersize=5,
+        color=ROBOT_COLOR,
+        linestyle="none",
+        zorder=6,
+    )
+    # Radius tick + label: 1.0 m is the envelope RADIUS, not its diameter. The
+    # tick points to the lower right, where the scene leaves free space.
+    tick_direction = np.array([np.cos(np.radians(-35.0)), np.sin(np.radians(-35.0))])
+    tick_end = robot_pos + ROBOT_ENVELOPE_RADIUS * tick_direction
+    ax.plot(
+        [robot_pos[0], tick_end[0]],
+        [robot_pos[1], tick_end[1]],
+        color=ROBOT_COLOR,
+        linewidth=0.9,
+        zorder=5,
+    )
+    ax.annotate(
+        "r = 1.0 m",
+        tick_end,
+        xytext=(3, -2),
+        textcoords="offset points",
+        color=ROBOT_COLOR,
+        fontsize=8,
+        ha="left",
+        va="top",
     )
     rdx, rdy = robot_heading * robot_speed * VEL_LOOKAHEAD_S
     ax.add_patch(
@@ -220,7 +281,7 @@ def main() -> None:
             head_width=0.34,
             head_length=0.34,
             length_includes_head=True,
-            color="white",
+            color=ROBOT_COLOR,
             zorder=5,
         ),
     )
@@ -241,12 +302,31 @@ def main() -> None:
             [],
             marker="o",
             ls="",
-            mfc=ROBOT_COLOR,
-            mec="black",
+            mfc=ROBOT_ENVELOPE_FACE,
+            mec=ROBOT_COLOR,
             ms=11,
-            label="Robot (ego agent)",
+            label="Collision envelope (r = 1.0 m)",
         ),
-        plt.Line2D([], [], marker="o", ls="", mfc=PED_COLOR, mec="black", ms=8, label="Pedestrian"),
+        plt.Line2D(
+            [],
+            [],
+            marker="o",
+            ls="",
+            mfc=ROBOT_COLOR,
+            mec=ROBOT_COLOR,
+            ms=5,
+            label="Robot center (ego agent)",
+        ),
+        plt.Line2D(
+            [],
+            [],
+            marker="o",
+            ls="",
+            mfc=PED_COLOR,
+            mec="black",
+            ms=8,
+            label="Pedestrian (r = 0.4 m)",
+        ),
         plt.Line2D(
             [], [], marker="*", ls="", mfc=GOAL_COLOR, mec=GOAL_COLOR, ms=12, label="Robot goal"
         ),
@@ -254,11 +334,16 @@ def main() -> None:
         velocity_proxy,
         plt.Line2D([], [], color=OBSTACLE_COLOR, lw=5, label="Wall / obstacle"),
     ]
+    # The legend sits above the axes: at the 5.2 in print width an in-axes legend
+    # would cover pedestrians of the rendered scene.
     ax.legend(
         handles=handles,
-        loc="upper left",
-        framealpha=0.9,
-        borderaxespad=0.4,
+        loc="lower left",
+        bbox_to_anchor=(0.0, 1.01, 1.0, 0.28),
+        mode="expand",
+        ncol=2,
+        framealpha=1.0,
+        borderaxespad=0.0,
         handler_map={FancyArrow: _FancyArrowLegendHandler()},
     )
 

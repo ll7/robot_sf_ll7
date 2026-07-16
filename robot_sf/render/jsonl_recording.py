@@ -106,6 +106,7 @@ class JSONLRecorder:
         self.current_file = None
         self.current_metadata = None
         self.last_simulation_timestep = 0.0
+        self.last_episode_file: Path | None = None
         self.flush_every_n = self._normalize_flush_interval(flush_every_n)
         self.flush_on_episode_end = flush_on_episode_end
         self._records_since_flush = 0
@@ -442,6 +443,7 @@ class JSONLRecorder:
 
         # Close episode file
         self.current_file.close()
+        self.last_episode_file = self._get_episode_filename(self.current_episode_id)
         self.current_file = None
 
         logger.info(f"Ended episode {self.current_episode_id} with {self.current_step_idx} steps")

@@ -580,9 +580,19 @@ def build_notebook_03() -> nbf.notebooknode:
         ),
         _code(
             """
-            # Locate the recorded JSONL (the recorder names it with suite/scenario/algorithm/seed).
-            candidates = sorted(recording_dir.glob("*.jsonl"))
-            episode_jsonl = candidates[-1]
+            # Consume the exact path reported by the recorder. Do not glob the directory:
+            # a previous notebook run may have left a newer-looking, stale recording there.
+            env_path = getattr(env, "last_recorded_jsonl", None)
+            if env_path is None:
+                raise FileNotFoundError(
+                    "No JSONL recording was produced; the episode recorder did not report "
+                    "an output path."
+                )
+            episode_jsonl = Path(env_path)
+            if not episode_jsonl.is_file():
+                raise FileNotFoundError(
+                    f"The episode recorder reported a missing JSONL file: {episode_jsonl}"
+                )
             # Promote a stable copy next to the other artifacts.
             stable_jsonl = OUTPUT_DIR / "episode.jsonl"
             stable_jsonl.write_bytes(episode_jsonl.read_bytes())

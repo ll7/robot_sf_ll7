@@ -10,8 +10,9 @@ from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.heterogeneous_population_ablation import (
-    build_mean_matched_harness_manifest,
+from robot_sf.benchmark.campaign_logging import (
+    add_campaign_logging_argument,
+    configure_campaign_logging,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -31,6 +32,11 @@ def parse_args() -> argparse.Namespace:
         default="output/issue_3574_mean_matched_harness/manifest.json",
         help="Manifest JSON output path.",
     )
+    parser.add_argument(
+        "--legacy-map",
+        help="Explicit map used to validate legacy inline scenarios without map_file fields.",
+    )
+    add_campaign_logging_argument(parser)
     return parser.parse_args()
 
 
@@ -52,11 +58,25 @@ def main() -> int:
     """Build and write the manifest."""
 
     args = parse_args()
+    configure_campaign_logging(debug=args.debug)
     config_path = REPO_ROOT / args.config
     output_path = REPO_ROOT / args.output
+    from robot_sf.benchmark.heterogeneous_population_ablation import (
+        build_mean_matched_harness_manifest,
+    )
+    from robot_sf.benchmark.heterogeneous_population_ablation_runner import (
+        assert_manifest_spawn_realizable,
+    )
+
     manifest = build_mean_matched_harness_manifest(
         _load_yaml(config_path),
         config_path=args.config,
+    )
+    legacy_map_path = None if args.legacy_map is None else REPO_ROOT / args.legacy_map
+    assert_manifest_spawn_realizable(
+        manifest["manifest_rows"],
+        scenario_path=config_path,
+        map_path=legacy_map_path,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

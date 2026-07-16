@@ -36,6 +36,7 @@ from robot_sf.benchmark.runner import run_batch
 
 CandidateEvaluator = Callable[[SearchConfig, CandidateSpec, Path, Path], CandidateEvaluation]
 CandidateCertifier = Callable[[CandidateSpec, Path, bool], CertificationStatus]
+ProductionCandidateEvaluator = Callable[[SearchConfig, CandidateSpec, int], CandidateEvaluation]
 
 DEFAULT_SCHEMA_PATH = (
     Path(__file__).parent.parent / "benchmark" / "schemas" / "episode.schema.v1.json"
@@ -269,3 +270,95 @@ def _observe_candidate(sampler: CandidateSampler, evaluation: CandidateEvaluatio
     observe = getattr(sampler, "observe", None)
     if callable(observe):
         observe(evaluation)
+
+
+def production_candidate_evaluator(
+    *,
+    evaluator: CandidateEvaluator | None = None,
+    certifier: CandidateCertifier | None = None,
+) -> ProductionCandidateEvaluator:
+    """Return the canonical per-candidate production pipeline for adversarial search.
+
+    The returned callable runs the same validation -> materialization ->
+    certification -> benchmark-evaluation sequence as ``run_adversarial_search`` for
+    one candidate, writing its bundle under ``config.output_dir / f"candidate_{index:04d}"``.
+    It is the integration point that lets the MAP-Elites quality-diversity archive
+    (``robot_sf/adversarial/qd.py``) run against the real adversarial pipeline instead of
+    an injected stub: see ``qd.production_qd_evaluator``.
+
+    Args:
+        evaluator: Optional injected four-argument evaluator; defaults to the benchmark
+            batch runner (``SearchConfig``/scenario/bundle contract).
+        certifier: Optional injected certifier; defaults to ``certify_candidate``.
+
+    Returns:
+        A callable ``(config, candidate, index) -> CandidateEvaluation``.
+    """
+
+    def _evaluate(
+        config: SearchConfig, candidate: CandidateSpec, index: int
+    ) -> CandidateEvaluation:
+        candidate_dir = config.output_dir / f"candidate_{index:04d}"
+        validation_errors = config.search_space.validate_candidate(candidate)
+        if validation_errors:
+            return _invalid_evaluation(
+                candidate=candidate,
+                certification_status=failed_status(
+                    "search-space validation failed",
+                    details={"errors": validation_errors},
+                ),
+                scenario_yaml_path=None,
+                bundle_path=None,
+                reason="; ".join(validation_errors),
+            )
+
+        scenario_yaml_path, _route_path = write_candidate_inputs(
+            config=config,
+            candidate=candidate,
+            candidate_dir=candidate_dir,
+            index=index,
+        )
+        active_certifier = certifier or _default_certifier
+        certification_status = active_certifier(
+            candidate, scenario_yaml_path, config.require_certification
+        )
+        if not candidate_allowed(
+            certification_status, require_certification=config.require_certification
+        ):
+            evaluation = _invalid_evaluation(
+                candidate=candidate,
+                certification_status=certification_status,
+                scenario_yaml_path=scenario_yaml_path,
+                bundle_path=candidate_dir,
+                reason=certification_status.reason,
+            )
+            write_json(
+                candidate_dir / "failure_attribution.json",
+                evaluation.failure_attribution.to_json(),
+            )
+            return evaluation
+
+        active_evaluator = evaluator or _default_evaluator
+        objective = get_objective(config.objective)
+        try:
+            evaluation = active_evaluator(config, candidate, scenario_yaml_path, candidate_dir)
+            evaluation = replace(evaluation, certification_status=certification_status)
+            score = objective(evaluation)
+            return evaluation.with_objective(score)
+        except Exception as exc:
+            error = repr(exc)
+            attribution = attribution_from_error(error)
+            write_json(candidate_dir / "failure_attribution.json", attribution.to_json())
+            return CandidateEvaluation(
+                candidate=candidate,
+                certification_status=certification_status,
+                objective_value=None,
+                failure_attribution=attribution,
+                episode_record_path=candidate_dir / "episode_records.jsonl",
+                trajectory_csv_path=None,
+                scenario_yaml_path=scenario_yaml_path,
+                bundle_path=candidate_dir,
+                error=error,
+            )
+
+    return _evaluate

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 from scripts.ci.check_evidence_writer_usage import check_changed_files, check_file
@@ -149,8 +150,30 @@ def test_issue_5903_prediction_mpc_factorial_fixture_writes_are_exempt(tmp_path:
     repo_root = Path(__file__).resolve().parents[2]
     target = repo_root / "tests" / "test_prediction_mpc_factorial.py"
     assert target.is_file(), "expected tests/test_prediction_mpc_factorial.py to exist"
-    blockers = check_file(target)
-    assert blockers == [], f"{target} must not trigger evidence-writer blockers: {blockers}"
+    source = target.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(target))
+    tmp_path_names: set[str] = set()
+    writer_receivers: list[ast.expr] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(child, ast.Name) and child.id == "tmp_path" for child in ast.walk(node.value)
+        ):
+            tmp_path_names.update(
+                target_node.id for target_node in node.targets if isinstance(target_node, ast.Name)
+            )
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"write_text", "write_bytes"}
+        ):
+            writer_receivers.append(node.func.value)
+
+    assert writer_receivers, f"expected temporary fixture writes in {target}"
+    assert all(
+        isinstance(receiver, ast.Name) and receiver.id in tmp_path_names
+        for receiver in writer_receivers
+    ), "every direct writer in the exempt file must target a tmp_path-derived fixture"
+    assert check_file(target) == []
 
     # Sanity: the guard still catches a genuine evidence-tree write replayed in a
     # sibling file, so the reconciliation did not weaken the global check.

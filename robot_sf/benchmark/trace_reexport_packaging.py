@@ -214,7 +214,8 @@ def _archive_member_bytes(archive: tarfile.TarFile, suffix: str) -> tuple[str, b
         path = PurePosixPath(member.name)
         if path.is_absolute() or ".." in path.parts:
             raise TraceReexportPackagingError(f"unsafe release archive member: {member.name!r}")
-        if member.name.endswith(suffix):
+        normalized_name = f"/{member.name.lstrip('/')}"
+        if normalized_name.endswith(suffix):
             matches.append(member)
     if len(matches) != 1:
         raise TraceReexportPackagingError(
@@ -230,6 +231,21 @@ def _archive_member_bytes(archive: tarfile.TarFile, suffix: str) -> tuple[str, b
     if handle is None:
         raise TraceReexportPackagingError(f"cannot read release archive member: {member.name}")
     return member.name, handle.read()
+
+
+def _payload_relative_path(member_name: str) -> str:
+    parts = PurePosixPath(member_name).parts
+    if parts.count("payload") != 1:
+        raise TraceReexportPackagingError(
+            f"release archive member must contain exactly one payload directory: {member_name!r}"
+        )
+    payload_index = parts.index("payload")
+    relative_parts = parts[payload_index + 1 :]
+    if not relative_parts:
+        raise TraceReexportPackagingError(
+            f"release archive member has no path below payload: {member_name!r}"
+        )
+    return PurePosixPath(*relative_parts).as_posix()
 
 
 def _load_release_rows(
@@ -272,8 +288,7 @@ def _load_release_rows(
                 raise TraceReexportPackagingError(f"duplicate publication manifest path: {path}")
             signed[path] = digest
     for member_name, expected in ((goal_name, digests["goal"]), (ppo_name, digests["ppo"])):
-        marker = "/payload/"
-        relative = member_name.split(marker, 1)[1]
+        relative = _payload_relative_path(member_name)
         candidates = (relative, f"payload/{relative}")
         matches = [signed[path] for path in candidates if path in signed]
         if len(matches) != 1 or matches[0] != expected:

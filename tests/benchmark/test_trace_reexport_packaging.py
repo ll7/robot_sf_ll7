@@ -190,7 +190,12 @@ class SyntheticInputs:
     def write_manifest(self, label: str, payload: dict[str, Any]) -> None:
         _write_json(self.outputs[label] / "campaign_manifest.json", payload)
 
-    def rebuild_release(self, *, repin_embedded: bool = True) -> None:
+    def rebuild_release(
+        self,
+        *,
+        repin_embedded: bool = True,
+        member_prefix: str = "bundle/",
+    ) -> None:
         streams = {
             planner: b"".join(_json_bytes(row) for row in rows)
             for planner, rows in self.release_rows.items()
@@ -206,11 +211,13 @@ class SyntheticInputs:
             for planner, data in streams.items():
                 _add_tar_bytes(
                     archive,
-                    f"bundle/payload/runs/{planner}__differential_drive/episodes.jsonl",
+                    f"{member_prefix}payload/runs/{planner}__differential_drive/episodes.jsonl",
                     data,
                 )
             _add_tar_bytes(
-                archive, "bundle/publication_manifest.json", _json_bytes({"files": files})
+                archive,
+                f"{member_prefix}publication_manifest.json",
+                _json_bytes({"files": files}),
             )
         updates: dict[str, str] = {"release_bundle_sha256": _sha256_file(self.release_bundle)}
         if repin_embedded:
@@ -378,6 +385,19 @@ def test_package_success_is_isolated_deterministic_and_idempotent(
     package_trace_reexport(**synthetic_inputs.kwargs(output))
     assert _tree_digests(output) == before
     assert (output / "package_complete.json").stat().st_mtime_ns == marker_mtime
+
+
+def test_package_accepts_release_members_rooted_at_payload(
+    synthetic_inputs: SyntheticInputs,
+) -> None:
+    """A valid bundle need not wrap its payload directory in another directory."""
+    synthetic_inputs.rebuild_release(member_prefix="")
+
+    output = synthetic_inputs.root / "root-payload-package"
+    package_trace_reexport(**synthetic_inputs.kwargs(output))
+
+    receipt = json.loads((output / "mapping_receipt.json").read_text())
+    assert len(receipt["rows"]) == 90
 
 
 @pytest.mark.parametrize("case", ["missing", "duplicate", "extra"])

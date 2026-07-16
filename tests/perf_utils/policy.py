@@ -6,10 +6,17 @@ Defines the data structure representing the per-test performance budget
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Literal
 
 BreachType = Literal["none", "soft", "hard"]
+
+# pytest-xdist sets PYTEST_XDIST_WORKER to the worker id (e.g. "gw0") in every
+# worker subprocess. The controller process leaves it unset. Detecting this lets
+# performance-sensitive tests relax their soft runtime envelope when the machine
+# is contended by sibling workers rather than failing on unrelated CPU/I/O load.
+XDIST_WORKER_ENV = "PYTEST_XDIST_WORKER"
 
 
 @dataclass(slots=True)
@@ -29,6 +36,11 @@ class PerformanceBudgetPolicy:
     report_count: int = 10
     relax_env_var: str = "ROBOT_SF_PERF_RELAX"
     enforce_env_var: str = "ROBOT_SF_PERF_ENFORCE"
+    # Multiplier applied to the soft envelope when the test runs under pytest-xdist
+    # contention. The hard boundary is never scaled (a genuine regression must still
+    # fail), only the advisory soft budget that trips when unrelated workers starve
+    # this one of CPU/I/O (issue #5836).
+    xdist_contention_multiplier: float = 3.0
 
     def __post_init__(self) -> None:  # lightweight construction validation
         """Validate configuration invariants.
@@ -43,6 +55,32 @@ class PerformanceBudgetPolicy:
             raise ValueError("soft_threshold_seconds must be > 0 and < hard_timeout_seconds")
         if self.report_count < 1:
             raise ValueError("report_count must be >= 1")
+
+    def is_under_xdist(self) -> bool:
+        """Return True when running inside a pytest-xdist worker subprocess.
+
+        pytest-xdist exports ``PYTEST_XDIST_WORKER`` (the worker id, e.g. ``gw0``)
+        in each worker; the controller and standalone runs leave it unset. This is
+        the canonical, dependency-free way to detect full-suite contention.
+        """
+        worker = os.environ.get(XDIST_WORKER_ENV)
+        return bool(worker) and worker.strip() != ""
+
+    def effective_soft_threshold(self, *, ci: bool = False) -> float:
+        """Return the soft runtime envelope to enforce for this invocation.
+
+        Under pytest-xdist the envelope is multiplied by ``xdist_contention_multiplier``
+        so a saturated machine (sibling workers consuming CPU/I/O) no longer trips the
+        advisory budget. The hard boundary is intentionally never scaled: a genuine
+        benchmark runtime regression must still fail even under contention (issue #5836).
+        The widened soft value is clamped to stay strictly below the hard boundary so it
+        remains advisory rather than colliding with the hard wall.
+        """
+        base = self.soft_threshold_seconds
+        if self.is_under_xdist():
+            widened = base * self.xdist_contention_multiplier
+            return min(widened, self.hard_timeout_seconds * 0.9)
+        return base
 
     def classify(self, duration_seconds: float) -> BreachType:
         """Classify a test duration.

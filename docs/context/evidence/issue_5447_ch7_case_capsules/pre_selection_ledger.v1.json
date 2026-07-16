@@ -1,0 +1,563 @@
+{
+  "schema_version": "pre_selection_ledger.v1",
+  "issue": "#5447",
+  "candidate_manifest": {
+    "rel_path": "docs/context/evidence/issue_5446_release_0_0_3_candidates/seed_flip_inversion_candidates.v1.json.gz",
+    "sha256_file": "1021e2fa6efbd2bd4a0d6426a4f7314d83474ef5402a9d5dcf0d042aca83dd64",
+    "sha256_canonical_dict": "cf9caa96b88c47908ac2b3c63cc8dae21f0b20d39c44f5c48cd9b77225984f45",
+    "schema_version": "seed_flip_inversion_candidates.v1",
+    "n_candidates": 50,
+    "archetypes": [
+      "planner_upset",
+      "seed_flip"
+    ]
+  },
+  "selection_result": {
+    "status": "insufficient_evidence",
+    "n_admitted": 3,
+    "n_unavailable": 3,
+    "admitted_archetypes": [
+      "hard_vs_easy_seed",
+      "strong_fail_weak_success",
+      "unexpected_recovery"
+    ],
+    "unavailable_archetypes": [
+      "paired_first_unsafe_action",
+      "near_miss_online_risk",
+      "ambiguous_abstention"
+    ],
+    "meets_min_capsules": false
+  },
+  "capsules": [
+    {
+      "archetype": "hard_vs_easy_seed",
+      "title": "hard versus easy seed for the same planner/scenario",
+      "status": "admitted",
+      "evidence_grade": "descriptive-only",
+      "source_candidate_id": "seed_flip::classic_doorway_medium::ppo",
+      "reason": null
+    },
+    {
+      "archetype": "strong_fail_weak_success",
+      "title": "held-out strong-planner failure versus weak-planner success",
+      "status": "admitted",
+      "evidence_grade": "descriptive-only",
+      "source_candidate_id": "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo",
+      "reason": null
+    },
+    {
+      "archetype": "paired_first_unsafe_action",
+      "title": "paired approach with different first unsafe action and counterfactual",
+      "status": "unavailable",
+      "evidence_grade": "unavailable",
+      "source_candidate_id": null,
+      "reason": "causal_report_unavailable"
+    },
+    {
+      "archetype": "near_miss_online_risk",
+      "title": "near miss where online risk distinguishes candidate actions early",
+      "status": "unavailable",
+      "evidence_grade": "unavailable",
+      "source_candidate_id": null,
+      "reason": "risk_report_unavailable"
+    },
+    {
+      "archetype": "unexpected_recovery",
+      "title": "unexpected recovery or critical-interval/aggregate disagreement",
+      "status": "admitted",
+      "evidence_grade": "descriptive-only",
+      "source_candidate_id": "seed_flip::classic_cross_trap_high::ppo",
+      "reason": null
+    },
+    {
+      "archetype": "ambiguous_abstention",
+      "title": "optional ambiguous multi-actor case whose correct causal output is abstention",
+      "status": "unavailable",
+      "evidence_grade": "unavailable",
+      "source_candidate_id": null,
+      "reason": "causal_report_unavailable"
+    }
+  ],
+  "candidate_pool": [
+    {
+      "candidate_id": "planner_upset::classic_doorway_high::goal>ppo",
+      "archetype": "planner_upset",
+      "scenario_id": "classic_doorway_high",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "planner_upset::classic_group_crossing_high::goal>ppo",
+      "archetype": "planner_upset",
+      "scenario_id": "classic_group_crossing_high",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "planner_upset::classic_group_crossing_medium::goal>ppo",
+      "archetype": "planner_upset",
+      "scenario_id": "classic_group_crossing_medium",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "planner_upset::classic_realworld_double_bottleneck_high::goal>ppo",
+      "archetype": "planner_upset",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "selected": true,
+      "triage_only": false,
+      "chosen": true
+    },
+    {
+      "candidate_id": "planner_upset::francis2023_parallel_traffic::goal>ppo",
+      "archetype": "planner_upset",
+      "scenario_id": "francis2023_parallel_traffic",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_bottleneck_low::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_bottleneck_low",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_bottleneck_medium::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_bottleneck_medium",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_cross_trap_high::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_cross_trap_high",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": true
+    },
+    {
+      "candidate_id": "seed_flip::classic_cross_trap_low::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_cross_trap_low",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_cross_trap_medium::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_cross_trap_medium",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_doorway_high::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_doorway_high",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_doorway_high::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_doorway_high",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_doorway_low::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_doorway_low",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_doorway_low::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_doorway_low",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_doorway_medium::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_doorway_medium",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_doorway_medium::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_doorway_medium",
+      "planner": "ppo",
+      "selected": true,
+      "triage_only": false,
+      "chosen": true
+    },
+    {
+      "candidate_id": "seed_flip::classic_group_crossing_high::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_group_crossing_high",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_group_crossing_high::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_group_crossing_high",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_group_crossing_low::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_group_crossing_low",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_group_crossing_low::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_group_crossing_low",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_group_crossing_medium::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_group_crossing_medium",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_group_crossing_medium::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_group_crossing_medium",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_head_on_corridor_low::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_head_on_corridor_low",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_head_on_corridor_low::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_head_on_corridor_low",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_head_on_corridor_medium::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_head_on_corridor_medium::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_head_on_corridor_medium",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_overtaking_low::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_overtaking_low",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_overtaking_low::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_overtaking_low",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_overtaking_medium::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_overtaking_medium",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_overtaking_medium::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_overtaking_medium",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_realworld_double_bottleneck_high::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_realworld_double_bottleneck_high",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_t_intersection_low::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_t_intersection_low",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_t_intersection_medium::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_t_intersection_medium",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_urban_crossing_medium::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_urban_crossing_medium",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::classic_urban_crossing_medium::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "classic_urban_crossing_medium",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_blind_corner::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_blind_corner",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_circular_crossing::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_circular_crossing",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_circular_crossing::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_circular_crossing",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_crowd_navigation::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_crowd_navigation",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_crowd_navigation::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_crowd_navigation",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_entering_elevator::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_entering_elevator",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_entering_room::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_entering_room",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_exiting_elevator::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_exiting_elevator",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_exiting_room::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_exiting_room",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_leave_group::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_leave_group",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_parallel_traffic::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_parallel_traffic",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_parallel_traffic::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_parallel_traffic",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_perpendicular_traffic::goal",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "planner": "goal",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_perpendicular_traffic::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_perpendicular_traffic",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    },
+    {
+      "candidate_id": "seed_flip::francis2023_robot_crowding::ppo",
+      "archetype": "seed_flip",
+      "scenario_id": "francis2023_robot_crowding",
+      "planner": "ppo",
+      "selected": false,
+      "triage_only": false,
+      "chosen": false
+    }
+  ],
+  "author_pending_fields": [
+    "ch7::hard_vs_easy_seed: narrative.what_went_well author-required",
+    "ch7::hard_vs_easy_seed: narrative.what_failed author-required",
+    "ch7::hard_vs_easy_seed: narrative.competing_explanation author-required",
+    "ch7::hard_vs_easy_seed: narrative.generalization_limits author-required",
+    "ch7::hard_vs_easy_seed: figure_spec.marked_times author-required",
+    "ch7::hard_vs_easy_seed: figure_spec.why_this_time_matters author-required",
+    "ch7::hard_vs_easy_seed: shared_axis_spec.axes_limits author-required",
+    "ch7::hard_vs_easy_seed: shared_axis_spec.map_crop author-required",
+    "ch7::hard_vs_easy_seed: shared_axis_spec.palette author-required",
+    "ch7::hard_vs_easy_seed: shared_axis_spec.time_markers author-required",
+    "ch7::hard_vs_easy_seed: shared_axis_spec.metric_risk_scale author-required",
+    "ch7::strong_fail_weak_success: narrative.what_went_well author-required",
+    "ch7::strong_fail_weak_success: narrative.what_failed author-required",
+    "ch7::strong_fail_weak_success: narrative.competing_explanation author-required",
+    "ch7::strong_fail_weak_success: narrative.generalization_limits author-required",
+    "ch7::strong_fail_weak_success: figure_spec.marked_times author-required",
+    "ch7::strong_fail_weak_success: figure_spec.why_this_time_matters author-required",
+    "ch7::strong_fail_weak_success: shared_axis_spec.axes_limits author-required",
+    "ch7::strong_fail_weak_success: shared_axis_spec.map_crop author-required",
+    "ch7::strong_fail_weak_success: shared_axis_spec.palette author-required",
+    "ch7::strong_fail_weak_success: shared_axis_spec.time_markers author-required",
+    "ch7::strong_fail_weak_success: shared_axis_spec.metric_risk_scale author-required",
+    "ch7::unexpected_recovery: narrative.what_went_well author-required",
+    "ch7::unexpected_recovery: narrative.what_failed author-required",
+    "ch7::unexpected_recovery: narrative.competing_explanation author-required",
+    "ch7::unexpected_recovery: narrative.generalization_limits author-required",
+    "ch7::unexpected_recovery: figure_spec.marked_times author-required",
+    "ch7::unexpected_recovery: figure_spec.why_this_time_matters author-required"
+  ]
+}

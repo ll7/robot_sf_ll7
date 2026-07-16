@@ -1,0 +1,14 @@
+# Issue #5447 Chapter 7 case-capsule build & export commands (pinned).
+# Reproduce the capsule manifest + ledger from the frozen #5446 candidate manifest.
+uv run python scripts/analysis/materialize_issue_5447_capsules.py
+
+# One-off CLI form (values pinned to the frozen-SHA candidate manifest):
+uv run python scripts/analysis/build_ch7_case_capsules_issue_5447.py \
+    --candidates docs/context/evidence/issue_5446_release_0_0_3_candidates/seed_flip_inversion_candidates.v1.json.gz \
+    --json docs/context/evidence/issue_5447_ch7_case_capsules/ch7_case_capsule_manifest.v1.json \
+    --validate
+
+# Downstream vector-figure rendering (reuses robot_sf.benchmark.figures);
+# requires the pinned episode trajectories resolved by #5615/#5446 trace resolution.
+# Author-pending narrative/figure fields must be completed and an
+# independent pinned-SHA visual/evidence review recorded before dissertation use.

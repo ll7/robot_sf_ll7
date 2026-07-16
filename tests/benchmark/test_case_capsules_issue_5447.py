@@ -9,6 +9,8 @@ author-pending narrative fields.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from typing import Any
 
 import pytest
@@ -344,3 +346,85 @@ def test_case_capsule_cli_fails_closed_on_missing_json(tmp_path, capsys):
     missing = tmp_path / "missing.json"
     assert build_cli_main(["--candidates", str(missing)]) == 2
     assert "error:" in capsys.readouterr().err
+
+
+def test_materialize_issue_5447_writes_pinned_artifact_set(tmp_path, monkeypatch):
+    """The materialize driver writes a manifest + ledger + SHA sidecar from the
+    real frozen #5446 candidate manifest, without fabricating capsules.
+
+    Uses a tiny synthetic candidate manifest copied into the expected path so the
+    test is hermetic (no network / large evidence bundle needed), while still
+    exercising the read-gz-or-plain path and the full output contract.
+    """
+    from scripts.analysis.materialize_issue_5447_capsules import (
+        CANDIDATE_REL,
+        EVID_DIR,
+        materialize,
+    )
+
+    out_root = tmp_path
+    cand_rel = out_root / CANDIDATE_REL
+    cand_rel.parent.mkdir(parents=True, exist_ok=True)
+    # Plain (non-gz) candidate manifest to exercise the json branch.
+    cand_rel.write_text(
+        json.dumps(
+            _candidate_manifest(
+                [_seed_flip_candidate("sf1", "sA", "p1"), _upset_candidate("up1", "sB", "p2")]
+            )
+        ),
+        encoding="utf-8",
+    )
+    evid = out_root / EVID_DIR
+    monkeypatch.setattr("scripts.analysis.materialize_issue_5447_capsules.EVID_DIR", evid)
+    monkeypatch.setattr(
+        "scripts.analysis.materialize_issue_5447_capsules.CANDIDATE_REL", str(cand_rel)
+    )
+
+    n = materialize()
+    assert n == 2  # two descriptive-only admitted, no casual/risk reports supplied
+
+    manifest_path = evid / "ch7_case_capsule_manifest.v1.json"
+    ledger_path = evid / "pre_selection_ledger.v1.json"
+    sums_path = evid / "SHA256SUMS"
+    assert manifest_path.exists() and ledger_path.exists() and sums_path.exists()
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["schema_version"] == "ch7_case_capsule_manifest.v1"
+    result = validate_ch7_case_capsule_manifest(manifest)
+    assert result.ok, result.structural_violations
+
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    # Pre-selection ledger retains the full candidate pool, not just chosen rows.
+    assert len(ledger["candidate_pool"]) == 2
+    assert ledger["selection_result"]["n_admitted"] == 2
+
+    # Sidecar names every emitted file with a checksum.
+    sums = sums_path.read_text(encoding="utf-8")
+    assert "ch7_case_capsule_manifest.v1.json" in sums
+    assert "pre_selection_ledger.v1.json" in sums
+
+
+def test_materialize_issue_5447_is_deterministic(tmp_path, monkeypatch):
+    """Re-materializing the same frozen candidate manifest yields identical SHA."""
+    from scripts.analysis.materialize_issue_5447_capsules import (
+        CANDIDATE_REL,
+        materialize,
+    )
+
+    cand_rel = tmp_path / CANDIDATE_REL
+    cand_rel.parent.mkdir(parents=True, exist_ok=True)
+    cand_rel.write_text(
+        json.dumps(_candidate_manifest([_seed_flip_candidate("sf1", "sA", "p1")])),
+        encoding="utf-8",
+    )
+    evid_a = tmp_path / "run_a"
+    evid_b = tmp_path / "run_b"
+    for evid in (evid_a, evid_b):
+        monkeypatch.setattr("scripts.analysis.materialize_issue_5447_capsules.EVID_DIR", evid)
+        monkeypatch.setattr(
+            "scripts.analysis.materialize_issue_5447_capsules.CANDIDATE_REL", str(cand_rel)
+        )
+        materialize()
+    a = (evid_a / "ch7_case_capsule_manifest.v1.json").read_bytes()
+    b = (evid_b / "ch7_case_capsule_manifest.v1.json").read_bytes()
+    assert hashlib.sha256(a).hexdigest() == hashlib.sha256(b).hexdigest()

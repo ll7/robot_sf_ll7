@@ -1,0 +1,87 @@
+{
+  "schema_version": "issue_5164_h600_source_reports_recovery.v1",
+  "issue": 5164,
+  "parent_issue": 5138,
+  "recovered_at": "2026-07-16T16:20:07+02:00",
+  "recovery_kind": "verbatim_recovery_of_original_2026-07-02_outputs",
+  "regenerated": false,
+  "copy_method": "scp -p from imech192; source files read only",
+  "claim_boundary": "Diagnostic-only source recovery. This record does not upgrade the campaign outputs to benchmark or paper-grade evidence.",
+  "preflight_decision": {
+    "inspected_path": "imech192:~/git/robot_sf_ll7.worktrees/slurm-issue-3810-extroster-20260702/output/benchmarks/camera_ready/issue3810_h600_extroster_preflight_20260702/reports",
+    "status": "rejected_as_source",
+    "reason": "The preflight directory contains no scenario_breakdown.csv, scenario_family_breakdown.csv, or seed_episode_rows.csv; issue #5164 pins the completed run outputs."
+  },
+  "runs": [
+    {
+      "job_id": "13268",
+      "run_label": "confirm",
+      "slurm_state": "COMPLETED",
+      "slurm_end": "2026-07-02T13:34:58",
+      "source_host": "imech192",
+      "source_workdir": "imech192:~/git/robot_sf_ll7.worktrees/slurm-issue-1554-origin-main-ready-20260630",
+      "source_reports_dir": "imech192:~/git/robot_sf_ll7.worktrees/slurm-issue-1554-origin-main-ready-20260630/output/benchmarks/camera_ready/issue3810_h600_longhorizon_confirm_run_20260702/reports",
+      "files": [
+        {
+          "name": "scenario_breakdown.csv",
+          "role": "issue_5164_required_source_report",
+          "size_bytes": 47943,
+          "sha256": "bab81ea5ed6517c7537ff41954b4b2ecefc2dc84754c6f43efca8d36f9bac2a1"
+        },
+        {
+          "name": "scenario_family_breakdown.csv",
+          "role": "issue_5164_required_source_report",
+          "size_bytes": 28502,
+          "sha256": "f2d7e3128eb956721a2724a2d8d9ca9645eced6df1a3219f1e3a4e597f8965b9"
+        },
+        {
+          "name": "seed_episode_rows.csv",
+          "role": "issue_5164_required_source_report",
+          "size_bytes": 166599,
+          "sha256": "4493c8ebee0942c1c32b0d51e511f4fd98f35ee2be8d24d366564f8979be7d23"
+        },
+        {
+          "name": "campaign_summary.json",
+          "role": "issue_5138_exporter_summary_companion",
+          "size_bytes": 339571,
+          "sha256": "f29e6c5ee12679408b1d65add0149e4cfe07390f0c8828208114f39dd900c257"
+        }
+      ]
+    },
+    {
+      "job_id": "13273",
+      "run_label": "extended_roster",
+      "slurm_state": "COMPLETED",
+      "slurm_end": "2026-07-02T18:37:23",
+      "source_host": "imech192",
+      "source_workdir": "imech192:~/git/robot_sf_ll7.worktrees/slurm-issue-3810-extroster-20260702",
+      "source_reports_dir": "imech192:~/git/robot_sf_ll7.worktrees/slurm-issue-3810-extroster-20260702/output/benchmarks/camera_ready/issue3810_h600_extroster_run_20260702/reports",
+      "files": [
+        {
+          "name": "scenario_breakdown.csv",
+          "role": "issue_5164_required_source_report",
+          "size_bytes": 62740,
+          "sha256": "49ef88f08ccc66e73f01cf6221a52fd685a6ca9d3aa4f1179aa0ca1532827e1f"
+        },
+        {
+          "name": "scenario_family_breakdown.csv",
+          "role": "issue_5164_required_source_report",
+          "size_bytes": 37422,
+          "sha256": "1a925a9fc4f0cecba834573597e1c8995a350a5b3454fec0cb4280256eb4a156"
+        },
+        {
+          "name": "seed_episode_rows.csv",
+          "role": "issue_5164_required_source_report",
+          "size_bytes": 217904,
+          "sha256": "f2e5960c2439f28745b4bd2f7cd19f4c94cabd86cb1387693095a656ac859e81"
+        },
+        {
+          "name": "campaign_summary.json",
+          "role": "issue_5138_exporter_summary_companion",
+          "size_bytes": 437114,
+          "sha256": "f456580bad70167e42d6e24c9570547042fd02ce39c35687ed152928f6a0698e"
+        }
+      ]
+    }
+  ]
+}

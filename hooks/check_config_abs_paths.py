@@ -18,6 +18,7 @@ handed (staged files at commit time), plus the whole tracked tree under ``--all`
 """
 
 import argparse
+import hashlib
 import logging
 import re
 import subprocess
@@ -59,6 +60,21 @@ LEGACY_EVIDENCE_ALLOWLIST = frozenset(
     }
 )
 
+# Two issue-5164 exporter companions are verbatim copies of the original 2026-07-02 campaign
+# summaries. Their embedded absolute paths are historical execution provenance and cannot be
+# rewritten without breaking the recovery checksums. Keep this exception byte-exact: any change to
+# either file stops matching here and restores the normal absolute-path scan.
+PINNED_VERBATIM_EVIDENCE_SHA256 = {
+    (
+        "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"
+        "source_reports/13268/campaign_summary.json"
+    ): "f29e6c5ee12679408b1d65add0149e4cfe07390f0c8828208114f39dd900c257",
+    (
+        "docs/context/evidence/issue_3810_h600_interpretation_2026-07/"
+        "source_reports/13273/campaign_summary.json"
+    ): "f456580bad70167e42d6e24c9570547042fd02ce39c35687ed152928f6a0698e",
+}
+
 
 def _under_root(path: Path, root: Path) -> bool:
     """Return whether ``path`` lives under ``root``.
@@ -91,6 +107,25 @@ def _is_grandfathered_evidence(path: Path) -> bool:
     return False
 
 
+def _is_pinned_verbatim_evidence(path: Path) -> bool:
+    """Return whether ``path`` is an exact pinned recovery artifact.
+
+    The path match accepts repository-relative and absolute caller paths. The digest match makes
+    the exception fail closed if a recovered artifact is edited or replaced.
+    """
+
+    normalized = path.as_posix()
+    for repo_path, expected_sha256 in PINNED_VERBATIM_EVIDENCE_SHA256.items():
+        if normalized != repo_path and not normalized.endswith(f"/{repo_path}"):
+            continue
+        try:
+            observed_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError:
+            return False
+        return observed_sha256 == expected_sha256
+    return False
+
+
 def _iter_scanned_files(files: list[str]) -> list[Path]:
     """
     Return the subset of ``files`` under a scanned root, minus grandfathered ones.
@@ -107,6 +142,8 @@ def _iter_scanned_files(files: list[str]) -> list[Path]:
         if not any(_under_root(path, root) for root in SCANNED_ROOTS):
             continue
         if _is_grandfathered_evidence(path):
+            continue
+        if _is_pinned_verbatim_evidence(path):
             continue
         selected.append(path)
     return selected

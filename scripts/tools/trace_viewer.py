@@ -529,10 +529,18 @@ def _log_series_styles(audit: RecordingAudit, rr: Any, case: EpisodeCase) -> Non
             1.0,
         ),
     )
+    # rerun-sdk >=0.23 renamed SeriesLine -> SeriesLines (widths became plural too).
+    series_cls = getattr(rr, "SeriesLines", None) or rr.SeriesLine
+    plural = series_cls.__name__.endswith("s")
     for name, display_name, color, width in styles:
+        kwargs = (
+            {"colors": color, "names": display_name, "widths": width}
+            if plural
+            else {"color": color, "name": display_name, "width": width}
+        )
         audit.log(
             f"{case.root}/metrics/{name}",
-            rr.SeriesLine(color=color, name=display_name, width=width),
+            series_cls(**kwargs),
             static=True,
         )
 

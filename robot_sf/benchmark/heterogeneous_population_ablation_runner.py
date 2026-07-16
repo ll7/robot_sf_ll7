@@ -17,7 +17,9 @@ from __future__ import annotations
 
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
 
 from robot_sf.benchmark.heterogeneous_population_ablation import (
     PopulationMixNotRealizableError,
@@ -25,6 +27,13 @@ from robot_sf.benchmark.heterogeneous_population_ablation import (
 )
 from robot_sf.benchmark.map_runner import _build_policy
 from robot_sf.benchmark.map_runner_episode import run_map_episode
+from robot_sf.nav.navigation import get_prepared_obstacles
+from robot_sf.ped_npc import ped_population
+from robot_sf.ped_npc.ped_population import PedSpawnConfig
+from robot_sf.training.scenario_loader import resolve_map_definition
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
 
 # Per-archetype desired-speed factors used when materializing a manifest row into
 # a runtime population. The ``mean_matched_homogeneous`` value is the weighted mean
@@ -38,6 +47,88 @@ DEFAULT_ARCHETYPE_SPEED_FACTORS = {
 
 DEFAULT_ARCHETYPE_SEED = 3574
 DEFAULT_MAX_EPISODE_STEPS = 600
+
+
+class ManifestSpawnRealizabilityError(ValueError):
+    """Raised when one or more manifest scenario/population cells cannot spawn."""
+
+
+def assert_manifest_spawn_realizable(
+    manifest_rows: Sequence[Mapping[str, Any]],
+    *,
+    scenario_path: Path,
+    map_path: Path | str | None = None,
+) -> None:
+    """Dry-run each distinct scenario/population spawn plan and aggregate failures.
+
+    This deliberately calls the same population-construction helper used by the simulator.
+    It parses map geometry and samples the requested pedestrian positions, but does not create
+    a simulator or advance any episode state.
+
+    Raises:
+        ManifestSpawnRealizabilityError: Any distinct scenario/map/population cell cannot spawn.
+    """
+
+    seen_cells: set[tuple[str, str, int]] = set()
+    failures: list[str] = []
+    for row_index, row in enumerate(manifest_rows):
+        scenario_id = str(row.get("scenario_id", f"manifest_rows[{row_index}]")).strip()
+        raw_map = row.get("map_file", map_path)
+        try:
+            counts = row["arm_population"]["counts"]
+            population_size = sum(int(value) for value in counts.values())
+        except (KeyError, TypeError, ValueError, AttributeError) as exc:
+            failures.append(f"scenario={scenario_id}: invalid forced population: {exc}")
+            continue
+
+        cell_key = (scenario_id, str(raw_map), population_size)
+        if cell_key in seen_cells:
+            continue
+        seen_cells.add(cell_key)
+        cell_name = f"scenario={scenario_id} population_size={population_size} map_file={raw_map}"
+
+        try:
+            scenario = build_episode_scenario(row, map_path=map_path)
+            map_definition = resolve_map_definition(
+                scenario["map_file"],
+                scenario_path=scenario_path,
+            )
+            if map_definition is None:
+                raise ValueError(f"map definition could not be loaded: {scenario['map_file']}")
+            simulation_config = scenario["simulation_config"]
+            spawn_config = PedSpawnConfig(
+                peds_per_area_m2=float(simulation_config["ped_density"]),
+                max_group_members=3,
+                archetype_composition=simulation_config.get("archetype_composition"),
+                archetype_speed_factors=simulation_config.get("archetype_speed_factors"),
+                archetype_seed=simulation_config.get("archetype_seed"),
+                response_law_composition=simulation_config.get("response_law_composition"),
+                response_law_seed=simulation_config.get("response_law_seed"),
+                force_population_size=int(simulation_config["population_size"]),
+            )
+            random_state = np.random.get_state()
+            np.random.seed(int(row.get("seed", DEFAULT_ARCHETYPE_SEED)))
+            try:
+                ped_population.populate_simulation(
+                    0.5,
+                    spawn_config,
+                    map_definition.ped_routes,
+                    map_definition.ped_crowded_zones,
+                    obstacle_polygons=get_prepared_obstacles(map_definition),
+                    single_pedestrians=map_definition.single_pedestrians,
+                    time_step_s=0.1,
+                )
+            finally:
+                np.random.set_state(random_state)
+        except (AssertionError, KeyError, TypeError, ValueError, OSError, RuntimeError) as exc:
+            failures.append(f"{cell_name}: {exc}")
+
+    if failures:
+        details = "\n".join(f"- {failure}" for failure in failures)
+        raise ManifestSpawnRealizabilityError(
+            "manifest spawn realizability validation failed for "
+            f"{len(failures)} scenario/population cell(s):\n{details}"
+        )
 
 
 def build_episode_scenario(
@@ -225,6 +316,8 @@ __all__ = [
     "DEFAULT_ARCHETYPE_SEED",
     "DEFAULT_ARCHETYPE_SPEED_FACTORS",
     "DEFAULT_MAX_EPISODE_STEPS",
+    "ManifestSpawnRealizabilityError",
+    "assert_manifest_spawn_realizable",
     "build_episode_scenario",
     "run_manifest_row",
 ]

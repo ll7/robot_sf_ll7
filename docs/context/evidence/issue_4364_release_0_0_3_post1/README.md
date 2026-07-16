@@ -12,7 +12,10 @@ ordering now use the same execution scalarizer.
 
 ## Durable artifact pointer
 
-- Draft release: `https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.3.post1`
+- Draft release:
+  `https://github.com/ll7/robot_sf_ll7/releases/tag/untagged-7d3aa3c9034687ce4f66`
+- Stable release URL after maintainer publication:
+  `https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.3.post1`
 - Concept DOI: `10.5281/zenodo.19482025`
 - Bundle SHA-256:
   `9bf6ea35a17ce812f0a9c841c3681bc072dcf7ba8c121cbcf05113b8514f4de1`
@@ -50,4 +53,3 @@ Compact outputs are preserved in `publication_preflight.json`, `snqi_reconciliat
 `collision_reconciliation.json`. The publication preflight passes with one expected warning:
 the execution and publication commits differ and are allowed by the structured
 `provenance.commit_reconciliation` block.
-

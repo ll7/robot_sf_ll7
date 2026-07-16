@@ -2,15 +2,17 @@
   "schema_version": "release_artifact_pointer.v1",
   "release_tag": "0.0.3.post1",
   "release_state": "draft_do_not_publish",
-  "release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.3.post1",
+  "draft_release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/untagged-7d3aa3c9034687ce4f66",
+  "published_release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.3.post1",
   "concept_doi": "10.5281/zenodo.19482025",
   "claim_boundary": "Corrected, row-preserving publication of the existing 20,160 release episodes. No simulation was run and no new benchmark or paper claim is introduced. The campaign SNQI contract remains fail-with-warning and must not be promoted as SNQI-contract-valid evidence.",
   "artifact": {
     "name": "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
     "size_bytes": 45072616,
     "sha256": "9bf6ea35a17ce812f0a9c841c3681bc072dcf7ba8c121cbcf05113b8514f4de1",
-    "asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/0.0.3.post1/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
-    "local_staging_classification": "durable-required until attached to the draft release; durable-promoted after upload"
+    "draft_asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/untagged-7d3aa3c9034687ce4f66/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+    "published_asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/0.0.3.post1/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+    "local_staging_classification": "durable-promoted to the draft release; the local copy is a recoverable staging cache"
   },
   "source": {
     "release_tag": "0.0.3",

@@ -218,6 +218,7 @@ def test_check_manifest_from_bundle_rejects_missing_execution_contract():
 def _build_mock_record(seed: int) -> dict[str, Any]:
     """Build a stable mock episode record whose hash depends only on seed."""
     return {
+        "algorithm_metadata": {"status": "ok", "config_hash": "mock-config"},
         "outcome": {"success": True, "collision": False, "timeout": False},
         "metrics": {
             "success": 1.0,
@@ -630,6 +631,17 @@ def test_record_is_isolation_failure_detects_worker_death_reason():
             {
                 "algorithm_metadata": {
                     "status": "policy_step_error_fallback",
+                    "fallback_reason": "planner step worker was unavailable",
+                }
+            }
+        )
+        is True
+    )
+    assert (
+        _record_is_isolation_failure(
+            {
+                "algorithm_metadata": {
+                    "status": "policy_step_error_fallback",
                     "fallback_reason": "planner step worker failed to initialize (RuntimeError: cuda)",
                 }
             }
@@ -674,6 +686,20 @@ def test_record_is_isolation_failure_rejects_native_ok_record():
 def test_record_is_isolation_failure_rejects_non_mapping_record():
     """Malformed runner output does not raise while checking isolation failure."""
     assert _record_is_isolation_failure(None) is False
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {},
+        {"algorithm_metadata": None},
+        {"algorithm_metadata": {}},
+        {"algorithm_metadata": {"status": None, "config_hash": None}},
+    ],
+)
+def test_record_is_isolation_failure_fails_closed_on_missing_policy_metadata(record):
+    """Records without usable policy metadata cannot become determinism evidence."""
+    assert _record_is_isolation_failure(record) is True
 
 
 def test_classify_repeat_failure_prefers_isolation_over_degraded():
@@ -863,6 +889,9 @@ def test_execute_campaign_dispositions_process_isolation_failure(
     for target in verified["targets"]:
         assert target["unrunnable"] is True
         assert target["isolation_failure"] is True
+    for cell in verified["cells"]:
+        assert cell["disposition"] == PROCESS_ISOLATION_DISPOSITION
+        assert cell["isolation_failure"] is True
 
 
 def test_verify_host_report_accepts_isolation_failure_disposition(
@@ -880,6 +909,40 @@ def test_verify_host_report_accepts_isolation_failure_disposition(
     assert verified["summary"]["n_unrunnable_cells"] == 7
 
 
+@pytest.mark.parametrize("isolation_failure", [None, 1, "true"])
+def test_verify_host_report_rejects_non_boolean_isolation_flag(
+    tmp_path, manifest, resolved_bundle, isolation_failure
+):
+    """The strict verifier rejects truthy or missing process-isolation flags."""
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / f"invalid_isolation_flag_{isolation_failure!s}",
+        run_episode=_isolation_failure_mock_runner,
+    )
+    for result in host_result["results"]:
+        if isolation_failure is None:
+            result.pop("isolation_failure")
+        else:
+            result["isolation_failure"] = isolation_failure
+    with pytest.raises(ValueError, match="disposition and isolation_failure disagree|boolean"):
+        verify_host_report(manifest, host_result)
+
+
+def test_verify_host_report_rejects_isolation_flag_for_unrunnable_disposition(
+    tmp_path, manifest, resolved_bundle
+):
+    """The isolation flag and disposition must describe the same failure class."""
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "mismatched_isolation_flag",
+        run_episode=_isolation_failure_mock_runner,
+    )
+    for result in host_result["results"]:
+        result["disposition"] = UNRUNNABLE_DISPOSITION
+    with pytest.raises(ValueError, match="disposition and isolation_failure disagree"):
+        verify_host_report(manifest, host_result)
+
+
 def test_execute_campaign_prefers_isolation_over_degradation(tmp_path, manifest, resolved_bundle):
     """When a repeat is both degraded and an isolation failure, isolation wins.
 
@@ -888,10 +951,19 @@ def test_execute_campaign_prefers_isolation_over_degradation(tmp_path, manifest,
     isolation cause must take precedence so the failure is not attributed to the
     planner policy.
     """
+
+    def degraded_isolation_runner(*args, **kwargs):
+        record = _isolation_failure_mock_runner(*args, **kwargs)
+        record["algorithm_metadata"] = {
+            "status": "policy_step_error_fallback",
+            "fallback_reason": "planner step worker exited before returning an action",
+        }
+        return record
+
     host_result = execute_campaign(
         resolved_bundle,
         output_dir=tmp_path / "isolation_precedence",
-        run_episode=_isolation_failure_mock_runner,
+        run_episode=degraded_isolation_runner,
     )
     assert all(r["disposition"] == PROCESS_ISOLATION_DISPOSITION for r in host_result["results"])
 

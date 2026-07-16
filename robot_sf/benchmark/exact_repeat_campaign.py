@@ -114,7 +114,7 @@ def _record_is_degraded(record: Any) -> bool:
 # repeats carry them the target failed at the isolation boundary, not in the
 # planner policy itself.
 _PROCESS_ISOLATION_FAILURE_SIGNATURES = (
-    "policy step worker was unavailable",
+    "planner step worker was unavailable",
     "planner step worker exited before returning an action",
     "planner step worker exited without returning an action",
     "planner step worker failed to start",
@@ -140,7 +140,7 @@ def _record_is_isolation_failure(record: Any) -> bool:
         return False
     metadata = record.get("algorithm_metadata")
     if not isinstance(metadata, Mapping):
-        return False
+        return True
     if metadata.get("status") == "policy_step_isolation_unavailable":
         return True
     reason = metadata.get("fallback_reason")
@@ -151,7 +151,7 @@ def _record_is_isolation_failure(record: Any) -> bool:
     # failed before/around action production; treat it as an isolation failure so
     # it is not silently promoted to a determinism verdict (fail-closed).
     if metadata.get("status") is None and not metadata.get("config_hash"):
-        return False
+        return True
     return False
 
 
@@ -657,12 +657,17 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
             # ``isolation_failure`` flag so the determinism signal is not polluted by
             # transient xdist/worker infra failures (issue #5781).
             isolation_failure = result.get("isolation_failure", False)
+            if not isinstance(isolation_failure, bool):
+                raise ValueError(f"target {key} isolation_failure must be a boolean")
+            expected_isolation_failure = disposition == PROCESS_ISOLATION_DISPOSITION
+            if isolation_failure != expected_isolation_failure:
+                raise ValueError(f"target {key} disposition and isolation_failure disagree")
             verified = {
                 "scenario_id": key[0],
                 "planner": key[1],
                 "seed": key[2],
                 "unrunnable": True,
-                "isolation_failure": bool(isolation_failure),
+                "isolation_failure": isolation_failure,
                 "disposition": disposition,
                 "disposition_reason": disposition_reason,
                 "bitwise_identical": None,
@@ -701,12 +706,17 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
         n_runnable_targets = len(runnable)
         n_unrunnable_targets = n_targets - n_runnable_targets
         if not runnable:
+            dispositions = {item["disposition"] for item in target_results}
+            cell_disposition = dispositions.pop() if len(dispositions) == 1 else MIXED_DISPOSITION
             cells.append(
                 {
                     "scenario_id": scenario_id,
                     "planner": planner,
                     "unrunnable": True,
-                    "disposition": UNRUNNABLE_DISPOSITION,
+                    "isolation_failure": any(
+                        item.get("isolation_failure") is True for item in target_results
+                    ),
+                    "disposition": cell_disposition,
                     "exact_repeat_determinism": None,
                     "first_divergence": None,
                     "n_targets": n_targets,

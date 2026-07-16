@@ -12,21 +12,21 @@ Rationale:
   workers plus other repository test work) contends for the same host: the deterministic isolated
   baseline is ~1.2s, but shared-host CPU contention pushed wall time to 21.479s.
 
-  To stay a reliable readiness signal we measure the smoke's own CPU time (``time.process_time``)
-  instead of wall-clock. CPU time counts only this process's own consumption, so transient
-  contention from *other* processes does not inflate it, while a genuine representative-path
-  regression (more CPU work in our code) still grows it proportionally and breaches the threshold.
-  The contract is fully deterministic across host load and is documented in
-  docs/context/issue_1436_reproducibility_flaky_acceptance.md.
+  To stay a reliable readiness signal we use the smoke's own CPU time (``time.process_time``) for
+  the soft budget. CPU time counts only this process's consumption, so transient contention from
+  *other* processes does not inflate it, while extra CPU work in our code still breaches the
+  threshold. A separate, deliberately generous wall-time fail-safe retains coverage for blocking
+  and I/O regressions without restoring the load-sensitive 20-second wall-clock assertion. The
+  contract is documented in docs/context/issue_1436_reproducibility_flaky_acceptance.md.
 """
 
 from __future__ import annotations
 
 import json
-import os
-import sys
 import time
 from pathlib import Path
+
+import pytest
 
 from robot_sf.benchmark.full_classic.orchestrator import (
     BenchmarkManifest,
@@ -34,10 +34,28 @@ from robot_sf.benchmark.full_classic.orchestrator import (
     run_full_benchmark,
 )
 
-# Soft CPU-time budget for the smoke. The isolated deterministic baseline is ~1.2s
-# wall / well under 1s CPU, so this is generous enough for quiet hosts yet tight
-# enough that a real regression (e.g. excessive loops or IO) still fails.
-SOFT_RUNTIME_SEC = 20.0
+# The isolated deterministic baseline is ~1.2s wall / well under 1s CPU. The soft CPU budget
+# detects excess computation without charging this process for unrelated host load. The wall
+# fail-safe is intentionally above the observed 21.479s loaded run and catches blocking or I/O
+# regressions that process CPU time cannot see.
+SOFT_CPU_RUNTIME_SEC = 20.0
+HARD_WALL_RUNTIME_SEC = 60.0
+
+
+def _assert_runtime_within_budget(
+    *,
+    cpu_elapsed: float,
+    wall_elapsed: float,
+    cpu_limit: float = SOFT_CPU_RUNTIME_SEC,
+    wall_limit: float = HARD_WALL_RUNTIME_SEC,
+) -> None:
+    """Fail when computation or end-to-end runtime breaches its respective budget."""
+    assert cpu_elapsed < cpu_limit, (
+        f"Performance smoke exceeded soft CPU-time threshold: {cpu_elapsed:.3f}s"
+    )
+    assert wall_elapsed < wall_limit, (
+        f"Performance smoke exceeded hard wall-time threshold: {wall_elapsed:.3f}s"
+    )
 
 
 def test_performance_smoke(config_factory):
@@ -54,11 +72,12 @@ def test_performance_smoke(config_factory):
         batch_size=1,
         workers=1,
     )
-    start = time.process_time()
+    cpu_start = time.process_time()
+    wall_start = time.perf_counter()
     run_full_benchmark(cfg)
-    elapsed = time.process_time() - start
-    assert elapsed < SOFT_RUNTIME_SEC, (
-        f"Performance smoke exceeded soft CPU-time threshold: {elapsed:.3f}s"
+    _assert_runtime_within_budget(
+        cpu_elapsed=time.process_time() - cpu_start,
+        wall_elapsed=time.perf_counter() - wall_start,
     )
 
     # Manifest scaling efficiency metrics
@@ -81,80 +100,23 @@ def test_performance_smoke(config_factory):
     assert scaling["parallel_efficiency_placeholder_deprecated"] is True
 
 
-def test_cpu_time_metric_ignores_external_host_contention() -> None:
-    """External (cross-process) CPU contention must not inflate this process's CPU time.
-
-    The smoke relies on ``time.process_time`` so that an unrelated parallel readiness lane
-    on the same host cannot push the measurement over threshold. This test confirms the
-    metric only counts our own CPU consumption: a background process burning cores does not
-    raise a short CPU-time sample above the same value measured on a quiet host.
-    """
-
-    def _measure() -> float:
-        start = time.process_time()
-        # representative in-process busy work
-        total = 0
-        for _ in range(200_000):
-            total += 1
-        return time.process_time() - start
-
-    quiet = _measure()
-
-    import subprocess
-
-    # Spawn external CPU burners in separate processes (mimics the parallel readiness lane).
-    burners = []
-    cores = max(1, (os.cpu_count() or 4) - 1)
-    for _ in range(cores):
-        burners.append(
-            subprocess.Popen(
-                [sys.executable, "-c", "while True:\n pass"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+def test_runtime_contract_rejects_controlled_threshold_breaches() -> None:
+    """Controlled CPU and wall-time regressions must fail without consuming test resources."""
+    with pytest.raises(AssertionError, match="soft CPU-time threshold"):
+        _assert_runtime_within_budget(
+            cpu_elapsed=0.02,
+            wall_elapsed=0.0,
+            cpu_limit=0.01,
+            wall_limit=1.0,
         )
-    try:
-        loaded = _measure()
-    finally:
-        for proc in burners:
-            proc.kill()
-    # Our process's own CPU time is essentially unchanged by external contention.
-    assert loaded <= quiet * 2.0 + 0.05
 
-
-def test_cpu_time_contract_rejects_deliberate_regression(config_factory) -> None:
-    """A deliberately CPU-heavy benchmark must still breach the soft threshold."""
-
-    cfg = config_factory(
-        smoke=True,
-        initial_episodes=1,
-        max_episodes=2,
-        batch_size=1,
-        workers=1,
-    )
-
-    # Inject a deliberate CPU-bound slowdown into the smoke path. Because the
-    # regression itself consumes our process's CPU, CPU-time measurement exposes it.
-    import robot_sf.benchmark.full_classic.orchestrator as orch
-
-    original = orch.run_full_benchmark
-
-    def _slow(*args, **kwargs):
-        busy_until = time.process_time() + (SOFT_RUNTIME_SEC * 2.0)
-        while time.process_time() < busy_until:
-            pass
-        return original(*args, **kwargs)
-
-    orch.run_full_benchmark = _slow
-    try:
-        start = time.process_time()
-        orch.run_full_benchmark(cfg)
-        elapsed = time.process_time() - start
-    finally:
-        orch.run_full_benchmark = original
-    assert elapsed >= SOFT_RUNTIME_SEC, (
-        f"Deliberate regression below threshold: {elapsed:.3f}s < {SOFT_RUNTIME_SEC:.3f}s"
-    )
+    with pytest.raises(AssertionError, match="hard wall-time threshold"):
+        _assert_runtime_within_budget(
+            cpu_elapsed=0.0,
+            wall_elapsed=0.02,
+            cpu_limit=1.0,
+            wall_limit=0.01,
+        )
 
 
 def test_scaling_compatibility_alias_is_zero_without_throughput(tmp_path: Path) -> None:

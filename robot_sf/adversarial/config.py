@@ -564,6 +564,7 @@ class SearchConfig:
         benchmark_profile: str = "baseline-safe",
         snqi_weights_path: Path | None = None,
         snqi_baseline_path: Path | None = None,
+        warm_start: tuple[WarmStartCandidate, ...] = (),
     ) -> SearchConfig:
         """Create a search config by loading the search-space YAML."""
         return cls(
@@ -584,6 +585,7 @@ class SearchConfig:
             benchmark_profile=benchmark_profile,
             snqi_weights_path=Path(snqi_weights_path) if snqi_weights_path else None,
             snqi_baseline_path=Path(snqi_baseline_path) if snqi_baseline_path else None,
+            warm_start=tuple(warm_start),
         )
 
     def validate(self) -> None:
@@ -599,6 +601,10 @@ class SearchConfig:
         if self.algo_config_path is not None and not self.algo_config_path.exists():
             raise FileNotFoundError(f"Algorithm config not found: {self.algo_config_path}")
         for warm in self.warm_start:
+            if not warm.scenario.strip():
+                raise ValueError("warm-start scenario must be non-empty")
+            if not warm.planner.strip():
+                raise ValueError("warm-start planner must be non-empty")
             candidate_errors = self.search_space.validate_candidate(warm.candidate)
             if candidate_errors:
                 raise ValueError(

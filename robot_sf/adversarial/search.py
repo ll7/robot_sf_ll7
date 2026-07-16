@@ -31,7 +31,7 @@ from robot_sf.adversarial.config import (
 )
 from robot_sf.adversarial.io import read_first_jsonl_record
 from robot_sf.adversarial.objectives import get_objective
-from robot_sf.adversarial.samplers import CandidateSampler, RandomCandidateSampler
+from robot_sf.adversarial.samplers import CandidateSampler, build_sampler
 from robot_sf.benchmark.runner import run_batch
 
 CandidateEvaluator = Callable[[SearchConfig, CandidateSpec, Path, Path], CandidateEvaluation]
@@ -152,7 +152,12 @@ def run_adversarial_search(
     objective = get_objective(config.objective)
     active_evaluator = evaluator or _default_evaluator
     active_certifier = certifier or _default_certifier
-    active_sampler = sampler or RandomCandidateSampler(config.search_space, seed=config.seed)
+    active_sampler = sampler or build_sampler(
+        "random",
+        config.search_space,
+        seed=config.seed,
+        warm_start=config.warm_start,
+    )
 
     config.output_dir.mkdir(parents=True, exist_ok=True)
     evaluations: list[CandidateEvaluation] = []

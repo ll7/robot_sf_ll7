@@ -32,6 +32,7 @@ from robot_sf.adversarial.config import (
 )
 from robot_sf.adversarial.samplers import build_sampler
 from robot_sf.adversarial.search import run_adversarial_search
+from robot_sf.common.artifact_paths import get_artifact_root, get_repository_root
 
 WARM_START_SCHEMA_VERSION = "adversarial-warm-start.v1"
 
@@ -77,7 +78,7 @@ def load_flip_report(path: str | Path) -> dict[str, Any]:
 
 
 def extract_warm_starts(
-    report: dict[str, Any] | list[dict[str, Any]],
+    report: dict[str, Any] | list[Any],
     *,
     search_space: SearchSpaceConfig,
     margin_threshold: float = 0.5,
@@ -129,6 +130,11 @@ def extract_warm_starts(
             )
             continue
         near_boundary += 1
+        scenario = _nonempty_text(entry.get("scenario"))
+        planner = _nonempty_text(entry.get("planner"))
+        if scenario is None or planner is None:
+            rejected.append({"index": index, "reason": "missing/scenario_or_planner"})
+            continue
         candidate = _candidate_from_entry(entry, search_space=search_space)
         if candidate is None:
             rejected.append({"index": index, "reason": "candidate_geometry_unparseable"})
@@ -140,8 +146,8 @@ def extract_warm_starts(
         warm_starts.append(
             WarmStartCandidate(
                 candidate=candidate,
-                scenario=str(entry.get("scenario", "")),
-                planner=str(entry.get("planner", "")),
+                scenario=scenario,
+                planner=planner,
                 outcome_margin=float(margin_value),
             )
         )
@@ -157,16 +163,16 @@ def extract_warm_starts(
     )
 
 
-def _coerce_entries(report: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _coerce_entries(report: dict[str, Any] | list[Any]) -> list[Any]:
     """Return the entry list from a report mapping or bare list."""
     if isinstance(report, list):
-        return [entry for entry in report if isinstance(entry, dict)]
+        return list(report)
     if isinstance(report, dict):
         entries = report.get("entries")
         if entries is None:
             return [report] if _looks_like_entry(report) else []
         if isinstance(entries, list):
-            return [entry for entry in entries if isinstance(entry, dict)]
+            return list(entries)
     return []
 
 
@@ -187,29 +193,33 @@ def _candidate_from_entry(
     if start is None or goal is None:
         return None
 
-    def _scalar(name: str, default: float) -> float:
-        value = raw.get(name)
-        parsed = _finite_float(value)
-        return float(parsed) if parsed is not None else default
+    def _scalar(name: str, default: float) -> float | None:
+        if name not in raw:
+            return default
+        return _finite_float(raw[name])
 
-    seed = raw.get("scenario_seed", raw.get("seed"))
-    seed_value = (
-        int(seed)
-        if isinstance(seed, int)
-        else (int(seed) if isinstance(seed, float) and seed.is_integer() else None)
+    spawn_time_s = _scalar("spawn_time_s", float(search_space.spawn_time_s.min))
+    pedestrian_speed_mps = _scalar(
+        "pedestrian_speed_mps", float(search_space.pedestrian_speed_mps.min)
     )
-    if seed_value is None:
+    pedestrian_delay_s = _scalar("pedestrian_delay_s", float(search_space.pedestrian_delay_s.min))
+    if spawn_time_s is None or pedestrian_speed_mps is None or pedestrian_delay_s is None:
+        return None
+
+    if "scenario_seed" in raw:
+        seed_value = _finite_int(raw["scenario_seed"])
+    elif "seed" in raw:
+        seed_value = _finite_int(raw["seed"])
+    else:
         seed_value = int(search_space.scenario_seed.min)
+    if seed_value is None:
+        return None
     return CandidateSpec(
         start=start,
         goal=goal,
-        spawn_time_s=_scalar("spawn_time_s", float(search_space.spawn_time_s.min)),
-        pedestrian_speed_mps=_scalar(
-            "pedestrian_speed_mps", float(search_space.pedestrian_speed_mps.min)
-        ),
-        pedestrian_delay_s=_scalar(
-            "pedestrian_delay_s", float(search_space.pedestrian_delay_s.min)
-        ),
+        spawn_time_s=spawn_time_s,
+        pedestrian_speed_mps=pedestrian_speed_mps,
+        pedestrian_delay_s=pedestrian_delay_s,
         scenario_seed=seed_value,
     )
 
@@ -218,9 +228,17 @@ def _pose_from_mapping(payload: object, *, name: str) -> Pose2D | None:
     """Build a pose from a mapping with x/y fields."""
     if not isinstance(payload, dict) or "x" not in payload or "y" not in payload:
         return None
-    theta_raw = payload.get("theta")
-    theta = float(theta_raw) if _finite_float(theta_raw) is not None else 0.0
-    return Pose2D(float(payload["x"]), float(payload["y"]), theta)
+    x = _finite_float(payload["x"])
+    y = _finite_float(payload["y"])
+    if x is None or y is None:
+        return None
+    if "theta" in payload:
+        theta = _finite_float(payload["theta"])
+        if theta is None:
+            return None
+    else:
+        theta = 0.0
+    return Pose2D(x, y, theta)
 
 
 def _finite_float(value: Any) -> float | None:
@@ -230,6 +248,24 @@ def _finite_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return parsed if math.isfinite(parsed) else None
+
+
+def _finite_int(value: Any) -> int | None:
+    """Return a finite integer-valued number or None."""
+    if isinstance(value, bool):
+        return None
+    parsed = _finite_float(value)
+    if parsed is None or not parsed.is_integer():
+        return None
+    return int(parsed)
+
+
+def _nonempty_text(value: Any) -> str | None:
+    """Return stripped non-empty text or None."""
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped or None
 
 
 @dataclass(frozen=True)
@@ -307,6 +343,7 @@ def warm_vs_cold_pilot(
     Returns:
         WarmVsColdPilotReport written to ``output_dir/warm_vs_cold_pilot.json``.
     """
+    pilot_output_dir = _validate_adversarial_archive_output_dir(output_dir)
     budget = int(config.budget)
     if budget < 1:
         raise ValueError("budget must be >= 1")
@@ -317,10 +354,10 @@ def warm_vs_cold_pilot(
         return bool(collapse_predicate(candidate)) if collapse_predicate else False
 
     warm_config = _replace_search_config(
-        config, objective=objective, output_dir=Path(output_dir) / "warm", warm_start=warm_start
+        config, objective=objective, output_dir=pilot_output_dir / "warm", warm_start=warm_start
     )
     cold_config = _replace_search_config(
-        config, objective=objective, output_dir=Path(output_dir) / "cold", warm_start=()
+        config, objective=objective, output_dir=pilot_output_dir / "cold", warm_start=()
     )
 
     warm_result = run_adversarial_search(
@@ -370,12 +407,44 @@ def warm_vs_cold_pilot(
             "evidence_tier": "capability_artifact_not_release_evidence",
         },
     )
-    report_path = Path(output_dir) / "warm_vs_cold_pilot.json"
+    report_path = pilot_output_dir / "warm_vs_cold_pilot.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
         json.dumps(report.to_json(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     return report
+
+
+def _validate_adversarial_archive_output_dir(output_dir: Path) -> Path:
+    """Resolve a pilot output path and enforce the repository archive boundary."""
+    resolved = Path(output_dir).expanduser().resolve()
+    repository_root = get_repository_root().resolve()
+    artifact_root = get_artifact_root().resolve()
+    adversarial_root = (artifact_root / "adversarial").resolve()
+
+    inside_repository = False
+    try:
+        resolved.relative_to(repository_root)
+        inside_repository = True
+    except ValueError:
+        pass
+
+    inside_artifact_root = False
+    try:
+        resolved.relative_to(artifact_root)
+        inside_artifact_root = True
+    except ValueError:
+        pass
+
+    if inside_repository or inside_artifact_root:
+        try:
+            resolved.relative_to(adversarial_root)
+        except ValueError as exc:
+            raise ValueError(
+                "warm-vs-cold pilot output inside the repository artifact boundary must be "
+                "under output/adversarial; release-evidence paths are forbidden"
+            ) from exc
+    return resolved
 
 
 def _replace_search_config(

@@ -240,7 +240,6 @@ class OptunaCandidateSampler:
         self._trial_state = optuna.trial.TrialState
         self._search_space = search_space
         self._pending_trials: list[tuple[CandidateSpec, Any]] = []
-        self._warm_starts: list[CandidateSpec] = [warm.candidate for warm in warm_start]
         # Enqueue warm starts as fixed trials so they are proposed first.
         for warm in warm_start:
             candidate = warm.candidate
@@ -257,9 +256,7 @@ class OptunaCandidateSampler:
             self._study.enqueue_trial(fixed)
 
     def sample(self) -> CandidateSpec:
-        """Return the next warm-start candidate (fixed trial), then optimizer proposals."""
-        if self._warm_starts:
-            return self._warm_starts.pop(0)
+        """Return the next enqueued warm-start trial, then optimizer proposals."""
         trial = self._study.ask()
         candidate = CandidateSpec(
             start=Pose2D(
@@ -494,9 +491,7 @@ class CmaEsCandidateSampler:
             self._in_flight.append((candidate, es, vec))
             return candidate
         if self._warm_starts:
-            candidate = self._warm_starts.pop(0)
-            self._in_flight.append((candidate, self._es, []))
-            return candidate
+            return self._warm_starts.pop(0)
         if not self._active_dims:
             candidate = CandidateSpec(
                 start=Pose2D(self._fixed_values["start.x"], self._fixed_values["start.y"]),

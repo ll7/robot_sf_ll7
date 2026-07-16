@@ -13,24 +13,14 @@ import yaml
 from robot_sf.adversarial.attribution import attribution_from_episode_record
 from robot_sf.adversarial.bundle import write_trajectory_csv
 from robot_sf.adversarial.certification import passed_status
-from robot_sf.adversarial.config import (
-    CandidateEvaluation,
-    SearchConfig,
-    WarmStartCandidate,
-)
-from robot_sf.adversarial.samplers import (
-    CandidateSampler,
-    CmaEsCandidateSampler,
-    CoordinateRefinementSampler,
-    OptunaCandidateSampler,
-    RandomCandidateSampler,
-)
+from robot_sf.adversarial.config import CandidateEvaluation, SearchConfig
+from robot_sf.adversarial.samplers import build_sampler
 from robot_sf.adversarial.search import run_adversarial_search
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from robot_sf.adversarial.config import CandidateSpec, SearchSpaceConfig
+    from robot_sf.adversarial.config import CandidateSpec
 
 
 @dataclass(frozen=True)
@@ -59,26 +49,6 @@ class SamplerComparisonRow:
     held_out_family_yield: float | None
     held_out_family_status: str
     caveats: tuple[str, ...]
-
-
-def build_sampler(
-    name: str,
-    search_space: SearchSpaceConfig,
-    *,
-    seed: int,
-    warm_start: tuple[WarmStartCandidate, ...] = (),
-) -> CandidateSampler:
-    """Build a named adversarial sampler."""
-    key = name.strip().lower()
-    if key == "random":
-        return RandomCandidateSampler(search_space, seed=seed, warm_start=warm_start)
-    if key == "coordinate":
-        return CoordinateRefinementSampler(search_space, seed=seed, warm_start=warm_start)
-    if key == "optuna":
-        return OptunaCandidateSampler(search_space, seed=seed, warm_start=warm_start)
-    if key == "cmaes":
-        return CmaEsCandidateSampler(search_space, seed=seed, warm_start=warm_start)
-    raise ValueError("sampler must be one of: random, coordinate, optuna, cmaes")
 
 
 def run_sampler_comparison(
@@ -120,7 +90,12 @@ def run_sampler_comparison(
                     )
                     result = run_adversarial_search(
                         sampler_config,
-                        sampler=build_sampler(sampler_name, config.search_space, seed=run_seed),
+                        sampler=build_sampler(
+                            sampler_name,
+                            sampler_config.search_space,
+                            seed=run_seed,
+                            warm_start=sampler_config.warm_start,
+                        ),
                         evaluator=_synthetic_evaluator if synthetic else None,
                         certifier=(
                             (

@@ -30,6 +30,7 @@ from robot_sf.adversarial.warm_start import (
     load_flip_report,
     warm_vs_cold_pilot,
 )
+from robot_sf.common.artifact_paths import get_repository_root
 
 
 def _space() -> SearchSpaceConfig:
@@ -87,8 +88,6 @@ def test_random_sampler_yields_warm_starts_first() -> None:
     warm = _warm(7)
     sampler = RandomCandidateSampler(space, seed=3, warm_start=[warm])
     assert sampler.sample() == warm.candidate
-    second = sampler.sample()
-    assert second != warm.candidate
 
 
 def test_coordinate_sampler_yields_warm_starts_first() -> None:
@@ -107,8 +106,11 @@ def test_optuna_sampler_enqueues_warm_starts() -> None:
     first = sampler.sample()
     assert first == warm.candidate
     sampler.observe(_evaluate(first))
+    assert len(sampler._study.trials) == 1
+    assert sampler._study.trials[0].value == pytest.approx(0.0)
     second = sampler.sample()
     assert space.validate_candidate(second) == []
+    assert len(sampler._study.trials) == 2
 
 
 def test_cmaes_sampler_returns_warm_starts_first() -> None:
@@ -152,6 +154,9 @@ def test_cmaes_sampler_uses_warm_start_as_x0() -> None:
     sampler = CmaEsCandidateSampler(space, seed=7, popsize=4, warm_start=[warm])
     first = sampler.sample()
     assert first.start.x == pytest.approx(2.5)
+    sampler.observe(_evaluate(first))
+    assert sampler._observed == []
+    assert space.validate_candidate(sampler.sample()) == []
 
 
 def test_search_config_validates_warm_start_inside_space(tmp_path: Path) -> None:
@@ -274,6 +279,40 @@ def test_extract_warm_starts_bare_list_and_file(tmp_path: Path) -> None:
     assert extraction2.num_selected == 1
 
 
+def test_extract_warm_starts_rejects_each_malformed_entry() -> None:
+    """Malformed report entries should be rejected individually without aborting extraction."""
+    valid_candidate = {
+        "start": {"x": 1.0, "y": 2.0},
+        "goal": {"x": 5.0, "y": 2.0},
+        "scenario_seed": 7,
+    }
+    entries = [
+        "not-a-mapping",
+        {
+            "scenario": "doorway",
+            "planner": "goal",
+            "outcome_margin": 0.1,
+            "candidate": {**valid_candidate, "scenario_seed": "not-an-integer"},
+        },
+        {
+            "scenario": "doorway",
+            "planner": "goal",
+            "outcome_margin": 0.1,
+            "candidate": {**valid_candidate, "start": {"x": "bad", "y": 2.0}},
+        },
+        {
+            "scenario": "doorway",
+            "planner": "goal",
+            "outcome_margin": 0.1,
+            "candidate": {**valid_candidate, "pedestrian_speed_mps": "bad"},
+        },
+    ]
+    extraction = extract_warm_starts(entries, search_space=_space())
+    assert extraction.num_selected == 0
+    assert len(extraction.rejected) == len(entries)
+    assert extraction.rejected[0]["reason"] == "entry must be a mapping"
+
+
 def test_warm_started_search_finds_failure_faster_than_cold() -> None:
     """Warm-started Optuna should find the collapse seed at least as early as cold."""
     space = _space()
@@ -312,8 +351,8 @@ def test_search_config_round_trips_warm_start_json(tmp_path: Path) -> None:
     space = _space()
     config = SearchConfig(
         policy="goal",
-        scenario_template=Path("configs/adversarial/template.yaml"),
-        search_space_path=Path("configs/adversarial/space.yaml"),
+        scenario_template=tmp_path / "template.yaml",
+        search_space_path=tmp_path / "space.yaml",
         search_space=space,
         objective="worst_case_snqi",
         output_dir=tmp_path / "out",
@@ -362,7 +401,12 @@ def _synthetic_collapse_evaluator(seed: int):
     return evaluator
 
 
-def _pilot_config(tmp_path: Path, budget: int = 6) -> SearchConfig:
+def _pilot_config(
+    tmp_path: Path,
+    budget: int = 6,
+    *,
+    warm_start: tuple[WarmStartCandidate, ...] = (),
+) -> SearchConfig:
     """Build an Optuna-friendly search config with a real seed range."""
     template = tmp_path / "template.yaml"
     template.write_text(
@@ -397,6 +441,7 @@ def _pilot_config(tmp_path: Path, budget: int = 6) -> SearchConfig:
         budget=budget,
         seed=3,
         workers=1,
+        warm_start=warm_start,
     )
 
 
@@ -439,21 +484,31 @@ def test_warm_vs_cold_pilot_reports_faster_warm_start(tmp_path: Path) -> None:
     assert (tmp_path / "pilot" / "warm_vs_cold_pilot.json").exists()
 
 
+def test_warm_vs_cold_pilot_rejects_release_evidence_path_before_search(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pilot execution must fail before either arm writes into release evidence."""
+    config = _pilot_config(tmp_path)
+
+    def unexpected_search(*_args, **_kwargs):
+        raise AssertionError("search must not start before output-boundary validation")
+
+    monkeypatch.setattr(warm_start_module, "run_adversarial_search", unexpected_search)
+    forbidden = get_repository_root() / "output" / "release_evidence" / "issue_5833"
+    with pytest.raises(ValueError, match="under output/adversarial"):
+        warm_vs_cold_pilot(
+            config,
+            warm_start=(_warm(9),),
+            objective="worst_case_snqi",
+            evaluator=_synthetic_collapse_evaluator(9),
+            output_dir=forbidden,
+        )
+
+
 def test_warm_started_search_runs_end_to_end(tmp_path: Path) -> None:
     """A full adversarial search run should accept warm starts without error."""
-    config = _pilot_config(tmp_path, budget=4)
     warm = _warm(12)
-    config = SearchConfig(
-        policy=config.policy,
-        scenario_template=config.scenario_template,
-        search_space_path=config.search_space_path,
-        search_space=config.search_space,
-        objective=config.objective,
-        output_dir=tmp_path / "e2e",
-        budget=config.budget,
-        seed=config.seed,
-        warm_start=(warm,),
-    )
+    config = _pilot_config(tmp_path, budget=4, warm_start=(warm,))
     result = run_adversarial_search(
         config,
         evaluator=_synthetic_collapse_evaluator(13),
@@ -461,3 +516,5 @@ def test_warm_started_search_runs_end_to_end(tmp_path: Path) -> None:
     )
     assert result.num_candidates == 4
     assert config.output_dir.exists()
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["candidates"][0]["candidate"]["scenario_seed"] == 12

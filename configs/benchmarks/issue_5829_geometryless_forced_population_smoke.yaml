@@ -1,0 +1,35 @@
+schema_version: mean_matched_heterogeneity_harness.config.v1
+issue: 3574
+claim_boundary: harness_only_no_ablation_result
+trace_metric_keys:
+  - clearance_m
+planners:
+  - key: goal
+    algo: goal
+seeds:
+  - 101
+# Single-interaction scenario with no background spawn geometry (no ped routes/zones)
+# and a forced population_size. Before issue #5829 option (a) this hard-failed at
+# simulation time; now it must build a valid manifest row and realize the population.
+scenarios:
+  - id: francis2023_blind_corner_forced_pop_12
+    map_file: maps/svg_maps/francis2023/francis2023_blind_corner.svg
+    density: 0.0
+    pedestrian_control_trace_near_field_clearance_m: 1.0
+    population_size: 12
+    archetype_seed: 3574
+    response_law_seed: 3574
+    composition:
+      cautious: 0.25
+      standard: 0.5
+      hurried: 0.25
+    archetypes:
+      cautious:
+        desired_speed_factor: 0.7
+        radius_m: 0.35
+      standard:
+        desired_speed_factor: 1.0
+        radius_m: 0.3
+      hurried:
+        desired_speed_factor: 1.4
+        radius_m: 0.25

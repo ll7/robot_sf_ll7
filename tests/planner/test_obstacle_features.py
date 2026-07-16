@@ -286,3 +286,52 @@ def test_vectorized_extract_many_single_line_multiple_points():
     np.testing.assert_allclose(vectorized[:, 0], [1.0, 1.0, 1.0], atol=1e-7)
     # All valid
     np.testing.assert_allclose(vectorized[:, 5], [1.0, 1.0, 1.0])
+
+
+def test_precompute_reuses_static_geometry_and_matches_uncached():
+    """precompute() must not change numerical output but skip re-array of static lines.
+
+    Issue #5411 (obstacle_features slice): the static line geometry was re-``asarray``
+    every ``extract_many`` call. After precompute, repeated extraction over the same
+    lines must return byte-identical features to the never-precomputed path.
+    """
+    rng = np.random.default_rng(5411)
+    starts = rng.uniform(-10.0, 10.0, size=(32, 2))
+    ends = starts + rng.uniform(-2.0, 2.0, size=(32, 2))
+    lines = [(tuple(start), tuple(end)) for start, end in zip(starts, ends, strict=True)]
+    query_points = [tuple(point) for point in rng.uniform(-10.0, 10.0, size=(64, 2))]
+
+    vanilla = LocalObstacleFeatureExtractor()
+    cached = LocalObstacleFeatureExtractor()
+    cached.precompute(lines)
+
+    uncached_rows = np.asarray(
+        [vanilla.extract(point, lines) for point in query_points], dtype=np.float32
+    )
+    precomputed_starts = cached._precomputed_starts
+    cached_rows = cached.extract_many(query_points, lines)
+
+    # Recompute again with the same cached extractor: still byte-identical (no drift).
+    cached_rows_again = cached.extract_many(query_points, lines)
+
+    np.testing.assert_array_equal(uncached_rows, cached_rows)
+    np.testing.assert_array_equal(cached_rows, cached_rows_again)
+    assert cached._precomputed_starts is precomputed_starts
+
+
+def test_precompute_rebuilds_on_different_line_set():
+    """Changing the line set must invalidate the cache and recompute correctly."""
+    extractor = LocalObstacleFeatureExtractor()
+    lines_a = [((0.0, 0.0), (2.0, 0.0))]
+    lines_b = [((0.0, 0.0), (0.0, 2.0))]
+
+    extractor.precompute(lines_a)
+    starts_a = extractor._precomputed_starts
+    out_a = extractor.extract_many([(1.0, 1.0)], lines_a)[0]
+    extractor.precompute(lines_b)
+    starts_b = extractor._precomputed_starts
+    out_b = extractor.extract_many([(1.0, 1.0)], lines_b)[0]
+
+    np.testing.assert_allclose(out_a, [1.0, 0.0, 1.0, 1.0, 0.0, 1.0])
+    np.testing.assert_allclose(out_b, [1.0, 1.0, 0.0, 0.0, 1.0, 1.0])
+    assert starts_b is not starts_a

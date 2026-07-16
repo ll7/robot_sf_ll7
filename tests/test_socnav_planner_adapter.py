@@ -1103,9 +1103,11 @@ def test_prediction_rollout_robot_vectorized_parity():
         assert np.allclose(got, ref, atol=1e-12, rtol=0.0)
 
 
-def test_prediction_rollout_robot_zero_steps_clamped():
-    """A non-positive steps value must be clamped to at least one step (#5412)."""
+def test_prediction_rollout_robot_boundary_steps_match_scalar_reference():
+    """Vectorization must preserve zero- and negative-step scalar behavior (#5412)."""
     adapter = PredictionPlannerAdapter(SocNavPlannerConfig(), allow_fallback=True)
     got = adapter._rollout_robot(v=0.5, w=0.2, dt=0.1, steps=0)
-    assert got.shape == (1, 2)
-    assert np.allclose(got, _scalar_rollout_robot(0.5, 0.2, 0.1, 1))
+    assert got.shape == (0, 2)
+    assert np.array_equal(got, _scalar_rollout_robot(0.5, 0.2, 0.1, 0))
+    with pytest.raises(ValueError, match="negative dimensions"):
+        adapter._rollout_robot(v=0.5, w=0.2, dt=0.1, steps=-1)

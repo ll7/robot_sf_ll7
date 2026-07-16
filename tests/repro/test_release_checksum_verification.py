@@ -497,10 +497,34 @@ class TestReproductionReport:
         assert result["status"] == "skip"
         assert "v1_2_3_scoped.yaml" in result["reason"]
 
+    @pytest.mark.parametrize("path_kind", ["missing", "directory"])
+    def test_supplied_bundle_path_must_be_a_file(self, tmp_path: Path, path_kind: str) -> None:
+        """Invalid supplied bundle paths return a structured failed step."""
+        from scripts.repro.cold_start_reproduction_report import _step_verify_checksums
 
-@pytest.fixture(scope="class")
+        bundle_path = tmp_path / "bundle.tar.gz"
+        if path_kind == "directory":
+            bundle_path.mkdir()
+        manifest = {
+            "release_tag": "0.0.2",
+            "artifact_set": {"bundle_archive": {"name": "bundle.tar.gz", "sha256": "0" * 64}},
+            "embedded_artifacts": {},
+        }
+
+        result = _step_verify_checksums(
+            tmp_path,
+            manifest,
+            tmp_path / "output",
+            bundle_path=bundle_path,
+        )
+
+        assert result["status"] == "fail"
+        assert result["error"] == f"Provided bundle path is not a file: {bundle_path}"
+
+
+@pytest.fixture(scope="module")
 def actual_execution_results(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
-    """Run each real release-verification flow once for the execution-test class.
+    """Run each real release-verification flow once for the execution-test module.
 
     The bundle is downloaded exactly once (by ``verify_release``) and then reused
     for the cold-start reproduction report. This keeps the fixture
@@ -634,24 +658,16 @@ class TestOrderIsolationRegression:
     and dropped ``steps.verify_checksums.embedded_artifacts``.
     """
 
-    def _real_bundle_path(self, tmp_path: Path) -> Path:
-        from scripts.repro.verify_release_checksums import verify_release
-
-        verify_report = verify_release(
-            manifest_path=MANIFEST_PATH,
-            bundle_path=None,
-            output_dir=tmp_path / "verification",
-            download=True,
-        )
-        assert verify_report["overall_verdict"] == "pass"
-        bundle_path = Path(verify_report["bundle_path"])
-        assert bundle_path.is_file()
-        return bundle_path
-
-    def test_report_from_changed_cwd_reuses_bundle(self, tmp_path: Path, monkeypatch: Any) -> None:
+    def test_report_from_changed_cwd_reuses_bundle(
+        self,
+        actual_execution_results: dict[str, Any],
+        tmp_path: Path,
+        monkeypatch: Any,
+    ) -> None:
         from scripts.repro.cold_start_reproduction_report import generate_reproduction_report
 
-        bundle_path = self._real_bundle_path(tmp_path)
+        bundle_path = Path(actual_execution_results["verification_report"]["bundle_path"])
+        assert bundle_path.is_file()
         # Simulate a preceding suite test that changed the working directory.
         monkeypatch.chdir(tmp_path)
 
@@ -674,11 +690,15 @@ class TestOrderIsolationRegression:
             assert artifact["actual_sha256"] == artifact["expected_sha256"]
 
     def test_report_with_preexisting_bundle_in_output_dir(
-        self, tmp_path: Path, monkeypatch: Any
+        self,
+        actual_execution_results: dict[str, Any],
+        tmp_path: Path,
+        monkeypatch: Any,
     ) -> None:
         from scripts.repro.cold_start_reproduction_report import generate_reproduction_report
 
-        bundle_path = self._real_bundle_path(tmp_path)
+        bundle_path = Path(actual_execution_results["verification_report"]["bundle_path"])
+        assert bundle_path.is_file()
         reproduction_dir = tmp_path / "reproduction"
         # Simulate a leftover bundle from a prior run in the same output dir.
         stale_dir = reproduction_dir / "bundle"

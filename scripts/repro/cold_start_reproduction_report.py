@@ -219,6 +219,10 @@ def _step_verify_checksums(
             return result
     else:
         bundle_path = Path(bundle_path)
+        if not bundle_path.is_file():
+            result["status"] = "fail"
+            result["error"] = f"Provided bundle path is not a file: {bundle_path}"
+            return result
 
     actual_sha = _sha256_file(bundle_path)
     result["bundle_path"] = str(bundle_path)

@@ -35,7 +35,10 @@ from typing import Any
 from robot_sf.benchmark.candidate_trace_resolution import (
     SCHEMA_VERSION,
     CandidateTraceResolutionError,
+    load_episode_mapping,
+    load_episode_requests,
     resolve_candidate_trace_resolution,
+    resolve_episode_requests,
     validate_candidate_trace_resolution,
 )
 
@@ -76,11 +79,27 @@ def build_parser() -> argparse.ArgumentParser:
         description=__doc__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument(
+    input_group = p.add_mutually_exclusive_group(required=True)
+    input_group.add_argument(
         "--candidates",
-        required=True,
         type=Path,
         help="Validated seed_flip_inversion_candidates.v1 manifest JSON (issue #5446).",
+    )
+    input_group.add_argument(
+        "--episode-requests",
+        type=Path,
+        help="Concrete issue_5446_trace_reexport_list.v1 request manifest (issue #5756).",
+    )
+    p.add_argument(
+        "--episode-mapping",
+        "--episode-map",
+        dest="episode_mapping",
+        type=Path,
+        default=None,
+        help=(
+            "Versioned issue_5756_trace_mapping_receipt.v1 JSON with pinned "
+            "provenance and trace digests."
+        ),
     )
     p.add_argument(
         "--campaign-store",
@@ -117,36 +136,71 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0912
     """Run the resolver CLI.
 
     Returns:
         Process exit code: 0 ok, 2 fail-closed, 3 validation/determinism failure.
     """
     args = build_parser().parse_args(argv)
-    try:
-        candidate_manifest = _load_json(args.candidates)
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
+    if args.episode_requests is not None:
+        if args.episode_mapping is None:
+            print("error: --episode-mapping is required with --episode-requests", file=sys.stderr)
+            return 2
+        incompatible = [
+            flag
+            for flag, supplied in (
+                ("--campaign-store", args.campaign_store is not None),
+                ("--trace-roots", bool(args.trace_roots)),
+                ("--critical-interval-config", args.critical_interval_config is not None),
+            )
+            if supplied
+        ]
+        if incompatible:
+            print(
+                "error: episode-request mode does not accept candidate-only flags: "
+                + ", ".join(incompatible),
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            request_manifest = load_episode_requests(args.episode_requests)
+            episode_mapping = load_episode_mapping(args.episode_mapping)
+            manifest = resolve_episode_requests(request_manifest, episode_mapping)
+        except CandidateTraceResolutionError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        candidate_manifest = None
+    else:
+        if args.episode_mapping is not None:
+            print("error: --episode-mapping requires --episode-requests", file=sys.stderr)
+            return 2
+        try:
+            candidate_manifest = _load_json(args.candidates)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
 
-    critical_interval_config = _load_critical_interval_config(args.critical_interval_config)
+        critical_interval_config = _load_critical_interval_config(args.critical_interval_config)
 
-    kwargs: dict[str, Any] = {
-        "trace_search_roots": [Path(r) for r in args.trace_roots],
-        "critical_interval_config": critical_interval_config,
-    }
-    if args.campaign_store is not None:
-        kwargs["campaign_store_dir"] = args.campaign_store
+        kwargs: dict[str, Any] = {
+            "trace_search_roots": [Path(r) for r in args.trace_roots],
+            "critical_interval_config": critical_interval_config,
+        }
+        if args.campaign_store is not None:
+            kwargs["campaign_store_dir"] = args.campaign_store
 
-    try:
-        manifest = resolve_candidate_trace_resolution(candidate_manifest, **kwargs)
-    except CandidateTraceResolutionError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
+        try:
+            manifest = resolve_candidate_trace_resolution(candidate_manifest, **kwargs)
+        except CandidateTraceResolutionError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
 
     if args.check_determinism:
-        manifest2 = resolve_candidate_trace_resolution(candidate_manifest, **kwargs)
+        if args.episode_requests is not None:
+            manifest2 = resolve_episode_requests(request_manifest, episode_mapping)
+        else:
+            manifest2 = resolve_candidate_trace_resolution(candidate_manifest, **kwargs)
         if json.dumps(manifest, sort_keys=True) != json.dumps(manifest2, sort_keys=True):
             print("error: determinism check failed; re-run was not byte-identical", file=sys.stderr)
             return 3

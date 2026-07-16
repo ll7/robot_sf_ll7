@@ -548,13 +548,51 @@ def test_record_is_degraded_detects_fallback_status():
     )
 
 
-def test_record_is_degraded_detects_timeout_event():
-    """An outcome timeout_event marks a record as degraded even when status is ok."""
+def test_record_is_degraded_accepts_native_episode_horizon_timeout():
+    """A normal episode horizon timeout does not imply planner-step degradation.
+
+    ``run_episode`` sets ``outcome.timeout_event`` whenever an otherwise-native
+    episode reaches its configured horizon.  Planner fallback is reported
+    separately through ``algorithm_metadata`` and must not be inferred from the
+    episode outcome.
+    """
     assert (
         _record_is_degraded(
             {"algorithm_metadata": {"status": "ok"}, "outcome": {"timeout_event": True}}
         )
+        is False
+    )
+
+
+def test_record_is_degraded_detects_fallback_counter_when_status_is_stale():
+    """Explicit planner-step fallback counts remain fail-closed evidence."""
+    assert (
+        _record_is_degraded(
+            {
+                "algorithm_metadata": {
+                    "status": "ok",
+                    "policy_step_timeout": {"fallback_actions": 1},
+                },
+                "outcome": {"timeout_event": False},
+            }
+        )
         is True
+    )
+
+
+def test_record_is_degraded_ignores_malformed_fallback_counter():
+    """Malformed fallback metadata neither raises nor fabricates degradation."""
+    assert (
+        _record_is_degraded(
+            {
+                "algorithm_metadata": {
+                    "status": "ok",
+                    "policy_step_timeout": {"fallback_actions": "not-a-number"},
+                },
+                "outcome": {"timeout_event": False},
+            }
+        )
+        is False
     )
 
 

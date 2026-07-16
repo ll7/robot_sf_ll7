@@ -12,3 +12,4 @@ dependencies are isolated enough for broad API generation.
    robot_sf.common
    robot_sf.research
    robot_sf.telemetry
+   stable_public_api

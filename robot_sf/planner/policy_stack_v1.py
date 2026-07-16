@@ -150,15 +150,20 @@ class PolicyStackV1Adapter:
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
         """Return the selected unicycle command and record step diagnostics."""
-        # The observation is read-only for planner scoring. Keep these values stable across
-        # every proposal and the hard shield so candidate count does not multiply parsing work.
-        step_context = self._build_step_context(observation)
+        # Goal proposal generation needs shared values immediately. Other source sets preserve
+        # the established no-candidate diagnostic before parsing scoring-only fields.
+        needs_proposal_context = any(
+            _normalize_source(source) == "goal" for source in self.config.proposal_sources
+        )
+        step_context = self._build_step_context(observation) if needs_proposal_context else None
         proposals = self._collect_proposals(observation, step_context=step_context)
         candidates = [
             p for p in proposals if p.command is not None and p.status in _COMMAND_STATUSES
         ]
         if not candidates:
             self._raise_no_candidate(proposals)
+        if step_context is None:
+            step_context = self._build_step_context(observation)
 
         scores = {
             proposal.key: self._score_command(
@@ -332,7 +337,7 @@ class PolicyStackV1Adapter:
         self,
         observation: dict[str, Any],
         *,
-        step_context: _StepContext,
+        step_context: _StepContext | None,
     ) -> list[_Proposal]:
         """Collect one normalized proposal from each configured source.
 
@@ -357,7 +362,7 @@ class PolicyStackV1Adapter:
         key: str,
         observation: dict[str, Any],
         *,
-        step_context: _StepContext,
+        step_context: _StepContext | None,
     ) -> _Proposal:
         """Build a proposal from one named source.
 
@@ -478,7 +483,7 @@ class PolicyStackV1Adapter:
         """
         if step_context is None:
             robot_pos, heading, goal = _robot_goal_heading(observation)
-            min_clearance = _min_ped_clearance(observation)
+            min_clearance = _min_ped_clearance(observation, robot_pos=robot_pos)
         else:
             robot_pos, heading, goal = (
                 step_context.robot_pos,

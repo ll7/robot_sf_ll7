@@ -90,6 +90,7 @@ from robot_sf.benchmark.observation_noise import (
     normalize_observation_noise_spec,
     observation_noise_hash,
 )
+from robot_sf.benchmark.result_provenance import build_execution_context_provenance
 from robot_sf.benchmark.seed_variance import build_seed_episode_rows
 from robot_sf.benchmark.snqi.campaign_contract import (
     SnqiContractThresholds,
@@ -107,7 +108,7 @@ from robot_sf.benchmark.snqi.campaign_contract import (
     soft_contract_warning_active,
     validate_snqi_normalized_inputs,
 )
-from robot_sf.benchmark.utils import capture_execution_context, load_optional_json
+from robot_sf.benchmark.utils import load_optional_json
 from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
 
 if TYPE_CHECKING:
@@ -2002,7 +2003,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
             "branch": git_meta.get("branch", "unknown"),
             "commit": git_meta.get("commit", "unknown"),
         },
-        "execution_context": capture_execution_context(),
+        "execution_context": build_execution_context_provenance(),
         "matrix_path": _repo_relative(cfg.scenario_matrix_path),
         "scenario_matrix_hash": scenario_hash,
         "latency_stress_profile": _latency_stress_metadata(

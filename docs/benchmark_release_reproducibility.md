@@ -117,7 +117,8 @@ conditions (same commit, same manifest, `workers: 1`) on 2026-04-10:
   - **The residual nondeterminism is upstream, in the pedestrian dynamics.**
     `pysocialforce.forces` computes per-agent forces with `@njit(fastmath=True)`;
     the resulting trajectories can cross the 0.5 m clearance threshold at
-    knife-edge timesteps, so a sub-ULP trajectory difference can flip a
+    knife-edge timesteps, so a sub-unit-in-the-last-place (ULP) trajectory
+    difference can flip a
     near-miss count. The residual is *machine-/compiler-conditional*, not a
     property of the metric definition.
   - **Tolerance quantification.** `measure_exact_repeat_nondeterminism` runs `N`
@@ -158,8 +159,9 @@ step traces) but **not trajectory-stable across execution contexts**.
   In that re-export, seed 114 produced 62 near-misses on the release box
   (`workers=32`) vs 78 on a Slurm node (`workers=1`) vs 37 on the login node
   (`workers=1`). There was no code delta — the commit was pinned on both sides.
-- **Mechanism:** ulp-level float differences from CPU/BLAS/threading context are
-  chaotically amplified in contact-rich scenarios (the same upstream
+- **Mechanism:** ULP-level float differences from CPU, Basic Linear Algebra
+  Subprograms (BLAS), and threading context are chaotically amplified in
+  contact-rich scenarios (the same upstream
   `pysocialforce.forces` `@njit(fastmath=True)` dynamics described above).
 
 **Rules for comparing runs:**
@@ -175,9 +177,9 @@ step traces) but **not trajectory-stable across execution contexts**.
 **What the pipeline now pins and records:**
 
 - The camera-ready runner (`scripts/tools/run_camera_ready_benchmark.py`) pins
-  `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and `MKL_NUM_THREADS` to `1` (only
-  when unset, so an explicit override is preserved). This makes re-executions at
-  least thread-deterministic.
+  `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and `MKL_NUM_THREADS` to `1`,
+  overriding inherited values for this reproducibility-focused entry point.
+  This makes re-executions at least thread-deterministic.
 - Each campaign `run_meta.json` now carries an `execution_context` block with
   `hostname`, `cpu_model` (from `/proc/cpuinfo`), and the resolved `thread_env`
   mapping, so divergent execution contexts are detectable after the fact.

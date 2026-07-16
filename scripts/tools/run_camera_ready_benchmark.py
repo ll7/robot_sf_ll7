@@ -11,37 +11,32 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from loguru import logger
+from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
 
-from robot_sf.benchmark.camera_ready_campaign import (
+# Apply process-wide numerical thread caps before importing camera-ready modules,
+# which transitively import NumPy and may initialize BLAS/OpenMP runtimes.
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
+pin_thread_env_for_determinism()
+
+from loguru import logger  # noqa: E402
+
+from robot_sf.benchmark.camera_ready_campaign import (  # noqa: E402
     load_campaign_config,
     prepare_campaign_preflight,
     run_campaign,
 )
-from robot_sf.benchmark.fallback_policy import campaign_exit_code
-from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError
-from robot_sf.benchmark.utils import pin_thread_env_for_determinism
-from scripts.tools.record_post_campaign_stage_status import build_stage_status
+from robot_sf.benchmark.fallback_policy import campaign_exit_code  # noqa: E402
+from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError  # noqa: E402
+from scripts.tools.record_post_campaign_stage_status import build_stage_status  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
-# Defense-in-depth against GPU memory fragmentation during long campaigns
-# (issue #4826). expandable_segments:True allows the allocator to grow
-# segments instead of failing on large contiguous allocations.
-import os
-
-os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
-
-# Pin BLAS/OpenMP thread counts to 1 for thread-deterministic trace re-execution
-# (issue #5816). ulp-level float differences from thread scheduling are chaotically
-# amplified in contact-rich scenarios, so re-exports must at least be thread-stable.
-pin_thread_env_for_determinism()
 
 
 def _build_parser() -> argparse.ArgumentParser:

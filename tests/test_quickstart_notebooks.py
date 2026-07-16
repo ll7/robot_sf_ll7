@@ -65,6 +65,56 @@ def test_notebook_uses_existing_public_api(name: str, needle: str) -> None:
     assert needle in joined, f"{name} should use the existing {needle!r} API"
 
 
+def test_notebook_01_seeds_action_space_explicitly() -> None:
+    """Notebook 01 must seed the factory, reset, and action space so the trace is reproducible."""
+    nb = _load("01_run_first_episode.ipynb")
+    joined = "\n".join(c.source for c in nb.cells if c.cell_type == "code")
+    assert "make_robot_env(debug=False, seed=SEED)" in joined, (
+        "notebook 01 should seed the factory via make_robot_env(seed=SEED)"
+    )
+    assert "env.reset(seed=SEED)" in joined, "notebook 01 should seed reset explicitly"
+    assert "env.action_space.seed(SEED)" in joined, (
+        "notebook 01 should seed the Gymnasium action space so action sampling is reproducible"
+    )
+
+
+def test_notebook_01_does_not_call_set_global_seed() -> None:
+    """The redundant set_global_seed call crashes the kernel on the installed Torch/TF stack."""
+    nb = _load("01_run_first_episode.ipynb")
+    joined = "\n".join(c.source for c in nb.cells if c.cell_type == "code")
+    assert "from robot_sf.common.seed import set_global_seed" not in joined, (
+        "notebook 01 must not import set_global_seed (kernel-crash path)"
+    )
+    assert "set_global_seed(" not in joined, (
+        "notebook 01 must not call set_global_seed (kernel-crash path)"
+    )
+
+
+def test_notebook_01_action_reward_trace_is_reproducible() -> None:
+    """Two seeded runs of notebook 01's policy must produce identical action/reward traces."""
+    from robot_sf.gym_env.environment_factory import make_robot_env
+
+    def run_trace() -> list[tuple[float, float]]:
+        SEED = 87234
+        env = make_robot_env(debug=False, seed=SEED)
+        env.reset(seed=SEED)
+        env.action_space.seed(SEED)
+        rewards: list[tuple[float, float]] = []
+        for _ in range(1, 61):
+            action = env.action_space.sample()
+            _obs, reward, terminated, truncated, _info = env.step(action)
+            rewards.append((float(action[0]), float(reward)))
+            if terminated or truncated:
+                env.reset(seed=SEED)
+                env.action_space.seed(SEED)
+        env.exit()
+        return rewards
+
+    assert run_trace() == run_trace(), (
+        "notebook 01 seeded action/reward trace must be identical across runs"
+    )
+
+
 def test_notebooks_resolve_repo_root_robustly() -> None:
     """Notebooks anchor paths to the repo root so they run from any cwd."""
     for name in EXPECTED_NOTEBOOKS:

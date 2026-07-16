@@ -15,6 +15,7 @@ the committed ``francis2023_blind_corner`` scenario (marked slow; diagnostic-onl
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -395,6 +396,43 @@ def test_issue_5596_diagnostic_end_to_end_on_committed_blind_corner() -> None:
     # Mechanism is bounded and diagnostic.
     assert "supported_explanation" in report["mechanism"]
     assert report["mechanism"]["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
+
+
+@pytest.mark.slow
+def test_issue_5596_diagnostic_is_deterministic_across_repeated_runs() -> None:
+    """Issue #5596 DoD: rerun the canonical diagnostic twice and compare normalized output.
+
+    The diagnostic must be reproducible: building the report twice on the committed
+    blind-corner cell (real certifier, oracle rollout, stateful route-follow, and the
+    corrected planner-path clearance check) yields byte-identical normalized verdicts.
+    ``source_commit`` legitimately varies per run and is excluded from the comparison.
+    It does NOT make any benchmark claim.
+    """
+    pytest.importorskip("robot_sf.benchmark.map_runner")
+    manifest = _REPO_ROOT / "configs/scenarios/francis2023.yaml"
+
+    def normalized_sha(report: dict[str, Any]) -> str:
+        comparable = {k: v for k, v in report.items() if k != "source_commit"}
+        serialized = json.dumps(comparable, sort_keys=True, indent=2)
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    first = build_issue_5596_blind_corner_diagnostic(manifest, envelope_radii_m=(1.0, 0.5))
+    second = build_issue_5596_blind_corner_diagnostic(manifest, envelope_radii_m=(1.0, 0.5))
+
+    # The non-source_commit verdict payload must be reproducible.
+    assert normalized_sha(first) == normalized_sha(second)
+    # Every verdict block is present in both runs (sanity on structure).
+    for key in (
+        "oracle_verdict",
+        "route_follow_intervention_verdict",
+        "straight_line_vs_route_clearance",
+        "planned_path_clearance_verdict",
+        "mechanism",
+    ):
+        assert key in first and key in second
+    # Provenance fields are consistent and diagnostic-scoped.
+    assert first["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
+    assert first["scenario_id"] == ISSUE_5596_BLIND_CORNER_SCENARIO_ID
 
 
 def test_measure_planned_path_clearance_flags_clipped_vertices() -> None:

@@ -44,6 +44,7 @@ from robot_sf.adversarial.qd import (
     QDSearchResult,
     compare_qd_vs_single_objective,
     default_behavior_descriptor,
+    production_qd_evaluator,
     run_map_elites,
     write_qd_archive,
 )
@@ -78,16 +79,19 @@ from robot_sf.adversarial.seed_sensitivity import (
 )
 
 if TYPE_CHECKING:
-    from robot_sf.adversarial.search import run_adversarial_search
+    from robot_sf.adversarial.search import (
+        production_candidate_evaluator,
+        run_adversarial_search,
+    )
 
 
 def __getattr__(name: str) -> Any:
     """Load heavyweight adversarial search dependencies only when requested."""
 
-    if name == "run_adversarial_search":
-        from robot_sf.adversarial.search import run_adversarial_search  # noqa: PLC0415
+    if name in {"production_candidate_evaluator", "run_adversarial_search"}:
+        from robot_sf.adversarial import search  # noqa: PLC0415
 
-        return run_adversarial_search
+        return getattr(search, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -139,6 +143,8 @@ __all__ = [
     "materialize_multi_ped_scenario_payload",
     "materialize_multi_ped_single_pedestrian_overrides",
     "multi_ped_config_to_single_pedestrian_definitions",
+    "production_candidate_evaluator",
+    "production_qd_evaluator",
     "run_adversarial_search",
     "run_map_elites",
     "run_seed_sensitivity",

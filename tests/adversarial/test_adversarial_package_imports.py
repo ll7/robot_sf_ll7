@@ -23,9 +23,13 @@ def test_adversarial_search_reexport_is_lazy() -> None:
     """The package-level search re-export resolves through module __getattr__."""
 
     from robot_sf import adversarial
-    from robot_sf.adversarial.search import run_adversarial_search
+    from robot_sf.adversarial.search import (
+        production_candidate_evaluator,
+        run_adversarial_search,
+    )
 
     assert adversarial.run_adversarial_search is run_adversarial_search
+    assert adversarial.production_candidate_evaluator is production_candidate_evaluator
     missing_name = "definitely_missing"
     with pytest.raises(AttributeError, match="definitely_missing"):
         getattr(adversarial, missing_name)

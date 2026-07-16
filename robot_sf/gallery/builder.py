@@ -22,6 +22,8 @@ from __future__ import annotations
 import base64
 import html
 import json
+import shlex
+import shutil
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -160,7 +162,7 @@ def estimate_expected_runtime_seconds(
     """
     pedestrian_count = max(pedestrian_count, 0)
     if horizon_steps < 1:
-        horizon_steps = _DEFAULT_HORIZON_STEPS
+        raise ValueError("horizon_steps must be >= 1")
     estimate = max(0.1, pedestrian_count * horizon_steps * _SECONDS_PER_AGENT_STEP)
     return round(estimate, 3)
 
@@ -228,15 +230,11 @@ def _build_run_command(matrix_path: str, scenario_id: str) -> str:
     Returns:
         Shell command string selecting a single scenario from the matrix.
     """
-    # ``robot_sf_bench run`` consumes a full matrix. To run a single scenario we
-    # point at the matrix with a one-row select via the existing runner flag
-    # surface. The runner honors ``select_scenarios`` in manifests; for abstract
-    # list matrices the canonical per-scenario invocation filters by id using a
-    # dedicated one-liner documented here. We emit the matrix-based command,
-    # which is the durable, always-valid surface.
+    output_path = f"output/gallery/runs/{scenario_id}.jsonl"
     return (
-        f"uv run robot_sf_bench run --matrix {matrix_path} "
-        f"--algo simple_policy --horizon 100  # scenario: {scenario_id}"
+        f"uv run robot_sf_bench run --matrix {shlex.quote(matrix_path)} "
+        f"--out {shlex.quote(output_path)} --scenario-id {shlex.quote(scenario_id)} "
+        "--algo simple_policy --horizon 100"
     )
 
 
@@ -267,6 +265,31 @@ def _escape(text: object) -> str:
         HTML-escaped string.
     """
     return html.escape(str(text))
+
+
+def _stage_sample_rollout(
+    rollout_path: Path,
+    *,
+    out_dir_path: Path,
+    scenario_id: str,
+) -> str | None:
+    """Copy a discovered rollout beneath the gallery and return a relative link.
+
+    Returns:
+        Relative staged path, or ``None`` when the source cannot be copied.
+    """
+    out_dir_abs = out_dir_path.resolve()
+    source = rollout_path.resolve()
+    target_dir = out_dir_abs / "rollouts"
+    target = target_dir / f"{scenario_id}{source.suffix.lower()}"
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        if source != target.resolve():
+            shutil.copy2(source, target)
+    except OSError:
+        logger.exception("Could not stage sample rollout {}", source)
+        return None
+    return str(target.relative_to(out_dir_abs))
 
 
 def _card_html(
@@ -496,14 +519,22 @@ def build_gallery(  # noqa: C901, PLR0913
     out_dir_path.mkdir(parents=True, exist_ok=True)
     thumbnail_dir = out_dir_path / "thumbnails"
 
-    # Deduplicate by resolved label, preserving order (mirrors plot-scenarios).
-    seen: set[str] = set()
+    # Deduplicate exact repeated labels, but fail closed when distinct labels
+    # collide after sanitization; otherwise one scenario silently disappears.
+    seen: dict[str, str] = {}
     unique_scenarios: list[dict[str, Any]] = []
     for sc in scenarios_list:
+        label = resolve_scenario_label(sc)
         sid = sanitize_scenario_label(resolve_scenario_label(sc))
-        if sid in seen:
-            continue
-        seen.add(sid)
+        previous_label = seen.get(sid)
+        if previous_label is not None:
+            if previous_label == label:
+                continue
+            raise ValueError(
+                f"Scenario labels {previous_label!r} and {label!r} both sanitize to {sid!r}; "
+                "use unique labels."
+            )
+        seen[sid] = label
         unique_scenarios.append(sc)
 
     # Render thumbnails via the existing renderer (no new rendering).
@@ -550,10 +581,11 @@ def build_gallery(  # noqa: C901, PLR0913
         sample_rel: str | None = None
         rollout_abs = _resolve_sample_rollout(sc, sample_rollout_root=rollout_root)
         if rollout_abs is not None:
-            try:
-                sample_rel = str(rollout_abs.relative_to(out_dir_path.resolve()))
-            except ValueError:
-                sample_rel = str(rollout_abs)
+            sample_rel = _stage_sample_rollout(
+                rollout_abs,
+                out_dir_path=out_dir_path,
+                scenario_id=sid,
+            )
 
         cards.append(
             GalleryCard(

@@ -38,7 +38,8 @@ Every scenario in the matrix gets a card with:
   (`peds × horizon × per-step cost`), labeled `est.` and shown in italics. It is
   explicitly **not** a benchmark result;
 - a **"run this" command** — a copy-pasteable `uv run robot_sf_bench run ...`
-  invocation for the scenario;
+  invocation with `--scenario-id` and an output path so it runs only that card's
+  scenario;
 - a **"view sample rollout"** link, when a sample rollout is discoverable under
   `--sample-rollout-root` (matched by `<scenario_id>.{mp4,webm,jsonl,html}`);
 - the **raw scenario params** in a collapsible `<details>` block for transparency.

@@ -22,6 +22,8 @@ from robot_sf.gallery.builder import (
     resolve_supported_planners,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 # A small, representative abstract scenario matrix mirroring
 # configs/baselines/example_matrix.yaml (kept inline so the test is hermetic).
 SAMPLE_SCENARIOS = [
@@ -75,7 +77,7 @@ def _build(tmp_path: Path, *, render_thumbnails: bool = True) -> GalleryBuildRes
 
 
 def test_build_gallery_generates_html_and_manifest(tmp_path: Path) -> None:
-    """Gallery build writes a self-contained HTML page and a JSON manifest."""
+    """Write portable HTML and a machine-readable manifest for offline inspection."""
     result = _build(tmp_path)
 
     assert result.html_path.is_file()
@@ -85,7 +87,7 @@ def test_build_gallery_generates_html_and_manifest(tmp_path: Path) -> None:
 
 
 def test_generated_page_references_every_scenario(tmp_path: Path) -> None:
-    """Acceptance: the page references every scenario in the manifest."""
+    """Keep every manifest scenario visible so gallery discovery does not silently omit rows."""
     result = _build(tmp_path)
     html_text = result.html_path.read_text(encoding="utf-8")
 
@@ -99,12 +101,14 @@ def test_generated_page_references_every_scenario(tmp_path: Path) -> None:
 
 
 def test_each_card_has_required_metadata_fields(tmp_path: Path) -> None:
-    """Each card carries thumbnail + map + peds + planners + runtime + command."""
+    """Expose actionable metadata and a runnable per-scenario command on every card."""
     result = _build(tmp_path)
     for card in result.cards:
         # A run-this command is present and references the matrix + algo.
         assert "robot_sf_bench run" in card.run_command
         assert "simple_policy" in card.run_command
+        assert "--out" in card.run_command
+        assert f"--scenario-id {card.scenario_id}" in card.run_command
         # Pedestrian count is a non-negative int derived from density.
         assert isinstance(card.pedestrian_count, int)
         assert card.pedestrian_count >= 0
@@ -124,7 +128,7 @@ def test_each_card_has_required_metadata_fields(tmp_path: Path) -> None:
 
 
 def test_embedded_thumbnails_make_page_self_contained(tmp_path: Path) -> None:
-    """With embed_thumbnails, the HTML carries base64 data URIs (no external img files needed)."""
+    """Embed images so copied HTML remains usable without external thumbnail files."""
     result = _build(tmp_path, render_thumbnails=True)
     html_text = result.html_path.read_text(encoding="utf-8")
     # As many data-URI images as rendered cards.
@@ -135,7 +139,7 @@ def test_embedded_thumbnails_make_page_self_contained(tmp_path: Path) -> None:
 
 
 def test_no_thumbnails_mode_emits_placeholders(tmp_path: Path) -> None:
-    """``render_thumbnails=False`` still builds a valid page with placeholders."""
+    """Keep headless gallery builds useful when thumbnail rendering is unavailable."""
     result = _build(tmp_path, render_thumbnails=False)
     assert result.html_path.is_file()
     html_text = result.html_path.read_text(encoding="utf-8")
@@ -151,13 +155,13 @@ def test_no_thumbnails_mode_emits_placeholders(tmp_path: Path) -> None:
 
 
 def test_empty_scenarios_fail_closed(tmp_path: Path) -> None:
-    """An empty scenario list fails closed with ValueError."""
+    """Reject empty input so users never mistake a blank gallery for valid output."""
     with pytest.raises(ValueError):
         build_gallery([], matrix_path="x.yaml", out_dir=tmp_path / "g")
 
 
 def test_runtime_estimate_is_deterministic_and_positive() -> None:
-    """The runtime estimate is deterministic, monotonic in peds, and labeled estimate-only."""
+    """Keep estimates stable and reject invalid horizons rather than inventing input values."""
     low = estimate_expected_runtime_seconds(10, horizon_steps=100)
     high = estimate_expected_runtime_seconds(40, horizon_steps=100)
     assert low > 0
@@ -167,6 +171,18 @@ def test_runtime_estimate_is_deterministic_and_positive() -> None:
     # Zero/invalid pedestrian counts are floored, not negative.
     assert estimate_expected_runtime_seconds(0) >= 0.1
     assert estimate_expected_runtime_seconds(-5) >= 0.1
+    with pytest.raises(ValueError, match="horizon_steps"):
+        estimate_expected_runtime_seconds(10, horizon_steps=0)
+
+
+def test_sanitized_scenario_id_collisions_fail_closed() -> None:
+    """Reject distinct labels that would overwrite each other in gallery artifacts."""
+    with pytest.raises(ValueError, match="both sanitize"):
+        build_gallery(
+            [{"id": "a/b"}, {"id": "a_b"}],
+            matrix_path="matrix.yaml",
+            render_thumbnails=False,
+        )
 
 
 def test_cli_gallery_build_against_real_example_matrix(tmp_path: Path) -> None:
@@ -175,8 +191,8 @@ def test_cli_gallery_build_against_real_example_matrix(tmp_path: Path) -> None:
     This exercises the real load_scenario_matrix path end-to-end (acceptance:
     ``gallery build`` produces a static page listing all scenarios).
     """
-    matrix = "configs/baselines/example_matrix.yaml"
-    if not Path(matrix).is_file():
+    matrix = REPO_ROOT / "configs/baselines/example_matrix.yaml"
+    if not matrix.is_file():
         pytest.skip(f"shipped matrix not present in this checkout: {matrix}")
     out_dir = tmp_path / "cli_gallery"
 
@@ -185,7 +201,7 @@ def test_cli_gallery_build_against_real_example_matrix(tmp_path: Path) -> None:
             "gallery",
             "build",
             "--matrix",
-            matrix,
+            str(matrix),
             "--out-dir",
             str(out_dir),
             "--base-seed",
@@ -214,13 +230,13 @@ def test_cli_gallery_build_against_real_example_matrix(tmp_path: Path) -> None:
 
 
 def test_cli_gallery_build_bad_matrix_returns_2(tmp_path: Path) -> None:
-    """A missing matrix path exits 2 (input boundary) instead of raising."""
+    """Return a clean CLI error for bad input instead of exposing a traceback."""
     rc = robot_sf_main(
         [
             "gallery",
             "build",
             "--matrix",
-            "definitely/not/a/matrix.yaml",
+            str(tmp_path / "definitely-not-a-matrix.yaml"),
             "--out-dir",
             str(tmp_path / "nope"),
         ]
@@ -229,7 +245,7 @@ def test_cli_gallery_build_bad_matrix_returns_2(tmp_path: Path) -> None:
 
 
 def test_sample_rollout_link_discovered_when_present(tmp_path: Path) -> None:
-    """A discoverable sample rollout is linked on its card."""
+    """Stage external rollouts inside the gallery before emitting safe relative links."""
     rollout_root = tmp_path / "rollouts"
     rollout_root.mkdir()
     sid = "gallery-test-uni-low-open"
@@ -245,5 +261,7 @@ def test_sample_rollout_link_discovered_when_present(tmp_path: Path) -> None:
     )
     card = next(c for c in result.cards if c.scenario_id == sid)
     assert card.sample_rollout_relpath is not None
+    assert card.sample_rollout_relpath == f"rollouts/{sid}.mp4"
+    assert (result.html_path.parent / card.sample_rollout_relpath).is_file()
     html_text = result.html_path.read_text(encoding="utf-8")
     assert "view sample rollout" in html_text

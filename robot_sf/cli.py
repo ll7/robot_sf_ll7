@@ -7,8 +7,10 @@ friendly, remedy-bearing output for beginners. The ``models`` and
 ``datasets`` subcommands wrap the existing model registry and external-data
 provenance/checksum machinery (issue #5797) behind list/verify/download and
 list/verify/prepare commands. The ``demo`` subcommand exposes the one-command
-visual demo from the adoption/UX epic. More everyday workflows can be added
-here without creating another top-level entry point.
+visual demo from the adoption/UX epic. The ``gallery`` subcommand builds a
+self-contained static scenario/planner gallery from existing rendering tools.
+More everyday workflows can be added here without creating another top-level
+entry point.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from robot_sf.examples_cli import examples_cli_main
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
 
 DEFAULT_GALLERY_MATRIX = "configs/baselines/example_matrix.yaml"
 DEFAULT_GALLERY_OUT_DIR = "output/gallery"
@@ -135,8 +138,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--sample-rollout-root",
         default=None,
         help=(
-            "Optional directory searched for per-scenario sample rollouts "
-            "(<id>.mp4/.jsonl/.html)"
+            "Optional directory searched for per-scenario sample rollouts (<id>.mp4/.jsonl/.html)"
         ),
     )
     g_build.add_argument(

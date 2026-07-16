@@ -1069,3 +1069,45 @@ def test_prediction_planner_caching_rollout_in_score_action(monkeypatch):
         steps=5,
     )
     assert rollouts == 1
+
+
+def _scalar_rollout_robot(v, w, dt, steps):
+    """Reference sequential scalar recurrence for issue #5412 parity."""
+    pos = np.zeros(2, dtype=float)
+    heading = 0.0
+    traj = np.zeros((steps, 2), dtype=float)
+    for i in range(steps):
+        heading += float(w) * dt
+        pos[0] += float(v) * np.cos(heading) * dt
+        pos[1] += float(v) * np.sin(heading) * dt
+        traj[i] = pos
+    return traj
+
+
+def test_prediction_rollout_robot_vectorized_parity():
+    """Vectorized _rollout_robot must match the scalar recurrence exactly (#5412)."""
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig(), allow_fallback=True)
+    rng = np.random.default_rng(20260716)
+    for _ in range(25):
+        v = float(rng.uniform(-1.2, 1.2))
+        w = float(rng.uniform(-1.2, 1.2))
+        dt = float(rng.uniform(0.05, 0.3))
+        steps = int(rng.integers(1, 16))
+        got = adapter._rollout_robot(v=v, w=w, dt=dt, steps=steps)
+        ref = _scalar_rollout_robot(v, w, dt, steps)
+        assert got.shape == (steps, 2)
+        # Closed-form cumsum reorders float additions vs the sequential scalar
+        # recurrence, so the residual is last-ULP drift (<1e-15). Per issue #5412
+        # the parity gate tolerates this: atol=1e-12 is sub-nanometer and
+        # benchmark-irrelevant, so the vectorization is accepted (no version bump).
+        assert np.allclose(got, ref, atol=1e-12, rtol=0.0)
+
+
+def test_prediction_rollout_robot_boundary_steps_match_scalar_reference():
+    """Vectorization must preserve zero- and negative-step scalar behavior (#5412)."""
+    adapter = PredictionPlannerAdapter(SocNavPlannerConfig(), allow_fallback=True)
+    got = adapter._rollout_robot(v=0.5, w=0.2, dt=0.1, steps=0)
+    assert got.shape == (0, 2)
+    assert np.array_equal(got, _scalar_rollout_robot(0.5, 0.2, 0.1, 0))
+    with pytest.raises(ValueError, match="negative dimensions"):
+        adapter._rollout_robot(v=0.5, w=0.2, dt=0.1, steps=-1)

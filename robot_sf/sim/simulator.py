@@ -761,6 +761,13 @@ class PedSimulator(Simulator):
             time_step_s=self.config.time_per_step_in_secs,
             single_ped_goal_threshold=pysf_config.desired_force_config.goal_threshold,
             add_ego_state=True,  # Add Ego pedestrian state to pysf_state
+            map_bounds=self.map_def.get_map_bounds(),
+            reserved_zones=[*self.map_def.robot_spawn_zones, *self.map_def.robot_goal_zones],
+            ped_radius=self.config.ped_radius,
+            reserved_zone_radius=max(
+                (float(robot.config.radius) for robot in self.robots),
+                default=0.0,
+            ),
         )
         for behavior in self.peds_behaviors:
             if isinstance(behavior, SinglePedestrianBehavior):

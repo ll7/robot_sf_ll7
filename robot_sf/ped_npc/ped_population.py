@@ -884,21 +884,45 @@ def _populate_scattered_background(
         group_size = min(group_size, num_unassigned)
         first_id = num_pedestrians - num_unassigned
         ped_ids = list(range(first_id, first_id + group_size))
+        zone_id: int | None = None
+        spawn_points: list[Vec2D] | None = None
+        group_goal: Vec2D | None = None
+        last_capacity_error: RuntimeError | None = None
+        for candidate_zone_id in rng.permutation(len(zones)):
+            candidate_zone = zones[int(candidate_zone_id)]
+            candidate_points: list[Vec2D] = []
+            try:
+                for _ped_id in ped_ids:
+                    candidate_points.append(
+                        _sample_scatter_point(
+                            candidate_zone,
+                            rng,
+                            exclusions,
+                            [*accepted_positions, *candidate_points],
+                            ped_radius,
+                        )
+                    )
+                candidate_goal = _sample_scatter_point(
+                    candidate_zone,
+                    rng,
+                    exclusions,
+                    [],
+                    ped_radius,
+                )
+            except RuntimeError as error:
+                last_capacity_error = error
+                continue
+            zone_id = int(candidate_zone_id)
+            spawn_points = candidate_points
+            group_goal = candidate_goal
+            break
+        if zone_id is None or spawn_points is None or group_goal is None:
+            raise RuntimeError(
+                f"No synthetic crowd zone can fit forced background group of size {group_size}."
+            ) from last_capacity_error
+
         groups.append(set(ped_ids))
-        zone_id = int(rng.integers(len(zones)))
-        zone = zones[zone_id]
-        spawn_points = []
-        for _ped_id in ped_ids:
-            spawn_point = _sample_scatter_point(
-                zone,
-                rng,
-                exclusions,
-                accepted_positions,
-                ped_radius,
-            )
-            spawn_points.append(spawn_point)
-            accepted_positions.append(spawn_point)
-        group_goal = _sample_scatter_point(zone, rng, exclusions, [], ped_radius)
+        accepted_positions.extend(spawn_points)
         centroid = np.mean(spawn_points, axis=0)
         heading = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
         velocity = np.asarray([cos(heading), sin(heading)]) * config.initial_speed

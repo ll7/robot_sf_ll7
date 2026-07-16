@@ -14,6 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from shapely.geometry import Point, Polygon
+from shapely.prepared import prep
 
 from robot_sf.nav.navigation import get_prepared_obstacles
 from robot_sf.nav.svg_map_parser import SvgMapConverter
@@ -331,3 +332,32 @@ def test_force_population_scatter_spawn_has_radius_clearance(
     for left_index, left in enumerate(positions):
         for right in positions[left_index + 1 :]:
             assert np.linalg.norm(left - right) >= 2 * ped_radius - 1e-9
+
+
+def test_force_population_scatter_retries_another_synthetic_zone() -> None:
+    """A blocked first synthetic triangle does not hide capacity in the second."""
+    map_bounds = (0.0, 10.0, 0.0, 10.0)
+    ped_radius = 0.4
+    zones = ped_population._synthetic_crowd_zones(map_bounds, ped_radius)
+    blocked_zone = prep(Polygon(zones[0]).buffer(1e-6))
+    spawn_config = PedSpawnConfig(
+        peds_per_area_m2=0.0,
+        max_group_members=1,
+        force_population_size=1,
+        route_spawn_seed=0,
+    )
+
+    ped_states, groups, assignments, returned_zones, _rng = (
+        ped_population._populate_scattered_background(
+            spawn_config,
+            1,
+            map_bounds,
+            [blocked_zone],
+            ped_radius,
+        )
+    )
+
+    assert returned_zones == zones
+    assert groups == [{0}]
+    assert assignments == {0: 1}
+    assert not blocked_zone.intersects(Point(ped_states[0, 0:2]))

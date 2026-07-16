@@ -55,6 +55,8 @@ class PerformanceBudgetPolicy:
             raise ValueError("soft_threshold_seconds must be > 0 and < hard_timeout_seconds")
         if self.report_count < 1:
             raise ValueError("report_count must be >= 1")
+        if self.xdist_contention_multiplier <= 0:
+            raise ValueError("xdist_contention_multiplier must be > 0")
 
     def is_under_xdist(self) -> bool:
         """Return True when running inside a pytest-xdist worker subprocess.
@@ -76,7 +78,7 @@ class PerformanceBudgetPolicy:
         The widened soft value is clamped to stay strictly below the hard boundary so it
         remains advisory rather than colliding with the hard wall.
         """
-        base = self.soft_threshold_seconds
+        base = self.soft_threshold_seconds if ci else (self.soft_threshold_seconds / 2.0)
         if self.is_under_xdist():
             widened = base * self.xdist_contention_multiplier
             return min(widened, self.hard_timeout_seconds * 0.9)

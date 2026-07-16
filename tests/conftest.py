@@ -257,9 +257,9 @@ def perf_policy():  # type: ignore[missing-return-type-doc]
             Args:
                 ci: TODO docstring.
             """
-            base = self.soft_threshold_seconds
+            base = self.soft_threshold_seconds if ci else (self.soft_threshold_seconds / 2.0)
             if self.is_under_xdist():
-                return base * self.xdist_contention_multiplier
+                return min(base * self.xdist_contention_multiplier, self.hard_timeout_seconds * 0.9)
             return base
 
         def classify(self, duration_seconds: float):

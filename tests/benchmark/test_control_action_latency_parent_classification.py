@@ -17,6 +17,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BUNDLE_DIR = REPO_ROOT / "docs/context/evidence/issue_5034_control_action_latency_sweep"
 SUMMARY_PATH = BUNDLE_DIR / "summary.json"
+SNQI_ANALYSIS_PATH = BUNDLE_DIR / "snqi_analysis.json"
 
 #: Permitted result classifications declared by issue #5034's Definition of Done
 #: and `docs/benchmark_governance.md`.
@@ -37,6 +38,16 @@ def test_bundle_classifies_as_diagnostic_only() -> None:
     assert summary["result_classification"] == "diagnostic-only"
     assert summary["result_classification"] in PERMITTED_CLASSIFICATIONS
     assert summary["evidence_tier"] == "targeted smoke"
+
+
+def test_snqi_claim_boundary_keeps_adapter_rows_diagnostic() -> None:
+    """The mixed-mode ranking must not read as native-only execution evidence."""
+    analysis = json.loads(SNQI_ANALYSIS_PATH.read_text(encoding="utf-8"))
+    boundary = analysis["claim_boundary"].casefold()
+    assert "diagnostic" in boundary
+    assert "native claims apply only to native rows" in boundary
+    assert "adapter rows remain explicitly labeled diagnostics" in boundary
+    assert "native execution only" not in boundary
 
 
 def test_bundle_points_at_parent_issue_4977() -> None:

@@ -8,8 +8,9 @@ remains a clearly bounded internal diagnostic rather than a paper-facing or pure
 
 ## Claim boundary
 
-**Internal fixed-scope latency-sensitivity result, native execution only, not paper-facing;
-fallback/degraded cells are caveats, not successes.**
+**Internal fixed-scope latency-sensitivity diagnostic, not paper-facing; native claims apply only
+to native rows, adapter rows remain explicitly labeled diagnostics, and fallback/degraded cells are
+caveats, not successes.**
 
 - Evidence status: `diagnostic-only`.
 - Job: `13516` (`5034c-issue5034-latency-sweep`).

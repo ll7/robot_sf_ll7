@@ -5,7 +5,7 @@
   "parent_issue": 4977,
   "date": "2026-07-16",
   "evidence_status": "diagnostic-only",
-  "claim_boundary": "internal fixed-scope latency-sensitivity result, native execution only, not paper-facing; fallback/degraded cells are caveats, not successes.",
+  "claim_boundary": "internal fixed-scope latency-sensitivity diagnostic, not paper-facing; native claims apply only to native rows, adapter rows remain explicitly labeled diagnostics, and fallback/degraded cells are caveats, not successes.",
   "provenance": {
     "job_id": 13516,
     "label": "5034c-issue5034-latency-sweep",

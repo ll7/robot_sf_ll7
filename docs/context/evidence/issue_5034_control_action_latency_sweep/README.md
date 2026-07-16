@@ -16,8 +16,9 @@ robustness analysis. The result is internal and diagnostic-only, not paper-facin
 - Evidence tier: `targeted smoke`
 - Result classification: `diagnostic-only`
 - Distance convention: `surface_clearance`
-- Evidence boundary (verbatim): **internal fixed-scope latency-sensitivity result, native execution
-  only, not paper-facing; fallback/degraded cells are caveats, not successes.**
+- Evidence boundary: **internal fixed-scope latency-sensitivity diagnostic, not paper-facing;
+  native claims apply only to native rows, adapter rows remain explicitly labeled diagnostics, and
+  fallback/degraded cells are caveats, not successes.**
 - Promotion boundary: reads the completed fidelity-campaign rows, isolates the
   `control_action_latency` axis, and reports latency metadata plus metrics. It makes no
   simulator-realism or sim-to-real claim.

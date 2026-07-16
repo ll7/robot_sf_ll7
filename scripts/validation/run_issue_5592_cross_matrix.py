@@ -12,9 +12,7 @@ from collections.abc import Mapping
 from typing import Any
 
 COMPLETED_TIMEOUT_REASONS = frozenset({"max_steps", "terminated", "timeout", "truncated"})
-FORBIDDEN_EXECUTION_STATUSES = frozenset(
-    {"blocked", "degraded", "error", "failed", "fallback", "not_available", "skipped"}
-)
+ELIGIBLE_EXECUTION_MODES = frozenset({"adapter", "mixed", "native"})
 
 
 class CrossMatrixRowError(RuntimeError):
@@ -57,16 +55,31 @@ def require_completed_execution_row(
     metadata = row.get("algorithm_metadata")
     if not isinstance(metadata, Mapping):
         raise CrossMatrixRowError(f"missing algorithm metadata {label}")
+    metadata_status = _normalized(metadata.get("status"))
+    if metadata_status != "ok":
+        raise CrossMatrixRowError(
+            f"ineligible execution {label}: algorithm_metadata.status={metadata_status!r}"
+        )
+
     kinematics = metadata.get("planner_kinematics")
-    kinematics = kinematics if isinstance(kinematics, Mapping) else {}
-    observed_execution_statuses = {
-        _normalized(metadata.get("status")),
-        _normalized(kinematics.get("execution_mode")),
-        _normalized(metadata.get("availability_status")),
-    }
-    forbidden = observed_execution_statuses & FORBIDDEN_EXECUTION_STATUSES
-    if forbidden:
-        raise CrossMatrixRowError(f"ineligible execution {label}: {sorted(forbidden)}")
+    if not isinstance(kinematics, Mapping):
+        raise CrossMatrixRowError(f"missing planner kinematics metadata {label}")
+    execution_mode = _normalized(kinematics.get("execution_mode"))
+    if execution_mode not in ELIGIBLE_EXECUTION_MODES:
+        raise CrossMatrixRowError(
+            f"ineligible execution {label}: execution_mode={execution_mode!r}"
+        )
+
+    availability_status = _normalized(metadata.get("availability_status"))
+    if availability_status and availability_status != "available":
+        raise CrossMatrixRowError(
+            f"ineligible execution {label}: availability_status={availability_status!r}"
+        )
+    readiness_status = _normalized(metadata.get("readiness_status"))
+    if readiness_status and readiness_status not in ELIGIBLE_EXECUTION_MODES:
+        raise CrossMatrixRowError(
+            f"ineligible execution {label}: readiness_status={readiness_status!r}"
+        )
 
     if status in {"error", "failed"} or termination == "error":
         raise CrossMatrixRowError(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -63,8 +64,8 @@ def _record(
         "termination_reason": termination,
         "outcome": outcome,
         "metrics": {
-            "min_pedestrian_distance_m": min_distance,
-            "critical_event_time_s": critical_time,
+            "distance_to_human_min": min_distance,
+            "time_to_collision_min": critical_time,
         },
     }
 
@@ -78,11 +79,12 @@ def _make_evaluation(
     failure: str = "collision",
     cert_status: Any = None,
     bundle_index: int = 0,
+    temp_root: Path,
 ) -> CandidateEvaluation:
     """Build a candidate evaluation with a measurable behavior descriptor."""
     record = _record(min_distance, critical_time, failure=failure)
 
-    bundle = Path(f"/tmp/qd_bundle_dummy_{bundle_index}")
+    bundle = temp_root / f"qd_bundle_dummy_{bundle_index}"
     bundle.mkdir(parents=True, exist_ok=True)
     episode_path = bundle / "episode_records.jsonl"
     episode_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
@@ -93,7 +95,7 @@ def _make_evaluation(
         failure_attribution=attribution_from_episode_record(record),
         episode_record_path=episode_path,
         trajectory_csv_path=None,
-        scenario_yaml_path=Path("/tmp/qd_scenario_dummy.yaml"),
+        scenario_yaml_path=temp_root / "qd_scenario_dummy.yaml",
         bundle_path=bundle,
     )
 
@@ -104,10 +106,10 @@ class _FakeEvaluator:
     def __init__(self, evaluations: list[CandidateEvaluation]) -> None:
         self._evaluations = list(evaluations)
 
-    def __call__(self, config: Any, candidate: CandidateSpec) -> CandidateEvaluation:
+    def __call__(self, config: QDSearchConfig, candidate: CandidateSpec) -> CandidateEvaluation:
         if not self._evaluations:
             raise AssertionError("evaluator queue exhausted")
-        return self._evaluations.pop(0)
+        return replace(self._evaluations.pop(0), candidate=candidate)
 
 
 def _candidates(count: int) -> list[CandidateSpec]:
@@ -125,7 +127,7 @@ def _candidates(count: int) -> list[CandidateSpec]:
     ]
 
 
-def _spanning_evaluations(count: int) -> list[CandidateEvaluation]:
+def _spanning_evaluations(count: int, *, temp_root: Path) -> list[CandidateEvaluation]:
     """Build evaluations whose descriptors span the full 2D grid."""
     evals: list[CandidateEvaluation] = []
     candidates = _candidates(count)
@@ -139,7 +141,9 @@ def _spanning_evaluations(count: int) -> list[CandidateEvaluation]:
                 critical_time=critical_time,
                 objective=float(i),
                 failure=["collision", "timeout", "incomplete"][i % 3],
+                cert_status=passed_status("synthetic fixture"),
                 bundle_index=i,
+                temp_root=temp_root,
             )
         )
     return evals
@@ -161,26 +165,32 @@ def test_grid_spec_rejects_invalid_bounds() -> None:
         GridSpec(x_min=float("nan"), x_max=1.0, y_min=0.0, y_max=1.0)
     with pytest.raises(ValueError):
         GridSpec(x_min=0.0, x_max=1.0, y_min=0.0, y_max=1.0, bins=0)
+    with pytest.raises(ValueError, match="x_max"):
+        GridSpec(x_min=1.0, x_max=1.0, y_min=0.0, y_max=1.0)
+    with pytest.raises(ValueError, match="y_max"):
+        GridSpec(x_min=0.0, x_max=1.0, y_min=2.0, y_max=1.0)
 
 
-def test_behavior_descriptor_reads_metrics() -> None:
+def test_behavior_descriptor_reads_metrics(tmp_path: Path) -> None:
     """Default descriptor pulls (min distance, critical time) from the record."""
     evaluation = _make_evaluation(
         candidate=_candidates(1)[0],
         min_distance=1.25,
         critical_time=2.0,
         objective=3.0,
+        temp_root=tmp_path,
     )
     assert default_behavior_descriptor(evaluation) == (1.25, 2.0)
 
 
-def test_behavior_descriptor_none_when_unmeasurable() -> None:
+def test_behavior_descriptor_none_when_unmeasurable(tmp_path: Path) -> None:
     """Descriptor returns None when the record/metrics are missing."""
     evaluation = _make_evaluation(
         candidate=_candidates(1)[0],
         min_distance=1.0,
         critical_time=1.0,
         objective=1.0,
+        temp_root=tmp_path,
     )
     evaluation = evaluation.__class__(
         candidate=evaluation.candidate,
@@ -195,10 +205,10 @@ def test_behavior_descriptor_none_when_unmeasurable() -> None:
     assert default_behavior_descriptor(evaluation) is None
 
 
-def test_archive_admits_only_certified_finite() -> None:
+def test_archive_admits_only_certified_finite(tmp_path: Path) -> None:
     """Archive rejects failed certification and non-finite objectives."""
     grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
-    archive = QDArchive(grid=grid, require_certification=False)
+    archive = QDArchive(grid=grid, require_certification=True)
 
     valid = _make_evaluation(
         candidate=_candidates(1)[0],
@@ -206,6 +216,7 @@ def test_archive_admits_only_certified_finite() -> None:
         critical_time=1.0,
         objective=5.0,
         cert_status=passed_status("ok"),
+        temp_root=tmp_path,
     )
     assert archive.try_insert(
         descriptor=(1.0, 1.0), evaluation=valid, certification_status=valid.certification_status
@@ -217,6 +228,7 @@ def test_archive_admits_only_certified_finite() -> None:
         critical_time=2.0,
         objective=9.0,
         cert_status=failed_status("excluded"),
+        temp_root=tmp_path,
     )
     assert not archive.try_insert(
         descriptor=(2.0, 2.0), evaluation=failed, certification_status=failed.certification_status
@@ -227,6 +239,7 @@ def test_archive_admits_only_certified_finite() -> None:
         min_distance=0.5,
         critical_time=0.5,
         objective=float("nan"),
+        temp_root=tmp_path,
     )
     assert not archive.try_insert(
         descriptor=(0.5, 0.5),
@@ -236,21 +249,33 @@ def test_archive_admits_only_certified_finite() -> None:
     assert archive.filled_cell_count() == 1
 
 
-def test_archive_keeps_higher_quality_incumbent() -> None:
+def test_archive_keeps_higher_quality_incumbent(tmp_path: Path) -> None:
     """A new elite only replaces the incumbent at its cell when scoring higher."""
     grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
     archive = QDArchive(grid=grid)
 
     low = _make_evaluation(
-        candidate=_candidates(1)[0], min_distance=1.0, critical_time=1.0, objective=2.0
+        candidate=_candidates(1)[0],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=2.0,
+        temp_root=tmp_path,
     )
     assert archive.try_insert(descriptor=(1.0, 1.0), evaluation=low, certification_status=None)
     high = _make_evaluation(
-        candidate=_candidates(2)[1], min_distance=1.0, critical_time=1.0, objective=8.0
+        candidate=_candidates(2)[1],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=8.0,
+        temp_root=tmp_path,
     )
     assert archive.try_insert(descriptor=(1.0, 1.0), evaluation=high, certification_status=None)
     worse = _make_evaluation(
-        candidate=_candidates(3)[2], min_distance=1.0, critical_time=1.0, objective=1.0
+        candidate=_candidates(3)[2],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=1.0,
+        temp_root=tmp_path,
     )
     assert not archive.try_insert(
         descriptor=(1.0, 1.0), evaluation=worse, certification_status=None
@@ -267,8 +292,9 @@ def test_run_map_elites_populates_grid_artifact(tmp_path: Path) -> None:
         grid=grid,
         budget=12,
         seed=7,
+        require_certification=True,
     )
-    evaluator = _FakeEvaluator(_spanning_evaluations(12))
+    evaluator = _FakeEvaluator(_spanning_evaluations(12, temp_root=tmp_path))
     result = run_map_elites(config, evaluator=evaluator)
 
     assert isinstance(result, QDSearchResult)
@@ -280,37 +306,47 @@ def test_run_map_elites_populates_grid_artifact(tmp_path: Path) -> None:
     artifact_path = write_qd_archive(result, tmp_path / "archive.json")
     payload = json.loads(artifact_path.read_text(encoding="utf-8"))
     assert payload["schema_version"] == QD_ARCHIVE_SCHEMA_VERSION
-    assert payload["behavior_axes"] == ["min_pedestrian_distance_m", "critical_event_time_s"]
+    assert payload["behavior_axes"] == ["distance_to_human_min", "time_to_collision_min"]
     assert payload["summary"]["filled_cell_count"] == result.archive.filled_cell_count()
 
 
-def test_run_map_elites_is_reproducible() -> None:
+def test_run_map_elites_is_reproducible(tmp_path: Path) -> None:
     """Same seed + config + evaluator ordering yields identical archive coverage."""
     grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
     config = QDSearchConfig(
-        search_space=_space(), objective="worst_case_snqi", grid=grid, budget=12, seed=7
+        search_space=_space(), objective="worst_case_snqi", grid=grid, budget=11, seed=7
     )
-    a = run_map_elites(config, evaluator=_FakeEvaluator(_spanning_evaluations(12)))
-    b = run_map_elites(config, evaluator=_FakeEvaluator(_spanning_evaluations(12)))
-    assert a.archive.filled_cell_count() == b.archive.filled_cell_count()
-    assert a.archive.qd_score() == b.archive.qd_score()
-    assert a.archive.distinct_failure_modes() == b.archive.distinct_failure_modes()
+    a = run_map_elites(
+        config, evaluator=_FakeEvaluator(_spanning_evaluations(11, temp_root=tmp_path))
+    )
+    b = run_map_elites(
+        config, evaluator=_FakeEvaluator(_spanning_evaluations(11, temp_root=tmp_path))
+    )
+    assert a.to_json() == b.to_json()
 
 
 def test_compare_qd_vs_single_objective(tmp_path: Path) -> None:
     """Equal-budget comparison reports QD coverage vs single-objective diversity."""
     grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
     config = QDSearchConfig(
-        search_space=_space(), objective="worst_case_snqi", grid=grid, budget=12, seed=7
+        search_space=_space(),
+        objective="worst_case_snqi",
+        grid=grid,
+        budget=12,
+        seed=7,
+        require_certification=True,
     )
-    qd_result = run_map_elites(config, evaluator=_FakeEvaluator(_spanning_evaluations(12)))
+    qd_result = run_map_elites(
+        config, evaluator=_FakeEvaluator(_spanning_evaluations(12, temp_root=tmp_path / "qd"))
+    )
 
-    single_objective = _spanning_evaluations(12)
+    single_objective = _spanning_evaluations(12, temp_root=tmp_path / "single")
     report = compare_qd_vs_single_objective(
         qd_result=qd_result,
         single_objective_evaluations=single_objective,
         budget=12,
         grid=grid,
+        require_certification=True,
     )
     assert isinstance(report, QDComparisonReport)
     assert report.qd.filled_cells == qd_result.archive.filled_cell_count()
@@ -324,17 +360,24 @@ def test_compare_qd_vs_single_objective(tmp_path: Path) -> None:
     assert loaded["comparison_type"] == "equal_budget_qd_vs_single_objective"
 
 
-def test_qd_finds_more_distinct_modes_than_single_objective_baseline() -> None:
-    """QD must expose more distinct certified failure mechanisms than the SO baseline.
+def test_qd_finds_more_distinct_modes_than_single_objective_baseline(tmp_path: Path) -> None:
+    """QD must expose more distinct synthetic failure mechanisms than the SO baseline.
 
     The single-objective baseline here converges on one failure mode at this budget
     while MAP-Elites spreads across the grid; this is the core QD claim at equal budget.
     """
     grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
     config = QDSearchConfig(
-        search_space=_space(), objective="worst_case_snqi", grid=grid, budget=12, seed=7
+        search_space=_space(),
+        objective="worst_case_snqi",
+        grid=grid,
+        budget=12,
+        seed=7,
+        require_certification=True,
     )
-    qd_result = run_map_elites(config, evaluator=_FakeEvaluator(_spanning_evaluations(12)))
+    qd_result = run_map_elites(
+        config, evaluator=_FakeEvaluator(_spanning_evaluations(12, temp_root=tmp_path / "qd"))
+    )
 
     single_objective = [
         _make_evaluation(
@@ -343,7 +386,9 @@ def test_qd_finds_more_distinct_modes_than_single_objective_baseline() -> None:
             critical_time=1.0,
             objective=9.0,
             failure="collision",
+            cert_status=passed_status("synthetic fixture"),
             bundle_index=100 + j,
+            temp_root=tmp_path / "single",
         )
         for j in range(12)
     ]
@@ -352,5 +397,72 @@ def test_qd_finds_more_distinct_modes_than_single_objective_baseline() -> None:
         single_objective_evaluations=single_objective,
         budget=12,
         grid=grid,
+        require_certification=True,
     )
     assert report.qd.distinct_failure_modes > report.single_objective.distinct_failure_modes
+
+
+def test_qd_config_and_emitters_fail_closed(tmp_path: Path) -> None:
+    """Invalid budgets and empty explicit emitter sets must not look successful."""
+    grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
+    with pytest.raises(ValueError, match="budget"):
+        QDSearchConfig(search_space=_space(), objective="worst_case_snqi", grid=grid, budget=0)
+    config = QDSearchConfig(search_space=_space(), objective="worst_case_snqi", grid=grid, budget=1)
+    with pytest.raises(ValueError, match="emitters"):
+        run_map_elites(
+            config,
+            evaluator=_FakeEvaluator(_spanning_evaluations(1, temp_root=tmp_path)),
+            emitters=[],
+        )
+
+
+def test_single_objective_comparison_uses_archive_admission(tmp_path: Path) -> None:
+    """The baseline row excludes failed, non-finite, and out-of-grid evaluations."""
+    grid = GridSpec(x_min=0.0, x_max=2.5, y_min=0.0, y_max=3.0, bins=4)
+    candidates = _candidates(4)
+    valid = _make_evaluation(
+        candidate=candidates[0],
+        min_distance=1.0,
+        critical_time=1.0,
+        objective=3.0,
+        cert_status=passed_status("ok"),
+        temp_root=tmp_path,
+    )
+    failed = _make_evaluation(
+        candidate=candidates[1],
+        min_distance=2.0,
+        critical_time=2.0,
+        objective=9.0,
+        cert_status=failed_status("excluded"),
+        bundle_index=1,
+        temp_root=tmp_path,
+    )
+    nonfinite = _make_evaluation(
+        candidate=candidates[2],
+        min_distance=0.5,
+        critical_time=0.5,
+        objective=float("nan"),
+        cert_status=passed_status("ok"),
+        bundle_index=2,
+        temp_root=tmp_path,
+    )
+    out_of_grid = _make_evaluation(
+        candidate=candidates[3],
+        min_distance=8.0,
+        critical_time=8.0,
+        objective=12.0,
+        cert_status=passed_status("ok"),
+        bundle_index=3,
+        temp_root=tmp_path,
+    )
+    empty_qd = QDSearchResult(archive=QDArchive(grid=grid), num_evaluated=0, num_admitted=0)
+    report = compare_qd_vs_single_objective(
+        qd_result=empty_qd,
+        single_objective_evaluations=[valid, failed, nonfinite, out_of_grid],
+        budget=4,
+        grid=grid,
+        require_certification=True,
+    )
+    assert report.single_objective.filled_cells == 1
+    assert report.single_objective.coverage_fraction == pytest.approx(1 / grid.cell_count)
+    assert report.single_objective.qd_score == 3.0

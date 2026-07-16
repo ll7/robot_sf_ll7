@@ -8,8 +8,8 @@ gate that the single-objective search uses (``certification.candidate_allowed``)
 Bounded first slice for issue #5308: Random + CoordinateRefinement emitters feed
 the grid. The behavior descriptors are scalars already measured during evaluation:
 
-* ``min_pedestrian_distance_m`` - closest robot/pedestrian clearance at failure;
-* ``critical_event_time_s`` - time of the critical safety event (TTC / collision).
+* ``distance_to_human_min`` - closest robot/pedestrian distance;
+* ``time_to_collision_min`` - minimum time-to-collision value.
 
 Quality = the configured objective value (use ``temporal_robustness`` from #5304
 when available; ``worst_case_snqi`` fallback otherwise).
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
 QD_ARCHIVE_SCHEMA_VERSION = "adversarial_qd_archive.v1"
 
-_BEHAVIOR_AXES = ("min_pedestrian_distance_m", "critical_event_time_s")
+_BEHAVIOR_AXES = ("distance_to_human_min", "time_to_collision_min")
 
 
 class BehaviorDescriptorFn(Protocol):
@@ -65,6 +65,13 @@ class QDEmitter(Protocol):
         """Observe one evaluated candidate (optional, default no-op)."""
 
 
+class QDEvaluator(Protocol):
+    """Injected evaluator contract for the dependency-light QD capability slice."""
+
+    def __call__(self, config: QDSearchConfig, candidate: CandidateSpec) -> CandidateEvaluation:
+        """Evaluate one candidate and return its repository evaluation payload."""
+
+
 def default_behavior_descriptor(evaluation: CandidateEvaluation) -> tuple[float, float] | None:
     """Return the (min distance, critical time) behavior descriptor from the record.
 
@@ -77,11 +84,11 @@ def default_behavior_descriptor(evaluation: CandidateEvaluation) -> tuple[float,
     if record is None:
         return None
     metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
-    distance = _finite_metric(metrics, "min_pedestrian_distance_m")
-    critical_time = _finite_metric(metrics, "critical_event_time_s")
-    if distance is None or critical_time is None:
+    distance = _finite_metric(metrics, "distance_to_human_min")
+    minimum_ttc = _finite_metric(metrics, "time_to_collision_min")
+    if distance is None or minimum_ttc is None:
         return None
-    return (distance, critical_time)
+    return (distance, minimum_ttc)
 
 
 def _finite_metric(metrics: dict[str, Any], key: str) -> float | None:
@@ -114,6 +121,10 @@ class GridSpec:
             raise ValueError("grid x bounds must be finite")
         if not math.isfinite(self.y_min) or not math.isfinite(self.y_max):
             raise ValueError("grid y bounds must be finite")
+        if self.x_max <= self.x_min:
+            raise ValueError("grid x_max must be strictly greater than x_min")
+        if self.y_max <= self.y_min:
+            raise ValueError("grid y_max must be strictly greater than y_min")
         if self.bins < 1:
             raise ValueError("grid bins must be >= 1")
 
@@ -284,6 +295,11 @@ class QDSearchConfig:
     require_certification: bool = False
     behavior_descriptor: BehaviorDescriptorFn = default_behavior_descriptor
 
+    def __post_init__(self) -> None:
+        """Fail closed on search settings that cannot perform an evaluation."""
+        if self.budget < 1:
+            raise ValueError("budget must be >= 1")
+
 
 @dataclass(frozen=True)
 class QDSearchResult:
@@ -306,7 +322,7 @@ class QDSearchResult:
 def run_map_elites(
     config: QDSearchConfig,
     *,
-    evaluator: Any,
+    evaluator: QDEvaluator,
     certifier: Any | None = None,
     emitters: list[QDEmitter] | None = None,
 ) -> QDSearchResult:
@@ -314,8 +330,10 @@ def run_map_elites(
 
     Args:
         config: MAP-Elites run configuration.
-        evaluator: Callable (config, candidate) -> CandidateEvaluation, mirroring the
-            injected-evaluator contract from ``search.run_adversarial_search``.
+        evaluator: Injected callable ``(config, candidate) -> CandidateEvaluation``.
+            This capability slice does not materialize scenarios or adapt the four-argument
+            production evaluator from ``search.run_adversarial_search``; Issue #5308 owns that
+            campaign integration.
         certifier: Optional callable (candidate) -> CertificationStatus; when omitted
             the evaluation's own certification status is used as the gate.
         emitters: Optional list of emitters; defaults to Random + CoordinateRefinement.
@@ -324,14 +342,19 @@ def run_map_elites(
         QDSearchResult with the populated archive and run counters.
     """
     objective_fn = get_objective(config.objective)
-    active_emitters = emitters or _default_emitters(config.search_space, seed=config.seed)
+    active_emitters = (
+        _default_emitters(config.search_space, seed=config.seed) if emitters is None else emitters
+    )
+    if not active_emitters:
+        raise ValueError("emitters must contain at least one emitter")
     archive = QDArchive(grid=config.grid, require_certification=config.require_certification)
 
     num_evaluated = 0
     num_admitted = 0
 
-    for _ in range(config.budget):
-        candidate = _sample_round_robin(active_emitters)
+    for index in range(config.budget):
+        emitter = active_emitters[index % len(active_emitters)]
+        candidate = emitter.sample()
         evaluation = evaluator(config, candidate)
         if evaluation.objective_value is None:
             score = objective_fn(evaluation)
@@ -370,17 +393,6 @@ def _default_emitters(search_space: SearchSpaceConfig, *, seed: int) -> list[QDE
         RandomCandidateSampler(search_space, seed=seed),
         CoordinateRefinementSampler(search_space, seed=seed + 1),
     ]
-
-
-def _sample_round_robin(emitters: list[QDEmitter]) -> CandidateSpec:
-    """Sample from emitters in round-robin order, cycling each call."""
-    index = _sample_round_robin.index
-    emitter = emitters[index % len(emitters)]
-    _sample_round_robin.index = (index + 1) % len(emitters)
-    return emitter.sample()
-
-
-_sample_round_robin.index = 0
 
 
 def _observe(emitter: QDEmitter, evaluation: CandidateEvaluation) -> None:
@@ -460,6 +472,7 @@ def compare_qd_vs_single_objective(
     budget: int,
     grid: GridSpec,
     require_certification: bool = False,
+    behavior_descriptor: BehaviorDescriptorFn = default_behavior_descriptor,
 ) -> QDComparisonReport:
     """Build an equal-budget comparison of QD diversity vs the single-objective baseline.
 
@@ -478,38 +491,26 @@ def compare_qd_vs_single_objective(
         distinct_failure_modes=len(qd_result.archive.distinct_failure_modes()),
     )
 
-    so_modes: set[str] = set()
-    so_best: CandidateEvaluation | None = None
+    so_archive = QDArchive(grid=grid, require_certification=require_certification)
     for evaluation in single_objective_evaluations:
-        if (
-            evaluation.failure_attribution is not None
-            and evaluation.failure_attribution.primary_failure
-        ):
-            so_modes.add(evaluation.failure_attribution.primary_failure)
-        if (
-            evaluation.certification_status is None
-            or evaluation.certification_status.status != "failed"
-            or not require_certification
-        ):
-            if (
-                so_best is None
-                or so_best.objective_value is None
-                or (
-                    evaluation.objective_value is not None
-                    and evaluation.objective_value > so_best.objective_value
-                )
-            ):
-                so_best = evaluation
+        descriptor = behavior_descriptor(evaluation)
+        if descriptor is None:
+            continue
+        so_archive.try_insert(
+            descriptor=descriptor,
+            evaluation=evaluation,
+            certification_status=evaluation.certification_status,
+        )
 
     so_row = QDComparisonRow(
         method="single_objective",
         budget=budget,
         num_evaluated=len(single_objective_evaluations),
-        num_admitted_or_best=1 if so_best is not None else 0,
-        filled_cells=len(so_modes),
-        coverage_fraction=len(so_modes) / grid.cell_count if grid.cell_count else 0.0,
-        qd_score=so_best.objective_value if so_best is not None else 0.0,
-        distinct_failure_modes=len(so_modes),
+        num_admitted_or_best=1 if so_archive.cells else 0,
+        filled_cells=so_archive.filled_cell_count(),
+        coverage_fraction=so_archive.coverage_fraction(),
+        qd_score=so_archive.qd_score(),
+        distinct_failure_modes=len(so_archive.distinct_failure_modes()),
     )
 
     return QDComparisonReport(
@@ -535,6 +536,7 @@ __all__ = [
     "QDComparisonReport",
     "QDComparisonRow",
     "QDEmitter",
+    "QDEvaluator",
     "QDSearchConfig",
     "QDSearchResult",
     "compare_qd_vs_single_objective",

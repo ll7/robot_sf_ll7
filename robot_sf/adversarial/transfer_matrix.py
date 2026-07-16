@@ -26,9 +26,11 @@ reported benchmark metrics.
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import math
 import random
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -37,8 +39,19 @@ from robot_sf.adversarial.archive import (
     ARCHIVE_SCHEMA_VERSION,
     SEARCH_MANIFEST_SCHEMA_VERSION,
 )
+from robot_sf.adversarial.provenance import (
+    ReceiptItem,
+    sha256_of_file,
+    write_execution_context,
+    write_receipt_manifest,
+)
 
 _TRANSFER_MATRIX_SCHEMA_VERSION = "adversarial_transfer_matrix.v1"
+
+# Durable archive subpath for the K x N transfer run inside the adversarial
+# archive. The issue pins "adversarial archive path — never the release
+# evidence store", so results live here, not in the release evidence tree.
+_TRANSFER_ARCHIVE_DIRNAME = "transfer_matrix"
 
 # Benchmark eligibility tiers that count as "certified / repliable" for slice 1.
 _CERTIFIED_ELIGIBILITY = frozenset({"eligible", "stress_only"})
@@ -720,6 +733,84 @@ def write_transfer_artifact(matrix: TransferMatrix, *, out_dir: str | Path) -> P
     return matrix_path
 
 
+def archive_transfer_run(
+    matrix: TransferMatrix,
+    *,
+    archive_root: str | Path,
+    run_id: str | None = None,
+    repo_root: str | Path | None = None,
+) -> Path:
+    """Write the durable, provenance-pinned K x N transfer run artifact.
+
+    This is the archival stage that issue #5303 leaves open after PR #5845's
+    capability-only plumbing: it persists the transfer matrix under the
+    adversarial archive path (never the release evidence store) together with
+    the per-job ``execution_context.txt`` and a ``receipt_manifest.json`` that
+    records every archived artifact's path and SHA-256 digest, exactly per the
+    evidence-grade promotion plan's provenance discipline.
+
+    Capability-not-evidence boundary: the archived artifacts describe *what ran*
+    and the measured transfer structure; they are not a benchmark or paper-facing
+    claim and are not written to the release evidence tree.
+
+    Parameters
+    ----------
+    matrix : TransferMatrix
+        The built transfer matrix (from :func:`build_transfer_matrix`).
+    archive_root : str | Path
+        Root of the adversarial archive. The run is written under
+        ``<archive_root>/transfer_matrix/<run_id>/``.
+    run_id : str | None
+        Stable run identifier. Defaults to a UTC timestamped uuid1 string.
+    repo_root : str | Path | None
+        Repository root for commit resolution in the execution context.
+
+    Returns
+    -------
+    Path
+        The run directory containing the durable artifacts.
+    """
+    if not matrix.config_ids:
+        raise ValueError("Cannot archive a transfer matrix with zero configs")
+    if len(matrix.planners) < 3:
+        raise ValueError("Transfer matrix must cover the target planner plus 2 others")
+    run_id = run_id or _dt.datetime.now(_dt.UTC).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid1().hex[:8]
+    run_dir = Path(archive_root) / _TRANSFER_ARCHIVE_DIRNAME / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    matrix_path = write_transfer_artifact(matrix, out_dir=run_dir)
+
+    context_path = write_execution_context(run_dir, repo_root=repo_root)
+    context_digest = sha256_of_file(context_path)
+    matrix_digest = sha256_of_file(matrix_path)
+    items = [
+        ReceiptItem(
+            artifact="transfer_matrix_json",
+            path=matrix_path.name,
+            digest=matrix_digest,
+            note=f"K={len(matrix.config_ids)} x N={len(matrix.planners)} transfer measurement",
+        ),
+        ReceiptItem(
+            artifact="transfer_report_md",
+            path="transfer_report.md",
+            note="one-page capability-only transfer report",
+        ),
+        ReceiptItem(
+            artifact="execution_context",
+            path=context_path.name,
+            digest=context_digest,
+            note="pinned hostname/CPU/threads/commit provenance",
+        ),
+    ]
+    write_receipt_manifest(
+        run_dir,
+        run_id=run_id,
+        items=items,
+        execution_context_path=context_path.name,
+    )
+    return run_dir
+
+
 __all__ = [
     "ARCHIVE_SCHEMA_VERSION",
     "DEFAULT_TRANSFER_ROSTER",
@@ -728,6 +819,7 @@ __all__ = [
     "PlannerRanking",
     "TransferCell",
     "TransferMatrix",
+    "archive_transfer_run",
     "build_transfer_matrix",
     "render_transfer_report",
     "select_certified_configs",

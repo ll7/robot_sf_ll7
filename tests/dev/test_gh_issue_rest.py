@@ -237,6 +237,92 @@ def test_complete_thread_does_not_mask_unrelated_native_failure() -> None:
     mock_rest.assert_not_called()
 
 
+def test_complete_thread_falls_back_on_graphql_rate_limit_exhaustion() -> None:
+    """GraphQL API rate-limit exhaustion must fall back to the full REST thread (#5896)."""
+    comments = [
+        {**_raw_comment(cid=10, login="first"), "body": "first comment"},
+        {**_raw_comment(cid=20, login="second"), "body": "second comment"},
+    ]
+    with (
+        patch("scripts.dev.gh_issue_rest._gh_issue_view") as mock_view,
+        patch("scripts.dev.gh_issue_rest._gh_api") as mock_api,
+    ):
+        mock_view.return_value = _proc(
+            returncode=1,
+            stderr="GraphQL: API rate limit already exceeded",
+        )
+        mock_api.side_effect = [
+            _proc(stdout=json.dumps(_raw_issue(number=5896))),
+            _proc(stdout=json.dumps(comments)),
+        ]
+        result = read_complete_issue_thread(5896, max_comment_pages=7)
+    assert result["status"] == "ok"
+    assert result["source"] == "rest_fallback"
+    # every paginated comment body must be present, not just page 1
+    assert "first comment" in result["text"]
+    assert "second comment" in result["text"]
+    assert [call.args[0] for call in mock_api.call_args_list] == [
+        "repos/ll7/robot_sf_ll7/issues/5896",
+        "repos/ll7/robot_sf_ll7/issues/5896/comments?per_page=100&page=1",
+    ]
+
+
+def test_complete_thread_falls_back_on_secondary_rate_limit() -> None:
+    """A secondary rate-limit GraphQL error must also trigger the REST fallback (#5896)."""
+    with (
+        patch("scripts.dev.gh_issue_rest._gh_issue_view") as mock_view,
+        patch("scripts.dev.gh_issue_rest._gh_api") as mock_api,
+    ):
+        mock_view.return_value = _proc(
+            returncode=1,
+            stderr="GraphQL: You have exceeded a secondary rate limit. Please wait.",
+        )
+        mock_api.side_effect = [
+            _proc(stdout=json.dumps(_raw_issue(number=5896))),
+            _proc(stdout=json.dumps([_raw_comment(cid=1)])),
+        ]
+        result = read_complete_issue_thread(5896)
+    assert result["status"] == "ok"
+    assert result["source"] == "rest_fallback"
+
+
+def test_complete_thread_falls_back_on_generic_graphql_error() -> None:
+    """A generic GraphQL error from the native-first read must fall back to REST (#5896)."""
+    with (
+        patch("scripts.dev.gh_issue_rest._gh_issue_view") as mock_view,
+        patch("scripts.dev.gh_issue_rest._gh_api") as mock_api,
+    ):
+        mock_view.return_value = _proc(
+            returncode=1,
+            stderr="GraphQL: Something went wrong while executing your query.",
+        )
+        mock_api.side_effect = [
+            _proc(stdout=json.dumps(_raw_issue(number=5896))),
+            _proc(stdout=json.dumps([_raw_comment(cid=1)])),
+        ]
+        result = read_complete_issue_thread(5896)
+    assert result["status"] == "ok"
+    assert result["source"] == "rest_fallback"
+
+
+def test_complete_thread_fails_closed_on_bad_credentials() -> None:
+    """HTTP 401 must fail closed (not hidden behind a GraphQL fallback) (#5896)."""
+    with (
+        patch("scripts.dev.gh_issue_rest._gh_issue_view") as mock_view,
+        patch("scripts.dev.gh_issue_rest.fetch_issue_with_comments") as mock_rest,
+    ):
+        mock_view.return_value = _proc(
+            returncode=1,
+            stderr="HTTP 401: Bad credentials",
+        )
+        result = read_complete_issue_thread(5896)
+    assert result["status"] == "error"
+    assert result["source"] == "gh_issue_view"
+    assert "Bad credentials" in result["error"]
+    assert "GraphQL" not in result["error"]
+    mock_rest.assert_not_called()
+
+
 def test_complete_thread_reports_rest_fallback_failure() -> None:
     """A failed fallback must report both the triggering path and REST error."""
     with (

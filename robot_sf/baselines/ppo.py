@@ -269,7 +269,8 @@ class PPOPlanner:
         """Lazily load model and init predictive foresight if not done yet."""
         if getattr(self, "_initialized", False):
             return
-        self._load_model()
+        if self._model is None:
+            self._load_model()
         self._init_predictive_foresight()
         if self._model is not None and self._runtime_observation_space is not None:
             self._validate_runtime_observation_space()

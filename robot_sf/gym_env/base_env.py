@@ -26,6 +26,8 @@ from robot_sf.sim.registry import get_backend
 from robot_sf.sim.simulator import init_simulators
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from robot_sf.render.jsonl_recording import JSONLRecorder
     from robot_sf.render.sim_view import SimulationView
 
@@ -115,6 +117,7 @@ class BaseEnv(Env):
         # New JSONL recording system
         self.use_jsonl_recording = use_jsonl_recording
         self.jsonl_recorder: JSONLRecorder | None = None
+        self.last_recorded_jsonl: Path | None = None
 
         if use_jsonl_recording and recording_enabled:
             # Use provided seed or generate from environment config
@@ -244,6 +247,7 @@ class BaseEnv(Env):
     ) -> None:
         """Start recording a new episode with JSONL recorder."""
         if self.jsonl_recorder is not None:
+            self.last_recorded_jsonl = None
             self.jsonl_recorder.start_episode(
                 config_hash=config_hash,
                 telemetry_path=telemetry_path,
@@ -269,6 +273,7 @@ class BaseEnv(Env):
         """End the current episode recording."""
         if self.jsonl_recorder is not None:
             self.jsonl_recorder.end_episode()
+            self.last_recorded_jsonl = self.jsonl_recorder.last_episode_file
 
     def close_recorder(self) -> None:
         """Close the recorder and clean up resources."""

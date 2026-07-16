@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5792_demo_validation_2026-07-15.md",
+  "artifact_sha256": "d40e3afd3dfecfa090c4298677209772dca4bde35dc6400cb7f89a7983ae6ce7",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

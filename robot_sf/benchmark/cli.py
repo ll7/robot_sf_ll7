@@ -100,6 +100,9 @@ from robot_sf.benchmark.scenario_schema import (
 from robot_sf.benchmark.scenario_thumbnails import (
     resolve_scenario_label as _thumb_resolve_label,
 )
+from robot_sf.benchmark.scenario_thumbnails import (
+    sanitize_scenario_label as _thumb_sanitize_label,
+)
 from robot_sf.benchmark.scenario_thumbnails import save_montage as _thumb_montage
 from robot_sf.benchmark.scenario_thumbnails import (
     save_scenario_thumbnails as _thumb_save_all,
@@ -135,6 +138,29 @@ _CLI_INPUT_ERRORS = (
 # logging/display calls must not hide programmer mistakes.
 _CLI_OPTIONAL_DEPENDENCY_ERRORS = (ImportError, ModuleNotFoundError, AttributeError)
 _CLI_LOGGING_ERRORS = (OSError, ValueError)
+
+
+def _select_scenario_matrix_row(matrix_path: str, scenario_id: str) -> list[dict[str, Any]]:
+    """Load a matrix and select exactly one row by its rendered scenario ID.
+
+    Returns:
+        The single matching scenario row.
+
+    Raises:
+        ValueError: If the matrix does not contain exactly one matching row.
+    """
+    scenarios = load_scenario_matrix(matrix_path)
+    matching = [
+        scenario
+        for scenario in scenarios
+        if _thumb_sanitize_label(_thumb_resolve_label(scenario)) == scenario_id
+    ]
+    if len(matching) != 1:
+        raise ValueError(
+            f"Scenario id {scenario_id!r} must resolve to exactly one matrix row; "
+            f"found {len(matching)}."
+        )
+    return matching
 
 
 def _handle_baseline(args) -> int:
@@ -325,8 +351,19 @@ def _handle_run(args) -> int:
                 readiness.note,
             )
 
+        scenarios_or_path: str | list[dict[str, Any]] = args.matrix
+        scenario_id = getattr(args, "scenario_id", None)
+        if scenario_id:
+            try:
+                scenarios_or_path = _select_scenario_matrix_row(args.matrix, scenario_id)
+            except _CLI_INPUT_ERRORS + (ValueError,):
+                _emit_structured(
+                    {"event": "benchmark.run.error", "error": "failed_loading_scenario_matrix"},
+                )
+                return 2
+
         summary = run_batch(
-            scenarios_or_path=args.matrix,
+            scenarios_or_path=scenarios_or_path,
             out_path=args.out,
             schema_path=args.schema,
             base_seed=args.base_seed,
@@ -1689,6 +1726,11 @@ def _add_run_subparser(
         help="Run a batch of episodes from a scenario matrix and write JSONL with real plots/videos",
     )
     p.add_argument("--matrix", required=True, help="Path to scenario matrix YAML")
+    p.add_argument(
+        "--scenario-id",
+        default=None,
+        help="Run exactly one sanitized scenario id from the matrix.",
+    )
     p.add_argument("--out", required=True, help="Path to write episode JSONL")
     p.add_argument("--schema", default=DEFAULT_SCHEMA_PATH, help="Schema path for validation")
     p.add_argument("--base-seed", type=int, default=0)

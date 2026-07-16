@@ -72,7 +72,13 @@ class ExampleCategory:
 
 @dataclass(frozen=True, slots=True)
 class ExampleScript:
-    """Describes a single example Python entry point."""
+    """Describes a single example Python entry point.
+
+    ``expected_runtime`` is an optional, human-readable estimate of how long the
+    example takes to run (e.g. ``"~10s"``, ``"interactive"``). It is surfaced by
+    discovery tooling (``robot-sf examples list``) and is left unset when no
+    trustworthy estimate is available rather than being fabricated.
+    """
 
     path: PurePosixPath
     name: str
@@ -83,6 +89,7 @@ class ExampleScript:
     ci_reason: str | None = None
     doc_reference: str | None = None
     tags: tuple[str, ...] = field(default_factory=tuple)
+    expected_runtime: str | None = None
 
     def __post_init__(self) -> None:
         """Validate the example category configuration.
@@ -408,6 +415,7 @@ def _parse_examples(
             ci_reason=_optional_string(item.get("ci_reason")),
             doc_reference=_optional_string(item.get("doc_reference")),
             tags=_optional_string_sequence(item.get("tags"), f"examples[{index}].tags"),
+            expected_runtime=_optional_string(item.get("expected_runtime")),
         )
         parsed.append(example)
     return tuple(parsed)

@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 from robot_sf.benchmark.campaign_atlas import (
+    CAMPAIGN_ATLAS_SCHEMA_VERSION,
     AtlasConfig,
     AtlasParityError,
     CampaignAtlasError,
@@ -386,7 +387,7 @@ class TestAtlasHtmlParity:
         summary_path.write_text(
             json.dumps(
                 {
-                    "schema_version": "campaign_atlas.v1",
+                    "schema_version": CAMPAIGN_ATLAS_SCHEMA_VERSION,
                     "campaign_id": summary.campaign_id,
                     "scenario_families": list(summary.scenario_families),
                     "planners": list(summary.planners),
@@ -397,6 +398,7 @@ class TestAtlasHtmlParity:
                         {
                             "scenario_family": c.scenario_family,
                             "planner": c.planner,
+                            "release_arm_id": c.release_arm_id,
                             "eligible": c.eligible,
                             "ineligible_reason": c.ineligible_reason,
                             "n_total": c.n_total,
@@ -422,7 +424,7 @@ class TestAtlasHtmlParity:
         summary_path.write_text(
             json.dumps(
                 {
-                    "schema_version": "campaign_atlas.v1",
+                    "schema_version": CAMPAIGN_ATLAS_SCHEMA_VERSION,
                     "campaign_id": "DIFFERENT",
                     "scenario_families": list(summary.scenario_families),
                     "planners": list(summary.planners),
@@ -447,7 +449,7 @@ class TestAtlasHtmlParity:
         summary_path.write_text(
             json.dumps(
                 {
-                    "schema_version": "campaign_atlas.v1",
+                    "schema_version": CAMPAIGN_ATLAS_SCHEMA_VERSION,
                     "campaign_id": summary.campaign_id,
                     "scenario_families": list(summary.scenario_families),
                     "planners": list(summary.planners),
@@ -458,6 +460,7 @@ class TestAtlasHtmlParity:
                         {
                             "scenario_family": cell.scenario_family,
                             "planner": cell.planner,
+                            "release_arm_id": cell.release_arm_id,
                             "eligible": cell.eligible,
                             "ineligible_reason": cell.ineligible_reason,
                             "n_total": cell.n_total,

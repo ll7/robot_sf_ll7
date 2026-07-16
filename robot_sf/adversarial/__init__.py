@@ -10,6 +10,7 @@ from robot_sf.adversarial.batch_certification import (
     certify_candidate_batch,
     certify_records,
 )
+from robot_sf.adversarial.cma_me import CMaMeEmitter
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
     CandidateSpec,
@@ -101,6 +102,7 @@ __all__ = [
     "AdversarialScenarioManifest",
     "BatchCertification",
     "BatchCertificationPolicy",
+    "CMaMeEmitter",
     "CandidateCertification",
     "CandidateEvaluation",
     "CandidateSpec",

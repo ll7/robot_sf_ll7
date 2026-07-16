@@ -15,7 +15,11 @@ import yaml
 from robot_sf.benchmark import campaign_logging
 from robot_sf.benchmark.heterogeneous_population_ablation_runner import (
     ManifestSpawnRealizabilityError,
+    assert_manifest_spawn_realizable,
 )
+from robot_sf.nav.global_route import GlobalRoute
+from robot_sf.nav.map_config import MapDefinition
+from robot_sf.nav.obstacle import Obstacle
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -96,6 +100,60 @@ def test_manifest_build_rejects_francis_forced_population_cell_once(tmp_path: Pa
     assert "population_size=12" in message
     assert "remaining 11 background pedestrians" in message
     assert not output_path.exists()
+
+
+def test_manifest_preflight_rejects_present_but_unsampleable_route(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A route blocked by obstacle geometry fails during build-time spawn construction."""
+
+    spawn_zone = ((1.0, 1.0), (2.0, 1.0), (1.0, 2.0))
+    goal_zone = ((8.0, 8.0), (9.0, 8.0), (8.0, 9.0))
+    route = GlobalRoute(
+        spawn_id=0,
+        goal_id=0,
+        waypoints=[(1.5, 1.5), (8.5, 8.5)],
+        spawn_zone=spawn_zone,
+        goal_zone=goal_zone,
+    )
+    blocked_map = MapDefinition(
+        width=10.0,
+        height=10.0,
+        obstacles=[Obstacle([(-10.0, -10.0), (20.0, -10.0), (20.0, 20.0), (-10.0, 20.0)])],
+        robot_spawn_zones=[spawn_zone],
+        ped_spawn_zones=[spawn_zone],
+        robot_goal_zones=[goal_zone],
+        bounds=[
+            (0.0, 10.0, 0.0, 0.0),
+            (0.0, 10.0, 10.0, 10.0),
+            (0.0, 0.0, 0.0, 10.0),
+            (10.0, 10.0, 0.0, 10.0),
+        ],
+        robot_routes=[route],
+        ped_goal_zones=[goal_zone],
+        ped_crowded_zones=[],
+        ped_routes=[route],
+    )
+    map_path = tmp_path / "blocked-route.svg"
+    map_path.write_text("<svg/>", encoding="utf-8")
+    monkeypatch.setattr(
+        "robot_sf.benchmark.heterogeneous_population_ablation_runner.resolve_map_definition",
+        lambda *_args, **_kwargs: blocked_map,
+    )
+    row = {
+        "scenario_id": "blocked_route",
+        "map_file": str(map_path),
+        "seed": 101,
+        "density": 0.02,
+        "arm_population": {
+            "counts": {"standard": 2},
+            "composition": {"standard": 1.0},
+            "pedestrian_control_trace_labels": [],
+        },
+    }
+
+    with pytest.raises(ManifestSpawnRealizabilityError, match="Failed to sample"):
+        assert_manifest_spawn_realizable([row], scenario_path=tmp_path / "scenario.yaml")
 
 
 def test_runner_preserves_completed_jsonl_records_on_abort(

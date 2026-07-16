@@ -19,12 +19,15 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
+
 from robot_sf.benchmark.heterogeneous_population_ablation import (
     PopulationMixNotRealizableError,
     build_runtime_population_control_trace_labels,
 )
 from robot_sf.benchmark.map_runner import _build_policy
 from robot_sf.benchmark.map_runner_episode import run_map_episode
+from robot_sf.nav.navigation import get_prepared_obstacles
 from robot_sf.ped_npc import ped_population
 from robot_sf.ped_npc.ped_population import PedSpawnConfig
 from robot_sf.training.scenario_loader import resolve_map_definition
@@ -58,9 +61,9 @@ def assert_manifest_spawn_realizable(
 ) -> None:
     """Dry-run each distinct scenario/population spawn plan and aggregate failures.
 
-    This deliberately calls the same spawn-budget helper used by
-    :func:`robot_sf.ped_npc.ped_population.populate_simulation`. It parses map geometry
-    but does not create a simulator or sample any pedestrian positions.
+    This deliberately calls the same population-construction helper used by the simulator.
+    It parses map geometry and samples the requested pedestrian positions, but does not create
+    a simulator or advance any episode state.
 
     Raises:
         ManifestSpawnRealizabilityError: Any distinct scenario/map/population cell cannot spawn.
@@ -103,13 +106,21 @@ def assert_manifest_spawn_realizable(
                 response_law_seed=simulation_config.get("response_law_seed"),
                 force_population_size=int(simulation_config["population_size"]),
             )
-            ped_population._spawn_configs_for_forced_population(
-                spawn_config,
-                map_definition.ped_routes,
-                map_definition.ped_crowded_zones,
-                map_definition.single_pedestrians,
-            )
-        except (KeyError, TypeError, ValueError, OSError) as exc:
+            random_state = np.random.get_state()
+            np.random.seed(int(row.get("seed", DEFAULT_ARCHETYPE_SEED)))
+            try:
+                ped_population.populate_simulation(
+                    0.5,
+                    spawn_config,
+                    map_definition.ped_routes,
+                    map_definition.ped_crowded_zones,
+                    obstacle_polygons=get_prepared_obstacles(map_definition),
+                    single_pedestrians=map_definition.single_pedestrians,
+                    time_step_s=0.1,
+                )
+            finally:
+                np.random.set_state(random_state)
+        except (AssertionError, KeyError, TypeError, ValueError, OSError, RuntimeError) as exc:
             failures.append(f"{cell_name}: {exc}")
 
     if failures:

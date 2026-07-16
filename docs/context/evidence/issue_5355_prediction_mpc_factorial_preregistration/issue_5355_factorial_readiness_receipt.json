@@ -1,0 +1,51 @@
+{
+  "campaign_run_status": "not_run",
+  "claim_boundary": "CPU readiness receipt only; no campaign has run, no benchmark/paper/release claim is supported, and no GPU/Slurm submission is authorized.",
+  "frozen_by": "scripts/validation/freeze_issue_5355_factorial_readiness_receipt.py",
+  "hierarchical_input_gate": {
+    "blocking_prerequisites": [
+      {
+        "field": "successor_release.release_tag",
+        "reason": "#4364 successor release tag is not recorded"
+      },
+      {
+        "field": "successor_release.commit",
+        "reason": "#4364 successor release commit must be a 40-character lowercase SHA-1"
+      },
+      {
+        "field": "successor_release.typed_ledger_rows_sha256",
+        "reason": "durable typed-ledger rows must declare a 64-character lowercase SHA-256"
+      },
+      {
+        "field": "successor_release.typed_ledger_rows",
+        "reason": "durable typed-ledger successor rows are not recorded"
+      }
+    ],
+    "claim_gate": {
+      "reason": "successor-release inputs are missing",
+      "status": "blocked_analysis_not_run"
+    },
+    "manifest": "/home/luttkule/git/robot_sf_ll7.worktrees/cheap-issue-5355-20260716T162334Z/configs/benchmarks/releases/hierarchical_paired_release_analysis_issue_5351.yaml",
+    "present": true,
+    "status": "blocked_missing_successor_release_rows"
+  },
+  "input_gate_consistent_with_audit": true,
+  "issue": 5355,
+  "readiness_blockers": [
+    "dependencies_resolved: dependency #5351 unresolved (status=open): successor-release typed-ledger rows for preregistered contrasts (input contract delivered by #5776)",
+    "hierarchical_input_gate_reconciled: #5776 input-gate present; evaluation status=blocked_missing_successor_release_rows; successor-release rows absent (blocker: #4364)"
+  ],
+  "readiness_criteria": {
+    "arm_configs_valid": true,
+    "dependencies_resolved": false,
+    "evidence_registry_pinned": true,
+    "hierarchical_input_gate_reconciled": false,
+    "preregistration_config_valid": true
+  },
+  "ready": false,
+  "schema_version": "robot_sf.issue_5355_factorial_readiness_receipt.v1",
+  "successor_slice_required": {
+    "issue": 4364,
+    "reason": "typed-ledger successor-release rows required before #5351 analysis runs"
+  }
+}

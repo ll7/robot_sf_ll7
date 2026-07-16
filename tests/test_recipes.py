@@ -9,6 +9,9 @@ These tests enforce the issue's acceptance criteria:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
+
 import pytest
 
 from robot_sf.cli import main
@@ -16,7 +19,15 @@ from robot_sf.recipes import discover_recipes, load_recipe
 from robot_sf.recipes.catalog import recipes_dir
 from robot_sf.recipes.cli import build_subparser, handle
 from robot_sf.recipes.cli import main as recipes_main
-from robot_sf.recipes.recipe import CATEGORIES, RecipeError, validate_configs_loadable
+from robot_sf.recipes.recipe import (
+    CATEGORIES,
+    RecipeError,
+    load_recipe_file,
+    validate_configs_loadable,
+)
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # The ten blessed workflows named in issue #5795.
 EXPECTED_RECIPE_IDS: frozenset[str] = frozenset(
@@ -102,7 +113,7 @@ def test_recipe_explain_prints_purpose_config_runtime_outputs(
     assert "command:" in out
     assert "configs (loadability contract):" in out
     # The config this recipe maps to must be named in the explanation.
-    assert "issue_4017_unconstrained_smoke.yaml" in out
+    assert "issue_4018_fixed_density_smoke.yaml" in out
 
 
 def test_recipe_explain_unknown_id_errors(
@@ -125,6 +136,79 @@ def test_recipe_run_dry_run_prints_command_without_executing(
     assert "first-demo" in out
     assert "examples/quickstart/01_basic_robot.py" in out
     assert "dry-run: command not executed" in out
+
+
+def test_recipe_run_is_shell_free_and_defaults_to_repository_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Installed CLI invocations work outside the checkout without a shell."""
+    captured: dict[str, object] = {}
+
+    def fake_run(argv, *, cwd, check):
+        captured.update(argv=argv, cwd=cwd, check=check)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("robot_sf.recipes.cli.subprocess.run", fake_run)
+
+    assert main(["recipe", "run", "first-demo"]) == 0
+    assert captured["argv"] == [
+        "uv",
+        "run",
+        "python",
+        "examples/quickstart/01_basic_robot.py",
+    ]
+    assert captured["cwd"] == str(recipes_dir().parents[1])
+    assert captured["check"] is False
+
+
+def test_recipe_manifest_rejects_repository_escape(tmp_path: Path) -> None:
+    """Manifest references may not traverse outside the repository."""
+    manifest = tmp_path / "escape.yaml"
+    manifest.write_text(
+        "\n".join(
+            [
+                "id: escape",
+                "title: Escape",
+                "purpose: Reject traversal.",
+                'runtime: "< 1s CPU"',
+                "category: getting-started",
+                "command: uv run python example.py",
+                "configs:",
+                "  - ../outside.yaml",
+                "outputs: []",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecipeError, match="escapes repository root"):
+        load_recipe_file(manifest)
+
+
+def test_recipe_manifest_rejects_missing_docs(tmp_path: Path) -> None:
+    """Catalog discovery fails closed when its user-facing docs target is missing."""
+    manifest = tmp_path / "missing-docs.yaml"
+    manifest.write_text(
+        "\n".join(
+            [
+                "id: missing-docs",
+                "title: Missing docs",
+                "purpose: Reject missing docs.",
+                'runtime: "< 1s CPU"',
+                "category: getting-started",
+                "command: uv run python example.py",
+                "configs: []",
+                "outputs: []",
+                "docs: docs/definitely-missing-recipe-doc.md",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RecipeError, match="missing docs"):
+        load_recipe_file(manifest)
 
 
 def test_standalone_recipes_cli_list(

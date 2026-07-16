@@ -13,10 +13,12 @@ no simulation itself: every recipe delegates to an EXISTING config/script.
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import sys
 from typing import TYPE_CHECKING
 
+from robot_sf.common.artifact_paths import get_repository_root
 from robot_sf.recipes.catalog import discover_recipes, load_recipe
 from robot_sf.recipes.recipe import CATEGORIES, Recipe, RecipeError
 
@@ -112,10 +114,13 @@ def _run_recipe(recipe_id: str, *, dry_run: bool, cwd: Path | None = None) -> in
 
     sys.stdout.write("-" * 60 + "\n")
     sys.stdout.flush()
+    argv = shlex.split(command)
+    if not argv:
+        sys.stderr.write(f"error: recipe {recipe.id!r} has an empty command\n")
+        return 1
     completed = subprocess.run(
-        command,
-        shell=True,
-        cwd=str(cwd) if cwd else None,
+        argv,
+        cwd=str(cwd or get_repository_root()),
         check=False,
     )
     return completed.returncode

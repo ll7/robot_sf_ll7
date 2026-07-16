@@ -147,12 +147,24 @@ def _resolve_repo_relative(ref: str, recipe_id: str, field_name: str) -> Path:
     Returns:
         Path: Absolute resolved path.
     """
-    cleaned = ref.strip().lstrip("./").lstrip("/")
+    cleaned = ref.strip()
+    while cleaned.startswith("./"):
+        cleaned = cleaned[2:]
     if not cleaned:
         raise RecipeError(
             f"recipe {recipe_id!r}: field {field_name!r} contains an empty path",
         )
-    return (get_repository_root() / cleaned).resolve()
+    if Path(cleaned).is_absolute():
+        raise RecipeError(f"recipe {recipe_id!r}: field {field_name!r} must be repository-relative")
+    root = get_repository_root().resolve()
+    resolved = (root / cleaned).resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise RecipeError(
+            f"recipe {recipe_id!r}: field {field_name!r} escapes repository root: {ref!r}"
+        ) from exc
+    return resolved
 
 
 def _require_string_list(
@@ -268,7 +280,7 @@ def load_recipe_file(path: Path) -> Recipe:
         docs_ref = _require_str(docs_ref_raw, "docs", recipe_id)
         docs_path = _resolve_repo_relative(docs_ref, recipe_id, "docs")
 
-    return Recipe(
+    recipe = Recipe(
         id=recipe_id,
         title=title,
         purpose=purpose,
@@ -281,6 +293,12 @@ def load_recipe_file(path: Path) -> Recipe:
         config_refs=tuple(config_refs),
         docs_ref=docs_ref,
     )
+    config_errors = validate_configs_loadable(recipe.config_paths)
+    if config_errors:
+        raise RecipeError(f"recipe {recipe_id!r}: " + "; ".join(config_errors))
+    if recipe.docs_path is not None and not recipe.docs_path.is_file():
+        raise RecipeError(f"recipe {recipe_id!r}: missing docs: {recipe.docs_path}")
+    return recipe
 
 
 def validate_configs_loadable(config_paths: Sequence[Path]) -> list[str]:

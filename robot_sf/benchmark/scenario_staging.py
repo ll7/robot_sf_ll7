@@ -28,7 +28,7 @@ def select_unique_scenario(
         ScenarioStagingError: If the source has zero or multiple exact matches.
     """
 
-    matches = [row for row in scenarios if str(row.get("name")) == scenario_name]
+    matches = [row for row in scenarios if row.get("name") == scenario_name]
     if len(matches) != 1:
         raise ScenarioStagingError(
             f"Scenario staging expected exactly one match for {scenario_name!r} "

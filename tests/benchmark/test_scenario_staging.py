@@ -48,3 +48,14 @@ def test_select_unique_scenario_reports_duplicate_matches() -> None:
             "duplicate",
             source="duplicate-scenarios.yaml",
         )
+
+
+@pytest.mark.parametrize("stored_name", [None, 123])
+def test_select_unique_scenario_does_not_coerce_non_string_names(stored_name: object) -> None:
+    """Exact matching must not coerce malformed source names into valid strings."""
+    with pytest.raises(ScenarioStagingError, match=r"found 0 matches"):
+        select_unique_scenario(
+            [{"name": stored_name}],
+            str(stored_name),
+            source="malformed-scenarios.yaml",
+        )

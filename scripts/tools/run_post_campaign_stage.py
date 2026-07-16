@@ -92,7 +92,7 @@ def build_post_campaign_stage_payload(
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse CLI arguments."""
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--campaign-summary", type=Path, required=True)
     parser.add_argument("--campaign-exit-code", type=_exit_code, required=True)
     parser.add_argument("--stage-name", required=True)

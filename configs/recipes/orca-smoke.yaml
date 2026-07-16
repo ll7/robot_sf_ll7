@@ -1,0 +1,19 @@
+id: orca-smoke
+title: ORCA / social-force planner smoke benchmark
+purpose: >
+  Run a tiny headless benchmark sweep of the social-force (ORCA-style) planner
+  on the planner-sanity scenario to confirm the benchmark runner, episode
+  recording, and aggregation pipeline are wired up. No trained model required.
+runtime: "< 1 min CPU"
+category: planners
+command: >
+  uv run python scripts/demo/run_robot_sf_smoke.py
+  --planners social_force --horizon 120
+configs:
+  - configs/scenarios/single/planner_sanity_simple.yaml
+  - scripts/demo/run_robot_sf_smoke.py
+outputs:
+  - output/demo/smoke_benchmark/summary.json
+  - output/demo/smoke_benchmark/report.md
+  - output/demo/smoke_benchmark/episodes/social_force.jsonl
+docs: docs/recipes/README.md

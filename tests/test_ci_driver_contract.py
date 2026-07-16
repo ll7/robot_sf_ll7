@@ -28,6 +28,7 @@ CI_JOB_TIMEOUTS = {
     "xdist-scratch-isolation": 15,
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
+    "notebooks-smoke": 30,
     "ci": 5,
 }
 PHASE_PATTERN = re.compile(
@@ -346,6 +347,16 @@ def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -
     assert _workflow_job_phases("examples-smoke") == {"examples-smoke"}
     assert "needs" not in workflow["jobs"]["examples-smoke"]
     assert "examples-smoke" in workflow["jobs"]["ci"]["needs"]
+
+
+def test_ci_workflow_notebooks_smoke_is_independent_and_required_by_aggregate() -> None:
+    """Keep notebook execution in a separately timed job required by aggregate CI."""
+    workflow = yaml.safe_load(_workflow_text())
+
+    assert "notebooks-smoke" in workflow["jobs"]
+    assert _workflow_job_phases("notebooks-smoke") == {"notebooks-smoke"}
+    assert "needs" not in workflow["jobs"]["notebooks-smoke"]
+    assert "notebooks-smoke" in workflow["jobs"]["ci"]["needs"]
 
 
 def test_ci_workflow_wheel_smoke_is_independent_and_required_by_aggregate() -> None:

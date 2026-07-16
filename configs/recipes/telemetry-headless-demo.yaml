@@ -1,0 +1,15 @@
+id: telemetry-headless-demo
+title: Headless telemetry / occupancy-grid demo
+purpose: >
+  Run the occupancy-grid quickstart, which exercises the observation, sensor,
+  and telemetry surfaces headless on CPU. Use this to confirm the perception
+  and telemetry pipeline produces observations without a display.
+runtime: "< 30s CPU"
+category: telemetry
+command: >
+  uv run python examples/quickstart/04_occupancy_grid.py
+configs:
+  - examples/quickstart/04_occupancy_grid.py
+outputs:
+  - "(stdout only: observation/occupancy-grid shape and reward logs)"
+docs: docs/recipes/README.md

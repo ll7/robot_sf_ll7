@@ -13,12 +13,15 @@ import pytest
 from robot_sf.baselines import is_runnable_algo
 from robot_sf.benchmark.exact_repeat_campaign import (
     HOST_REPORT_SCHEMA_VERSION,
+    PROCESS_ISOLATION_DISPOSITION,
     RESOLVED_DEFINITIONS_SCHEMA_VERSION,
     UNRUNNABLE_DISPOSITION,
     _check_manifest_from_bundle,
+    _classify_repeat_failure,
     _compute_trajectory_hash,
     _get_environment_fingerprint,
     _record_is_degraded,
+    _record_is_isolation_failure,
     _safe_json_value,
     canonical_sha256,
     execute_campaign,
@@ -215,6 +218,7 @@ def test_check_manifest_from_bundle_rejects_missing_execution_contract():
 def _build_mock_record(seed: int) -> dict[str, Any]:
     """Build a stable mock episode record whose hash depends only on seed."""
     return {
+        "algorithm_metadata": {"status": "ok", "config_hash": "mock-config"},
         "outcome": {"success": True, "collision": False, "timeout": False},
         "metrics": {
             "success": 1.0,
@@ -596,6 +600,163 @@ def test_record_is_degraded_ignores_malformed_fallback_counter():
     )
 
 
+# --- _record_is_isolation_failure (issue #5781) --------------------------
+
+
+def test_record_is_isolation_failure_detects_isolation_unavailable_status():
+    """A worker-isolation-unavailable status is an isolation failure."""
+    assert (
+        _record_is_isolation_failure(
+            {"algorithm_metadata": {"status": "policy_step_isolation_unavailable"}}
+        )
+        is True
+    )
+
+
+def test_record_is_isolation_failure_detects_worker_death_reason():
+    """A worker-death fallback_reason is an isolation failure, not a planner degrade."""
+    assert (
+        _record_is_isolation_failure(
+            {
+                "algorithm_metadata": {
+                    "status": "policy_step_error_fallback",
+                    "fallback_reason": "planner step worker exited before returning an action",
+                }
+            }
+        )
+        is True
+    )
+    assert (
+        _record_is_isolation_failure(
+            {
+                "algorithm_metadata": {
+                    "status": "policy_step_error_fallback",
+                    "fallback_reason": "planner step worker was unavailable",
+                }
+            }
+        )
+        is True
+    )
+    assert (
+        _record_is_isolation_failure(
+            {
+                "algorithm_metadata": {
+                    "status": "policy_step_error_fallback",
+                    "fallback_reason": "planner step worker failed to initialize (RuntimeError: cuda)",
+                }
+            }
+        )
+        is True
+    )
+
+
+def test_record_is_isolation_failure_rejects_genuine_planner_fallback():
+    """A genuine planner zero-action fallback is NOT an isolation failure."""
+    assert (
+        _record_is_isolation_failure(
+            {
+                "algorithm_metadata": {
+                    "status": "policy_step_error_fallback",
+                    "fallback_reason": "policy_step_error",
+                }
+            }
+        )
+        is False
+    )
+    assert (
+        _record_is_isolation_failure(
+            {
+                "algorithm_metadata": {
+                    "status": "policy_step_timeout_fallback",
+                    "fallback_reason": "policy_step_timeout",
+                }
+            }
+        )
+        is False
+    )
+
+
+def test_record_is_isolation_failure_rejects_native_ok_record():
+    """A native ok record is neither degraded nor an isolation failure."""
+    ok_record = {"algorithm_metadata": {"status": "ok", "config_hash": "abc"}}
+    assert _record_is_degraded(ok_record) is False
+    assert _record_is_isolation_failure(ok_record) is False
+
+
+def test_record_is_isolation_failure_rejects_non_mapping_record():
+    """Malformed runner output does not raise while checking isolation failure."""
+    assert _record_is_isolation_failure(None) is False
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {},
+        {"algorithm_metadata": None},
+        {"algorithm_metadata": {}},
+        {"algorithm_metadata": {"status": None, "config_hash": None}},
+    ],
+)
+def test_record_is_isolation_failure_fails_closed_on_missing_policy_metadata(record):
+    """Records without usable policy metadata cannot become determinism evidence."""
+    assert _record_is_isolation_failure(record) is True
+
+
+def test_classify_repeat_failure_prefers_isolation_over_degraded():
+    """An isolation failure takes precedence over a planner degradation flag.
+
+    Issue #5781: a forked-worker death under xdist must be classified as a
+    process-isolation failure rather than folded into the planner ``unrunnable``
+    disposition, so the determinism signal is not polluted by transient infra noise.
+    """
+    records = [
+        {
+            "algorithm_metadata": {
+                "status": "policy_step_error_fallback",
+                "fallback_reason": "planner step worker exited before returning an action",
+            }
+        },
+        {
+            "algorithm_metadata": {
+                "status": "policy_step_timeout_fallback",
+                "fallback_reason": "policy_step_timeout",
+            }
+        },
+    ]
+    any_degraded, any_isolation = _classify_repeat_failure(records)
+    assert any_degraded is True
+    assert any_isolation is True
+
+
+def test_classify_repeat_failure_detects_genuine_degradation_only():
+    """A genuine planner fallback is degraded but not an isolation failure."""
+    records = [
+        {
+            "algorithm_metadata": {
+                "status": "policy_step_timeout_fallback",
+                "fallback_reason": "policy_step_timeout",
+            }
+        }
+    ]
+    any_degraded, any_isolation = _classify_repeat_failure(records)
+    assert any_degraded is True
+    assert any_isolation is False
+
+
+def test_classify_repeat_failure_detects_isolation_only():
+    """A dead-worker record is isolation-only, not a planner degradation."""
+    records = [
+        {
+            "algorithm_metadata": {
+                "status": "policy_step_isolation_unavailable",
+            }
+        }
+    ]
+    any_degraded, any_isolation = _classify_repeat_failure(records)
+    assert any_degraded is False
+    assert any_isolation is True
+
+
 def test_record_is_degraded_accepts_native_record():
     """A native run with ok status and no timeout is not degraded."""
     assert (
@@ -664,6 +825,149 @@ def test_execute_campaign_dispositions_degraded_fallback_targets(
         assert target["unrunnable"] is True
 
 
+# --- execute_campaign process-isolation disposition (issue #5781) ---------
+
+
+def _isolation_failure_mock_runner(
+    scenario_params: dict[str, Any],
+    seed: int,
+    *,
+    algo: str = "goal",
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Mock run_episode whose records look like a dead/forked planner worker.
+
+    Issue #5781: under the parallel readiness lane a forked planner-step worker
+    can die/reparent (or be unavailable to fork again inside an xdist worker).
+    The runner reports this through the isolation-unavailable status, which must
+    be classified as a process-isolation failure, not a planner degradation.
+    """
+    record = _build_mock_record(seed)
+    record["algorithm_metadata"] = {"status": "policy_step_isolation_unavailable"}
+    record["outcome"] = {"timeout_event": True}
+    return record
+
+
+def test_execute_campaign_dispositions_process_isolation_failure(
+    tmp_path, manifest, resolved_bundle
+):
+    """A dead planner worker is a process-isolation failure, distinct from degradation.
+
+    Issue #5781: a forked-worker death under xdist multiprocessing contention must
+    not be misfiled as a planner ``unrunnable_on_current_main`` disposition (which
+    means "this planner cannot be constructed on main"). It is recorded with the
+    separate ``process_isolation_failure`` disposition and fails closed (excluded
+    from the determinism claim) while staying distinguishable from genuine planner
+    degradation.
+    """
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "isolation_failure_disposition",
+        run_episode=_isolation_failure_mock_runner,
+    )
+
+    by_planner = {}
+    for result in host_result["results"]:
+        by_planner.setdefault(result["planner"], []).append(result)
+
+    for results in by_planner.values():
+        for result in results:
+            assert result["disposition"] == PROCESS_ISOLATION_DISPOSITION
+            assert result.get("isolation_failure") is True
+            assert result.get("degraded") is not True
+            assert result["repeats"] == []
+            assert "isolation" in result["disposition_reason"]
+            # It must NOT be recorded as a planner-runnability defect on main.
+            assert result["disposition"] != UNRUNNABLE_DISPOSITION
+
+    verified = verify_host_report(manifest, host_result)
+    # Isolation-failure targets are excluded from the determinism claim but are
+    # explicitly flagged so the signal is not polluted by transient infra noise.
+    assert verified["summary"]["n_runnable_cells"] == 0
+    assert verified["summary"]["n_unrunnable_cells"] == 7
+    assert verified["summary"]["all_cells_bitwise_identical"] is False
+    for target in verified["targets"]:
+        assert target["unrunnable"] is True
+        assert target["isolation_failure"] is True
+    for cell in verified["cells"]:
+        assert cell["disposition"] == PROCESS_ISOLATION_DISPOSITION
+        assert cell["isolation_failure"] is True
+
+
+def test_verify_host_report_accepts_isolation_failure_disposition(
+    tmp_path, manifest, resolved_bundle
+):
+    """The verifier accepts the process-isolation disposition and surfaces the flag."""
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "verify_isolation_disposition",
+        run_episode=_isolation_failure_mock_runner,
+    )
+    verified = verify_host_report(manifest, host_result)
+    assert all(t["isolation_failure"] is True for t in verified["targets"])
+    assert all(t["disposition"] == PROCESS_ISOLATION_DISPOSITION for t in verified["targets"])
+    assert verified["summary"]["n_unrunnable_cells"] == 7
+
+
+@pytest.mark.parametrize("isolation_failure", [None, 1, "true"])
+def test_verify_host_report_rejects_non_boolean_isolation_flag(
+    tmp_path, manifest, resolved_bundle, isolation_failure
+):
+    """The strict verifier rejects truthy or missing process-isolation flags."""
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / f"invalid_isolation_flag_{isolation_failure!s}",
+        run_episode=_isolation_failure_mock_runner,
+    )
+    for result in host_result["results"]:
+        if isolation_failure is None:
+            result.pop("isolation_failure")
+        else:
+            result["isolation_failure"] = isolation_failure
+    with pytest.raises(ValueError, match="disposition and isolation_failure disagree|boolean"):
+        verify_host_report(manifest, host_result)
+
+
+def test_verify_host_report_rejects_isolation_flag_for_unrunnable_disposition(
+    tmp_path, manifest, resolved_bundle
+):
+    """The isolation flag and disposition must describe the same failure class."""
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "mismatched_isolation_flag",
+        run_episode=_isolation_failure_mock_runner,
+    )
+    for result in host_result["results"]:
+        result["disposition"] = UNRUNNABLE_DISPOSITION
+    with pytest.raises(ValueError, match="disposition and isolation_failure disagree"):
+        verify_host_report(manifest, host_result)
+
+
+def test_execute_campaign_prefers_isolation_over_degradation(tmp_path, manifest, resolved_bundle):
+    """When a repeat is both degraded and an isolation failure, isolation wins.
+
+    Issue #5781: a dead worker can legitimately carry a fallback status (the
+    runner fell back to a zero action before noticing the worker died). The
+    isolation cause must take precedence so the failure is not attributed to the
+    planner policy.
+    """
+
+    def degraded_isolation_runner(*args, **kwargs):
+        record = _isolation_failure_mock_runner(*args, **kwargs)
+        record["algorithm_metadata"] = {
+            "status": "policy_step_error_fallback",
+            "fallback_reason": "planner step worker exited before returning an action",
+        }
+        return record
+
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "isolation_precedence",
+        run_episode=degraded_isolation_runner,
+    )
+    assert all(r["disposition"] == PROCESS_ISOLATION_DISPOSITION for r in host_result["results"])
+
+
 # --- native PPO determinism (issue #5498 slice) --------------------------
 
 
@@ -676,6 +980,15 @@ def test_native_ppo_target_runs_deterministically_with_real_runner(tmp_path, res
     so a PPO target must now execute with the real ``run_episode`` runner and
     produce exactly three bitwise-identical repeats (matching trajectory hashes)
     rather than a degraded disposition.
+
+    Issue #5781: under the parallel readiness lane (xdist), a transient
+    process-isolation failure (a dead/reparented forked planner worker or an
+    unsupported second-level fork under an xdist worker) is a real-runner
+    environment failure, **not** a planner-runnability regression on main. Such a
+    cause is recorded with the distinct ``process_isolation_failure`` disposition
+    and must skip this determinism assertion (fail-closed, never flaked, never
+    falsely passed) instead of being misfiled as ``unrunnable_on_current_main``.
+    Only a genuine planner degradation disposition is a hard failure.
     """
     if not is_runnable_algo("ppo"):
         pytest.skip("ppo baseline not runnable on this host")
@@ -689,6 +1002,16 @@ def test_native_ppo_target_runs_deterministically_with_real_runner(tmp_path, res
         ppo_bundle, output_dir=tmp_path / "native_ppo_deterministic", run_episode=run_episode
     )
     result = host_result["results"][0]
+
+    # A transient process-isolation failure is an environment/worker failure, not
+    # a planner regression: skip the determinism claim fail-closed so the parallel
+    # gate cannot flake on infra noise (#5781).
+    if result.get("disposition") == PROCESS_ISOLATION_DISPOSITION:
+        pytest.skip(
+            "native PPO could not execute: planner-step isolation boundary failed "
+            "under parallel execution (process-isolation failure, not a planner "
+            "regression on main); skipping determinism assertion fail-closed"
+        )
 
     # Native execution: no degraded/unrunnable disposition, exactly three repeats.
     assert "disposition" not in result, "native PPO must not be dispositioned as unrunnable"

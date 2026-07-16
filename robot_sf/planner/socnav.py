@@ -2966,6 +2966,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._fallback_warned = False
         self._device = self._resolve_device()
         self._bound_obstacle_lines: list = []
+        self._obstacle_feature_extractor = LocalObstacleFeatureExtractor()
         self._baseline_predictor: Any | None = None
         self._forecast_variant_execution_mode = self._init_forecast_variant()
 
@@ -3052,6 +3053,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
     def bind_obstacle_lines(self, obstacle_lines: Any) -> None:
         """Bind explicit runtime obstacle-line geometry for obstacle-feature inputs."""
         self._bound_obstacle_lines = normalize_obstacle_lines(obstacle_lines)
+        self._obstacle_feature_extractor.precompute(self._bound_obstacle_lines)
 
     def bind_env(self, env: Any) -> None:
         """Bind static map obstacle geometry from a live Robot SF environment."""
@@ -3065,6 +3067,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             if callable(iter_segments):
                 lines = normalize_obstacle_lines(iter_segments())
         self._bound_obstacle_lines = lines
+        self._obstacle_feature_extractor.precompute(lines)
 
     def _resolve_device(self) -> str:
         """Resolve runtime device string for predictive model inference.
@@ -3268,7 +3271,8 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 state[:count, 7] = float(goal_dir[1])
                 state[:count, 8] = goal_dist
             if schema_metadata["name"] == PREDICTIVE_OBSTACLE_FEATURE_SCHEMA:
-                extractor = LocalObstacleFeatureExtractor()
+                extractor = self._obstacle_feature_extractor
+                extractor.precompute(self._bound_obstacle_lines)
                 obstacle_lines = obstacle_lines_from_observation(observation)
                 if not obstacle_lines:
                     obstacle_lines = self._bound_obstacle_lines

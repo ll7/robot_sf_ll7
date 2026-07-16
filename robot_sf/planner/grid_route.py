@@ -401,15 +401,36 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
     ) -> tuple[Any, ...] | None:
         """Build a last-call route cache key for repeated observation consumers.
 
+        Keyed on grid *content* + shape and the resolved planning state, not on
+        ``id(observation)``/``id(grid)``. An unchanged static occupancy grid is
+        therefore reused across rollout steps even when a fresh observation object
+        (and fresh grid array view) is produced each step, avoiding a redundant
+        inflated-grid build + BFS clearance map + A* every step.
+
         Returns:
-            tuple[Any, ...] | None: Cache key, or ``None`` when caching is disabled.
+            tuple[Any, ...] | None: Cache key, or ``None`` when caching is disabled
+            (``cache_key is None`` and the caller wants per-call isolation).
         """
         if cache_key is None:
             return None
+        # Grid content + shape signature (cheap relative to A*/BFS rebuild).
+        grid_shape = tuple(grid.shape)
+        grid_sig = (grid_shape, hash(grid.tobytes()) if grid.size else 0)
+        meta_sig = (
+            tuple(
+                float(value)
+                for value in np.asarray(meta.get("origin", [0.0, 0.0]), dtype=float)[:2]
+            ),
+            float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0]),
+            bool(self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5),
+            tuple(
+                float(value)
+                for value in np.asarray(meta.get("robot_pose", [0.0, 0.0, 0.0]), dtype=float)[:3]
+            ),
+        )
         return (
-            cache_key,
-            id(grid),
-            id(meta),
+            grid_sig,
+            meta_sig,
             tuple(float(value) for value in np.asarray(robot_pos, dtype=float)[:2]),
             tuple(float(value) for value in np.asarray(goal, dtype=float)[:2]),
             float(radius),

@@ -105,6 +105,74 @@ class LocalObstacleFeatureExtractor:
         """Validate unavailable-feature sentinel configuration."""
         if not np.isfinite(self.unavailable_distance) or self.unavailable_distance < 0.0:
             raise ValueError("unavailable_distance must be a finite, non-negative float")
+        # Precomputed, static line geometry built once via :meth:`precompute`.
+        # Stored outside the frozen fields so the extractor stays hashable/comparable.
+        object.__setattr__(self, "_precomputed_lines_key", None)
+        object.__setattr__(self, "_precomputed_starts", None)
+        object.__setattr__(self, "_precomputed_segments", None)
+        object.__setattr__(self, "_precomputed_length_sq", None)
+        object.__setattr__(self, "_precomputed_valid_indices", None)
+
+    def precompute(self, obstacle_lines: Iterable[Line2D]) -> None:
+        """Precompute static line geometry once so per-step extraction skips re-``asarray``.
+
+        Call this a single time per scenario (static obstacle geometry is fixed).
+        Subsequent :meth:`extract_many` calls reuse the cached arrays, which is
+        behavior-preserving: the geometry is identical, only the recomputation is
+        skipped. Calling with a different line set rebuilds the cache.
+        """
+        lines = list(obstacle_lines)
+        key = (
+            len(lines),
+            tuple(
+                (
+                    tuple(line[0]),
+                    tuple(line[1]),
+                )
+                for line in lines
+            ),
+        )
+        if key == self._precomputed_lines_key:
+            return
+        if not lines:
+            object.__setattr__(self, "_precomputed_lines_key", key)
+            object.__setattr__(self, "_precomputed_starts", None)
+            object.__setattr__(self, "_precomputed_segments", None)
+            object.__setattr__(self, "_precomputed_length_sq", None)
+            object.__setattr__(self, "_precomputed_valid_indices", None)
+            return
+        starts = np.empty((len(lines), 2), dtype=float)
+        ends = np.empty((len(lines), 2), dtype=float)
+        for i, line in enumerate(lines):
+            starts[i] = line[0]
+            ends[i] = line[1]
+        segments = ends - starts
+        length_sq = np.einsum("ij,ij->i", segments, segments)
+        valid_indices = np.where(length_sq > 0.0)[0] if lines else np.empty((0,), dtype=int)
+        object.__setattr__(self, "_precomputed_lines_key", key)
+        object.__setattr__(self, "_precomputed_starts", starts)
+        object.__setattr__(self, "_precomputed_segments", segments)
+        object.__setattr__(self, "_precomputed_length_sq", length_sq)
+        object.__setattr__(self, "_precomputed_valid_indices", valid_indices)
+
+    def _precomputed_geometry(
+        self, lines: list[Line2D]
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+        """Return precomputed line arrays, building them on first demand.
+
+        Returns
+        -------
+        tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None
+            ``(starts, segments, length_sq, valid_indices)`` for non-empty lines,
+            or ``None`` when the line set is empty.
+        """
+        self.precompute(lines)
+        return (
+            self._precomputed_starts,
+            self._precomputed_segments,
+            self._precomputed_length_sq,
+            self._precomputed_valid_indices,
+        )
 
     @property
     def schema(self) -> str:
@@ -243,20 +311,18 @@ class LocalObstacleFeatureExtractor:
             ``(num_points, 6)`` float32 feature matrix.
         """
         num_points = len(points)
-        num_lines = len(lines)
 
-        # Build line arrays: starts (L, 2), segments (L, 2), length_sq (L,)
-        starts = np.empty((num_lines, 2), dtype=float)
-        ends = np.empty((num_lines, 2), dtype=float)
-        for i, line in enumerate(lines):
-            starts[i] = line[0]
-            ends[i] = line[1]
-        segments = ends - starts
-        length_sq = np.einsum("ij,ij->i", segments, segments)
-
-        # Filter degenerate lines (zero-length)
-        valid_mask = length_sq > 0.0
-        valid_indices = np.where(valid_mask)[0]
+        # Reuse precomputed static line geometry when available; build on demand.
+        geometry = self._precomputed_geometry(lines)
+        if geometry is None:
+            return np.tile(
+                np.asarray(
+                    [self.unavailable_distance, 0.0, 0.0, 0.0, 0.0, 0.0],
+                    dtype=np.float32,
+                ),
+                (num_points, 1),
+            )
+        starts, segments, length_sq, valid_indices = geometry
         if len(valid_indices) == 0:
             return np.tile(
                 np.asarray(

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from robot_sf.planner.grid_route import (
@@ -288,6 +290,69 @@ def test_grid_route_reuses_cached_path_for_same_observation() -> None:
     assert planner.route_geometry(observation) is not None
     assert planner.route_waypoint(observation) is not None
     assert planner.astar_calls == 1
+
+
+def test_grid_route_reuses_cached_path_across_distinct_observations() -> None:
+    """Identical static grid content should reuse one A* route across step objects.
+
+    Issue #5411 (grid_route slice): the route cache key used ``id(observation)`` /
+    ``id(grid)`` so an unchanged static occupancy grid rebuilt the inflated grid + BFS
+    clearance map every rollout step. Keying on grid *content* + shape must reuse the
+    cached route when two distinct observation objects carry identical grid content.
+    """
+
+    class CountingGridRoutePlanner(GridRoutePlannerAdapter):
+        """Route planner that counts A* calls."""
+
+        def __init__(self, config: GridRoutePlannerConfig) -> None:
+            super().__init__(config)
+            self.astar_calls = 0
+            self.plan_calls = 0
+
+        def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
+            """Count and delegate plan invocations."""
+            self.plan_calls += 1
+            return super().plan(observation)
+
+        def _astar(
+            self,
+            blocked: np.ndarray,
+            start: tuple[int, int],
+            goal: tuple[int, int],
+            clearance_map: np.ndarray | None = None,
+        ) -> list[tuple[int, int]]:
+            """Count and delegate A* route computations."""
+            self.astar_calls += 1
+            return super()._astar(blocked, start, goal, clearance_map=clearance_map)
+
+    planner = CountingGridRoutePlanner(
+        GridRoutePlannerConfig(
+            obstacle_inflation_cells=0,
+            waypoint_lookahead_cells=3,
+            clearance_penalty_weight=1.0,
+        )
+    )
+    occupied = [(10, 11), (10, 12), (10, 13), (9, 12), (11, 12)]
+
+    def make_observation() -> dict[str, object]:
+        return _observation(occupied_cells=list(occupied))
+
+    # Two distinct observation dicts -> same grid content across "steps".
+    obs_a = make_observation()
+    obs_b = make_observation()
+
+    assert planner.route_geometry(obs_a) is not None
+    assert planner.route_waypoint(obs_a) is not None
+    assert planner.plan(obs_a) is not None
+
+    # Second step with a fresh observation object carrying identical grid content.
+    assert planner.route_geometry(obs_b) is not None
+    assert planner.route_waypoint(obs_b) is not None
+    assert planner.plan(obs_b) is not None
+
+    # A* routes should be shared across the identical-content observations.
+    assert planner.astar_calls == 1
+    assert planner.plan_calls == 2
 
 
 def test_build_grid_route_config_clearance_penalty() -> None:

@@ -375,6 +375,7 @@ def run_map_elites(
     evaluator: QDEvaluator,
     certifier: Any | None = None,
     emitters: list[QDEmitter] | None = None,
+    archive: QDArchive | None = None,
 ) -> QDSearchResult:
     """Run a bounded MAP-Elites search over the configured emitters.
 
@@ -387,6 +388,8 @@ def run_map_elites(
         certifier: Optional callable (candidate) -> CertificationStatus; when omitted
             the evaluation's own certification status is used as the gate.
         emitters: Optional list of emitters; defaults to Random + CoordinateRefinement.
+        archive: Optional live archive shared with stateful emitters. Its grid and
+            certification policy must match ``config``.
 
     Returns:
         QDSearchResult with the populated archive and run counters.
@@ -397,7 +400,12 @@ def run_map_elites(
     )
     if not active_emitters:
         raise ValueError("emitters must contain at least one emitter")
-    archive = QDArchive(grid=config.grid, require_certification=config.require_certification)
+    if archive is None:
+        archive = QDArchive(grid=config.grid, require_certification=config.require_certification)
+    elif (
+        archive.grid != config.grid or archive.require_certification != config.require_certification
+    ):
+        raise ValueError("archive grid and certification policy must match QDSearchConfig")
 
     num_evaluated = 0
     num_admitted = 0

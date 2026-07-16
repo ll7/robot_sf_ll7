@@ -273,6 +273,32 @@ def test_single_raw_seed_uses_one_spatial_panel(tmp_path: Path) -> None:
     assert vertical.args[0].kind == "Spatial2DView"
 
 
+def test_assumed_radius_overlap_does_not_fabricate_collision_event(tmp_path: Path) -> None:
+    """Diagnostic default-radius overlap must not override a successful source outcome."""
+    episodes_jsonl = tmp_path / "episodes.jsonl"
+    episodes_jsonl.write_text(
+        json.dumps(_episode_row(7, "success", [6.8, 6.9, 6.8])) + "\n",
+        encoding="utf-8",
+    )
+
+    with trace_viewer.prepared_episode_dirs(
+        bundle_dirs=[],
+        episodes_jsonl=episodes_jsonl,
+        seeds=[7],
+    ) as bundle_dirs:
+        cases = trace_viewer.load_episode_bundles(bundle_dirs)
+        assert min(cases[0].surface_clearance_m) < 0.0
+        recording = _FakeRecording()
+        audit, _focal, _contrast = trace_viewer.log_cases(
+            recording,
+            FAKE_RERUN,
+            FAKE_BLUEPRINT,
+            cases,
+        )
+
+    assert "episode_A/scene/events/collision" not in audit.entities
+
+
 def test_current_rerun_time_api_uses_duration_and_sequence_keywords() -> None:
     """Current RecordingStream time calls use the SDK's documented keywords."""
     recording = _ModernRecording()

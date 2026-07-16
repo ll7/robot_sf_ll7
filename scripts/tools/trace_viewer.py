@@ -15,10 +15,10 @@ diagnostic unless those defaults are known to match the source run.
 
 Examples:
 
-    uv run --with rerun-sdk python scripts/tools/trace_viewer.py \
+    uv run --with 'rerun-sdk==0.34.1' python scripts/tools/trace_viewer.py \
       output/exemplars/seed113 output/exemplars/seed114 --spawn
 
-    uv run --with rerun-sdk python scripts/tools/trace_viewer.py \
+    uv run --with 'rerun-sdk==0.34.1' python scripts/tools/trace_viewer.py \
       --episodes-jsonl output/benchmarks/example/episodes.jsonl \
       --seed 113 --seed 114 --save output/trace_viewer/seed113-vs-114.rrd
 
@@ -66,6 +66,7 @@ from robot_sf.benchmark.constants import NEAR_MISS_DIST  # noqa: E402
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS  # noqa: E402
 
 APPLICATION_ID = "robot_sf_edge_case_trace_viewer"
+VALIDATED_RERUN_SDK_VERSION = "0.34.1"
 TIMELINE_NAME = "sim_time"
 STEP_TIMELINE_NAME = "step"
 
@@ -230,7 +231,8 @@ def _import_rerun() -> tuple[Any, Any]:
     except ImportError as exc:
         raise TraceViewerError(
             "Rerun SDK is not installed. Run this tool with "
-            "`uv run --with rerun-sdk python scripts/tools/trace_viewer.py ...`; "
+            f"`uv run --with 'rerun-sdk=={VALIDATED_RERUN_SDK_VERSION}' python "
+            "scripts/tools/trace_viewer.py ...`; "
             "do not add it to pyproject.toml."
         ) from exc
     return rr, rrb
@@ -610,9 +612,7 @@ def _log_series_styles(audit: RecordingAudit, rr: Any, case: EpisodeCase) -> Non
 
 
 def _terminal_collision(case: EpisodeCase, index: int) -> bool:
-    """Return whether this frame should carry a collision consequence marker."""
-    if case.surface_clearance_m[index] < 0.0:
-        return True
+    """Return whether the source outcome establishes a terminal collision."""
     return index == len(case.scene_trace.steps) - 1 and "collision" in case.outcome
 
 

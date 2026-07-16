@@ -476,12 +476,15 @@ class TestReproductionReport:
             assert "architecture" in env
 
     def test_load_manifest_rejects_non_mapping_root(self, tmp_path: Path, monkeypatch: Any) -> None:
+        from scripts.repro import cold_start_reproduction_report as report_module
         from scripts.repro.cold_start_reproduction_report import _load_manifest
 
+        # _load_manifest resolves the manifest via an absolute repo-root path, so
+        # point REPO_ROOT at a temp tree to keep the repo tree untouched.
+        monkeypatch.setattr(report_module, "REPO_ROOT", tmp_path)
         manifest_path = tmp_path / "configs" / "releases" / "release_1_2_3_checksum_manifest.yaml"
         manifest_path.parent.mkdir(parents=True)
         manifest_path.write_text("- not\\n- a mapping\\n")
-        monkeypatch.chdir(tmp_path)
 
         with pytest.raises(ValueError, match="root must be a mapping"):
             _load_manifest("1.2.3")
@@ -497,7 +500,14 @@ class TestReproductionReport:
 
 @pytest.fixture(scope="class")
 def actual_execution_results(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
-    """Run each real release-verification flow once for the execution-test class."""
+    """Run each real release-verification flow once for the execution-test class.
+
+    The bundle is downloaded exactly once (by ``verify_release``) and then reused
+    for the cold-start reproduction report. This keeps the fixture
+    order-independent: it depends on a single network call and never re-downloads
+    into an output directory that a preceding suite run may have populated.
+    """
+    from scripts.repro.cold_start_reproduction_report import generate_reproduction_report
     from scripts.repro.verify_release_checksums import verify_release
 
     execution_dir = tmp_path_factory.mktemp("actual_execution")
@@ -508,14 +518,17 @@ def actual_execution_results(tmp_path_factory: pytest.TempPathFactory) -> dict[s
         download=True,
     )
 
-    from scripts.repro.cold_start_reproduction_report import generate_reproduction_report
-
     reproduction_dir = execution_dir / "reproduction"
+    # Reuse the bundle that verify_release already downloaded so the cold-start
+    # report does not issue a second gh download (which could fail in the full
+    # suite from a leftover artifact or transient network state).
+    bundle_path = verify_report.get("bundle_path")
     reproduction_report = generate_reproduction_report(
         tag="0.0.2",
         output_dir=reproduction_dir,
         local_repo=ROOT,
         checksums_only=True,
+        bundle_path=Path(bundle_path) if bundle_path else None,
     )
 
     return {
@@ -600,6 +613,93 @@ class TestActualExecution:
         assert report_path.is_file()
         loaded = json.loads(report_path.read_text())
         assert loaded["overall_verdict"] == "partial"
+
+
+@pytest.mark.skipif(
+    not shutil.which("gh"),
+    reason="GitHub CLI 'gh' is required for actual execution tests",
+)
+@pytest.mark.skipif(
+    os.environ.get("GITHUB_ACTIONS") == "true",
+    reason="CI runner cannot authenticate to download release bundles",
+)
+class TestOrderIsolationRegression:
+    """Regression for issue #5873: the cold-start report must not flip to `fail`.
+
+    The report generation must be order-independent: it must work from a changed
+    working directory (the manifest is loaded via an absolute repo-root path) and
+    when a previously downloaded bundle already sits in the output directory
+    (the supplied bundle path is reused instead of re-downloading). Both were
+    full-suite state mutations that flipped the verdict from `partial` to `fail`
+    and dropped ``steps.verify_checksums.embedded_artifacts``.
+    """
+
+    def _real_bundle_path(self, tmp_path: Path) -> Path:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        verify_report = verify_release(
+            manifest_path=MANIFEST_PATH,
+            bundle_path=None,
+            output_dir=tmp_path / "verification",
+            download=True,
+        )
+        assert verify_report["overall_verdict"] == "pass"
+        bundle_path = Path(verify_report["bundle_path"])
+        assert bundle_path.is_file()
+        return bundle_path
+
+    def test_report_from_changed_cwd_reuses_bundle(self, tmp_path: Path, monkeypatch: Any) -> None:
+        from scripts.repro.cold_start_reproduction_report import generate_reproduction_report
+
+        bundle_path = self._real_bundle_path(tmp_path)
+        # Simulate a preceding suite test that changed the working directory.
+        monkeypatch.chdir(tmp_path)
+
+        report = generate_reproduction_report(
+            tag="0.0.2",
+            output_dir=tmp_path / "reproduction",
+            local_repo=ROOT,
+            checksums_only=True,
+            bundle_path=bundle_path,
+        )
+
+        assert report["overall_verdict"] == "partial"
+        step = report["steps"]["verify_checksums"]
+        assert step["status"] == "pass"
+        assert step["bundle_checksum_match"] is True
+        embedded = step["embedded_artifacts"]
+        assert len(embedded) >= 3
+        for artifact in embedded:
+            assert artifact["match"] is True
+            assert artifact["actual_sha256"] == artifact["expected_sha256"]
+
+    def test_report_with_preexisting_bundle_in_output_dir(
+        self, tmp_path: Path, monkeypatch: Any
+    ) -> None:
+        from scripts.repro.cold_start_reproduction_report import generate_reproduction_report
+
+        bundle_path = self._real_bundle_path(tmp_path)
+        reproduction_dir = tmp_path / "reproduction"
+        # Simulate a leftover bundle from a prior run in the same output dir.
+        stale_dir = reproduction_dir / "bundle"
+        stale_dir.mkdir(parents=True)
+        stale_bundle = stale_dir / bundle_path.name
+        stale_bundle.write_bytes(b"stale partial download that must not be used")
+        monkeypatch.chdir(tmp_path)
+
+        report = generate_reproduction_report(
+            tag="0.0.2",
+            output_dir=reproduction_dir,
+            local_repo=ROOT,
+            checksums_only=True,
+            bundle_path=bundle_path,
+        )
+
+        assert report["overall_verdict"] == "partial"
+        step = report["steps"]["verify_checksums"]
+        assert step["status"] == "pass"
+        assert step["bundle_checksum_match"] is True
+        assert len(step["embedded_artifacts"]) >= 3
 
 
 class TestDocumentation:

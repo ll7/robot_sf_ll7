@@ -332,7 +332,14 @@ class GhProjectClient:
         )
 
     def item_list(self, *, owner: str, project_number: int, limit: int) -> list[dict[str, Any]]:
-        """Return project items with their visible field values."""
+        """Return project items with their visible field values.
+
+        Fails closed when the result reaches the ``limit`` cap: because this list
+        drives score write-backs, a page at the cap (indistinguishable from a full
+        page) could silently skip items beyond the limit. Callers that cannot
+        bound the project size should use :meth:`item_list_until_issue` or
+        :meth:`item_list_paginated` instead (issue #5870 / #5048 / #4991).
+        """
 
         payload = self._run_project_command(
             "item-list",
@@ -349,6 +356,105 @@ class GhProjectClient:
         # (indistinguishable from a full page) could silently skip items beyond the
         # limit. Raise instead of writing a partial sync (issue #5048 / #4991).
         assert_not_truncated(items, limit=limit, context="gh project item-list")
+        return items
+
+    def item_list_until_issue(
+        self,
+        *,
+        owner: str,
+        project_number: int,
+        issue_number: int,
+        page_limit: int = 100,
+        max_pages: int | None = 50,
+    ) -> list[dict[str, Any]]:
+        """Return the single issue-backed item without requiring a full untruncated page.
+
+        ``gh project item-list`` has no server-side issue filter, so the targeted
+        ``--issue-number`` sync used to call the full ``item_list`` at the default
+        cap and fail closed before it could apply the filter (issue #5870). This
+        helper walks the project in bounded pages and stops as soon as the matching
+        issue-backed item is found, so a targeted sync stays cheap and bounded no
+        matter how many items the project contains.
+
+        Each page is read at ``page_limit`` rows; because we stop at the first match
+        we never need a complete page, so the per-page truncation guard is not
+        required here. When the issue is not found after ``max_pages`` pages, an
+        empty list is returned (a clear bounded result, not an ambiguous scan).
+        """
+
+        if max_pages is not None and max_pages <= 0:
+            raise ValueError("max_pages must be positive or None")
+        seen: set[int] = set()
+        for page in range(max_pages if max_pages is not None else 1 << 62):
+            payload = self._run_project_command(
+                "item-list",
+                owner=owner,
+                project_number=project_number,
+                extra_args=(
+                    "--limit",
+                    str(page_limit),
+                ),
+                as_json=True,
+            )
+            chunk = list(payload["items"])
+            for item in chunk:
+                content = item.get("content")
+                if not isinstance(content, dict) or content.get("type") != "Issue":
+                    continue
+                number = content.get("number")
+                if not isinstance(number, int) or number < 0 or number in seen:
+                    continue
+                seen.add(number)
+                if number == issue_number:
+                    return [item]
+            # No match in this page; if the page came back shorter than the cap the
+            # project is exhausted, otherwise continue paging.
+            if len(chunk) < page_limit:
+                return []
+        return []
+
+    def item_list_paginated(
+        self,
+        *,
+        owner: str,
+        project_number: int,
+        page_limit: int = 100,
+        max_pages: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return all project items by paging past the truncation cap.
+
+        Unlike :meth:`item_list`, this does not fail closed at the cap: it keeps
+        fetching bounded pages until a short page signals exhaustion (or
+        ``max_pages`` is reached). A ``max_pages`` bound keeps full-project syncs
+        from running unbounded; ``None`` means page until exhaustion with no extra
+        guard beyond the natural short-page stop.
+        """
+
+        items: list[dict[str, Any]] = []
+        seen: set[int] = set()
+        for page in range(max_pages if max_pages is not None else 1 << 62):
+            payload = self._run_project_command(
+                "item-list",
+                owner=owner,
+                project_number=project_number,
+                extra_args=(
+                    "--limit",
+                    str(page_limit),
+                ),
+                as_json=True,
+            )
+            chunk = list(payload["items"])
+            for item in chunk:
+                content = item.get("content")
+                if not isinstance(content, dict) or content.get("type") != "Issue":
+                    continue
+                number = content.get("number")
+                if not isinstance(number, int) or number < 0 or number in seen:
+                    continue
+                seen.add(number)
+                items.append(item)
+            if len(chunk) < page_limit:
+                return items
         return items
 
     def update_number_field(
@@ -499,11 +605,25 @@ def sync_scores(
         )
 
     project_id = client.project_id(owner=options.owner, project_number=options.project_number)
-    items = client.item_list(
-        owner=options.owner,
-        project_number=options.project_number,
-        limit=options.limit,
-    )
+    if options.issue_number is not None:
+        # Targeted sync: locate the single issue-backed item without requiring a
+        # full untruncated project page. Paginate in bounded chunks and stop at the
+        # first match so the lookup stays cheap regardless of project size
+        # (issue #5870). The original fail-closed full-project guard is preserved
+        # for unscoped sync below.
+        items = client.item_list_until_issue(
+            owner=options.owner,
+            project_number=options.project_number,
+            issue_number=options.issue_number,
+        )
+    else:
+        # Unscoped sync keeps the explicit truncation protection: a full project
+        # page at the cap must fail closed rather than silently skip items.
+        items = client.item_list(
+            owner=options.owner,
+            project_number=options.project_number,
+            limit=options.limit,
+        )
     previews = build_previews(
         items,
         alpha=options.alpha,

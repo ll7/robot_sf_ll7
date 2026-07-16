@@ -13,6 +13,7 @@ from scripts.tools.project_priority_score import (
     DEFAULT_SUCCESS_PROBABILITY,
     EFFORT_FIELD,
     PRIORITY_SCORE_FIELD,
+    REQUIRED_NUMBER_FIELDS,
     ScoreInputs,
     SyncOptions,
     build_previews,
@@ -60,6 +61,27 @@ class FakeGhProjectClient:
         """Return project items up to the requested limit."""
 
         return self._items[:limit]
+
+    def item_list_until_issue(
+        self,
+        *,
+        owner: str,
+        project_number: int,
+        issue_number: int,
+        page_limit: int = 100,
+        max_pages: int | None = 50,
+    ) -> list[dict]:
+        """Simulate bounded pagination that stops at the matching issue."""
+
+        for start in range(0, max(len(self._items), 1), max(page_limit, 1)):
+            chunk = self._items[start : start + page_limit]
+            for item in chunk:
+                content = item.get("content") or {}
+                if content.get("type") == "Issue" and content.get("number") == issue_number:
+                    return [item]
+            if len(chunk) < page_limit:
+                break
+        return []
 
     def update_number_field(
         self,
@@ -287,6 +309,122 @@ def test_sync_scores_skips_malformed_issue_numbers_when_indexing_items() -> None
     assert client.updated_numbers == [
         ("item-699", f"field-{PRIORITY_SCORE_FIELD}", "project-id", previews[0].new_score)
     ]
+
+
+def test_sync_scores_targeted_finds_issue_beyond_default_limit() -> None:
+    """`--issue-number N` locates N past the default 400-item boundary cheaply.
+
+    Issue #5870: the targeted sync must not call the full fail-closed
+    ``item_list`` (which raises at the cap) before applying the issue filter.
+    Here the project holds 2,300+ items; the targeted pass must find issue
+    2299 using bounded pagination without needing a full untruncated page.
+    """
+
+    items = [
+        _item(number, improvement=5, **{lower_first_key(EFFORT_FIELD): 8})
+        for number in range(1, 2301)
+    ]
+    client = FakeGhProjectClient(
+        fields=[
+            _field(name)
+            for name in (
+                EFFORT_FIELD,
+                *REQUIRED_NUMBER_FIELDS,
+            )
+        ],
+        items=items,
+    )
+
+    previews = sync_scores(
+        client,
+        SyncOptions(
+            owner="ll7",
+            project_number=5,
+            ensure_fields=False,
+            limit=400,
+            alpha=DEFAULT_ALPHA,
+            round_digits=6,
+            issue_number=2299,
+            dry_run=False,
+            skip_statuses={"Done"},
+        ),
+    )
+
+    assert [p.issue_number for p in previews] == [2299]
+    assert client.updated_numbers == [
+        ("item-2299", f"field-{PRIORITY_SCORE_FIELD}", "project-id", previews[0].new_score)
+    ]
+
+
+def test_sync_scores_targeted_does_not_update_others() -> None:
+    """Targeted mode updates exactly the requested issue and no other item."""
+
+    client = FakeGhProjectClient(
+        fields=[
+            _field(name)
+            for name in (
+                EFFORT_FIELD,
+                *REQUIRED_NUMBER_FIELDS,
+            )
+        ],
+        items=[
+            _item(1, improvement=5, **{lower_first_key(EFFORT_FIELD): 8}),
+            _item(2, improvement=5, **{lower_first_key(EFFORT_FIELD): 8}),
+            _item(3, improvement=5, **{lower_first_key(EFFORT_FIELD): 8}),
+        ],
+    )
+
+    previews = sync_scores(
+        client,
+        SyncOptions(
+            owner="ll7",
+            project_number=5,
+            ensure_fields=False,
+            limit=400,
+            alpha=DEFAULT_ALPHA,
+            round_digits=6,
+            issue_number=2,
+            dry_run=False,
+            skip_statuses={"Done"},
+        ),
+    )
+
+    assert [p.issue_number for p in previews] == [2]
+    assert len(client.updated_numbers) == 1
+    assert client.updated_numbers[0][0] == "item-2"
+
+
+def test_sync_scores_targeted_missing_issue_returns_no_updates() -> None:
+    """A missing issue number yields a bounded empty result, not an ambiguous scan."""
+
+    client = FakeGhProjectClient(
+        fields=[
+            _field(name)
+            for name in (
+                EFFORT_FIELD,
+                *REQUIRED_NUMBER_FIELDS,
+            )
+        ],
+        items=[_item(1, improvement=5, **{lower_first_key(EFFORT_FIELD): 8})],
+    )
+
+    previews = sync_scores(
+        client,
+        SyncOptions(
+            owner="ll7",
+            project_number=5,
+            ensure_fields=False,
+            limit=400,
+            alpha=DEFAULT_ALPHA,
+            round_digits=6,
+            issue_number=999,
+            dry_run=False,
+            skip_statuses={"Done"},
+        ),
+    )
+
+    assert previews == []
+    assert client.updated_numbers == []
 
 
 def test_write_summary_persists_machine_readable_payload(tmp_path: Path) -> None:

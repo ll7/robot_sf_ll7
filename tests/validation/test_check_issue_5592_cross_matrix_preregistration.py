@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from loguru import logger
 
+from robot_sf.common.logging import safe_sink
 from scripts.validation import check_issue_5592_cross_matrix_preregistration as checker
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -82,8 +83,15 @@ def test_cli_emits_machine_readable_ready_status(capsys) -> None:
 
 
 def test_json_cli_preserves_caller_loguru_sink(capsys) -> None:
-    """JSON validation must not remove process-global sinks installed by callers."""
-    sink_id = logger.add(sys.stdout, format="{message}")
+    """JSON validation must not remove process-global sinks installed by callers.
+
+    The sink is bound through :func:`safe_sink` so that, if ``capsys`` tears
+    down its captured ``sys.stdout`` after the test finishes but before the
+    handler is removed, the late write is dropped instead of raising
+    ``ValueError: I/O operation on closed file`` under ``pytest-xdist``
+    workers (see issue #5849).
+    """
+    sink_id = logger.add(safe_sink(sys.stdout), format="{message}")
     try:
         exit_code = checker.main(["--json"])
         captured = capsys.readouterr()

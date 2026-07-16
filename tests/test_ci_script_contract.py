@@ -140,6 +140,17 @@ def test_run_tests_parallel_validates_dist_mode_before_resolving_workers() -> No
     assert script_text.find(dist_validation) < script_text.find(worker_resolution)
 
 
+def test_run_tests_parallel_worker_resolution_avoids_dev_fd() -> None:
+    """Worker-count resolution must run in sandboxes where /dev/fd is restricted."""
+    script_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+    worker_block = script_text.split('worker_spec="$(', maxsplit=1)[1].split(
+        ')"',
+        maxsplit=1,
+    )[0]
+
+    assert "> >(" not in worker_block
+
+
 def test_run_tests_parallel_invalid_dist_fails_before_worker_resolution() -> None:
     """Invalid dist mode should exit before validating or resolving worker count."""
 

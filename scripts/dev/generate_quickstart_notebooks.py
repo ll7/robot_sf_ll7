@@ -102,7 +102,6 @@ def build_notebook_01() -> nbf.notebooknode:
 
             import matplotlib.pyplot as plt
 
-            from robot_sf.common.seed import set_global_seed
             from robot_sf.gym_env.environment_factory import make_robot_env
 
             # Resolve the repo root robustly regardless of the working directory this
@@ -124,15 +123,19 @@ def build_notebook_01() -> nbf.notebooknode:
             """
         ),
         _md(
-            "## 1. Build and reset the environment\n\n`make_robot_env()` is the ergonomic entry point. We seed everything for reproducibility."
+            "## 1. Build and reset the environment\n\n`make_robot_env()` is the ergonomic entry point. We seed the factory, the reset, and the action space explicitly so the action/reward trace is reproducible."
         ),
         _code(
             """
             SEED = 87234
-            set_global_seed(SEED)
 
-            env = make_robot_env(debug=False)
-            observation, info = env.reset()
+            # Seed the factory (Python random + NumPy + env RNGs), the reset, and the
+            # action space explicitly. We deliberately avoid set_global_seed here: it
+            # also seeds the private Torch/TensorFlow RNGs, which can crash the kernel
+            # on the installed stack, and it does NOT seed Gymnasium's action_space RNG.
+            env = make_robot_env(debug=False, seed=SEED)
+            observation, info = env.reset(seed=SEED)
+            env.action_space.seed(SEED)
             print("Environment created and reset.")
             print("Observation type:", type(observation).__name__)
             if hasattr(observation, "keys"):

@@ -67,17 +67,14 @@ DEFAULT_NEAR_MISS_DIST = 0.7  # metres, aligned with benchmark constants
 # steps.  Each element is either ``None`` (no event) or a mapping whose
 # ``step`` equals the index and whose ``metric``/``near_miss`` fields describe
 # the recorded event.  The anchor consumes only the explicit event signal and
-# must NOT conflate center-to-center distance with radius-adjusted clearance
-# (``clearance_m``); the two are distinct signals with distinct units/semantics.
+# must NOT conflate center-to-center distance with radius-adjusted clearance;
+# the two are distinct signals with distinct units/semantics.
 #
 # Schema for one event entry (dict):
 #   - ``step``   : int, the step index this event belongs to (fail-closed if
 #                  it does not match the list position).
 #   - ``metric`` : str, one of the accepted near-miss metric names below.
 #   - ``near_miss`` : bool, True when the event is a recorded near-miss.
-#   - ``clearance_m`` : optional float, radius-adjusted surface clearance at the
-#                  event (kept separate from center distance; not used to decide
-#                  the anchor, only reported/diagnostic).
 STEP_NEAR_MISS_EVENTS_FIELD = "step_near_miss_events"
 
 # Accepted ``metric`` names for a per-step near-miss event.  These are the
@@ -85,7 +82,6 @@ STEP_NEAR_MISS_EVENTS_FIELD = "step_near_miss_events"
 # ``robot_sf/benchmark/metrics.py``.  Unknown metric names fail closed.
 ACCEPTED_NEAR_MISS_METRICS = frozenset(
     [
-        "center_distance",
         "surface_clearance",
         "ttc",
         "occlusion",
@@ -583,10 +579,7 @@ def _validate_step_near_miss_events(
         should then mark the anchor as ``invalid_trace``).
     """
 
-    if events is None:
-        return [], None
-
-    if not isinstance(events, (list, tuple)):
+    if not isinstance(events, list):
         return [], "step_near_miss_events must be a list aligned with trace steps"
 
     if len(events) != n_steps:
@@ -621,21 +614,27 @@ def _validate_one_step_event(entry: object, *, idx: int) -> tuple[bool, str | No
         return False, None
     if not isinstance(entry, dict):
         return False, f"step_near_miss_events[{idx}] must be a dict or None"
-    if entry.get("step", idx) != idx:
-        return False, f"step_near_miss_events[{idx}].step does not match position"
+    step = entry.get("step")
+    if type(step) is not int:
+        return False, (f"step_near_miss_events[{idx}].step is required and must be an integer")
+    if step != idx:
+        return False, (f"step_near_miss_events[{idx}].step ({step}) does not match position {idx}")
     metric = entry.get("metric")
-    if metric not in ACCEPTED_NEAR_MISS_METRICS:
-        return False, f"step_near_miss_events[{idx}] unknown metric {metric!r}"
     # Center-distance evidence is not a step-event signal; reject so the anchor
     # cannot silently fuse it with the center-distance threshold.
-    if metric == "center_distance":
+    if isinstance(metric, str) and metric == "center_distance":
         return False, (
             f"step_near_miss_events[{idx}] metric 'center_distance' is not an "
             "accepted step-event signal; use the center-distance anchor"
         )
-    # ``near_miss`` defaults to True for an explicit event entry (the entry
-    # itself is the recorded event), but an explicit False is honored.
-    if entry.get("near_miss", True) is False:
+    if not isinstance(metric, str):
+        return False, f"step_near_miss_events[{idx}].metric must be a string"
+    if metric not in ACCEPTED_NEAR_MISS_METRICS:
+        return False, f"step_near_miss_events[{idx}] unknown metric {metric!r}"
+    near_miss = entry.get("near_miss")
+    if type(near_miss) is not bool:
+        return False, (f"step_near_miss_events[{idx}].near_miss is required and must be a boolean")
+    if not near_miss:
         return False, None
     return True, None
 
@@ -753,8 +752,12 @@ def extract_critical_intervals(  # noqa: C901, PLR0912, PLR0915
                 # center-distance threshold.  The two signals have distinct
                 # units/semantics and must not be conflated.  The center-distance
                 # diagnostic is retained as a fallback when no step event exists.
-                step_events = trace.get(STEP_NEAR_MISS_EVENTS_FIELD)
-                event_steps, fail_reason = _validate_step_near_miss_events(step_events, n_steps=T)
+                if STEP_NEAR_MISS_EVENTS_FIELD in trace:
+                    event_steps, fail_reason = _validate_step_near_miss_events(
+                        trace[STEP_NEAR_MISS_EVENTS_FIELD], n_steps=T
+                    )
+                else:
+                    event_steps, fail_reason = [], None
                 if fail_reason is not None:
                     status = "invalid_trace"
                     reason = f"invalid step near-miss event schema: {fail_reason}"

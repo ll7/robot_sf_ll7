@@ -1117,8 +1117,6 @@ def _make_step_event_trace(
             "metric": "center_distance" if center_distance_event else event_metric,
             "near_miss": True,
         }
-        if not center_distance_event:
-            entry["clearance_m"] = 0.15
         events[step] = entry
 
     trace: dict[str, object] = {
@@ -1250,10 +1248,18 @@ class TestStepLevelNearMissEvent:
 class TestValidateStepNearMissEvents:
     """Direct coverage of the fail-closed event schema validator."""
 
-    def test_none_is_empty(self) -> None:
+    def test_none_fails_closed(self) -> None:
+        """A present null field is malformed, not equivalent to an absent field."""
         steps, reason = _validate_step_near_miss_events(None, n_steps=5)
         assert steps == []
-        assert reason is None
+        assert reason is not None
+        assert "must be a list" in reason
+
+    def test_tuple_fails_closed(self) -> None:
+        """Only the declared JSON-list collection shape is accepted."""
+        _steps, reason = _validate_step_near_miss_events((None, None), n_steps=2)
+        assert reason is not None
+        assert "must be a list" in reason
 
     def test_wrong_length(self) -> None:
         _steps, reason = _validate_step_near_miss_events([None, None], n_steps=4)
@@ -1265,6 +1271,44 @@ class TestValidateStepNearMissEvents:
         _steps, reason = _validate_step_near_miss_events(events, n_steps=2)
         assert reason is not None
         assert "step" in reason
+
+    @pytest.mark.parametrize("step", [True, 1.0, "1"])
+    def test_step_requires_exact_integer_type(self, step: object) -> None:
+        """Boolean and coercible step values must not pass the integer contract."""
+        events = [None, {"step": step, "metric": "ttc", "near_miss": True}]
+        _steps, reason = _validate_step_near_miss_events(events, n_steps=2)
+        assert reason is not None
+        assert "integer" in reason
+
+    def test_missing_step_fails_closed(self) -> None:
+        """The required step field cannot default to its list position."""
+        events = [None, {"metric": "ttc", "near_miss": True}]
+        _steps, reason = _validate_step_near_miss_events(events, n_steps=2)
+        assert reason is not None
+        assert "required" in reason
+
+    @pytest.mark.parametrize("near_miss", [1, 0, "true", None])
+    def test_near_miss_requires_exact_boolean_type(self, near_miss: object) -> None:
+        """Truthy/falsy coercion must not weaken the required boolean contract."""
+        events = [None, {"step": 1, "metric": "ttc", "near_miss": near_miss}]
+        _steps, reason = _validate_step_near_miss_events(events, n_steps=2)
+        assert reason is not None
+        assert "boolean" in reason
+
+    def test_missing_near_miss_fails_closed(self) -> None:
+        """An event mapping without the required signal flag is malformed."""
+        events = [None, {"step": 1, "metric": "ttc"}]
+        _steps, reason = _validate_step_near_miss_events(events, n_steps=2)
+        assert reason is not None
+        assert "required" in reason
+
+    @pytest.mark.parametrize("metric", [None, 1, []])
+    def test_metric_requires_string_type(self, metric: object) -> None:
+        """Malformed metric values fail closed instead of raising membership errors."""
+        events = [None, {"step": 1, "metric": metric, "near_miss": True}]
+        _steps, reason = _validate_step_near_miss_events(events, n_steps=2)
+        assert reason is not None
+        assert "string" in reason
 
     def test_occlusion_metric_accepted(self) -> None:
         events = [None, {"step": 1, "metric": "occlusion", "near_miss": True}]

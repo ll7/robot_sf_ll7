@@ -16,12 +16,16 @@ import pytest
 
 from robot_sf.benchmark import risk_layer_ablation as rla
 
-CONFIG_PATH = Path("configs/benchmark/risk_layer_ablation.yaml")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CONFIG_PATH = REPO_ROOT / "configs/benchmark/risk_layer_ablation.yaml"
 
 BASELINE_STATS = {
     "collisions": {"med": 0.0, "p95": 2.0},
+    "force_exceed_events": {"med": 0.0, "p95": 2.0},
+    "near_misses": {"med": 0.0, "p95": 2.0},
     "comfort_exposure": {"med": 0.0, "p95": 2.0},
     "time_to_goal_norm": {"med": 0.5, "p95": 1.0},
+    "semantic_risk_exposure": {"med": 0.0, "p95": 2.0},
 }
 
 
@@ -77,13 +81,10 @@ def _dynamics_flip_records(n: int = 4) -> list[dict]:
 
 def test_risk_layer_config_loads() -> None:
     """The canonical ablation config must load with three progressive layers."""
-    import yaml
-
-    with CONFIG_PATH.open(encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+    config = rla.load_risk_layer_config(CONFIG_PATH)
 
     assert config["schema_version"] == rla.RISK_LAYER_ABLATION_SCHEMA
-    layer_names = [layer["name"] for layer in config["layers"]]
+    layer_names = config["layer_names"]
     assert layer_names == [
         "L0_geometry_only",
         "L1_plus_dynamics",
@@ -91,10 +92,12 @@ def test_risk_layer_config_loads() -> None:
     ]
     # Each higher layer must enable strictly more weight terms than the prior one.
     active_counts = [
-        sum(1 for w in layer["weights"].values() if w > 0.0) for layer in config["layers"]
+        sum(1 for weight in config["weights_by_layer"][name].values() if weight > 0.0)
+        for name in layer_names
     ]
     assert active_counts == sorted(active_counts)
     assert active_counts[-1] > active_counts[0]
+    assert config["weights_by_layer"] == rla.RISK_LAYER_WEIGHTS
 
 
 def test_risk_layer_constants_consistent() -> None:
@@ -165,10 +168,66 @@ def test_l2_degrades_gracefully_without_zone_metadata() -> None:
         bootstrap={"seed": 1, "samples": 50},
     )
     assert report["semantic_risk_available"] is False
+    assert report["semantic_risk_coverage"] == {
+        "present": 0,
+        "total": len(records),
+        "status": "unavailable",
+    }
     # L2 should still produce finite ranks for both planners.
     by_planner = {row["planner"]: row for row in report["rows"]}
     assert by_planner["A"]["per_layer_rank"]["L2_plus_semantic_risk"] in (1, 2)
     assert by_planner["B"]["per_layer_rank"]["L2_plus_semantic_risk"] in (1, 2)
+    assert all(
+        row["per_layer_score"]["L2_plus_semantic_risk"]
+        == row["per_layer_score"]["L1_plus_dynamics"]
+        for row in report["rows"]
+    )
+
+
+def test_semantic_risk_changes_l2_ranking() -> None:
+    """L2 must apply semantic exposure instead of a hidden time penalty."""
+    records = _dynamics_flip_records()
+    for record in records:
+        record["metrics"]["comfort_exposure"] = 0.0
+        record["metrics"]["semantic_risk_exposure"] = (
+            2.0 if record["scenario_params"]["algo"] == "A" else 0.0
+        )
+
+    report = rla.build_risk_layer_report(records, baseline_stats=BASELINE_STATS)
+    rows = {row["planner"]: row for row in report["rows"]}
+
+    assert report["semantic_risk_available"] is True
+    assert rows["A"]["per_layer_rank"]["L0_geometry_only"] == 1
+    assert rows["A"]["per_layer_rank"]["L2_plus_semantic_risk"] == 2
+
+
+def test_partial_semantic_coverage_fails_closed() -> None:
+    """A partial semantic metric cannot be silently imputed as neutral."""
+    records = _dynamics_flip_records()
+    records[0]["metrics"].pop("semantic_risk_exposure")
+
+    with pytest.raises(ValueError, match="partial semantic-risk coverage"):
+        rla.build_risk_layer_report(records, baseline_stats=BASELINE_STATS)
+
+
+def test_mismatched_planner_seed_coverage_fails_closed() -> None:
+    """Planner rankings require the same scenario/seed multiset."""
+    records = _dynamics_flip_records()
+    records.pop()
+
+    with pytest.raises(ValueError, match="scenario/seed coverage differs"):
+        rla.build_risk_layer_report(records, baseline_stats=BASELINE_STATS)
+
+
+def test_config_drives_report_runtime() -> None:
+    """The checked-in YAML is consumed by the public config-first entry point."""
+    report = rla.build_risk_layer_report_from_config(
+        _dynamics_flip_records(),
+        baseline_stats=BASELINE_STATS,
+        config_path=CONFIG_PATH,
+    )
+
+    assert report["bootstrap"]["L0_geometry_only"]["samples"] == 200
 
 
 def test_markdown_report_renders_delta_table() -> None:

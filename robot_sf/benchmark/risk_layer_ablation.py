@@ -33,17 +33,23 @@ under a non-zero L2 weight is reported as unavailable rather than imputed.
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import numpy as np
+import yaml
 
 from robot_sf.benchmark.rank_metrics import rank_by, spearman
-from robot_sf.benchmark.snqi.compute import compute_snqi_v0
+from robot_sf.benchmark.snqi.compute import compute_snqi_v0, normalize_metric_required
 
 RISK_LAYER_ABLATION_SCHEMA = "risk_layer_ablation.v1"
 RISK_LAYER_VERSION = "risk-layers.v1"
+DEFAULT_RISK_LAYER_CONFIG = (
+    Path(__file__).resolve().parents[2] / "configs/benchmark/risk_layer_ablation.yaml"
+)
 
 # Semantic-risk exposure metric produced by zone-aware scenarios. Absent for
 # scenario families without zone metadata; the L2 layer degrades gracefully.
@@ -60,6 +66,13 @@ RISK_WEIGHT_NAMES = (
     "w_time",
     "w_semantic_risk",
 )
+
+_BASELINE_METRIC_BY_WEIGHT = {
+    "w_collisions": "collisions",
+    "w_force_exceed": "force_exceed_events",
+    "w_near": "near_misses",
+    "w_semantic_risk": SEMANTIC_RISK_METRIC_KEY,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,7 +138,7 @@ RISK_LAYER_WEIGHTS: dict[str, dict[str, float]] = {
         "w_force_exceed": 1.0,
         "w_near": 1.5,
         "w_comfort": 1.0,
-        "w_time": 0.5,
+        "w_time": 0.0,
         "w_semantic_risk": 1.5,
     },
 }
@@ -186,16 +199,31 @@ def _score_episode(
     Returns:
         SNQI score for the episode under the supplied weights.
     """
-    return float(compute_snqi_v0(_episode_metrics(record), weights, baseline_stats))
+    metrics = _episode_metrics(record)
+    score = float(compute_snqi_v0(metrics, weights, baseline_stats))
+    semantic_weight = float(weights.get("w_semantic_risk", 0.0))
+    if semantic_weight == 0.0:
+        return score
+    if SEMANTIC_RISK_METRIC_KEY not in metrics:
+        raise ValueError(
+            "semantic-risk scoring requires metrics.semantic_risk_exposure on every record"
+        )
+    semantic_norm = normalize_metric_required(
+        SEMANTIC_RISK_METRIC_KEY,
+        metrics[SEMANTIC_RISK_METRIC_KEY],
+        baseline_stats,
+    )
+    return score - semantic_weight * semantic_norm
 
 
-def _semantic_risk_available(records: Iterable[Mapping[str, Any]]) -> bool:
-    """Return whether any episode carries a finite semantic-risk metric."""
+def _semantic_risk_coverage(records: Sequence[Mapping[str, Any]]) -> tuple[int, int]:
+    """Return finite semantic-risk metric count and total record count."""
+    present = 0
     for record in records:
         value = _episode_metrics(record).get(SEMANTIC_RISK_METRIC_KEY)
         if isinstance(value, bool | int | float) and math.isfinite(float(value)):
-            return True
-    return False
+            present += 1
+    return present, len(records)
 
 
 def compute_layer_scores(
@@ -214,18 +242,124 @@ def compute_layer_scores(
     groups: dict[str, list[float]] = {}
     for record in records:
         key = _resolve_group_key(record, group_by, fallback_group_by)
-        try:
-            score = _score_episode(record, layer_weights, baseline_stats)
-        except (ValueError, TypeError, KeyError):
-            continue
+        if key == "unknown":
+            raise ValueError(
+                f"record is missing both group keys {group_by!r} and {fallback_group_by!r}"
+            )
+        score = _score_episode(record, layer_weights, baseline_stats)
         if not math.isfinite(score):
-            continue
+            raise ValueError(f"non-finite risk-layer score for planner {key!r}")
         groups.setdefault(key, []).append(score)
     return {
         planner: {"mean": sum(vals) / len(vals), "support": len(vals)}
         for planner, vals in groups.items()
         if vals
     }
+
+
+def _validate_layer_weights(
+    weights_by_layer: Mapping[str, Mapping[str, float]],
+    layer_names: Sequence[str],
+) -> None:
+    """Validate exact, finite, non-negative risk-layer weight mappings."""
+    expected = set(RISK_WEIGHT_NAMES)
+    for name in layer_names:
+        if name not in weights_by_layer:
+            raise ValueError(f"missing weights for risk layer {name!r}")
+        weights = weights_by_layer[name]
+        if set(weights) != expected:
+            missing = sorted(expected - set(weights))
+            extra = sorted(set(weights) - expected)
+            raise ValueError(f"invalid weights for {name!r}: missing={missing}, extra={extra}")
+        for weight_name, value in weights.items():
+            numeric = float(value)
+            if not math.isfinite(numeric) or numeric < 0.0:
+                raise ValueError(
+                    f"weight {weight_name!r} for {name!r} must be finite and non-negative"
+                )
+
+
+def _validate_baseline_coverage(
+    weights_by_layer: Mapping[str, Mapping[str, float]],
+    baseline_stats: Mapping[str, Mapping[str, float]],
+) -> None:
+    """Fail closed when an active normalized term lacks baseline statistics."""
+    required = {
+        metric_name
+        for weights in weights_by_layer.values()
+        for weight_name, metric_name in _BASELINE_METRIC_BY_WEIGHT.items()
+        if float(weights[weight_name]) > 0.0
+    }
+    missing = sorted(required - set(baseline_stats))
+    if missing:
+        raise ValueError(f"baseline_stats missing active normalized metrics: {missing}")
+
+
+def _validate_comparable_records(
+    records: Sequence[Mapping[str, Any]],
+    *,
+    group_by: str,
+    fallback_group_by: str,
+) -> None:
+    """Require identical scenario/seed multisets for every compared planner."""
+    coverage: dict[str, Counter[tuple[str, str]]] = {}
+    for index, record in enumerate(records):
+        planner = _resolve_group_key(record, group_by, fallback_group_by)
+        if planner == "unknown":
+            raise ValueError(
+                f"record {index} is missing both group keys {group_by!r} and {fallback_group_by!r}"
+            )
+        scenario_id = record.get("scenario_id")
+        seed = record.get("seed")
+        if scenario_id is None or seed is None:
+            raise ValueError(f"record {index} must carry scenario_id and seed provenance")
+        key = (str(scenario_id), str(seed))
+        coverage.setdefault(planner, Counter())[key] += 1
+    if len(coverage) < 2:
+        raise ValueError("risk-layer ablation requires at least two planners")
+    reference_planner = sorted(coverage)[0]
+    reference = coverage[reference_planner]
+    for planner, planner_coverage in coverage.items():
+        if planner_coverage != reference:
+            raise ValueError(
+                "planner scenario/seed coverage differs: "
+                f"{planner!r} does not match {reference_planner!r}"
+            )
+
+
+def _effective_layer_weights(
+    records: Sequence[Mapping[str, Any]],
+    weights_by_layer: Mapping[str, Mapping[str, float]],
+) -> tuple[dict[str, dict[str, float]], bool]:
+    """Return scoreable weights and all-or-none semantic-risk availability."""
+    present, total = _semantic_risk_coverage(records)
+    if 0 < present < total:
+        raise ValueError(
+            "partial semantic-risk coverage is not comparable: "
+            f"{present} of {total} records provide {SEMANTIC_RISK_METRIC_KEY}"
+        )
+    semantic_available = total > 0 and present == total
+    effective = {name: dict(weights) for name, weights in weights_by_layer.items()}
+    if not semantic_available:
+        for weights in effective.values():
+            weights["w_semantic_risk"] = 0.0
+    return effective, semantic_available
+
+
+def _resolve_layer_weights(
+    layer_names: Sequence[str],
+    weights_override: Mapping[str, Mapping[str, float]] | None,
+) -> dict[str, dict[str, float]]:
+    """Return requested layer weights, rejecting unknown layer names."""
+    resolved: dict[str, dict[str, float]] = {}
+    for name in layer_names:
+        if weights_override is not None and name in weights_override:
+            resolved[name] = dict(weights_override[name])
+        elif name in RISK_LAYER_WEIGHTS:
+            resolved[name] = dict(RISK_LAYER_WEIGHTS[name])
+        else:
+            raise ValueError(f"unknown risk layer: {name!r}")
+    return resolved
 
 
 def compute_risk_layer_ablation(
@@ -241,8 +375,8 @@ def compute_risk_layer_ablation(
 
     Args:
         records: Episode records carrying ``metrics`` and a planner/group key.
-        baseline_stats: Optional SNQI baseline normalization stats. When absent,
-            the v0 zero-baseline fallback is used (all terms normalized to 0).
+        baseline_stats: SNQI baseline normalization stats. Missing coverage for
+            an active normalized metric fails closed.
         group_by: Dotted key used to group episodes by planner.
         fallback_group_by: Fallback grouping key when ``group_by`` is absent.
         layer_names: Ordered subset of risk-layer names to evaluate. Defaults to
@@ -254,17 +388,24 @@ def compute_risk_layer_ablation(
         List of per-planner rows ordered by L0 rank (best first).
     """
     record_list = [dict(record) for record in records]
+    if not record_list:
+        return []
     baseline: Mapping[str, Mapping[str, float]] = baseline_stats or {}
     names = list(layer_names) if layer_names is not None else [layer.name for layer in RISK_LAYERS]
 
-    weights_by_layer: dict[str, dict[str, float]] = {}
-    for name in names:
-        if weights_override is not None and name in weights_override:
-            weights_by_layer[name] = dict(weights_override[name])
-        elif name in RISK_LAYER_WEIGHTS:
-            weights_by_layer[name] = dict(RISK_LAYER_WEIGHTS[name])
-        else:
-            raise ValueError(f"unknown risk layer: {name!r}")
+    weights_by_layer = _resolve_layer_weights(names, weights_override)
+
+    _validate_layer_weights(weights_by_layer, names)
+    _validate_comparable_records(
+        record_list,
+        group_by=group_by,
+        fallback_group_by=fallback_group_by,
+    )
+    weights_by_layer, _semantic_available = _effective_layer_weights(
+        record_list,
+        weights_by_layer,
+    )
+    _validate_baseline_coverage(weights_by_layer, baseline)
 
     per_layer_means: dict[str, dict[str, float]] = {}
     per_layer_support: dict[str, dict[str, int]] = {}
@@ -329,6 +470,7 @@ def bootstrap_layer_rank_stability(
     records: Iterable[Mapping[str, Any]],
     *,
     layer_name: str,
+    baseline_stats: Mapping[str, Mapping[str, float]],
     rng: Any | None = None,
     samples: int = 200,
     group_by: str = "scenario_params.algo",
@@ -345,6 +487,7 @@ def bootstrap_layer_rank_stability(
     Args:
         records: Episode records with a planner/group key and metrics.
         layer_name: Risk layer whose ranking stability is estimated.
+        baseline_stats: Baseline normalization statistics for active metrics.
         rng: Random generator exposing ``integers(...)`` (e.g.
             ``numpy.random.default_rng(seed)``).
         samples: Number of bootstrap resamples.
@@ -366,15 +509,27 @@ def bootstrap_layer_rank_stability(
         if weights_override is not None and layer_name in weights_override
         else RISK_LAYER_WEIGHTS[layer_name]
     )
+    record_list = [dict(record) for record in records]
+    _validate_comparable_records(
+        record_list,
+        group_by=group_by,
+        fallback_group_by=fallback_group_by,
+    )
+    effective, _semantic_available = _effective_layer_weights(
+        record_list,
+        {layer_name: weights},
+    )
+    weights = effective[layer_name]
+    _validate_layer_weights({layer_name: weights}, [layer_name])
+    _validate_baseline_coverage({layer_name: weights}, baseline_stats)
     grouped: dict[str, list[float]] = {}
-    for record in records:
+    for record in record_list:
         key = _resolve_group_key(record, group_by, fallback_group_by)
-        try:
-            score = _score_episode(record, weights, {})
-        except (ValueError, TypeError, KeyError):
-            continue
+        score = _score_episode(record, weights, baseline_stats)
         if math.isfinite(score):
             grouped.setdefault(key, []).append(score)
+        else:
+            raise ValueError(f"non-finite bootstrap score for planner {key!r}")
 
     if len(grouped) < 2:
         raise ValueError("bootstrap_layer_rank_stability requires at least two planners")
@@ -441,7 +596,8 @@ def build_risk_layer_report(
 
     Args:
         records: Episode records carrying metrics and a planner/group key.
-        baseline_stats: Optional SNQI baseline normalization stats.
+        baseline_stats: SNQI baseline normalization stats. Missing coverage for
+            an active normalized metric fails closed.
         group_by: Planner grouping key.
         fallback_group_by: Fallback grouping key.
         layer_names: Ordered subset of risk layers to evaluate.
@@ -464,7 +620,8 @@ def build_risk_layer_report(
     )
     names = list(layer_names) if layer_names is not None else [layer.name for layer in RISK_LAYERS]
 
-    semantic_available = _semantic_risk_available(record_list)
+    semantic_present, semantic_total = _semantic_risk_coverage(record_list)
+    semantic_available = semantic_total > 0 and semantic_present == semantic_total
     bootstrap_blocks: dict[str, Any] = {}
     if bootstrap is not None and record_list:
         rng = np.random.default_rng(int(bootstrap.get("seed", 0)))
@@ -473,14 +630,15 @@ def build_risk_layer_report(
                 bootstrap_blocks[name] = bootstrap_layer_rank_stability(
                     record_list,
                     layer_name=name,
+                    baseline_stats=baseline_stats or {},
                     rng=rng,
                     samples=int(bootstrap.get("samples", 200)),
                     group_by=group_by,
                     fallback_group_by=fallback_group_by,
                     weights_override=weights_override,
                 )
-            except ValueError:
-                bootstrap_blocks[name] = {"status": "skipped", "reason": "insufficient_planners"}
+            except ValueError as exc:
+                raise ValueError(f"bootstrap failed for risk layer {name!r}") from exc
 
     return {
         "schema_version": RISK_LAYER_ABLATION_SCHEMA,
@@ -504,6 +662,11 @@ def build_risk_layer_report(
             if layer.name in names
         ],
         "semantic_risk_available": semantic_available,
+        "semantic_risk_coverage": {
+            "present": semantic_present,
+            "total": semantic_total,
+            "status": "complete" if semantic_available else "unavailable",
+        },
         "group_by": group_by,
         "fallback_group_by": fallback_group_by,
         "n_episodes": len(record_list),
@@ -520,6 +683,121 @@ def build_risk_layer_report(
         ],
         "bootstrap": bootstrap_blocks,
     }
+
+
+def _parse_config_layers(
+    payload: Mapping[str, Any],
+) -> tuple[list[str], dict[str, dict[str, float]]]:
+    """Parse and validate ordered risk-layer definitions from config.
+
+    Returns:
+        Ordered layer names and weights keyed by layer.
+    """
+    raw_layers = payload.get("layers")
+    if not isinstance(raw_layers, list) or not all(
+        isinstance(layer, Mapping) for layer in raw_layers
+    ):
+        raise ValueError("risk-layer config layers must be a list of mappings")
+    names = [str(layer.get("name", "")) for layer in raw_layers]
+    expected_names = [layer.name for layer in RISK_LAYERS]
+    if names != expected_names:
+        raise ValueError(f"risk-layer order must be {expected_names}")
+    weights_by_layer: dict[str, dict[str, float]] = {}
+    for raw_layer in raw_layers:
+        raw_weights = raw_layer.get("weights")
+        if not isinstance(raw_weights, Mapping):
+            raise ValueError(f"risk layer {raw_layer.get('name')!r} is missing weights")
+        weights_by_layer[str(raw_layer["name"])] = {
+            str(name): float(value) for name, value in raw_weights.items()
+        }
+    _validate_layer_weights(weights_by_layer, names)
+    return names, weights_by_layer
+
+
+def _parse_config_bootstrap(payload: Mapping[str, Any]) -> dict[str, int]:
+    """Parse and validate deterministic bootstrap controls.
+
+    Returns:
+        Integer seed and positive sample count.
+    """
+    raw_bootstrap = payload.get("bootstrap")
+    if not isinstance(raw_bootstrap, Mapping):
+        raise ValueError("bootstrap must be a mapping")
+    try:
+        seed = int(raw_bootstrap["seed"])
+        samples = int(raw_bootstrap["samples"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("bootstrap requires integer seed and samples") from exc
+    if samples < 1:
+        raise ValueError("bootstrap.samples must be at least 1")
+    return {"seed": seed, "samples": samples}
+
+
+def _validate_config_header(payload: Mapping[str, Any]) -> None:
+    """Validate config schema and risk-layer versions."""
+    if payload.get("schema_version") != RISK_LAYER_ABLATION_SCHEMA:
+        raise ValueError(f"risk-layer config schema_version must be {RISK_LAYER_ABLATION_SCHEMA!r}")
+    if payload.get("risk_layer_version") != RISK_LAYER_VERSION:
+        raise ValueError(f"risk_layer_version must be {RISK_LAYER_VERSION!r}")
+
+
+def load_risk_layer_config(
+    config_path: Path = DEFAULT_RISK_LAYER_CONFIG,
+) -> dict[str, Any]:
+    """Load and validate the canonical risk-layer ablation configuration.
+
+    Returns:
+        Normalized config fields consumed by the config-first report builder.
+    """
+    try:
+        payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(f"cannot load risk-layer config {config_path}") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError("risk-layer config root must be a mapping")
+    _validate_config_header(payload)
+    names, weights_by_layer = _parse_config_layers(payload)
+
+    group_by = payload.get("group_by")
+    fallback_group_by = payload.get("fallback_group_by")
+    if not isinstance(group_by, str) or not group_by:
+        raise ValueError("group_by must be a non-empty dotted-key string")
+    if not isinstance(fallback_group_by, str) or not fallback_group_by:
+        raise ValueError("fallback_group_by must be a non-empty dotted-key string")
+    bootstrap = _parse_config_bootstrap(payload)
+
+    return {
+        "schema_version": RISK_LAYER_ABLATION_SCHEMA,
+        "risk_layer_version": RISK_LAYER_VERSION,
+        "group_by": group_by,
+        "fallback_group_by": fallback_group_by,
+        "layer_names": names,
+        "weights_by_layer": weights_by_layer,
+        "bootstrap": bootstrap,
+    }
+
+
+def build_risk_layer_report_from_config(
+    records: Iterable[Mapping[str, Any]],
+    *,
+    baseline_stats: Mapping[str, Mapping[str, float]],
+    config_path: Path = DEFAULT_RISK_LAYER_CONFIG,
+) -> dict[str, Any]:
+    """Build a report using one validated config as the runtime source of truth.
+
+    Returns:
+        Risk-layer report artifact.
+    """
+    config = load_risk_layer_config(config_path)
+    return build_risk_layer_report(
+        records,
+        baseline_stats=baseline_stats,
+        group_by=config["group_by"],
+        fallback_group_by=config["fallback_group_by"],
+        layer_names=config["layer_names"],
+        weights_override=config["weights_by_layer"],
+        bootstrap=config["bootstrap"],
+    )
 
 
 def format_risk_layer_markdown(report: Mapping[str, Any]) -> str:
@@ -603,6 +881,7 @@ def _clamp01(value: float) -> float:
 
 
 __all__ = [
+    "DEFAULT_RISK_LAYER_CONFIG",
     "RISK_LAYERS",
     "RISK_LAYER_ABLATION_SCHEMA",
     "RISK_LAYER_VERSION",
@@ -613,7 +892,9 @@ __all__ = [
     "RiskLayerDefinition",
     "bootstrap_layer_rank_stability",
     "build_risk_layer_report",
+    "build_risk_layer_report_from_config",
     "compute_layer_scores",
     "compute_risk_layer_ablation",
     "format_risk_layer_markdown",
+    "load_risk_layer_config",
 ]

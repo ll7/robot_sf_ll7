@@ -56,5 +56,5 @@ layers:
       w_force_exceed: 1.0
       w_near: 1.5
       w_comfort: 1.0
-      w_time: 0.5
+      w_time: 0.0
       w_semantic_risk: 1.5

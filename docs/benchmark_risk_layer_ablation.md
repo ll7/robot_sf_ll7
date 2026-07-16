@@ -27,7 +27,7 @@ ranked safe at L0 but unsafe at L2 is exactly the publishable finding class.*
 | --- | --- | --- |
 | `L0_geometry_only` | static obstacles, hard contact geometry | `w_success`, `w_collisions`, `w_force_exceed` |
 | `L1_plus_dynamics` | L0 + moving-pedestrian **dynamics** | + `w_near`, `w_comfort` |
-| `L2_plus_semantic_risk` | L1 + **semantic / zone** risk | + `w_time`, `w_semantic_risk` |
+| `L2_plus_semantic_risk` | L1 + **semantic / zone** risk | + `w_semantic_risk` |
 
 Layer definitions and their exact weight mappings live in
 `RISK_LAYERS` / `RISK_LAYER_WEIGHTS` in `robot_sf/benchmark/risk_layer_ablation.py`
@@ -41,8 +41,8 @@ and are mirrored in `configs/benchmark/risk_layer_ablation.yaml`.
 - **L2** adds semantic/zone risk weighting. The semantic-risk term is read from
   `metrics.semantic_risk_exposure`, which scenario families carry when they have
   zone metadata (crossings, doorways, high-density zones). When that metric is
-  absent, the layer reports it `unavailable` and scores on the remaining active
-  terms only — never imputing a zero risk field.
+  absent from every record, the layer reports it `unavailable` and equals L1.
+  Partial coverage fails closed rather than imputing missing records.
 
 ## Metric mapping
 
@@ -77,13 +77,13 @@ zone metadata.
 
 ```python
 from robot_sf.benchmark.risk_layer_ablation import (
-    build_risk_layer_report,
+    build_risk_layer_report_from_config,
     format_risk_layer_markdown,
 )
 
-report = build_risk_layer_report(
-    records,                       # episode dicts with metrics + planner key
-    bootstrap={"seed": 20260716, "samples": 200},
+report = build_risk_layer_report_from_config(
+    records,  # episode dicts with metrics + planner key
+    baseline_stats=baseline_stats,
 )
 print(format_risk_layer_markdown(report))
 ```

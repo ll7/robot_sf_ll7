@@ -344,7 +344,7 @@ def _reconcile_snqi_diagnostics(campaign_root: Path, cfg: Any) -> None:
         raise ValueError("Publication reconstruction requires pinned SNQI weights and baseline")
     weights = load_weight_mapping(cfg.snqi_weights_path)
     baseline = load_baseline_mapping(cfg.snqi_baseline_path)
-    grouped: dict[tuple[str, str], list[float]] = defaultdict(list)
+    grouped: defaultdict[tuple[str, str], list[float]] = defaultdict(list)
     row_count = 0
     for episodes_path in _episode_files(campaign_root):
         arm_name = episodes_path.parent.name
@@ -356,7 +356,11 @@ def _reconcile_snqi_diagnostics(campaign_root: Path, cfg: Any) -> None:
             if not isinstance(metrics, dict):
                 raise ValueError(f"{episodes_path}: every frozen row requires metrics")
             stored_value = metrics.get("snqi")
-            if not isinstance(stored_value, (int, float)) or not math.isfinite(float(stored_value)):
+            if (
+                isinstance(stored_value, bool)
+                or not isinstance(stored_value, (int, float))
+                or not math.isfinite(float(stored_value))
+            ):
                 raise ValueError(f"{episodes_path}: every frozen row requires finite metrics.snqi")
             recomputed_value = curvature_aware_snqi(metrics, weights, baseline_stats=baseline)
             if not math.isclose(float(stored_value), recomputed_value, rel_tol=1e-9, abs_tol=1e-9):

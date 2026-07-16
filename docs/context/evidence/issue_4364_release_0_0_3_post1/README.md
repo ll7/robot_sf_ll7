@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#4364, 2026-07-16) - NEEDS-REVIEW -->
 # Release 0.0.3.post1 corrected publication evidence
 
 This packet registers the corrected successor bundle for release 0.0.3. It packages the existing
@@ -7,7 +8,7 @@ tracked in issues #5530 and #5580.
 Claim boundary: this is a row-preserving release-engineering correction, not a new benchmark or
 paper claim. All 14 arms are native or declared adapter executions with no fallback/degraded rows,
 but the campaign Social Navigation Quality Index (SNQI) contract still reports `fail` under
-warning enforcement. The SNQI consistency pass proves only that the stored field and diagnostics
+warning enforcement. The SNQI consistency pass verifies only that the stored field and diagnostics
 ordering now use the same execution scalarizer.
 
 ## Durable artifact pointer

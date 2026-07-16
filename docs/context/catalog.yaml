@@ -104,6 +104,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/SHA256SUMS.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4364_release_0_0_3_post1/artifact_pointer.json
   status: evidence
   freshness: evidence

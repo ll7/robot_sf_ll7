@@ -1,5 +1,6 @@
 {
   "bundle_dir": "release://0.0.3.post1/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "evidence": {
     "episode_software_commits": {
       "a307ef276d701f8d14dead1aa0513f44ee97c0b0": 20160
@@ -16,4 +17,3 @@
     "episode-ledger software commits differ from the publication commit; allowed via structured provenance.commit_reconciliation"
   ]
 }
-

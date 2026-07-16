@@ -160,3 +160,38 @@ def test_reconcile_snqi_diagnostics_rejects_changed_stored_field(tmp_path: Path)
             campaign_root,
             SimpleNamespace(snqi_weights_path=WEIGHTS, snqi_baseline_path=BASELINE),
         )
+
+
+@pytest.mark.parametrize(
+    "invalid_snqi",
+    [
+        pytest.param(True, id="boolean"),
+        pytest.param(float("nan"), id="nan"),
+        pytest.param(float("inf"), id="infinity"),
+    ],
+)
+def test_reconcile_snqi_diagnostics_rejects_non_finite_or_boolean_stored_field(
+    tmp_path: Path, invalid_snqi: object
+) -> None:
+    """Frozen SNQI values must be real finite numbers rather than bool sentinels."""
+    campaign_root = tmp_path / "campaign"
+    reports_dir = campaign_root / "reports"
+    reports_dir.mkdir(parents=True)
+    metrics: dict[str, object] = _metrics(curvature_mean=0.1)
+    metrics["snqi"] = invalid_snqi
+    _write_episode(
+        campaign_root,
+        arm="goal__differential_drive",
+        episode_id="ep-1",
+        metrics=metrics,  # type: ignore[arg-type]
+    )
+    (reports_dir / "snqi_diagnostics.json").write_text(
+        json.dumps({"planner_ordering": []}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="finite metrics.snqi"):
+        rebuild._reconcile_snqi_diagnostics(
+            campaign_root,
+            SimpleNamespace(snqi_weights_path=WEIGHTS, snqi_baseline_path=BASELINE),
+        )

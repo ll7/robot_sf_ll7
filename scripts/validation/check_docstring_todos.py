@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 DEFAULT_BACKLOG_ROOTS = ("robot_sf", "scripts", "tests", "examples")
 DEFAULT_BASELINE_PATH = Path("scripts/validation/docstring_todo_baseline.json")
+_PLACEHOLDER = "TODO docstring"
 
 
 @dataclass(frozen=True)
@@ -286,7 +287,22 @@ def compare_backlog_to_baseline(
 
 def _count_todo_docstrings(path: Path) -> int:
     """Count TODO-docstring placeholder occurrences in definition docstrings."""
-    return sum(info.docstring.count("TODO docstring") for info in _read_defs(path))
+    return sum(info.docstring.count(_PLACEHOLDER) for info in _read_defs(path))
+
+
+def _count_todo_docstrings_in_source(source: str, path_hint: str) -> int:
+    """Count placeholder docstring debt in source text using the same AST path.
+
+    Mirrors :func:`_count_todo_docstrings` but accepts raw source so the
+    ``verify-baseline`` ref build does not need a working-tree file.
+
+    Returns:
+        Number of placeholder occurrences inside definition docstrings.
+    """
+    tree = _parse_source(source, Path(path_hint))
+    if tree is None:
+        return 0
+    return sum(info.docstring.count(_PLACEHOLDER) for info in _collect_defs(tree))
 
 
 def _files_payload(report: Mapping[str, Any]) -> dict[str, int]:
@@ -323,10 +339,11 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Check TODO-docstring placeholder debt.")
     parser.add_argument(
         "--mode",
-        choices=("diff", "report", "write-baseline", "ratchet"),
+        choices=("diff", "report", "write-baseline", "ratchet", "verify-baseline"),
         default="diff",
         help="diff preserves the historical touched-definition check; ratchet compares backlog "
-        "counts to a tracked baseline.",
+        "counts to a tracked baseline; verify-baseline confirms the committed baseline still "
+        "matches the base ref (origin/main) backlog so docs-only PRs are not failed by drift.",
     )
     parser.add_argument("--base", default="origin/main", help="Base ref to diff against")
     parser.add_argument(
@@ -362,14 +379,106 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def build_backlog_report_for_ref(
+    repo_root: Path,
+    base: str,
+    *,
+    roots: Iterable[str] = DEFAULT_BACKLOG_ROOTS,
+) -> dict[str, Any]:
+    """Build a TODO-docstring backlog report for a git ref (not the working tree).
+
+    Resolves each root's tracked ``.py`` files at ``base`` and counts their TODO
+    docstrings. This lets the verification guard compare the committed baseline
+    against what the base branch actually contains, without modifying the working
+    tree.
+
+    Returns:
+        JSON-serializable backlog report for the given ref.
+    """
+    files: dict[str, int] = {}
+    areas: dict[str, dict[str, int]] = {}
+    for root in roots:
+        area = root.strip().strip("/")
+        if not area:
+            continue
+        area_files = 0
+        area_occurrences = 0
+        listed = _run(
+            ["git", "ls-tree", "-r", "--name-only", base, "--", area],
+            cwd=repo_root,
+        ).splitlines()
+        for rel_path in listed:
+            rel_path = rel_path.strip()
+            if not rel_path.endswith(".py"):
+                continue
+            source = _run(
+                ["git", "show", f"{base}:{rel_path}"],
+                cwd=repo_root,
+            )
+            occurrences = _count_todo_docstrings_in_source(source, rel_path)
+            if occurrences <= 0:
+                continue
+            files[rel_path] = occurrences
+            area_files += 1
+            area_occurrences += occurrences
+        areas[area] = {
+            "files": area_files,
+            "occurrences": area_occurrences,
+        }
+    return {
+        "schema_version": "docstring-todo-backlog.v1",
+        "roots": [root.strip().strip("/") for root in roots if root.strip().strip("/")],
+        "totals": {
+            "files": len(files),
+            "total_occurrences": sum(files.values()),
+        },
+        "areas": areas,
+        "files": dict(sorted(files.items())),
+    }
+
+
 def main() -> int:
     """Run the selected TODO-docstring check."""
     args = _parse_args()
     repo_root = _repo_root()
 
+    if args.mode == "verify-baseline":
+        return _run_verify_baseline(args, repo_root)
     if args.mode != "diff":
         return _run_backlog_mode(args, repo_root)
     return _run_diff_mode(args, repo_root)
+
+
+def _run_verify_baseline(args: argparse.Namespace, repo_root: Path) -> int:
+    """Verify the committed baseline matches the base-ref backlog (drift guard)."""
+    baseline_path = repo_root / args.baseline
+    baseline = _read_backlog_baseline(baseline_path, repo_root)
+    if baseline is None:
+        return 1
+    roots = tuple(args.roots or DEFAULT_BACKLOG_ROOTS)
+    ref_report = build_backlog_report_for_ref(repo_root, args.base, roots=roots)
+    drift = compare_backlog_to_baseline(ref_report, baseline)
+    reverse_drift = [
+        line for line in compare_backlog_to_baseline(baseline, ref_report) if line not in drift
+    ]
+    if drift or reverse_drift:
+        print(f"TODO-docstring baseline drift detected against base '{args.base}':")
+        for line in drift:
+            print(f"- baseline is stale (base has more): {line}")
+        for line in reverse_drift:
+            print(f"- baseline exceeds base (base has fewer): {line}")
+        print(
+            "Run: uv run python scripts/validation/check_docstring_todos.py --mode write-baseline"
+        )
+        return 1
+    totals = cast("dict[str, int]", ref_report["totals"])
+    if not isinstance(totals, dict):
+        raise ValueError("docstring TODO report totals must be a mapping")
+    print(
+        "TODO-docstring baseline matches base "
+        f"'{args.base}': {totals['files']} files, {totals['total_occurrences']} occurrences."
+    )
+    return 0
 
 
 def _run_diff_mode(args: argparse.Namespace, repo_root: Path) -> int:

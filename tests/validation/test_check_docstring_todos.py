@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import textwrap
 
 from scripts.validation import check_docstring_todos
@@ -141,3 +142,79 @@ def test_read_backlog_baseline_fails_closed_for_missing_or_invalid_files(tmp_pat
 
     assert check_docstring_todos._read_backlog_baseline(non_object, tmp_path) is None
     assert "must contain a JSON object" in capsys.readouterr().err
+
+
+def test_count_from_source_matches_file_count(tmp_path):
+    """Ref-based source counting must match the file-based counter (issue #5858)."""
+    src = (
+        textwrap.dedent(
+            '''
+        def needs_doc():
+            """TODO docstring."""
+            return 1
+
+        class Demo:
+            """TODO docstring.
+
+            TODO docstring.
+            """
+    '''
+        ).strip()
+        + "\n"
+    )
+    source_file = tmp_path / "module.py"
+    source_file.write_text(src, encoding="utf-8")
+
+    from_file = check_docstring_todos._count_todo_docstrings(source_file)
+    from_source = check_docstring_todos._count_todo_docstrings_in_source(src, "module.py")
+
+    assert from_file == from_source == 3
+
+
+def test_verify_baseline_detects_drift(tmp_path, capsys):
+    """A stale baseline must be reported as drift, not passed silently (issue #5858)."""
+    baseline = {"files": {"scripts/tool.py": 1}}
+    baseline_path = tmp_path / "docstring_todo_baseline.json"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+
+    stale_report = {
+        "totals": {"files": 1, "total_occurrences": 3},
+        "files": {"scripts/tool.py": 3},
+    }
+    increases = check_docstring_todos.compare_backlog_to_baseline(stale_report, baseline)
+    reverse = [
+        line
+        for line in check_docstring_todos.compare_backlog_to_baseline(baseline, stale_report)
+        if line not in increases
+    ]
+
+    assert increases == ["scripts/tool.py: 3 TODO docstring occurrences (baseline 1, +2)"]
+    assert reverse == []
+
+
+def test_verify_baseline_docs_only_branch_does_not_fail(tmp_path, capsys):
+    """A docs-only branch identical to base for Python must not fail readiness.
+
+    Reproduces issue #5858: when the base ref and committed baseline agree, a
+    branch that changes only non-Python files (docs) must report no drift.
+    """
+    baseline = {
+        "totals": {"files": 1, "total_occurrences": 2},
+        "files": {"scripts/tool.py": 2},
+    }
+    baseline_path = tmp_path / "docstring_todo_baseline.json"
+    baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
+
+    ref_report = {
+        "totals": {"files": 1, "total_occurrences": 2},
+        "files": {"scripts/tool.py": 2},
+    }
+    increases = check_docstring_todos.compare_backlog_to_baseline(ref_report, baseline)
+    reverse = [
+        line
+        for line in check_docstring_todos.compare_backlog_to_baseline(baseline, ref_report)
+        if line not in increases
+    ]
+
+    assert increases == []
+    assert reverse == []

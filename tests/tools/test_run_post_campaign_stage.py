@@ -311,10 +311,22 @@ class TestWrapperArgvContractIssue5707:
         assert args.campaign_exit_code == 0
         assert args.stage_name == "headline_ci_rank_stability_report"
         assert args.output == stage_status
-        # The nested ``--campaign`` stays inside the REMAINDER-based stage command.
-        assert "--campaign" in args.stage_command
-        assert str(campaign_root) in args.stage_command
-        # ``--campaign`` must NOT leak into the primitive's own top-level options.
+        # The nested command is preserved exactly, including ordering and all options.
+        assert args.stage_command == [
+            "uv",
+            "run",
+            "python",
+            "scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py",
+            "--campaign",
+            str(campaign_root),
+            "--rank-metric",
+            "snqi",
+            "--expected-planners-from-config",
+            str(config),
+            "--output-dir",
+            str(tmp_path / "report"),
+        ]
+        # ``--campaign`` must not leak into the primitive's own top-level options.
         assert not hasattr(args, "campaign")
 
 

@@ -48,8 +48,10 @@ arm's ``episodes.jsonl`` is missing or empty.
 from __future__ import annotations
 
 import json
+import math
 import shlex
 import sys
+from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -61,6 +63,7 @@ from robot_sf.benchmark.artifact_publication import (
     export_publication_bundle,
     verify_publication_bundle_preflight,
 )
+from robot_sf.benchmark.camera_ready._artifacts import _write_snqi_diagnostics_artifacts
 from robot_sf.benchmark.camera_ready._config import load_campaign_config
 from robot_sf.benchmark.camera_ready._preflight import prepare_campaign_preflight
 from robot_sf.benchmark.camera_ready._reporting import write_campaign_report
@@ -72,6 +75,7 @@ from robot_sf.benchmark.camera_ready._util import _utc_now
 # lower-level robot_sf.benchmark.camera_ready.campaign.run_campaign accepts an injectable
 # run_batch collaborator, which this script relies on to skip simulation entirely.
 from robot_sf.benchmark.camera_ready.campaign import run_campaign
+from robot_sf.benchmark.metrics import snqi as curvature_aware_snqi
 from robot_sf.benchmark.orca_preflight import OrcaRvo2PreflightError, check_orca_rvo2_preflight
 from robot_sf.benchmark.release_protocol import (
     build_release_provenance,
@@ -79,6 +83,10 @@ from robot_sf.benchmark.release_protocol import (
     load_release_manifest,
     parse_release_args,
     validate_release_manifest,
+)
+from robot_sf.benchmark.snqi_scalarization_sensitivity import (
+    load_baseline_mapping,
+    load_weight_mapping,
 )
 from robot_sf.common.artifact_paths import get_artifact_category_path, get_repository_root
 
@@ -201,6 +209,173 @@ def _repo_relative(path: Path) -> str:
         return resolved.relative_to(repo_root).as_posix()
     except ValueError:
         return str(resolved)
+
+
+def _episode_files(campaign_root: Path) -> list[Path]:
+    """Return the frozen per-arm episode ledgers in deterministic order."""
+    return sorted(campaign_root.glob("runs/*/episodes.jsonl"))
+
+
+def _record_row_reconstruction_provenance(campaign_root: Path) -> None:  # noqa: C901
+    """Record distinct execution and publication commit roles for a frozen-row rebuild."""
+    run_meta_path = campaign_root / "run_meta.json"
+    run_meta = _read_json(run_meta_path)
+    repository = run_meta.get("repo")
+    publication_commit = repository.get("commit") if isinstance(repository, dict) else None
+    if not isinstance(publication_commit, str) or not publication_commit.strip():
+        raise ValueError("run_meta.json repo.commit is required for publication provenance")
+
+    runtime_commits: set[str] = set()
+    annotated_boundary_rows = 0
+    unresolved_boundary_rows = 0
+    for episodes_path in _episode_files(campaign_root):
+        for record in read_jsonl(str(episodes_path)):
+            ledger = record.get("event_ledger")
+            if not isinstance(ledger, dict):
+                raise ValueError(f"{episodes_path}: every frozen row requires event_ledger")
+            runtime_commit = ledger.get("software_commit")
+            if not isinstance(runtime_commit, str) or not runtime_commit.strip():
+                raise ValueError(
+                    f"{episodes_path}: every frozen row requires event_ledger.software_commit"
+                )
+            runtime_commits.add(runtime_commit.strip())
+            exact_events = ledger.get("exact_events")
+            if not isinstance(exact_events, dict):
+                continue
+            if bool(exact_events.get("goal_reached")) and bool(exact_events.get("timeout")):
+                note = record.get("goal_timeout_boundary_note")
+                if record.get("reached_goal_step") is not None or (
+                    isinstance(note, str) and note.strip()
+                ):
+                    annotated_boundary_rows += 1
+                else:
+                    unresolved_boundary_rows += 1
+    if not runtime_commits:
+        raise ValueError("Frozen-row rebuild found no episode software commits")
+    if unresolved_boundary_rows:
+        raise ValueError(
+            "Frozen-row rebuild contains unresolved goal+timeout boundary rows: "
+            f"{unresolved_boundary_rows}"
+        )
+
+    sorted_runtime_commits = sorted(runtime_commits)
+    run_meta["commit_reconciliation"] = {
+        "status": ("matched" if runtime_commits == {publication_commit} else "explained"),
+        "runtime_commits": sorted_runtime_commits,
+        "execution_commit": (
+            sorted_runtime_commits[0] if len(sorted_runtime_commits) == 1 else None
+        ),
+        "publication_commit": publication_commit,
+        "roles": {
+            "execution_commit": (
+                "Software revision recorded by the frozen episode event ledgers; it produced "
+                "the simulated trajectories and raw per-episode metrics."
+            ),
+            "publication_commit": (
+                "Software revision that rebuilt reports and packaging from the frozen rows; "
+                "it did not resimulate episodes."
+            ),
+        },
+        "explanation": (
+            "The publication bundle was reconstructed without simulation from checksum-pinned "
+            "episode rows. Runtime commits identify execution; the publication commit identifies "
+            "the report, manifest, and bundle reconstruction code."
+        ),
+    }
+    run_meta["goal_timeout_boundary"] = {
+        "annotated_rows": annotated_boundary_rows,
+        "unresolved_rows": unresolved_boundary_rows,
+        "policy": (
+            "Frozen rows lacking a reached-goal step must carry an explicit note and are excluded "
+            "from timing-boundary interpretation; no timing evidence is fabricated."
+        ),
+    }
+    _write_json(run_meta_path, run_meta)
+
+
+def _reconcile_snqi_diagnostics(campaign_root: Path, cfg: Any) -> None:
+    """Align diagnostics ordering with the canonical curvature-aware frozen-row SNQI field."""
+    if cfg.snqi_weights_path is None or cfg.snqi_baseline_path is None:
+        raise ValueError("Publication reconstruction requires pinned SNQI weights and baseline")
+    weights = load_weight_mapping(cfg.snqi_weights_path)
+    baseline = load_baseline_mapping(cfg.snqi_baseline_path)
+    grouped: dict[tuple[str, str], list[float]] = defaultdict(list)
+    row_count = 0
+    for episodes_path in _episode_files(campaign_root):
+        arm_name = episodes_path.parent.name
+        planner_key, separator, kinematics = arm_name.partition("__")
+        if not separator:
+            raise ValueError(f"Unexpected arm directory name: {arm_name}")
+        for record in read_jsonl(str(episodes_path)):
+            metrics = record.get("metrics")
+            if not isinstance(metrics, dict):
+                raise ValueError(f"{episodes_path}: every frozen row requires metrics")
+            stored_value = metrics.get("snqi")
+            if not isinstance(stored_value, (int, float)) or not math.isfinite(float(stored_value)):
+                raise ValueError(f"{episodes_path}: every frozen row requires finite metrics.snqi")
+            recomputed_value = curvature_aware_snqi(metrics, weights, baseline_stats=baseline)
+            if not math.isclose(float(stored_value), recomputed_value, rel_tol=1e-9, abs_tol=1e-9):
+                raise ValueError(
+                    f"{episodes_path}: stored SNQI does not match the pinned curvature-aware basis"
+                )
+            grouped[(planner_key, kinematics)].append(recomputed_value)
+            row_count += 1
+
+    ordering = [
+        {
+            "planner_key": planner_key,
+            "kinematics": kinematics,
+            "episode_count": len(values),
+            "mean_snqi": sum(values) / len(values),
+        }
+        for (planner_key, kinematics), values in grouped.items()
+    ]
+    ordering.sort(
+        key=lambda row: (
+            -float(row["mean_snqi"]),
+            str(row["planner_key"]),
+            str(row["kinematics"]),
+        )
+    )
+    for rank, row in enumerate(ordering, start=1):
+        row["rank"] = rank
+
+    diagnostics_path = campaign_root / "reports" / "snqi_diagnostics.json"
+    diagnostics = _read_json(diagnostics_path)
+    diagnostics["planner_ordering"] = ordering
+    diagnostics["score_basis_reconciliation"] = {
+        "status": "reconciled",
+        "canonical_formula": "robot_sf.benchmark.metrics.snqi",
+        "canonical_formula_terms": (
+            "camera_ready_v3 declared terms plus the execution scalarizer's implicit "
+            "w_curvature=1.0 default applied to curvature_mean"
+        ),
+        "weights_path": _repo_relative(cfg.snqi_weights_path),
+        "baseline_path": _repo_relative(cfg.snqi_baseline_path),
+        "declared_weights": weights,
+        "effective_weights": {**weights, "w_curvature": weights.get("w_curvature", 1.0)},
+        "declared_weights_labeling_disposition": (
+            "camera_ready_v3 omits w_curvature; the canonical execution scalarizer therefore "
+            "used its documented default of 1.0. The stored field is retained and this implicit "
+            "effective weight is now explicit in bundle metadata."
+        ),
+        "verified_episode_rows": row_count,
+        "stored_field_disposition": (
+            "retained: all stored metrics.snqi values match the pinned curvature-aware basis"
+        ),
+        "planner_ordering_disposition": (
+            "recomputed from the frozen rows on the same curvature-aware basis"
+        ),
+        "legacy_diagnostic_sections": {
+            "formula": "robot_sf.benchmark.snqi.compute.compute_snqi_v0",
+            "curvature_term": False,
+            "scope": (
+                "contract, calibration, component, and sensitivity diagnostics only; these "
+                "sections do not define the canonical per-episode SNQI or planner ordering"
+            ),
+        },
+    }
+    _write_snqi_diagnostics_artifacts(campaign_root / "reports", diagnostics)
 
 
 def _merge_release_provenance(campaign_root: Path, release_provenance: dict[str, Any]) -> None:
@@ -382,6 +557,13 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
     )
     result.update(run_payload)
     campaign_root = Path(str(run_payload["campaign_root"])).resolve()
+
+    # The frozen rows retain the execution commit and canonical per-episode SNQI values.
+    # Record the publication-only reconstruction role explicitly and replace the legacy
+    # curvature-free diagnostics ordering with the same pinned curvature-aware basis used by
+    # metrics.snqi. Neither step simulates or changes an episode outcome.
+    _record_row_reconstruction_provenance(campaign_root)
+    _reconcile_snqi_diagnostics(campaign_root, cfg)
 
     release_provenance = build_release_provenance(
         manifest,

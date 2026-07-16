@@ -261,5 +261,62 @@ class TestPostCampaignStageRunner:
         assert lanes["post_campaign_stage"]["exit_code"] == 0
 
 
+class TestWrapperArgvContractIssue5707:
+    """Issue #5707: the issue-3216 wrapper must dispatch a ``run_post_campaign_stage``
+    argv shape that argparse accepts without ambiguity.
+
+    A prior regression passed ``--campaign`` (an option the report builder owns) in a
+    position where ``run_post_campaign_stage``'s parser rejected it as ambiguous against
+    its own ``--campaign-summary`` / ``--campaign-exit-code`` options. The wrapper now
+    emits ``--campaign`` only inside ``--stage-command`` (argparse.REMAINDER), so it must
+    parse cleanly. This test guards the exact dispatch contract so the optional
+    predictive readiness lane cannot silently regress again.
+    """
+
+    def test_argparse_accepts_wrapper_dispatch_shape(self, tmp_path: Path) -> None:
+        """The wrapper's exact argv parses without an ambiguous-option error."""
+        campaign_root = tmp_path / "issue3216_s20_headline_ci"
+        config = tmp_path / "benchmark.yaml"
+        stage_status = campaign_root / "reports" / "post_campaign_stage_status.json"
+        summary = campaign_root / "reports" / "campaign_summary.json"
+
+        argv = [
+            "--campaign-summary",
+            str(summary),
+            "--campaign-exit-code",
+            "0",
+            "--stage-name",
+            "headline_ci_rank_stability_report",
+            "--output",
+            str(stage_status),
+            "--stage-command",
+            "uv",
+            "run",
+            "python",
+            "scripts/benchmark/build_headline_ci_rank_stability_report_issue_3216.py",
+            "--campaign",
+            str(campaign_root),
+            "--rank-metric",
+            "snqi",
+            "--expected-planners-from-config",
+            str(config),
+            "--output-dir",
+            str(tmp_path / "report"),
+        ]
+
+        # Must not raise argparse.ArgumentError / SystemExit (ambiguous option).
+        args = run_post_campaign_stage._parse_args(argv)
+
+        assert args.campaign_summary == summary
+        assert args.campaign_exit_code == 0
+        assert args.stage_name == "headline_ci_rank_stability_report"
+        assert args.output == stage_status
+        # The nested ``--campaign`` stays inside the REMAINDER-based stage command.
+        assert "--campaign" in args.stage_command
+        assert str(campaign_root) in args.stage_command
+        # ``--campaign`` must NOT leak into the primitive's own top-level options.
+        assert not hasattr(args, "campaign")
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

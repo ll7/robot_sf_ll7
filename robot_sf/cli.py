@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 from robot_sf import cli_datasets, cli_envs, cli_models
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
 from robot_sf.examples_cli import examples_cli_main
+from robot_sf.recipes import cli as recipes_cli
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -149,6 +150,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional page title (defaults to a name derived from the matrix)",
     )
     g_build.set_defaults(gallery_cmd="build")
+
+    # Curated recipe catalog (issue #5795): list / run / explain blessed workflows.
+    recipes_cli.build_subparser(subparsers)
     return parser
 
 
@@ -604,6 +608,7 @@ _HANDLERS = {
     "datasets": _handle_datasets,
     "envs": _handle_envs,
     "gallery": _handle_gallery,
+    "recipe": recipes_cli.handle,
 }
 
 

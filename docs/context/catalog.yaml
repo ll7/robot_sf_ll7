@@ -3765,6 +3765,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
   legacy_dirty_evidence: true
+- path: docs/context/evidence/issue_5305_certified_archive
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4328_h600_seed_sufficiency_candidates_2026-07-03/README.md
   status: evidence
   freshness: evidence

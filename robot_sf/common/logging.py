@@ -71,6 +71,9 @@ def safe_sink(
             return
         try:
             stream.write(message)
+            flush = getattr(stream, "flush", None)
+            if flush is not None:
+                flush()
         except ValueError as exc:
             if closed_message and closed_message in str(exc):
                 # The capture stream was closed during teardown; the log

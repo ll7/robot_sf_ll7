@@ -58,12 +58,23 @@ def test_unguarded_write_to_closed_stream_raises_original_diagnostic() -> None:
 
 
 def test_safe_sink_propagates_live_stream_writes() -> None:
-    """Ordinary records through a live stream are still delivered verbatim."""
-    buf = io.StringIO()
+    """Ordinary records are delivered and flushed like Loguru stream sinks."""
+
+    class _FlushTrackingStream(io.StringIO):
+        def __init__(self) -> None:
+            super().__init__()
+            self.flush_calls = 0
+
+        def flush(self) -> None:
+            self.flush_calls += 1
+            super().flush()
+
+    buf = _FlushTrackingStream()
     sink = safe_sink(buf)
     sink("alpha\n")
     sink("beta\n")
     assert buf.getvalue() == "alpha\nbeta\n"
+    assert buf.flush_calls == 2
 
 
 def test_safe_sink_still_raises_real_os_failure_on_live_stream() -> None:

@@ -1,7 +1,7 @@
 {
   "schema_version": "issue_5596_blind_corner_diagnostic.v1",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "source_commit": "81856f9658fc54ad19bae175901695be0ba94ece",
+  "source_commit": "f08328dca6c2636a3d488d455c925087b73ac9eb",
   "issue": "5596",
   "scenario_id": "francis2023_blind_corner",
   "claim_boundary": "diagnostic_only_not_benchmark_evidence",
@@ -142,6 +142,30 @@
       "inflated_collision_free_path": true
     }
   ],
+  "planned_path_clearance_verdict": [
+    {
+      "planned_path_clearance_m": -0.20943058495790512,
+      "planned_path_vertex_clipped_count": 2,
+      "planned_path_length_m": 38.27817459305202,
+      "planned_path_vertex_count": 73,
+      "planned_path_validated": true,
+      "planned_path_clips_corner": true,
+      "status": "clipped",
+      "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+      "envelope_radius_m": 1.0
+    },
+    {
+      "planned_path_clearance_m": -0.1464466094067262,
+      "planned_path_vertex_clipped_count": 1,
+      "planned_path_length_m": 37.98528137423857,
+      "planned_path_vertex_count": 72,
+      "planned_path_validated": true,
+      "planned_path_clips_corner": true,
+      "status": "clipped",
+      "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+      "envelope_radius_m": 0.5
+    }
+  ],
   "mechanism": {
     "explanation_1_scripted_controller_incomplete": false,
     "explanation_2_route_geometry_or_config_cause": true,
@@ -150,6 +174,8 @@
     "oracle_nominal_feasible": false,
     "route_follow_intervention_feasible": false,
     "route_follow_intervention_status": "failed",
+    "planned_path_clips_corner": true,
+    "planner_path_clearance_established": true,
     "claim_boundary": "diagnostic_only_not_benchmark_evidence"
   }
 }

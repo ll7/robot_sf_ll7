@@ -30,7 +30,9 @@ from robot_sf.scenario_certification.feasibility_oracle import (
     ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
     ISSUE_5596_DIAGNOSTIC_SCHEMA,
     ROUTE_FOLLOW_ALGO,
+    _scenario_id,
     build_issue_5596_blind_corner_diagnostic,
+    planned_path_clearance_verdict,
 )
 from robot_sf.scenario_certification.v1 import (
     CERT_SCHEMA_VERSION,
@@ -38,6 +40,7 @@ from robot_sf.scenario_certification.v1 import (
     RouteCertificate,
     ScenarioCertificate,
 )
+from robot_sf.training.scenario_loader import load_scenarios
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -346,6 +349,70 @@ def test_issue_5596_diagnostic_end_to_end_on_committed_blind_corner() -> None:
     assert len(report["straight_line_vs_route_clearance"]) == 2
     for entry in report["straight_line_vs_route_clearance"]:
         assert entry["envelope_radius_m"] in (1.0, 0.5)
+    # Corrected planner-path clearance check is present for each radius (issue #5596 finding #3).
+    assert len(report["planned_path_clearance_verdict"]) == 2
+    for entry in report["planned_path_clearance_verdict"]:
+        assert entry["envelope_radius_m"] in (1.0, 0.5)
+        assert entry["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
     # Mechanism is bounded and diagnostic.
     assert "supported_explanation" in report["mechanism"]
     assert report["mechanism"]["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
+
+
+def test_measure_planned_path_clearance_flags_clipped_vertices() -> None:
+    """The clearance measurer flags clipped vertices and reports negative min clearance.
+
+    Pure unit check of the corrected-path core (finding #3): a vertex inside the
+    inflated obstacle yields negative clearance and is counted as clipped, while a
+    far-away vertex keeps positive clearance.
+    """
+    from shapely.geometry import Polygon
+
+    from robot_sf.scenario_certification.feasibility_oracle import (
+        _measure_planned_path_clearance,
+    )
+
+    obstacle = Polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
+    path = [
+        (1.0, 1.0),  # inside the 1.0 m obstacle (clearance -1.0, clipped)
+        (10.0, 10.0),  # far away (clearance ~8.0)
+    ]
+    clipped, min_clearance = _measure_planned_path_clearance(path, obstacle, robot_radius=1.0)
+    assert clipped == 1
+    assert min_clearance is not None
+    assert min_clearance < 0.0
+
+    # A path entirely clear of the obstacle reports no clipped vertices and positive min.
+    clear_path = [(5.0, 5.0), (10.0, 10.0)]
+    clipped2, min2 = _measure_planned_path_clearance(clear_path, obstacle, robot_radius=1.0)
+    assert clipped2 == 0
+    assert min2 is not None
+    assert min2 > 0.0
+
+
+def test_planned_path_clearance_verdict_reports_negative_clearance_on_clipped_path() -> None:
+    """The committed blind-corner cell's A* planned path clips the inner corner.
+
+    This is the corrected-path check (finding #3): the A* planned path clips the inner
+    corner at the nominal envelope even though the authored route line keeps nominal
+    clearance, exposing the inconsistency between ``inflated_collision_free_path=True``
+    and the path geometry the oracle consumes.
+    """
+    manifest = _REPO_ROOT / "configs/scenarios/francis2023.yaml"
+    if not manifest.exists():
+        pytest.skip("committed francis2023.yaml manifest not available")
+    pytest.importorskip("robot_sf.benchmark.map_runner")
+
+    # Load the real blind-corner scenario cell so the planner uses its own map/route.
+    scenarios = load_scenarios(manifest)
+    cell = next(s for s in scenarios if _scenario_id(s) == ISSUE_5596_BLIND_CORNER_SCENARIO_ID)
+
+    verdict = planned_path_clearance_verdict(cell, scenario_path=manifest, robot_radius=1.0)
+    assert verdict["planned_path_validated"] is True
+    assert verdict["planned_path_clips_corner"] is True
+    assert verdict["status"] == "clipped"
+    assert verdict["planned_path_vertex_clipped_count"] is not None
+    assert verdict["planned_path_vertex_clipped_count"] >= 1
+    # Negative clearance means a vertex sits inside the inflated obstacle.
+    assert verdict["planned_path_clearance_m"] is not None
+    assert verdict["planned_path_clearance_m"] < 0.0

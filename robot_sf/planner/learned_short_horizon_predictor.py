@@ -80,6 +80,11 @@ class _TinyMlp:
             hidden_dim=hidden_dim,
             device=device,
         )
+        # Static inference-time state: the model never trains at planning time,
+        # so eval mode and the device are fixed once instead of re-looked-up on
+        # every predict_numpy call.
+        self.module.eval()
+        self._device = next(self.module.parameters()).device
 
     def zero_initialize(self) -> None:
         """Make untrained-smoke predictions deterministic and stationary."""
@@ -100,10 +105,8 @@ class _TinyMlp:
         """
 
         torch = self.torch
-        self.module.eval()
-        device = next(self.module.parameters()).device
         with torch.no_grad():
-            tensor = torch.as_tensor(features[None, :], dtype=torch.float32, device=device)
+            tensor = torch.as_tensor(features[None, :], dtype=torch.float32, device=self._device)
             output = self.module(tensor).detach().cpu().numpy()
         return np.asarray(output[0], dtype=float)
 

@@ -14,7 +14,7 @@
     },
     "tests": {
       "files": 183,
-      "occurrences": 1263
+      "occurrences": 1257
     }
   },
   "files": {
@@ -73,7 +73,7 @@
     "tests/classic_interactions/test_seed_determinism.py": 2,
     "tests/classic_interactions/test_smoke_demo.py": 2,
     "tests/classic_interactions/test_summary_schema.py": 2,
-    "tests/conftest.py": 18,
+    "tests/conftest.py": 12,
     "tests/contract/test_multi_extractor_summary_json.py": 2,
     "tests/contract/test_multi_extractor_summary_markdown.py": 2,
     "tests/examples/test_examples_run.py": 13,
@@ -235,6 +235,6 @@
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
     "files": 207,
-    "total_occurrences": 1850
+    "total_occurrences": 1844
   }
 }

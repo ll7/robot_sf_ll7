@@ -1,0 +1,18 @@
+{
+  "artifact_family": "issue_5498_native_ppo_primary_host",
+  "artifacts": {
+    "issue_5498_native_ppo_host_result.json": "20dbc93bead6777f8cb9e93925267d03b66d278409c53c36da4933454c74425a",
+    "issue_5498_native_ppo_verified_host_result.json": "b1611fea68839dc7c4b3a8706dc328d9a9022c8dcf26ba91d4c94098dea79e03"
+  },
+  "evidence_grade": "observed single-host primary-host diagnostic (issue #5498 native-PPO slice)",
+  "generated_at_utc": "2026-07-15T17:40:45.644551+00:00",
+  "generated_by_commit": "dde54c0588ede337bdf11010c9f6d881f2cd7cb4",
+  "note": "Follow-up to #5499 (orca+goal) and #5740 (native-PPO worker isolation). This is the first registered NATIVE-PPO primary-host exact-repeat result; prior #5499 recorded PPO as degraded/unrunnable.",
+  "reproducible_command": "uv run python scripts/benchmark/run_issue_5498_native_ppo_slice.py --output-dir /tmp/robot_sf_issue_5498_native_ppo",
+  "schema_versions": {
+    "host_result": "scenario_exact_repeat_host_result.v1",
+    "verified_host_result": "scenario_exact_repeat_verified_host_result.v1"
+  },
+  "source_revision": "a5516b432fceffa71573e458aaee31c00a0b6c81",
+  "verdict": "60/60 PPO targets runnable on primary host; all 3 PPO cells bitwise-identical across 3 repeats"
+}

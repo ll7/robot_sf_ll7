@@ -133,6 +133,8 @@ class PedSpawnConfig:
             "spread" spaces groups along the route length.
         route_spawn_jitter_frac: Fraction of spacing used as random jitter when spreading.
         route_spawn_seed: Optional RNG seed for deterministic spawn placement/jitter.
+        force_population_size: Optional exact total pedestrian count across route,
+            crowded-zone, and explicitly defined single-pedestrian spawns.
     """
 
     peds_per_area_m2: float
@@ -703,6 +705,84 @@ def populate_single_pedestrians(
     return ped_states, metadata
 
 
+def _spawn_configs_for_forced_population(
+    spawn_config: PedSpawnConfig,
+    ped_routes: list[GlobalRoute],
+    ped_crowded_zones: list[Zone],
+    single_pedestrians: list | None,
+) -> tuple[PedSpawnConfig, PedSpawnConfig, bool]:
+    """Budget a forced total across explicit, crowded-zone, and route pedestrians.
+
+    Returns:
+        Crowd and route spawn configs plus whether archetype factors must be applied
+        after the population is merged.
+    """
+    forced_population_size = spawn_config.force_population_size
+    if forced_population_size is None:
+        return spawn_config, spawn_config, False
+
+    single_pedestrian_count = len(single_pedestrians or [])
+    if single_pedestrian_count > forced_population_size:
+        raise ValueError(
+            "force_population_size cannot be smaller than the number of explicitly defined "
+            f"single pedestrians ({forced_population_size} < {single_pedestrian_count})"
+        )
+    background_population_size = forced_population_size - single_pedestrian_count
+    if background_population_size > 0 and not (ped_crowded_zones or ped_routes):
+        raise ValueError(
+            "force_population_size requires a pedestrian route or crowded zone for the "
+            f"remaining {background_population_size} background pedestrians"
+        )
+
+    apply_archetypes_to_forced_population = spawn_config.archetype_composition is not None
+    # Direct callers of ``populate_ped_routes`` retain their existing archetype behavior.
+    # Here the final merged population owns the composition, so defer factor assignment
+    # until explicit pedestrians have been appended and every simulator index is known.
+    background_spawn_config = (
+        replace(spawn_config, archetype_composition=None)
+        if apply_archetypes_to_forced_population
+        else spawn_config
+    )
+    if ped_crowded_zones and ped_routes:
+        zone_share = background_population_size // 2
+        route_share = background_population_size - zone_share
+    elif ped_crowded_zones:
+        zone_share = background_population_size
+        route_share = 0
+    else:
+        zone_share = 0
+        route_share = background_population_size
+
+    return (
+        replace(background_spawn_config, force_population_size=zone_share),
+        replace(background_spawn_config, force_population_size=route_share),
+        apply_archetypes_to_forced_population,
+    )
+
+
+def _apply_forced_population_contract(
+    ped_states: np.ndarray,
+    spawn_config: PedSpawnConfig,
+    apply_archetypes: bool,
+) -> None:
+    """Verify the forced count and apply one composition across the merged population."""
+    forced_population_size = spawn_config.force_population_size
+    if forced_population_size is not None and ped_states.shape[0] != forced_population_size:
+        raise RuntimeError(
+            "forced pedestrian population accounting failed: "
+            f"instantiated {ped_states.shape[0]}, expected {forced_population_size}"
+        )
+    if not apply_archetypes or ped_states.shape[0] == 0:
+        return
+    speed_factors = assign_archetype_speed_factors(
+        ped_states.shape[0],
+        spawn_config.archetype_composition,
+        spawn_config.archetype_speed_factors,
+        seed=spawn_config.archetype_seed,
+    )
+    ped_states[:, 2:4] *= speed_factors[:, np.newaxis]
+
+
 def populate_simulation(  # noqa: PLR0913
     tau: float,
     spawn_config: PedSpawnConfig,
@@ -756,18 +836,18 @@ def populate_simulation(  # noqa: PLR0913
     """
     prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
 
-    # ``force_population_size`` sets the EXACT total pedestrian count. Both the crowded-zone
-    # and route spawners honor the field independently, so when a scenario declares both
-    # routes and crowded zones a naive pass would spawn ``2 * force_population_size`` peds
-    # (issue #4618 R4). Split the forced total between the two active spawners so the merged
-    # population matches the requested size; any odd remainder is assigned to routes.
-    crowd_spawn_config = spawn_config
-    route_spawn_config = spawn_config
-    if spawn_config.force_population_size is not None and ped_crowded_zones and ped_routes:
-        zone_share = spawn_config.force_population_size // 2
-        route_share = spawn_config.force_population_size - zone_share
-        crowd_spawn_config = replace(spawn_config, force_population_size=zone_share)
-        route_spawn_config = replace(spawn_config, force_population_size=route_share)
+    # ``force_population_size`` sets the exact total across every spawn channel. Reserve
+    # map-defined single pedestrians first, then split the remaining background budget
+    # between crowded zones and routes. Without the reservation, a map with one explicit
+    # pedestrian and a forced route population of 12 instantiated 13 pedestrians.
+    crowd_spawn_config, route_spawn_config, apply_archetypes_to_forced_population = (
+        _spawn_configs_for_forced_population(
+            spawn_config,
+            ped_routes,
+            ped_crowded_zones,
+            single_pedestrians,
+        )
+    )
 
     crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
         crowd_spawn_config,
@@ -792,6 +872,11 @@ def populate_simulation(  # noqa: PLR0913
     # Combine all pedestrian states: crowd + route + single
     combined_ped_states_np = np.concatenate(
         (crowd_ped_states_np, route_ped_states_np, single_ped_states_np[:, :6]),
+    )
+    _apply_forced_population_contract(
+        combined_ped_states_np,
+        spawn_config,
+        apply_archetypes_to_forced_population,
     )
     taus = np.full((combined_ped_states_np.shape[0]), tau)
     ped_states = np.concatenate((combined_ped_states_np, np.expand_dims(taus, -1)), axis=-1)

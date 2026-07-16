@@ -4,7 +4,7 @@
       "robot_sf/benchmark/camera_ready/campaign.py": 1,
       "robot_sf/benchmark/camera_ready/resource_lifecycle.py": 2,
       "robot_sf/benchmark/candidate_trace_resolution.py": 1,
-      "robot_sf/benchmark/doctor.py": 1,
+      "robot_sf/benchmark/doctor.py": 2,
       "robot_sf/benchmark/forecast_lane_inventory.py": 1,
       "robot_sf/benchmark/helper_catalog.py": 2,
       "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
@@ -104,7 +104,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 175
+    "total": 176
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -150,6 +150,15 @@
       "fingerprint": "c68a0e0b1fcaafb1",
       "handler": "Exception",
       "lineno": 207,
+      "path": "robot_sf/benchmark/doctor.py",
+      "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 4,
+      "context": "_resolve_quickstart_examples",
+      "fingerprint": "fcee4a1031e8281c",
+      "handler": "Exception",
+      "lineno": 320,
       "path": "robot_sf/benchmark/doctor.py",
       "source": "except Exception as exc:"
     },

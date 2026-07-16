@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5263_exact_repeat/issue_5498_native_ppo_verified_host_result.json",
+  "artifact_sha256": "b1611fea68839dc7c4b3a8706dc328d9a9022c8dcf26ba91d4c94098dea79e03",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

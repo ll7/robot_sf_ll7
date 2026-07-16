@@ -276,7 +276,8 @@ def validate_packet(packet: dict[str, Any], *, repo_root: Path | None = None) ->
     )
     required_files = artifact.get("required_files")
     _require(
-        tuple(required_files or ()) == EXPECTED_ARTIFACT_FILES,
+        isinstance(required_files, (list, tuple))
+        and tuple(required_files) == EXPECTED_ARTIFACT_FILES,
         "artifact contract must declare the complete integration artifact set",
     )
 

@@ -9,6 +9,7 @@ failed rows. No campaign is run; synthetic per-cell summaries drive the checks.
 from __future__ import annotations
 
 import math
+import statistics
 
 import pytest
 
@@ -20,7 +21,10 @@ from robot_sf.benchmark.issue_5578_speed_tier_synthesis import (
     PRIMARY_METRICS,
     _classify_interval,
     _holm_adjust,
+    _holm_adjust_by_planner,
+    _z_critical,
     classify_excluded,
+    main,
     parse_cell,
     synthesize_speed_tier_sweep,
 )
@@ -126,6 +130,43 @@ def test_parse_cell_validates_required_keys() -> None:
         parse_cell(bad)
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("scenario_id", None, "non-empty string"),
+        ("seed", True, "must be an integer"),
+        ("seed", 111.5, "must be an integer"),
+        ("horizon_steps", "600", "must be an integer"),
+        ("dt_seconds", 0.0, "must be positive"),
+        ("speed_cap_m_s", -1.0, "must be positive"),
+        ("success_rate", 1.1, "must be in.*0, 1"),
+    ],
+)
+def test_parse_cell_rejects_coercive_or_out_of_range_values(
+    field: str, value: object, message: str
+) -> None:
+    """Malformed identifiers, integral fields, durations, and rates fail closed."""
+    row = _cell(
+        "classic_doorway_medium",
+        NOMINAL_TIER_ID,
+        2.0,
+        "orca",
+        111,
+        metrics={"success_rate": 0.9},
+    )
+    row[field] = value
+    with pytest.raises(ValueError, match=message):
+        parse_cell(row)
+
+
+def test_parse_cell_requires_typed_collision_breakdown() -> None:
+    """Typed collision rates are mandatory rather than silently omitted."""
+    row = _cell("classic_doorway_medium", NOMINAL_TIER_ID, 2.0, "orca", 111, metrics={})
+    row.pop("ped_collision_rate")
+    with pytest.raises(ValueError, match="typed collision metric"):
+        parse_cell(row)
+
+
 def test_classify_excluded_marks_non_native_rows() -> None:
     """Only native rows pass; fallback/degraded/failed are visible exclusions."""
     native = parse_cell(_cell("s", "t", 2.0, "orca", 1, metrics={}, execution_mode="native"))
@@ -153,6 +194,13 @@ def test_holm_adjust_is_monotone_and_stepwise() -> None:
     assert adjusted["a"] <= adjusted["c"]
 
 
+def test_two_sided_critical_value_matches_declared_confidence() -> None:
+    """The 95% two-sided normal critical value is approximately 1.96."""
+    assert _z_critical(0.95) == pytest.approx(1.96, abs=0.005)
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        _z_critical(1.0)
+
+
 def test_classify_interval_detects_harmful_collision_increase() -> None:
     """A collision-rate CI entirely above the +0.02 harm threshold is harmful."""
     ci_low, ci_high = 0.05, 0.10
@@ -177,6 +225,10 @@ def test_synthesis_full_native_grid_reports_all_cells() -> None:
         nominal_metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
         tier_metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
     )
+    scenario_effects = {scenario: 0.01 * (index + 1) for index, scenario in enumerate(SCENARIOS)}
+    for cell in cells:
+        if cell["speed_tier_id"] != NOMINAL_TIER_ID:
+            cell["success_rate"] = 0.8 + scenario_effects[str(cell["scenario_id"])]
     result = synthesize_speed_tier_sweep(cells)
     assert result.native_cell_count == len(cells)
     assert result.excluded_cell_count == 0
@@ -187,9 +239,25 @@ def test_synthesis_full_native_grid_reports_all_cells() -> None:
     )
     for row in result.decision_table:
         assert row["p_value_holm"] <= 1.0
-        # Identical metrics -> zero pooled delta -> no material shift.
+        assert row["n_scenarios"] == len(SCENARIOS)
         assert row["classification"] == "no_material_shift"
-        assert row["pooled_delta_mean"] == pytest.approx(0.0)
+        assert row["adjusted_confidence_level"] >= CONFIDENCE_LEVEL
+        assert set(row["typed_collision_breakdown"]) == {
+            "ped_collision_rate",
+            "obstacle_collision_rate",
+            "agent_collision_rate",
+            "unclassified_collision_rate",
+        }
+    success_row = next(
+        row
+        for row in result.decision_table
+        if row["planner_id"] == "orca"
+        and row["speed_tier_id"] == "cap_3_0"
+        and row["metric"] == "success_rate"
+    )
+    expected_se = statistics.stdev(scenario_effects.values()) / math.sqrt(len(SCENARIOS))
+    assert success_row["pooled_delta_mean"] == pytest.approx(0.035)
+    assert success_row["pooled_delta_se"] == pytest.approx(expected_se)
 
 
 def test_synthesis_flags_fallback_rows_as_exclusions() -> None:
@@ -252,8 +320,49 @@ def test_synthesis_holm_family_is_six_tests_per_planner() -> None:
     for planner in PLANNERS:
         planner_rows = [r for r in result.decision_table if r["planner_id"] == planner]
         assert len(planner_rows) == 6
+        expected = _holm_adjust([(row["test_id"], row["p_value_raw"]) for row in planner_rows])
+        assert {row["test_id"]: row["p_value_holm"] for row in planner_rows} == expected
     # Harm thresholds and confidence are the frozen preregistration values.
     assert HARM_THRESHOLDS["success_rate"] == -0.05
     assert HARM_THRESHOLDS["collision_rate"] == 0.02
     assert HARM_THRESHOLDS["near_miss_rate"] == 0.05
     assert math.isclose(CONFIDENCE_LEVEL, 0.95)
+
+
+def test_holm_families_are_independent_per_planner() -> None:
+    """Distinct planner inputs receive independent six-test Holm adjustments."""
+    values = [
+        *(("a", f"a{i}", p) for i, p in enumerate((0.01, 0.02, 0.03, 0.04, 0.05, 0.06))),
+        *(("b", f"b{i}", p) for i, p in enumerate((0.001, 0.2, 0.3, 0.4, 0.5, 0.6))),
+    ]
+    adjusted, confidence = _holm_adjust_by_planner(values)
+    assert {key: adjusted[key] for key in adjusted if key.startswith("a")} == _holm_adjust(
+        [(test_id, p_value) for planner, test_id, p_value in values if planner == "a"]
+    )
+    assert {key: adjusted[key] for key in adjusted if key.startswith("b")} == _holm_adjust(
+        [(test_id, p_value) for planner, test_id, p_value in values if planner == "b"]
+    )
+    assert confidence["a0"] == pytest.approx(1.0 - 0.05 / 6.0)
+    assert confidence["b0"] == pytest.approx(1.0 - 0.05 / 6.0)
+
+
+def test_synthesis_rejects_incomplete_duplicate_and_drifted_grids() -> None:
+    """Incomplete, duplicate, and dimension-drifted inputs cannot become evidence."""
+    cells = _full_native_grid(nominal_metrics={}, tier_metrics={})
+    with pytest.raises(ValueError, match="grid incomplete"):
+        synthesize_speed_tier_sweep(cells[:-1])
+    with pytest.raises(ValueError, match="duplicate declared cell identity"):
+        synthesize_speed_tier_sweep([*cells, dict(cells[0])])
+    drifted = [dict(cell) for cell in cells]
+    drifted[0]["speed_cap_m_s"] = 2.1
+    with pytest.raises(ValueError, match="speed cap drift"):
+        synthesize_speed_tier_sweep(drifted)
+
+
+def test_cli_demo_is_explicit_smoke_not_benchmark_evidence(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The built-in partial demo never prints a benchmark-success PASS label."""
+    assert main([]) == 0
+    output = capsys.readouterr().out
+    assert output.startswith("SMOKE (not benchmark evidence):")

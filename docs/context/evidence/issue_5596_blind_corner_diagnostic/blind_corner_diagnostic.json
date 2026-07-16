@@ -1,7 +1,7 @@
 {
   "schema_version": "issue_5596_blind_corner_diagnostic.v1",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "source_commit": "f08328dca6c2636a3d488d455c925087b73ac9eb",
+  "source_commit": "7a756e1b1fe348638521c34f64722a87ae2b7d56",
   "issue": "5596",
   "scenario_id": "francis2023_blind_corner",
   "claim_boundary": "diagnostic_only_not_benchmark_evidence",
@@ -144,7 +144,8 @@
   ],
   "planned_path_clearance_verdict": [
     {
-      "planned_path_clearance_m": -0.20943058495790512,
+      "planned_path_clearance_m": -0.2928932188134524,
+      "planned_path_vertex_clearance_m": -0.20943058495790512,
       "planned_path_vertex_clipped_count": 2,
       "planned_path_length_m": 38.27817459305202,
       "planned_path_vertex_count": 73,
@@ -156,6 +157,7 @@
     },
     {
       "planned_path_clearance_m": -0.1464466094067262,
+      "planned_path_vertex_clearance_m": -0.1464466094067262,
       "planned_path_vertex_clipped_count": 1,
       "planned_path_length_m": 37.98528137423857,
       "planned_path_vertex_count": 72,

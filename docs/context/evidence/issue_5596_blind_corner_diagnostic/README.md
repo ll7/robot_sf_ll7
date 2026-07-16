@@ -16,7 +16,7 @@ planner-ranking claim.
 ## Canonical command
 
 ```bash
-python scripts/tools/run_blind_corner_diagnostic_issue_5596.py \
+uv run python scripts/tools/run_blind_corner_diagnostic_issue_5596.py \
   --output docs/context/evidence/issue_5596_blind_corner_diagnostic/blind_corner_diagnostic.json
 ```
 
@@ -35,10 +35,11 @@ normalized JSON / checksums. The rollout seed is pinned (blind-corner manifest s
   contract is tracked by [#5636](https://github.com/ll7/robot_sf_ll7/issues/5636).
 - `straight_line_vs_route_clearance`: straight-line (goal beeline) vs certified-route
   obstacle clearance for each envelope radius.
-- `planned_path_clearance_verdict`: the corrected planner-path clearance check (issue
-  #5596 finding #3). It re-plans the inflated A* path and re-validates every planned
-  vertex against the obstacle union with the robot envelope, reporting the minimum vertex
-  clearance and the clipped-vertex count for each radius.
+- `planned_path_clearance_verdict`: the corrected planner-path clearance check (Issue #5596
+  finding #3). It selects the scenario-configured map and route, re-plans the
+  inflated A* path, and validates the full polyline plus every planned vertex against the
+  obstacle union with the robot envelope. It reports minimum full-path and vertex
+  clearances and the clipped-vertex count for each radius.
 - `mechanism`: bounded classification of the three competing explanations from the issue,
   now also carrying `planner_path_clearance_established` and `planned_path_clips_corner`.
 
@@ -73,14 +74,15 @@ the report's top-level `source_commit` field.
    path geometry the oracle then consumes.
 
    **Corrected planner-path clearance check (this report's added evidence).** The
-   diagnostic now re-plans the inflated A* path and re-validates *every planned vertex*
-   against the obstacle union using the robot envelope (the certifier never does this for
-   the planned path — it only clears the authored route line). At the nominal 1.0 m
-   radius the planned path has a minimum vertex clearance of **−0.21 m** and clips **2**
-   vertices; at the reduced 0.5 m radius it has **−0.15 m** and clips **1** vertex.
-   Negative clearance means those vertices sit inside the inflated obstacle, so the
-   robot circle collides there. This is direct, quantitative confirmation of finding #3:
-   the `inflated_collision_free_path = True` claim is geometrically false for the path the
+   diagnostic now re-plans the inflated A* path and re-validates its full polyline and
+   *every planned vertex* against the obstacle union using the robot envelope (the
+   certifier never does this for the planned path — it only clears the authored route
+   line). At the nominal 1.0 m radius the planned path has **−0.29 m** minimum full-path
+   clearance and **−0.21 m** minimum vertex clearance, with **2** clipped vertices. At the
+   reduced 0.5 m radius both clearances are **−0.15 m**, with **1** clipped vertex.
+   Negative clearance means the path passes inside the robot's required obstacle envelope.
+   This is direct, quantitative confirmation of finding #3: the
+   `inflated_collision_free_path = True` claim is geometrically false for the path the
    oracle consumes.
 
 ### Mechanism status
@@ -89,9 +91,10 @@ The retained clearance trace and the stateful route-follow collision are consist
 **certifier/planner-path artifact** — the inflated A* path does not honor the clearance the
 certifier attributes to the route line. The corrected planner-path clearance check
 (`planned_path_clearance_verdict`) now *establishes* this quantitatively: the planned A* path
-has negative minimum vertex clearance at both radii (nominal −0.21 m, reduced −0.15 m) and
-clips 2 / 1 vertices respectively, so `inflated_collision_free_path = True` is
-geometrically false for the path the oracle consumes. The report therefore records
+has negative minimum full-path clearance at both radii (nominal −0.29 m, reduced −0.15 m),
+negative minimum vertex clearance (nominal −0.21 m, reduced −0.15 m), and clips 2 / 1
+vertices respectively. Therefore `inflated_collision_free_path = True` is geometrically
+false for the path the oracle consumes. The report records
 `supported_explanation = route_geometry_or_config_cause` and
 `planner_path_clearance_established = true`, while keeping the result diagnostic-only. The
 scripted-controller explanation is not promoted because the route-follow intervention did
@@ -106,8 +109,8 @@ release surface, with no deliberate diagnostic change.
 Per the issue, the analysis stays diagnostic-only. It does **not** relabel the
 blind-corner cell or change any campaign denominator. The certifier inconsistency is
 reported as a mechanism finding; promoting the cell to `infeasible-as-configured`
-requires a separate reviewed issue with benchmark-grade evidence (e.g. a corrected
-planner-path clearance check).
+requires a separate reviewed issue with benchmark-grade validation and explicit denominator
+governance.
 
 ## Files
 

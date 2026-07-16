@@ -49,7 +49,7 @@ from matplotlib.patches import Polygon, Rectangle
 from robot_sf.benchmark.event_ledger import EPISODE_EVENT_LEDGER_SCHEMA_VERSION
 from robot_sf.common.optional_import import try_import
 
-CAMPAIGN_ATLAS_SCHEMA_VERSION = "campaign_atlas.v1"
+CAMPAIGN_ATLAS_SCHEMA_VERSION = "campaign_atlas.v2"
 EVENT_DETECTOR_VERSION = EPISODE_EVENT_LEDGER_SCHEMA_VERSION
 RENDERER_VERSION = f"matplotlib=={matplotlib.__version__}"
 STYLE_VERSION = "publication_style.v1"
@@ -528,9 +528,6 @@ def render_atlas_figure(summary: AtlasSummary, out: Path) -> Path:
                     release_arm_id,
                     figure,
                 )
-            for c, label in enumerate(column_labels):
-                axes[0][c].set_title(label, fontsize=8)
-        figure.suptitle(f"Campaign atlas — {summary.campaign_id}", fontsize=13)
         figure.suptitle(f"Campaign atlas — {summary.campaign_id}", fontsize=13)
         figure.tight_layout(rect=(0, 0, 1, 0.96))
         _save_figure(figure, out)

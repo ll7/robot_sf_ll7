@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-15
+updated_at: 2026-07-16
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -93,6 +93,34 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5580_release_0_0_3_snqi_field_consistency/summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/SHA256SUMS.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/artifact_pointer.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/publication_preflight.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/snqi_reconciliation.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/collision_reconciliation.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence

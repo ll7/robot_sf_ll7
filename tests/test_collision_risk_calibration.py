@@ -26,10 +26,12 @@ from robot_sf.research.collision_risk.calibration import (
     EstimatorPrediction,
     FamilySpec,
     LabeledSample,
+    MatchedActionPair,
     MatchedDatasetProvenance,
     average_precision,
     brier_score,
     evaluate_estimator,
+    evaluate_matched_action_sensitivity,
     expected_calibration_error,
     fnr_at_thresholds,
     generate_matched_dataset,
@@ -221,6 +223,106 @@ def test_risk_calibration_deterministic_signal_not_on_probability_curve() -> Non
     assert "average_precision" in result
 
 
+def test_risk_calibration_action_sensitivity_uses_shared_forecast_inputs() -> None:
+    """Two actions on one actor state are ordered with common forecast draws."""
+    config = _small_config(n_samples=512, seed=19)
+    pedestrians = (
+        PedestrianState(id=1, position=np.array([1.5, 0.2]), velocity=np.array([-0.4, 0.0])),
+        PedestrianState(id=2, position=np.array([1.5, -0.2]), velocity=np.array([-0.4, 0.0])),
+    )
+    pairs = tuple(
+        MatchedActionPair(
+            pair_id=f"pair-{index}",
+            pedestrians=pedestrians,
+            higher_risk_action=action_from_constant_velocity(
+                f"pair-{index}:higher",
+                [0.0, 0.0],
+                [1.0, 0.0],
+                horizon_steps=config.horizon_steps,
+                dt_s=config.dt_s,
+            ),
+            lower_risk_action=action_from_constant_velocity(
+                f"pair-{index}:lower",
+                [0.0, 0.0],
+                [0.2, 1.2],
+                horizon_steps=config.horizon_steps,
+                dt_s=config.dt_s,
+            ),
+        )
+        for index in range(2)
+    )
+
+    result = evaluate_matched_action_sensitivity(pairs, config)
+
+    assert result["status"] == "scored"
+    assert result["matched_forecast_inputs"] is True
+    assert result["forecast_seed"] == 19
+    assert result["n_pairs"] == 2
+    assert result["fraction_correct"] == pytest.approx(1.0)
+    assert all(pair["direction_as_expected"] for pair in result["pairs"])
+
+
+def test_risk_calibration_action_sensitivity_fails_closed_without_pairs() -> None:
+    """An absent action fixture cannot become a successful zero-denominator report."""
+    with pytest.raises(CalibrationInputError, match="at least one pair"):
+        evaluate_matched_action_sensitivity((), _small_config())
+
+
+def test_risk_calibration_report_rejects_explicit_null_action_fixture(tmp_path: Path) -> None:
+    """An explicit null action fixture cannot silently select legacy compatibility."""
+    pytest.importorskip("yaml")
+    import yaml
+
+    from scripts.analysis.collision_risk_calibration_report import build_report
+
+    with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    data["evaluation"]["action_sensitivity"] = None
+    packet = tmp_path / "null-action-sensitivity.yaml"
+    with packet.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle)
+
+    with pytest.raises(CalibrationInputError, match="action_sensitivity must be a mapping"):
+        build_report(packet)
+
+
+@pytest.mark.parametrize("value", [None, "2", 2.0, True])
+def test_risk_calibration_report_rejects_malformed_min_pairs(tmp_path: Path, value: object) -> None:
+    """Malformed minimum-pair values fail with the structured config error."""
+    pytest.importorskip("yaml")
+    import yaml
+
+    from scripts.analysis.collision_risk_calibration_report import build_report
+
+    with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    data["evaluation"]["action_sensitivity"]["min_pairs"] = value
+    packet = tmp_path / "malformed-min-pairs.yaml"
+    with packet.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle)
+
+    with pytest.raises(CalibrationInputError, match="min_pairs must be a positive integer"):
+        build_report(packet)
+
+
+def test_risk_calibration_report_rejects_null_pair_id(tmp_path: Path) -> None:
+    """A null pair identifier cannot become the string ``None``."""
+    pytest.importorskip("yaml")
+    import yaml
+
+    from scripts.analysis.collision_risk_calibration_report import build_report
+
+    with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    data["evaluation"]["action_sensitivity"]["pairs"][0]["pair_id"] = None
+    packet = tmp_path / "null-pair-id.yaml"
+    with packet.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle)
+
+    with pytest.raises(CalibrationInputError, match="has no pair_id"):
+        build_report(packet)
+
+
 # --------------------------------------------------------------------------- #
 # Registry + fail-closed behaviour
 # --------------------------------------------------------------------------- #
@@ -257,6 +359,10 @@ def test_risk_calibration_report_cli_scores_packet(tmp_path: Path) -> None:
     report = build_report(CONFIG_PATH)
     assert report["status"] == "scored"
     assert report["provenance"]["n_samples"] == 880
+    assert report["action_sensitivity"]["status"] == "scored"
+    assert report["action_sensitivity"]["min_pairs"] == 2
+    assert report["action_sensitivity"]["n_pairs"] == 2
+    assert report["action_sensitivity"]["fraction_correct"] == pytest.approx(1.0)
     ids = {row["estimator_id"] for row in report["estimators"]}
     assert ids == set(AVAILABLE_ESTIMATORS)
     for row in report["estimators"]:

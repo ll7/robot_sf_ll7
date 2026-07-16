@@ -286,7 +286,9 @@ def _check_pr_gate_staleness(
             + "\nRun: gh pr edit <number> --base main, then inspect the head with "
             "gh pr view <number> --json headRefOid --jq .headRefOid and run "
             "uv run python scripts/dev/update_pr_branch.py <number> "
-            "--expected-head-sha <head-sha>",
+            "--expected-head-sha <head-sha> "
+            "(or scripts/dev/update_pr_branch_safely.sh <number> "
+            "--expected-head-sha <head-sha> when gh update-branch is unavailable)",
             file=sys.stderr,
         )
         overall["stale"] = True

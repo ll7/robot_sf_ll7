@@ -70,6 +70,19 @@ repository S30 ruling. It does not rewrite the historical result packet or imply
 exists; S30 remains a predeclared escalation if a strict ordering claim or reviewer request makes
 the additional seed budget necessary.
 
+## Integration contract
+
+Run the CPU-only claim-packet checker before reusing this bundle:
+
+```bash
+uv run python scripts/validation/check_issue_5247_rank_stability_claim_packet.py
+```
+
+It derives the headline counts from `result.json`, checks them against the decision packet,
+verifies the preserved output hashes and constraints-first provenance, and requires the
+diagnostic-only/S30-deferred claim boundary. It does not regenerate the analysis or submit a
+campaign.
+
 The exact SNQI failure is `rank_alignment_spearman=-0.2`, below the `0.3` fail threshold, under
 `snqi_contract.enforcement=warn`. SNQI therefore remains explanatory only and cannot support an
 adjacent-rank claim.

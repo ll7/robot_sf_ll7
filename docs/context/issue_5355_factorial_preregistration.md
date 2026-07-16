@@ -11,10 +11,12 @@
   Factor A's ON state; its explicit collision-constraint set is the toggleable Factor B.
 - **Implementation status**: the arm configs, `predictor_backend`,
   `hard_pedestrian_constraints_enabled`, and the fail-closed soft-clearance-weight contract
-  now exist. CPU configuration and intervention-fidelity tests cover them (§6, §8). The
-  #5353 matched-capability fairness dependency is resolved and reconciled in the pinned config;
-  #5351 hierarchical paired analysis remains the open blocker. The authorized campaign RUN
-  (compute, ops queue) is also still required — no config or ready verdict authorizes submission.
+   now exist. CPU configuration and intervention-fidelity tests cover them (§6, §8). The
+   #5353 matched-capability fairness dependency is resolved and reconciled in the pinned config;
+   the #5351 *input contract* is delivered by #5776 and reconciled by the readiness gate (§8.1).
+   The #5351 analysis itself remains blocked on the #4364 successor-release rows, so the campaign
+   readiness gate stays fail-closed. The authorized campaign RUN (compute, ops queue) is also
+   still required — no config or ready verdict authorizes submission.
 
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/5355>
 
@@ -350,6 +352,25 @@ or row archiving occurs under this pre-registration.
    No campaign submission or evidence claim is authorized. A ready verdict from
    `assess_campaign_readiness()` authorizes no GPU/Slurm submission and promotes no benchmark or
    paper claim.
+
+### 8.1 Issue #5776 input-gate reconciliation (landed)
+
+PR **#5776** delivered the **#5351 analysis input contract**: a tracked manifest
+(`configs/benchmarks/releases/hierarchical_paired_release_analysis_issue_5351.yaml`) plus the
+fail-closed checker (`robot_sf/benchmark/hierarchical_paired_release_inputs.py` /
+`scripts/benchmark/check_hierarchical_paired_release_inputs.py`). This removes the cheap-lane
+*input-contract* blocker for #5351 — the readiness gate now verifies the input-gate deliverable
+is present (criterion `hierarchical_input_gate_reconciled`) and records its frozen evaluation in
+the readiness receipt. The **actual analysis data** still depends on the **#4364 successor
+release** typed-ledger rows, which remain absent, so the gate stays fail-closed with a distinct
+`#4364` blocker (status `blocked_missing_successor_release_rows`).
+
+The frozen readiness receipt is emitted by
+`scripts/validation/freeze_issue_5355_factorial_readiness_receipt.py` into
+`docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/issue_5355_factorial_readiness_receipt.json`.
+It aggregates `assess_campaign_readiness()` and the #5776 input-gate evaluation into a single
+deterministic, no-submit artifact. The authorized factorial campaign RUN (compute, ops queue) is
+still required and is never performed by the cheap lane.
 
 ---
 

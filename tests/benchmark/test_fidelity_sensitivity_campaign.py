@@ -451,6 +451,18 @@ def test_fixed_scope_runner_binds_remaining_planner_prerequisites() -> None:
     variant_index = campaign_runner.build_fixed_scope_variant_index(config)
     cells = [
         campaign_runner.FixedScopeRunCell(
+            planner_group="goal",
+            algorithm="goal",
+            planner_available=True,
+            planner_tier="baseline-ready",
+            requires_explicit_opt_in=False,
+            axis="integration_timestep",
+            variant="dt_0_05",
+            baseline_variant=False,
+            seed=111,
+            scenario_set="configs/benchmarks/paper_experiment_matrix_v1.yaml",
+        ),
+        campaign_runner.FixedScopeRunCell(
             planner_group="orca",
             algorithm="orca",
             planner_available=True,
@@ -488,8 +500,9 @@ def test_fixed_scope_runner_binds_remaining_planner_prerequisites() -> None:
         ),
     ]
     bindings = [campaign_runner.bind_fixed_scope_run_cell(cell, variant_index) for cell in cells]
-    assert [binding.runner_bound for binding in bindings] == [True, True, True]
+    assert [binding.runner_bound for binding in bindings] == [True, True, True, True]
     assert [binding.planner_name for binding in bindings] == [
+        "goal_seek",
         "orca",
         "baseline_social_force",
         "hybrid_rule_v0_minimal",

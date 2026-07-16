@@ -494,6 +494,7 @@ def write_fixed_scope_run_plan(
 # resolves to them stays unbound and fails closed rather than silently running a
 # substitute planner (no silent fallback).
 RUNNER_ALGORITHM_PLANNERS: Mapping[str, str] = {
+    "goal": "goal_seek",
     "orca": "orca",
     "social_force": "baseline_social_force",
     "hybrid_rule_local_planner": "hybrid_rule_v0_minimal",

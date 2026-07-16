@@ -351,11 +351,32 @@ def _write_integration_report(
     This report deliberately summarizes the existing contract and blocker state; it does not
     replace the row-level agreement table or infer a ranking when an input is absent.
     """
-    candidate = packet.get("candidate_contract", {})
-    pairing = packet.get("pairing_contract", {})
-    roster = packet.get("planner_roster", {}).get("structural_classes", {})
-    selected_rows = candidate.get("selected_rows", [])
-    scenario_ids = [str(row.get("scenario_id")) for row in selected_rows]
+    reference = packet.get("reference_contract") or {}
+    candidate = packet.get("candidate_contract") or {}
+    pairing = packet.get("pairing_contract") or {}
+    roster_parent = packet.get("planner_roster") or {}
+    if not isinstance(reference, dict):
+        reference = {}
+    if not isinstance(candidate, dict):
+        candidate = {}
+    if not isinstance(pairing, dict):
+        pairing = {}
+    if not isinstance(roster_parent, dict):
+        roster_parent = {}
+    roster = roster_parent.get("structural_classes") or {}
+    selected_rows = candidate.get("selected_rows") or []
+    if not isinstance(roster, dict):
+        roster = {}
+    if not isinstance(selected_rows, list):
+        selected_rows = []
+    planner_count = sum(
+        len(value) for value in roster.values() if isinstance(value, (list, tuple, set))
+    )
+    scenario_ids = [
+        str(row.get("scenario_id"))
+        for row in selected_rows
+        if isinstance(row, dict) and row.get("scenario_id") is not None
+    ]
     missing: list[str] = []
     if not reference_present:
         missing.append("reference (`classic_interactions`) structural ranking CSV")
@@ -382,12 +403,12 @@ current blocker state explicit for the campaign-capable successor lane.
 ## Coherent frozen contract
 
 - Pre-registration: `{_public_path(packet_path)}`
-- Reference matrix: `{packet.get("reference_contract", {}).get("scenario_matrix")}`
+- Reference matrix: `{reference.get("scenario_matrix")}`
 - Candidate matrix: `{candidate.get("scenario_matrix")}`
 - Candidate scenarios, in frozen order: {", ".join("`" + item + "`" for item in scenario_ids)}
 - Pairing: seeds `{pairing.get("seeds")}`, horizon `{pairing.get("horizon_steps")}` steps, `dt={pairing.get("dt_seconds")}` seconds
 - Comparability: same seed schedule, same planner roster, frozen scenario order, and no seed substitution
-- Planner roster: `{sum(len(value) for value in roster.values())}` planners across `{len(roster)}` structural classes
+- Planner roster: `{planner_count}` planners across `{len(roster)}` structural classes
 - Primary output: `cross_matrix_agreement.csv`; ranks are compared independently, never merged
 
 ## Blocker accounting

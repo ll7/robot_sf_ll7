@@ -8,6 +8,7 @@ from robot_sf.models.registry import (
     load_registry,
     resolve_latest_wandb_model,
     resolve_model_path,
+    sha256_of_file,
     upsert_registry_entry,
     validate_registry_entry_benchmark_promotion,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "load_registry",
     "resolve_latest_wandb_model",
     "resolve_model_path",
+    "sha256_of_file",
     "upsert_registry_entry",
     "validate_registry_entry_benchmark_promotion",
 ]

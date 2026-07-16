@@ -76,9 +76,7 @@ class TestVerifyGateWorktree:
         assert health.classification == "missing"
         assert health.cleanup_owner is None
 
-    def test_missing_with_active_lease_reports_owner(
-        self, mock_git_dirs: Path
-    ) -> None:
+    def test_missing_with_active_lease_reports_owner(self, mock_git_dirs: Path) -> None:
         """A missing path with a live lease reports the cleanup owner."""
         wt = mock_git_dirs / "gone-wt"
         _write_active_lease(mock_git_dirs, wt, owner="auto-smart-routing", pr_number=5819)
@@ -92,9 +90,7 @@ class TestVerifyGateWorktree:
         assert "pr=#5819" in health.cleanup_owner
         assert health.lease_pr_number == 5819
 
-    def test_missing_with_expired_lease_has_no_owner(
-        self, mock_git_dirs: Path
-    ) -> None:
+    def test_missing_with_expired_lease_has_no_owner(self, mock_git_dirs: Path) -> None:
         """A missing path whose lease is expired is not attributed to an owner."""
         wt = mock_git_dirs / "gone-wt"
         now = datetime.now(UTC)
@@ -139,9 +135,7 @@ class TestRecreateGateWorktree:
         assert result.error is not None
         assert "no live lease" in result.error
 
-    def test_recreate_from_lease_calls_worktree_add(
-        self, mock_git_dirs: Path
-    ) -> None:
+    def test_recreate_from_lease_calls_worktree_add(self, mock_git_dirs: Path) -> None:
         """A missing path with a live lease recreates the worktree from its branch."""
         wt = mock_git_dirs / "gone-wt"
         _write_active_lease(mock_git_dirs, wt, owner="auto-smart-routing")
@@ -163,9 +157,7 @@ class TestRecreateGateWorktree:
         assert add_calls, "expected git worktree add to be invoked"
         assert str(wt) in add_calls[0]
 
-    def test_recreate_failure_reports_error(
-        self, mock_git_dirs: Path
-    ) -> None:
+    def test_recreate_failure_reports_error(self, mock_git_dirs: Path) -> None:
         """A failed git worktree add surfaces the git error deterministically."""
         wt = mock_git_dirs / "gone-wt"
         _write_active_lease(mock_git_dirs, wt, owner="auto-smart-routing")

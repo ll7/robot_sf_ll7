@@ -113,9 +113,7 @@ def test_gate_worktree_present_allows_update(capsys) -> None:  # type: ignore[no
     """A present gate worktree lets the normal guarded update proceed."""
     present_health = {"exists": True, "classification": "healthy", "cleanup_owner": None}
     with (
-        patch(
-            "scripts.dev.update_pr_branch._verify_gate_worktree", return_value=present_health
-        ),
+        patch("scripts.dev.update_pr_branch._verify_gate_worktree", return_value=present_health),
         patch("scripts.dev.update_pr_branch._gh") as mock_gh,
     ):
         mock_gh.side_effect = [
@@ -139,4 +137,3 @@ def test_gate_worktree_present_allows_update(capsys) -> None:  # type: ignore[no
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "update_requested"
     assert payload["updated"] is True
-

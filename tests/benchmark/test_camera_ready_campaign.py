@@ -2824,6 +2824,14 @@ def test_run_campaign_writes_core_artifacts(tmp_path: Path, monkeypatch):  # noq
     assert "planner_group" in table_md
     assert "kinematics" in table_md
     run_meta = json.loads((campaign_root / "run_meta.json").read_text(encoding="utf-8"))
+    execution_context = run_meta["execution_context"]
+    assert set(execution_context) >= {
+        "hostname",
+        "cpu_model",
+        "python_version",
+        "platform",
+        "thread_env",
+    }
     assert "seed_policy" in run_meta
     assert "resolved_seeds" in run_meta["seed_policy"]
     assert run_meta["preflight_artifacts"]["validate_config"].endswith(

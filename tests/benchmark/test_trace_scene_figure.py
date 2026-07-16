@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from matplotlib import pyplot as plt
 from matplotlib.text import Text
@@ -19,6 +20,8 @@ from robot_sf.benchmark.trace_scene_figure import (
     EpisodeTrace,
     _choose_scale_bar_corner,
     _clamp_texts_to_canvas,
+    _collect_line_obstacles,
+    _collect_marker_obstacles,
     _compute_scene_extent,
     _contiguous_segments,
     _draw_robot_time_markers,
@@ -332,3 +335,32 @@ def test_contiguous_segments_breaks_on_teleport() -> None:
     assert len(segments) == 2
     assert segments[0] == ([0.0, 0.2], [0.0, 0.1])
     assert segments[1] == ([25.0, 25.2], [30.0, 30.1])
+
+
+def test_line_obstacles_split_non_finite_gaps() -> None:
+    """NaN/Inf coordinates do not reach transforms or bridge line gaps."""
+    figure, ax = plt.subplots()
+    try:
+        ax.plot([0.0, 1.0, np.nan, 2.0, 3.0], [0.0, 1.0, np.inf, 2.0, 3.0])
+        figure.canvas.draw()
+        obstacles = _collect_line_obstacles(ax)
+    finally:
+        plt.close(figure)
+
+    assert len(obstacles) == 2
+    assert all(np.isfinite(points).all() for points in obstacles)
+
+
+def test_marker_obstacles_filter_non_finite_coordinates() -> None:
+    """Scatter and line markers expose only finite display-space points."""
+    figure, ax = plt.subplots()
+    try:
+        ax.scatter([0.0, np.nan], [1.0, 2.0])
+        ax.plot([2.0, np.inf], [3.0, 4.0], marker="o", linestyle="none")
+        figure.canvas.draw()
+        markers = _collect_marker_obstacles(ax)
+    finally:
+        plt.close(figure)
+
+    assert markers.shape == (2, 2)
+    assert np.isfinite(markers).all()

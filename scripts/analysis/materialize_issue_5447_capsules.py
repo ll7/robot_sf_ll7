@@ -32,6 +32,7 @@ from robot_sf.benchmark.case_capsules import (
     canonical_sha256,
     validate_ch7_case_capsule_manifest,
 )
+from robot_sf.evidence.writers import write_json, write_text
 
 EVID_DIR = Path("docs/context/evidence/issue_5447_ch7_case_capsules")
 CANDIDATE_REL = (
@@ -75,7 +76,7 @@ def materialize() -> int:
     EVID_DIR.mkdir(parents=True, exist_ok=True)
 
     manifest_path = EVID_DIR / "ch7_case_capsule_manifest.v1.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    write_json(manifest_path, manifest)
 
     # Pre-selection ledger: full candidate pool vs. chosen / unavailable.
     candidates = candidate_manifest["candidates"]
@@ -132,11 +133,12 @@ def materialize() -> int:
         "author_pending_fields": validation.author_pending,
     }
     ledger_path = EVID_DIR / "pre_selection_ledger.v1.json"
-    ledger_path.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
+    write_json(ledger_path, ledger)
 
     # Exact dissertation / figure-export commands (issue #5447 remaining work).
     build_cmd_path = EVID_DIR / "build_command.v1.txt"
-    build_cmd_path.write_text(
+    write_text(
+        build_cmd_path,
         (
             "# Issue #5447 Chapter 7 case-capsule build & export commands (pinned).\n"
             "# Reproduce the capsule manifest + ledger from the frozen #5446 candidate manifest.\n"
@@ -153,7 +155,7 @@ def materialize() -> int:
             "# Author-pending narrative/figure fields must be completed and an\n"
             "# independent pinned-SHA visual/evidence review recorded before dissertation use.\n"
         ),
-        encoding="utf-8",
+        issue_ref="robot_sf#5447 cheap-lane worker",
     )
 
     # Sidecar checksums.
@@ -168,7 +170,11 @@ def materialize() -> int:
         if p.exists():
             lines.append(f"{_sha256_file(p)}  {name}")
     lines.append(f"{_sha256_file(candidate_path)}  {CANDIDATE_REL}")
-    sums_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    write_text(
+        sums_path,
+        "\n".join(lines) + "\n",
+        issue_ref="robot_sf#5447 cheap-lane worker",
+    )
 
     return manifest["summary"]["n_admitted"]
 

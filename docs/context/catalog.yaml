@@ -4476,3 +4476,19 @@ entries:
   status: proposal
   freshness: dated
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5447_ch7_case_capsules/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5447_ch7_case_capsules/build_command.v1.txt
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5447_ch7_case_capsules/ch7_case_capsule_manifest.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5447_ch7_case_capsules/pre_selection_ledger.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

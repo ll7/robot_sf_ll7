@@ -12,6 +12,7 @@ Phases:
   typecheck        Ty type check (advisory; reports findings but exits zero)
   test             Main pytest suite, excluding example smoke tests
   examples-smoke   Example script smoke tests
+  notebooks-smoke  Quickstart notebook smoke tests (nbconvert)
   smoke            Validation and benchmark smoke checks
   artifact-policy  Canonical artifact root policy guard
 
@@ -35,7 +36,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"
 
-readonly PHASES=("lint" "typecheck" "test" "examples-smoke" "smoke" "artifact-policy")
+readonly PHASES=("lint" "typecheck" "test" "examples-smoke" "notebooks-smoke" "smoke" "artifact-policy")
 
 list_phases() {
   printf "%s\n" "${PHASES[@]}"
@@ -213,6 +214,10 @@ run_examples_smoke_phase() {
   uv run python scripts/validation/run_examples_smoke.py --skip-perf-tests
 }
 
+run_notebooks_smoke_phase() {
+  uv run python scripts/validation/run_notebooks_smoke.py
+}
+
 run_fast_feedback_benchmark_reconciliation_guard() {
   local shard_count="${PYTEST_SHARD_COUNT:-1}"
   local shard_index="${PYTEST_SHARD_INDEX:-1}"
@@ -265,6 +270,9 @@ run_phase() {
       ;;
     examples-smoke)
       run_examples_smoke_phase
+      ;;
+    notebooks-smoke)
+      run_notebooks_smoke_phase
       ;;
     smoke)
       run_smoke_phase "$event_name" "$github_ref"

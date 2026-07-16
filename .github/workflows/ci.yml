@@ -312,6 +312,9 @@ jobs:
       - name: Example smoke tests
         run: scripts/dev/ci_driver.sh examples-smoke
 
+      - name: Notebook smoke tests
+        run: scripts/dev/ci_driver.sh notebooks-smoke
+
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 5

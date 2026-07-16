@@ -42,6 +42,7 @@ _TRANSFER_MATRIX_SCHEMA_VERSION = "adversarial_transfer_matrix.v1"
 
 # Benchmark eligibility tiers that count as "certified / repliable" for slice 1.
 _CERTIFIED_ELIGIBILITY = frozenset({"eligible", "stress_only"})
+_ELIGIBILITY_SEVERITY = {"eligible": 0, "stress_only": 1, "excluded": 2}
 
 # Default 3-planner mechanism-stratified roster for slice 1: the issue asks for
 # the target planner plus 2 other planners. The roster mirrors the engineered
@@ -141,6 +142,7 @@ class TransferMatrix:
 
     schema_version: str = _TRANSFER_MATRIX_SCHEMA_VERSION
     target_planner: str = ""
+    configs: tuple[CertifiedConfig, ...] = ()
     config_ids: tuple[str, ...] = ()
     planners: tuple[str, ...] = ()
     cells: tuple[TransferCell, ...] = ()
@@ -154,6 +156,7 @@ class TransferMatrix:
         return {
             "schema_version": self.schema_version,
             "target_planner": self.target_planner,
+            "configs": [config.__dict__ for config in self.configs],
             "config_ids": list(self.config_ids),
             "planners": list(self.planners),
             "cells": [c.__dict__ for c in self.cells],
@@ -175,11 +178,18 @@ def _candidate_certification_tier(candidate: dict[str, Any]) -> str | None:
         else None
     )
     if isinstance(certificates, list) and certificates:
-        first = certificates[0]
-        if isinstance(first, dict):
-            return first.get("benchmark_eligibility")
-    # Fall back to a single top-level status if present.
-    return cert.get("status")
+        tiers: list[str] = []
+        for certificate in certificates:
+            if not isinstance(certificate, dict):
+                return None
+            tier = str(certificate.get("benchmark_eligibility", "")).strip().lower()
+            if tier not in _ELIGIBILITY_SEVERITY:
+                return None
+            tiers.append(tier)
+        return max(tiers, key=_ELIGIBILITY_SEVERITY.__getitem__)
+    # Fall back only when a top-level status already uses the eligibility vocabulary.
+    status = str(cert.get("status", "")).strip().lower()
+    return status if status in _ELIGIBILITY_SEVERITY else None
 
 
 def _candidate_scenario_seed(candidate: dict[str, Any]) -> int | None:
@@ -188,9 +198,12 @@ def _candidate_scenario_seed(candidate: dict[str, Any]) -> int | None:
     if seed is None:
         return None
     try:
-        return int(seed)
+        parsed = float(seed)
     except (TypeError, ValueError):
         return None
+    if not math.isfinite(parsed) or not parsed.is_integer() or parsed < 0:
+        return None
+    return int(parsed)
 
 
 def _is_certified(candidate: dict[str, Any]) -> bool:
@@ -199,16 +212,71 @@ def _is_certified(candidate: dict[str, Any]) -> bool:
     return tier in _CERTIFIED_ELIGIBILITY
 
 
-def _objective_value(candidate: dict[str, Any]) -> float:
+def _objective_value(candidate: dict[str, Any]) -> float | None:
     """Return the worst-case objective value for a candidate."""
     value = candidate.get("objective_value")
     if value is None:
-        return float("-inf")
+        return None
     try:
         parsed = float(value)
     except (TypeError, ValueError):
-        return float("-inf")
-    return parsed if __import__("math").isfinite(parsed) else float("-inf")
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _load_target_manifest(
+    manifest_path: Path, *, target_planner: str
+) -> tuple[dict[str, Any], list[Any]]:
+    """Load one search manifest and verify its schema and target-planner lineage."""
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Search manifest must be a JSON object: {manifest_path}")
+    schema = payload.get("schema_version")
+    if schema != SEARCH_MANIFEST_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported search manifest schema for {manifest_path}: {schema!r}; "
+            f"expected {SEARCH_MANIFEST_SCHEMA_VERSION!r}"
+        )
+    manifest_config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+    manifest_policy = str(manifest_config.get("policy", "")).strip()
+    if manifest_policy != target_planner:
+        raise ValueError(
+            f"Target planner mismatch for {manifest_path}: manifest policy "
+            f"{manifest_policy!r} != {target_planner!r}"
+        )
+    candidates = payload.get("candidates") or []
+    return manifest_config, candidates if isinstance(candidates, list) else []
+
+
+def _certified_config_from_payload(
+    candidate_payload: Any,
+    *,
+    manifest_path: Path,
+    target_planner: str,
+    index: int,
+) -> CertifiedConfig | None:
+    """Build one fail-closed selected config or return None when it is not repliable."""
+    if not isinstance(candidate_payload, dict) or not _is_certified(candidate_payload):
+        return None
+    candidate = (
+        candidate_payload.get("candidate")
+        if isinstance(candidate_payload.get("candidate"), dict)
+        else {}
+    )
+    objective_value = _objective_value(candidate_payload)
+    scenario_seed = _candidate_scenario_seed(candidate)
+    if not candidate or objective_value is None or scenario_seed is None:
+        return None
+    return CertifiedConfig(
+        config_id=f"{manifest_path.as_posix()}#{index}",
+        target_planner=target_planner,
+        candidate=candidate,
+        objective_value=objective_value,
+        source_manifest=manifest_path.as_posix(),
+        source_candidate_index=index,
+        certification_tier=_candidate_certification_tier(candidate_payload) or "unknown",
+        scenario_seed=scenario_seed,
+    )
 
 
 def select_certified_configs(
@@ -245,48 +313,28 @@ def select_certified_configs(
     """
     if K < 1:
         raise ValueError("K must be >= 1")
+    if not target_planner.strip():
+        raise ValueError("target_planner must be non-empty")
 
     configs: list[CertifiedConfig] = []
     for manifest_path in sorted(Path(p) for p in manifest_paths):
-        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if not isinstance(payload, dict):
-            raise ValueError(f"Search manifest must be a JSON object: {manifest_path}")
-        schema = payload.get("schema_version")
-        if schema != SEARCH_MANIFEST_SCHEMA_VERSION:
-            raise ValueError(
-                f"Unsupported search manifest schema for {manifest_path}: {schema!r}; "
-                f"expected {SEARCH_MANIFEST_SCHEMA_VERSION!r}"
-            )
-        manifest_config = payload.get("config") if isinstance(payload.get("config"), dict) else {}
+        manifest_config, candidates = _load_target_manifest(
+            manifest_path, target_planner=target_planner
+        )
         if (
             scenario_template is not None
             and manifest_config.get("scenario_template") != scenario_template
         ):
             continue
-        candidates = payload.get("candidates") or []
-        if not isinstance(candidates, list):
-            continue
-        for index, candidate in enumerate(candidates):
-            if not isinstance(candidate, dict):
-                continue
-            cand = (
-                candidate.get("candidate") if isinstance(candidate.get("candidate"), dict) else {}
+        for index, candidate_payload in enumerate(candidates):
+            config = _certified_config_from_payload(
+                candidate_payload,
+                manifest_path=manifest_path,
+                target_planner=target_planner,
+                index=index,
             )
-            if not _is_certified(candidate):
-                continue
-            tier = _candidate_certification_tier(candidate) or "unknown"
-            configs.append(
-                CertifiedConfig(
-                    config_id=f"{manifest_path.stem}#{index}",
-                    target_planner=target_planner,
-                    candidate=cand,
-                    objective_value=_objective_value(candidate),
-                    source_manifest=manifest_path.as_posix(),
-                    source_candidate_index=index,
-                    certification_tier=tier,
-                    scenario_seed=_candidate_scenario_seed(cand),
-                )
-            )
+            if config is not None:
+                configs.append(config)
 
     configs.sort(key=lambda c: (-c.objective_value, c.config_id))
     return configs[:K]
@@ -342,16 +390,7 @@ def _build_cells(
         for planner in planners:
             ev = eval_by_key.get((cfg_id, planner))
             if ev is None:
-                cells.append(
-                    TransferCell(
-                        config_id=cfg_id,
-                        planner=planner,
-                        robustness=float("nan"),
-                        failed=False,
-                        transferred=False,
-                    )
-                )
-                continue
+                raise ValueError(f"Missing evaluation for config={cfg_id!r}, planner={planner!r}")
             # A weak point transfers when the target config's failure also
             # reproduces against the evaluated planner.
             cells.append(
@@ -376,7 +415,7 @@ def _build_ranking(
     ranking_rows: list[PlannerRanking] = []
     for planner in planners:
         planner_cells = per_planner[planner]
-        finite = [c.robustness for c in planner_cells if not math.isnan(c.robustness)]
+        finite = [c.robustness for c in planner_cells if math.isfinite(c.robustness)]
         worst = min(finite) if finite else float("nan")
         failures = [c for c in planner_cells if c.failed]
         transfer_rate = len(failures) / len(planner_cells) if planner_cells else 0.0
@@ -385,7 +424,7 @@ def _build_ranking(
                 planner=planner,
                 worst_case_robustness=worst,
                 transfer_failure_rate=transfer_rate,
-                minimax_regret=-worst if not math.isnan(worst) else float("nan"),
+                minimax_regret=-worst if math.isfinite(worst) else float("nan"),
                 rank=0,
             )
         )
@@ -402,6 +441,106 @@ def _group_cells_by_planner(
         if cell.planner in per_planner:
             per_planner[cell.planner].append(cell)
     return per_planner
+
+
+def _validate_matrix_configs(
+    configs: list[CertifiedConfig], *, bootstrap_n: int
+) -> tuple[tuple[str, ...], str]:
+    """Validate selected config provenance and return ids plus the shared target planner."""
+    if not configs:
+        raise ValueError("Cannot build a transfer matrix from zero certified configs")
+    if len(configs) < 5:
+        raise ValueError(
+            f"Issue #5303 slice 1 requires K >= 5 certified configs; got {len(configs)}"
+        )
+    config_ids = tuple(config.config_id for config in configs)
+    target_planner = configs[0].target_planner
+    if not target_planner.strip():
+        raise ValueError("Certified configs must name a target planner")
+    if len(set(config_ids)) != len(config_ids):
+        raise ValueError("Certified config ids must be unique")
+    if any(config.target_planner != target_planner for config in configs):
+        raise ValueError("All certified configs must share one target planner")
+    if any(config.certification_tier not in _CERTIFIED_ELIGIBILITY for config in configs):
+        raise ValueError("All configs must have eligible or stress_only certification")
+    if any(not math.isfinite(config.objective_value) for config in configs):
+        raise ValueError("All certified configs must have a finite objective value")
+    if any(config.scenario_seed is None for config in configs):
+        raise ValueError("All certified configs must pin scenario_seed")
+    if bootstrap_n < 0:
+        raise ValueError("bootstrap_n must be >= 0")
+    return config_ids, target_planner
+
+
+def _resolve_matrix_planners(
+    evaluations: list[PlannerEval],
+    *,
+    target_planner: str,
+    planners: tuple[str, ...] | None,
+) -> tuple[str, ...]:
+    """Resolve and validate the target-plus-two planner roster."""
+    if planners is None:
+        planners = tuple(dict.fromkeys(evaluation.planner for evaluation in evaluations))
+    if len(planners) < 3:
+        raise ValueError("Issue #5303 slice 1 requires the target planner plus 2 others")
+    if len(set(planners)) != len(planners):
+        raise ValueError("Planner names must be unique")
+    if target_planner not in planners:
+        raise ValueError("The target planner must be present in the matrix roster")
+    return planners
+
+
+def _validate_evaluation(evaluation: PlannerEval) -> None:
+    """Validate one signed-robustness evaluation before aggregation."""
+    if not math.isfinite(evaluation.robustness):
+        raise ValueError(
+            f"Evaluation robustness must be finite for config={evaluation.config_id!r}, "
+            f"planner={evaluation.planner!r}"
+        )
+    if evaluation.seed is None or evaluation.seed < 0:
+        raise ValueError(
+            f"Evaluation seed must be pinned and non-negative for config={evaluation.config_id!r}, "
+            f"planner={evaluation.planner!r}"
+        )
+    if evaluation.failed != (evaluation.robustness < 0.0):
+        raise ValueError(
+            "Evaluation failed flag disagrees with signed robustness for "
+            f"config={evaluation.config_id!r}, planner={evaluation.planner!r}"
+        )
+
+
+def _index_complete_evaluations(
+    evaluations: list[PlannerEval],
+    *,
+    config_ids: tuple[str, ...],
+    planners: tuple[str, ...],
+) -> dict[tuple[str, str], PlannerEval]:
+    """Return a complete unique evaluation index or fail closed."""
+    valid_config_ids = set(config_ids)
+    valid_planners = set(planners)
+    indexed: dict[tuple[str, str], PlannerEval] = {}
+    for evaluation in evaluations:
+        key = (evaluation.config_id, evaluation.planner)
+        if evaluation.config_id not in valid_config_ids:
+            raise ValueError(f"Evaluation references unknown config: {evaluation.config_id!r}")
+        if evaluation.planner not in valid_planners:
+            raise ValueError(f"Evaluation references unknown planner: {evaluation.planner!r}")
+        if key in indexed:
+            raise ValueError(
+                f"Duplicate evaluation for config={evaluation.config_id!r}, "
+                f"planner={evaluation.planner!r}"
+            )
+        _validate_evaluation(evaluation)
+        indexed[key] = evaluation
+    expected = {(config_id, planner) for config_id in config_ids for planner in planners}
+    missing = sorted(expected - set(indexed))
+    if missing:
+        config_id, planner = missing[0]
+        raise ValueError(
+            f"Transfer matrix is incomplete; missing {len(missing)} evaluation(s), "
+            f"including config={config_id!r}, planner={planner!r}"
+        )
+    return indexed
 
 
 def build_transfer_matrix(
@@ -433,31 +572,21 @@ def build_transfer_matrix(
     TransferMatrix
         The transfer measurement, per-planner minimax ranking, and bootstrap CI.
     """
-    if not configs:
-        raise ValueError("Cannot build a transfer matrix from zero certified configs")
-    if len(configs) < 5:
-        raise ValueError(
-            f"Issue #5303 slice 1 requires K >= 5 certified configs; got {len(configs)}"
-        )
-
-    config_ids = tuple(c.config_id for c in configs)
-    target_planner = configs[0].target_planner
-
-    if planners is None:
-        seen: list[str] = []
-        for ev in evaluations:
-            if ev.planner not in seen:
-                seen.append(ev.planner)
-        planners = tuple(seen)
-
-    # Map (config_id, planner) -> eval.
-    eval_by_key: dict[tuple[str, str], PlannerEval] = {
-        (ev.config_id, ev.planner): ev for ev in evaluations
-    }
+    config_ids, target_planner = _validate_matrix_configs(configs, bootstrap_n=bootstrap_n)
+    planners = _resolve_matrix_planners(
+        evaluations, target_planner=target_planner, planners=planners
+    )
+    eval_by_key = _index_complete_evaluations(evaluations, config_ids=config_ids, planners=planners)
 
     cells = _build_cells(config_ids, planners, eval_by_key)
     ranking_rows = _build_ranking(cells, planners)
-    ranking_rows.sort(key=lambda r: (r.worst_case_robustness, r.planner))
+    ranking_rows.sort(
+        key=lambda row: (
+            not math.isfinite(row.worst_case_robustness),
+            -row.worst_case_robustness if math.isfinite(row.worst_case_robustness) else 0.0,
+            row.planner,
+        )
+    )
     for rank, row in enumerate(ranking_rows, start=1):
         ranking_rows[rank - 1] = PlannerRanking(
             planner=row.planner,
@@ -492,6 +621,7 @@ def build_transfer_matrix(
 
     return TransferMatrix(
         target_planner=target_planner,
+        configs=tuple(configs),
         config_ids=config_ids,
         planners=planners,
         cells=tuple(cells),
@@ -504,6 +634,8 @@ def build_transfer_matrix(
 
 def render_transfer_report(matrix: TransferMatrix, *, configs: list[CertifiedConfig]) -> str:
     """Render a one-page transfer-measurement report (capability-only)."""
+    if tuple(config.config_id for config in configs) != matrix.config_ids:
+        raise ValueError("Report configs must match the transfer matrix config order")
     lines: list[str] = []
     lines.append("# Cross-planner adversarial transfer matrix (slice 1, capability-only)")
     lines.append("")
@@ -528,7 +660,7 @@ def render_transfer_report(matrix: TransferMatrix, *, configs: list[CertifiedCon
     for row in matrix.ranking:
         wc = (
             f"{row.worst_case_robustness:.3f}"
-            if row.worst_case_robustness == row.worst_case_robustness
+            if math.isfinite(row.worst_case_robustness)
             else "n/a"
         )
         lines.append(f"| {row.rank} | `{row.planner}` | {wc} | {row.transfer_failure_rate:.3f} |")
@@ -552,7 +684,7 @@ def render_transfer_report(matrix: TransferMatrix, *, configs: list[CertifiedCon
         mark = []
         for planner in matrix.planners:
             cell = by_config.get(cfg_id, {}).get(planner)
-            if cell is None or cell.robustness != cell.robustness:
+            if cell is None or not math.isfinite(cell.robustness):
                 mark.append("?")
             elif cell.transferred:
                 mark.append("X")
@@ -582,35 +714,10 @@ def write_transfer_artifact(matrix: TransferMatrix, *, out_dir: str | Path) -> P
     matrix_path.write_text(
         json.dumps(matrix.to_json(), indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    report_path.write_text(_render_matrix_only_report(matrix), encoding="utf-8")
+    report_path.write_text(
+        render_transfer_report(matrix, configs=list(matrix.configs)), encoding="utf-8"
+    )
     return matrix_path
-
-
-def _render_matrix_only_report(matrix: TransferMatrix) -> str:
-    """Render report without full config provenance (used by write_transfer_artifact)."""
-    lines: list[str] = []
-    lines.append("# Cross-planner adversarial transfer matrix (slice 1, capability-only)")
-    lines.append("")
-    lines.append("> Capability-not-evidence boundary: archive paths and pinned configs/seeds only.")
-    lines.append("")
-    lines.append(f"- Target planner: `{matrix.target_planner}`")
-    lines.append(f"- Configs (K): {len(matrix.config_ids)}")
-    lines.append(f"- Planners (N): {len(matrix.planners)}")
-    lines.append(f"- Overall transfer rate: {matrix.overall_transfer_rate:.3f}")
-    lines.append(f"- Transfer-rate 95% CI: {tuple(round(x, 3) for x in matrix.transfer_rate_ci)}")
-    lines.append("")
-    lines.append("## Minimax ranking")
-    lines.append("")
-    lines.append("| rank | planner | worst-case robustness | transfer-failure rate |")
-    lines.append("|---|---|---|---|")
-    for row in matrix.ranking:
-        wc = (
-            f"{row.worst_case_robustness:.3f}"
-            if row.worst_case_robustness == row.worst_case_robustness
-            else "n/a"
-        )
-        lines.append(f"| {row.rank} | `{row.planner}` | {wc} | {row.transfer_failure_rate:.3f} |")
-    return "\n".join(lines) + "\n"
 
 
 __all__ = [

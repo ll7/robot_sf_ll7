@@ -116,18 +116,30 @@ def test_get_forces_at_points_matches_pointwise_without_obstacles():
     assert batched == pytest.approx(pointwise)
 
 
-def test_wrapper_init_raises_value_error_for_zero_agents():
-    """Wrapper initialization should raise ValueError if simulator has no pedestrians."""
+def test_get_forces_at_points_matches_pointwise_without_pedestrians():
+    """Batched force sampling should handle obstacle-only simulations."""
     sim = make_no_pedestrian_sim()
-    with pytest.raises(ValueError, match="n_agents must be positive"):
-        FastPysfWrapper(sim)
+    wrapper = FastPysfWrapper(sim)
+
+    points = np.array([[0.5, 0.0], [1.5, 0.25], [2.0, -0.5]], dtype=float)
+    batched = wrapper.get_forces_at_points(points, include_desired=True, desired_goal=[5.0, 0.0])
+    pointwise = np.vstack(
+        [
+            wrapper.get_forces_at(point, include_desired=True, desired_goal=[5.0, 0.0])
+            for point in points
+        ],
+    )
+
+    assert batched.shape == (len(points), 2)
+    assert batched == pytest.approx(pointwise)
+    assert np.linalg.norm(batched[0]) > 0, "Obstacle force must remain active without pedestrians"
 
 
 def test_wrapper_init_raises_value_error_for_negative_agents(monkeypatch):
-    """Wrapper initialization should raise ValueError if simulator reports negative pedestrian count."""
+    """Wrapper initialization should reject a negative pedestrian count."""
     sim = make_simple_sim()
     monkeypatch.setattr(sim.peds, "size", lambda: -1)
-    with pytest.raises(ValueError, match="n_agents must be positive"):
+    with pytest.raises(ValueError, match=r"n_agents must be non-negative \(got -1\)"):
         FastPysfWrapper(sim)
 
 

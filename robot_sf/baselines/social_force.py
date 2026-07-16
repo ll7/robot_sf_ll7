@@ -323,10 +323,7 @@ class SocialForcePlanner(BasePolicy):
             obstacles=obstacles,  # type: ignore[arg-type]
             config=cfg,
         )
-        if n_agents > 0:
-            self._wrapper = FastPysfWrapper(self._sim)
-        else:
-            self._wrapper = None
+        self._wrapper = FastPysfWrapper(self._sim)
 
     def _create_pysf_config(self) -> SimulatorConfig:
         """Build a PySocialForce simulator configuration from planner settings.
@@ -390,15 +387,13 @@ class SocialForcePlanner(BasePolicy):
         desired = (v_des - robot_vel) / max(self.config.tau, 1e-6)
 
         # Interaction forces (exclude desired to prevent double counting)
-        if self._wrapper is not None:
-            interactions = self._wrapper.get_forces_at(
-                robot_pos,  # type: ignore[arg-type]  # ndarray is a Sequence
-                include_desired=False,
-                include_robot=False,
-            )
-            interactions *= self.config.interaction_weight
-        else:
-            interactions = np.zeros(2, dtype=float)
+        assert self._wrapper is not None, "Wrapper must be initialized"
+        interactions = self._wrapper.get_forces_at(
+            robot_pos,  # type: ignore[arg-type]  # ndarray is a Sequence
+            include_desired=False,
+            include_robot=False,
+        )
+        interactions *= self.config.interaction_weight
 
         ammv_force = self._compute_ammv_aware_force(robot_pos, robot_vel, agent_states)
         total = desired + interactions + ammv_force

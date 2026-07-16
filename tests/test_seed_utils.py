@@ -292,6 +292,7 @@ def test_torch_213_cuda_seed_is_reproducible_across_calls():
     the GPU without importing the Dynamo/Triton wrapper that segfaulted before the
     Torch 2.13.0 fix landed.
     """
+    assert torch is not None
     set_global_seed(7, deterministic=True)
     a = torch.randn(4, 4, device="cuda")
 

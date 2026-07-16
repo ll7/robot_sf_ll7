@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 import subprocess
@@ -33,7 +32,7 @@ _SCRIPT_PATH = _REPO_ROOT / "scripts/benchmark/check_hierarchical_paired_release
 def _manifest() -> dict[str, object]:
     """Load a fresh copy of the checked-in blocked manifest."""
 
-    return copy.deepcopy(load_hierarchical_paired_release_input_manifest(_MANIFEST_PATH))
+    return load_hierarchical_paired_release_input_manifest(_MANIFEST_PATH)
 
 
 def test_checked_in_manifest_reports_missing_successor_rows_fail_closed() -> None:

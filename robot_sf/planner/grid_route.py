@@ -401,15 +401,42 @@ class GridRoutePlannerAdapter(OccupancyAwarePlannerMixin):
     ) -> tuple[Any, ...] | None:
         """Build a last-call route cache key for repeated observation consumers.
 
+        Keyed on grid *content* + shape and the resolved planning state, not on
+        ``id(observation)``/``id(grid)``. An unchanged static occupancy grid is
+        therefore reused across rollout steps even when a fresh observation object
+        (and fresh grid array view) is produced each step, avoiding a redundant
+        inflated-grid build + BFS clearance map + A* every step.
+
         Returns:
-            tuple[Any, ...] | None: Cache key, or ``None`` when caching is disabled.
+            tuple[Any, ...] | None: Cache key, or ``None`` when caching is disabled
+            (``cache_key is None`` and the caller wants per-call isolation).
         """
         if cache_key is None:
             return None
+        # Keep the exact bytes rather than a lossy hash: a collision must never
+        # reuse a route for different occupancy semantics. The cache retains only
+        # the latest key, so this costs one grid-sized byte string rather than an
+        # unbounded content cache.
+        grid_sig = (grid.dtype.str, tuple(grid.shape), grid.tobytes(order="C"))
+        meta_sig = (
+            tuple(
+                float(value)
+                for value in self._as_1d_float(meta.get("origin", [0.0, 0.0]), pad=2)[:2]
+            ),
+            float(self._as_1d_float(meta.get("resolution", [0.2]), pad=1)[0]),
+            tuple(
+                float(value) for value in self._as_1d_float(meta.get("size", [0.0, 0.0]), pad=2)[:2]
+            ),
+            bool(self._as_1d_float(meta.get("use_ego_frame", [0.0]), pad=1)[0] > 0.5),
+            tuple(
+                float(value)
+                for value in self._as_1d_float(meta.get("robot_pose", [0.0, 0.0, 0.0]), pad=3)[:3]
+            ),
+            tuple(float(value) for value in self._as_1d_float(meta.get("channel_indices", []))),
+        )
         return (
-            cache_key,
-            id(grid),
-            id(meta),
+            grid_sig,
+            meta_sig,
             tuple(float(value) for value in np.asarray(robot_pos, dtype=float)[:2]),
             tuple(float(value) for value in np.asarray(goal, dtype=float)[:2]),
             float(radius),

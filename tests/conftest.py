@@ -238,7 +238,12 @@ def perf_policy():  # type: ignore[missing-return-type-doc]
             pass
 
     class _Fallback:  # pragma: no cover - only used when perf utils missing
-        """TODO docstring. Document this class."""
+        """Fallback performance policy used only when ``tests.perf_utils`` is unavailable.
+
+        Mirrors the public ``PerformanceBudgetPolicy`` contract (soft/hard envelopes,
+        CI vs local thresholds, and xdist contention handling) so the slow-test report
+        still works in minimal environments.
+        """
 
         soft_threshold_seconds = 20.0
         hard_timeout_seconds = 60.0
@@ -247,15 +252,28 @@ def perf_policy():  # type: ignore[missing-return-type-doc]
         xdist_contention_multiplier = 3.0
 
         def is_under_xdist(self) -> bool:
-            """TODO docstring. Document this function."""
+            """Return whether the suite runs under pytest-xdist parallel workers.
+
+            Returns:
+                True when ``PYTEST_XDIST_WORKER`` is set to a non-empty worker id.
+            """
             worker = os.environ.get("PYTEST_XDIST_WORKER")
             return bool(worker) and worker.strip() != ""
 
         def effective_soft_threshold(self, *, ci: bool = False) -> float:
-            """TODO docstring. Document this function.
+            """Compute the soft performance threshold, widened under xdist contention.
+
+            In CI the base soft threshold is used as-is; locally it is halved so the
+            minimal off-CI runs stay fast. When running under pytest-xdist the soft
+            threshold is multiplied by ``xdist_contention_multiplier`` (capped at 90
+            percent of the hard timeout) to absorb parallel-worker scheduling jitter.
 
             Args:
-                ci: TODO docstring.
+                ci: When True, use the full ``soft_threshold_seconds`` instead of the
+                    halved local soft threshold.
+
+            Returns:
+                The effective soft threshold in seconds.
             """
             base = self.soft_threshold_seconds if ci else (self.soft_threshold_seconds / 2.0)
             if self.is_under_xdist():
@@ -263,10 +281,16 @@ def perf_policy():  # type: ignore[missing-return-type-doc]
             return base
 
         def classify(self, duration_seconds: float):
-            """TODO docstring. Document this function.
+            """Classify a measured test duration against the soft/hard envelopes.
 
             Args:
-                duration_seconds: TODO docstring.
+                duration_seconds: Measured wall-clock duration of a single test in
+                    seconds.
+
+            Returns:
+                ``"hard"`` when the duration reaches or exceeds the hard timeout,
+                ``"soft"`` when it reaches or exceeds the soft threshold, otherwise
+                ``"none"``.
             """
             if duration_seconds >= self.hard_timeout_seconds:
                 return "hard"

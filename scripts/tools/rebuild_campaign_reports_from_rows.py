@@ -216,7 +216,60 @@ def _episode_files(campaign_root: Path) -> list[Path]:
     return sorted(campaign_root.glob("runs/*/episodes.jsonl"))
 
 
-def _record_row_reconstruction_provenance(campaign_root: Path) -> None:  # noqa: C901
+def _frozen_execution_commits(campaign_root: Path) -> set[str]:
+    """Return execution commits that agree across row and exact-event provenance."""
+    commits: set[str] = set()
+    for episodes_path in _episode_files(campaign_root):
+        for record in read_jsonl(str(episodes_path)):
+            ledger = record.get("event_ledger")
+            result_provenance = record.get("result_provenance")
+            ledger_commit = ledger.get("software_commit") if isinstance(ledger, dict) else None
+            row_commit = (
+                result_provenance.get("repo_commit")
+                if isinstance(result_provenance, dict)
+                else record.get("git_hash")
+            )
+            if not isinstance(ledger_commit, str) or not ledger_commit.strip():
+                raise ValueError(f"{episodes_path}: missing event-ledger execution commit")
+            if not isinstance(row_commit, str) or not row_commit.strip():
+                raise ValueError(f"{episodes_path}: missing row-provenance execution commit")
+            if ledger_commit.strip() != row_commit.strip():
+                raise ValueError(
+                    f"{episodes_path}: event-ledger and row-provenance commits disagree"
+                )
+            commits.add(ledger_commit.strip())
+    if not commits:
+        raise ValueError("Frozen-row rebuild found no execution commits")
+    return commits
+
+
+def _prepare_frozen_row_campaign_preflight(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Prepare a campaign while keeping the frozen execution commit as integrity anchor."""
+    prepared = prepare_campaign_preflight(*args, **kwargs)
+    campaign_root = Path(prepared["campaign_root"])
+    execution_commits = _frozen_execution_commits(campaign_root)
+    if len(execution_commits) != 1:
+        raise ValueError(
+            "Frozen-row reconstruction requires one execution commit, found "
+            f"{sorted(execution_commits)}"
+        )
+    execution_commit = next(iter(execution_commits))
+    manifest_payload = dict(prepared["manifest_payload"])
+    git_payload = manifest_payload.get("git")
+    git_payload = dict(git_payload) if isinstance(git_payload, dict) else {}
+    git_payload["commit"] = execution_commit
+    git_payload["role"] = "execution_commit"
+    manifest_payload["git"] = git_payload
+    manifest_payload["row_reconstruction"] = {
+        "mode": "native_reuse_no_resimulation",
+        "execution_commit": execution_commit,
+        "publication_commit": prepared.get("git_meta", {}).get("commit"),
+    }
+    prepared["manifest_payload"] = manifest_payload
+    return prepared
+
+
+def _record_row_reconstruction_provenance(campaign_root: Path) -> None:
     """Record distinct execution and publication commit roles for a frozen-row rebuild."""
     run_meta_path = campaign_root / "run_meta.json"
     run_meta = _read_json(run_meta_path)
@@ -225,7 +278,7 @@ def _record_row_reconstruction_provenance(campaign_root: Path) -> None:  # noqa:
     if not isinstance(publication_commit, str) or not publication_commit.strip():
         raise ValueError("run_meta.json repo.commit is required for publication provenance")
 
-    runtime_commits: set[str] = set()
+    runtime_commits = _frozen_execution_commits(campaign_root)
     annotated_boundary_rows = 0
     unresolved_boundary_rows = 0
     for episodes_path in _episode_files(campaign_root):
@@ -233,12 +286,6 @@ def _record_row_reconstruction_provenance(campaign_root: Path) -> None:  # noqa:
             ledger = record.get("event_ledger")
             if not isinstance(ledger, dict):
                 raise ValueError(f"{episodes_path}: every frozen row requires event_ledger")
-            runtime_commit = ledger.get("software_commit")
-            if not isinstance(runtime_commit, str) or not runtime_commit.strip():
-                raise ValueError(
-                    f"{episodes_path}: every frozen row requires event_ledger.software_commit"
-                )
-            runtime_commits.add(runtime_commit.strip())
             exact_events = ledger.get("exact_events")
             if not isinstance(exact_events, dict):
                 continue
@@ -250,8 +297,6 @@ def _record_row_reconstruction_provenance(campaign_root: Path) -> None:  # noqa:
                     annotated_boundary_rows += 1
                 else:
                     unresolved_boundary_rows += 1
-    if not runtime_commits:
-        raise ValueError("Frozen-row rebuild found no episode software commits")
     if unresolved_boundary_rows:
         raise ValueError(
             "Frozen-row rebuild contains unresolved goal+timeout boundary rows: "
@@ -553,6 +598,7 @@ def main(argv: Sequence[str] | None = None) -> int:  # noqa: PLR0915
         campaign_id=args.campaign_id,
         skip_publication_bundle=True,
         invoked_command=invoked_command,
+        prepare_campaign_preflight=_prepare_frozen_row_campaign_preflight,
         run_batch=_native_reuse_run_batch,
     )
     result.update(run_payload)

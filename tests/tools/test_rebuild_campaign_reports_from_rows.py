@@ -41,6 +41,7 @@ def _write_episode(
                 "timeout": boundary_note is not None,
             },
         },
+        "result_provenance": {"repo_commit": runtime_commit},
     }
     if boundary_note is not None:
         row["goal_timeout_boundary_note"] = boundary_note

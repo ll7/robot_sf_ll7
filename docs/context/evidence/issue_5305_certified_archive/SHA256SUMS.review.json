@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5305_certified_archive/SHA256SUMS",
+  "artifact_sha256": "722dc3c3c71e6a8223230529d231c6450685c6e0101640bc4db90ff651fd25ea",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

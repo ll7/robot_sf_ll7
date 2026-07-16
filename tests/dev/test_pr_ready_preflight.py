@@ -37,6 +37,7 @@ _POST_PREFLIGHT_SCRIPTS = [
     "check_changed_coverage.sh",
     "check_docstring_todos_diff.sh",
     "check_docstring_todos_ratchet.sh",
+    "check_docstring_todos_baseline_freshness.sh",
     "check_optional_import_pr_freshness.py",
     # check_base_drift.py is invoked by pr_ready_check.sh as a final base-drift
     # recheck before recording the freshness stamp (issue #5782).  Stub it here so

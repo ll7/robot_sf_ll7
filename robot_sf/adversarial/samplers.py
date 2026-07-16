@@ -6,7 +6,13 @@ import math
 from random import Random
 from typing import TYPE_CHECKING, Any, Protocol
 
-from robot_sf.adversarial.config import CandidateSpec, Pose2D, RangeConfig, SearchSpaceConfig
+from robot_sf.adversarial.config import (
+    CandidateSpec,
+    Pose2D,
+    RangeConfig,
+    SearchSpaceConfig,
+    WarmStartCandidate,
+)
 from robot_sf.common.optional_import import try_import
 
 if TYPE_CHECKING:
@@ -27,16 +33,51 @@ class FeedbackCandidateSampler(CandidateSampler, Protocol):
         """Observe one evaluated candidate."""
 
 
+def build_sampler(
+    name: str,
+    search_space: SearchSpaceConfig,
+    *,
+    seed: int,
+    warm_start: tuple[WarmStartCandidate, ...] = (),
+) -> CandidateSampler:
+    """Build a named adversarial sampler, optionally seeded with warm starts.
+
+    Warm starts are knife-edge candidates from seed-sensitivity analysis
+    (#5816/#5817) the optimizer should begin from. Each sampler family consumes
+    them differently: random/coordinate samplers drain them first; Optuna
+    enqueues them as fixed trials; CMA-ES centers initial exploration on them.
+    """
+    key = name.strip().lower()
+    if key == "random":
+        return RandomCandidateSampler(search_space, seed=seed, warm_start=warm_start)
+    if key == "coordinate":
+        return CoordinateRefinementSampler(search_space, seed=seed, warm_start=warm_start)
+    if key == "optuna":
+        return OptunaCandidateSampler(search_space, seed=seed, warm_start=warm_start)
+    if key == "cmaes":
+        return CmaEsCandidateSampler(search_space, seed=seed, warm_start=warm_start)
+    raise ValueError("sampler must be one of: random, coordinate, optuna, cmaes")
+
+
 class RandomCandidateSampler:
     """Dependency-light random-search sampler."""
 
-    def __init__(self, search_space: SearchSpaceConfig, *, seed: int) -> None:
+    def __init__(
+        self,
+        search_space: SearchSpaceConfig,
+        *,
+        seed: int,
+        warm_start: tuple[WarmStartCandidate, ...] = (),
+    ) -> None:
         """Initialize the sampler with a search space and deterministic seed."""
         self._search_space = search_space
         self._rng = Random(seed)
+        self._warm_starts: list[CandidateSpec] = [warm.candidate for warm in warm_start]
 
     def sample(self) -> CandidateSpec:
-        """Return the next random candidate."""
+        """Return the next warm-start candidate, then random candidates."""
+        if self._warm_starts:
+            return self._warm_starts.pop(0)
         return self._search_space.sample_candidate(self._rng)
 
 
@@ -59,7 +100,14 @@ class CoordinateRefinementSampler:
         "pedestrian_delay_s",
     )
 
-    def __init__(self, search_space: SearchSpaceConfig, *, seed: int, step_fraction: float = 0.5):
+    def __init__(
+        self,
+        search_space: SearchSpaceConfig,
+        *,
+        seed: int,
+        step_fraction: float = 0.5,
+        warm_start: tuple[WarmStartCandidate, ...] = (),
+    ) -> None:
         """Initialize a deterministic coordinate-refinement sampler."""
         if not math.isfinite(step_fraction) or step_fraction <= 0.0:
             raise ValueError("step_fraction must be finite and positive")
@@ -69,9 +117,12 @@ class CoordinateRefinementSampler:
         self._best_candidate: CandidateSpec | None = None
         self._best_score: float | None = None
         self._iteration = 0
+        self._warm_starts: list[CandidateSpec] = [warm.candidate for warm in warm_start]
 
     def sample(self) -> CandidateSpec:
-        """Return the next midpoint or coordinate-refinement candidate."""
+        """Return the next warm-start, midpoint, or coordinate-refinement candidate."""
+        if self._warm_starts:
+            return self._warm_starts.pop(0)
         if self._best_candidate is None:
             self._iteration += 1
             return self._midpoint_candidate()
@@ -175,7 +226,13 @@ class OptunaCandidateSampler:
     the runner contract.
     """
 
-    def __init__(self, search_space: SearchSpaceConfig, *, seed: int) -> None:
+    def __init__(
+        self,
+        search_space: SearchSpaceConfig,
+        *,
+        seed: int,
+        warm_start: tuple[WarmStartCandidate, ...] = (),
+    ) -> None:
         """Initialize an Optuna study with deterministic sampler seed."""
         optuna = _import_optuna()
         sampler = optuna.samplers.TPESampler(seed=int(seed))
@@ -183,9 +240,23 @@ class OptunaCandidateSampler:
         self._trial_state = optuna.trial.TrialState
         self._search_space = search_space
         self._pending_trials: list[tuple[CandidateSpec, Any]] = []
+        # Enqueue warm starts as fixed trials so they are proposed first.
+        for warm in warm_start:
+            candidate = warm.candidate
+            fixed: dict[str, Any] = {
+                "start.x": float(candidate.start.x),
+                "start.y": float(candidate.start.y),
+                "goal.x": float(candidate.goal.x),
+                "goal.y": float(candidate.goal.y),
+                "spawn_time_s": float(candidate.spawn_time_s),
+                "pedestrian_speed_mps": float(candidate.pedestrian_speed_mps),
+                "pedestrian_delay_s": float(candidate.pedestrian_delay_s),
+                "scenario_seed": int(candidate.scenario_seed),
+            }
+            self._study.enqueue_trial(fixed)
 
     def sample(self) -> CandidateSpec:
-        """Return the next optimizer proposal within the configured bounds."""
+        """Return the next enqueued warm-start trial, then optimizer proposals."""
         trial = self._study.ask()
         candidate = CandidateSpec(
             start=Pose2D(
@@ -274,6 +345,7 @@ class CmaEsCandidateSampler:
         seed: int,
         sigma_fraction: float = 0.25,
         popsize: int | None = None,
+        warm_start: tuple[WarmStartCandidate, ...] = (),
     ) -> None:
         """Initialize a CMA-ES strategy over the bounded continuous dimensions.
 
@@ -283,7 +355,9 @@ class CmaEsCandidateSampler:
         runner calls ``sample``/``observe`` one candidate at a time, so the
         sampler buffers a full generation (CMA-ES population) internally and
         feeds it back to the optimizer only once the whole generation has been
-        observed.
+        observed. The first warm start is used as the initial mean (x0) when it
+        lies inside the active-dimension bounds; warm starts are otherwise
+        proposed as the first candidates of the search.
         """
         if not math.isfinite(sigma_fraction) or sigma_fraction <= 0.0:
             raise ValueError("sigma_fraction must be finite and positive")
@@ -310,6 +384,11 @@ class CmaEsCandidateSampler:
         spans = [upper[i] - lower[i] for i in range(len(lower))]
         max_span = max(spans) if spans else 1.0
         x0 = [0.5 * (lower[i] + upper[i]) for i in range(len(lower))]
+        if warm_start:
+            warm_vec = self._warm_start_vector(warm_start[0].candidate, bounds)
+            if warm_vec is not None:
+                # Seed the optimizer mean from the first warm start (knife-edge point).
+                x0 = warm_vec
         sigma0 = max(1e-3, sigma_fraction * max_span)
         opts: dict[str, Any] = {
             "bounds": [lower, upper],
@@ -321,7 +400,30 @@ class CmaEsCandidateSampler:
                 raise ValueError("popsize must be >= 1")
             opts["popsize"] = int(popsize)
         self._popsize = int(opts.get("popsize", 4 * len(lower) + 3)) if self._active_dims else 1
+        self._warm_starts: list[CandidateSpec] = [warm.candidate for warm in warm_start]
         self._es = cma.CMAEvolutionStrategy(x0, sigma0, opts) if self._active_dims else None
+
+    def _warm_start_vector(
+        self, candidate: CandidateSpec, bounds: dict[str, tuple[float, float]]
+    ) -> list[float] | None:
+        """Return the active-dimension vector for a warm start when fully in-bounds."""
+        values = {
+            "start.x": candidate.start.x,
+            "start.y": candidate.start.y,
+            "goal.x": candidate.goal.x,
+            "goal.y": candidate.goal.y,
+            "spawn_time_s": candidate.spawn_time_s,
+            "pedestrian_speed_mps": candidate.pedestrian_speed_mps,
+            "pedestrian_delay_s": candidate.pedestrian_delay_s,
+        }
+        vec: list[float] = []
+        for name in self._active_dims:
+            value = float(values[name])
+            low, high = bounds[name]
+            if value < low or value > high:
+                return None
+            vec.append(value)
+        return vec
 
     def _continuous_bounds(self) -> dict[str, tuple[float, float]]:
         """Return the (min, max) bound for each continuous candidate dimension."""
@@ -388,6 +490,8 @@ class CmaEsCandidateSampler:
             candidate, es, vec = self._pending.pop(0)
             self._in_flight.append((candidate, es, vec))
             return candidate
+        if self._warm_starts:
+            return self._warm_starts.pop(0)
         if not self._active_dims:
             candidate = CandidateSpec(
                 start=Pose2D(self._fixed_values["start.x"], self._fixed_values["start.y"]),

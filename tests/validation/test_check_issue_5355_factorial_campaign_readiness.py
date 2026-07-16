@@ -77,13 +77,20 @@ class TestReadinessCLI:
         assert written["config_path"] == str(CONFIG_PATH)
         assert written["ready"] is False
 
-    def test_ready_config_exits_zero(self, tmp_path, capsys):
+    def test_resolved_dependencies_still_blocked_on_missing_successor_rows(self, tmp_path, capsys):
+        """Resolving declared deps is insufficient while #4364 rows are absent.
+
+        The #5776 input-gate deliverable is present, but the successor-release rows
+        the #5351 analysis consumes are missing, so the gate stays NOT READY.
+        """
         cfg, registry = _resolved_config_and_registry(tmp_path)
-        code = main(["--config", str(cfg), "--registry", str(registry)])
-        assert code == 0
-        out = capsys.readouterr().out
-        assert "READY" in out
-        assert "NOT READY" not in out
+        code = main(["--config", str(cfg), "--registry", str(registry), "--json"])
+        assert code == 1
+        report = json.loads(capsys.readouterr().out)
+        assert report["ready"] is False
+        assert report["criteria"]["dependencies_resolved"]["ready"] is True
+        assert report["criteria"]["hierarchical_input_gate_reconciled"]["ready"] is False
+        assert any("#4364" in blocker for blocker in report["blockers"])
 
     def test_invalid_config_fails_closed(self, tmp_path):
         bad = tmp_path / "bad.yaml"

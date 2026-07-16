@@ -42,6 +42,8 @@ from typing import Any
 
 import yaml
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
@@ -97,7 +99,9 @@ def _env_info() -> dict[str, str]:
 
 def _load_manifest(tag: str) -> dict[str, Any]:
     tag_slug = tag.replace(".", "_")
-    manifest_path = Path(f"configs/releases/release_{tag_slug}_checksum_manifest.yaml")
+    manifest_path = (
+        REPO_ROOT / "configs" / "releases" / f"release_{tag_slug}_checksum_manifest.yaml"
+    )
     if not manifest_path.exists():
         raise FileNotFoundError(f"Checksum manifest not found: {manifest_path}")
     with open(manifest_path) as f:
@@ -176,8 +180,9 @@ def _step_verify_checksums(
     clone_dir: Path,
     manifest: dict[str, Any],
     output_dir: Path,
+    bundle_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Download and verify release bundle checksums."""
+    """Download (unless a bundle path is supplied) and verify release bundle checksums."""
     result: dict[str, Any] = {"step": "verify_checksums"}
     bundle_info = manifest["artifact_set"]["bundle_archive"]
     bundle_name = bundle_info["name"]
@@ -185,31 +190,39 @@ def _step_verify_checksums(
 
     bundle_dir = output_dir / "bundle"
     bundle_dir.mkdir(parents=True, exist_ok=True)
-    bundle_path = bundle_dir / bundle_name
 
-    try:
-        subprocess.check_call(
-            [
-                "gh",
-                "release",
-                "download",
-                manifest["release_tag"],
-                "--pattern",
-                bundle_name,
-                "--dir",
-                str(bundle_dir),
-            ],
-            cwd=clone_dir,
-            timeout=120,
-        )
-    except subprocess.CalledProcessError as exc:
-        result["status"] = "fail"
-        result["error"] = f"Bundle download failed: {exc}"
-        return result
-    except subprocess.TimeoutExpired:
-        result["status"] = "fail"
-        result["error"] = "Bundle download timed out after 120s"
-        return result
+    if bundle_path is None:
+        bundle_path = bundle_dir / bundle_name
+        try:
+            subprocess.check_call(
+                [
+                    "gh",
+                    "release",
+                    "download",
+                    manifest["release_tag"],
+                    "--pattern",
+                    bundle_name,
+                    "--dir",
+                    str(bundle_dir),
+                    "--clobber",
+                ],
+                cwd=clone_dir,
+                timeout=120,
+            )
+        except subprocess.CalledProcessError as exc:
+            result["status"] = "fail"
+            result["error"] = f"Bundle download failed: {exc}"
+            return result
+        except subprocess.TimeoutExpired:
+            result["status"] = "fail"
+            result["error"] = "Bundle download timed out after 120s"
+            return result
+    else:
+        bundle_path = Path(bundle_path)
+        if not bundle_path.is_file():
+            result["status"] = "fail"
+            result["error"] = f"Provided bundle path is not a file: {bundle_path}"
+            return result
 
     actual_sha = _sha256_file(bundle_path)
     result["bundle_path"] = str(bundle_path)
@@ -320,13 +333,26 @@ def generate_reproduction_report(
     output_dir: Path,
     local_repo: Path | None = None,
     checksums_only: bool = False,
+    bundle_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Generate the full cold-start reproduction report."""
+    """Generate the full cold-start reproduction report.
+
+    Args:
+        bundle_path: Optional pre-downloaded bundle archive. When supplied, the
+            verify_checksums step reuses it instead of downloading again, which
+            makes the flow resilient to a previously downloaded artifact in the
+            output directory and removes a redundant network call.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     start_time = time.monotonic()
 
     manifest = _load_manifest(tag)
-    manifest_path = Path(f"configs/releases/release_{tag.replace('.', '_')}_checksum_manifest.yaml")
+    manifest_path = (
+        REPO_ROOT
+        / "configs"
+        / "releases"
+        / f"release_{tag.replace('.', '_')}_checksum_manifest.yaml"
+    )
     env = _env_info()
 
     report: dict[str, Any] = {
@@ -379,6 +405,7 @@ def generate_reproduction_report(
         clone_dir,
         manifest,
         output_dir,
+        bundle_path=bundle_path,
     )
 
     if not checksums_only:
@@ -412,6 +439,11 @@ def main() -> None:
         action="store_true",
         help="Only verify checksums (skip build and benchmark)",
     )
+    parser.add_argument(
+        "--bundle-path",
+        type=Path,
+        help="Use a pre-downloaded bundle archive instead of downloading again",
+    )
     args = parser.parse_args()
 
     report = generate_reproduction_report(
@@ -419,6 +451,7 @@ def main() -> None:
         output_dir=args.output_dir,
         local_repo=args.local_repo,
         checksums_only=args.checksums_only,
+        bundle_path=args.bundle_path,
     )
 
     report_path = args.output_dir / "reproduction_report.json"

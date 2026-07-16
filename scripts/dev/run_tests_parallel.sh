@@ -201,7 +201,7 @@ fi
 
 worker_spec="$(
   uv run python "$SCRIPT_DIR/resolve_pytest_workers.py" ${requested_args[@]+"${requested_args[@]}"} \
-    --show-reason
+    --show-reason 2> >(cat >&2)
 )"
 if [[ -z "$worker_spec" ]]; then
   echo "Failed to resolve pytest worker count." >&2
@@ -250,7 +250,7 @@ fi
 # using the -m "not slow" marker unless the caller supplied an explicit marker.
 # Full suite runs unsharded on main/nightly.
 has_marker="0"
-for pytest_arg in ${pytest_args[@]+"${pytest_args[@]}"}; do
+for pytest_arg in "${pytest_args[@]}"; do
   if [[ "$pytest_arg" == "-m" || "$pytest_arg" == --markexpr=* ]]; then
     has_marker="1"
     break
@@ -273,7 +273,7 @@ if [[ "$lane_mode" != "all" ]]; then
 fi
 
 explicit_test_targets=()
-for pytest_arg in ${pytest_args[@]+"${pytest_args[@]}"}; do
+for pytest_arg in "${pytest_args[@]}"; do
   [[ "$pytest_arg" == -* ]] && continue
   normalized_pytest_arg="$(normalize_pytest_target_path "$pytest_arg")"
   if [[ -e "$normalized_pytest_arg" || "$normalized_pytest_arg" == tests* ]]; then
@@ -301,7 +301,7 @@ fi
 append_unique_pytest_arg() {
   local candidate="$1"
   local existing
-  for existing in ${pytest_args[@]+"${pytest_args[@]}"}; do
+  for existing in "${pytest_args[@]}"; do
     if [[ "$existing" == "$candidate" ]]; then
       return
     fi
@@ -310,7 +310,7 @@ append_unique_pytest_arg() {
 }
 
 if [[ "$lane_mode" == "core" ]]; then
-  for pytest_arg in ${explicit_test_targets[@]+"${explicit_test_targets[@]}"}; do
+  for pytest_arg in "${explicit_test_targets[@]}"; do
     if is_optional_test_path "$pytest_arg"; then
       echo "Core pytest lane cannot run optional-extra path '$pytest_arg'." >&2
       echo "Use scripts/dev/run_tests_parallel.sh --lane optional for torch/rvo2/CARLA/predictive tests." >&2
@@ -323,7 +323,7 @@ if [[ "$lane_mode" == "core" ]]; then
         append_unique_pytest_arg "$core_test_path"
       fi
     done
-    for changed_test_path in ${changed_top_level_core_test_paths[@]+"${changed_top_level_core_test_paths[@]}"}; do
+    for changed_test_path in "${changed_top_level_core_test_paths[@]}"; do
       if [[ -e "$changed_test_path" ]]; then
         append_unique_pytest_arg "$changed_test_path"
       fi

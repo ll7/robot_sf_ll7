@@ -4,6 +4,15 @@ The viewer is intentionally diagnostic: it keeps the collision visible as an
 outcome marker while the shared timeline and command/clearance tracks make it
 possible to scrub back to the earlier trajectory divergence.
 
+Raw ``--episodes-jsonl`` mode deliberately uses the provenance-pinned doorway
+adapter from the A/B trace pipeline. For other trace exports, first provide
+validated trace-bundle directories; the viewer never weakens the adapter's
+campaign checks.
+
+Surface-clearance tracks subtract the repository's default robot and pedestrian
+radii because the bundle schema does not carry runtime radii. Treat them as
+diagnostic unless those defaults are known to match the source run.
+
 Examples:
 
     uv run --with rerun-sdk python scripts/tools/trace_viewer.py \
@@ -76,6 +85,16 @@ class TraceViewerError(RuntimeError):
     """Raised when an input or recording cannot satisfy the viewer contract."""
 
 
+def _metadata_summary(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Return an optional summary mapping without accepting malformed values."""
+    summary = metadata.get("summary")
+    if summary is None:
+        return {}
+    if not isinstance(summary, dict):
+        raise TraceViewerError("metadata.summary must be an object or null")
+    return summary
+
+
 @dataclass(frozen=True)
 class EpisodeCase:
     """One episode loaded through the canonical scene and hinge loaders."""
@@ -109,7 +128,7 @@ class EpisodeCase:
     def outcome(self) -> str:
         """Return the normalized episode outcome used in the headline."""
         metadata = self.scene_trace.metadata
-        summary = metadata.get("summary", {})
+        summary = _metadata_summary(metadata)
         value = metadata.get(
             "episode_status",
             metadata.get("status", summary.get("episode_status", "unknown")),
@@ -223,7 +242,7 @@ def _headline(case_label: str, hinge_trace: Any) -> str:
     closest = hinge.closest_approach(hinge_trace)
     near_miss_steps = hinge.count_near_miss_steps(hinge_trace)
     metadata = hinge_trace.metadata
-    summary = metadata.get("summary", {})
+    summary = _metadata_summary(metadata)
     outcome = str(
         metadata.get(
             "episode_status",
@@ -415,11 +434,56 @@ def _entity_slug(value: object) -> str:
 def _scenario_id(case: EpisodeCase) -> str:
     """Return the scenario identifier needed to resolve static map geometry."""
     metadata = case.scene_trace.metadata
-    summary = metadata.get("summary", {})
+    summary = _metadata_summary(metadata)
     scenario_id = metadata.get("scenario_id", summary.get("scenario_id"))
     if not isinstance(scenario_id, str) or not scenario_id:
         raise TraceViewerError(f"{case.bundle_dir}: metadata has no scenario_id")
     return scenario_id
+
+
+def _provenance_text(case: EpisodeCase) -> str:
+    """Build one source-provenance line embedded in the recording."""
+    metadata = case.scene_trace.metadata
+    fields = {
+        "commit": metadata.get("git_commit"),
+        "planner": metadata.get("planner"),
+        "scenario": metadata.get("scenario_id"),
+        "seed": metadata.get("seed"),
+        "bundle_schema": metadata.get("schema_version"),
+    }
+    rendered = ", ".join(
+        f"{name}={value if value is not None else 'missing'}" for name, value in fields.items()
+    )
+    return f"Source provenance: {rendered}."
+
+
+def _pair_provenance_text(cases: Sequence[EpisodeCase]) -> str | None:
+    """Describe whether a two-episode view shares commit and scenario context."""
+    if len(cases) != 2:
+        return None
+    first = cases[0].scene_trace.metadata
+    second = cases[1].scene_trace.metadata
+    commit_a, commit_b = first.get("git_commit"), second.get("git_commit")
+    scenario_a, scenario_b = first.get("scenario_id"), second.get("scenario_id")
+    shared_context = (
+        commit_a is not None
+        and commit_a == commit_b
+        and scenario_a is not None
+        and scenario_a == scenario_b
+    )
+    if shared_context:
+        return (
+            f"A/B provenance: shared commit {commit_a}, shared scenario {scenario_a}; "
+            f"planner A={first.get('planner', 'missing')}, "
+            f"planner B={second.get('planner', 'missing')}. "
+            "Configuration hashes are unavailable in this bundle schema."
+        )
+    return (
+        "A/B provenance caveat: "
+        f"commit A={commit_a or 'missing'}, B={commit_b or 'missing'}; "
+        f"scenario A={scenario_a or 'missing'}, B={scenario_b or 'missing'}. "
+        "Do not treat this diagnostic view as comparison-ready evidence."
+    )
 
 
 def _map_obstacle_strips(case: EpisodeCase) -> list[list[tuple[float, float]]]:
@@ -552,6 +616,20 @@ def _terminal_collision(case: EpisodeCase, index: int) -> bool:
     return index == len(case.scene_trace.steps) - 1 and "collision" in case.outcome
 
 
+def _frame_time_s(frame: dict[str, Any], *, bundle_dir: Path, index: int) -> float:
+    """Return one finite raw-frame timestamp with a source-aware error."""
+    raw_time = frame.get("time_s")
+    if raw_time is None or isinstance(raw_time, bool):
+        raise TraceViewerError(f"{bundle_dir}: raw frame {index} has invalid time_s")
+    try:
+        time_s = float(raw_time)
+    except (TypeError, ValueError) as exc:
+        raise TraceViewerError(f"{bundle_dir}: raw frame {index} has invalid time_s") from exc
+    if not math.isfinite(time_s):
+        raise TraceViewerError(f"{bundle_dir}: raw frame {index} has invalid time_s")
+    return time_s
+
+
 def _log_frame(
     audit: RecordingAudit,
     rr: Any,
@@ -565,8 +643,9 @@ def _log_frame(
     frame = case.frames[index]
     step = scene.steps[index]
     time_s = scene.time_s[index]
+    frame_time_s = _frame_time_s(frame, bundle_dir=case.bundle_dir, index=index)
     if frame.get("step") != step or not math.isclose(
-        float(frame.get("time_s", math.nan)),
+        frame_time_s,
         time_s,
         abs_tol=1e-9,
     ):
@@ -720,6 +799,7 @@ def log_cases(
         _log_series_styles(audit, rr, case)
         audit.set_time(time_s=case.scene_trace.time_s[0], step=case.scene_trace.steps[0])
         audit.log(f"{case.root}/summary/headline", rr.TextLog(case.headline))
+        audit.log(f"{case.root}/summary/provenance", rr.TextLog(_provenance_text(case)))
         for index in range(len(case.scene_trace.steps)):
             _log_frame(
                 audit,
@@ -733,11 +813,15 @@ def log_cases(
         first_time = min(case.scene_trace.time_s[0] for case in cases)
         audit.set_time(time_s=first_time, step=0)
         audit.log("comparison/headline", rr.TextLog(contrast))
+        pair_provenance = _pair_provenance_text(cases)
+        if pair_provenance is not None:
+            audit.log("comparison/provenance", rr.TextLog(pair_provenance))
         audit.log(
             "comparison/evidence_boundary",
             rr.TextLog(
                 "Shared-clock diagnostic contrast; different seeds are descriptive, "
-                "not a counterfactual replay or a causal pivot validation."
+                "not a counterfactual replay or a causal pivot validation. Surface clearance "
+                "uses repository-default radii because bundle runtime radii are unavailable."
             ),
         )
     return audit, focal, contrast
@@ -790,6 +874,11 @@ def verify_recording_contract(  # noqa: C901 - explicit entity-by-entity proof c
             f"{case.root}/summary/headline",
             (case.scene_trace.time_s[0], case.scene_trace.time_s[0]),
         )
+        _assert_time_range(
+            audit,
+            f"{case.root}/summary/provenance",
+            (case.scene_trace.time_s[0], case.scene_trace.time_s[0]),
+        )
 
         for ped_id, track in case.scene_trace.pedestrian_tracks.items():
             trajectory_path = f"{case.root}/scene/pedestrians/ped_{_entity_slug(ped_id)}/trajectory"
@@ -829,6 +918,7 @@ def verify_recording_contract(  # noqa: C901 - explicit entity-by-entity proof c
     if len(cases) == 2:
         first_time = min(case.scene_trace.time_s[0] for case in cases)
         _assert_time_range(audit, "comparison/headline", (first_time, first_time))
+        _assert_time_range(audit, "comparison/provenance", (first_time, first_time))
         _assert_time_range(audit, "comparison/evidence_boundary", (first_time, first_time))
 
     rrd_size: int | None = None
@@ -897,6 +987,14 @@ def _flush(recording: Any) -> None:
         flush()
 
 
+def _finalize_saved_recording(recording: Any) -> None:
+    """Flush and close a saved recording before verifying its artifact."""
+    _flush(recording)
+    disconnect = getattr(recording, "disconnect", None)
+    if callable(disconnect):
+        disconnect()
+
+
 def _build_parser() -> argparse.ArgumentParser:
     """Build the command-line interface."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -909,7 +1007,10 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--episodes-jsonl",
         type=Path,
-        help="Raw episodes.jsonl input; requires one or two repeated --seed values.",
+        help=(
+            "Provenance-pinned doorway episodes.jsonl input; requires one or two "
+            "repeated --seed values. Use validated bundle directories for other campaigns."
+        ),
     )
     parser.add_argument(
         "--seed",
@@ -951,13 +1052,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 serve=args.serve,
             )
             audit, focal, contrast = log_cases(recording, rr, rrb, cases)
-            _flush(recording)
+            if args.save is not None:
+                _finalize_saved_recording(recording)
+            else:
+                _flush(recording)
             report = verify_recording_contract(audit, cases, rrd_path=args.save)
 
             for case in cases:
                 print(case.headline)
+                print(_provenance_text(case))
             if contrast is not None:
                 print(contrast)
+                pair_provenance = _pair_provenance_text(cases)
+                if pair_provenance is not None:
+                    print(pair_provenance)
             print(focal.note)
             ranges = ", ".join(
                 f"{case.label}={case.scene_trace.time_s[0]:.2f}..{case.scene_trace.time_s[-1]:.2f}s"

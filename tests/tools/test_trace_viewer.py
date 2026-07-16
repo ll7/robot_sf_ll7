@@ -52,6 +52,35 @@ class _FakeRecording:
         self.blueprints.append(blueprint)
 
 
+class _ModernRecording:
+    """Capture the current Rerun ``set_time`` keyword surface."""
+
+    def __init__(self) -> None:
+        self.times: list[tuple[str, int | float | None, int | None]] = []
+
+    def set_time(
+        self,
+        timeline: str,
+        *,
+        duration: int | float | None = None,
+        sequence: int | None = None,
+    ) -> None:
+        self.times.append((timeline, duration, sequence))
+
+
+class _SavedRecording:
+    """Capture current Rerun save finalization order."""
+
+    def __init__(self) -> None:
+        self.events: list[str] = []
+
+    def flush(self, *, timeout_sec: float = 1e38) -> None:
+        self.events.append(f"flush:{timeout_sec}")
+
+    def disconnect(self) -> None:
+        self.events.append("disconnect")
+
+
 FAKE_RERUN = SimpleNamespace(
     LineStrips2D=_archetype("LineStrips2D"),
     Points2D=_archetype("Points2D"),
@@ -101,6 +130,7 @@ def _frame(
 
 
 def _episode_row(seed: int, status: str, robot_positions: list[float]) -> dict[str, Any]:
+    adapter = trace_viewer._adapter_module()
     frames = [
         _frame(
             step=index,
@@ -117,8 +147,13 @@ def _episode_row(seed: int, status: str, robot_positions: list[float]) -> dict[s
         "seed": seed,
         "status": status,
         "termination_reason": status,
-        "git_hash": "synthetic",
-        "algo": "synthetic_planner",
+        "git_hash": adapter.EXEC_COMMIT,
+        "algo": adapter.EXPECTED_ALGO,
+        "result_provenance": {
+            "repo_commit": adapter.EXEC_COMMIT,
+            "scenario_id": adapter.EXPECTED_SCENARIO_ID,
+            "seed": seed,
+        },
         "algorithm_metadata": {
             "simulation_step_trace": {
                 "schema_version": "simulation-step-trace.v1",
@@ -185,8 +220,10 @@ def test_raw_pair_loader_and_rerun_logging_contract(tmp_path: Path) -> None:
 
     assert "episode_A/scene/map/obstacles" in report.entity_paths
     assert "episode_A/scene/robot/path" in report.entity_paths
+    assert "episode_A/summary/provenance" in report.entity_paths
     assert "episode_B/scene/events/collision" in report.entity_paths
     assert "episode_B/metrics/omega_command_rad_s" in report.entity_paths
+    assert "comparison/provenance" in report.entity_paths
     assert report.time_ranges_s["episode_A/scene/robot/path"] == pytest.approx((0.1, 0.3))
     assert report.time_ranges_s["episode_B/metrics/min_pedestrian_clearance_m"] == pytest.approx(
         (0.1, 0.3)
@@ -234,3 +271,49 @@ def test_single_raw_seed_uses_one_spatial_panel(tmp_path: Path) -> None:
     assert not any(path.startswith("episode_B/") for path in report.entity_paths)
     vertical = recording.blueprints[0].args[0]
     assert vertical.args[0].kind == "Spatial2DView"
+
+
+def test_current_rerun_time_api_uses_duration_and_sequence_keywords() -> None:
+    """Current RecordingStream time calls use the SDK's documented keywords."""
+    recording = _ModernRecording()
+
+    trace_viewer._set_recording_time(
+        recording,
+        timeline=trace_viewer.TIMELINE_NAME,
+        value=1.25,
+        kind="duration",
+    )
+    trace_viewer._set_recording_time(
+        recording,
+        timeline=trace_viewer.STEP_TIMELINE_NAME,
+        value=7,
+        kind="sequence",
+    )
+
+    assert recording.times == [
+        (trace_viewer.TIMELINE_NAME, 1.25, None),
+        (trace_viewer.STEP_TIMELINE_NAME, None, 7),
+    ]
+
+
+def test_null_metadata_summary_is_treated_as_absent() -> None:
+    """Explicit JSON null summary values should not crash metadata fallback."""
+    assert trace_viewer._metadata_summary({"summary": None}) == {}
+
+    with pytest.raises(trace_viewer.TraceViewerError, match="object or null"):
+        trace_viewer._metadata_summary({"summary": []})
+
+
+def test_null_frame_time_has_source_aware_error(tmp_path: Path) -> None:
+    """Explicit JSON null frame timestamps should fail cleanly."""
+    with pytest.raises(trace_viewer.TraceViewerError, match="raw frame 3 has invalid time_s"):
+        trace_viewer._frame_time_s({"time_s": None}, bundle_dir=tmp_path, index=3)
+
+
+def test_saved_recording_is_closed_before_artifact_verification() -> None:
+    """Saved recordings must write their footer before size/integrity checks."""
+    recording = _SavedRecording()
+
+    trace_viewer._finalize_saved_recording(recording)
+
+    assert recording.events == ["flush:1e+38", "disconnect"]

@@ -332,7 +332,14 @@ class GhProjectClient:
         )
 
     def item_list(self, *, owner: str, project_number: int, limit: int) -> list[dict[str, Any]]:
-        """Return project items with their visible field values."""
+        """Return project items with their visible field values.
+
+        Fails closed when the result reaches the ``limit`` cap: because this list
+        drives score write-backs, a page at the cap (indistinguishable from a full
+        page) could silently skip items beyond the limit. Callers that cannot
+        bound the project size should use :meth:`item_list_until_issue` instead
+        (issue #5870 / #5048 / #4991).
+        """
 
         payload = self._run_project_command(
             "item-list",
@@ -350,6 +357,50 @@ class GhProjectClient:
         # limit. Raise instead of writing a partial sync (issue #5048 / #4991).
         assert_not_truncated(items, limit=limit, context="gh project item-list")
         return items
+
+    def item_list_until_issue(
+        self,
+        *,
+        owner: str,
+        project_number: int,
+        issue_number: int,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Return one issue-backed item through the project query surface.
+
+        The numeric query narrows discovery before ``gh`` applies ``--limit``;
+        the exact-number check then rejects textual false positives. If the
+        bounded query reaches its cap without finding the issue, fail closed
+        because the exact match may have been truncated.
+        """
+
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        payload = self._run_project_command(
+            "item-list",
+            owner=owner,
+            project_number=project_number,
+            extra_args=(
+                "--query",
+                str(issue_number),
+                "--limit",
+                str(limit),
+            ),
+            as_json=True,
+        )
+        items = list(payload["items"])
+        for item in items:
+            content = item.get("content")
+            if isinstance(content, dict) and content.get("type") == "Issue":
+                if content.get("number") == issue_number:
+                    return [item]
+
+        assert_not_truncated(
+            items,
+            limit=limit,
+            context=f"gh project item-list query for issue #{issue_number}",
+        )
+        return []
 
     def update_number_field(
         self,
@@ -499,11 +550,25 @@ def sync_scores(
         )
 
     project_id = client.project_id(owner=options.owner, project_number=options.project_number)
-    items = client.item_list(
-        owner=options.owner,
-        project_number=options.project_number,
-        limit=options.limit,
-    )
+    if options.issue_number is not None:
+        # Targeted sync: locate the single issue-backed item without requiring a
+        # full untruncated project page. Query before applying the cap, then verify
+        # the exact issue number so textual false positives cannot be updated
+        # (issue #5870). The original fail-closed full-project guard is preserved
+        # for unscoped sync below.
+        items = client.item_list_until_issue(
+            owner=options.owner,
+            project_number=options.project_number,
+            issue_number=options.issue_number,
+        )
+    else:
+        # Unscoped sync keeps the explicit truncation protection: a full project
+        # page at the cap must fail closed rather than silently skip items.
+        items = client.item_list(
+            owner=options.owner,
+            project_number=options.project_number,
+            limit=options.limit,
+        )
     previews = build_previews(
         items,
         alpha=options.alpha,

@@ -11,6 +11,7 @@ placeholders.
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 CONFTEST = Path(__file__).resolve().parents[1] / "conftest.py"
@@ -24,18 +25,26 @@ def _fallback_source() -> str:
     return CONFTEST.read_text(encoding="utf-8")
 
 
-def _fallback_block() -> str:
-    text = _fallback_source()
-    return text.split("class _Fallback")[1].split("return _Fallback()")[0]
+def _fallback_class() -> ast.ClassDef:
+    classes = [
+        node
+        for node in ast.walk(ast.parse(_fallback_source()))
+        if isinstance(node, ast.ClassDef) and node.name == "_Fallback"
+    ]
+    assert len(classes) == 1, "expected exactly one _Fallback class in tests/conftest.py"
+    return classes[0]
 
 
 def _method_block(method: str) -> str:
-    block = _fallback_block()
-    start = block.index(f"def {method}")
-    rest = block[start:]
-    # Slice up to the next method or the end of the fallback block.
-    next_def = rest.find("\n    def ", len(f"def {method}"))
-    return rest if next_def == -1 else rest[:next_def]
+    methods = [
+        node
+        for node in _fallback_class().body
+        if isinstance(node, ast.FunctionDef) and node.name == method
+    ]
+    assert len(methods) == 1, f"expected exactly one {method} method on _Fallback"
+    source = ast.get_source_segment(_fallback_source(), methods[0])
+    assert source is not None
+    return source
 
 
 def test_conftest_fallback_target_methods_have_no_placeholder_docstrings():
@@ -48,7 +57,7 @@ def test_conftest_fallback_target_methods_have_no_placeholder_docstrings():
 
 def test_fallback_effective_soft_threshold_documents_ci_and_xdist():
     """Documented contract: CI uses full soft threshold; xdist widens below hard."""
-    block = _fallback_block()
+    block = _method_block("effective_soft_threshold")
     assert "effective_soft_threshold" in block
     assert "is_under_xdist" in block
     # The fix documents both the CI branch and the xdist contention multiplier.

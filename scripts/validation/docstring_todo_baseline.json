@@ -13,8 +13,8 @@
       "occurrences": 587
     },
     "tests": {
-      "files": 182,
-      "occurrences": 1262
+      "files": 183,
+      "occurrences": 1263
     }
   },
   "files": {
@@ -209,6 +209,7 @@
     "tests/unit/test_metrics_edge_cases.py": 5,
     "tests/unit/test_resume_manifest.py": 18,
     "tests/unit/test_runner_video.py": 10,
+    "tests/validation/test_pr_contract_check.py": 1,
     "tests/visuals/test_deterministic_selection.py": 6,
     "tests/visuals/test_encode_wrapper.py": 22,
     "tests/visuals/test_encode_write_clip_fallbacks.py": 35,
@@ -233,7 +234,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 206,
-    "total_occurrences": 1849
+    "files": 207,
+    "total_occurrences": 1850
   }
 }

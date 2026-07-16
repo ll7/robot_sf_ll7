@@ -16,6 +16,9 @@ import pytest
 import yaml
 
 from robot_sf.benchmark.critical_intervals import (
+    ANCHOR_SOURCE_CENTER_DISTANCE,
+    ANCHOR_SOURCE_STEP_EVENT,
+    STEP_NEAR_MISS_EVENTS_FIELD,
     TTC_CONVENTION,
     CriticalInterval,
     IntervalMetrics,
@@ -24,6 +27,7 @@ from robot_sf.benchmark.critical_intervals import (
     _compute_window_min_ttc_s,
     _detect_ttc_threshold_crossing,
     _pairwise_ttc_s,
+    _validate_step_near_miss_events,
     extract_critical_intervals,
     load_config,
     report_to_dict,
@@ -1078,3 +1082,192 @@ class TestHeadingOscillationBaseline:
         trace = _make_trace(robot_pos)
         whole = _compute_interval_metrics_in_window(trace, start=0, end=None)
         assert whole["heading_oscillation"] == pytest.approx(0.0, abs=1e-12)
+
+
+# ---------------------------------------------------------------------------
+# Step-level near-miss event anchor (issue #5884)
+# ---------------------------------------------------------------------------
+
+
+def _make_step_event_trace(
+    n: int,
+    *,
+    event_steps: list[int] | None = None,
+    event_metric: str = "surface_clearance",
+    center_distance_event: bool = False,
+) -> dict[str, object]:
+    """Build a columnar trace carrying the per-step near-miss event list.
+
+    The robot and pedestrian stay far apart (never a center-distance crossing),
+    but the step event list records near-miss events at the given steps so the
+    ``collision_or_near_miss`` anchor can be exercised on the event signal alone.
+    """
+
+    robot_pos = np.zeros((n, 2), dtype=float)
+    robot_pos[:, 0] = np.arange(n) * 0.3
+
+    # Pedestrian kept at large center distance (> default near-miss threshold).
+    peds_pos = np.zeros((n, 1, 2), dtype=float)
+    peds_pos[:, 0, 0] = 50.0
+
+    events: list[dict[str, object] | None] = [None] * n
+    for step in event_steps or []:
+        entry: dict[str, object] = {
+            "step": step,
+            "metric": "center_distance" if center_distance_event else event_metric,
+            "near_miss": True,
+        }
+        if not center_distance_event:
+            entry["clearance_m"] = 0.15
+        events[step] = entry
+
+    trace: dict[str, object] = {
+        "robot_pos": robot_pos,
+        "peds_pos": peds_pos,
+        "dt": 0.1,
+        STEP_NEAR_MISS_EVENTS_FIELD: events,
+    }
+    return trace
+
+
+def _collision_or_near_miss_interval(trace: dict[str, object]) -> CriticalInterval:
+    intervals = extract_critical_intervals(
+        trace,
+        {
+            "critical_intervals": {
+                "collision_or_near_miss": {
+                    "enabled": True,
+                    "before_s": 0.5,
+                    "after_s": 0.5,
+                },
+            },
+        },
+    )
+    assert len(intervals) == 1
+    return intervals[0]
+
+
+class TestStepLevelNearMissEvent:
+    """Issue #5884: event signal anchors without center-distance crossing."""
+
+    def test_event_anchors_at_recorded_step(self) -> None:
+        """Synthetic trace with step-level events but no center-distance crossing
+        yields the anchor at the recorded event step with explicit source."""
+        trace = _make_step_event_trace(10, event_steps=[4, 7])
+        iv = _collision_or_near_miss_interval(trace)
+        assert iv.status == "available"
+        assert iv.anchor_step == 4  # first event step
+        assert iv.source == ANCHOR_SOURCE_STEP_EVENT
+
+    def test_event_overrides_center_distance_fallback(self) -> None:
+        """When both an event and a center-distance crossing exist, the event
+        (which may occur earlier) is the reported anchor source."""
+        trace = _make_step_event_trace(10, event_steps=[8])
+        # Add a center-distance crossing at step 2 (pedestrian approaches).
+        peds_pos = np.zeros((10, 1, 2), dtype=float)
+        peds_pos[:, 0, 0] = 5.0 - np.arange(10) * 0.5
+        trace["peds_pos"] = peds_pos  # closest at step 5 (~2.5m)
+        iv = _collision_or_near_miss_interval(trace)
+        assert iv.status == "available"
+        # Step event at 8 is the anchor; center distance alone would be ~step 5
+        # only if it crossed, but the event signal wins and is clearly labeled.
+        assert iv.anchor_step == 8
+        assert iv.source == ANCHOR_SOURCE_STEP_EVENT
+
+    def test_no_event_falls_back_to_center_distance(self) -> None:
+        """Legacy/current traces (no event list) keep documented behaviour."""
+        n = 10
+        robot_pos = np.zeros((n, 2), dtype=float)
+        robot_pos[:, 0] = np.arange(n) * 0.3
+        peds_pos = np.zeros((n, 1, 2), dtype=float)
+        peds_pos[:, 0, 0] = 2.0 - np.arange(n) * 0.2
+        trace = _make_trace(robot_pos, peds_pos, dt=0.1)
+        iv = _collision_or_near_miss_interval(trace)
+        assert iv.status == "available"
+        assert iv.anchor_step is not None
+        assert iv.source == ANCHOR_SOURCE_CENTER_DISTANCE
+
+    def test_no_event_no_crossing_missing_anchor(self) -> None:
+        """No event list and no center-distance crossing -> missing_anchor."""
+        trace = _make_no_event_trace()
+        iv = _collision_or_near_miss_interval(trace)
+        assert iv.status == "missing_anchor"
+        assert iv.source is None
+
+    def test_mismatched_length_fails_closed(self) -> None:
+        """Event list length != trace length invalidates the trace."""
+        n = 10
+        robot_pos = np.zeros((n, 2), dtype=float)
+        robot_pos[:, 0] = np.arange(n) * 0.3
+        peds_pos = np.zeros((n, 1, 2), dtype=float)
+        peds_pos[:, 0, 0] = 50.0
+        # 9 entries, one short of the 10-step trace -> inconsistent length.
+        bad_events = [None for _ in range(n - 1)]
+        trace = _make_trace(robot_pos, peds_pos, dt=0.1)
+        trace[STEP_NEAR_MISS_EVENTS_FIELD] = bad_events
+        iv = _collision_or_near_miss_interval(trace)
+        assert iv.status == "invalid_trace"
+        assert "length" in (iv.reason or "")
+
+    def test_unknown_metric_fails_closed(self) -> None:
+        """Unknown near-miss metric name fails closed."""
+        n = 5
+        trace = _make_step_event_trace(n, event_steps=[1])
+        events = list(trace[STEP_NEAR_MISS_EVENTS_FIELD])  # type: ignore[arg-type]
+        events[1] = {"step": 1, "metric": "not_a_metric", "near_miss": True}  # type: ignore[index]
+        trace[STEP_NEAR_MISS_EVENTS_FIELD] = events  # type: ignore[index]
+        iv = _collision_or_near_miss_interval(trace)
+        assert iv.status == "invalid_trace"
+
+    def test_center_distance_metric_rejected_as_event(self) -> None:
+        """Center-distance evidence must not be silently accepted as a step
+        event; it is rejected so the two signals stay distinct."""
+        trace = _make_step_event_trace(5, event_steps=[2], center_distance_event=True)
+        iv = _collision_or_near_miss_interval(trace)
+        assert iv.status == "invalid_trace"
+
+    def test_explicit_false_event_is_not_a_near_miss(self) -> None:
+        """An entry flagged ``near_miss=False`` is not counted as an event."""
+        n = 5
+        trace = _make_step_event_trace(n, event_steps=[1])
+        events = list(trace[STEP_NEAR_MISS_EVENTS_FIELD])  # type: ignore[arg-type]
+        events[1] = {"step": 1, "metric": "surface_clearance", "near_miss": False}  # type: ignore[index]
+        trace[STEP_NEAR_MISS_EVENTS_FIELD] = events  # type: ignore[index]
+        iv = _collision_or_near_miss_interval(trace)
+        # No center-distance crossing either -> missing_anchor, not step event.
+        assert iv.status == "missing_anchor"
+
+    def test_report_includes_source(self) -> None:
+        """Serialized report carries the anchor source field."""
+        trace = _make_step_event_trace(10, event_steps=[3])
+        iv = _collision_or_near_miss_interval(trace)
+        d = report_to_dict(summarize_interval_metrics(trace, [iv]))
+        ci = d["critical_intervals"][0]
+        assert ci["source"] == ANCHOR_SOURCE_STEP_EVENT
+        assert ci["anchor_step"] == 3
+
+
+class TestValidateStepNearMissEvents:
+    """Direct coverage of the fail-closed event schema validator."""
+
+    def test_none_is_empty(self) -> None:
+        steps, reason = _validate_step_near_miss_events(None, n_steps=5)
+        assert steps == []
+        assert reason is None
+
+    def test_wrong_length(self) -> None:
+        _steps, reason = _validate_step_near_miss_events([None, None], n_steps=4)
+        assert reason is not None
+        assert "length" in reason
+
+    def test_step_mismatch(self) -> None:
+        events = [None, {"step": 5, "metric": "ttc", "near_miss": True}]
+        _steps, reason = _validate_step_near_miss_events(events, n_steps=2)
+        assert reason is not None
+        assert "step" in reason
+
+    def test_occlusion_metric_accepted(self) -> None:
+        events = [None, {"step": 1, "metric": "occlusion", "near_miss": True}]
+        steps, reason = _validate_step_near_miss_events(events, n_steps=2)
+        assert reason is None
+        assert steps == [1]

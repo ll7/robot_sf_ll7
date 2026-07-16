@@ -137,6 +137,58 @@ MARKER_B = "s"  # open square
 _LABEL_BBOX = {"facecolor": "white", "edgecolor": "none", "alpha": 0.72, "pad": 0.5}
 
 #: --------------------------------------------------------------------------------------
+#: Per-layout panel styling. "screen" reproduces the original prototype values exactly.
+#: "print" designs at FINAL size: the figure is 6.3 in wide and vendored at \\textwidth
+#: with no LaTeX rescaling, so matplotlib pt == on-page pt. Print constraints (author
+#: feedback 2026-07-16): minimum rendered font 7 pt; 8 pt for ticks/annotations; 9-10 pt
+#: panel titles; declutter -- drop the per-step "braking" marker+label and the dimmed
+#: context-pedestrian id labels (their roles move to the legend), keep collision marker,
+#: min-clearance point+value (compact "x.xx m" text), focal-pedestrian highlight, and
+#: start/end glyphs.
+#: --------------------------------------------------------------------------------------
+_SCREEN_PANEL_STYLE: dict[str, Any] = {
+    "title_fs": 10.5,
+    "tick_fs": 7.5,
+    "axis_fs": 8.0,
+    "annot_fs": 7.0,  # focal label, collision/near-miss labels
+    "small_fs": 6.5,  # pivot + clearance labels, non-completion note
+    "ped_fs": 6.5,  # context-pedestrian id labels
+    "brake_fs": 6.0,
+    "show_braking": True,
+    "show_ped_labels": True,
+    "clearance_compact": False,
+    "outcome_label_in_legend": False,
+    #: radial search distances for _place_clear_label -- the original defaults
+    "label_radii": (52.0, 68.0, 86.0, 106.0, 128.0),
+}
+_PRINT_PANEL_STYLE: dict[str, Any] = {
+    "title_fs": 9.0,
+    "tick_fs": 8.0,
+    "axis_fs": 8.0,
+    "annot_fs": 8.0,
+    "small_fs": 8.0,
+    "ped_fs": 7.0,  # unused while show_ped_labels is False; floor kept >= 7 pt anyway
+    "brake_fs": 7.0,  # unused while show_braking is False
+    "show_braking": False,
+    "show_ped_labels": False,
+    "clearance_compact": True,
+    #: at ~2.6 in panel width the congestion around the doorway leaves no clear spot
+    #: near the outcome marker: the radial search parks the "collision" text next to
+    #: the (unrelated) trace-start diamond, which misattributes it. The X marker stays
+    #: in-panel; its name moves to the legend instead.
+    "outcome_label_in_legend": True,
+    #: closer-first radial search: at ~2.6 in panel width the screen default's 52 pt
+    #: minimum offset is ~28% of the panel -- labels drift too far from their anchors
+    #: to read as attached (no leader lines are drawn; see _place_clear_label's
+    #: docstring for why leaders are off).
+    "label_radii": (16.0, 26.0, 38.0, 52.0, 68.0),
+}
+
+#: Print figure width in inches: included at \\textwidth (6.3 in) with NO rescaling, so
+#: this is the exact on-page size and every pt above is the exact on-page pt.
+PRINT_FIG_WIDTH_IN: float = 6.3
+
+#: --------------------------------------------------------------------------------------
 #: D(t) normalized joint-state divergence -- physical scales.
 #: Design spec (diss docs/context/research/2026-07-15_visualization_scenarios.md,
 #: "Automatic pivotal-frame selection", step 2): "Use physically meaningful scales s_k,
@@ -1004,6 +1056,7 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     defer_labels: bool = False,
     pivot_label_text: str = "pivot",
     contrast_mode: bool = False,
+    style: dict[str, Any] | None = None,
 ) -> list[tuple[tuple[float, float], str, dict[str, Any]]]:
     """Draw one spatial panel of the hinge figure. Mutates ``ax`` in place.
 
@@ -1014,6 +1067,10 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     ignored). Everything else (pedestrians, braking/clearance/outcome markers,
     start/end glyphs) is unchanged. The default (hinge) mode is untouched for true
     shared-prefix pairs.
+
+    ``style`` selects a per-layout font/declutter table (``_SCREEN_PANEL_STYLE``
+    default, reproducing the original prototype values exactly, or
+    ``_PRINT_PANEL_STYLE`` for the design-at-final-size print layout).
 
     When ``defer_labels`` is True, the two dynamically-placed labels (pivot ring,
     clearance) are NOT placed here; instead their ``(anchor_xy, text, style_kwargs)``
@@ -1029,6 +1086,7 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
         Empty list unless ``defer_labels`` is True, in which case up to two
         ``(anchor_xy, text, style_kwargs)`` tuples for the caller to place later.
     """
+    style = style or _SCREEN_PANEL_STYLE
     xmin, xmax, ymin, ymax = bounds
     pending_labels: list[tuple[tuple[float, float], str, dict[str, Any]]] = []
 
@@ -1057,12 +1115,14 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
             continue
         for seg_x, seg_y in _contiguous_segments(list(xy[:, 0]), list(xy[:, 1])):
             ax.plot(seg_x, seg_y, color=COLOR_PED_CONTEXT, linewidth=0.6, alpha=0.55, zorder=1)
+        if not style["show_ped_labels"]:
+            continue  # print declutter: ids move to the legend's "other pedestrians" entry
         ped_label_spec = (
             (float(xy[0, 0]), float(xy[0, 1])),
             f"p{pid}",
             {
                 "color": COLOR_PED_CONTEXT,
-                "fontsize": 6.5,
+                "fontsize": style["ped_fs"],
                 "draw_leader": False,
                 "radii_points": (18.0, 30.0, 44.0, 60.0),
             },
@@ -1088,7 +1148,13 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     focal_label_spec = (
         (float(focal_xy[0, 0]), float(focal_xy[0, 1])),
         f"focal p{focal_ped_id}",
-        {"color": COLOR_PED_FOCAL_OUTLINE, "fontsize": 7, "weight": "bold", "draw_leader": False},
+        {
+            "color": COLOR_PED_FOCAL_OUTLINE,
+            "fontsize": style["annot_fs"],
+            "weight": "bold",
+            "draw_leader": False,
+            "radii_points": style["label_radii"],
+        },
     )
     if defer_labels:
         pending_labels.append(focal_label_spec)
@@ -1162,7 +1228,12 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
         pivot_label_spec = (
             (px, py),
             pivot_label_text,
-            {"color": "#111111", "fontsize": 6.5, "draw_leader": False},
+            {
+                "color": "#111111",
+                "fontsize": style["small_fs"],
+                "draw_leader": False,
+                "radii_points": style["label_radii"],
+            },
         )
         if defer_labels:
             pending_labels.append(pivot_label_spec)
@@ -1178,6 +1249,8 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
         if anchor == "closest_approach":
             continue  # drawn explicitly below with the labelled clearance line
         if anchor == "first_braking_event":
+            if not style["show_braking"]:
+                continue  # print declutter: braking marker+label dropped (author feedback)
             ax.scatter(
                 [px],
                 [py],
@@ -1191,7 +1264,12 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
             braking_label_spec = (
                 (float(px), float(py)),
                 "braking",
-                {"color": "#111111", "fontsize": 6, "draw_leader": False},
+                {
+                    "color": "#111111",
+                    "fontsize": style["brake_fs"],
+                    "draw_leader": False,
+                    "radii_points": style["label_radii"],
+                },
             )
             if defer_labels:
                 pending_labels.append(braking_label_spec)
@@ -1207,10 +1285,20 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
         rx, ry = closest["robot_xy"]
         pxg, pyg = closest["ped_xy"]
         ax.plot([rx, pxg], [ry, pyg], color=color, linewidth=0.8, linestyle=":", zorder=5)
+        clearance_text = (
+            f"{closest['distance_m']:.2f} m"
+            if style["clearance_compact"]
+            else f"clearance {closest['distance_m']:.2f} m\n@t={closest['time_s']:.1f}s"
+        )
         clearance_label_spec = (
             (pxg, pyg),
-            f"clearance {closest['distance_m']:.2f} m\n@t={closest['time_s']:.1f}s",
-            {"color": color, "fontsize": 6.5, "draw_leader": False},
+            clearance_text,
+            {
+                "color": color,
+                "fontsize": style["small_fs"],
+                "draw_leader": False,
+                "radii_points": style["label_radii"],
+            },
         )
         if defer_labels:
             pending_labels.append(clearance_label_spec)
@@ -1220,17 +1308,20 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     # -- outcome marker: collision (x) / near-miss (triangle) --------------------------
     if collision_or_near_miss_step is not None and collision_or_near_miss_step < len(xy):
         px, py = xy[collision_or_near_miss_step]
+        outcome_label_spec: tuple[Any, ...] | None = None
         if outcome_kind == "collision":
             ax.scatter([px], [py], marker="x", s=90, color=COLOR_COLLISION, linewidth=2.2, zorder=7)
             outcome_label_spec = (
                 (float(px), float(py)),
                 "collision",
-                {"color": COLOR_COLLISION, "fontsize": 7, "weight": "bold", "draw_leader": False},
+                {
+                    "color": COLOR_COLLISION,
+                    "fontsize": style["annot_fs"],
+                    "weight": "bold",
+                    "draw_leader": False,
+                    "radii_points": style["label_radii"],
+                },
             )
-            if defer_labels:
-                pending_labels.append(outcome_label_spec)
-            else:
-                _place_clear_label(ax, *outcome_label_spec[:2], **outcome_label_spec[2])
         elif outcome_kind == "near_miss":
             ax.scatter(
                 [px],
@@ -1245,8 +1336,18 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
             outcome_label_spec = (
                 (float(px), float(py)),
                 "near miss",
-                {"color": COLOR_COLLISION, "fontsize": 7, "weight": "bold", "draw_leader": False},
+                {
+                    "color": COLOR_COLLISION,
+                    "fontsize": style["annot_fs"],
+                    "weight": "bold",
+                    "draw_leader": False,
+                    "radii_points": style["label_radii"],
+                },
             )
+        # Print declutter: the outcome marker's name moves to the legend (the doorway
+        # congestion leaves no clear spot near the marker itself -- the radial search
+        # would park the text next to the unrelated trace-start diamond).
+        if outcome_label_spec is not None and not style["outcome_label_in_legend"]:
             if defer_labels:
                 pending_labels.append(outcome_label_spec)
             else:
@@ -1279,7 +1380,12 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
         non_completion_label_spec = (
             (float(xy[-1, 0]), float(xy[-1, 1])),
             "episode continues past this crop\n(non-completion / timeout, not shown)",
-            {"color": color, "fontsize": 6, "draw_leader": False},
+            {
+                "color": color,
+                "fontsize": style["small_fs"],
+                "draw_leader": False,
+                "radii_points": style["label_radii"],
+            },
         )
         if defer_labels:
             pending_labels.append(non_completion_label_spec)
@@ -1289,9 +1395,9 @@ def _draw_panel(  # noqa: C901, PLR0912, PLR0913, PLR0915 - one-panel figure ass
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
     ax.set_aspect("equal", adjustable="box")
-    ax.set_title(label, fontsize=10.5, loc="left", color=color, weight="bold")
-    ax.tick_params(labelsize=7.5)
-    ax.set_xlabel("x (m)", fontsize=8)
+    ax.set_title(label, fontsize=style["title_fs"], loc="left", color=color, weight="bold")
+    ax.tick_params(labelsize=style["tick_fs"])
+    ax.set_xlabel("x (m)", fontsize=style["axis_fs"])
     ax.grid(alpha=0.15, linewidth=0.5)
     return pending_labels
 
@@ -1391,157 +1497,63 @@ def _draw_delta_gutter(ax: plt.Axes, gutter: dict[str, Any]) -> None:
         )
 
 
-def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argument is a
-    # distinct precomputed fact (event dicts, labels, outcome kinds) the two panels need.
-    ep_a: EpisodeTrace,
-    ep_b: EpisodeTrace,
+def _draw_contrast_strip(ax: plt.Axes, gutter: dict[str, Any], *, fontsize: float) -> None:
+    """Draw the print layout's compact single-row contrast strip (replaces the vertical
+    central gutter below the panels): four cells, each a small dimmed header over its A/B
+    values -- min clearance to the focal pedestrian, near-miss steps, steps to
+    termination, first braking. Same data source as the vertical contrast gutter
+    (``compute_contrast_gutter``); only the arrangement changes.
+    """
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.axis("off")
+    clear_a = gutter["min_clearance_focal_m"]["episode_a"]
+    clear_b = gutter["min_clearance_focal_m"]["episode_b"]
+    near_a = gutter["near_miss_steps"]["episode_a"]
+    near_b = gutter["near_miss_steps"]["episode_b"]
+    steps_a = gutter["steps_to_termination"]["episode_a"]
+    steps_b = gutter["steps_to_termination"]["episode_b"]
+    brake_a = gutter["first_braking_time_s"]["episode_a"]
+    brake_b = gutter["first_braking_time_s"]["episode_b"]
+    if brake_a is not None and brake_b is not None:
+        brake_val = f"A @{brake_a:.1f} s / B @{brake_b:.1f} s"
+    elif brake_a is not None or brake_b is not None:
+        only = f"A @{brake_a:.1f} s" if brake_a is not None else f"B @{brake_b:.1f} s"
+        brake_val = f"{only} (other n/a)"
+    else:
+        brake_val = "n/a"
+    cells = [
+        ("min clearance (focal ped)", f"A {clear_a:.2f} m / B {clear_b:.2f} m"),
+        ("near-miss steps", f"A {near_a} / B {near_b}"),
+        ("steps to termination", f"A {steps_a} / B {steps_b}"),
+        ("first braking", brake_val),
+    ]
+    n = len(cells)
+    for i, (head, value) in enumerate(cells):
+        x = (i + 0.5) / n
+        ax.text(x, 0.74, head, fontsize=fontsize, ha="center", va="center", color="#555555")
+        ax.text(x, 0.24, value, fontsize=fontsize, ha="center", va="center", color="#111111")
+
+
+def _build_legend_elements(
     *,
-    label_a: str,
-    label_b: str,
-    divergence: dict[str, Any],
-    separator: dict[str, Any],
-    gutter: dict[str, Any],
-    focal_ped_id: int,
-    events_a: dict[str, dict[str, Any]],
-    events_b: dict[str, dict[str, Any]],
-    closest_a: dict[str, Any],
-    closest_b: dict[str, Any],
-    outcome_a: str,
+    contrast_mode: bool,
+    print_layout: bool,
     outcome_b: str,
     b_outcome_step: int | None,
-    headline: str,
-    map_definition: Any | None,
-    out_pdf: Path,
-    out_png: Path,
-    pivot_label_text: str = "pivot",
-    contrast_mode: bool = False,
-) -> list[Any]:
-    """Render + export the two-panel figure (vector PDF + PNG preview).
+) -> list[Line2D]:
+    """Legend entries per rendering mode/layout.
 
-    Two rendering modes:
-    - hinge mode (default): the original pivot grammar -- gray common prefix, post-pivot
-      A/B styling, pivot ring, delta gutter. For true shared-prefix pairs (e.g. the
-      same-seed orca/social_force reference pair).
-    - ``contrast_mode``: matched seed-pair contrast framing (author ruling 2026-07-16),
-      for pairs with no shared start -- full per-episode trajectories, "trace start"
-      legend vocabulary instead of pivot/prefix vocabulary, and a contrast gutter
-      (``compute_contrast_gutter``) instead of pivot-anchored deltas.
+    Contrast mode uses contrast vocabulary only -- no pivot/hinge/common-prefix wording
+    anywhere in the rendered output (matched seed-pair contrast framing, author ruling
+    2026-07-16). The print layout additionally names the pedestrian line styles and the
+    outcome marker here, because the print declutter removed their in-panel labels.
 
     Returns:
-        The list of ``figure_qa.lint_figure`` defects found on the rendered figure (before
-        the caller closes it), so the CLI can report an exact before/after lint count.
+        Legend handle list.
     """
-    plt.rcParams.update(
-        {
-            "font.family": "sans-serif",
-            "font.size": 8.5,
-            "pdf.fonttype": 42,  # embed as real (editable) glyphs, not Type 3 bitmaps
-            "ps.fonttype": 42,
-        }
-    )
-    bounds = shared_world_bounds(ep_a, ep_b)
-    _, _, ymin, ymax = bounds
-    xmin, xmax, _, _ = bounds
-    aspect = (ymax - ymin) / (xmax - xmin)
-    panel_w = 4.4
-    fig_h = panel_w * aspect + 1.0
-    fig = plt.figure(figsize=(panel_w * 2 + 1.5, fig_h))
-    grid = fig.add_gridspec(1, 3, width_ratios=(1.0, 0.34, 1.0), wspace=0.06)
-    ax_a = fig.add_subplot(grid[0, 0])
-    ax_gutter = fig.add_subplot(grid[0, 1])
-    ax_b = fig.add_subplot(grid[0, 2])
-
-    # Pivot ring position = the separator found by find_separator (design spec: "a
-    # conspicuous pivot ring at the first persistent action difference"), NOT the raw D(t)
-    # persistence-onset step t_d -- the separator is t_d itself or up to ~1s earlier.
-    pivot_step = separator["step"]
-    common_prefix_end = pivot_step
-
-    # defer_labels=True: draw geometry now, place the two dynamic labels (pivot,
-    # clearance) AFTER fig.tight_layout() below -- see _draw_panel's docstring for why a
-    # single-pass placement measurably cleared every line/marker at draw time yet still
-    # showed up in figure_qa.lint_figure (tight_layout moves the axes afterward).
-    pending_a = _draw_panel(
-        ax_a,
-        ep_a,
-        color=COLOR_A,
-        marker=MARKER_A,
-        linestyle="-",
-        label=f"A -- {label_a}",
-        divergence_step=pivot_step,
-        common_prefix_end=common_prefix_end,
-        focal_ped_id=focal_ped_id,
-        critical_events=events_a,
-        closest=closest_a,
-        collision_or_near_miss_step=None,
-        outcome_kind=outcome_a,
-        bounds=bounds,
-        map_definition=map_definition,
-        defer_labels=True,
-        pivot_label_text=pivot_label_text,
-        contrast_mode=contrast_mode,
-    )
-    pending_b = _draw_panel(
-        ax_b,
-        ep_b,
-        color=COLOR_B,
-        marker=MARKER_B,
-        linestyle="--",
-        label=f"B -- {label_b}",
-        divergence_step=pivot_step,
-        common_prefix_end=common_prefix_end,
-        focal_ped_id=focal_ped_id,
-        critical_events=events_b,
-        closest=closest_b,
-        collision_or_near_miss_step=b_outcome_step,
-        outcome_kind=outcome_b,
-        bounds=bounds,
-        map_definition=map_definition,
-        defer_labels=True,
-        pivot_label_text=pivot_label_text,
-        contrast_mode=contrast_mode,
-    )
-    ax_b.set_ylabel("")
-    ax_a.set_ylabel("y (m)", fontsize=8)
-    _draw_delta_gutter(ax_gutter, gutter)
-
-    if contrast_mode:
-        # Contrast vocabulary only: no pivot/hinge/common-prefix wording anywhere in the
-        # rendered output (matched seed-pair contrast framing, author ruling 2026-07-16).
-        legend_elements = [
-            Line2D(
-                [0],
-                [0],
-                color=COLOR_A,
-                lw=1.8,
-                marker=MARKER_A,
-                markersize=5,
-                label="episode A trajectory",
-            ),
-            Line2D(
-                [0],
-                [0],
-                color=COLOR_B,
-                lw=1.8,
-                linestyle="--",
-                marker=MARKER_B,
-                markersize=5,
-                markerfacecolor="none",
-                label="episode B trajectory",
-            ),
-            Line2D(
-                [0],
-                [0],
-                marker="D",
-                color="none",
-                markeredgecolor="black",
-                markerfacecolor="white",
-                markersize=7,
-                label="trace start",
-            ),
-        ]
-    else:
-        legend_elements = [
+    if not contrast_mode:
+        return [
             Line2D([0], [0], color=COLOR_COMMON_PREFIX, lw=1.6, label="common prefix (both)"),
             Line2D(
                 [0],
@@ -1574,17 +1586,252 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
                 label="pivot (separator)",
             ),
         ]
-    fig.legend(
-        handles=legend_elements,
-        loc="lower center",
-        ncol=len(legend_elements),
-        fontsize=7,
-        frameon=False,
-        bbox_to_anchor=(0.5, -0.005),
-    )
+    elements = [
+        Line2D(
+            [0],
+            [0],
+            color=COLOR_A,
+            lw=1.8,
+            marker=MARKER_A,
+            markersize=5,
+            label="episode A trajectory",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=COLOR_B,
+            lw=1.8,
+            linestyle="--",
+            marker=MARKER_B,
+            markersize=5,
+            markerfacecolor="none",
+            label="episode B trajectory",
+        ),
+        Line2D(
+            [0],
+            [0],
+            marker="D",
+            color="none",
+            markeredgecolor="black",
+            markerfacecolor="white",
+            markersize=7,
+            label="trace start",
+        ),
+    ]
+    if print_layout:
+        elements += [
+            Line2D([0], [0], color=COLOR_PED_FOCAL_OUTLINE, lw=1.1, label="focal pedestrian"),
+            Line2D([0], [0], color=COLOR_PED_CONTEXT, lw=0.8, label="other pedestrians"),
+        ]
+        if b_outcome_step is not None and outcome_b == "collision":
+            elements.append(
+                Line2D(
+                    [0],
+                    [0],
+                    marker="x",
+                    color="none",
+                    markeredgecolor=COLOR_COLLISION,
+                    markeredgewidth=2.0,
+                    markersize=8,
+                    label="collision",
+                )
+            )
+        elif b_outcome_step is not None and outcome_b == "near_miss":
+            elements.append(
+                Line2D(
+                    [0],
+                    [0],
+                    marker="^",
+                    color="none",
+                    markeredgecolor=COLOR_COLLISION,
+                    markerfacecolor="none",
+                    markersize=8,
+                    label="near miss",
+                )
+            )
+    return elements
 
-    fig.suptitle(headline, fontsize=9, wrap=True, y=0.995)
-    fig.tight_layout(rect=(0, 0.045, 1, 0.975))
+
+def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argument is a
+    # distinct precomputed fact (event dicts, labels, outcome kinds) the two panels need.
+    ep_a: EpisodeTrace,
+    ep_b: EpisodeTrace,
+    *,
+    label_a: str,
+    label_b: str,
+    divergence: dict[str, Any],
+    separator: dict[str, Any],
+    gutter: dict[str, Any],
+    focal_ped_id: int,
+    events_a: dict[str, dict[str, Any]],
+    events_b: dict[str, dict[str, Any]],
+    closest_a: dict[str, Any],
+    closest_b: dict[str, Any],
+    outcome_a: str,
+    outcome_b: str,
+    b_outcome_step: int | None,
+    headline: str,
+    map_definition: Any | None,
+    out_pdf: Path,
+    out_png: Path,
+    pivot_label_text: str = "pivot",
+    contrast_mode: bool = False,
+    layout: str = "screen",
+) -> list[Any]:
+    """Render + export the two-panel figure (vector PDF + PNG preview).
+
+    Two rendering modes:
+    - hinge mode (default): the original pivot grammar -- gray common prefix, post-pivot
+      A/B styling, pivot ring, delta gutter. For true shared-prefix pairs (e.g. the
+      same-seed orca/social_force reference pair).
+    - ``contrast_mode``: matched seed-pair contrast framing (author ruling 2026-07-16),
+      for pairs with no shared start -- full per-episode trajectories, "trace start"
+      legend vocabulary instead of pivot/prefix vocabulary, and a contrast gutter
+      (``compute_contrast_gutter``) instead of pivot-anchored deltas.
+
+    Two layouts:
+    - ``layout="screen"`` (default): the original wide-format prototype layout
+      (10.3 x ~3.5 in, vertical central gutter, multi-sentence suptitle) -- unchanged.
+    - ``layout="print"`` (contrast mode only): designed at FINAL size -- total width
+      exactly ``PRINT_FIG_WIDTH_IN`` (6.3 in, included at \\textwidth with no LaTeX
+      rescaling, so pt here == pt on the page). Two equal-aspect panels side by side,
+      the contrast gutter folded into a compact single-row strip below the panels
+      (``_draw_contrast_strip``), NO suptitle (the LaTeX caption owns the takeaway --
+      house style), 8 pt minimum rendered font (``_PRINT_PANEL_STYLE``), decluttered
+      panels (no braking marker, no context-ped id labels; those roles move to the
+      caption and legend).
+
+    Returns:
+        The list of ``figure_qa.lint_figure`` defects found on the rendered figure (before
+        the caller closes it), so the CLI can report an exact before/after lint count.
+    """
+    print_layout = layout == "print"
+    panel_style = _PRINT_PANEL_STYLE if print_layout else _SCREEN_PANEL_STYLE
+    plt.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.size": 8.5,
+            "pdf.fonttype": 42,  # embed as real (editable) glyphs, not Type 3 bitmaps
+            "ps.fonttype": 42,
+        }
+    )
+    bounds = shared_world_bounds(ep_a, ep_b)
+    _, _, ymin, ymax = bounds
+    xmin, xmax, _, _ = bounds
+    aspect = (ymax - ymin) / (xmax - xmin)
+    if print_layout:
+        # Design at final size: width is EXACTLY PRINT_FIG_WIDTH_IN; height = the two
+        # equal-aspect panels' data height + tick/label band + strip row + legend band.
+        # No suptitle (the LaTeX caption owns the takeaway).
+        fig_w = PRINT_FIG_WIDTH_IN
+        panel_data_h = (fig_w / 2.0) * aspect
+        fig_h = panel_data_h + 1.45  # ticks/labels/titles + strip + legend
+        fig = plt.figure(figsize=(fig_w, fig_h))
+        grid = fig.add_gridspec(
+            2, 2, height_ratios=(panel_data_h + 0.55, 0.42), hspace=0.08, wspace=0.10
+        )
+        ax_a = fig.add_subplot(grid[0, 0])
+        ax_b = fig.add_subplot(grid[0, 1])
+        ax_gutter = fig.add_subplot(grid[1, :])
+    else:
+        panel_w = 4.4
+        fig_h = panel_w * aspect + 1.0
+        fig = plt.figure(figsize=(panel_w * 2 + 1.5, fig_h))
+        grid = fig.add_gridspec(1, 3, width_ratios=(1.0, 0.34, 1.0), wspace=0.06)
+        ax_a = fig.add_subplot(grid[0, 0])
+        ax_gutter = fig.add_subplot(grid[0, 1])
+        ax_b = fig.add_subplot(grid[0, 2])
+
+    # Pivot ring position = the separator found by find_separator (design spec: "a
+    # conspicuous pivot ring at the first persistent action difference"), NOT the raw D(t)
+    # persistence-onset step t_d -- the separator is t_d itself or up to ~1s earlier.
+    pivot_step = separator["step"]
+    common_prefix_end = pivot_step
+
+    # defer_labels=True: draw geometry now, place the two dynamic labels (pivot,
+    # clearance) AFTER fig.tight_layout() below -- see _draw_panel's docstring for why a
+    # single-pass placement measurably cleared every line/marker at draw time yet still
+    # showed up in figure_qa.lint_figure (tight_layout moves the axes afterward).
+    pending_a = _draw_panel(
+        ax_a,
+        ep_a,
+        color=COLOR_A,
+        marker=MARKER_A,
+        linestyle="-",
+        label=f"A -- {label_a}",
+        divergence_step=pivot_step,
+        common_prefix_end=common_prefix_end,
+        focal_ped_id=focal_ped_id,
+        critical_events=events_a,
+        closest=closest_a,
+        collision_or_near_miss_step=None,
+        outcome_kind=outcome_a,
+        bounds=bounds,
+        map_definition=map_definition,
+        defer_labels=True,
+        pivot_label_text=pivot_label_text,
+        contrast_mode=contrast_mode,
+        style=panel_style,
+    )
+    pending_b = _draw_panel(
+        ax_b,
+        ep_b,
+        color=COLOR_B,
+        marker=MARKER_B,
+        linestyle="--",
+        label=f"B -- {label_b}",
+        divergence_step=pivot_step,
+        common_prefix_end=common_prefix_end,
+        focal_ped_id=focal_ped_id,
+        critical_events=events_b,
+        closest=closest_b,
+        collision_or_near_miss_step=b_outcome_step,
+        outcome_kind=outcome_b,
+        bounds=bounds,
+        map_definition=map_definition,
+        defer_labels=True,
+        pivot_label_text=pivot_label_text,
+        contrast_mode=contrast_mode,
+        style=panel_style,
+    )
+    ax_b.set_ylabel("")
+    ax_a.set_ylabel("y (m)", fontsize=panel_style["axis_fs"])
+    if print_layout:
+        _draw_contrast_strip(ax_gutter, gutter, fontsize=panel_style["annot_fs"])
+    else:
+        _draw_delta_gutter(ax_gutter, gutter)
+
+    legend_elements = _build_legend_elements(
+        contrast_mode=contrast_mode,
+        print_layout=print_layout,
+        outcome_b=outcome_b,
+        b_outcome_step=b_outcome_step,
+    )
+    if print_layout:
+        # 8 pt legend (>= the 7 pt on-page minimum); 3 columns x 2 rows fits 6.3 in.
+        fig.legend(
+            handles=legend_elements,
+            loc="lower center",
+            ncol=3,
+            fontsize=8,
+            frameon=False,
+            bbox_to_anchor=(0.5, -0.005),
+            handlelength=1.6,
+            columnspacing=1.2,
+        )
+        # NO suptitle: the LaTeX caption owns the takeaway (house style).
+        fig.tight_layout(rect=(0, 0.17, 1, 1.0))
+    else:
+        fig.legend(
+            handles=legend_elements,
+            loc="lower center",
+            ncol=len(legend_elements),
+            fontsize=7,
+            frameon=False,
+            bbox_to_anchor=(0.5, -0.005),
+        )
+        fig.suptitle(headline, fontsize=9, wrap=True, y=0.995)
+        fig.tight_layout(rect=(0, 0.045, 1, 0.975))
 
     # Place the two dynamic labels per panel now that the final axes layout is fixed
     # (see the defer_labels note above).
@@ -1782,6 +2029,7 @@ def build_provenance_sidecar(  # noqa: PLR0913 - every argument is a distinct pr
     qa_defects_before: int,
     qa_defects_after: int,
     framing: dict[str, Any] | None = None,
+    figure_layout: str = "screen",
 ) -> dict[str, Any]:
     """Provenance sidecar (item 4): episode ids, planners, seeds, source commits,
     config/trace hashes -- everything needed to reproduce or audit the shipped still
@@ -1843,6 +2091,7 @@ def build_provenance_sidecar(  # noqa: PLR0913 - every argument is a distinct pr
             "pdf": str(figure_pdf),
             "pdf_sha256": _sha256_of_file(figure_pdf),
             "png": str(figure_png),
+            "layout": figure_layout,
         },
         "figure_qa": {
             "first_cut_error_defects": qa_defects_before,
@@ -1946,6 +2195,15 @@ def _build_parser() -> argparse.ArgumentParser:
         "dt=0.1s -- covers B's own closest approach without dragging its full timeout tail).",
     )
     parser.add_argument("--no-video", action="store_true", help="Skip the side-by-side A/B video.")
+    parser.add_argument(
+        "--layout",
+        choices=("screen", "print"),
+        default="screen",
+        help="Figure layout: 'screen' (original wide prototype layout, default) or 'print' "
+        f"(design-at-final-size, {PRINT_FIG_WIDTH_IN:g} in wide for \\textwidth inclusion "
+        "with no rescaling, 8 pt minimum fonts, no header text, compact contrast strip; "
+        "currently implemented for the contrast rendering mode only).",
+    )
     return parser
 
 
@@ -2068,6 +2326,16 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
     else:
         headline = _compose_hinge_headline(separator, onset, focal_closest_a, focal_closest_b)
 
+    layout: str = args.layout
+    if layout == "print" and not contrast_mode:
+        print(
+            "warning: --layout print is currently implemented for the contrast rendering "
+            "mode only (this pair has a shared prefix -> hinge mode); falling back to the "
+            "screen layout",
+            file=sys.stderr,
+        )
+        layout = "screen"
+
     scenario_id = str(ep_a.metadata["scenario_id"])
     try:
         map_definition = tsf._load_map_definition(scenario_id)
@@ -2099,6 +2367,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
         out_png=out_png,
         pivot_label_text=pivot_label_text,
         contrast_mode=contrast_mode,
+        layout=layout,
     )
     qa_errors = [d for d in qa_defects if getattr(d, "severity", "") == "error"]
 
@@ -2142,6 +2411,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
         "closest_approach_focal_ped_a": focal_closest_a,
         "closest_approach_focal_ped_b": focal_closest_b,
         "headline": headline,
+        "figure_layout": layout,
         "figure_pdf": str(out_pdf),
         "figure_png": str(out_png),
         "figure_pdf_sha256": _sha256_of_file(out_pdf),
@@ -2176,6 +2446,7 @@ def main(argv: list[str] | None = None) -> int:  # noqa: PLR0915 - linear CLI or
         qa_defects_before=FIRST_CUT_LINT_ERROR_COUNT,
         qa_defects_after=len(qa_errors),
         framing=framing,
+        figure_layout=layout,
     )
     provenance_path = out_dir / "butterfly_hinge_provenance.json"
     provenance_path.write_text(json.dumps(provenance, indent=2, default=str), encoding="utf-8")

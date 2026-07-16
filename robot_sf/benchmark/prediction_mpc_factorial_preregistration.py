@@ -362,7 +362,6 @@ def _readiness_dependency_blockers(dependencies: Any) -> list[str]:
 
 def _record_hierarchical_input_gate_criterion(
     record: Callable[[str, bool, str], None],
-    config_path: Path,
 ) -> None:
     """Record the issue #5351 analysis input-gate reconciliation criterion.
 
@@ -371,10 +370,11 @@ def _record_hierarchical_input_gate_criterion(
 
     Args:
         record: The gate's ``_record(name, ok, detail)`` callback.
-        config_path: Path to the factorial config (used to resolve the repo root).
     """
 
-    repo_root = Path(config_path).resolve().parents[2]
+    # The config may be an override or a temporary test fixture, so it cannot
+    # safely locate the checkout. This module has a stable repository location.
+    repo_root = Path(__file__).resolve().parents[2]
     gate = assess_hierarchical_input_gate(repo_root)
     if not gate["input_gate_delivered"]:
         record("hierarchical_input_gate_reconciled", False, gate["detail"])
@@ -477,7 +477,7 @@ def assess_campaign_readiness(
     # still-missing analysis rows keep the gate fail-closed. PR #5776 removed the
     # cheap-lane blocker for the input contract while the analysis data stays
     # pending on #4364.
-    _record_hierarchical_input_gate_criterion(_record, config_path)
+    _record_hierarchical_input_gate_criterion(_record)
 
     return {
         "schema_version": "robot_sf.issue_5355_prediction_mpc_factorial_readiness.v1",

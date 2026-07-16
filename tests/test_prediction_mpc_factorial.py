@@ -737,3 +737,17 @@ class TestFreezeReadinessReceipt:
         written = json.loads(out.read_text(encoding="utf-8"))
         assert written["schema_version"] == "robot_sf.issue_5355_factorial_readiness_receipt.v1"
         assert written["hierarchical_input_gate"]["present"] is True
+
+    def test_malformed_input_manifest_is_a_structured_blocker(self, tmp_path):
+        from scripts.validation.freeze_issue_5355_factorial_readiness_receipt import freeze_receipt
+
+        manifest = tmp_path / "malformed.yaml"
+        manifest.write_text("successor_release: [", encoding="utf-8")
+
+        receipt = freeze_receipt(REPO_ROOT, input_manifest_path=manifest)
+
+        input_gate = receipt["hierarchical_input_gate"]
+        assert input_gate["present"] is True
+        assert input_gate["status"] == "blocked_invalid_input_manifest"
+        assert "error" in input_gate
+        assert receipt["input_gate_consistent_with_audit"] is False

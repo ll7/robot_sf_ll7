@@ -30,16 +30,18 @@ from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
 from robot_sf.evidence.writers import write_json
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
+DEFAULT_CONFIG_RELATIVE_PATH = "configs/research/prediction_mpc_factorial_v1.yaml"
+DEFAULT_CONFIG = REPO_ROOT / DEFAULT_CONFIG_RELATIVE_PATH
 RECEIPT_RELATIVE_PATH = (
     "docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration"
     "/issue_5355_factorial_readiness_receipt.json"
 )
 
 
-def _resolve(repo_root: Path, relative: str) -> Path:
-    candidate = repo_root / relative
-    return candidate if candidate.is_file() else Path(relative)
+def _resolve_from_root(repo_root: Path, path: str | Path) -> Path:
+    """Resolve relative overrides against the explicit checkout root."""
+    candidate = Path(path)
+    return candidate if candidate.is_absolute() else repo_root / candidate
 
 
 def _portable_path(path: Path, *, repo_root: Path) -> str:
@@ -60,23 +62,33 @@ def freeze_receipt(
     """Compute and return the frozen readiness receipt payload."""
 
     root = Path(repo_root).resolve()
-    cfg = config_path or DEFAULT_CONFIG
-    input_manifest = input_manifest_path or _resolve(
-        root, DEFAULT_HIERARCHICAL_INPUT_MANIFEST_RELATIVE_PATH
+    cfg = _resolve_from_root(root, config_path or DEFAULT_CONFIG_RELATIVE_PATH)
+    input_manifest = _resolve_from_root(
+        root, input_manifest_path or DEFAULT_HIERARCHICAL_INPUT_MANIFEST_RELATIVE_PATH
     )
 
     readiness = assess_campaign_readiness(cfg, registry_path=None)
     input_gate: dict[str, object] = {"status": "unknown", "present": False}
     if Path(input_manifest).is_file():
-        manifest = load_hierarchical_paired_release_input_manifest(input_manifest)
-        evaluation = evaluate_hierarchical_paired_release_inputs(manifest, repo_root=root)
-        input_gate = {
-            "present": True,
-            "manifest": _portable_path(Path(input_manifest), repo_root=root),
-            "status": str(evaluation.get("status")),
-            "blocking_prerequisites": evaluation.get("blocking_prerequisites", []),
-            "claim_gate": evaluation.get("claim_gate", {}),
-        }
+        manifest_display = _portable_path(Path(input_manifest), repo_root=root)
+        try:
+            manifest = load_hierarchical_paired_release_input_manifest(input_manifest)
+            evaluation = evaluate_hierarchical_paired_release_inputs(manifest, repo_root=root)
+        except (ValueError, OSError) as exc:
+            input_gate = {
+                "present": True,
+                "manifest": manifest_display,
+                "status": "blocked_invalid_input_manifest",
+                "error": str(exc),
+            }
+        else:
+            input_gate = {
+                "present": True,
+                "manifest": manifest_display,
+                "status": str(evaluation.get("status")),
+                "blocking_prerequisites": evaluation.get("blocking_prerequisites", []),
+                "claim_gate": evaluation.get("claim_gate", {}),
+            }
 
     return {
         "schema_version": "robot_sf.issue_5355_factorial_readiness_receipt.v1",

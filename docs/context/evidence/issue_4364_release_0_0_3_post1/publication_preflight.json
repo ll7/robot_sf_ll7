@@ -1,0 +1,19 @@
+{
+  "bundle_dir": "release://0.0.3.post1/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle",
+  "evidence": {
+    "episode_software_commits": {
+      "a307ef276d701f8d14dead1aa0513f44ee97c0b0": 20160
+    },
+    "goal_reached_timeout_rows": 0,
+    "publication_commit": "ded9027d2928512c14bc241397e0ab1d8f586654",
+    "signed_files": 85
+  },
+  "schema_version": "publication-preflight.v1",
+  "status": "pass",
+  "violation_count": 0,
+  "violations": [],
+  "warnings": [
+    "episode-ledger software commits differ from the publication commit; allowed via structured provenance.commit_reconciliation"
+  ]
+}
+

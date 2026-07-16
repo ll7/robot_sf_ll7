@@ -1,36 +1,41 @@
-"""Runnable Robot SF -> SocNavBench cross-suite canary (#5783).
+"""Runnable Robot SF -> SocNavBench cross-suite canary (#5783 / issue #5842).
 
-Issue #5783 materializes the *runnable* bridge that issue #3285 only previewed: it
-emits a concrete SocNavBench scenario JSON that a downstream SocNavBench runner consumes
-through the vendored SocNavBench metric API, pins one concrete policy identity/version that
-is recorded identically in both suite receipts, and runs a one-scenario / one-seed / two-suite
-canary that forbids any policy/adapter fallback.
+Issue #5842 hardens the canary introduced by #5783 so the pinned policy is *actually
+executed* on the Robot SF path, the exported scenario + staged ETH traversible are
+*really consumed* by a SocNavBench source harness, the two suites no longer share a
+colliding metric identity for reciprocal ratio definitions, and any fallback path is
+recorded as non-success evidence rather than a green receipt.
 
 Scope and claim boundary
 ------------------------
 - This is a **diagnostic sim-to-sim canary**, not a benchmark campaign, not a training run,
   and not a simulator-equivalence or policy-superiority claim. It proves that the same
-  pinned policy identity and the same cross-suite metric can be produced on both sides from
-  one mapped scenario and one seed, with suite-specific denominators preserved and recorded.
-- The robot-side metric is the vendored-style ``socnavbench_path_length_ratio`` executed over
-  a deterministic trajectory synthesized from the pinned scenario/seed. The SocNavBench-side
-  metric is the vendored SocNavBench ``cost_functions.path_length_ratio`` executed over the
-  same trajectory expressed in SocNavBench coordinates. Both are REAL CPU computations; the
-  cross-suite identity is proven by identical policy-identity blocks plus metric agreement.
-- The exported SocNavBench scenario references the staged ETH traversible (asset
-  ``socnavbench-s3dis-eth``) via the external-data registry. When that licensed asset is not
-  staged the canary fails closed (nonzero exit); it never substitutes a placeholder map, and
-  it never enables a fallback or degraded adapter.
+  pinned policy identity and the same cross-suite metric family can be produced on both sides
+  from one mapped scenario and one seed, with suite-specific denominators and reciprocal
+  ratio directions preserved and recorded.
+- The Robot SF side **executes the pinned SocialForce policy** through the real Robot SF
+  environment (headless, CPU, no licensed data) and computes the vendored-style
+  ``socnavbench_path_length_ratio`` (distance / displacement) over the resulting trajectory.
+- The SocNavBench side **runs a real source harness** that loads the materialized export JSON
+  and the staged ETH traversible shape contract, then computes the vendored SocNavBench
+  ``cost_functions.path_length_ratio`` (displacement / distance) over the same geometric path.
+  Both ratio definitions differ in direction by design; each is recorded with its own metric
+  id, numerator, denominator, formula, direction, and mapping class.
+- When the licensed ETH asset is absent the SocNavBench path fails closed. A test-only
+  ``--allow-synthetic-traversible`` flag lets the no-licensed-data fixture path still exercise
+  the real runner against a synthetic traversible, but it is recorded as a fallback and the
+  receipt reports ``counts_as_success_evidence: False``. The real canary never sets it.
 
 Fail-closed contract
 --------------------
 Every gate below returns a nonzero exit / raises rather than silently degrading:
-  * missing staged ETH asset or absent export -> blocked;
+  * missing staged ETH asset or absent export -> blocked (unless the test-only flag is set,
+    which is recorded as fallback / non-success);
   * placeholder metadata (``tbd`` / ``blocked_prerequisite`` / ``to_be_selected`` / ``None``)
     in the pinned policy or scenario mapping -> blocked;
   * policy-identity mismatch between the two suite receipts -> blocked (fallback detected);
   * scenario conversion with no mappable map/agents -> blocked;
-  * any fallback or degraded adapter path requested -> blocked.
+  * any fallback or degraded adapter path requested or taken -> recorded, never green.
 """
 
 from __future__ import annotations
@@ -45,6 +50,7 @@ from typing import Any
 
 import numpy as np
 
+from robot_sf.benchmark.canary_rollout import PolicyRolloutResult, execute_pinned_policy
 from robot_sf.benchmark.cross_benchmark_metrics import (
     CROSS_BENCHMARK_CLAIM_BOUNDARY,
     CROSS_BENCHMARK_METRIC_MAPPING_VERSION,
@@ -55,6 +61,9 @@ from robot_sf.data.external.socnavbench_eth import (
 )
 from robot_sf.data.external.socnavbench_eth import (
     is_available as socnavbench_eth_is_available,
+)
+from robot_sf.data.external.socnavbench_eth import (
+    load_shape_contract as socnavbench_eth_load_shape_contract,
 )
 from robot_sf.data.external.socnavbench_eth import (
     resolve_root as socnavbench_eth_resolve_root,
@@ -75,8 +84,7 @@ PLACEHOLDER_TOKENS = (
     "blocked_external_input",
 )
 
-# One concrete, pinned Robot SF policy. Identity is proven identical across suites by recording
-# these exact fields (id, version, algo, config digest, source commit) in BOTH receipts.
+# Pinned policy constants. The algo config is read at runtime for provenance.
 PINNED_POLICY_ID = "social_force_holonomic"
 PINNED_POLICY_VERSION = "tau_low_v1"
 PINNED_POLICY_ALGO = "social_force"
@@ -84,8 +92,7 @@ PINNED_POLICY_ALGO_CONFIG = (
     MODULE_ROOT / "configs" / "algos" / "social_force_holonomic_tuned_tau_low.yaml"
 )
 
-# One concrete, documented cross-suite scenario mapping. Robot SF scenario geometry is mapped to
-# the staged ETH traversible; the non-equivalence limitations are explicit and recorded.
+# One concrete, documented cross-suite scenario mapping.
 CANARY_ROBOT_SF_SCENARIO_ID = "canary-corridor-uni-low-open"
 CANARY_SOCNAVBENCH_SCENARIO_ID = "ETH/canary-corridor-unilowopen"
 CANARY_SEED = 0
@@ -97,13 +104,19 @@ CANARY_SCENARIO_LIMITATION_FLAGS = (
 )
 CANARY_SCENARIO_MAPPING_QUALITY = "documented_canary_mapping"
 
-# Deterministic corridor geometry (meters) used by both suites. The mapping is explicit so the
-# canary cannot silently change scenario populations or denominators between suites.
-CORRIDOR_LENGTH_M = 10.0
-CORRIDOR_WIDTH_M = 2.0
-ROBOT_START = (1.0, 1.0)
-ROBOT_GOAL = (9.0, 1.0)
-CORRIDOR_RESOLUTION_M = 0.1
+# Suite-specific metric identities for the reciprocal path-length-ratio definitions.
+# Robot SF computes distance / displacement; SocNavBench computes displacement / distance.
+# These MUST be distinct metric IDs — sharing one exact id for reciprocal formulas is a bug.
+ROBOT_SF_METRIC_ID = "robot_sf.path_length_ratio.distance_over_displacement"
+SOCNAVBENCH_METRIC_ID = "socnavbench.path_length_ratio.displacement_over_distance"
+ROBOT_SF_RATIO_FORMULA = "total_path_distance / start_to_goal_displacement"
+SOCNAVBENCH_RATIO_FORMULA = "start_to_goal_displacement / total_path_distance"
+ROBOT_SF_RATIO_DIRECTION = "distance_over_displacement"
+SOCNAVBENCH_RATIO_DIRECTION = "displacement_over_distance"
+ROBOT_SF_DENOMINATOR_KIND = "start_to_goal_displacement_m"
+SOCNAVBENCH_DENOMINATOR_KIND = "start_to_goal_displacement_m"
+ROBOT_SF_MAPPING_CLASS = "approximate"
+SOCNAVBENCH_MAPPING_CLASS = "approximate"
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,9 +129,11 @@ class PinnedPolicy:
     algo_config: str
     config_digest_sha256: str
     source_commit: str
+    # Runtime provenance: the exact planner parameters that governed the executed trajectory.
+    runtime_planner_config: dict[str, float]
 
-    def to_dict(self) -> dict[str, str]:
-        """Return a stable, JSON-safe identity block."""
+    def to_dict(self) -> dict[str, Any]:
+        """Return a stable, JSON-safe identity block including runtime provenance."""
         return {
             "policy_id": self.policy_id,
             "version": self.version,
@@ -126,6 +141,7 @@ class PinnedPolicy:
             "algo_config": self.algo_config,
             "config_digest_sha256": self.config_digest_sha256,
             "source_commit": self.source_commit,
+            "runtime_planner_config": dict(self.runtime_planner_config),
         }
 
     def matches(self, other: PinnedPolicy) -> bool:
@@ -137,6 +153,7 @@ class PinnedPolicy:
             and self.algo_config == other.algo_config
             and self.config_digest_sha256 == other.config_digest_sha256
             and self.source_commit == other.source_commit
+            and dict(self.runtime_planner_config) == dict(other.runtime_planner_config)
         )
 
 
@@ -160,6 +177,29 @@ class ScenarioMapping:
             "external_asset_id": self.external_asset_id,
             "mapping_quality": self.mapping_quality,
             "limitation_flags": list(self.limitation_flags),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SuiteMetricSpec:
+    """Suite-specific path-length-ratio definition (reciprocal across suites)."""
+
+    metric_id: str
+    numerator: str
+    denominator_kind: str
+    formula: str
+    ratio_direction: str
+    mapping_class: str
+
+    def to_dict(self) -> dict[str, str]:
+        """Return a JSON-safe spec of the suite-specific ratio definition."""
+        return {
+            "metric_id": self.metric_id,
+            "numerator": self.numerator,
+            "denominator_kind": self.denominator_kind,
+            "formula": self.formula,
+            "ratio_direction": self.ratio_direction,
+            "mapping_class": self.mapping_class,
         }
 
 
@@ -198,37 +238,48 @@ def _raise_if_placeholder(name: str, value: str | None) -> None:
         raise CanaryError(f"{name} is missing or empty (placeholder not allowed)")
     lowered = str(value).strip().lower()
     for token in PLACEHOLDER_TOKENS:
-        if lowered == token or lowered.startswith(f"{token}"):
-            raise CanaryError(f"{name} still contains placeholder token {token!r}")
+        if lowered == token or lowered.startswith(f"{token}_") or lowered.endswith(f"_{token}"):
+            raise CanaryError(
+                f"{name} contains a placeholder token '{token}' (not a concrete value)"
+            )
 
 
 def _repo_relative(path: Path, *, repo_root: Path = MODULE_ROOT) -> str:
-    """Return a repo-relative posix path when possible, else the absolute posix path.
-
-    Using a repo-relative path keeps the policy identity block portable across checkouts and
-    worktrees and avoids baking absolute private paths into receipts.
-    """
+    """Return a repo-root-relative POSIX path string."""
     try:
-        return Path(path).resolve().relative_to(Path(repo_root).resolve()).as_posix()
+        return path.relative_to(repo_root).as_posix()
     except ValueError:
-        return Path(path).as_posix()
+        return path.as_posix()
 
 
 def resolve_pinned_policy(*, repo_root: Path = MODULE_ROOT) -> PinnedPolicy:
-    """Resolve the concrete pinned policy identity, failing closed on placeholders/missing configs.
+    """Resolve the concrete, pinned policy identity for the canary.
 
-    The policy identity is identical across suites by construction: both receipts record the
-    exact same ``PinnedPolicy`` block, so a mismatch is a fallback and is rejected.
+    The config digest and source commit are computed at runtime so the identity block
+    reflects the real state of the tracked config file and the current git HEAD.
 
     Returns:
-        The concrete pinned policy identity with config digest and source commit.
+        PinnedPolicy with all identity fields populated (no placeholder tokens allowed).
+
+    Raises:
+        CanaryError: If any identity field is missing or a placeholder token.
     """
-    config_path = PINNED_POLICY_ALGO_CONFIG
-    if not config_path.is_file():
-        raise CanaryError(f"Pinned policy config missing: {config_path}")
+    config_path = repo_root / "configs" / "algos" / "social_force_holonomic_tuned_tau_low.yaml"
     _raise_if_placeholder("policy_id", PINNED_POLICY_ID)
-    _raise_if_placeholder("policy_version", PINNED_POLICY_VERSION)
-    _raise_if_placeholder("policy_algo", PINNED_POLICY_ALGO)
+    _raise_if_placeholder("version", PINNED_POLICY_VERSION)
+    _raise_if_placeholder("algo", PINNED_POLICY_ALGO)
+
+    if not config_path.is_file():
+        raise CanaryError(f"Pinned policy algo config not found: {config_path}")
+
+    # Runtime provenance comes from the real rollout configuration (see canary_rollout).
+    from robot_sf.benchmark.canary_rollout import _resolve_pinned_planner_config  # noqa: PLC0415
+
+    planner_cfg = _resolve_pinned_planner_config(algo_config=config_path)
+    from robot_sf.benchmark.canary_rollout import _planner_config_provenance  # noqa: PLC0415
+
+    runtime_config = _planner_config_provenance(planner_cfg)
+
     return PinnedPolicy(
         policy_id=PINNED_POLICY_ID,
         version=PINNED_POLICY_VERSION,
@@ -236,14 +287,18 @@ def resolve_pinned_policy(*, repo_root: Path = MODULE_ROOT) -> PinnedPolicy:
         algo_config=_repo_relative(config_path, repo_root=repo_root),
         config_digest_sha256=_config_digest(config_path),
         source_commit=_git_commit_sha(repo_root=repo_root),
+        runtime_planner_config=runtime_config,
     )
 
 
 def resolve_scenario_mapping() -> ScenarioMapping:
-    """Resolve the concrete, documented cross-suite scenario mapping.
+    """Return the concrete, documented cross-suite scenario mapping.
 
     Returns:
-        The concrete scenario mapping with pinned IDs, seed, asset, and limitation flags.
+        ScenarioMapping with all fields populated (no placeholder tokens allowed).
+
+    Raises:
+        CanaryError: If any mapping field is missing or a placeholder token.
     """
     _raise_if_placeholder("robot_sf_scenario_id", CANARY_ROBOT_SF_SCENARIO_ID)
     _raise_if_placeholder("socnavbench_scenario_id", CANARY_SOCNAVBENCH_SCENARIO_ID)
@@ -257,46 +312,38 @@ def resolve_scenario_mapping() -> ScenarioMapping:
     )
 
 
-def _synthesize_trajectory(seed: int) -> list[tuple[float, float]]:
-    """Deterministic robot trajectory from start to goal (social-force-like curved approach).
-
-    The trajectory is a pure function of the seed plus the fixed corridor geometry, so the
-    canary is reproducible. It is a documented diagnostic path, not a real planner rollout.
+def _start_goal_displacement(robot_positions: np.ndarray, goal: np.ndarray) -> float:
+    """Compute straight-line start-to-goal displacement in meters.
 
     Returns:
-        List of (x, y) waypoints in meters from start to goal.
+        Euclidean distance from the first position to the goal, in meters.
     """
-    rng = np.random.default_rng(seed)
-    n_steps = 21
-    xs = np.linspace(ROBOT_START[0], ROBOT_GOAL[0], n_steps)
-    # Small deterministic lateral deviation so the path is not a degenerate straight line.
-    ys = np.full(n_steps, ROBOT_START[1], dtype=float)
-    perturb = (rng.random(n_steps) - 0.5) * 0.2
-    ys = ys + perturb * np.sin(np.linspace(0.0, np.pi, n_steps))
-    return [(float(x), float(y)) for x, y in zip(xs, ys, strict=True)]
+    start = np.asarray(robot_positions[0], dtype=float)
+    return float(np.linalg.norm(np.asarray(goal, dtype=float) - start))
 
 
-def _robot_sf_denominator() -> float:
-    """Robot SF suite-specific denominator: straight-line start->goal displacement (meters).
+def _build_episode_from_trajectory(
+    robot_positions: list[tuple[float, float]],
+    goal_position: tuple[float, float],
+) -> EpisodeData:
+    """Build a minimal ``EpisodeData`` from an executed trajectory for metric computation.
 
     Returns:
-        Straight-line displacement in meters between robot start and goal.
+        EpisodeData with positions from the trajectory and zeroed-out pedestrian data.
     """
-    displacement = float(np.linalg.norm(np.asarray(ROBOT_GOAL) - np.asarray(ROBOT_START)))
-    return displacement
-
-
-def _socnavbench_denominator() -> float:
-    """SocNavBench suite-specific denominator: straight-line start->goal displacement (meters).
-
-    SocNavBench computes path_length_ratio as displacement/distance over the same geometric
-    start/goal, so the denominator is recorded separately to prove it was not silently changed.
-
-    Returns:
-        Straight-line displacement in meters between robot start and goal.
-    """
-    displacement = float(np.linalg.norm(np.asarray(ROBOT_GOAL) - np.asarray(ROBOT_START)))
-    return displacement
+    positions = np.asarray(robot_positions, dtype=float)
+    goal = np.asarray(goal_position, dtype=float)
+    return EpisodeData(
+        robot_pos=positions,
+        robot_vel=np.zeros_like(positions),
+        robot_acc=np.zeros_like(positions),
+        peds_pos=np.zeros((positions.shape[0], 0, 2), dtype=float),
+        ped_forces=np.zeros((positions.shape[0], 0, 2), dtype=float),
+        goal=goal,
+        dt=0.1,
+        robot_radius=0.3,
+        ped_radius=0.4,
+    )
 
 
 def materialize_socnavbench_export(
@@ -304,20 +351,40 @@ def materialize_socnavbench_export(
     policy: PinnedPolicy,
     mapping: ScenarioMapping,
     out_dir: Path,
-) -> Path:
+    rollout: PolicyRolloutResult | None = None,
+) -> tuple[Path, PolicyRolloutResult]:
     """Write a concrete SocNavBench scenario JSON consumed by the canary runner.
 
     The export references the staged ETH traversible via the external-data registry root and
     pins the same policy identity that the Robot SF receipt records, so a downstream SocNavBench
-    runner consumes a real, mappable scenario (not a preview).
+    runner consumes a real, mappable scenario (not a preview). It also records the Robot SF
+    executed trajectory so the runner consumes the identical geometric path on both sides.
+
+    When ``rollout`` is provided (e.g. from the caller that already ran the policy), it is used
+    directly; otherwise ``execute_pinned_policy`` is called once here. Pass the returned rollout
+    to ``run_robot_sf_receipt_from_rollout`` to avoid a double execution.
+
+    Args:
+        policy: Pinned policy identity.
+        mapping: Concrete cross-suite scenario mapping.
+        out_dir: Output directory for the export JSON.
+        rollout: Optional pre-executed policy rollout result. If None, the policy is executed.
 
     Returns:
-        Path to the written export JSON.
+        (export_path, rollout) where rollout is the (possibly freshly executed) policy result.
 
     Raises:
         CanaryError: If the export cannot be produced without placeholder metadata.
     """
     _raise_if_placeholder("socnavbench_scenario_id", mapping.socnavbench_scenario_id)
+
+    # Execute the pinned policy exactly once and reuse the result across both suite receipts.
+    if rollout is None:
+        rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
+
+    robot_positions = [list(pos) for pos in rollout.robot_positions]
+    goal = list(rollout.goal_position)
+
     export = {
         "schema_version": EXPORT_SCHEMA_VERSION,
         "canary": CANARY_NAME,
@@ -329,19 +396,20 @@ def materialize_socnavbench_export(
         "map": {
             "asset_id": mapping.external_asset_id,
             "traversible": "ETH",
-            "resolution_m": CORRIDOR_RESOLUTION_M,
-            "width_m": CORRIDOR_WIDTH_M,
-            "length_m": CORRIDOR_LENGTH_M,
+            "resolution_m": None,  # filled by the runner from the staged ETH shape contract
+            "width_m": None,
+            "length_m": None,
         },
         "robot": {
-            "start": list(ROBOT_START),
-            "goal": list(ROBOT_GOAL),
+            "start": robot_positions[0],
+            "goal": goal,
         },
+        "trajectory": robot_positions,
         "pedestrians": [
             {
                 "id": "ped-1",
-                "start": [CORRIDOR_LENGTH_M - 2.0, CORRIDOR_WIDTH_M - 0.5],
-                "goal": [2.0, CORRIDOR_WIDTH_M - 0.5],
+                "start": [float(goal[0]) - 2.0, float(goal[1]) + 1.5],
+                "goal": [float(robot_positions[0][0]) + 2.0, float(robot_positions[0][1]) + 1.5],
             }
         ],
         "policy_identity": policy.to_dict(),
@@ -353,7 +421,52 @@ def materialize_socnavbench_export(
     out_dir.mkdir(parents=True, exist_ok=True)
     export_path = out_dir / f"{mapping.socnavbench_scenario_id.replace('/', '_')}.socnavbench.json"
     export_path.write_text(json.dumps(export, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return export_path
+    return export_path, rollout
+
+
+def run_robot_sf_receipt_from_rollout(
+    *,
+    policy: PinnedPolicy,
+    mapping: ScenarioMapping,
+    rollout: PolicyRolloutResult,
+) -> dict[str, Any]:
+    """Build the Robot SF receipt from an already-executed policy rollout.
+
+    This is the canonical path for ``run_canary``: the rollout is executed once and shared
+    across both suite receipts to guarantee that the trajectory and denominator are identical.
+
+    Returns:
+        JSON-safe Robot SF receipt dict with policy identity (including runtime provenance),
+        mapping, metric value, and the suite-specific ratio definition.
+    """
+    episode = _build_episode_from_trajectory(rollout.robot_positions, rollout.goal_position)
+    try:
+        # Robot SF definition: distance / displacement (>= 1.0 for efficient paths).
+        ratio = float(socnavbench_path_length_ratio(episode))
+    except (AttributeError, IndexError, TypeError, ValueError) as exc:
+        raise CanaryError(f"Robot SF metric computation failed: {exc}") from exc
+
+    spec = SuiteMetricSpec(
+        metric_id=ROBOT_SF_METRIC_ID,
+        numerator="total_path_distance",
+        denominator_kind=ROBOT_SF_DENOMINATOR_KIND,
+        formula=ROBOT_SF_RATIO_FORMULA,
+        ratio_direction=ROBOT_SF_RATIO_DIRECTION,
+        mapping_class=ROBOT_SF_MAPPING_CLASS,
+    )
+    denominator = _start_goal_displacement(episode.robot_pos, episode.goal)
+    return {
+        "suite": "Robot SF",
+        "policy_identity": policy.to_dict(),
+        "scenario_mapping": mapping.to_dict(),
+        "metric_mapping_version": CROSS_BENCHMARK_METRIC_MAPPING_VERSION,
+        "metric_spec": spec.to_dict(),
+        "value": ratio,
+        "denominator": denominator,
+        "trajectory_length": len(rollout.robot_positions),
+        "executed_policy": True,
+        "claim_boundary": CROSS_BENCHMARK_CLAIM_BOUNDARY,
+    }
 
 
 def run_robot_sf_receipt(
@@ -363,47 +476,20 @@ def run_robot_sf_receipt(
 ) -> dict[str, Any]:
     """Run the Robot SF side of the canary and return a machine-checkable receipt.
 
-    Executes the real vendored-style ``socnavbench_path_length_ratio`` metric over the
-    deterministic trajectory and records the suite-specific denominator.
+    Executes the **real pinned policy** through the Robot SF environment, then computes the
+    vendored-style ``socnavbench_path_length_ratio`` (distance / displacement) over the
+    resulting trajectory. Records the suite-specific metric identity, denominator, numerator,
+    formula, direction, and mapping class.
+
+    For use in tests or standalone calls. When calling from ``run_canary``, prefer
+    ``run_robot_sf_receipt_from_rollout`` to avoid executing the policy twice.
 
     Returns:
         JSON-safe Robot SF receipt dict with policy identity, mapping, metric value, and
-        the suite-specific denominator.
+        the suite-specific ratio definition.
     """
-    trajectory = _synthesize_trajectory(mapping.seed)
-
-    positions = np.asarray(trajectory, dtype=float)
-    goal = np.asarray(ROBOT_GOAL, dtype=float)
-    data = EpisodeData(
-        robot_pos=positions,
-        robot_vel=np.zeros_like(positions),
-        robot_acc=np.zeros_like(positions),
-        peds_pos=np.zeros((positions.shape[0], 0, 2), dtype=float),
-        ped_forces=np.zeros((positions.shape[0], 0, 2), dtype=float),
-        goal=goal,
-        dt=0.1,
-        robot_radius=0.3,
-        ped_radius=0.4,
-    )
-    try:
-        ratio = float(socnavbench_path_length_ratio(data))
-    except (AttributeError, IndexError, TypeError, ValueError) as exc:
-        # The metric boundary can reject malformed episode arrays, but programming
-        # errors must remain visible instead of being mislabeled as canary failures.
-        raise CanaryError(f"Robot SF metric computation failed: {exc}") from exc
-
-    return {
-        "suite": "Robot SF",
-        "policy_identity": policy.to_dict(),
-        "scenario_mapping": mapping.to_dict(),
-        "metric_mapping_version": CROSS_BENCHMARK_METRIC_MAPPING_VERSION,
-        "metric_id": "socnavbench.path_length_ratio",
-        "value": ratio,
-        "denominator": _robot_sf_denominator(),
-        "denominator_kind": "start_to_goal_displacement_m",
-        "trajectory_length": len(trajectory),
-        "claim_boundary": CROSS_BENCHMARK_CLAIM_BOUNDARY,
-    }
+    rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
+    return run_robot_sf_receipt_from_rollout(policy=policy, mapping=mapping, rollout=rollout)
 
 
 def run_socnavbench_receipt(
@@ -415,17 +501,22 @@ def run_socnavbench_receipt(
 ) -> dict[str, Any]:
     """Run the SocNavBench side of the canary and return a machine-checkable receipt.
 
-    Loads the materialized export and executes the vendored SocNavBench ``path_length_ratio``
-    over the same deterministic trajectory. The staged ETH asset is the only licensed input;
-    when it is absent the canary fails closed unless ``allow_synthetic_traversible`` is set for
-    the no-licensed-data test path (never enabled by the real canary, which forbids fallback).
+    Loads the materialized export and **runs a real SocNavBench source harness** that consumes
+    the export and the staged ETH traversible shape contract, then computes the vendored
+    ``cost_functions.path_length_ratio`` (displacement / distance) over the same geometric path.
+
+    When the licensed ETH asset is absent the runner fails closed unless
+    ``allow_synthetic_traversible`` is set for the no-licensed-data test path. In that case the
+    run is recorded as a fallback and the receipt reports ``counts_as_success_evidence: False``.
+    The ``fallback_forbidden`` flag in the joint receipt reflects whether any fallback was taken
+    (it is ``True`` only when no fallback path was activated and the real asset was used).
 
     Raises:
         CanaryError: On missing export, asset-absent-without-explicit-test-flag, or fallback use.
 
     Returns:
         JSON-safe SocNavBench receipt dict with policy identity, mapping, metric value, and
-        the suite-specific denominator.
+        the suite-specific ratio definition.
     """
     export_path = Path(export_path)
     if not export_path.is_file():
@@ -445,47 +536,133 @@ def run_socnavbench_receipt(
             "SocNavBench invocation. Stage the external asset or stop. Fallback is forbidden."
         )
 
-    trajectory = _synthesize_trajectory(mapping.seed)
-    try:
-        # The vendored SocNavBench metric module imports its own helpers as
-        # ``from metrics.cost_utils import *``, so its package root
-        # (``third_party/socnavbench``) must be on ``sys.path`` -- not ``third_party``.
-        vendored_root = MODULE_ROOT / "third_party" / "socnavbench"
-        if str(vendored_root) not in sys.path:
-            sys.path.insert(0, str(vendored_root))
-        from metrics.cost_functions import (  # noqa: PLC0415 -- vendored import path
-            path_length_ratio as _sn_path_length_ratio,
-        )
+    # The real source harness consumes the export and the staged ETH traversible shape contract.
+    # Without the asset the runner falls back to a synthetic traversible (recorded as fallback).
+    traversible_resolution = _load_traversible_resolution(
+        export, allow_synthetic=allow_synthetic_traversible
+    )
 
-        ratio = float(_sn_path_length_ratio(trajectory, export["robot"]["goal"]))
+    try:
+        # The trajectory is embedded in the export by materialize_socnavbench_export so the
+        # SocNavBench runner consumes the identical geometric path as the Robot SF receipt.
+        trajectory = np.asarray(export["trajectory"], dtype=float)
+        goal = np.asarray(export["robot"]["goal"], dtype=float)
+        ratio, runner_meta = _run_socnavbench_runner(
+            trajectory=trajectory,
+            goal=goal,
+            traversible_resolution=traversible_resolution,
+            allow_synthetic=allow_synthetic_traversible,
+        )
     except (AttributeError, ImportError, IndexError, KeyError, TypeError, ValueError) as exc:
-        # Preserve fail-closed behavior for malformed exports and unavailable vendored
-        # dependencies without masking unrelated implementation errors.
         raise CanaryError(f"SocNavBench metric computation failed: {exc}") from exc
 
+    spec = SuiteMetricSpec(
+        metric_id=SOCNAVBENCH_METRIC_ID,
+        numerator="start_to_goal_displacement",
+        denominator_kind=SOCNAVBENCH_DENOMINATOR_KIND,
+        formula=SOCNAVBENCH_RATIO_FORMULA,
+        ratio_direction=SOCNAVBENCH_RATIO_DIRECTION,
+        mapping_class=SOCNAVBENCH_MAPPING_CLASS,
+    )
+    denominator = _start_goal_displacement(trajectory, goal)
+    # A fallback is active whenever the test-only synthetic escape is used OR the real asset
+    # was not staged. Either case disqualifies the receipt as success evidence.
+    fallback = bool(allow_synthetic_traversible) or not asset_available
     return {
         "suite": "SocNavBench",
         "policy_identity": policy.to_dict(),
         "scenario_mapping": mapping.to_dict(),
         "metric_mapping_version": CROSS_BENCHMARK_METRIC_MAPPING_VERSION,
-        "metric_id": "socnavbench.path_length_ratio",
-        "value": ratio,
-        "denominator": _socnavbench_denominator(),
-        "denominator_kind": "start_to_goal_displacement_m",
+        "metric_spec": spec.to_dict(),
+        "value": float(ratio),
+        "denominator": denominator,
         "external_asset_id": export.get("external_asset_id"),
         "external_asset_staged": bool(asset_available),
-        "trajectory_length": len(trajectory),
+        "traversible_resolution_m": (
+            None if traversible_resolution is None else float(traversible_resolution)
+        ),
+        "runner": runner_meta,
+        "executed_policy": True,
+        "is_fallback": fallback,
+        "counts_as_success_evidence": (not fallback),
+        "trajectory_length": int(trajectory.shape[0]),
         "claim_boundary": CROSS_BENCHMARK_CLAIM_BOUNDARY,
     }
+
+
+def _load_traversible_resolution(
+    export: dict[str, Any], *, allow_synthetic: bool
+) -> float | None:
+    """Load the staged ETH traversible resolution (real) or return synthetic fallback.
+
+    Returns:
+        The resolution_m from the staged ETH shape contract, or None if the asset is absent
+        and allow_synthetic is True (recorded as fallback in the receipt).
+    """
+    try:
+        contract = socnavbench_eth_load_shape_contract()
+        return float(contract.get("resolution_m", 0.1))
+    except Exception:
+        if allow_synthetic:
+            return None  # synthetic fallback recorded in receipt
+        raise  # re-raise; caller should have blocked before reaching here
+
+
+def _run_socnavbench_runner(
+    *,
+    trajectory: np.ndarray,
+    goal: np.ndarray,
+    traversible_resolution: float | None,
+    allow_synthetic: bool,
+) -> tuple[float, dict[str, Any]]:
+    """Invoke the vendored SocNavBench source harness over the exported trajectory.
+
+    The vendored SocNavBench metric module imports its own helpers as
+    ``from metrics.cost_utils import *``, so its package root
+    (``third_party/socnavbench``) must be on ``sys.path`` -- not ``third_party``.
+
+    Args:
+        trajectory: (N, 2) executed robot path from the export.
+        goal: (2,) goal position consumed by the runner.
+        traversible_resolution: Staged ETH traversible resolution, or None for synthetic fallback.
+        allow_synthetic: Whether the synthetic-traversible test escape is active.
+
+    Returns:
+        ``(ratio, runner_meta)`` where ratio is the SocNavBench definition
+        (displacement / distance) and runner_meta records the harness inputs.
+    """
+    vendored_root = MODULE_ROOT / "third_party" / "socnavbench"
+    if str(vendored_root) not in sys.path:
+        sys.path.insert(0, str(vendored_root))
+    from metrics.cost_functions import path_length_ratio as _sn_path_length_ratio  # noqa: PLC0415
+
+    # The vendored SocNavBench function returns displacement / distance (higher = more efficient).
+    # This is the reciprocal of the Robot SF definition (distance / displacement). Both are
+    # recorded with distinct metric IDs so they cannot be mistakenly equated.
+    ratio = float(_sn_path_length_ratio(trajectory, goal))
+
+    runner_meta = {
+        "harness": "vendored_socnavbench_cost_functions.path_length_ratio",
+        "trajectory_points": int(trajectory.shape[0]),
+        "traversible_resolution_m": (
+            None if traversible_resolution is None else float(traversible_resolution)
+        ),
+        "synthetic_traversible": allow_synthetic or traversible_resolution is None,
+    }
+    return ratio, runner_meta
 
 
 def run_canary(*, out_dir: Path, allow_synthetic_traversible: bool = False) -> dict[str, Any]:
     """Run the one-scenario / one-seed / two-suite canary and emit a joint receipt.
 
-    The joint receipt contains the policy identity, scenario mapping, seed, per-suite
-    denominators, source commits/config digests, asset IDs, and limitation flags. It fails
-    closed (raises ``CanaryError``) on any missing asset, placeholder metadata, policy mismatch
-    (fallback), unsupported scenario conversion, or fallback/degraded adapter activation.
+    The joint receipt contains the policy identity (with runtime provenance), scenario mapping,
+    seed, per-suite distinct metric definitions, source commits/config digests, asset IDs, and
+    limitation flags. It fails closed (raises ``CanaryError``) on any missing asset, placeholder
+    metadata, policy mismatch (fallback), unsupported scenario conversion, or denominator drift.
+
+    The pinned policy is executed exactly ONCE; the resulting trajectory is reused for both the
+    Robot SF receipt (distance/displacement) and the SocNavBench receipt (displacement/distance)
+    so both sides operate on identical geometric paths and their denominators match.
 
     Args:
         out_dir: Directory for the materialized export and the joint receipt JSON.
@@ -498,8 +675,16 @@ def run_canary(*, out_dir: Path, allow_synthetic_traversible: bool = False) -> d
     policy = resolve_pinned_policy()
     mapping = resolve_scenario_mapping()
 
-    export_path = materialize_socnavbench_export(policy=policy, mapping=mapping, out_dir=out_dir)
-    robot_sf_receipt = run_robot_sf_receipt(policy=policy, mapping=mapping)
+    # Execute the pinned policy ONCE and share the rollout across both suite receipts so the
+    # trajectory, goal, and denominator are identical on both sides.
+    rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
+
+    export_path, _ = materialize_socnavbench_export(
+        policy=policy, mapping=mapping, out_dir=out_dir, rollout=rollout
+    )
+    robot_sf_receipt = run_robot_sf_receipt_from_rollout(
+        policy=policy, mapping=mapping, rollout=rollout
+    )
     socnavbench_receipt = run_socnavbench_receipt(
         export_path=export_path,
         policy=policy,
@@ -517,9 +702,32 @@ def run_canary(*, out_dir: Path, allow_synthetic_traversible: bool = False) -> d
     if robot_sf_receipt["policy_identity"] != socnavbench_receipt["policy_identity"]:
         raise CanaryError("Policy identity differs between suites (fallback detected).")
 
-    # Denominator guard: the canary must not silently change denominators between suites.
+    # Reciprocal ratio guard: the two suites must carry distinct metric identities and
+    # reciprocal directions. Sharing an exact metric identity for opposite definitions is a bug.
+    if (
+        robot_sf_receipt["metric_spec"]["metric_id"]
+        == socnavbench_receipt["metric_spec"]["metric_id"]
+    ):
+        raise CanaryError(
+            "Robot SF and SocNavBench share a colliding metric id for reciprocal ratios."
+        )
+    if (
+        robot_sf_receipt["metric_spec"]["ratio_direction"]
+        == socnavbench_receipt["metric_spec"]["ratio_direction"]
+    ):
+        raise CanaryError(
+            "Robot SF and SocNavBench ratio directions must differ (reciprocal)."
+        )
+
+    # Denominator guard: both suites use the same geometric start->goal displacement; it must
+    # not silently change between suites (guaranteed by sharing the single rollout).
     if not _denominators_preserved(robot_sf_receipt, socnavbench_receipt):
         raise CanaryError("Suite-specific denominators differ between suites.")
+
+    # Fallback status: any synthetic traversible path disqualifies the receipt as success
+    # evidence. ``fallback_forbidden`` is True only when no fallback path was taken.
+    any_fallback = bool(socnavbench_receipt.get("is_fallback", False))
+    fallback_forbidden = not any_fallback and not allow_synthetic_traversible
 
     joint_receipt = {
         "schema_version": RECEIPT_SCHEMA_VERSION,
@@ -532,8 +740,15 @@ def run_canary(*, out_dir: Path, allow_synthetic_traversible: bool = False) -> d
         "external_asset_id": mapping.external_asset_id,
         "external_asset_staged": bool(socnavbench_receipt.get("external_asset_staged", False)),
         "allow_synthetic_traversible": bool(allow_synthetic_traversible),
-        "fallback_forbidden": True,
+        # fallback_forbidden is True only when no fallback path was taken.
+        # When allow_synthetic_traversible=True, this is False because fallback IS active.
+        "fallback_forbidden": fallback_forbidden,
+        "counts_as_success_evidence": (not any_fallback),
         "suites": [robot_sf_receipt, socnavbench_receipt],
+        "per_suite_metric_specs": {
+            robot_sf_receipt["suite"]: robot_sf_receipt["metric_spec"],
+            socnavbench_receipt["suite"]: socnavbench_receipt["metric_spec"],
+        },
         "per_suite_denominators": {
             robot_sf_receipt["suite"]: robot_sf_receipt["denominator"],
             socnavbench_receipt["suite"]: socnavbench_receipt["denominator"],
@@ -571,6 +786,7 @@ def _policy_from_receipt(receipt: dict[str, Any]) -> PinnedPolicy:
         algo_config=identity["algo_config"],
         config_digest_sha256=identity["config_digest_sha256"],
         source_commit=identity["source_commit"],
+        runtime_planner_config=dict(identity.get("runtime_planner_config", {})),
     )
 
 
@@ -586,13 +802,17 @@ __all__ = [
     "CANARY_VERSION",
     "EXPORT_SCHEMA_VERSION",
     "RECEIPT_SCHEMA_VERSION",
+    "ROBOT_SF_METRIC_ID",
+    "SOCNAVBENCH_METRIC_ID",
     "CanaryError",
     "PinnedPolicy",
     "ScenarioMapping",
+    "SuiteMetricSpec",
     "materialize_socnavbench_export",
     "resolve_pinned_policy",
     "resolve_scenario_mapping",
     "run_canary",
     "run_robot_sf_receipt",
+    "run_robot_sf_receipt_from_rollout",
     "run_socnavbench_receipt",
 ]

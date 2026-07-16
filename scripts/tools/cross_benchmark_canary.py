@@ -98,24 +98,30 @@ def main(argv: list[str] | None = None) -> int:
         robot_sf = next(s for s in suites if s["suite"] == "Robot SF")
         socnavbench = next(s for s in suites if s["suite"] == "SocNavBench")
         policy = receipt["policy_identity"]
-        print(f"Cross-suite canary {CANARY_NAME} v{CANARY_VERSION} (issue #5783)")
+        print(f"Cross-suite canary {CANARY_NAME} v{CANARY_VERSION} (issue #5783/#5842)")
         print(f"  policy: {policy['policy_id']}@{policy['version']} ({policy['algo']})")
         print(
             f"  scenario: {receipt['scenario_mapping']['robot_sf_scenario_id']} <-> "
             f"{receipt['scenario_mapping']['socnavbench_scenario_id']} seed={receipt['seed']}"
         )
-        print(f"  metric: {robot_sf['metric_id']}")
+        rf_spec = robot_sf.get("metric_spec", {})
+        sn_spec = socnavbench.get("metric_spec", {})
+        print(f"  Robot SF metric: {rf_spec.get('metric_id', 'unknown')}")
+        print(f"  SocNavBench metric: {sn_spec.get('metric_id', 'unknown')}")
         print(
             f"  Robot SF value:   {robot_sf['value']:.6f} "
-            f"(denominator={robot_sf['denominator']:.6f} {robot_sf['denominator_kind']})"
+            f"(denominator={robot_sf['denominator']:.6f} "
+            f"{rf_spec.get('denominator_kind', '')})"
         )
         print(
             f"  SocNavBench value:{socnavbench['value']:.6f} "
-            f"(denominator={socnavbench['denominator']:.6f} {socnavbench['denominator_kind']})"
+            f"(denominator={socnavbench['denominator']:.6f} "
+            f"{sn_spec.get('denominator_kind', '')})"
         )
         print(f"  policy identity match: {receipt['policy_identity_match']}")
         print(f"  denominators preserved: {receipt['denominators_preserved']}")
         print(f"  fallback forbidden: {receipt['fallback_forbidden']}")
+        print(f"  counts as success evidence: {receipt['counts_as_success_evidence']}")
         print(
             f"  external asset staged: {receipt['external_asset_staged']} "
             f"({receipt['external_asset_id']})"

@@ -16,6 +16,7 @@ from robot_sf.benchmark.artifact_catalog import (
     main,
     sha256_file,
     validate_artifact_catalog,
+    _is_local_only_path,
 )
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "artifact_catalog" / "v1"
@@ -167,3 +168,42 @@ def test_cli_main_fails_on_duplicate_artifact_ids(tmp_path: Path, capsys) -> Non
     captured = capsys.readouterr()
     assert '"ok": false' in captured.out
     assert "duplicate artifact_id" in captured.out
+
+
+def test_is_local_only_path_multi_segment_absolute_prefix() -> None:
+    """Multi-segment absolute prefixes like /var/tmp/ must be classified as local-only.
+
+    Regression test for issue #5944: the original implementation used strip("/")
+    which turned '/var/tmp/' into 'var/tmp' (a single string), but then compared
+    only parts[1] (=='var') against the set, which never matched.
+    """
+    assert _is_local_only_path("/var/tmp/x.csv") is True
+    assert _is_local_only_path("/var/tmp/subdir/file.json") is True
+
+
+def test_is_local_only_path_single_segment_absolute_prefix() -> None:
+    """Single-segment absolute prefixes like /tmp/ and /home/ must work."""
+
+    assert _is_local_only_path("/tmp/file.csv") is True
+    assert _is_local_only_path("/tmp/subdir/file.json") is True
+    assert _is_local_only_path("/home/user/file.csv") is True
+    assert _is_local_only_path("/home/user/.local/file.json") is True
+
+
+def test_is_local_only_path_relative_prefix() -> None:
+    """Relative prefixes like output/ and results/ must be classified as local-only."""
+
+    assert _is_local_only_path("output/file.csv") is True
+    assert _is_local_only_path("output/subdir/file.json") is True
+    assert _is_local_only_path("results/file.csv") is True
+    assert _is_local_only_path(".git/config") is True
+    assert _is_local_only_path(".venv/bin/python") is True
+
+
+def test_is_local_only_path_durable_paths() -> None:
+    """Durable repository-relative paths must not be classified as local-only."""
+
+    assert _is_local_only_path("configs/file.yaml") is False
+    assert _is_local_only_path("robot_sf/benchmark/artifact_catalog.py") is False
+    assert _is_local_only_path("tests/test_file.py") is False
+    assert _is_local_only_path("docs/readme.md") is False

@@ -279,7 +279,12 @@ def test_admission_fails_when_checkpoint_points_at_nonexistent_id(
     config_path.write_text(yaml.safe_dump(bad_config), encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     planner["config_path"] = str(config_path)
-    findings = _findings_for(packet, "prediction_planner")
+    isolated_packet = {
+        "execution_boundary": packet["execution_boundary"],
+        "planner_roster": {"required": [planner]},
+    }
+    summary = check_campaign_arm_admission(isolated_packet, repo_root=tmp_path)
+    findings = [f for f in summary.findings if f.planner_id == "prediction_planner"]
     checkpoint_findings = [f for f in findings if f.contract == "checkpoint"]
     assert checkpoint_findings, "expected a checkpoint finding for the unknown model_id"
     assert any("definitely_not_a_real_model_id_5961" in f.message for f in checkpoint_findings)
@@ -320,8 +325,8 @@ def test_admission_passes_when_leader_role_cites_existing_evidence() -> None:
     """A leader role that cites a durable registered result is admissible on the evidence contract."""
     packet = _packet()
     hybrid = _arm(packet, "scenario_adaptive_hybrid_orca_v1")
-    # Cite the real durable evidence directory that backs the hybrid roster interpretation.
-    hybrid["evidence"] = "docs/context/evidence/issue_3810_h600_interpretation_2026-07"
+    # Cite a real durable evidence file that backs the hybrid roster interpretation.
+    hybrid["evidence"] = "docs/context/evidence/issue_3810_h600_interpretation_2026-07/README.md"
     findings = _findings_for(packet, "scenario_adaptive_hybrid_orca_v1")
     assert not [f for f in findings if f.contract == "evidence"]
 

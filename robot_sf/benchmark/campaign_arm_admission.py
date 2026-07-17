@@ -235,6 +235,57 @@ def _resolve_algo(planner_id: str, algo_config: dict[str, Any] | None) -> str:
     return _normalize_lower(planner_id)
 
 
+def _is_relative_to(path: Path, root: Path) -> bool:
+    """Return whether ``path`` is contained by ``root`` after resolution."""
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _has_symlink_component(path: Path, *, root: Path) -> bool:
+    """Return whether a path component between ``root`` and ``path`` is a symlink."""
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return True
+    current = root
+    for component in relative.parts:
+        current /= component
+        if current.is_symlink():
+            return True
+    return False
+
+
+def _resolve_config_path(
+    config_path: Any, *, repo_root: Path
+) -> tuple[str, Path | None, str | None]:
+    """Resolve a config path only when it stays within the trusted repository root.
+
+    Returns:
+        tuple[str, Path | None, str | None]: Raw path, resolved path when safe, and an
+        actionable path error when resolution is rejected.
+    """
+    if not isinstance(config_path, (str, Path)):
+        return "", None, f"config_path must be a string or path, got {type(config_path).__name__}"
+    raw_path = str(config_path).strip()
+    if not raw_path:
+        return "", None, None
+    candidate = Path(raw_path)
+    if ".." in candidate.parts:
+        return raw_path, None, "config_path must not contain parent traversal"
+    if not candidate.is_absolute():
+        candidate = repo_root / candidate
+    try:
+        resolved = candidate.resolve(strict=False)
+    except OSError as exc:
+        return raw_path, None, f"config_path could not be resolved safely: {exc}"
+    if not _is_relative_to(resolved, repo_root):
+        return raw_path, None, "config_path resolves outside the trusted repository root"
+    return raw_path, resolved, None
+
+
 def _load_arm_algo_config(
     config_path: Any,
     *,
@@ -251,15 +302,45 @@ def _load_arm_algo_config(
     """
     if config_path is None:
         return None, None, None
-    raw_path = str(config_path).strip()
+    raw_path, path, path_error = _resolve_config_path(config_path, repo_root=repo_root)
     if not raw_path:
         return None, None, None
-    path = repo_root / raw_path
+    if path_error is not None:
+        return (
+            None,
+            raw_path,
+            ArmAdmissionFinding(
+                planner_id=planner_id,
+                contract="config_load",
+                declared=raw_path,
+                observed="unsafe config path",
+                message=(
+                    f"arm '{planner_id}' config_path '{raw_path}' cannot be admitted: {path_error}"
+                ),
+            ),
+        )
+    assert path is not None
     if not path.is_file():
         # A missing config file is a FileNotFoundError, not a shape error -- it is not an
         # apparently-valid packet. The caller's structural checker already owns that contract.
         raise FileNotFoundError(f"planner config missing: {raw_path}")
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        return (
+            None,
+            raw_path,
+            ArmAdmissionFinding(
+                planner_id=planner_id,
+                contract="config_load",
+                declared=raw_path,
+                observed=type(exc).__name__,
+                message=(
+                    f"arm '{planner_id}' algo_config {raw_path} is malformed YAML and cannot "
+                    "load through the real loader"
+                ),
+            ),
+        )
     if not isinstance(data, dict):
         message = (
             f"arm '{planner_id}' algo_config {raw_path} did not load as a mapping through the "
@@ -615,7 +696,7 @@ def _check_explicit_opt_in_readiness(
     """
     spec = get_algorithm_readiness(algo)
     tier = spec.tier if spec is not None else None
-    if tier == "baseline-ready" or _normalize_lower(config.get("allow_testing_algorithms")):
+    if tier == "baseline-ready" or config.get("allow_testing_algorithms") is True:
         return []
     return [
         _finding(
@@ -797,10 +878,22 @@ def _check_evidence_contract(
             )
         )
         return findings
-    evidence_file = repo_root / evidence_path
-    # Accept either a durable evidence file or a durable evidence directory (a packet commonly
-    # cites a docs/context/evidence/<name>/ folder).
-    if not evidence_file.exists():
+    candidate = Path(evidence_path)
+    evidence_file: Path | None = None
+    if not candidate.is_absolute() and ".." not in candidate.parts:
+        candidate = repo_root / candidate
+        try:
+            resolved = candidate.resolve(strict=False)
+        except OSError:
+            resolved = None
+        if (
+            resolved is not None
+            and _is_relative_to(resolved, repo_root)
+            and not _has_symlink_component(candidate, root=repo_root)
+            and resolved.is_file()
+        ):
+            evidence_file = resolved
+    if evidence_file is None:
         findings.append(
             ArmAdmissionFinding(
                 planner_id=planner_id,
@@ -913,7 +1006,7 @@ def check_campaign_arm_admission(
         FileNotFoundError: When a declared config_path does not exist (a missing file is a file
             error, not an apparently-valid packet).
     """
-    root = repo_root or Path(__file__).resolve().parents[2]
+    root = (repo_root or Path(__file__).resolve().parents[2]).resolve()
     roster = _require_mapping(packet.get(roster_key), label=roster_key)
     required = roster.get("required")
     if not isinstance(required, list):
@@ -921,7 +1014,8 @@ def check_campaign_arm_admission(
 
     execution = packet.get("execution_boundary")
     fallback_allowed = bool(
-        isinstance(execution, dict) and execution.get("fallback_or_degraded_success_allowed")
+        isinstance(execution, dict)
+        and execution.get("fallback_or_degraded_success_allowed") is True
     )
 
     arms: list[ArmAdmissionReport] = []

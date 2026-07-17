@@ -105,6 +105,27 @@ def test_experimental_opt_in_requires_allow_testing_flag() -> None:
     assert not [m for m in _admit(packet_ok) if "[scenario_adaptive_hybrid_orca_v1] readiness" in m]
 
 
+def test_experimental_opt_in_rejects_false_flag(tmp_path: Path) -> None:
+    """A YAML false value is not an explicit opt-in for an experimental algorithm."""
+    config_path = tmp_path / "experimental_false.yaml"
+    config_path.write_text(
+        yaml.safe_dump({"algo": "hybrid_rule_local_planner", "allow_testing_algorithms": False}),
+        encoding="utf-8",
+    )
+    packet = _packet_with_arms(
+        [
+            {
+                "planner_id": "hybrid_rule_local_planner",
+                "role": "candidate",
+                "readiness": "experimental_explicit_opt_in",
+                "config_path": str(config_path),
+            }
+        ]
+    )
+    messages = list(check_campaign_arm_admission(packet, repo_root=tmp_path).failure_messages())
+    assert any("allow_testing_algorithms not true" in message for message in messages)
+
+
 # --- checkpoint contract ---------------------------------------------------
 
 
@@ -171,6 +192,42 @@ def test_config_load_fails_when_algo_config_is_not_a_mapping(tmp_path: Path) -> 
     summary = check_campaign_arm_admission(packet, repo_root=tmp_path)
     messages = list(summary.failure_messages())
     assert any("[ppo] config_load" in m and "did not load as a mapping" in m for m in messages)
+
+
+def test_config_load_reports_malformed_yaml(tmp_path: Path) -> None:
+    """Malformed YAML is reported as a structured config finding, not raised to the caller."""
+    config_path = tmp_path / "malformed.yaml"
+    config_path.write_text("algo: [\n", encoding="utf-8")
+    packet = _packet_with_arms(
+        [
+            {
+                "planner_id": "ppo",
+                "role": "learned_policy",
+                "readiness": "checkpoint_qualified_only",
+                "config_path": str(config_path),
+            }
+        ]
+    )
+    messages = list(check_campaign_arm_admission(packet, repo_root=tmp_path).failure_messages())
+    assert any("[ppo] config_load" in m and "malformed YAML" in m for m in messages)
+
+
+def test_config_path_outside_repo_root_fails_closed(tmp_path: Path) -> None:
+    """An absolute config path outside the trusted root cannot be loaded."""
+    outside = tmp_path.parent / "outside_config_5961.yaml"
+    outside.write_text("algo: orca\n", encoding="utf-8")
+    packet = _packet_with_arms(
+        [
+            {
+                "planner_id": "orca",
+                "role": "baseline_reactive",
+                "readiness": "canonical_baseline",
+                "config_path": str(outside),
+            }
+        ]
+    )
+    messages = list(check_campaign_arm_admission(packet, repo_root=tmp_path).failure_messages())
+    assert any("outside the trusted repository root" in m for m in messages)
 
 
 def test_missing_config_path_raises_file_not_found() -> None:
@@ -241,6 +298,30 @@ def test_nested_fallback_flag_is_surfaced(tmp_path: Path) -> None:
     assert any("[ppo] fallback" in m and "fallback_to_stop" in m for m in messages)
 
 
+def test_string_true_fallback_boundary_fails_closed(tmp_path: Path) -> None:
+    """A string that resembles true does not allow fallback in a boolean contract."""
+    config = {
+        "algo": "ppo",
+        "model_id": "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
+        "fallback_to_goal": True,
+    }
+    config_path = tmp_path / "ppo_string_boundary.yaml"
+    config_path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    packet = _packet_with_arms(
+        [
+            {
+                "planner_id": "ppo",
+                "role": "learned_policy",
+                "readiness": "checkpoint_qualified_only",
+                "config_path": str(config_path),
+            }
+        ]
+    )
+    packet["execution_boundary"]["fallback_or_degraded_success_allowed"] = "true"
+    messages = list(check_campaign_arm_admission(packet, repo_root=tmp_path).failure_messages())
+    assert any("[ppo] fallback" in m and "fallback_to_goal" in m for m in messages)
+
+
 # --- evidence contract -----------------------------------------------------
 
 
@@ -261,12 +342,33 @@ def test_leader_role_with_cited_existing_evidence_is_admissible() -> None:
                 "planner_id": "orca",
                 "role": "roster_leader",
                 "readiness": "canonical_baseline",
-                "evidence": "docs/context/evidence/issue_3810_h600_interpretation_2026-07",
+                "evidence": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/README.md",
             }
         ]
     )
     messages = _admit(packet)
     assert not [m for m in messages if "[orca] evidence" in m]
+
+
+def test_evidence_path_escape_and_symlink_fail_closed(tmp_path: Path) -> None:
+    """Evidence citations must be regular files below the repository root, without symlinks."""
+    outside = tmp_path.parent / "outside_evidence_5961.txt"
+    outside.write_text("not a registered result", encoding="utf-8")
+    symlink = tmp_path / "evidence_link"
+    symlink.symlink_to(outside)
+    for evidence in (str(outside), "../outside_evidence_5961.txt", "evidence_link"):
+        packet = _packet_with_arms(
+            [
+                {
+                    "planner_id": "orca",
+                    "role": "roster_leader",
+                    "readiness": "canonical_baseline",
+                    "evidence": evidence,
+                }
+            ]
+        )
+        messages = list(check_campaign_arm_admission(packet, repo_root=tmp_path).failure_messages())
+        assert any("[orca] evidence" in message for message in messages)
 
 
 def test_leader_role_with_missing_cited_evidence_fails() -> None:

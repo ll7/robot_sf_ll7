@@ -555,10 +555,14 @@ def _is_local_only_path(value: str) -> bool:
 
     path = Path(value.strip())
     parts = path.parts
+    if path.is_absolute():
+        for prefix in _LOCAL_ONLY_PREFIXES:
+            prefix_path = Path(prefix)
+            if prefix_path.is_absolute() and (path == prefix_path or prefix_path in path.parents):
+                return True
+        return False
     local_roots = {prefix.strip("/") for prefix in _LOCAL_ONLY_PREFIXES}
     local_roots.discard("")
-    if path.is_absolute():
-        return len(parts) > 1 and parts[1] in local_roots
     return bool(parts) and (parts[0] in local_roots or any(".worktrees" in part for part in parts))
 
 

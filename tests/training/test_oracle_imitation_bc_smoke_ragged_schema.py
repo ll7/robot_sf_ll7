@@ -126,12 +126,10 @@ def _write_ragged_npz(
 
     for episode in episodes:
         steps = int(episode["steps"])
-        obs_arrays = np.empty(steps, dtype=object)
-        act_arrays = np.empty((steps, 2), dtype=np.float32)
-        for step in range(steps):
-            observation = episode["observations"][step]
-            obs_arrays[step] = observation
-            act_arrays[step] = episode["actions"][step]
+        obs_arrays = np.asarray(episode["observations"], dtype=object)
+        act_arrays = np.asarray(episode["actions"], dtype=np.float32)
+        assert obs_arrays.shape == (steps,)
+        assert act_arrays.shape == (steps, 2)
         per_episode["observations"].append(obs_arrays)
         per_episode["actions"].append(act_arrays)
         per_episode["positions"].append(np.zeros((steps, 2), dtype=np.float32))

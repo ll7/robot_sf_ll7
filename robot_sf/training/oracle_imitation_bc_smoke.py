@@ -197,9 +197,9 @@ def _per_episode_steps(array: np.ndarray, *, name: str) -> list[np.ndarray]:
         )
     if data.ndim == 1:
         # Ragged layout: each element is already a per-episode step array.
-        return [data[index] for index in range(data.shape[0])]
+        return list(data)
     # Rectangular 2-D (or 3-D for actions): each leading-axis slice is one episode.
-    return [data[index] for index in range(data.shape[0])]
+    return list(data)
 
 
 def _episode_identity(array: np.ndarray, *, name: str) -> list[str]:
@@ -324,10 +324,12 @@ def _validate_dataset_arrays(arrays: dict[str, np.ndarray]) -> int:
             f"{len(actions)} vs {len(observations)}"
         )
     for episode_index, (obs_steps, act_steps) in enumerate(zip(observations, actions, strict=True)):
-        if _step_count(obs_steps) != _step_count(act_steps):
+        obs_len = _step_count(obs_steps)
+        act_len = _step_count(act_steps)
+        if obs_len != act_len:
             raise OracleImitationBcSmokeError(
                 f"episode {episode_index} observations and actions disagree on step count: "
-                f"{_step_count(obs_steps)} vs {_step_count(act_steps)}"
+                f"{obs_len} vs {act_len}"
             )
 
     episode_count = len(observations)

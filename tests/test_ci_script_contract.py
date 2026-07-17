@@ -775,7 +775,10 @@ def test_worktree_shared_venv_helper_pins_current_checkout_imports() -> None:
     assert 'venv_path="${venv_override:-$main_repo_root/.venv}"' in script_text
     assert 'export UV_PROJECT_ENVIRONMENT="$venv_path"' in script_text
     assert "export UV_NO_SYNC=1" in script_text
-    assert 'export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"' in script_text
+    assert (
+        'export PYTHONPATH="$repo_root:$repo_root/fast-pysf${PYTHONPATH:+:$PYTHONPATH}"'
+        in script_text
+    )
     assert 'exec uv run "${cmd[@]}"' in script_text
 
 
@@ -814,7 +817,7 @@ def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
         check=False,
     )
     assert help_result.returncode == 0
-    assert "PYTHONPATH=$PWD" in help_result.stdout
+    assert "PYTHONPATH=$PWD:$PWD/fast-pysf" in help_result.stdout
     assert "UV_PROJECT_ENVIRONMENT" in help_result.stdout
     assert "UV_NO_SYNC=1" in help_result.stdout
     assert "COVERAGE_FILE" in help_result.stdout

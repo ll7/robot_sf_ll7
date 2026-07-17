@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.local/schemas/result_job_durability.v1.json",
+  "title": "Robot SF result-job durability gate manifest",
+  "description": "Producer-side declaration a result job publishes before any analysis successor issue may be created or admitted. A completed result job MUST publish (1) a checksummed input, (2) a versioned schema for that input, (3) a canonical rerun command, and (4) a durable public-safe pointer. The analysis must run from the tracked pointer alone on a clean checkout.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "gate_id",
+    "source_job",
+    "analysis_input",
+    "sha256",
+    "input_schema",
+    "rerun_command",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "result_job_durability.v1"
+    },
+    "gate_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$"
+    },
+    "source_job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "producing_issue"],
+      "properties": {
+        "job_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "producing_issue": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Issue or PR number that produced the result job, e.g. '#3207'."
+        },
+        "producing_commit": {
+          "type": "string",
+          "minLength": 7
+        }
+      }
+    },
+    "analysis_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pointer", "pointer_kind"],
+      "properties": {
+        "pointer": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Durable public-safe pointer to the analysis input: a repository-relative tracked path or a registry/release URI. Local-only paths (output/, results/, .venv/, worktrees, home, /tmp) are rejected."
+        },
+        "pointer_kind": {
+          "enum": ["tracked_path", "registry_entry", "release_artifact"]
+        },
+        "private_safe": {
+          "type": "boolean",
+          "default": false,
+          "description": "True when the raw rows must stay private and the pointer names a checksummed sufficient-derived input or private storage pointer rather than the public raw artifact."
+        },
+        "hydration_command": {
+          "type": "string",
+          "description": "Optional command that hydrates the artifact from the durable pointer into a local cache before rerun. Required for release_artifact and registry_entry pointers."
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 checksum of the analysis input resolved by analysis_input.pointer."
+    },
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_name", "schema_version"],
+      "properties": {
+        "schema_name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        },
+        "schema_version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^v[0-9]+(\\.[0-9]+)*$"
+        },
+        "schema_path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional repository-relative path to the versioned schema describing the input (e.g. robot_sf/benchmark/schemas/episode.schema.v1.json). When set, it must resolve on a clean checkout."
+        }
+      }
+    },
+    "rerun_command": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Canonical command that regenerates the analysis from the analysis input alone, with no host-local state."
+    },
+    "claim_boundary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Evidence boundary the successor analysis must preserve (e.g. internal diagnostic, not paper-facing)."
+    }
+  }
+}

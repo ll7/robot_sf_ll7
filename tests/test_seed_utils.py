@@ -109,8 +109,8 @@ def test_model_package_preloads_torch_runtime_before_direct_ppo_import():
         version = seed_module.package_version("torch")
     except PackageNotFoundError:
         pytest.skip("Torch is not installed")
-    if sys.version_info[:2] < (3, 12) or not str(version).split("+", 1)[0].startswith("2.13.0"):
-        pytest.skip("the model-import boundary guard only applies to Torch 2.13/Python 3.12+")
+    if sys.version_info[:2] < (3, 11) or not str(version).split("+", 1)[0].startswith("2.13.0"):
+        pytest.skip("the model-import boundary guard only applies to Torch 2.13/Python 3.11+")
     if importlib.util.find_spec("stable_baselines3") is None:
         pytest.skip("Stable-Baselines3 is not installed")
 
@@ -138,7 +138,7 @@ def test_model_package_preloads_torch_runtime_before_direct_ppo_import():
 
 def test_torch_213_runtime_guard_is_limited_to_supported_versions(monkeypatch):
     """Do not disable Torch compilation for unaffected interpreter/version pairs."""
-    monkeypatch.setattr(sys, "version_info", (3, 11))
+    monkeypatch.setattr(sys, "version_info", (3, 10))
     monkeypatch.setattr(seed_module, "package_version", lambda _name: "2.13.0+cpu")
     monkeypatch.setenv("TORCH_COMPILE_DISABLE", "0")
 
@@ -180,15 +180,15 @@ def test_torch_optional_behavior():
         assert rep.has_torch is False
 
 
-def test_torch_213_python312_313_uses_c_level_determinism_setter(monkeypatch):
-    """Avoid Torch 2.13.0's Python 3.12/3.13 Dynamo/Triton import path.
+def test_torch_213_python311_plus_uses_c_level_determinism_setter(monkeypatch):
+    """Avoid Torch 2.13.0's Python 3.11/3.12/3.13 Dynamo/Triton import path.
 
     The real Torch 2.13.0 ``_C._set_deterministic_algorithms`` builtin takes a
     single positional ``enabled`` flag. The double mirrors that exact arity so
     the test fails if the helper regresses to the 2-arg call that raised
     ``TypeError`` under the actual Torch 2.13.0 graph (issue #5556).
     """
-    for py_ver in [(3, 12), (3, 13)]:
+    for py_ver in [(3, 11), (3, 12), (3, 13)]:
         monkeypatch.setattr(sys, "version_info", py_ver)
 
         calls: list[bool] = []

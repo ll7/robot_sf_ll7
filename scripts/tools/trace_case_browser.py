@@ -33,10 +33,16 @@ Pair output includes execution-commit, scenario-contract, and runtime-contract
 compatibility. Missing or mismatched provenance remains visible as a caveat;
 such a pair is a discovery lead, not comparison-ready evidence.
 
-Executable figure commands are emitted only when both rows satisfy the pinned
-PPO doorway converter contract. Other discovery pairs return
-``command_hint.status=adapter_required`` and no commands; Issue #5883 tracks a
-generic fail-closed adapter.
+Executable figure commands are emitted for any pair the generic fail-closed
+adapter (``scripts/repro/trace_series_adapter.py``, Issue #5883) can convert:
+each row is selected exactly by source path plus episode identity
+(``episode_id``, or the ``scenario``/``planner``/``seed`` triple) from its own
+source JSONL, then adapted into the ``trace_series.json`` /
+``metadata.json`` contract consumed by the figure renderer. Pairs that fall
+outside the adapter's fail-closed contract (unknown trace schema, missing
+provenance, actor-set changes, zero-pedestrian frames, ambiguous same-seed
+rows) return ``command_hint.status=adapter_required`` and no commands instead
+of emitting a command that would fail at runtime.
 
 Examples:
     uv run python scripts/tools/trace_case_browser.py list RUNS_DIR --sort=-near
@@ -171,10 +177,6 @@ DEFAULT_CRITICAL_CONFIG: dict[str, Any] = {
         },
     }
 }
-
-_PINNED_DOORWAY_CONVERTER_COMMIT = "a307ef276d701f8d14dead1aa0513f44ee97c0b0"
-_PINNED_DOORWAY_CONVERTER_ARM = "ppo"
-_PINNED_DOORWAY_CONVERTER_SCENARIO = "classic_doorway_medium"
 
 
 class CaseBrowserError(ValueError):
@@ -815,32 +817,33 @@ def _slug(value: str) -> str:
     return normalized or "case"
 
 
-def _doorway_converter_gaps(episode: Episode) -> list[str]:
-    """Return reasons the pinned doorway converter would reject an episode."""
+def _adapter_gaps(episode: Episode) -> list[str]:
+    """Return reasons the generic fail-closed adapter would reject an episode.
+
+    The generic adapter (Issue #5883) requires a supported ``simulation-step-trace``
+    and an exact identity (``episode_id``, or ``scenario``/``planner``/``seed``),
+    which the normalized :class:`Episode` already carries; this only checks the
+    checks the browser can perform without re-reading the source file.
+    """
     gaps: list[str] = []
-    if episode.arm != _PINNED_DOORWAY_CONVERTER_ARM:
-        gaps.append(f"planner {episode.arm!r}")
-    if episode.scenario != _PINNED_DOORWAY_CONVERTER_SCENARIO:
-        gaps.append(f"scenario {episode.scenario!r}")
-    if episode.record.get("git_hash") != _PINNED_DOORWAY_CONVERTER_COMMIT:
-        gaps.append("top-level execution commit")
-    provenance = episode.record.get("result_provenance")
-    if not isinstance(provenance, dict):
-        gaps.append("result provenance")
-    else:
-        if provenance.get("repo_commit") != _PINNED_DOORWAY_CONVERTER_COMMIT:
-            gaps.append("provenance execution commit")
-        if provenance.get("scenario_id") != _PINNED_DOORWAY_CONVERTER_SCENARIO:
-            gaps.append("provenance scenario")
-        if provenance.get("seed") != episode.seed:
-            gaps.append("provenance seed")
+    if not episode.has_trace:
+        gaps.append("no simulation trace")
+    if episode.seed is None:
+        gaps.append("missing seed")
+    if episode.git_commit is None:
+        gaps.append("missing execution commit")
     return gaps
 
 
 def _command_hint(kind: str, episode_a: Episode, episode_b: Episode) -> dict[str, Any]:
-    """Build bundle-preparation and hinge-figure commands for one matched pair."""
-    gaps_a = _doorway_converter_gaps(episode_a)
-    gaps_b = _doorway_converter_gaps(episode_b)
+    """Build bundle-preparation and hinge-figure commands for one matched pair.
+
+    Uses the generic fail-closed adapter (Issue #5883) when both rows carry a
+    convertible trace and exact identity. Otherwise emits ``adapter_required`` with
+    an actionable reason rather than a command that would fail at runtime.
+    """
+    gaps_a = _adapter_gaps(episode_a)
+    gaps_b = _adapter_gaps(episode_b)
     if gaps_a or gaps_b:
         reasons = []
         if gaps_a:
@@ -852,10 +855,12 @@ def _command_hint(kind: str, episode_a: Episode, episode_b: Episode) -> dict[str
             "working_directory": "repository root",
             "commands": [],
             "note": (
-                "No executable command is emitted: the available bundle converter is pinned "
-                "to one PPO doorway re-export and would reject this pair ("
+                "No executable command is emitted: the generic fail-closed adapter "
+                "(Issue #5883) cannot convert this pair ("
                 + "; ".join(reasons)
-                + "). Use the generic fail-closed adapter tracked in Issue #5883."
+                + "). The adapter selects each row exactly by source identity and rejects "
+                "unknown trace schemas, missing provenance, actor-set changes, "
+                "zero-pedestrian frames, and ambiguous same-seed rows."
             ),
         }
 
@@ -868,14 +873,24 @@ def _command_hint(kind: str, episode_a: Episode, episode_b: Episode) -> dict[str
     bundle_a = case_root / "episode_a"
     bundle_b = case_root / "episode_b"
     figure_dir = case_root / "figure"
-    converter = "scripts/repro/butterfly_reexport_to_trace_series.py"
+    adapter = "scripts/repro/trace_series_adapter.py"
     figure = "scripts/repro/butterfly_hinge_figure_proto.py"
 
     def prepare_command(episode: Episode, output_dir: Path) -> str:
+        identity = (
+            f"--episode-id {shlex.quote(str(episode.episode_id))}"
+            if episode.episode_id
+            and episode.episode_id != f"{episode.source.name}:{episode.line_number}"
+            else (
+                f"--scenario {shlex.quote(episode.scenario)}"
+                f" --planner {shlex.quote(episode.arm)}"
+                f" --seed {episode.seed}"
+            )
+        )
         return (
-            f"uv run python {converter} build-bundle"
+            f"uv run python {adapter} build-bundle"
             f" --episodes-jsonl {shlex.quote(str(episode.source))}"
-            f" --seed {episode.seed}"
+            f" {identity}"
             f" --out-dir {shlex.quote(str(output_dir))}"
         )
 
@@ -898,8 +913,8 @@ def _command_hint(kind: str, episode_a: Episode, episode_b: Episode) -> dict[str
         "working_directory": "repository root",
         "commands": commands,
         "note": (
-            "The bundle converter selects by seed within each source JSONL; "
-            "use separate per-arm source files for same-seed planner upsets."
+            "The generic adapter selects each row exactly by source identity; use "
+            "separate per-arm source files for same-seed planner upsets."
         ),
     }
 

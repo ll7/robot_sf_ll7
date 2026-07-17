@@ -104,6 +104,42 @@ def test_rejects_roster_expansion() -> None:
         checker.validate_packet(packet, repo_root=REPO_ROOT)
 
 
+def test_rejects_stale_planner_count_wording() -> None:
+    """The report exclusion rule must use the amended six-planner cardinality."""
+    packet = _packet()
+    policy = packet["row_status_policy"]
+    assert isinstance(policy, dict)
+    policy["exclusion_rule"] = "An incomplete five-planner episode blocks the report."
+    with pytest.raises(checker.PacketError, match="six-planner completeness"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_ppo_checkpoint_pin_drift() -> None:
+    """The packet must retain the maintainer-approved PPO checkpoint identity."""
+    packet = _packet()
+    roster = packet["planner_roster"]
+    assert isinstance(roster, dict)
+    ppo = roster["required"][1]
+    assert isinstance(ppo, dict)
+    pinned = ppo["pinned_provenance"]
+    assert isinstance(pinned, dict)
+    pinned["checkpoint_sha256"] = "0" * 64
+    with pytest.raises(checker.PacketError, match="PPO checkpoint pin"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_ppo_fallback_enablement() -> None:
+    """The amended PPO arm must remain fail-closed when its artifact is unavailable."""
+    packet = _packet()
+    roster = packet["planner_roster"]
+    assert isinstance(roster, dict)
+    ppo = roster["required"][1]
+    assert isinstance(ppo, dict)
+    ppo["fallback_to_goal"] = True
+    with pytest.raises(checker.PacketError, match="PPO fallback_to_goal"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
 def test_missing_planner_config_raises_file_not_found() -> None:
     """A required planner config cannot be treated as a generic packet error."""
     packet = _packet()
@@ -111,9 +147,9 @@ def test_missing_planner_config_raises_file_not_found() -> None:
     assert isinstance(roster, dict)
     required = roster["required"]
     assert isinstance(required, list)
-    ppo = required[1]
-    assert isinstance(ppo, dict)
-    ppo["config_path"] = "configs/algos/missing.yaml"
+    prediction_planner = required[2]
+    assert isinstance(prediction_planner, dict)
+    prediction_planner["config_path"] = "configs/algos/missing.yaml"
     with pytest.raises(FileNotFoundError, match="planner config missing"):
         checker.validate_packet(packet, repo_root=REPO_ROOT)
 

@@ -18,6 +18,7 @@ from robot_sf.benchmark.campaign_arm_admission import (
     CampaignArmAdmissionError,
     check_campaign_arm_admission,
 )
+from robot_sf.models.registry import load_registry
 from scripts.validation.check_preregistration_inference_contract import (
     InferenceContractError,
     check_inference_contract,
@@ -25,6 +26,10 @@ from scripts.validation.check_preregistration_inference_contract import (
 
 DEFAULT_PACKET = Path("configs/analysis/issue_5302_oracle_gap_packet.yaml")
 SCHEMA_VERSION = "issue_5302_oracle_gap_analysis_packet.v1"
+PPO_CONFIG_PATH = "configs/algos/ppo_v3_camera_ready.yaml"
+PPO_MODEL_ID = "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
+PPO_CHECKPOINT_SHA256 = "8367af109a27e8879ced0c8913f6eff26df7ec59c31ea88f9a297bb2c141eb09"
+PPO_PROVENANCE_SOURCE = "model/registry.yaml github_release.sha256"
 EXPECTED_PLANNERS = (
     "orca",
     "ppo",
@@ -74,6 +79,13 @@ def _mapping(payload: dict[str, Any], key: str) -> dict[str, Any]:
     value = payload.get(key)
     _require(isinstance(value, dict), f"{key} must be a mapping")
     return value
+
+
+def _load_mapping(path: Path, key: str) -> dict[str, Any]:
+    """Load a YAML mapping and identify malformed contract sources."""
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    _require(isinstance(payload, dict), f"{key} must be a YAML mapping")
+    return payload
 
 
 def _repo_relative_path(value: Any, key: str) -> str:
@@ -151,6 +163,40 @@ def validate_packet(  # noqa: C901, PLR0915
         "planner roster must match the approved six-planner order",
     )
     _require(all(isinstance(row, dict) for row in rows), "planner roster rows must be mappings")
+    ppo_rows = [row for row in rows if row.get("planner_id") == "ppo"]
+    _require(len(ppo_rows) == 1, "planner roster must contain exactly one PPO row")
+    ppo_row = ppo_rows[0]
+    _require(ppo_row.get("config_path") == PPO_CONFIG_PATH, "PPO config path must remain pinned")
+    _require(
+        ppo_row.get("readiness") == "experimental_explicit_opt_in",
+        "PPO readiness must remain experimental_explicit_opt_in",
+    )
+    _require(ppo_row.get("fallback_to_goal") is False, "PPO fallback_to_goal must be false")
+    pinned = _mapping(ppo_row, "pinned_provenance")
+    _require(pinned.get("model_id") == PPO_MODEL_ID, "PPO model_id pin is incorrect")
+    _require(
+        pinned.get("checkpoint_sha256") == PPO_CHECKPOINT_SHA256,
+        "PPO checkpoint pin is incorrect",
+    )
+    _require(
+        pinned.get("provenance_source") == PPO_PROVENANCE_SOURCE,
+        "PPO provenance source must be model/registry.yaml",
+    )
+    ppo_config = _load_mapping(root / PPO_CONFIG_PATH, "PPO config")
+    _require(ppo_config.get("model_id") == PPO_MODEL_ID, "PPO config model_id does not match pin")
+    _require(
+        ppo_config.get("fallback_to_goal") is False,
+        "PPO config fallback_to_goal must be false",
+    )
+    registry = load_registry(root / "model" / "registry.yaml")
+    registry_entry = registry.get(PPO_MODEL_ID)
+    _require(isinstance(registry_entry, dict), "PPO model_id is missing from model registry")
+    release = registry_entry.get("github_release")
+    _require(isinstance(release, dict), "PPO model registry release metadata is missing")
+    _require(
+        str(release.get("sha256", "")).lower() == PPO_CHECKPOINT_SHA256,
+        "PPO checkpoint pin does not match model registry",
+    )
     for row in rows:
         if row["planner_id"] == "orca":
             _require(row.get("config_path") is None, "orca must use its canonical baseline config")
@@ -269,6 +315,10 @@ def validate_packet(  # noqa: C901, PLR0915
     _require(
         "blocks the report" in str(row_policy.get("exclusion_rule")),
         "row exclusion rule must fail closed",
+    )
+    _require(
+        "incomplete six-planner episode" in str(row_policy.get("exclusion_rule")),
+        "row exclusion rule must state six-planner completeness",
     )
 
     outputs = _mapping(packet, "outputs")

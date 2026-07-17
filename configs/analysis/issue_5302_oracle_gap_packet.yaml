@@ -263,7 +263,7 @@ row_status_policy:
     - blocked
   exclusion_rule: >-
     Any missing provenance, non-native execution, invalid row status, duplicate
-    planner/episode key, incomplete five-planner episode, or split leakage
+    planner/episode key, incomplete six-planner episode, or split leakage
     blocks the report; weak rows remain visible and never count as evidence.
 
 decision_rule:

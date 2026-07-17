@@ -467,9 +467,7 @@ def test_review_companion_covers_every_post_5317_baseline_file() -> None:
         if path in prior_findings and current_count > prior_findings[path].get(code, 0)
     }
     declared_increases = [
-        (entry.get("path"), code)
-        for entry in increase_entries
-        for code in entry.get("codes", [])
+        (entry.get("path"), code) for entry in increase_entries for code in entry.get("codes", [])
     ]
     assert len(declared_increases) == len(set(declared_increases)), (
         "reviewed_baseline_increases contains duplicate path/code rows."

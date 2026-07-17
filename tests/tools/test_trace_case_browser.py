@@ -224,16 +224,18 @@ def test_pairs_finds_seed_flip_and_planner_upset_with_commands(
         assert compatibility["same_scenario_contract"] is True
         assert compatibility["same_runtime_contract"] is True
         assert compatibility["caveats"] == []
-        assert pair["command_hint"]["status"] == "adapter_required"
-        assert pair["command_hint"]["commands"] == []
-        assert "Issue #5883" in pair["command_hint"]["note"]
+        assert pair["command_hint"]["status"] == "ready"
+        commands = "\n".join(pair["command_hint"]["commands"])
+        assert "scripts/repro/trace_series_adapter.py" in commands
+        assert "build-bundle" in commands
+        assert "scripts/repro/butterfly_hinge_figure_proto.py" in commands
 
 
-def test_pairs_emit_commands_only_for_the_pinned_doorway_converter_contract(
+def test_pairs_emit_commands_through_generic_adapter_contract(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Pinned PPO doorway rows receive commands that their converter accepts."""
+    """Generic-adapter rows receive ready commands that the adapter accepts."""
     episodes_path = tmp_path / "episodes.jsonl"
     rows = [
         _episode("ppo", 113, "success", near_misses=2, min_clearance=0.25),
@@ -249,7 +251,8 @@ def test_pairs_emit_commands_only_for_the_pinned_doorway_converter_contract(
     hint = payload["seed_flips"][0]["command_hint"]
     assert hint["status"] == "ready"
     commands = "\n".join(hint["commands"])
-    assert "scripts/repro/butterfly_reexport_to_trace_series.py" in commands
+    assert "scripts/repro/trace_series_adapter.py" in commands
+    assert "build-bundle" in commands
     assert "scripts/repro/butterfly_hinge_figure_proto.py" in commands
 
 

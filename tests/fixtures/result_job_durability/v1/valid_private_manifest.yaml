@@ -1,0 +1,16 @@
+schema_version: result_job_durability.v1
+gate_id: job_13516_latency_snqi_private
+source_job:
+  job_id: "13516"
+  producing_issue: "#5904"
+analysis_input:
+  pointer: wandb-artifact://robot-sf/job_13516_latency_rows:v3
+  pointer_kind: registry_entry
+  private_safe: true
+  hydration_command: uv run python scripts/tools/hydrate_artifact.py --uri wandb-artifact://robot-sf/job_13516_latency_rows:v3 --out output/_cache/job_13516_latency_rows.parquet
+sha256: 6b34e690dfe6cc1ccccd9cd19bde8b3f6a3501bbc1b0a0b44639e151557b4134
+input_schema:
+  schema_name: snqi_latency_rows
+  schema_version: v1
+rerun_command: uv run python scripts/benchmark/analyze_latency_snqi.py --input $(uv run python scripts/tools/hydrate_artifact.py --uri wandb-artifact://robot-sf/job_13516_latency_rows:v3 --print-path)
+claim_boundary: internal control-action-latency diagnostic; adapter rows; not paper-facing

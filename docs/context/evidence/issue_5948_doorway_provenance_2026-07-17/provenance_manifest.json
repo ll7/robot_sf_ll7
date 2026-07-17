@@ -1,0 +1,59 @@
+{
+  "schema": "robot_sf_run_config_provenance.v1",
+  "issue": 5948,
+  "incident_date": "2026-07-17",
+  "run_identification": {
+    "slurm_job_id": 13483,
+    "execution_commit": "a307ef276d701f8d14dead1aa0513f44ee97c0b0",
+    "config_hash_from_run": "846e99aaba7dff51",
+    "output_tree_path": "output/benchmarks/doorway_butterfly_trace_reexport/job-13483/"
+  },
+  "config_reconstruction": {
+    "reconstructed_file": "configs/benchmarks/doorway_butterfly_trace_reexport.yaml",
+    "reconstruction_date": "2026-07-17",
+    "sources": [
+      "job-13483 run_summary.yaml",
+      "spec inline YAML reconstruction"
+    ],
+    "key_parameters": {
+      "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
+      "scenario_candidate": "classic_doorway_medium",
+      "planner_algo": "ppo",
+      "planner_config": "configs/baselines/ppo_15m_grid_socnav.yaml",
+      "seed_set": "paper_eval_s30",
+      "seeds": [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140],
+      "horizon": 600,
+      "dt": 0.1,
+      "workers": 1,
+      "snqi_weights": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+      "snqi_enforcement": "warn",
+      "amv_profile": "amv-paper-v1",
+      "amv_status": "pass",
+      "observation_noise_enabled": false,
+      "paper_facing": false
+    }
+  },
+  "durable_bundle": {
+    "filename": "job-13483-doorway-provenance.tar.gz",
+    "sha256": "1a434946d774a5550ec3791ec6a829768fab5ce058c7a9ec4db9d43711780dff",
+    "file_count": 46,
+    "location": "durable-evidence/",
+    "contents": [
+      "run_summary.yaml",
+      "campaign_manifest.json",
+      "PER_SEED_DIFF.md",
+      "per-seed reports"
+    ]
+  },
+  "rule_established": {
+    "title": "Producer-side durability gate",
+    "statement": "Anything required to reproduce a shipped artifact — its config, its input, AND the code that produced it — must be durable on main (or registered with a durable pointer) before the artifact is treated as shipped.",
+    "related_issues": [5936, 5893, 5447]
+  },
+  "resolution": {
+    "config_committed": true,
+    "provenance_registered": true,
+    "bundle_preserved": true,
+    "documentation_added": true
+  }
+}

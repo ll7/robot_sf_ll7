@@ -1,0 +1,75 @@
+# Reconstructed 2026-07-17 per issue #5948 from job-13483 run_summary.yaml
+# Original ad-hoc config was lost when worktree doorway-a307 was cleaned.
+# This reconstruction matches config_hash 846e99aaba7dff51 from the actual run.
+#
+# Provenance:
+#   - Slurm job: 13483
+#   - Execution commit: a307ef276d701f8d14dead1aa0513f44ee97c0b0
+#   - Output tree: output/benchmarks/doorway_butterfly_trace_reexport/job-13483/
+#   - Durable bundle: durable-evidence/job-13483-doorway-provenance.tar.gz
+#   - Bundle sha256: 1a434946d774a5550ec3791ec6a829768fab5ce058c7a9ec4db9d43711780dff
+#
+# Note: The spec's minimal variant listed seeds [113, 114]; the run actually used
+# the recommended 30-seed set (111-140). This artifact is authoritative about what ran.
+
+name: doorway_butterfly_trace_reexport
+paper_facing: false
+paper_profile_version: paper-matrix-v1
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+scenario_candidates: [classic_doorway_medium]
+route_clearance_certifications: configs/benchmarks/route_clearance_certifications_v1.yaml
+
+seed_policy:
+  mode: fixed-list
+  seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+
+amv_contract:
+  enabled: true
+  status: pass
+  profile: amv-paper-v1
+
+workers: 1
+horizon: 600
+dt: 0.1
+record_forces: true
+record_planner_decision_trace: true
+record_simulation_step_trace: true
+resume: false
+stop_on_failure: true
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+kinematics_matrix: [differential_drive]
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: "{release_tag}"
+doi: 10.5281/zenodo.<record-id>
+paper_interpretation_profile: diagnostic-trace-reexport-only
+
+# Observation noise disabled per reconstruction (issue #5948)
+observation_noise:
+  enabled: false
+
+planners:
+  - key: ppo
+    algo: ppo
+    planner_group: experimental
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    benchmark_profile: experimental
+    adapter_impact_eval: true

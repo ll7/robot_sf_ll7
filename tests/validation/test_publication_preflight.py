@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 from robot_sf.benchmark.artifact_publication import (
     PublicationPreflightError,
+    _check_snqi_field_consistency,
     export_publication_bundle,
     verify_publication_bundle_preflight,
 )
@@ -845,6 +846,44 @@ def test_preflight_snqi_check_fails_on_drifted_stored_field(tmp_path: Path) -> N
 
     with pytest.raises(PublicationPreflightError, match="stored SNQI"):
         verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_snqi_check_counts_all_drifted_fields_above_sample_cap(tmp_path: Path) -> None:
+    """The per-episode rejection sample is capped, but violation_count counts every drift.
+
+    With more than 20 drifted episodes the reported ``violations`` sample is capped (so a large
+    drift cannot balloon the report), yet ``violation_count`` and ``counts.snqi_field_mismatches``
+    must reflect the true number of drifted episodes, not just the capped sample.
+    """
+    bundle_dir = _build_bundle(tmp_path)
+    rows = [_snqi_episode(success=True, seed=seed) for seed in range(1, 26)]
+    for row in rows:
+        row["metrics"]["snqi"] += 0.5  # corrupt every stored field (25 drifts)
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", rows)
+    mean = sum(r["metrics"]["snqi"] for r in rows) / len(rows)
+    _seed_snqi_diagnostics(
+        bundle_dir,
+        [
+            {
+                "planner_key": "orca",
+                "kinematics": "holonomic",
+                "episode_count": len(rows),
+                "mean_snqi": mean,
+                "rank": 1,
+            }
+        ],
+    )
+
+    with pytest.raises(PublicationPreflightError, match="stored SNQI"):
+        verify_publication_bundle_preflight(bundle_dir)
+    # The preflight raises before returning; inspect the self-check directly to verify the
+    # capped-sample / full-count split so the diagnostic evidence is not misleading on a
+    # large drift.
+    snqi = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert snqi["counts"]["snqi_field_mismatches"] == 25
+    stored_drift_messages = [v for v in snqi["violations"] if "stored SNQI" in v]
+    assert len(stored_drift_messages) == 20  # per-episode sample capped for report size
+    assert snqi["violation_count"] == 25  # counts every drifted episode, not just the sample
 
 
 def test_preflight_snqi_check_fails_on_ordering_disagreement(tmp_path: Path) -> None:

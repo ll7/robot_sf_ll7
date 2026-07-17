@@ -1522,6 +1522,7 @@ def _check_snqi_field_consistency(  # noqa: C901, PLR0912, PLR0915
     per_arm_field_sum: dict[str, float] = defaultdict(float)
     per_arm_field_count: dict[str, int] = defaultdict(int)
     mismatch_sample: list[str] = []
+    mismatch_total = 0
     for episodes_path in sorted(payload_dir.glob("runs/*/episodes.jsonl")):
         arm = episodes_path.parent.name
         try:
@@ -1570,21 +1571,24 @@ def _check_snqi_field_consistency(  # noqa: C901, PLR0912, PLR0915
                 continue
             per_arm_field_sum[arm] += stored_snqi
             per_arm_field_count[arm] += 1
-            if (
-                not math.isclose(
-                    stored_snqi,
-                    recomputed_snqi,
-                    rel_tol=_SNQI_RECOMPUTE_RTOL,
-                    abs_tol=_SNQI_RECOMPUTE_ATOL,
-                )
-                and len(mismatch_sample) < 20
+            if not math.isclose(
+                stored_snqi,
+                recomputed_snqi,
+                rel_tol=_SNQI_RECOMPUTE_RTOL,
+                abs_tol=_SNQI_RECOMPUTE_ATOL,
             ):
-                mismatch_sample.append(
-                    f"{source}: stored SNQI {stored_snqi!r} != curvature-aware recompute "
-                    f"{recomputed_snqi!r}"
-                )
+                # Every drift is counted; the per-episode rejection sample is capped so a
+                # large drift cannot balloon the report, but ``violation_count`` below
+                # accounts for every drifted episode so the evidence is not misleading.
+                mismatch_total += 1
+                if len(mismatch_sample) < 20:
+                    mismatch_sample.append(
+                        f"{source}: stored SNQI {stored_snqi!r} != curvature-aware recompute "
+                        f"{recomputed_snqi!r}"
+                    )
 
     rejections.extend(mismatch_sample)
+    truncated_mismatches = max(mismatch_total - len(mismatch_sample), 0)
     field_means = {
         arm: (per_arm_field_sum[arm] / per_arm_field_count[arm])
         if per_arm_field_count[arm]
@@ -1605,7 +1609,7 @@ def _check_snqi_field_consistency(  # noqa: C901, PLR0912, PLR0915
 
     return {
         "checked": True,
-        "violation_count": len(rejections),
+        "violation_count": len(rejections) + truncated_mismatches,
         "violations": rejections,
         "ordering": {
             "field_planner_ordering": field_ordering,
@@ -1614,6 +1618,7 @@ def _check_snqi_field_consistency(  # noqa: C901, PLR0912, PLR0915
         "counts": {
             "rows": rows,
             "episode_field_present": episode_field_present,
+            "snqi_field_mismatches": mismatch_total,
             "arms": len(per_arm_field_count),
         },
         "integrity": {

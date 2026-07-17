@@ -8,8 +8,10 @@ command, so no external planner binary or GPU is required.
 from __future__ import annotations
 
 import sys
+import time
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 
 from robot_sf.benchmark import runner as runner_mod
@@ -37,10 +39,25 @@ _NATIVE_STUB_SRC = (
     "sys.stdout.flush()\n"
 )
 
+_NATIVE_PERSISTENT_STUB_SRC = (
+    "import sys, json\n"
+    "for raw in sys.stdin:\n"
+    "    req = json.loads(raw)\n"
+    "    pos = req['robot_pos']; goal = req['robot_goal']\n"
+    "    dx = goal[0]-pos[0]; dy = goal[1]-pos[1]\n"
+    "    d = (dx*dx + dy*dy) ** 0.5\n"
+    "    print(json.dumps({'v': min(1.0, d), 'omega': 0.0}))\n"
+    "    sys.stdout.flush()\n"
+)
+
 
 def _native_command_spec(*, persistent: bool, timeout_s: float = 2.0) -> dict[str, object]:
     """Return a scenario ``native_command`` block invoking the inline stub."""
-    argv = [sys.executable, "-c", _NATIVE_STUB_SRC]
+    argv = [
+        sys.executable,
+        "-c",
+        _NATIVE_PERSISTENT_STUB_SRC if persistent else _NATIVE_STUB_SRC,
+    ]
     return {
         "id": "nc_test",
         "num_pedestrians": 0,
@@ -64,6 +81,8 @@ def test_native_command_provenance_captures_command_and_hash():
     assert prov["argv"] == spec["native_command"]["argv"]
     assert prov["env_keys"] == ["NC_TEST"]
     assert len(prov["command_hash_sha256"]) == 64
+    assert prov["binary_path"] == sys.executable
+    assert len(prov["binary_hash_sha256"]) == 64
     # Hash is stable across identical invocations.
     again = runner_mod._native_command_provenance(
         spec["native_command"]["argv"], spec["native_command"]["env"]
@@ -114,6 +133,25 @@ def test_native_command_persistent_process_runs(tmp_path: Path):
     assert am["command_mode"] == "persistent_process"
     assert am["planner_kinematics"]["execution_mode"] == "native"
     assert len(am["planner_diagnostics"]["planner_step_runtime_seconds"]) == 30
+
+
+def test_native_command_persistent_timeout_is_bounded():
+    """A persistent child that never responds cannot block the episode indefinitely."""
+    policy = runner_mod._NativeCommandPolicy(
+        argv=[sys.executable, "-c", "import sys, time; time.sleep(5)"],
+        env={},
+        timeout_s=0.05,
+        persistent=True,
+    )
+    started = time.monotonic()
+    try:
+        command = policy.step(np.zeros(2), np.zeros(2), np.ones(2), np.empty((0, 2)), 0.1)
+    finally:
+        policy.close()
+    assert time.monotonic() - started < 1.0
+    assert command.tolist() == [0.0, 0.0]
+    assert policy.diagnostics()["runtime_bound_exits"] == 1
+    assert policy.diagnostics()["fallback_count"] == 1
 
 
 def test_native_command_fallback_on_nonzero_exit():
@@ -242,3 +280,12 @@ def test_native_command_parser_accepts_holonomic_response():
     )
     command = policy._parse_response('{"vx": 0.5, "vy": -0.25}')
     assert command.tolist() == [0.5, -0.25]
+
+
+def test_native_command_parser_rejects_nonfinite_response():
+    """NaN/Inf responses fail closed instead of entering the simulator."""
+    policy = runner_mod._NativeCommandPolicy(
+        argv=[sys.executable], env={}, timeout_s=1.0, persistent=False
+    )
+    with pytest.raises(ValueError, match="finite"):
+        policy._parse_response('{"v": NaN, "omega": 0.0}')

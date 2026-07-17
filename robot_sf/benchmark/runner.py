@@ -16,10 +16,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import multiprocessing as mp
 import os
 import platform
+import selectors
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -496,7 +499,14 @@ def _native_command_spec(scenario_params: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Native-command contract dict with argv/env/timeout/process defaults.
     """
-    spec = dict(scenario_params.get(NATIVE_COMMAND_ARM, {}))
+    raw_spec = scenario_params.get(NATIVE_COMMAND_ARM, {})
+    spec = dict(raw_spec) if isinstance(raw_spec, Mapping) else {}
+    if "argv" not in spec and "command" in spec:
+        spec["argv"] = spec["command"]
+    if "timeout_s" not in spec and "step_timeout_sec" in spec:
+        spec["timeout_s"] = spec["step_timeout_sec"]
+    if "persistent" not in spec and "mode" in spec:
+        spec["persistent"] = str(spec["mode"]).strip().lower() == "persistent"
     spec.setdefault("argv", [])
     spec.setdefault("env", {})
     spec.setdefault("timeout_s", NATIVE_COMMAND_DEFAULT_TIMEOUT_S)
@@ -509,9 +519,8 @@ def _native_command_provenance(argv: list[str], env: Mapping[str, str]) -> dict[
     """Capture provenance for a declared native command (command + version/hash).
 
     Returns:
-        Provenance dict with the resolved argv, effective env keys, and a
-        content hash of the command invocation (argv + sorted env) so the exact
-        binary contract is reproducible in the episode record.
+        Provenance dict with the resolved argv, effective env keys, an invocation
+        hash, and the resolved binary path/content hash when the executable is readable.
     """
     argv_list = [str(item) for item in argv]
     env_items = {str(k): str(v) for k, v in (env or {}).items()}
@@ -520,11 +529,27 @@ def _native_command_provenance(argv: list[str], env: Mapping[str, str]) -> dict[
         sort_keys=True,
     ).encode("utf-8")
     command_hash = hashlib.sha256(canonical).hexdigest()
+    binary_path: str | None = None
+    binary_hash: str | None = None
+    if argv_list:
+        candidate = Path(argv_list[0])
+        if not candidate.is_file():
+            resolved = shutil.which(argv_list[0])
+            if resolved:
+                candidate = Path(resolved)
+        if candidate.is_file():
+            binary_path = str(candidate)
+            try:
+                binary_hash = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            except OSError:
+                binary_hash = None
     return {
         "protocol": NATIVE_COMMAND_PROTOCOL_VERSION,
         "argv": argv_list,
         "env_keys": sorted(env_items.keys()),
         "command_hash_sha256": command_hash,
+        "binary_path": binary_path,
+        "binary_hash_sha256": binary_hash,
     }
 
 
@@ -552,8 +577,11 @@ class _NativeCommandPolicy:
         self._argv = [str(item) for item in argv]
         self._env = dict(env or {})
         self._timeout_s = float(timeout_s)
+        if not math.isfinite(self._timeout_s) or self._timeout_s <= 0.0:
+            raise ValueError("native_command timeout_s must be positive and finite")
         self._persistent = bool(persistent)
-        self._process: subprocess.Popen[str] | None = None
+        self._process: subprocess.Popen[bytes] | None = None
+        self._stdout_buffer = bytearray()
         self._diagnostics: dict[str, Any] = {
             "expansion_limit_hits": 0,
             "runtime_bound_exits": 0,
@@ -564,7 +592,7 @@ class _NativeCommandPolicy:
             "last_exit_code": None,
         }
 
-    def _spawn(self) -> subprocess.Popen[str]:
+    def _spawn(self) -> subprocess.Popen[bytes]:
         """Spawn the native command child process with pipes and merged env.
 
         Returns:
@@ -578,11 +606,10 @@ class _NativeCommandPolicy:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             env=child_env,
-            text=True,
-            bufsize=1,
+            bufsize=0,
         )
 
-    def _ensure_process(self) -> subprocess.Popen[str]:
+    def _ensure_process(self) -> subprocess.Popen[bytes]:
         """Start the persistent child process if needed.
 
         Returns:
@@ -591,6 +618,7 @@ class _NativeCommandPolicy:
         if self._process is not None and self._process.poll() is None:
             return self._process
         self._process = self._spawn()
+        self._stdout_buffer.clear()
         return self._process
 
     def _parse_response(self, raw: str) -> np.ndarray:
@@ -602,13 +630,67 @@ class _NativeCommandPolicy:
             The velocity command array.
         """
         payload = json.loads(raw)
-        if isinstance(payload, dict) and "v" in payload and "omega" in payload:
-            return np.array([float(payload["v"]), float(payload["omega"])], dtype=float)
-        if isinstance(payload, dict) and "vx" in payload and "vy" in payload:
-            return np.array([float(payload["vx"]), float(payload["vy"])], dtype=float)
+        if isinstance(payload, dict):
+            linear = payload.get(
+                "linear_velocity",
+                payload.get("linear", payload.get("v", payload.get("vx"))),
+            )
+            angular = payload.get(
+                "angular_velocity",
+                payload.get("angular", payload.get("omega", payload.get("vy"))),
+            )
+            if linear is not None and angular is not None:
+                command = np.array([float(linear), float(angular)], dtype=float)
+                if not np.all(np.isfinite(command)):
+                    raise ValueError("native_command response must contain finite velocities")
+                return command
         if isinstance(payload, list | tuple) and len(payload) == 2:
-            return np.array([float(payload[0]), float(payload[1])], dtype=float)
+            command = np.array([float(payload[0]), float(payload[1])], dtype=float)
+            if not np.all(np.isfinite(command)):
+                raise ValueError("native_command response must contain finite velocities")
+            return command
         raise ValueError(f"native_command returned unrecognized command: {raw!r}")
+
+    def _readline_with_timeout(self, process: subprocess.Popen[bytes]) -> str:
+        """Read one persistent response line with a hard wall-clock bound.
+
+        Returns:
+            Decoded response text without the line terminator.
+        """
+        assert process.stdout is not None
+        deadline = time.monotonic() + self._timeout_s
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while b"\n" not in self._stdout_buffer:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    raise subprocess.TimeoutExpired(self._argv, self._timeout_s)
+                if not selector.select(remaining):
+                    raise subprocess.TimeoutExpired(self._argv, self._timeout_s)
+                chunk = os.read(process.stdout.fileno(), 4096)
+                if not chunk:
+                    break
+                self._stdout_buffer.extend(chunk)
+        if b"\n" not in self._stdout_buffer:
+            raw = bytes(self._stdout_buffer)
+            self._stdout_buffer.clear()
+            return raw.decode("utf-8", errors="replace")
+        line, remainder = bytes(self._stdout_buffer).split(b"\n", 1)
+        self._stdout_buffer = bytearray(remainder)
+        return line.decode("utf-8", errors="replace")
+
+    def _kill_persistent_process(self) -> None:
+        """Kill and reap a failed persistent child, clearing buffered output."""
+        process = self._process
+        self._process = None
+        self._stdout_buffer.clear()
+        if process is not None:
+            if process.poll() is None:
+                process.kill()
+            try:
+                process.wait(timeout=0.1)
+            except subprocess.TimeoutExpired:
+                pass
 
     def step(
         self,
@@ -636,15 +718,18 @@ class _NativeCommandPolicy:
         try:
             if self._persistent:
                 process = self._ensure_process()
+                assert process.stdin is not None
+                process.stdin.write((json.dumps(request) + "\n").encode("utf-8"))
+                process.stdin.flush()
+                stdout = self._readline_with_timeout(process)
+                exit_code = process.poll()
             else:
                 process = self._spawn()
-            try:
-                stdout, _ = process.communicate(json.dumps(request) + "\n", timeout=self._timeout_s)
+                stdout_bytes, _ = process.communicate(
+                    json.dumps(request).encode("utf-8") + b"\n", timeout=self._timeout_s
+                )
+                stdout = stdout_bytes.decode("utf-8", errors="replace")
                 exit_code = process.returncode
-            finally:
-                if not self._persistent and process.poll() is None:
-                    process.kill()
-                    process.wait(timeout=0.1)
 
             runtime = float(max(0.0, time.perf_counter() - started))
             self._diagnostics[NATIVE_COMMAND_RUNTIME_FIELD].append(runtime)
@@ -664,20 +749,23 @@ class _NativeCommandPolicy:
             self._diagnostics["runtime_bound_exits"] += 1
             self._diagnostics["fallback_count"] += 1
             self._diagnostics["last_exit_code"] = None
-            if self._process is not None:
-                self._process.kill()
-                self._process.wait(timeout=0.1)
-                self._process = None
+            self._diagnostics["exit_codes"].append(None)
+            if self._persistent:
+                self._kill_persistent_process()
+            elif "process" in locals() and process.poll() is None:
+                process.kill()
+                process.wait(timeout=0.1)
             return np.zeros(2, dtype=float)
         except (ValueError, json.JSONDecodeError, OSError) as exc:
             runtime = float(max(0.0, time.perf_counter() - started))
             self._diagnostics[NATIVE_COMMAND_RUNTIME_FIELD].append(runtime)
             self._diagnostics["fallback_count"] += 1
             logger.opt(exception=exc).warning("native_command step failed: {}", exc)
-            if self._process is not None:
-                self._process.kill()
-                self._process.wait(timeout=0.1)
-                self._process = None
+            if self._persistent:
+                self._kill_persistent_process()
+            elif "process" in locals() and process.poll() is None:
+                process.kill()
+                process.wait(timeout=0.1)
             return np.zeros(2, dtype=float)
 
     def diagnostics(self) -> dict[str, Any]:
@@ -690,6 +778,7 @@ class _NativeCommandPolicy:
         """Tear down the persistent child process if still alive."""
         process = self._process
         self._process = None
+        self._stdout_buffer.clear()
         if process is not None and process.poll() is None:
             try:
                 process.terminate()
@@ -906,6 +995,9 @@ def _create_native_command_policy(
     *,
     scenario_params: dict[str, Any],
     seed: int,
+    scenario_id: str = "unknown",
+    horizon: int = 100,
+    dt: float = 0.1,
     robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
     ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
 ):
@@ -922,8 +1014,21 @@ def _create_native_command_policy(
         Tuple of (policy function, metadata dict with native arm + diagnostics).
     """
     spec = _native_command_spec(scenario_params)
-    argv = [str(item) for item in spec["argv"]]
-    env = dict(spec.get("env") or {})
+    mapping = {
+        "{scenario_id}": str(scenario_id),
+        "{seed}": str(seed),
+        "{horizon}": str(horizon),
+        "{dt}": str(dt),
+    }
+
+    def render(value: Any) -> str:
+        rendered = str(value)
+        for token, replacement in mapping.items():
+            rendered = rendered.replace(token, replacement)
+        return rendered
+
+    argv = [render(item) for item in spec["argv"]]
+    env = {str(key): render(value) for key, value in (spec.get("env") or {}).items()}
     timeout_s = float(spec["timeout_s"])
     persistent = bool(spec["persistent"])
 
@@ -980,6 +1085,8 @@ def _create_robot_policy(  # noqa: C901, PLR0915
     seed: int,
     *,
     scenario_params: dict[str, Any] | None = None,
+    horizon: int = 100,
+    dt: float = 0.1,
     robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
     ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
 ):
@@ -993,6 +1100,16 @@ def _create_robot_policy(  # noqa: C901, PLR0915
         return _create_native_command_policy(
             scenario_params=scenario_params or {},
             seed=seed,
+            scenario_id=str(
+                (scenario_params or {}).get(
+                    "scenario_id",
+                    (scenario_params or {}).get(
+                        "id", (scenario_params or {}).get("name", "unknown")
+                    ),
+                )
+            ),
+            horizon=horizon,
+            dt=dt,
             robot_radius=robot_radius,
             ped_radius=ped_radius,
         )
@@ -1793,6 +1910,8 @@ def run_episode(  # noqa: PLR0913
         algo_config_path,
         seed,
         scenario_params=scenario_params,
+        horizon=horizon,
+        dt=dt,
         robot_radius=robot_radius,
         ped_radius=ped_radius,
     )

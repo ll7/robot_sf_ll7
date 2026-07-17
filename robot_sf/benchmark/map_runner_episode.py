@@ -2617,11 +2617,17 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
     attach_pedestrian_model_fields(record, pedestrian_model_provenance)
     record.update(static_deadlock_fields)
 
-    # Extract native-command deadlock + diagnostics fields from algo metadata
+    # Keep native-command diagnostics in the canonical algorithm metadata block used by
+    # the issue #5416 analyzer. The generic deadlock metric already lives under
+    # ``metrics.deadlock``/``metrics.deadlock_stall``; the native detector's typed
+    # trace is nested under the native command metadata rather than emitted as a
+    # misleading top-level replacement.
     is_native_nc, deadlock_field, planner_diag = native_command_metadata_for_record(algo_meta)
     if is_native_nc:
-        record["planner_diagnostics"] = planner_diag
-        record["deadlock"] = deadlock_field
+        algo_meta["planner_diagnostics"] = planner_diag
+        native_metadata = algo_meta.get("native_command")
+        if isinstance(native_metadata, dict):
+            native_metadata["deadlock"] = deadlock_field
 
     # Write-time episode-row instrumentation for issue #4242 AC #2: emit native
     # failure-mechanism (fail-closed unknown) and interaction-exposure (computed

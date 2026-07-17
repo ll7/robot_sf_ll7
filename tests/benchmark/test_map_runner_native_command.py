@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -51,6 +52,14 @@ class TestNativeCommandContract:
         spec = nc.NativeCommandSpec.from_config({"command": ["/bin/true"], "mode": "persistent"})
         assert spec.mode == "persistent"
 
+    def test_standard_contract_aliases_are_accepted(self) -> None:
+        spec = nc.NativeCommandSpec.from_config(
+            {"argv": ["/bin/true"], "persistent": True, "timeout_s": 0.25}
+        )
+        assert spec.command == ["/bin/true"]
+        assert spec.mode == "persistent"
+        assert spec.step_timeout_sec == 0.25
+
     def test_template_substitution(self) -> None:
         spec = nc.NativeCommandSpec.from_config(
             {
@@ -64,7 +73,7 @@ class TestNativeCommandContract:
 
     def test_binary_hash_is_deterministic(self) -> None:
         spec = nc.NativeCommandSpec.from_config({"command": [_FAKE_PLANNER]})
-        assert len(spec.binary_hash) == 16
+        assert len(spec.binary_hash) == 64
         assert spec.binary_label.endswith("native_command_fake_planner.py")
 
 
@@ -109,12 +118,17 @@ class TestNoProgressDeadlockDetector:
     [
         ("", "empty response"),
         ("[]", "JSON object"),
-        ("{}", "missing linear_velocity/angular_velocity"),
+        ("{}", "missing a recognized linear/angular command pair"),
     ],
 )
 def test_native_command_response_rejects_unusable_payloads(response: str, message: str) -> None:
     with pytest.raises(NativeCommandStepError, match=message):
         nc._parse_response(response)
+
+
+def test_native_command_response_rejects_nonfinite_values() -> None:
+    with pytest.raises(NativeCommandStepError, match="finite"):
+        nc._parse_response('{"linear_velocity": NaN, "angular_velocity": 0.0}')
 
 
 def test_native_command_metadata_rejects_non_mapping() -> None:
@@ -182,8 +196,8 @@ class TestNativeCommandPolicyBuilder:
             horizon=500,
             dt=0.1,
         )
-        with pytest.raises(NativeCommandStepError):
-            policy({"robot": {}, "goal": {}})
+        assert policy({"robot": {}, "goal": {}}) == (0.0, 0.0)
+        assert _meta["_native_run_state"]["planner_diagnostics"]["fallback_count"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +262,7 @@ def test_native_command_smoke_produces_schema_valid_row(tmp_path: Path) -> None:
     # New additive diagnostics fields present and schema-shaped.
     assert isinstance(record["metrics"]["deadlock"], bool)
     assert record["algorithm_metadata"]["planner_kinematics"]["execution_mode"] == "native"
-    diag = record["planner_diagnostics"]
+    diag = record["algorithm_metadata"]["planner_diagnostics"]
     for key in (
         "expansion_limit_hits",
         "runtime_bound_exits",
@@ -260,8 +274,42 @@ def test_native_command_smoke_produces_schema_valid_row(tmp_path: Path) -> None:
         isinstance(diag["planner_step_runtime_seconds"], list)
         and diag["planner_step_runtime_seconds"]
     )
-    assert record["deadlock"]["schema_version"] == "native-command-deadlock.v1"
+    assert (
+        record["algorithm_metadata"]["native_command"]["deadlock"]["schema_version"]
+        == "native-command-deadlock.v1"
+    )
+    from scripts.analysis.analyze_issue_5416_sipp_four_geometry import _diagnostics
+
+    diagnostics, errors = _diagnostics(record)
+    assert diagnostics is not None
+    assert errors == []
     assert record["algorithm_metadata"]["native_command"]["binary_hash"]
+
+
+def test_native_command_persistent_timeout_is_bounded(tmp_path: Path) -> None:
+    """Persistent map-runner reads have a hard timeout instead of unbounded readline."""
+    slow_script = tmp_path / "slow_native.py"
+    slow_script.write_text(
+        "import time\ntime.sleep(5)\n",
+        encoding="utf-8",
+    )
+    policy, meta = build_native_command_policy(
+        "native_command",
+        {"argv": ["python3", str(slow_script)], "persistent": True, "timeout_s": 0.05},
+        scenario_id="slow",
+        seed=1,
+        horizon=2,
+        dt=0.1,
+    )
+    try:
+        started = time.monotonic()
+        assert policy({"robot": {}, "goal": {}}) == (0.0, 0.0)
+        assert time.monotonic() - started < 1.0
+    finally:
+        policy._planner_close()  # type: ignore[attr-defined]
+    diag = meta["_native_run_state"]["planner_diagnostics"]
+    assert diag["runtime_bound_exits"] == 1
+    assert diag["fallback_count"] == 1
 
 
 def test_native_row_passes_5416_analyzer_native_gate(tmp_path: Path) -> None:

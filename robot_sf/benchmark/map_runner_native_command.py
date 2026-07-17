@@ -22,6 +22,8 @@ import hashlib
 import json
 import math
 import os
+import selectors
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -67,23 +69,25 @@ def _resolve_binary_hash(command: list[str]) -> tuple[str, str]:
         command: Resolved argv list (first element is the binary path).
 
     Returns:
-        A short content/identity label and a sha256 prefix describing the resolved
-        binary. When the binary is not a readable file, the label falls back to the
-        argv string and the hash is the sha256 of that string (still deterministic).
+        The resolved binary label and its full sha256 content hash. An unresolved
+        command has an empty content hash and is still allowed to fail at launch time.
     """
 
     if not command:
         raise NativeCommandContractError("native command must be a non-empty argv list")
     binary = Path(command[0])
+    if not binary.is_file():
+        resolved = shutil.which(command[0])
+        if resolved:
+            binary = Path(resolved)
     label = str(binary)
+    if not binary.is_file():
+        return label, ""
     try:
-        if binary.is_file():
-            digest = hashlib.sha256(binary.read_bytes()).hexdigest()
-        else:
-            digest = hashlib.sha256(" ".join(command).encode("utf-8")).hexdigest()
+        digest = hashlib.sha256(binary.read_bytes()).hexdigest()
     except OSError:
-        digest = hashlib.sha256(" ".join(command).encode("utf-8")).hexdigest()
-    return label, digest[:16]
+        return label, ""
+    return label, digest
 
 
 @dataclass
@@ -98,7 +102,7 @@ class NativeCommandSpec:
             stdin/stdout).
         step_timeout_sec: Per-step wall-clock budget before the call is declared stalled.
         binary_label: Provenance label of the resolved binary.
-        binary_hash: Short content hash of the resolved binary.
+        binary_hash: Full content hash of the resolved binary, when available.
     """
 
     command: list[str]
@@ -127,22 +131,32 @@ class NativeCommandSpec:
             A validated ``NativeCommandSpec``.
         """
         payload = config or {}
-        raw_command = payload.get("command")
+        nested = payload.get("native_command")
+        if isinstance(nested, dict):
+            payload = nested
+        raw_command = payload.get("command", payload.get("argv"))
         if not isinstance(raw_command, (list, tuple)) or not raw_command:
             raise NativeCommandContractError(
-                "native_command requires a non-empty 'command' argv list",
+                "native_command requires a non-empty 'command' or 'argv' list",
             )
         command = [str(token) for token in raw_command]
         env = payload.get("env")
         env = {str(k): str(v) for k, v in env.items()} if isinstance(env, dict) else {}
-        mode = str(payload.get("mode", "per_episode")).strip().lower()
+        raw_mode = payload.get("mode")
+        if raw_mode is None and "persistent" in payload:
+            raw_mode = "persistent" if bool(payload["persistent"]) else "per_episode"
+        mode = str(raw_mode if raw_mode is not None else "per_episode").strip().lower()
         if mode not in {"per_episode", "persistent"}:
             raise NativeCommandContractError(
                 f"native_command mode must be 'per_episode' or 'persistent', got {mode!r}",
             )
-        step_timeout_sec = float(payload.get("step_timeout_sec", _DEFAULT_STEP_TIMEOUT_SEC))
-        if step_timeout_sec <= 0.0:
-            raise NativeCommandContractError("native_command step_timeout_sec must be positive")
+        step_timeout_sec = float(
+            payload.get("step_timeout_sec", payload.get("timeout_s", _DEFAULT_STEP_TIMEOUT_SEC))
+        )
+        if not math.isfinite(step_timeout_sec) or step_timeout_sec <= 0.0:
+            raise NativeCommandContractError(
+                "native_command step timeout must be positive and finite",
+            )
         label, binary_hash = _resolve_binary_hash(command)
         return cls(
             command=command,
@@ -240,14 +254,23 @@ def _parse_response(text: str) -> tuple[float, float]:
         raise NativeCommandStepError(f"native command returned invalid JSON: {exc}") from exc
     if not isinstance(payload, dict):
         raise NativeCommandStepError("native command response must be a JSON object")
-    linear = payload.get("linear_velocity", payload.get("linear"))
-    angular = payload.get("angular_velocity", payload.get("angular"))
+    linear = payload.get(
+        "linear_velocity",
+        payload.get("linear", payload.get("v", payload.get("vx"))),
+    )
+    angular = payload.get(
+        "angular_velocity",
+        payload.get("angular", payload.get("omega", payload.get("vy"))),
+    )
     try:
-        return float(linear), float(angular)
+        values = (float(linear), float(angular))
     except (TypeError, ValueError) as exc:
         raise NativeCommandStepError(
-            "native command response missing linear_velocity/angular_velocity",
+            "native command response missing a recognized linear/angular command pair",
         ) from exc
+    if not all(math.isfinite(value) for value in values):
+        raise NativeCommandStepError("native command response must contain finite velocities")
+    return values
 
 
 class _NoProgressDeadlockDetector:
@@ -315,10 +338,13 @@ class NativeCommandPlanner:
     def __init__(self, spec: NativeCommandSpec) -> None:
         """Bind the resolved command spec and initialize run-state buffers."""
         self._spec = spec
-        self._process: subprocess.Popen[str] | None = None
+        self._process: subprocess.Popen[bytes] | None = None
+        self._stdout_buffer = bytearray()
         self._last_runtime_sec: float = 0.0
         self._last_decision: dict[str, Any] = {}
-        self._diagnostics: dict[str, int] = dict.fromkeys(_DIAGNOSTICS_KEYS, 0)
+        self._diagnostics: dict[str, Any] = dict.fromkeys(_DIAGNOSTICS_KEYS, 0)
+        self._diagnostics["exit_codes"] = []
+        self._diagnostics["last_exit_code"] = None
         self._runtimes: list[float] = []
         self._deadlock = _NoProgressDeadlockDetector()
         # Plain serializable run state, updated every step so episode finalization can
@@ -343,9 +369,8 @@ class NativeCommandPlanner:
                 env={**_process_environ(), **self._spec.env},
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
+                stderr=subprocess.DEVNULL,
+                bufsize=0,
             )
         except OSError as exc:
             raise NativeCommandContractError(
@@ -365,6 +390,7 @@ class NativeCommandPlanner:
                 except subprocess.TimeoutExpired:
                     self._process.kill()
             self._process = None
+        self._stdout_buffer.clear()
 
     def close(self) -> None:
         """Release any persistent subprocess."""
@@ -385,10 +411,19 @@ class NativeCommandPlanner:
         """
         request = _render_request(obs)
         started = time.perf_counter()
-        if self._spec.mode == "persistent":
-            _cmd, linear, angular = self._plan_persistent(request)
-        else:
-            _cmd, linear, angular = self._plan_per_episode(request)
+        try:
+            if self._spec.mode == "persistent":
+                _cmd, linear, angular = self._plan_persistent(request)
+            else:
+                _cmd, linear, angular = self._plan_per_episode(request)
+        except NativeCommandStepError:
+            # A malformed response, timeout, non-zero exit, or broken persistent
+            # stream is a per-step fallback, not a batch-wide crash. Contract and
+            # launch errors remain fail-closed and are intentionally not caught.
+            if self._spec.mode == "persistent":
+                self._stop_process()
+            linear, angular = 0.0, 0.0
+            self._diagnostics["fallback_count"] += 1
         self._last_runtime_sec = float(time.perf_counter() - started)
         self._runtimes.append(self._last_runtime_sec)
         self._last_decision = {
@@ -424,15 +459,16 @@ class NativeCommandPlanner:
         try:
             proc = subprocess.run(
                 self._spec.command,
-                input=request,
+                input=request.encode("utf-8"),
                 env={**_process_environ(), **self._spec.env},
                 capture_output=True,
-                text=True,
                 timeout=self._spec.step_timeout_sec,
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
             self._diagnostics["runtime_bound_exits"] += 1
+            self._diagnostics.setdefault("exit_codes", []).append(None)
+            self._diagnostics["last_exit_code"] = None
             raise NativeCommandStepError(
                 f"native command exceeded step timeout {self._spec.step_timeout_sec}s",
             ) from exc
@@ -440,12 +476,14 @@ class NativeCommandPlanner:
             raise NativeCommandContractError(
                 f"failed to launch native command {self._spec.command}: {exc}",
             ) from exc
+        self._diagnostics.setdefault("exit_codes", []).append(proc.returncode)
+        self._diagnostics["last_exit_code"] = proc.returncode
         if proc.returncode != 0:
-            self._diagnostics["fallback_count"] += 1
             raise NativeCommandStepError(
-                f"native command exited with code {proc.returncode}: {proc.stderr.strip()}",
+                f"native command exited with code {proc.returncode}: "
+                f"{proc.stderr.decode('utf-8', errors='replace').strip()}",
             )
-        linear, angular = _parse_response(proc.stdout)
+        linear, angular = _parse_response(proc.stdout.decode("utf-8", errors="replace"))
         return self._spec.command, linear, angular
 
     def _plan_persistent(self, request: str) -> tuple[list[str], float, float]:
@@ -455,19 +493,66 @@ class NativeCommandPlanner:
         assert self._process.stdin is not None
         assert self._process.stdout is not None
         try:
-            self._process.stdin.write(request + "\n")
+            self._process.stdin.write((request + "\n").encode("utf-8"))
             self._process.stdin.flush()
-            line = self._process.stdout.readline()
+            line = self._readline_with_timeout()
+        except subprocess.TimeoutExpired as exc:
+            self._diagnostics["runtime_bound_exits"] += 1
+            self._diagnostics.setdefault("exit_codes", []).append(None)
+            self._diagnostics["last_exit_code"] = self._process.poll()
+            self._stop_process()
+            raise NativeCommandStepError(
+                f"persistent native command exceeded step timeout {self._spec.step_timeout_sec}s",
+            ) from exc
         except (OSError, ValueError) as exc:
-            self._diagnostics["fallback_count"] += 1
+            self._diagnostics.setdefault("exit_codes", []).append(self._process.poll())
+            self._diagnostics["last_exit_code"] = self._process.poll()
             self._stop_process()
             raise NativeCommandStepError(f"persistent native command I/O failed: {exc}") from exc
         if not line:
-            self._diagnostics["fallback_count"] += 1
+            self._diagnostics.setdefault("exit_codes", []).append(self._process.poll())
+            self._diagnostics["last_exit_code"] = self._process.poll()
             self._stop_process()
             raise NativeCommandStepError("persistent native command closed its stdout")
+        exit_code = self._process.poll()
+        self._diagnostics.setdefault("exit_codes", []).append(exit_code)
+        self._diagnostics["last_exit_code"] = exit_code
+        if exit_code not in (0, None):
+            self._stop_process()
+            raise NativeCommandStepError(
+                f"persistent native command exited with code {exit_code}",
+            )
         linear, angular = _parse_response(line)
         return self._spec.command, linear, angular
+
+    def _readline_with_timeout(self) -> str:
+        """Read one persistent response line without allowing an unbounded block.
+
+        Returns:
+            Decoded response text without the line terminator.
+        """
+        assert self._process is not None
+        assert self._process.stdout is not None
+        deadline = time.monotonic() + self._spec.step_timeout_sec
+        with selectors.DefaultSelector() as selector:
+            selector.register(self._process.stdout, selectors.EVENT_READ)
+            while b"\n" not in self._stdout_buffer:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    raise subprocess.TimeoutExpired(self._spec.command, self._spec.step_timeout_sec)
+                if not selector.select(remaining):
+                    raise subprocess.TimeoutExpired(self._spec.command, self._spec.step_timeout_sec)
+                chunk = os.read(self._process.stdout.fileno(), 4096)
+                if not chunk:
+                    break
+                self._stdout_buffer.extend(chunk)
+        if b"\n" not in self._stdout_buffer:
+            line = bytes(self._stdout_buffer)
+            self._stdout_buffer.clear()
+            return line.decode("utf-8", errors="replace")
+        line, remainder = bytes(self._stdout_buffer).split(b"\n", 1)
+        self._stdout_buffer = bytearray(remainder)
+        return line.decode("utf-8", errors="replace")
 
     def planner_stats(self) -> dict[str, Any]:
         """Return live diagnostics snapshot for the episode metadata/analyzer."""
@@ -485,6 +570,8 @@ class NativeCommandPlanner:
         return {
             **{key: int(self._diagnostics[key]) for key in _DIAGNOSTICS_KEYS},
             _RUNTIME_FIELD: [float(value) for value in self._runtimes],
+            "exit_codes": list(self._diagnostics["exit_codes"]),
+            "last_exit_code": self._diagnostics["last_exit_code"],
         }
 
     @property
@@ -549,11 +636,16 @@ def build_native_command_policy(  # noqa: PLR0913
     meta["native_command"] = {
         "schema_version": "native-command.v1",
         "mode": spec.mode,
+        "persistent": spec.mode == "persistent",
         "command": spec.command,
+        "argv": spec.command,
         "env": spec.env,
         "binary_label": spec.binary_label,
         "binary_hash": spec.binary_hash,
+        "binary_path": spec.binary_label,
+        "binary_hash_sha256": spec.binary_hash or None,
         "step_timeout_sec": spec.step_timeout_sec,
+        "timeout_s": spec.step_timeout_sec,
     }
     meta["planner_diagnostics"] = planner.diagnostics
     meta["_native_run_state"] = planner.run_state

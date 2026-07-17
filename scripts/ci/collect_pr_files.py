@@ -13,18 +13,19 @@ blip must not look like a body/contract failure.
 
 This helper is the shared retrying collector used by both workflows. It pages the
 ``repos/{owner}/{repo}/pulls/{number}/files`` endpoint one page at a time so each
-page can be retried independently, treats a non-zero exit *or* a non-JSON
-(HTML error-page) response *or* a non-list payload as a transient retryable
-failure, backs off with exponential delay + jitter, and fails closed with a
-clear, actionable reason once retries are exhausted.
+page can be retried independently. HTTP 429/5xx responses, connection failures,
+and non-JSON HTML error pages are retried with exponential delay + jitter;
+permanent failures such as HTTP 401/403/404 fail immediately. Every failure
+fails closed with a clear, actionable reason.
 
 Contract
 --------
 - Exits ``0`` and writes the requested output files only after the *full* file
   list has been collected; a partial/failed run never leaves a misleading
   truncated file behind.
-- Exits ``1`` and prints a single diagnostic to stderr when retries are
-  exhausted (persistent API failure) -- the workflows surface this verbatim.
+- Exits ``1`` and prints a single diagnostic to stderr on an immediate permanent
+  failure or after transient retries are exhausted -- the workflows surface
+  this verbatim.
 
 Usage
 -----
@@ -42,6 +43,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import subprocess
 import sys
 import time
@@ -57,17 +59,23 @@ DEFAULT_BASE_DELAY = 1.0
 DEFAULT_MAX_DELAY = 30.0
 DEFAULT_TIMEOUT = 30
 
-# A transient GitHub API failure shows up as one of:
-#   * a non-zero gh exit code (HTTP 4xx/5xx that gh recognises),
-#   * an HTML error page on stdout that is not valid JSON (the 502/503/504 body
-#     that produced the original ``invalid character '<'`` failure),
-#   * a valid JSON value that is not the expected list of file objects.
-# Any of these on a single page is retried with backoff; a *persistent* failure
-# after all attempts fails closed with the diagnostic below.
+# Retry only failures that are genuinely transient: HTTP 429/5xx, timeouts or
+# connection resets, and the HTML error-page response from issue #5918. In
+# particular, authentication/authorization/not-found responses are permanent
+# and must fail immediately rather than consuming the retry budget.
+
+_CONNECTION_FAILURE_MARKERS = (
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "unexpected eof",
+    "tls handshake timeout",
+    "i/o timeout",
+)
 
 
 class PrFilesFetchError(RuntimeError):
-    """Raised when changed-file collection cannot complete after all retries."""
+    """Raised when changed-file collection fails permanently or exhausts retries."""
 
 
 def _run_gh_api_page(
@@ -80,14 +88,16 @@ def _run_gh_api_page(
 ) -> subprocess.CompletedProcess[str]:
     """Run ``gh api`` for a single page of the PR files endpoint.
 
-    Using ``-f page=... -f per_page=...`` (rather than embedding the query string
-    in the URL) lets gh own query serialization and keeps this shell-quote-free.
-    For GET requests, gh serializes ``-f`` fields as query parameters.
+    Adding ``-f`` fields makes ``gh api`` default to POST, so ``--method GET``
+    is required. With that explicit method, gh serializes the fields as query
+    parameters without embedding a query string in the endpoint.
     """
     return subprocess.run(
         [
             "gh",
             "api",
+            "--method",
+            "GET",
             f"repos/{repo}/pulls/{pr_number}/files",
             "-f",
             f"per_page={per_page}",
@@ -103,18 +113,24 @@ def _run_gh_api_page(
 
 def _parse_page(
     proc: subprocess.CompletedProcess[str],
-) -> tuple[list[dict[str, Any]] | None, str | None]:
+) -> tuple[list[dict[str, Any]] | None, str | None, bool]:
     """Validate one page response.
 
-    Returns ``(files, None)`` on success, or ``(None, reason)`` when the response
-    is a transient retryable failure (bad exit code, HTML/non-JSON body, or an
-    unexpected payload shape). The reason string is surfaced in the diagnostic.
+    Returns ``(files, None, False)`` on success, or
+    ``(None, reason, retryable)`` on failure. The reason and retryability are
+    surfaced by the retry loop and terminal diagnostic.
     """
+    status = _http_status(proc)
+    response_text = "\n".join(part for part in (proc.stderr, proc.stdout) if part)
+    is_html = proc.stdout.lstrip().startswith("<")
+    connection_failure = _is_connection_failure(response_text)
+
     if proc.returncode != 0:
         snippet = (proc.stderr or proc.stdout or "").strip()
         if len(snippet) > 300:
             snippet = snippet[:300] + "..."
-        return None, f"gh api exited with code {proc.returncode}: {snippet}".strip()
+        retryable = _is_transient_http_status(status) or is_html or connection_failure
+        return None, f"gh api exited with code {proc.returncode}: {snippet}".strip(), retryable
     try:
         data = json.loads(proc.stdout)
     except json.JSONDecodeError as exc:
@@ -123,13 +139,50 @@ def _parse_page(
         snippet = proc.stdout.strip()
         if len(snippet) > 200:
             snippet = snippet[:200] + "..."
-        return None, f"non-JSON response (likely HTML error page): {exc}; snippet: {snippet!r}"
+        retryable = is_html or connection_failure
+        return (
+            None,
+            f"non-JSON response (likely HTML error page): {exc}; snippet: {snippet!r}",
+            retryable,
+        )
     if not isinstance(data, list):
         snippet = proc.stdout.strip()
         if len(snippet) > 200:
             snippet = snippet[:200] + "..."
-        return None, f"unexpected response shape (expected a JSON list); snippet: {snippet!r}"
-    return data, None
+        return (
+            None,
+            f"unexpected response shape (expected a JSON list); snippet: {snippet!r}",
+            _is_transient_http_status(status),
+        )
+    return data, None, False
+
+
+def _http_status(proc: subprocess.CompletedProcess[str]) -> int | None:
+    """Extract an HTTP status from gh's JSON body or stderr diagnostic."""
+    try:
+        data = json.loads(proc.stdout)
+    except (json.JSONDecodeError, TypeError):
+        data = None
+    if isinstance(data, dict):
+        raw_status = data.get("status")
+        try:
+            return int(raw_status)
+        except (TypeError, ValueError):
+            pass
+
+    match = re.search(r"\bHTTP\s+(\d{3})\b", proc.stderr or "", flags=re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
+def _is_transient_http_status(status: int | None) -> bool:
+    """Return whether an HTTP status is safe to retry."""
+    return status == 429 or (status is not None and 500 <= status <= 599)
+
+
+def _is_connection_failure(message: str) -> bool:
+    """Recognize gh diagnostics for transient connection failures."""
+    lowered = message.lower()
+    return any(marker in lowered for marker in _CONNECTION_FAILURE_MARKERS)
 
 
 def _backoff_delay(
@@ -194,7 +247,7 @@ def fetch_all_pr_files(  # noqa: PLR0913
     all_files: list[dict[str, Any]] = []
     page = 1
     while True:
-        files, error = _fetch_page_with_retries(
+        files, error, attempts_used, retryable = _fetch_page_with_retries(
             repo,
             pr_number,
             page,
@@ -211,7 +264,13 @@ def fetch_all_pr_files(  # noqa: PLR0913
             # Persistent failure: fail closed with a single actionable diagnostic.
             raise PrFilesFetchError(
                 _format_terminal_error(
-                    repo, pr_number, page, max_attempts, per_page, error or "unknown error"
+                    repo,
+                    pr_number,
+                    page,
+                    attempts_used,
+                    per_page,
+                    error or "unknown error",
+                    retryable=retryable,
                 )
             )
         if not files:
@@ -236,11 +295,13 @@ def _fetch_page_with_retries(  # noqa: PLR0913
     sleep: Callable[[float], None],
     run_page: Callable[..., subprocess.CompletedProcess[str]],
     rng: Callable[[], float],
-) -> tuple[list[dict[str, Any]] | None, str | None]:
+) -> tuple[list[dict[str, Any]] | None, str | None, int, bool]:
     """Retry a single page up to ``max_attempts`` times with backoff.
 
-    Returns ``(files, None)`` on success or ``(None, last_reason)`` when every
-    attempt failed. Sleeps between attempts using full-jitter exponential backoff.
+    Returns ``(files, None, attempts_used, False)`` on success or
+    ``(None, last_reason, attempts_used, retryable)`` on failure. Permanent
+    failures return immediately; transient failures sleep between attempts using
+    full-jitter exponential backoff.
     """
     last_error: str | None = None
     for attempt in range(1, max_attempts + 1):
@@ -248,40 +309,56 @@ def _fetch_page_with_retries(  # noqa: PLR0913
             proc = run_page(repo, pr_number, page, per_page, timeout=timeout)
         except subprocess.TimeoutExpired:
             last_error = f"gh api timed out after {timeout} seconds"
+            retryable = True
         except FileNotFoundError:
             last_error = "gh CLI not found on PATH; install GitHub CLI (https://cli.github.com/)"
+            retryable = False
         except OSError as exc:
             last_error = f"could not run gh api: {exc}"
+            retryable = isinstance(exc, ConnectionError) or _is_connection_failure(str(exc))
         else:
-            files, error = _parse_page(proc)
+            files, error, retryable = _parse_page(proc)
             if error is None:
-                return files, None
+                return files, None, attempt, False
             last_error = error
 
+        if not retryable:
+            return None, last_error, attempt, False
         if attempt < max_attempts:
             delay = _backoff_delay(attempt, base_delay, max_delay, rng=rng)
             if delay > 0:
                 sleep(delay)
-    return None, last_error
+    return None, last_error, max_attempts, True
 
 
 def _format_terminal_error(
     repo: str,
     pr_number: str,
     page: int,
-    max_attempts: int,
+    attempts_used: int,
     per_page: int,
     last_error: str,
+    *,
+    retryable: bool,
 ) -> str:
-    """Build the fail-closed diagnostic printed when retries are exhausted."""
+    """Build the fail-closed diagnostic for permanent or exhausted failures."""
+    if retryable:
+        guidance = (
+            "  This is typically a transient GitHub API outage (502/503/504/429) or "
+            "connection failure. Re-run the job; if it persists, check "
+            "https://www.githubstatus.com/.\n"
+        )
+    else:
+        guidance = (
+            "  The failure is non-retryable (for example HTTP 401/403/404 or an "
+            "invalid response). Verify the endpoint and GH_TOKEN permissions.\n"
+        )
     return (
         f"ERROR: Failed to collect changed files for PR #{pr_number} from "
-        f"repos/{repo}/pulls/{pr_number}/files after {max_attempts} attempt(s) "
+        f"repos/{repo}/pulls/{pr_number}/files after {attempts_used} attempt(s) "
         f"on page {page} (per_page={per_page}).\n"
         f"  Last error: {last_error}\n"
-        "  This is typically a transient GitHub API outage (502/503/504/429) or "
-        "an auth/network issue. Re-run the job; if it persists, verify GH_TOKEN "
-        "permissions and check https://www.githubstatus.com/.\n"
+        f"{guidance}"
         "  This is an infrastructure failure during changed-file collection, NOT "
         "a PR body/contract validation failure."
     )

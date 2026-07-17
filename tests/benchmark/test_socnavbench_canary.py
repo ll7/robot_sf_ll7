@@ -110,7 +110,7 @@ def test_materialize_export_returns_rollout_for_reuse(tmp_path: Path) -> None:
     pre_rollout = execute_pinned_policy(
         seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG
     )
-    export_path, returned_rollout = materialize_socnavbench_export(
+    _, returned_rollout = materialize_socnavbench_export(
         policy=policy, mapping=mapping, out_dir=tmp_path, rollout=pre_rollout
     )
     # When a rollout is passed in, it must be returned as-is (no re-execution).

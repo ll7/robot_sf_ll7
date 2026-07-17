@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from robot_sf.benchmark.critical_intervals import (
+    ANCHOR_SOURCE_STEP_EVENT,
+    STEP_NEAR_MISS_EVENTS_FIELD,
     adapt_simulation_step_trace,
     extract_critical_intervals,
     summarize_interval_metrics,
@@ -112,3 +114,62 @@ def test_adapter_rejects_unknown_nested_trace_schema() -> None:
 
     with pytest.raises(ValueError, match="Unknown schema_version"):
         adapt_simulation_step_trace(trace)
+
+
+def test_real_trace_step_near_miss_events_anchor() -> None:
+    """Issue #5884: verify that a real trace adapted to columnar can anchor from step_near_miss_events."""
+    import json
+    from pathlib import Path
+
+    evidence_path = (
+        Path(__file__).resolve().parents[2]
+        / "docs"
+        / "context"
+        / "evidence"
+        / "issue_4891_head_on_corridor_exemplars_2026-07"
+        / "social_force"
+        / "classic_head_on_corridor_medium_seed24_worst"
+        / "trace_series.json"
+    )
+
+    with open(evidence_path, encoding="utf-8") as f:
+        payload = json.load(f)
+
+    # Wrap the real frames into the simulation-step-trace.v1 schema format.
+    trace = {
+        "schema_version": "simulation-step-trace.v1",
+        "dt": 0.1,
+        "steps": payload["frames"],
+    }
+
+    # Verify that the adapter can process it cleanly.
+    adapted = adapt_simulation_step_trace(trace)
+    T = len(adapted["robot_pos"])
+    assert T > 0
+
+    # Inject step_near_miss_events: let's put one at step 5
+    events = [None] * T
+    events[5] = {
+        "step": 5,
+        "metric": "surface_clearance",
+        "near_miss": True,
+    }
+    trace[STEP_NEAR_MISS_EVENTS_FIELD] = events
+
+    # Configure the collision_or_near_miss anchor.
+    config = {
+        "critical_intervals": {
+            "collision_or_near_miss": {
+                "enabled": True,
+                "before_s": 0.5,
+                "after_s": 0.5,
+            }
+        }
+    }
+
+    intervals = extract_critical_intervals(trace, config)
+    assert len(intervals) == 1
+    iv = intervals[0]
+    assert iv.status == "available"
+    assert iv.anchor_step == 5
+    assert iv.source == ANCHOR_SOURCE_STEP_EVENT

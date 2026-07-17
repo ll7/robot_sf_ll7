@@ -45,7 +45,7 @@ def test_shipped_packet_structural_contract_is_ready() -> None:
     """The structural contract still validates against tracked sources (shape checks)."""
     result = checker.validate_packet(_packet(), repo_root=REPO_ROOT, check_admission=False)
     assert result["status"] == "ok"
-    assert result["planner_count"] == 5
+    assert result["planner_count"] == 6
     assert result["ceiling_count"] == 4
     assert result["campaign_execution_allowed"] is False
 

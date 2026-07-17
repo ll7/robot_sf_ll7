@@ -31,6 +31,7 @@ EXPECTED_PLANNERS = (
     "prediction_planner",
     "scenario_adaptive_hybrid_orca_v1",
     "prediction_mpc",
+    "hybrid_rule_v3_fast_progress_static_escape_continuous",
 )
 REQUIRED_CEILINGS = (
     "best_fixed_planner",
@@ -147,7 +148,7 @@ def validate_packet(  # noqa: C901, PLR0915
     planner_ids = tuple(str(row.get("planner_id")) for row in rows if isinstance(row, dict))
     _require(
         planner_ids == EXPECTED_PLANNERS,
-        "planner roster must match the approved five-planner order",
+        "planner roster must match the approved six-planner order",
     )
     _require(all(isinstance(row, dict) for row in rows), "planner roster rows must be mappings")
     for row in rows:
@@ -198,8 +199,8 @@ def validate_packet(  # noqa: C901, PLR0915
     ):
         _require(split.get(key) is True, f"split_contract.{key} must be true")
     _require(
-        split.get("required_planner_count_per_episode") == 5,
-        "five planner rows per episode are required",
+        split.get("required_planner_count_per_episode") == 6,
+        "six planner rows per episode are required",
     )
     provenance = _mapping(inputs, "provenance")
     provenance_paths = provenance.get("required_paths")

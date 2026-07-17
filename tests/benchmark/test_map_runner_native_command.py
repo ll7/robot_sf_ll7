@@ -312,6 +312,37 @@ class TestNativeCommandPolicyBuilder:
         finally:
             policy._planner_close()
 
+    def test_per_episode_failed_launch_not_counted_as_spawn(self) -> None:
+        """A per-episode launch that never starts must not be counted as a spawn.
+
+        Companion to the "count only successful spawns" rule applied to the
+        persistent path: ``process_spawns`` records how many subprocesses were
+        actually launched, so an ``OSError`` launch failure (e.g. a missing
+        binary) must leave the counter at zero even though ``_plan_per_episode``
+        was invoked.
+        """
+        policy, _ = build_native_command_policy(
+            "native_command",
+            {"command": ["/nonexistent/native_planner_binary"], "mode": "per_episode"},
+            scenario_id="corridor",
+            seed=111,
+            horizon=500,
+            dt=0.1,
+        )
+        obs = {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [5.0, 0.0]},
+        }
+        planner = policy._native_planner
+
+        try:
+            with pytest.raises(NativeCommandContractError, match="failed to launch native command"):
+                policy(obs)
+            # The launch never happened, so it must not be counted as a spawn.
+            assert planner.diagnostics["process_spawns"] == 0
+        finally:
+            policy._planner_close()
+
     def test_persistent_plan_timeout(self, tmp_path: Path) -> None:
         import sys
 

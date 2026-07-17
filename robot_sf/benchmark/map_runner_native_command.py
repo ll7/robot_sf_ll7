@@ -462,7 +462,6 @@ class NativeCommandPlanner:
         return linear, angular
 
     def _plan_per_episode(self, request: str) -> tuple[list[str], float, float]:
-        self._process_spawns += 1
         try:
             proc = subprocess.run(
                 self._spec.command,
@@ -473,6 +472,9 @@ class NativeCommandPlanner:
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
+            # The child was launched but exceeded the step budget, so it counts as a
+            # spawn (matches the persistent path's "only count an actual launch" rule).
+            self._process_spawns += 1
             self._diagnostics["runtime_bound_exits"] += 1
             self._diagnostics.setdefault("exit_codes", []).append(None)
             self._diagnostics["last_exit_code"] = None
@@ -480,9 +482,13 @@ class NativeCommandPlanner:
                 f"native command exceeded step timeout {self._spec.step_timeout_sec}s",
             ) from exc
         except OSError as exc:
+            # Not counted: the subprocess never launched (contract/launch failure).
             raise NativeCommandContractError(
                 f"failed to launch native command {self._spec.command}: {exc}",
             ) from exc
+        # The child launched and returned; count it even on a nonzero exit, since it
+        # did run (consistent with runner.py's _spawn-then-communicate per-episode path).
+        self._process_spawns += 1
         self._diagnostics.setdefault("exit_codes", []).append(proc.returncode)
         self._diagnostics["last_exit_code"] = proc.returncode
         if proc.returncode != 0:

@@ -15,8 +15,9 @@ decision_summary: >-
   backfilled without external evidence. New campaigns are held to the full integrity contract:
   their files appear in the baseline only after an explicit per-file remediate-or-baseline review
   (see scripts/validation/evidence_registry_baseline_review.yaml, issue #5952). The count
-  justifications below were refreshed in #5952 after twelve post-baseline evidence files were
-  reviewed and added to the baseline.
+  justifications below were refreshed in #5952 and again in #5972 after one further evidence file
+  (issue #5948 run_summary_reconstruction.yaml) and twelve other post-baseline files were reviewed
+  and added to the baseline; the committed baseline now reconciles with a clean main (408 findings).
 excluded_codes:
   - code: duplicate_campaign_id
     status: review_cross_bundle_collision
@@ -42,7 +43,7 @@ excluded_codes:
   - code: dangling_commit
     status: historical_commit_unavailable
     justification: >-
-      Declared commits that are not reachable in this checkout (10 at the #5952 refresh).
+      Declared commits that are not reachable in this checkout (10 at the #5972 refresh).
       Requires recovery from a durable remote or archive. Never replace with the current commit.
   - code: config_missing_at_commit
     status: provenance_backfill_required
@@ -53,7 +54,7 @@ excluded_codes:
   - code: hash_without_artifact_path
     status: artifact_provenance_backfill_required
     justification: >-
-      Checksums that cannot be bound to a specific artifact path (84 at the #5952 refresh).
+      Checksums that cannot be bound to a specific artifact path (85 at the #5972 refresh).
       Requires adding the adjacent repository-relative path or an explicit external location.
   - code: uncommitted_artifact_missing_location
     status: artifact_provenance_backfill_required

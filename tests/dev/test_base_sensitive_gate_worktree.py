@@ -7,6 +7,10 @@ with the lease cleanup owner reported instead of operating on a vanished path.
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -60,6 +64,37 @@ class TestVerifyGateWorktree:
         with patch.object(gate, "_GUARD_HELPER", tmp_path / "absent.py"):
             health = gate._verify_gate_worktree(str(wt))
         assert health is None
+
+    def test_direct_execution_can_import_gate_guard(self, tmp_path) -> None:
+        """Direct CLI execution imports the gate guard without relying on PYTHONPATH."""
+        gh = tmp_path / "gh"
+        gh.write_text("#!/bin/sh\nprintf '%s\\n' tests/dev/test_base_sensitive_gate_worktree.py\n")
+        gh.chmod(0o755)
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+        env["PATH"] = f"{tmp_path}{os.pathsep}{env['PATH']}"
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(gate.REPO_ROOT / "scripts/dev/check_base_sensitive_gates.py"),
+                "--pr",
+                "5979",
+                "--gate-worktree-path",
+                str(tmp_path / "missing-wt"),
+                "--json",
+            ],
+            cwd=gate.REPO_ROOT,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+
+        assert result.returncode == 2
+        payload = json.loads(result.stdout)
+        assert payload["gate_worktree_health"]["classification"] == "missing"
+        assert "No module named 'scripts'" not in result.stdout + result.stderr
 
 
 class TestCheckPrGateStalenessWorktreeGuard:

@@ -229,10 +229,41 @@ if [[ -n "$GATE_WORKTREE_PATH" ]]; then
     emit_result "error" "false" "could not verify gate worktree before local fallback" "local_fallback"
     exit 2
   fi
-  if ! python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("exists") else 1)' <<<"$GUARD_JSON"; then
-    CLEANUP_OWNER="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("cleanup_owner") or "unknown")' <<<"$GUARD_JSON")"
+  set +e
+  GUARD_RESULT="$(python3 -c '
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+    if not isinstance(payload, dict):
+        raise ValueError("guard output must be a JSON object")
+    if payload.get("exists"):
+        print("ok")
+    else:
+        print("missing:" + str(payload.get("cleanup_owner") or "unknown"))
+except Exception:
+    print("error")
+    raise SystemExit(2)
+' <<<"$GUARD_JSON")"
+  PARSE_RC=$?
+  set -e
+  if [[ $PARSE_RC -ne 0 ]] || [[ "$GUARD_RESULT" == "error" ]]; then
+    emit_result "error" "false" "could not parse gate worktree guard output before local fallback" "local_fallback"
+    exit 2
+  fi
+  if [[ "$GUARD_RC" -ne 0 && "$GUARD_RESULT" == "ok" ]]; then
+    emit_result "error" "false" "gate worktree guard failed despite reporting an existing path" "local_fallback"
+    exit 2
+  fi
+  if [[ "$GUARD_RESULT" == missing:* ]]; then
+    CLEANUP_OWNER="${GUARD_RESULT#missing:}"
     emit_result "gate_worktree_missing" "false" "registered gate worktree vanished before local branch-switch; cleanup owner: ${CLEANUP_OWNER}" "local_fallback"
     exit 1
+  fi
+  if [[ "$GUARD_RESULT" != "ok" ]]; then
+    emit_result "error" "false" "gate worktree guard returned an unrecognized result" "local_fallback"
+    exit 2
   fi
 fi
 

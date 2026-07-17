@@ -316,6 +316,43 @@ fi
 # would have mutated. The mock git (if any) is absent, so command-not-found would
 # have surfaced; ensure no git rebase reached the stub by checking exit closed.
 
+# 8. Malformed guard output must produce a deterministic JSON error rather than
+#    a second parser traceback or an unstructured shell failure.
+BAD_GUARD_DIR="${MOCK_DIR}/bad-guard"
+mkdir -p "$BAD_GUARD_DIR"
+cat > "${BAD_GUARD_DIR}/gate_worktree_guard.py" <<'EOF'
+#!/usr/bin/env python3
+print("not-json")
+raise SystemExit(1)
+EOF
+chmod +x "${BAD_GUARD_DIR}/gate_worktree_guard.py"
+cp "$SCRIPT" "${MOCK_DIR}/update_pr_branch_safely_bad_guard.sh"
+python3 - "$BAD_GUARD_DIR" "$MOCK_DIR" <<'PY'
+import sys
+
+bad_guard_dir, mock_dir = sys.argv[1:]
+script_path = f"{mock_dir}/update_pr_branch_safely_bad_guard.sh"
+source = open(script_path).read()
+source = source.replace(
+    'GUARD_HELPER="${SCRIPT_DIR}/gate_worktree_guard.py"',
+    f'GUARD_HELPER="{bad_guard_dir}/gate_worktree_guard.py"',
+)
+open(script_path, "w").write(source)
+PY
+chmod +x "${MOCK_DIR}/update_pr_branch_safely_bad_guard.sh"
+RC=0
+OUT="$(PATH="${MOCK_DIR}:$PATH" bash "${MOCK_DIR}/update_pr_branch_safely_bad_guard.sh" \
+  --pr 1 --repo owner/repo --expected-head-sha headsha --gate-worktree-path "$GONE_WT" 2>/dev/null)" || RC=$?
+assert_json "malformed guard output remains valid JSON" "$OUT"
+assert_fail "malformed guard output fails closed" "$RC"
+if echo "$OUT" | grep -q '"status":"error"'; then
+  echo "PASS: malformed guard output reports a deterministic error"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: malformed guard output did not report a deterministic error"
+  FAIL=$((FAIL + 1))
+fi
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]] || exit 1

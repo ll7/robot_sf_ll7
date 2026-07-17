@@ -58,6 +58,9 @@ def _verify_gate_worktree(gate_worktree_path: str) -> dict[str, Any] | None:
     if not _GUARD_HELPER.exists():
         return None
     try:
+        repo_root = str(REPO_ROOT)
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
         from scripts.dev.gate_worktree_guard import verify_gate_worktree
 
         health = verify_gate_worktree(Path(gate_worktree_path))

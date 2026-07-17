@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -185,12 +186,17 @@ def _ensure_gate_worktree(
     caller still fails closed and issues no remote branch update.
     """
     try:
+        repo_root = str(Path(__file__).resolve().parents[2])
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
         from scripts.dev.gate_worktree_guard import ensure_gate_worktree
 
         health, recreate = ensure_gate_worktree(Path(gate_worktree_path), ttl_hours=ttl_hours)
         result = {
-            "exists": health.exists,
-            "classification": health.classification,
+            "exists": health.exists or bool(recreate and recreate.recreated),
+            "classification": (
+                "healthy" if recreate is not None and recreate.recreated else health.classification
+            ),
             "cleanup_owner": health.cleanup_owner,
             "lease_owner": health.lease_owner,
             "lease_pr_number": health.lease_pr_number,

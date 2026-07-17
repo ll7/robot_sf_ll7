@@ -7,8 +7,10 @@ friendly, remedy-bearing output for beginners. The ``models`` and
 ``datasets`` subcommands wrap the existing model registry and external-data
 provenance/checksum machinery (issue #5797) behind list/verify/download and
 list/verify/prepare commands. The ``demo`` subcommand exposes the one-command
-visual demo from the adoption/UX epic. More everyday workflows can be added
-here without creating another top-level entry point.
+visual demo from the adoption/UX epic. The ``gallery`` subcommand builds a
+self-contained static scenario/planner gallery from existing rendering tools.
+More everyday workflows can be added here without creating another top-level
+entry point.
 """
 
 from __future__ import annotations
@@ -19,12 +21,17 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from robot_sf import cli_datasets, cli_models
+from robot_sf import cli_datasets, cli_envs, cli_models
 from robot_sf.benchmark.doctor import collect_doctor_report, doctor_exit_code
 from robot_sf.examples_cli import examples_cli_main
+from robot_sf.recipes import cli as recipes_cli
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+
+DEFAULT_GALLERY_MATRIX = "configs/baselines/example_matrix.yaml"
+DEFAULT_GALLERY_OUT_DIR = "output/gallery"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -68,6 +75,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_models_subparser(subparsers)
     _add_datasets_subparser(subparsers)
+    _add_envs_subparser(subparsers)
     # The ``examples`` subcommand owns its own sub-subcommand parser
     # (``list``/``run``); it is registered here only so the top-level parser
     # recognises the token. Remaining args are forwarded by the handler.
@@ -85,6 +93,66 @@ def _build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--scenario", type=Path, default=None)
     demo.add_argument("--seed", type=int, default=None)
     demo.add_argument("--verbose", action="store_true")
+
+    gallery = subparsers.add_parser(
+        "gallery",
+        help="Build a static scenario/planner gallery (issue #5796)",
+    )
+    gallery_sub = gallery.add_subparsers(dest="gallery_cmd", required=True)
+    g_build = gallery_sub.add_parser(
+        "build",
+        help=(
+            "Render per-scenario thumbnails (reusing existing tooling) and emit a "
+            "self-contained static HTML gallery plus a JSON manifest. "
+            "Discoverability artifact only — not benchmark evidence."
+        ),
+    )
+    g_build.add_argument(
+        "--matrix",
+        default=DEFAULT_GALLERY_MATRIX,
+        help=f"Path to scenario matrix YAML (default: {DEFAULT_GALLERY_MATRIX})",
+    )
+    g_build.add_argument(
+        "--out-dir",
+        default=DEFAULT_GALLERY_OUT_DIR,
+        help=f"Output directory (default: {DEFAULT_GALLERY_OUT_DIR})",
+    )
+    g_build.add_argument("--base-seed", type=int, default=0, help="Base seed for thumbnails")
+    g_build.add_argument(
+        "--horizon",
+        type=int,
+        default=100,
+        help="Horizon (steps) used for the expected-runtime estimate",
+    )
+    g_build.add_argument(
+        "--no-thumbnails",
+        action="store_true",
+        default=False,
+        help="Skip thumbnail rendering (cards show a placeholder)",
+    )
+    g_build.add_argument(
+        "--link-thumbnails",
+        action="store_true",
+        default=False,
+        help="Reference thumbnails by relative path instead of embedding as data URIs",
+    )
+    g_build.add_argument(
+        "--sample-rollout-root",
+        default=None,
+        help=(
+            "Optional directory searched for per-scenario sample rollouts "
+            "(<id>.mp4/.webm/.jsonl/.html)"
+        ),
+    )
+    g_build.add_argument(
+        "--title",
+        default=None,
+        help="Optional page title (defaults to a name derived from the matrix)",
+    )
+    g_build.set_defaults(gallery_cmd="build")
+
+    # Curated recipe catalog (issue #5795): list / run / explain blessed workflows.
+    recipes_cli.build_subparser(subparsers)
     return parser
 
 
@@ -222,6 +290,32 @@ def _add_datasets_subparser(sub: argparse._SubParsersAction) -> None:
         help="Override the local source path to verify (default: the resolved asset path).",
     )
     dprepare.add_argument(
+        "--format",
+        choices=("friendly", "json"),
+        default="friendly",
+        help="Output format (default: friendly).",
+    )
+
+
+def _add_envs_subparser(sub: argparse._SubParsersAction) -> None:
+    """Register the ``robot-sf envs`` subcommand tree (issue #5801)."""
+    envs = sub.add_parser(
+        "envs",
+        help="List and describe registered public environments (uv run robot-sf envs ...)",
+    )
+    envs_sub = envs.add_subparsers(dest="envs_cmd", required=True)
+
+    elist = envs_sub.add_parser("list", help="List registered public environments.")
+    elist.add_argument(
+        "--format",
+        choices=("friendly", "json"),
+        default="friendly",
+        help="Output format (default: friendly).",
+    )
+
+    edescribe = envs_sub.add_parser("describe", help="Describe one registered environment by id.")
+    edescribe.add_argument("env_id", help="Registered environment id to describe.")
+    edescribe.add_argument(
         "--format",
         choices=("friendly", "json"),
         default="friendly",
@@ -427,11 +521,57 @@ def _format_datasets_prepare(payload: dict) -> None:
         sys.stdout.write(f"  action: {layout['action']}\n")
 
 
-_HANDLERS = {
-    "doctor": _handle_doctor,
-    "models": _handle_models,
-    "datasets": _handle_datasets,
-}
+def _handle_gallery_build(args: argparse.Namespace) -> int:
+    """Handle ``gallery build`` and emit a self-contained inspection artifact.
+
+    Returns:
+        Exit code (0 for success, 2 for invalid input or build failure).
+    """
+    from robot_sf.benchmark.runner import load_scenario_matrix  # noqa: PLC0415
+    from robot_sf.gallery.builder import build_gallery  # noqa: PLC0415
+
+    try:
+        scenarios = load_scenario_matrix(args.matrix)
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"error: failed to load matrix {args.matrix}: {exc}\n")
+        return 2
+
+    try:
+        result = build_gallery(
+            scenarios,
+            matrix_path=str(args.matrix),
+            out_dir=Path(args.out_dir),
+            base_seed=int(args.base_seed),
+            horizon_steps=int(args.horizon),
+            render_thumbnails=not bool(args.no_thumbnails),
+            embed_thumbnails=not bool(args.link_thumbnails),
+            sample_rollout_root=args.sample_rollout_root,
+            title=args.title,
+        )
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"error: {exc}\n")
+        return 2
+
+    payload = {
+        "html_path": str(result.html_path),
+        "manifest_path": str(result.manifest_path),
+        "scenario_count": len(result.cards),
+        "matrix_path": result.matrix_path,
+        "schema_version": result.schema_version,
+    }
+    sys.stdout.write(json.dumps(payload, indent=2) + "\n")
+    return 0
+
+
+def _handle_gallery(args: argparse.Namespace) -> int:
+    """Dispatch the ``gallery`` command group.
+
+    Returns:
+        Exit code from the selected gallery subcommand.
+    """
+    if args.gallery_cmd != "build":
+        return 2
+    return _handle_gallery_build(args)
 
 
 def _handle_examples(extra_args: Sequence[str]) -> int:
@@ -444,6 +584,32 @@ def _handle_examples(extra_args: Sequence[str]) -> int:
         int: Process-style exit code from the examples CLI.
     """
     return examples_cli_main(list(extra_args))
+
+
+def _handle_envs(args: argparse.Namespace) -> int:
+    """Dispatch the ``robot-sf envs`` subcommand.
+
+    Returns:
+        int: Process-style exit code (0 success, 2 unknown env id).
+    """
+    cmd = args.envs_cmd
+    if cmd == "list":
+        return cli_envs._handle_envs_list(args)
+    if cmd == "describe":
+        return cli_envs._handle_envs_describe(args)
+    parser = _build_parser()  # pragma: no cover - defensive
+    parser.error(f"unknown envs command: {cmd}")
+    return 2
+
+
+_HANDLERS = {
+    "doctor": _handle_doctor,
+    "models": _handle_models,
+    "datasets": _handle_datasets,
+    "envs": _handle_envs,
+    "gallery": _handle_gallery,
+    "recipe": recipes_cli.handle,
+}
 
 
 def main(argv: Sequence[str] | None = None) -> int:

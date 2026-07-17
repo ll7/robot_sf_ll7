@@ -1,0 +1,4 @@
+planner,benchmark_set_mean_snqi,heldout_family_mean_snqi,transfer_delta_snqi,claim_eligible,claim_boundary
+goal,,-0.103835,,false,diagnostic_only_until_claim_card_review
+orca,,-0.326941,,false,diagnostic_only_until_claim_card_review
+social_force,,-0.790247,,false,diagnostic_only_until_claim_card_review

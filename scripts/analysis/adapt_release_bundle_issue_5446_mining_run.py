@@ -130,8 +130,15 @@ def _mining_row(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _atlas_row(row: dict[str, Any]) -> dict[str, Any]:
+def _atlas_row(row: dict[str, Any], *, release_arm_id: str | None = None) -> dict[str, Any]:
     """Project one bundle episode row into the #5616 atlas inventory contract.
+
+    ``release_arm_id`` (the ``runs/<arm>`` directory name from the pinned
+    release bundle) is the stable release-arm identity: it keeps architecturally
+    distinct configurations that share one ``algo`` label -- e.g. the four hybrid
+    configs all reporting ``algo="hybrid_rule_local_planner"`` -- as distinct
+    atlas arms (issue #5784). It is emitted verbatim from the bundle directory
+    name; the atlas builder never infers arm identity from ``algo`` alone.
 
     No ``trajectory``/``event_anchors``/``predicate_timeline`` are emitted:
     this release bundle contains no per-step trace exports, so the ensemble
@@ -144,6 +151,7 @@ def _atlas_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
         "episode_id": row.get("episode_id"),
         "planner": row.get("algo"),
+        "release_arm_id": release_arm_id,
         "scenario_id": scenario_id,
         "scenario_family": _derive_scenario_family(scenario_id, archetype),
         "seed": row.get("seed"),
@@ -232,6 +240,9 @@ def _adapt_one_arm(
     """
     episodes_path = arm_dir / "episodes.jsonl"
     run_id = _resolve_run_id(arm_dir)
+    # The arm directory name is the pinned release-arm identity (issue #5784):
+    # it is stable and distinct even when several arms share one ``algo`` label.
+    release_arm_id = arm_dir.name
     arm_count = 0
     with episodes_path.open("r", encoding="utf-8") as fh:
         for line_no, raw_line in enumerate(fh, start=1):
@@ -245,7 +256,10 @@ def _adapt_one_arm(
             if mining_fh is not None:
                 mining_fh.write(json.dumps(_mining_row(row), sort_keys=True) + "\n")
             if atlas_fh is not None:
-                atlas_fh.write(json.dumps(_atlas_row(row), sort_keys=True) + "\n")
+                atlas_fh.write(
+                    json.dumps(_atlas_row(row, release_arm_id=release_arm_id), sort_keys=True)
+                    + "\n"
+                )
             if store_rows is not None:
                 store_rows.append(
                     _store_row(row, run_id=run_id, line_no=line_no, source_path=episodes_path)

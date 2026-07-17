@@ -102,7 +102,6 @@ def build_notebook_01() -> nbf.notebooknode:
 
             import matplotlib.pyplot as plt
 
-            from robot_sf.common.seed import set_global_seed
             from robot_sf.gym_env.environment_factory import make_robot_env
 
             # Resolve the repo root robustly regardless of the working directory this
@@ -124,15 +123,19 @@ def build_notebook_01() -> nbf.notebooknode:
             """
         ),
         _md(
-            "## 1. Build and reset the environment\n\n`make_robot_env()` is the ergonomic entry point. We seed everything for reproducibility."
+            "## 1. Build and reset the environment\n\n`make_robot_env()` is the ergonomic entry point. We seed the factory, the reset, and the action space explicitly so the action/reward trace is reproducible."
         ),
         _code(
             """
             SEED = 87234
-            set_global_seed(SEED)
 
-            env = make_robot_env(debug=False)
-            observation, info = env.reset()
+            # Seed the factory (Python random + NumPy + env RNGs), the reset, and the
+            # action space explicitly. We deliberately avoid set_global_seed here: it
+            # also seeds the private Torch/TensorFlow RNGs, which can crash the kernel
+            # on the installed stack, and it does NOT seed Gymnasium's action_space RNG.
+            env = make_robot_env(debug=False, seed=SEED)
+            observation, info = env.reset(seed=SEED)
+            env.action_space.seed(SEED)
             print("Environment created and reset.")
             print("Observation type:", type(observation).__name__)
             if hasattr(observation, "keys"):
@@ -528,6 +531,7 @@ def build_notebook_03() -> nbf.notebooknode:
             """
             from robot_sf.gym_env.environment_factory import make_robot_env
             from robot_sf.gym_env.robot_env import RobotEnv
+            from robot_sf.common.artifact_paths import resolve_artifact_path
             from robot_sf.training.scenario_loader import load_scenarios, build_robot_config_from_scenario
             from robot_sf.baselines.random_policy import RandomPlanner
 
@@ -539,6 +543,7 @@ def build_notebook_03() -> nbf.notebooknode:
                 s for s in load_scenarios(SCENARIO_PATH) if s["name"] == SCENARIO_NAME
             )
             config = build_robot_config_from_scenario(scenario, scenario_path=SCENARIO_PATH)
+            recording_dir = resolve_artifact_path(OUTPUT_DIR / "recordings")
 
             env: RobotEnv = make_robot_env(
                 config=config,
@@ -546,7 +551,7 @@ def build_notebook_03() -> nbf.notebooknode:
                 debug=False,
                 recording_enabled=True,
                 use_jsonl_recording=True,
-                recording_dir=str(OUTPUT_DIR / "recordings"),
+                recording_dir=str(recording_dir),
                 suite_name="notebook",
                 scenario_name=SCENARIO_NAME,
                 algorithm_name="random",
@@ -575,9 +580,19 @@ def build_notebook_03() -> nbf.notebooknode:
         ),
         _code(
             """
-            # Locate the recorded JSONL (the recorder names it with suite/scenario/algorithm/seed).
-            candidates = sorted((OUTPUT_DIR / "recordings").glob("*.jsonl"))
-            episode_jsonl = candidates[-1]
+            # Consume the exact path reported by the recorder. Do not glob the directory:
+            # a previous notebook run may have left a newer-looking, stale recording there.
+            env_path = getattr(env, "last_recorded_jsonl", None)
+            if env_path is None:
+                raise FileNotFoundError(
+                    "No JSONL recording was produced; the episode recorder did not report "
+                    "an output path."
+                )
+            episode_jsonl = Path(env_path)
+            if not episode_jsonl.is_file():
+                raise FileNotFoundError(
+                    f"The episode recorder reported a missing JSONL file: {episode_jsonl}"
+                )
             # Promote a stable copy next to the other artifacts.
             stable_jsonl = OUTPUT_DIR / "episode.jsonl"
             stable_jsonl.write_bytes(episode_jsonl.read_bytes())

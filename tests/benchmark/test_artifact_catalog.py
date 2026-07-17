@@ -11,6 +11,7 @@ import yaml
 from robot_sf.benchmark.artifact_catalog import (
     ARTIFACT_CATALOG_SCHEMA_VERSION,
     ArtifactCatalogValidationError,
+    _is_local_only_path,
     artifact_catalog_from_dict,
     load_artifact_catalog,
     main,
@@ -167,3 +168,70 @@ def test_cli_main_fails_on_duplicate_artifact_ids(tmp_path: Path, capsys) -> Non
     captured = capsys.readouterr()
     assert '"ok": false' in captured.out
     assert "duplicate artifact_id" in captured.out
+
+
+def test_is_local_only_path_multi_segment_absolute_prefix() -> None:
+    """Multi-segment absolute prefixes like /var/tmp/ must be classified as local-only.
+
+    Regression test for issue #5944: the original implementation used strip("/")
+    which turned '/var/tmp/' into 'var/tmp' (a single string), but then compared
+    only parts[1] (=='var') against the set, which never matched.
+    """
+    assert _is_local_only_path("/var/tmp") is True
+    assert _is_local_only_path("/var/tmp/x.csv") is True
+    assert _is_local_only_path("/var/tmp/subdir/file.json") is True
+
+
+def test_is_local_only_path_single_segment_absolute_prefix() -> None:
+    """Single-segment absolute prefixes like /tmp/ and /home/ must work."""
+
+    assert _is_local_only_path("/tmp") is True
+    assert _is_local_only_path("/tmp/file.csv") is True
+    assert _is_local_only_path("/tmp/subdir/file.json") is True
+    assert _is_local_only_path("/home") is True
+    assert _is_local_only_path("/home/user/file.csv") is True
+    assert _is_local_only_path("/home/user/.local/file.json") is True
+
+
+def test_is_local_only_path_relative_prefix() -> None:
+    """Relative prefixes like output/ and results/ must be classified as local-only."""
+
+    assert _is_local_only_path("output/file.csv") is True
+    assert _is_local_only_path("output/subdir/file.json") is True
+    assert _is_local_only_path("results/file.csv") is True
+    assert _is_local_only_path(".git/config") is True
+    assert _is_local_only_path(".venv/bin/python") is True
+
+
+def test_is_local_only_path_durable_paths() -> None:
+    """Durable repository-relative paths must not be classified as local-only."""
+
+    assert _is_local_only_path("configs/file.yaml") is False
+    assert _is_local_only_path("robot_sf/benchmark/artifact_catalog.py") is False
+    assert _is_local_only_path("tests/test_file.py") is False
+    assert _is_local_only_path("docs/readme.md") is False
+    assert _is_local_only_path("/output/file.json") is False
+    assert _is_local_only_path("/tmp-other/file.json") is False
+    assert _is_local_only_path("/var/tmp-other/file.json") is False
+
+
+def test_result_job_durability_path_check_mirrors_artifact_catalog() -> None:
+    """Both durability validators must classify absolute local paths identically."""
+
+    from robot_sf.benchmark.result_job_durability import _is_local_only_path as is_durable_local
+
+    paths = (
+        "/var/tmp",
+        "/var/tmp/subdir/file.json",
+        "/tmp",
+        "/tmp/file.csv",
+        "/home/user/file.csv",
+        "output/file.csv",
+        "/output/file.csv",
+        "/tmp-other/file.csv",
+        "configs/file.yaml",
+    )
+
+    assert [is_durable_local(path) for path in paths] == [
+        _is_local_only_path(path) for path in paths
+    ]

@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  merge_group:
   push:
     branches: [main]
     paths-ignore:
@@ -312,6 +313,16 @@ jobs:
       - name: Example smoke tests
         run: scripts/dev/ci_driver.sh examples-smoke
 
+  notebooks-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
       - name: Notebook smoke tests
         run: scripts/dev/ci_driver.sh notebooks-smoke
 
@@ -326,6 +337,7 @@ jobs:
       - xdist-scratch-isolation
       - wheel-smoke-install
       - examples-smoke
+      - notebooks-smoke
     if: always()
     steps:
       - name: Check split job results
@@ -356,5 +368,9 @@ jobs:
           fi
           if [[ "${{ needs.examples-smoke.result }}" != "success" ]]; then
             echo "examples-smoke finished with ${{ needs.examples-smoke.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.notebooks-smoke.result }}" != "success" ]]; then
+            echo "notebooks-smoke finished with ${{ needs.notebooks-smoke.result }}" >&2
             exit 1
           fi

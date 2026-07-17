@@ -1,0 +1,5 @@
+planner,scenario_id,seed,row_status,snqi
+baseline_social_force,crossing_a,111,native,0.72
+baseline_social_force,crossing_a,112,native,0.71
+orca,crossing_a,111,native,0.65
+orca,crossing_a,112,native,0.64

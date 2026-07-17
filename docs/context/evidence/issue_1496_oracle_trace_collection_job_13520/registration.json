@@ -1,0 +1,50 @@
+{
+  "schema_version": "issue1496.oracle_trace_dataset_registration.v1",
+  "status": "dataset_materialized_small_collection",
+  "issue": 1496,
+  "job_id": 13520,
+  "label": "07-issue1496-oracle-trace-collection",
+  "execution_commit": "9d65072ecd9d04e2f664a4299665dbff718401d9",
+  "dataset": {
+    "dataset_id": "expert_traj_v1",
+    "classification": "private_external_data",
+    "uri": "private-artifact://oracle-imitation/issue1496/oracle-trace-collection/dataset/expert_traj_v1.npz",
+    "sha256": "433c797f6e3635f133d7541c9dd9edd3849cdee7b89e23c930b458e463979388",
+    "size_bytes": 363117931,
+    "committed": false,
+    "schema_valid": true,
+    "per_step_observations_actions": true
+  },
+  "episodes": {
+    "total": 12,
+    "train": 6,
+    "validation": 3,
+    "evaluation": 3
+  },
+  "steps": {
+    "total": 1173,
+    "train": 616,
+    "validation": 201,
+    "evaluation": 356,
+    "minimum_episode_steps": 1,
+    "maximum_episode_steps": 241
+  },
+  "registry": {
+    "path": "configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1496_collection.yaml",
+    "strict_private_root_status": "valid",
+    "strict_private_root_training_ready": true
+  },
+  "source_checksums": {
+    "acceptance.json": "092e6eb1dfc160ab7b42db62d77c39a0ebd2c4a5ef433cbf32f23e79ae99cae2",
+    "collection_plan.json": "d178913b7f4a54f51339af0ac2d286b6bb872712e4e43a55fbb7473bf4387a80",
+    "oracle_trace_uri_registry_issue_1496_collection.yaml": "c615188d9aa544c0befd4efe888caa7cefeaba387077a696bd51b2db10793e25",
+    "strict_registry_validation.json": "501b2c601da109593e8637b5c4d22e5ce5bd4e41ca0b0c922e9455b867b9684a"
+  },
+  "training_performed": false,
+  "sufficiency": {
+    "materialization_blocker_resolved": true,
+    "loader_and_smoke_ready": true,
+    "full_bc_comparison_ready": false,
+    "reason": "Six training episodes and 616 training steps are too small for a credible full warm-start comparison; a larger balanced collection is required."
+  }
+}

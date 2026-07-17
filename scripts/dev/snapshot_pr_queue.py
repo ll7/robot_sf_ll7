@@ -14,6 +14,7 @@ from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.check_pr_ci_status import (
     FAILURE_CONCLUSIONS,
     PENDING_STATUSES,
+    _latest_check_runs,
     _rollup_conclusion,
     _rollup_name,
     _rollup_status,
@@ -249,8 +250,17 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
 
 
 def _checks(pr: dict[str, Any]) -> dict[str, Any]:
-    """Return a compact CI check summary from statusCheckRollup."""
-    rollup = pr.get("statusCheckRollup", []) or []
+    """Return a compact CI check summary from statusCheckRollup.
+
+    Superseded GitHub Actions runs (an older run replaced by a newer one on the
+    same workflow/job identity) are dropped first, matching the canonical
+    `_latest_check_runs` semantics used by `check_pr_ci_status`.  A current,
+    non-superseded cancellation remains fail-closed.
+    """
+    raw_rollup = [
+        check for check in (pr.get("statusCheckRollup", []) or []) if isinstance(check, dict)
+    ]
+    rollup, superseded_count = _latest_check_runs(raw_rollup)
     conclusions: dict[str, int] = {}
     statuses: dict[str, int] = {}
     names: set[str] = set()
@@ -290,6 +300,7 @@ def _checks(pr: dict[str, Any]) -> dict[str, Any]:
     return {
         "overall": overall,
         "total": len(rollup),
+        "superseded": superseded_count,
         "by_conclusion": conclusions,
         "by_status": statuses,
         "names": sorted(names),

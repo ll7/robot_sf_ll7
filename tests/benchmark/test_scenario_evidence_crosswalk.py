@@ -259,6 +259,57 @@ def test_unknown_predicate_schema_version_fails_validation() -> None:
         build_scenario_evidence_crosswalk(scenarios, source="fixture.yaml", predicate_export=export)
 
 
+def test_predicate_schema_version_must_match_predicate_name() -> None:
+    """A schema accepted for one predicate must not validate under another name."""
+    scenarios = [_scenario("doorway_low")]
+    export = {
+        "schema_version": PREDICATE_EXPORT_SCHEMA_VERSION,
+        "rows": [
+            {
+                "scenario_id": "doorway_low",
+                "predicates": [
+                    {
+                        "predicate": "oscillatory_control",
+                        "schema_version": LEGACY_LATE_EVASIVE_PREDICATE_SCHEMA,
+                    }
+                ],
+            }
+        ],
+    }
+
+    with pytest.raises(ScenarioEvidenceCrosswalkError, match="unknown predicate schema version"):
+        build_scenario_evidence_crosswalk(scenarios, source="fixture.yaml", predicate_export=export)
+
+
+def test_semantic_validation_rejects_mismatched_predicate_schema_version() -> None:
+    """Semantic validation applies the same predicate-name/schema-version boundary."""
+    scenarios = [_scenario("doorway_low")]
+    export = {
+        "schema_version": PREDICATE_EXPORT_SCHEMA_VERSION,
+        "rows": [
+            {
+                "scenario_id": "doorway_low",
+                "predicates": [
+                    {
+                        "predicate": "late_evasive",
+                        "schema_version": LEGACY_LATE_EVASIVE_PREDICATE_SCHEMA,
+                    }
+                ],
+            }
+        ],
+    }
+    crosswalk = build_scenario_evidence_crosswalk(
+        scenarios, source="fixture.yaml", predicate_export=export
+    )
+    crosswalk["rows"][0]["predicate_availability"]["exported_predicates"][0]["predicate"] = (
+        "oscillatory_control"
+    )
+
+    errors = validate_scenario_evidence_crosswalk(crosswalk)
+
+    assert any("unknown predicate schema_version" in error for error in errors)
+
+
 def test_legacy_late_evasive_v1_flows_through_with_exact_provenance() -> None:
     """Legacy late_evasive.v1 (issue #5935) is accepted and retained as v1, not normalized.
 

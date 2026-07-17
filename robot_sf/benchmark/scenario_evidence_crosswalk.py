@@ -91,12 +91,6 @@ SUPPORTED_PREDICATE_SCHEMAS: dict[str, frozenset[str]] = {
     "occlusion_near_miss": frozenset({OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA}),
 }
 
-#: Flat set of every accepted predicate schema version, used for fail-closed
-#: provenance validation (unknown versions are rejected).
-_ACCEPTED_PREDICATE_SCHEMA_VERSIONS: frozenset[str] = frozenset().union(
-    *SUPPORTED_PREDICATE_SCHEMAS.values()
-)
-
 PREDICATE_EXPORT_SCHEMA_VERSION = "trace_predicate_export.v1"
 
 EXCLUSION_REASON_PREDICATE_UNAVAILABLE = "predicate_export_unavailable"
@@ -300,6 +294,17 @@ def _absorb_predicate_row(row: Mapping[str, Any], entry: dict[str, Any]) -> None
         entry["predicate_status"][name] = pred.get("status", "ok")
 
 
+def _is_supported_predicate_schema(name: object, version: object) -> bool:
+    """Return whether a predicate name and schema version form a supported pair."""
+    if version is None:
+        return True
+    return (
+        isinstance(name, str)
+        and isinstance(version, str)
+        and version in SUPPORTED_PREDICATE_SCHEMAS.get(name, frozenset())
+    )
+
+
 def _predicate_section(
     scenario_id: str,
     export: Mapping[str, dict[str, Any]],
@@ -337,7 +342,7 @@ def _predicate_section(
         }
 
     for name, version in entry["exported"].items():
-        if version is not None and version not in _ACCEPTED_PREDICATE_SCHEMA_VERSIONS:
+        if not _is_supported_predicate_schema(name, version):
             raise ScenarioEvidenceCrosswalkError(
                 f"scenario {scenario_id}: unknown predicate schema version {version!r} for "
                 f"predicate {name!r}"
@@ -705,10 +710,12 @@ def _validate_crosswalk_row(
     pred = row.get("predicate_availability")
     if isinstance(pred, Mapping):
         for rec in pred.get("exported_predicates", []) or []:
+            name = rec.get("predicate")
             version = rec.get("schema_version")
-            if version is not None and version not in _ACCEPTED_PREDICATE_SCHEMA_VERSIONS:
+            if not _is_supported_predicate_schema(name, version):
                 errors.append(
-                    f"rows[{index}] ({sid}): unknown predicate schema_version {version!r}"
+                    f"rows[{index}] ({sid}): unknown predicate schema_version {version!r} for "
+                    f"predicate {name!r}"
                 )
 
     evidence = row.get("evidence")

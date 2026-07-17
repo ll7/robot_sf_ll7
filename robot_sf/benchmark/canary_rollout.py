@@ -169,33 +169,36 @@ def execute_pinned_policy(
     policy = make_social_force_policy(planner_config)
 
     env = make_robot_env(config=cfg, seed=int(seed))
-    obs, _ = env.reset(seed=int(seed))
+    try:
+        obs, _ = env.reset(seed=int(seed))
 
-    positions: list[tuple[float, float]] = [tuple(float(v) for v in env.simulator.robot_pos[0])]
-    reached_goal_step: int | None = None
-    terminated = False
-    truncated = False
-    for step_idx in range(int(max_steps)):
-        action = policy.act(obs)
-        obs, _reward, terminated, truncated, info = env.step(action)
-        positions.append(tuple(float(v) for v in env.simulator.robot_pos[0]))
-        if reached_goal_step is None and bool(info.get("is_success", False)):
-            reached_goal_step = step_idx + 1
-            break
-        if terminated or truncated:
-            break
+        positions: list[tuple[float, float]] = [tuple(float(v) for v in env.simulator.robot_pos[0])]
+        reached_goal_step: int | None = None
+        terminated = False
+        truncated = False
+        for step_idx in range(int(max_steps)):
+            action = policy.act(obs)
+            obs, _reward, terminated, truncated, info = env.step(action)
+            positions.append(tuple(float(v) for v in env.simulator.robot_pos[0]))
+            if reached_goal_step is None and bool(info.get("is_success", False)):
+                reached_goal_step = step_idx + 1
+                break
+            if terminated or truncated:
+                break
 
-    goal = tuple(float(v) for v in env.simulator.goal_pos[0])
-    return PolicyRolloutResult(
-        robot_positions=positions,
-        goal_position=goal,
-        reached_goal_step=reached_goal_step,
-        terminated=terminated,
-        truncated=truncated,
-        planner_config=_planner_config_provenance(planner_config),
-        scenario_id=scenario_id,
-        seed=int(seed),
-    )
+        goal = tuple(float(v) for v in env.simulator.goal_pos[0])
+        return PolicyRolloutResult(
+            robot_positions=positions,
+            goal_position=goal,
+            reached_goal_step=reached_goal_step,
+            terminated=terminated,
+            truncated=truncated,
+            planner_config=_planner_config_provenance(planner_config),
+            scenario_id=scenario_id,
+            seed=int(seed),
+        )
+    finally:
+        env.close()
 
 
 __all__ = [

@@ -126,6 +126,53 @@ def test_predicate_export_is_consumed_when_present() -> None:
     assert "oscillatory_control" not in motivated
 
 
+def test_predicate_export_consumes_raw_export_lane_shape() -> None:
+    """The crosswalk consumes a raw #5593 export-lane row (per-episode dict predicates).
+
+    Regression for the integration gap (issue #5593): the export lane emits one row per
+    episode whose ``predicates`` is a *dict* keyed by predicate name with an
+    ``export_status`` field, while the crosswalk historically only consumed a *list* of
+    ``{predicate, schema_version, status}``. A raw export row now flows through directly,
+    with ``export_status`` mapped to a crosswalk-recognized status (degraded/missing), so a
+    degraded predicate is not misrepresented as a clean measurement.
+    """
+    scenarios = [_scenario("doorway_low")]
+    # Raw export-lane shape: per-row predicates is a dict; blocks carry export_status.
+    export = {
+        "schema_version": PREDICATE_EXPORT_SCHEMA_VERSION,
+        "rows": [
+            {
+                "scenario_id": "doorway_low",
+                "predicates": {
+                    "oscillatory_control": {
+                        "predicate": "oscillatory_control",
+                        "schema_version": KNOWN_PREDICATE_SCHEMAS["oscillatory_control"],
+                        "export_status": "exported",
+                    },
+                    "late_evasive": {
+                        "predicate": "late_evasive",
+                        "schema_version": KNOWN_PREDICATE_SCHEMAS["late_evasive"],
+                        "status": "not_applicable",
+                        "export_status": "degraded",
+                    },
+                },
+            }
+        ],
+    }
+
+    crosswalk = build_scenario_evidence_crosswalk(
+        scenarios, source="fixture.yaml", predicate_export=export
+    )
+    availability = crosswalk["rows"][0]["predicate_availability"]
+    assert availability["export_status"] == "available"
+    exported = {p["predicate"] for p in availability["exported_predicates"]}
+    assert exported == {"oscillatory_control"}
+    degraded = {
+        (p["predicate"], p["status"]) for p in availability["missing_or_degraded_predicates"]
+    }
+    assert ("late_evasive", "degraded") in degraded
+
+
 def test_geometry_group_and_validated_mechanism_are_separate_fields() -> None:
     """Geometry group is a descriptive label; validated_mechanism stays null in crosswalk."""
     scenarios = [_scenario("doorway_low", geometry_group="doorway_geometry")]

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from robot_sf.evidence.writers import (
+    REVIEW_SIDECAR_SCHEMA_VERSION,
     extract_marker_date,
     review_marker,
     review_marker_comment,
@@ -12,6 +13,7 @@ from robot_sf.evidence.writers import (
     sha256_file,
     write_csv,
     write_json,
+    write_review_sidecar,
     write_sha256sums,
     write_text,
 )
@@ -132,6 +134,37 @@ class TestWriteSha256sums:
         sha_file = tmp_path / "SHA256SUMS"
         content = sha_file.read_text(encoding="utf-8")
         assert "SHA256SUMS" not in content.split("\n", 1)[1]
+
+
+class TestWriteReviewSidecar:
+    """Test the write_review_sidecar helper (issue #5911)."""
+
+    def test_writes_marker_sidecar_with_schema_and_digest(self, tmp_path: Path) -> None:
+        artifact = tmp_path / "archive.json"
+        artifact.write_text('{"a": 1}\n', encoding="utf-8")
+        sidecar = write_review_sidecar(artifact, repo_root=tmp_path)
+
+        import json
+
+        assert sidecar == artifact.with_name("archive.json.review.json")
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["schema_version"] == REVIEW_SIDECAR_SCHEMA_VERSION
+        assert payload["artifact_path"] == "archive.json"
+        assert payload["artifact_sha256"] == sha256_file(artifact)
+        assert payload["review_marker"] == review_marker_json()
+        assert payload["preserved_exact_bytes"] is True
+
+    def test_artifact_bytes_are_not_mutated(self, tmp_path: Path) -> None:
+        """The sidecar must not change the artifact bytes or its digest."""
+        artifact = tmp_path / "archive.json"
+        original_bytes = b'{"schema_version": "x.v1", "entries": []}\n'
+        artifact.write_bytes(original_bytes)
+        expected_digest = sha256_file(artifact)
+
+        write_review_sidecar(artifact, repo_root=tmp_path)
+
+        assert artifact.read_bytes() == original_bytes
+        assert sha256_file(artifact) == expected_digest
 
 
 class TestWriteText:

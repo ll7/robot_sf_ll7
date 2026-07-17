@@ -18,18 +18,23 @@ import pytest
 from robot_sf.benchmark.control_action_latency_preflight import AXIS_KEY
 from robot_sf.benchmark.control_action_latency_snqi import (
     ANALYSIS_SCHEMA_VERSION,
+    BASELINE_SHA256,
+    EXPECTED_SCENARIO_IDS,
     INTERVAL_TOL,
     PAIRWISE_DIFF_TOL,
     POINT_TOL,
     PROBABILITY_TOL,
+    WEIGHTS_SHA256,
     SnqiLatencyAnalysisError,
     build_snqi_analysis,
     classify_input_row,
     derive_inputs_from_raw_rows,
     load_input_provenance,
     load_input_rows,
+    validate_file_checksum,
     validate_fixed_scope,
     validate_input_checksum,
+    validate_raw_rows_checksum,
     verify_against_reference,
     write_input_provenance,
     write_input_rows,
@@ -69,7 +74,7 @@ MODE_BY_GROUP = {
     "hybrid_rule_v0_minimal": "adapter",
     "orca": "adapter",
 }
-SCENARIOS = [f"scenario_{i:02d}" for i in range(48)]
+SCENARIOS = list(EXPECTED_SCENARIO_IDS)
 SEEDS = (111, 112, 113)
 STEPS = (0, 1, 3)
 
@@ -183,6 +188,15 @@ def test_classify_missing_snqi_metric_is_exclusion() -> None:
     assert "missing_or_invalid_metric:time_to_goal_norm" in (cell.exclusion_reason or "")
 
 
+def test_classify_inconsistent_latency_milliseconds_is_exclusion() -> None:
+    """A latency step and millisecond marker must describe the same delay."""
+    row = _input_row(planner_group="orca", step=1, seed=111, scenario_id=SCENARIOS[0])
+    row["latency_ms"] = 300.0
+    cell = classify_input_row(row)
+    assert cell.classification == "exclusion"
+    assert "latency_ms_does_not_match_latency_step" in (cell.exclusion_reason or "")
+
+
 def test_classify_non_boolean_success_fails_closed() -> None:
     """A non-boolean success value is rejected rather than silently coerced."""
     row = _input_row(planner_group="orca", step=0, seed=111, scenario_id="scenario_00")
@@ -240,6 +254,19 @@ def test_validate_fixed_scope_rejects_wrong_seed_roster() -> None:
         validate_fixed_scope(inputs)
 
 
+def test_validate_fixed_scope_rejects_wrong_scenario_roster() -> None:
+    """A same-sized replacement scenario set must not pass fixed-scope validation."""
+    rows = [
+        {**row, "scenario_id": "unregistered_scenario"}
+        if row["scenario_id"] == SCENARIOS[0]
+        else row
+        for row in _full_input_set()
+    ]
+    inputs = [classify_input_row(row) for row in rows]
+    with pytest.raises(SnqiLatencyAnalysisError, match="scenario roster"):
+        validate_fixed_scope(inputs)
+
+
 # --- validate_input_checksum: malformed provenance -------------------------
 
 
@@ -275,6 +302,24 @@ def test_checksum_validation_rejects_wrong_raw_anchor(tmp_path: Path) -> None:
     }
     with pytest.raises(SnqiLatencyAnalysisError, match="raw-row SHA-256"):
         validate_input_checksum(input_path, provenance)
+
+
+def test_raw_row_checksum_rejects_unregistered_file(tmp_path: Path) -> None:
+    """Raw-row mode must not accept a file with an unregistered digest."""
+    raw_path = tmp_path / "episode_rows.jsonl"
+    raw_path.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(SnqiLatencyAnalysisError, match="raw campaign rows checksum mismatch"):
+        validate_raw_rows_checksum(raw_path)
+
+
+def test_registered_config_checksum_rejects_override(tmp_path: Path) -> None:
+    """Canonical config provenance must reject an arbitrary override file."""
+    override = tmp_path / "weights.json"
+    override.write_text("{}\n", encoding="utf-8")
+    with pytest.raises(SnqiLatencyAnalysisError, match="SNQI weights checksum mismatch"):
+        validate_file_checksum(override, WEIGHTS_SHA256, label="SNQI weights")
+    with pytest.raises(SnqiLatencyAnalysisError, match="SNQI baseline checksum mismatch"):
+        validate_file_checksum(override, BASELINE_SHA256, label="SNQI baseline")
 
 
 def test_provenance_sidecar_round_trips(tmp_path: Path) -> None:

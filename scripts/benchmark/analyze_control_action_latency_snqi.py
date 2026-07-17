@@ -36,13 +36,18 @@ from pathlib import Path
 
 from robot_sf.benchmark.control_action_latency_snqi import (
     ANALYSIS_SCHEMA_VERSION,
+    BASELINE_SHA256,
+    WEIGHTS_SHA256,
     SnqiLatencyAnalysisError,
     build_snqi_analysis,
     derive_inputs_from_raw_rows,
     load_input_provenance,
     load_input_rows,
     load_raw_rows,
+    validate_file_checksum,
+    validate_fixed_scope,
     validate_input_checksum,
+    validate_raw_rows_checksum,
     verify_against_reference,
     write_input_provenance,
     write_input_rows,
@@ -168,12 +173,14 @@ def _run_promote_input(args: argparse.Namespace) -> int:
     raw_rows_path = Path(args.raw_rows)
     if not raw_rows_path.is_absolute():
         raw_rows_path = REPO_ROOT / raw_rows_path
+    validate_raw_rows_checksum(raw_rows_path)
     rows = load_raw_rows(raw_rows_path)
     inputs = derive_inputs_from_raw_rows(rows)
     if not inputs:
         raise SnqiLatencyAnalysisError(
             f"raw rows {raw_rows_path} contain no '{_axis_label()}' axis rows"
         )
+    validate_fixed_scope(inputs)
     input_path = Path(args.input)
     if not input_path.is_absolute():
         input_path = REPO_ROOT / input_path
@@ -213,6 +220,7 @@ def _load_inputs(args: argparse.Namespace) -> list:
         raw_rows_path = Path(args.raw_rows)
         if not raw_rows_path.is_absolute():
             raw_rows_path = REPO_ROOT / raw_rows_path
+        validate_raw_rows_checksum(raw_rows_path)
         rows = load_raw_rows(raw_rows_path)
         return derive_inputs_from_raw_rows(rows)
     input_path = Path(args.input)
@@ -235,8 +243,12 @@ def main(argv: list[str] | None = None) -> int:
             return _run_promote_input(args)
 
         inputs = _load_inputs(args)
-        weights = _load_json(Path(args.weights))
-        baseline = _load_json(Path(args.baseline))
+        weights_path = Path(args.weights)
+        baseline_path = Path(args.baseline)
+        validate_file_checksum(weights_path, WEIGHTS_SHA256, label="SNQI weights")
+        validate_file_checksum(baseline_path, BASELINE_SHA256, label="SNQI baseline")
+        weights = _load_json(weights_path)
+        baseline = _load_json(baseline_path)
         packet = build_snqi_analysis(
             inputs, weights=weights, baseline_stats=baseline, date=str(args.date)
         )

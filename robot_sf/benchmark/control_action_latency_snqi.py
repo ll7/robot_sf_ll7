@@ -92,6 +92,56 @@ BOOTSTRAP_PERCENTILES = (2.5, 97.5)
 #: Each planner groups 48 scenarios x 3 seeds = 144 paired scenario-seed units.
 EXPECTED_PAIRED_UNITS_PER_PLANNER = 144
 EXPECTED_SCENARIO_COUNT = 48
+EXPECTED_SCENARIO_IDS: tuple[str, ...] = (
+    "classic_bottleneck_low",
+    "classic_bottleneck_medium",
+    "classic_bottleneck_high",
+    "classic_realworld_double_bottleneck_high",
+    "classic_station_platform_medium",
+    "classic_cross_trap_low",
+    "classic_cross_trap_medium",
+    "classic_cross_trap_high",
+    "classic_doorway_low",
+    "classic_doorway_medium",
+    "classic_doorway_high",
+    "classic_group_crossing_low",
+    "classic_group_crossing_medium",
+    "classic_group_crossing_high",
+    "classic_head_on_corridor_low",
+    "classic_head_on_corridor_medium",
+    "classic_merging_low",
+    "classic_merging_medium",
+    "classic_overtaking_low",
+    "classic_overtaking_medium",
+    "classic_t_intersection_low",
+    "classic_t_intersection_medium",
+    "classic_urban_crossing_medium",
+    "francis2023_frontal_approach",
+    "francis2023_pedestrian_obstruction",
+    "francis2023_pedestrian_overtaking",
+    "francis2023_robot_overtaking",
+    "francis2023_down_path",
+    "francis2023_intersection_no_gesture",
+    "francis2023_blind_corner",
+    "francis2023_narrow_hallway",
+    "francis2023_narrow_doorway",
+    "francis2023_entering_room",
+    "francis2023_exiting_room",
+    "francis2023_entering_elevator",
+    "francis2023_exiting_elevator",
+    "francis2023_intersection_wait",
+    "francis2023_intersection_proceed",
+    "francis2023_following_human",
+    "francis2023_leading_human",
+    "francis2023_accompanying_peer",
+    "francis2023_join_group",
+    "francis2023_leave_group",
+    "francis2023_crowd_navigation",
+    "francis2023_parallel_traffic",
+    "francis2023_perpendicular_traffic",
+    "francis2023_circular_crossing",
+    "francis2023_robot_crowding",
+)
 EXPECTED_SEEDS: tuple[int, ...] = (111, 112, 113)
 EXPECTED_LATENCY_STEPS: tuple[int, ...] = REQUIRED_LATENCY_STEPS  # (0, 1, 3)
 
@@ -254,6 +304,13 @@ def classify_input_row(row: Mapping[str, Any]) -> SnqiLatencyInput:
         reasons.append("missing_or_invalid_latency_step")
     if latency_ms is None:
         reasons.append("missing_or_invalid_latency_ms")
+    elif latency_step is not None and not math.isclose(
+        latency_ms,
+        latency_step * MS_PER_LATENCY_STEP,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    ):
+        reasons.append("latency_ms_does_not_match_latency_step")
     if seed is None:
         reasons.append("missing_or_invalid_seed")
     if not row.get("planner_group"):
@@ -567,6 +624,29 @@ def load_input_provenance(provenance_path: str | Path) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def validate_file_checksum(
+    path: str | Path,
+    expected_sha256: str,
+    *,
+    label: str,
+) -> None:
+    """Fail closed when a required file does not match its registered checksum."""
+    file_path = Path(path)
+    try:
+        actual = sha256_file(file_path)
+    except OSError as exc:
+        raise SnqiLatencyAnalysisError(f"{label} {file_path} cannot be hashed: {exc}") from exc
+    if actual != expected_sha256:
+        raise SnqiLatencyAnalysisError(
+            f"{label} checksum mismatch: expected {expected_sha256} but {file_path} is {actual}"
+        )
+
+
+def validate_raw_rows_checksum(raw_rows_path: str | Path) -> None:
+    """Fail closed unless raw campaign rows match the registered job artifact."""
+    validate_file_checksum(raw_rows_path, RAW_ROWS_SHA256, label="raw campaign rows")
+
+
 def validate_input_checksum(input_path: str | Path, provenance: Mapping[str, Any]) -> None:
     """Fail closed when the durable input's SHA-256 disagrees with its provenance."""
     expected = provenance.get("input_sha256")
@@ -574,12 +654,7 @@ def validate_input_checksum(input_path: str | Path, provenance: Mapping[str, Any
         raise SnqiLatencyAnalysisError(
             "input provenance has no valid input_sha256; cannot verify durable input checksum"
         )
-    actual = sha256_file(Path(input_path))
-    if actual != expected:
-        raise SnqiLatencyAnalysisError(
-            f"durable input checksum mismatch: provenance expects {expected} but "
-            f"{Path(input_path).name} is {actual}"
-        )
+    validate_file_checksum(input_path, expected, label="durable input")
     source = provenance.get("source") or {}
     raw_sha = source.get("raw_rows_sha256")
     if raw_sha != RAW_ROWS_SHA256:
@@ -645,6 +720,15 @@ def validate_fixed_scope(inputs: Sequence[SnqiLatencyInput]) -> dict[str, Any]:
         raise SnqiLatencyAnalysisError(
             f"scenario count {len(scenarios)} does not match the registered "
             f"{EXPECTED_SCENARIO_COUNT} scenarios"
+        )
+    expected_scenarios = set(EXPECTED_SCENARIO_IDS)
+    observed_scenarios = set(scenarios)
+    if observed_scenarios != expected_scenarios:
+        missing = sorted(expected_scenarios - observed_scenarios)
+        extra = sorted(observed_scenarios - expected_scenarios)
+        raise SnqiLatencyAnalysisError(
+            "scenario roster does not match the registered fixed-scope plan: "
+            f"missing={missing[:3]}, extra={extra[:3]}"
         )
 
     # Verify the result rows form the complete fixed-scope cross-product: every
@@ -758,7 +842,7 @@ def _near_miss_recovery_max_fractional_error(inputs: Sequence[SnqiLatencyInput])
 
 
 def _ols_slope(x: Sequence[float], y: Sequence[float]) -> float:
-    """Return the ordinary-least-squares slope of ``y`` on ``x`` (no intercept)."""
+    """Return the ordinary-least-squares slope of ``y`` on ``x`` with an intercept."""
     x_arr = list(x)
     y_arr = list(y)
     n = len(x_arr)
@@ -1342,6 +1426,7 @@ __all__ = [
     "BASELINE_SHA256",
     "BOOTSTRAP_RESAMPLES",
     "BOOTSTRAP_SEED",
+    "EXPECTED_SCENARIO_IDS",
     "INPUT_COLUMNS",
     "INPUT_PROVENANCE_SCHEMA_VERSION",
     "INPUT_SCHEMA_VERSION",
@@ -1362,8 +1447,10 @@ __all__ = [
     "load_input_provenance",
     "load_input_rows",
     "load_raw_rows",
+    "validate_file_checksum",
     "validate_fixed_scope",
     "validate_input_checksum",
+    "validate_raw_rows_checksum",
     "verify_against_reference",
     "write_input_provenance",
     "write_input_rows",

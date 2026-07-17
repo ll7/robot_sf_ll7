@@ -52,6 +52,7 @@ from robot_sf.benchmark.camera_ready._reporting import (
     write_campaign_report,
 )
 from robot_sf.benchmark.camera_ready._resume_plan import (
+    ArmResumeVerdict,
     build_resume_plan,
     emit_resume_plan_log,
     verify_resume_context,
@@ -534,12 +535,64 @@ def _dependency_gated_planner_summary(
     }
 
 
+def _resolve_campaign_planner_batch_result(
+    context: _CampaignPlannerMatrixContext,
+    *,
+    planner: PlannerSpec,
+    run: _CampaignPlannerVariantRun,
+    resume_verdict: ArmResumeVerdict | None,
+) -> _CampaignPlannerBatchResult:
+    """Return an executed, gated, or completed-resume arm result."""
+    if resume_verdict is not None:
+        if resume_verdict.verdict != "skip-complete":
+            raise ValueError(
+                "resume_verdict must be skip-complete when bypassing arm execution, "
+                f"got {resume_verdict.verdict!r}"
+            )
+        if resume_verdict.episodes_path != run.episodes_path:
+            raise ValueError(
+                "resume-plan episodes path does not match scheduler arm path: "
+                f"{resume_verdict.episodes_path} != {run.episodes_path}"
+            )
+        logger.info(
+            "Skipping completed campaign arm: planner={} kinematics={} episodes={}/{}",
+            planner.key,
+            run.kinematics,
+            resume_verdict.episodes_found,
+            resume_verdict.expected_total,
+        )
+        if not isinstance(resume_verdict.prior_summary, dict):
+            raise ValueError(
+                "completed resume arm requires a JSON-object summary.json: "
+                f"{run.planner_dir / 'summary.json'}"
+            )
+        summary = dict(resume_verdict.prior_summary)
+        summary.setdefault("total_jobs", resume_verdict.expected_total)
+        summary.setdefault("written", resume_verdict.episodes_found)
+        summary.setdefault("failed_jobs", 0)
+        summary.setdefault("failures", [])
+        summary.setdefault("out_path", str(run.episodes_path))
+        return _CampaignPlannerBatchResult(
+            status=str(summary.get("status", "ok")),
+            summary=summary,
+            warnings=[],
+        )
+    if planner.availability_gate == "dependency_gated":
+        return _CampaignPlannerBatchResult(
+            status="not_available",
+            summary=_dependency_gated_planner_summary(context, planner=planner, run=run),
+            warnings=[],
+        )
+    return _execute_campaign_planner_batch(context, planner, run)
+
+
 def _run_campaign_planner_variant(
     context: _CampaignPlannerMatrixContext,
     *,
     planner: PlannerSpec,
     kinematics: str,
     active_observation_mode: str,
+    resume_verdict: ArmResumeVerdict | None = None,
 ) -> _CampaignPlannerVariantResult:
     cfg = context.cfg
     run_entries: list[dict[str, Any]] = []
@@ -552,24 +605,31 @@ def _run_campaign_planner_variant(
         planner=planner,
         kinematics=kinematics,
         active_observation_mode=active_observation_mode,
-        log_run=planner.availability_gate != "dependency_gated",
+        log_run=resume_verdict is None and planner.availability_gate != "dependency_gated",
     )
 
     planner_started_at_utc = _utc_now()
     planner_start = time.perf_counter()
-    if planner.availability_gate == "dependency_gated":
-        status = "not_available"
-        summary = _dependency_gated_planner_summary(context, planner=planner, run=run)
-    else:
-        batch_result = _execute_campaign_planner_batch(context, planner, run)
-        status = batch_result.status
-        summary = batch_result.summary
-        warnings.extend(batch_result.warnings)
+    batch_result = _resolve_campaign_planner_batch_result(
+        context,
+        planner=planner,
+        run=run,
+        resume_verdict=resume_verdict,
+    )
+    status = batch_result.status
+    summary = batch_result.summary
+    warnings.extend(batch_result.warnings)
     aggregates: dict[str, Any] | None = None
 
-    planner_finished_at_utc = _utc_now()
-    runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
-    episodes_written = int(summary.get("written", 0))
+    if resume_verdict is None:
+        planner_finished_at_utc = _utc_now()
+        runtime_sec = float(max(1e-9, time.perf_counter() - planner_start))
+        episodes_written = int(summary.get("written", 0))
+    else:
+        planner_started_at_utc = str(summary.get("started_at_utc") or planner_started_at_utc)
+        planner_finished_at_utc = str(summary.get("finished_at_utc") or planner_started_at_utc)
+        runtime_sec = float(summary.get("runtime_sec", 0.0))
+        episodes_written = int(summary.get("written", 0))
     summary["status"] = status
     summary["started_at_utc"] = planner_started_at_utc
     summary["finished_at_utc"] = planner_finished_at_utc
@@ -942,6 +1002,7 @@ def _run_campaign_planner_matrix(
     runs_dir: Path,
     dependencies: _CampaignRuntimeDependencies,
     arm_isolation: str | None = None,
+    resume_verdicts: list[ArmResumeVerdict] | None = None,
 ) -> _CampaignPlannerRunResults:
     """Run the planner matrix with optional arm isolation override.
 
@@ -954,6 +1015,7 @@ def _run_campaign_planner_matrix(
         dependencies: Runtime dependency collaborators.
         arm_isolation: Optional override for arm isolation mode ("in_process" or "subprocess").
             If None, uses cfg.arm_isolation (issue #4826).
+        resume_verdicts: Per-arm resume plan used to bypass completed arms.
 
     Returns:
         Campaign planner run results with run_entries, planner_rows, warnings, and
@@ -974,6 +1036,9 @@ def _run_campaign_planner_matrix(
         runs_dir=runs_dir,
         dependencies=dependencies,
     )
+    resume_by_arm = {
+        (verdict.planner_key, verdict.kinematics): verdict for verdict in (resume_verdicts or [])
+    }
     stop_requested = False
 
     for planner in cfg.planners:
@@ -981,10 +1046,19 @@ def _run_campaign_planner_matrix(
             continue
         active_observation_mode = planner.observation_mode or cfg.observation_mode
         for kinematics in kinematics_matrix:
+            resume_verdict = resume_by_arm.get((planner.key, kinematics))
             # Dispatch based on arm_isolation mode (issue #4826)
             use_subprocess = effective_arm_isolation == "subprocess"
 
-            if use_subprocess:
+            if resume_verdict is not None and resume_verdict.verdict == "skip-complete":
+                variant_result = _run_campaign_planner_variant(
+                    context,
+                    planner=planner,
+                    kinematics=kinematics,
+                    active_observation_mode=active_observation_mode,
+                    resume_verdict=resume_verdict,
+                )
+            elif use_subprocess:
                 logger.info(
                     "Running arm with subprocess isolation: planner={} kinematics={}",
                     planner.key,
@@ -1161,23 +1235,26 @@ def _emit_resume_plan_preflight(
     campaign_root: Path,
     runs_dir: Path,
     scenarios: list[Any],
-) -> None:
+) -> list[ArmResumeVerdict]:
     """Emit a resume plan before a resumed campaign executes (issue #5392).
 
     When ``cfg.resume`` is enabled and any arm directory already exists, this
     verifies the campaign context matches and writes ``resume_plan.json`` so the
     operator can sanity-check projected walltime.
 
+    Returns:
+        Per-arm resume verdicts, or an empty list when no prior arms exist.
+
     Raises:
         ResumeMismatchError: If the campaign-id or config-hash on disk does not
             match the current invocation.
     """
     if not cfg.resume:
-        return
+        return []
 
     has_prior_arms = any(r.is_dir() for r in runs_dir.iterdir()) if runs_dir.exists() else False
     if not has_prior_arms:
-        return
+        return []
 
     # Fail-closed context check before any work begins.
     verify_resume_context(
@@ -1209,6 +1286,7 @@ def _emit_resume_plan_preflight(
         campaign_id=campaign_id,
         verdicts=verdicts,
     )
+    return verdicts
 
 
 def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
@@ -1278,7 +1356,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
     # Resume-plan preflight (issue #5392): when cfg.resume is enabled and the campaign
     # root already exists with prior data, verify context and emit a plan before any
     # arm executes, so the operator knows what runs will be skipped vs continued.
-    _emit_resume_plan_preflight(
+    resume_verdicts = _emit_resume_plan_preflight(
         cfg=cfg,
         campaign_id=campaign_id,
         config_hash=str(config_hash),
@@ -1296,6 +1374,7 @@ def _run_campaign_orchestrator(  # noqa: C901, PLR0912, PLR0915
         runs_dir=runs_dir,
         dependencies=dependencies,
         arm_isolation=arm_isolation,
+        resume_verdicts=resume_verdicts,
     )
     run_entries = planner_run_results.run_entries
     planner_rows = planner_run_results.planner_rows

@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-16
+updated_at: 2026-07-17
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,10 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/issue_5936_result_job_durability_gate.md
+  status: current
+  freshness: policy
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5792_demo_validation_2026-07-15.md
   status: evidence
   freshness: dated

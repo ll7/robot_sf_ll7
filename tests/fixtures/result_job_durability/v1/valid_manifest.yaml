@@ -1,0 +1,17 @@
+schema_version: result_job_durability.v1
+gate_id: job_13512_snqi_rank_identifiability
+source_job:
+  job_id: "13512"
+  producing_issue: "#3207"
+  producing_commit: daf0adfc28
+analysis_input:
+  pointer: tests/fixtures/result_job_durability/v1/job_13512_snqi_rows.csv
+  pointer_kind: tracked_path
+  private_safe: false
+sha256: 7ddd678faf6f5a4dbb0d6879187dfdf1d7ea619bbeb9870430b2bdfc616e9ad1
+input_schema:
+  schema_name: snqi_rank_rows
+  schema_version: v1
+  schema_path: robot_sf/benchmark/schemas/episode.schema.v1.json
+rerun_command: uv run python scripts/tools/analyze_snqi_vs_single_metric_ranking.py --input tests/fixtures/result_job_durability/v1/job_13512_snqi_rows.csv
+claim_boundary: internal simulator-fidelity sensitivity; diagnostic, not paper-facing

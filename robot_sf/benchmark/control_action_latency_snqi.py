@@ -829,11 +829,6 @@ def _paired_cluster_bootstrap(
     slopes (equivalent to the OLS slope of the resampled per-latency means for a
     common latency-step regressor). Percentile endpoints use linear interpolation.
     """
-    try:
-        import numpy as np
-    except ImportError as exc:  # pragma: no cover - numpy is a hard runtime dependency
-        raise SnqiLatencyAnalysisError("the paired cluster-bootstrap requires numpy") from exc
-
     groups = list(unit_slopes_by_group)
     n_units = {group: len(unit_slopes_by_group[group]) for group in groups}
     for group in groups:

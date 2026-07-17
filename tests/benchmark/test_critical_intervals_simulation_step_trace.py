@@ -173,3 +173,308 @@ def test_real_trace_step_near_miss_events_anchor() -> None:
     assert iv.status == "available"
     assert iv.anchor_step == 5
     assert iv.source == ANCHOR_SOURCE_STEP_EVENT
+
+
+def test_trace_xy_validation_errors() -> None:
+    """Verify that _trace_xy rejects boolean, non-numeric, infinite, and incorrect length vectors."""
+    # Test boolean in coordinates (line 255)
+    with pytest.raises(ValueError, match="must be a finite numeric"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {"robot": {"position": [True, 2.0], "velocity": [0.0, 0.0]}, "pedestrians": []}
+                ],
+            }
+        )
+
+    # Test non-numeric values (line 258-259)
+    with pytest.raises(ValueError, match="must be a numeric"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {"robot": {"position": ["abc", 2.0], "velocity": [0.0, 0.0]}, "pedestrians": []}
+                ],
+            }
+        )
+
+    # Test infinite values (line 262)
+    with pytest.raises(ValueError, match="must be a finite numeric"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {
+                        "robot": {"position": [float("inf"), 2.0], "velocity": [0.0, 0.0]},
+                        "pedestrians": [],
+                    }
+                ],
+            }
+        )
+
+    # Test array fallback exceptions (line 265-270)
+    with pytest.raises(ValueError, match="must be a finite numeric"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {
+                        "robot": {"position": [1.0, 2.0, 3.0], "velocity": [0.0, 0.0]},
+                        "pedestrians": [],
+                    }
+                ],
+            }
+        )
+
+
+def test_pedestrian_key_validation() -> None:
+    """Verify that _pedestrian_key handles missing IDs and unhashable IDs."""
+    # Test id fallback to index when "id" is absent (line 276)
+    adapted = adapt_simulation_step_trace(
+        {
+            "schema_version": "simulation-step-trace.v1",
+            "steps": [
+                {
+                    "robot": {"position": [0.0, 0.0], "velocity": [0.0, 0.0]},
+                    "pedestrians": [{"position": [1.0, 1.0], "velocity": [0.0, 0.0]}],
+                }
+            ],
+        }
+    )
+    assert adapted["pedestrian_ids"] == [0]
+
+    # Test unhashable id (line 280-281)
+    with pytest.raises(ValueError, match="must be hashable"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {
+                        "robot": {"position": [0.0, 0.0], "velocity": [0.0, 0.0]},
+                        "pedestrians": [{"id": [1, 2], "position": [1.0, 1.0]}],
+                    }
+                ],
+            }
+        )
+
+
+def test_adapter_various_validation_cases() -> None:
+    """Verify other schema verification paths in adapt_simulation_step_trace."""
+    # Test steps is not a list (line 322)
+    with pytest.raises(ValueError, match="requires a list-valued steps field"):
+        adapt_simulation_step_trace(
+            {"schema_version": "simulation-step-trace.v1", "steps": "not-a-list"}
+        )
+
+    # Test empty steps list (line 328-329)
+    adapted = adapt_simulation_step_trace(
+        {"schema_version": "simulation-step-trace.v1", "steps": []}
+    )
+    assert adapted["robot_pos"] == []
+    assert adapted["peds_pos"] == []
+
+    # Test simulation step 0 is not a mapping (line 333)
+    with pytest.raises(ValueError, match="step 0 must be a mapping"):
+        adapt_simulation_step_trace(
+            {"schema_version": "simulation-step-trace.v1", "steps": ["not-a-dict"]}
+        )
+
+    # Test simulation step 0 pedestrians is not a list (line 336)
+    with pytest.raises(ValueError, match="step 0 pedestrians must be a list"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [{"robot": {"position": [0.0, 0.0]}, "pedestrians": "not-a-list"}],
+            }
+        )
+
+    # Test simulation step 0 pedestrian is not a mapping (line 342)
+    with pytest.raises(ValueError, match="step 0 pedestrian 0 must be a mapping"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [{"robot": {"position": [0.0, 0.0]}, "pedestrians": ["not-a-dict"]}],
+            }
+        )
+
+    # Test duplicate pedestrian id in step 0 (line 345)
+    with pytest.raises(ValueError, match="contains duplicate pedestrian ID"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {
+                        "robot": {"position": [0.0, 0.0]},
+                        "pedestrians": [
+                            {"id": 1, "position": [1.0, 1.0]},
+                            {"id": 1, "position": [2.0, 2.0]},
+                        ],
+                    }
+                ],
+            }
+        )
+
+    # Test step_index step is not a mapping (line 358)
+    with pytest.raises(ValueError, match="step 1 must be a mapping"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [{"robot": {"position": [0.0, 0.0]}, "pedestrians": []}, "not-a-dict"],
+            }
+        )
+
+    # Test step_index step robot is not a mapping (line 361)
+    with pytest.raises(ValueError, match="step 1 robot must be a mapping"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {"robot": {"position": [0.0, 0.0]}, "pedestrians": []},
+                    {"robot": "not-a-dict"},
+                ],
+            }
+        )
+
+    # Test missing robot velocity (line 369)
+    adapted = adapt_simulation_step_trace(
+        {
+            "schema_version": "simulation-step-trace.v1",
+            "steps": [{"robot": {"position": [0.0, 0.0], "velocity": None}, "pedestrians": []}],
+        }
+    )
+    assert "robot_vel" not in adapted
+
+    # Test step_index step pedestrians is not a list (line 380)
+    with pytest.raises(ValueError, match="step 1 pedestrians must be a list"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {"robot": {"position": [0.0, 0.0]}, "pedestrians": []},
+                    {"robot": {"position": [0.0, 0.0]}, "pedestrians": "not-a-list"},
+                ],
+            }
+        )
+
+    # Test step_index step pedestrian is not a mapping (line 384)
+    with pytest.raises(ValueError, match="step 1 pedestrian 0 must be a mapping"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {
+                        "robot": {"position": [0.0, 0.0]},
+                        "pedestrians": [{"id": 1, "position": [1.0, 1.0]}],
+                    },
+                    {"robot": {"position": [0.0, 0.0]}, "pedestrians": ["not-a-dict"]},
+                ],
+            }
+        )
+
+    # Test duplicate pedestrian id in step_index (line 389)
+    with pytest.raises(ValueError, match="step 1 contains duplicate pedestrian ID"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {
+                        "robot": {"position": [0.0, 0.0]},
+                        "pedestrians": [{"id": 1, "position": [1.0, 1.0]}],
+                    },
+                    {
+                        "robot": {"position": [0.0, 0.0]},
+                        "pedestrians": [
+                            {"id": 1, "position": [1.0, 1.0]},
+                            {"id": 1, "position": [2.0, 2.0]},
+                        ],
+                    },
+                ],
+            }
+        )
+
+    # Test missing pedestrian velocity (line 410)
+    adapted = adapt_simulation_step_trace(
+        {
+            "schema_version": "simulation-step-trace.v1",
+            "steps": [
+                {
+                    "robot": {"position": [0.0, 0.0]},
+                    "pedestrians": [{"id": 1, "position": [1.0, 1.0], "velocity": None}],
+                }
+            ],
+        }
+    )
+    assert "ped_vel" not in adapted
+
+
+def test_load_config_defaults_and_errors() -> None:
+    """Verify load_config defaults and anchor validation errors."""
+    # Test line 222: config_dict is None, path is None -> cfg = {}
+    from robot_sf.benchmark.critical_intervals import load_config
+
+    assert load_config(None, config_dict=None) == {}
+
+    # Test line 232: anchor spec is not a dict
+    with pytest.raises(ValueError, match="must map to a dict"):
+        load_config(config_dict={"critical_intervals": {"collision_or_near_miss": "not-a-dict"}})
+
+
+def test_adapt_trace_other_cases() -> None:
+    """Verify numpy array inputs, conversion failures, and schema version bypass."""
+    # Test line 270: array fallback success
+    import numpy as np
+
+    adapted = adapt_simulation_step_trace(
+        {
+            "schema_version": "simulation-step-trace.v1",
+            "steps": [
+                {
+                    "robot": {"position": np.array([1.0, 2.0]), "velocity": np.array([0.0, 0.0])},
+                    "pedestrians": [],
+                }
+            ],
+        }
+    )
+    assert adapted["robot_pos"] == [[1.0, 2.0]]
+
+    # Test line 266-267: np.asarray failure
+    with pytest.raises(ValueError, match="must be a numeric"):
+        adapt_simulation_step_trace(
+            {
+                "schema_version": "simulation-step-trace.v1",
+                "steps": [
+                    {
+                        "robot": {"position": {"x": 1, "y": 2}, "velocity": [0.0, 0.0]},
+                        "pedestrians": [],
+                    }
+                ],
+            }
+        )
+
+    # Test line 320: schema version mismatch and steps is not a list
+    trace = {"schema_version": "unknown"}
+    assert adapt_simulation_step_trace(trace) is trace
+
+
+def test_get_trace_arrays_edge_cases() -> None:
+    """Verify _get_trace_arrays edge cases for empty, 1D, 2D input arrays and invalid dt values."""
+    from robot_sf.benchmark.critical_intervals import _get_trace_arrays
+
+    # Test line 445: empty robot_pos
+    robot_pos, peds_pos, dt = _get_trace_arrays({"robot_pos": []})
+    assert robot_pos.shape == (0, 2)
+
+    # Test line 447: 1D robot_pos
+    robot_pos, peds_pos, dt = _get_trace_arrays({"robot_pos": [1.0, 2.0]})
+    assert robot_pos.shape == (1, 2)
+
+    # Test line 455: 2D peds_pos
+    robot_pos, peds_pos, dt = _get_trace_arrays(
+        {"robot_pos": [[0.0, 0.0]], "peds_pos": [[1.0, 2.0]]}
+    )
+    assert peds_pos.shape == (1, 1, 2)
+
+    # Test line 459: invalid dt
+    robot_pos, peds_pos, dt = _get_trace_arrays({"dt": -1.0})
+    assert dt == 0.1

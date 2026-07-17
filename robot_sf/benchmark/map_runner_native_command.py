@@ -303,9 +303,9 @@ class _NoProgressDeadlockDetector:
             distance_to_goal_m: Euclidean robot-to-goal distance at this step.
         """
         self._distances.append(float(distance_to_goal_m))
-        if len(self._distances) <= 1:
+        if len(self._distances) <= self._window_steps:
             return
-        window_start_idx = max(0, len(self._distances) - 1 - self._window_steps)
+        window_start_idx = len(self._distances) - 1 - self._window_steps
         start_distance = self._distances[window_start_idx]
         final_distance = self._distances[-1]
         progress_delta = start_distance - final_distance

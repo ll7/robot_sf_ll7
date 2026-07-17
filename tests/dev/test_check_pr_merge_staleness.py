@@ -9,12 +9,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scripts.dev.check_pr_merge_staleness import (
+    DEFAULT_BASE_BRANCH,
     _detect_workflow_run_base_sha,
     _fetch_main_sha_with_retry,
+    _fetch_pr_base_ref,
     _fetch_pr_base_sha,
     _fetch_workflow_runs_with_retry,
     _gh_with_retry,
     _is_transient_gh_failure,
+    _parent_branch_lags_main,
     _PermanentApiError,
     check_merge_staleness,
     format_human,
@@ -243,6 +246,163 @@ def test_fallback_when_detect_returns_none() -> None:
     assert data["stale"] is False
 
 
+# ── stacked PR handling (issue #5965) ────────────────────────────────────────
+
+
+def test_stacked_pr_fresh_when_current_with_declared_base() -> None:
+    """A PR current with its stacked base is not stale just because main moved."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch(
+            "scripts.dev.check_pr_merge_staleness._detect_workflow_run_base_sha",
+            return_value="parent_sha",
+        ),
+    ):
+        # main sha + parent ref sha + compare status are fetched via _gh; the
+        # parent is ahead of main, so the stacked PR is genuinely fresh.
+        mock_gh.side_effect = [
+            _gh_response(stdout="main_sha"),
+            _gh_response(stdout="parent_sha"),
+            _gh_response(stdout="ahead"),
+        ]
+        data = check_merge_staleness(
+            "5953",
+            base_sha="parent_sha",
+            repo="owner/repo",
+            base_ref="proto-butterfly-video",
+        )
+
+    assert data["detection"] == "stacked_base"
+    assert data["stale"] is False
+    assert data["parent_sha"] == "parent_sha"
+    assert data["main_sha"] == "main_sha"
+
+
+def test_stacked_pr_stale_when_ci_base_older_than_current_parent() -> None:
+    """A stacked PR whose declared base moved since CI ran is stale."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch(
+            "scripts.dev.check_pr_merge_staleness._detect_workflow_run_base_sha",
+            return_value="old_parent",
+        ),
+    ):
+        mock_gh.side_effect = [
+            _gh_response(stdout="main_head"),
+            _gh_response(stdout="current_parent"),
+        ]
+        data = check_merge_staleness(
+            "5953",
+            base_sha="current_parent",
+            repo="owner/repo",
+            base_ref="proto-butterfly-video",
+        )
+
+    assert data["detection"] == "stacked_base"
+    assert data["stale"] is True
+    assert data["ci_base_sha"] == "old_parent"
+    assert data["parent_sha"] == "current_parent"
+
+
+def test_stacked_pr_stale_when_parent_lags_main_fallback() -> None:
+    """A stale parent branch fails closed even without workflow provenance."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch(
+            "scripts.dev.check_pr_merge_staleness._detect_workflow_run_base_sha", return_value=None
+        ),
+    ):
+        # base_sha == parent_sha, but parent_sha != main -> stale parent.
+        mock_gh.side_effect = [
+            _gh_response(stdout="main_head"),
+            _gh_response(stdout="parent_sha"),
+            _gh_response(stdout="behind"),
+        ]
+        data = check_merge_staleness(
+            "5953",
+            base_sha="parent_sha",
+            repo="owner/repo",
+            base_ref="proto-butterfly-video",
+        )
+
+    assert data["detection"] == "stacked_base_stale_parent"
+    assert data["stale"] is True
+    assert "parent" in data["reason"].lower()
+
+
+def test_stacked_pr_stale_when_declared_base_sha_older_fallback() -> None:
+    """Fallback path flags a stacked PR when declared base.sha lags parent."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch(
+            "scripts.dev.check_pr_merge_staleness._detect_workflow_run_base_sha", return_value=None
+        ),
+    ):
+        mock_gh.side_effect = [
+            _gh_response(stdout="main_head"),
+            _gh_response(stdout="current_parent"),
+        ]
+        data = check_merge_staleness(
+            "5953",
+            base_sha="old_parent",
+            repo="owner/repo",
+            base_ref="proto-butterfly-video",
+        )
+
+    assert data["detection"] == "stacked_base"
+    assert data["stale"] is True
+    assert data["parent_sha"] == "current_parent"
+
+
+def test_main_targeting_pr_preserves_race_check() -> None:
+    """A PR targeting main keeps the original base-vs-main race protection."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch(
+            "scripts.dev.check_pr_merge_staleness._detect_workflow_run_base_sha", return_value=None
+        ),
+    ):
+        mock_gh.side_effect = [_gh_response(stdout="new_main")]
+        data = check_merge_staleness("42", base_sha="old_base", repo="owner/repo", base_ref="main")
+
+    assert data["detection"] == "base_vs_main"
+    assert data["stale"] is True
+
+
+def test_parent_branch_lags_main_helper() -> None:
+    """Helper uses compare ancestry and fails closed on compare errors."""
+    with patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout="ahead"),
+            _gh_response(stdout="behind"),
+            _gh_response(stdout="diverged"),
+            _gh_response(returncode=1, stderr="compare unavailable"),
+        ]
+        assert _parent_branch_lags_main("owner/repo", "same", "same") is False
+        assert _parent_branch_lags_main("owner/repo", "parent", "main") is False
+        assert _parent_branch_lags_main("owner/repo", "parent", "main") is True
+        assert _parent_branch_lags_main("owner/repo", "parent", "main") is True
+
+    assert "compare/main...parent" in " ".join(mock_gh.call_args_list[0].args[0])
+
+
+def test_fetch_pr_base_ref_reads_ref_field() -> None:
+    """The PR's declared base ref name is read from the REST payload."""
+    with patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(
+            stdout=json.dumps({"base": {"sha": "s", "ref": "proto-x"}})
+        )
+        ref = _fetch_pr_base_ref("42", repo="owner/repo")
+
+    assert ref == "proto-x"
+    assert "pulls/42" in " ".join(mock_gh.call_args.args[0])
+
+
+def test_default_base_branch_constant_is_main() -> None:
+    """The default base branch used for race checks is main."""
+    assert DEFAULT_BASE_BRANCH == "main"
+
+
 # ── format_human ─────────────────────────────────────────────────────────────
 
 
@@ -334,7 +494,7 @@ def test_main_exit_0_when_fresh(capsys: pytest.CaptureFixture) -> None:
             # main sha
             _gh_response(stdout="same_sha"),
         ]
-        rc = main(["42"])
+        rc = main(["42", "--base-ref", "main"])
 
     assert rc == 0
     captured = capsys.readouterr()
@@ -354,7 +514,7 @@ def test_main_exit_1_when_stale(capsys: pytest.CaptureFixture) -> None:
             _gh_response(stdout=json.dumps({"base": {"sha": "old_base"}})),
             _gh_response(stdout="new_main"),
         ]
-        rc = main(["42"])
+        rc = main(["42", "--base-ref", "main"])
 
     assert rc == 1
     captured = capsys.readouterr()
@@ -379,7 +539,7 @@ def test_main_exit_2_on_error(capsys: pytest.CaptureFixture) -> None:
             _gh_response(returncode=1, stderr="network error"),
             _gh_response(returncode=1, stderr="network error"),
         ]
-        rc = main(["1"])
+        rc = main(["1", "--base-ref", "main"])
 
     assert rc == 2
     assert mock_sleep.call_count == 3
@@ -400,7 +560,7 @@ def test_main_json_output(capsys: pytest.CaptureFixture) -> None:
             _gh_response(stdout=json.dumps({"base": {"sha": "abc"}})),
             _gh_response(stdout="abc"),
         ]
-        rc = main(["7", "--json"])
+        rc = main(["7", "--json", "--base-ref", "main"])
 
     assert rc == 0
     payload = json.loads(capsys.readouterr().out)
@@ -421,7 +581,7 @@ def test_main_repo_flag(capsys: pytest.CaptureFixture) -> None:
             _gh_response(stdout=json.dumps({"base": {"sha": "sha"}})),
             _gh_response(stdout="sha"),
         ]
-        rc = main(["1", "--repo", "ll7/robot_sf_ll7"])
+        rc = main(["1", "--repo", "ll7/robot_sf_ll7", "--base-ref", "main"])
 
     assert rc == 0
     # Should have made exactly 2 gh calls (pr view, main sha), not 3.
@@ -440,7 +600,7 @@ def test_main_pr_flag_alias(capsys: pytest.CaptureFixture) -> None:
             _gh_response(stdout=json.dumps({"base": {"sha": "sha"}})),
             _gh_response(stdout="sha"),
         ]
-        rc = main(["--pr", "99", "--repo", "ll7/robot_sf_ll7"])
+        rc = main(["--pr", "99", "--repo", "ll7/robot_sf_ll7", "--base-ref", "main"])
 
     assert rc == 0
 
@@ -489,7 +649,7 @@ def test_main_repo_detect_failure(capsys: pytest.CaptureFixture) -> None:
     """Repository detection failure should exit 1."""
     with patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh:
         mock_gh.return_value = _gh_response(returncode=1, stderr="auth error")
-        rc = main(["42"])
+        rc = main(["42", "--base-ref", "main"])
 
     assert rc == 1
     assert "Failed to detect repository" in capsys.readouterr().err

@@ -515,10 +515,7 @@ def test_ci_driver_lint_reports_all_failures_without_short_circuiting() -> None:
     # `uv run` forwards to our python stub. We detect which check is running via the
     # args so we can make the broad-exception check fail.
     uv_stub.write_text(
-        "#!/usr/bin/env bash\nset -- \"${@:3}\"\n"
-        "exec \""
-        + str(python_stub)
-        + "\" \"$@\"\n",
+        '#!/usr/bin/env bash\nset -- "${@:3}"\nexec "' + str(python_stub) + '" "$@"\n',
         encoding="utf-8",
     )
     python_stub.write_text(
@@ -558,9 +555,9 @@ def test_ci_driver_lint_reports_all_failures_without_short_circuiting() -> None:
     combined = result.stdout + result.stderr
     # Both independent failures must appear in a single run.
     assert "would reformat" in combined, f"format failure not surfaced:\n{combined}"
-    assert (
-        "broad exception ratchet increased" in combined
-    ), f"broad-exception failure not surfaced:\n{combined}"
+    assert "broad exception ratchet increased" in combined, (
+        f"broad-exception failure not surfaced:\n{combined}"
+    )
     # The phase must still fail overall.
     assert result.returncode != 0, f"lint phase exited zero despite failures:\n{combined}"
 
@@ -574,15 +571,10 @@ def test_ci_driver_lint_passes_when_all_checks_pass() -> None:
     python_stub = stub_dir / "python"
 
     uv_stub.write_text(
-        "#!/usr/bin/env bash\nset -- \"${@:3}\"\n"
-        "exec \""
-        + str(python_stub)
-        + "\" \"$@\"\n",
+        '#!/usr/bin/env bash\nset -- "${@:3}"\nexec "' + str(python_stub) + '" "$@"\n',
         encoding="utf-8",
     )
-    python_stub.write_text(
-        "#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n", encoding="utf-8"
-    )
+    python_stub.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n", encoding="utf-8")
     uv_stub.chmod(0o755)
     python_stub.chmod(0o755)
 

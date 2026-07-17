@@ -13,6 +13,7 @@ evidence_status: diagnostic-only
 approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5952
+prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
 refreshed_baseline_total_findings: 407

@@ -30,6 +30,7 @@ BASELINE = ROOT / "scripts" / "validation" / "evidence_registry_baseline.json"
 REVIEW = ROOT / "scripts" / "validation" / "evidence_registry_baseline_review.yaml"
 STRICT_POLICY = ROOT / "docs" / "context" / "evidence" / "evidence_registry_strict_ci_policy.yaml"
 LINTER = ROOT / "scripts" / "tools" / "lint_evidence_registry.py"
+PRIOR_BASELINE_COMMIT = "9fa96c01bf1c8152459f5fa8c481e938fb1e6725"
 
 # Import the helper as a source module (it lives under scripts/dev, not a package).
 _spec = importlib.util.spec_from_file_location("evidence_registry_ratchet", SCRIPT)
@@ -189,7 +190,7 @@ def test_load_baseline_rejects_non_dict_findings(tmp_path: Path) -> None:
 # --- CLI end-to-end (no live linter; uses --report) --------------------------------
 
 
-def _run_cli(tmp_path: Path, report: dict[str, object], *args: str) -> subprocess.CompletedProcess:
+def _run_cli(tmp_path: Path, report: object, *args: str) -> subprocess.CompletedProcess:
     """Run the ratchet CLI against a pre-rendered report, returning the process result."""
     report_path = tmp_path / "report.json"
     report_path.write_text(json.dumps(report), encoding="utf-8")
@@ -205,7 +206,8 @@ def _run_cli(tmp_path: Path, report: dict[str, object], *args: str) -> subproces
             str(baseline),
             "--root",
             str(tmp_path),
-        ],
+        ]
+        + list(args),
         capture_output=True,
         text=True,
         check=False,
@@ -301,6 +303,36 @@ def test_cli_check_reports_infra_error_when_report_missing(tmp_path: Path) -> No
     assert proc.returncode == 2
 
 
+@pytest.mark.parametrize(
+    "report",
+    [[], None, {"issues": None}, {"issues": [None]}, {"summary": []}],
+)
+def test_cli_check_reports_infra_error_for_malformed_report(tmp_path: Path, report: object) -> None:
+    """Malformed report JSON fails with the documented infra-error exit code."""
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text(json.dumps({"schema_version": 1, "findings_by_path": {}}), encoding="utf-8")
+    report_path = tmp_path / "report.json"
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--check",
+            "--report",
+            str(report_path),
+            "--baseline",
+            str(baseline),
+            "--root",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert proc.returncode == 2
+
+
 # --- issue #5952 acceptance: clean-main baseline drift guard -----------------------
 
 
@@ -374,23 +406,40 @@ def test_review_companion_covers_every_post_5317_baseline_file() -> None:
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     baseline_files = set(baseline["findings_by_path"])
 
-    # (1) The committed baseline must decompose as prior boundary + reviewed delta.
+    # (1) Load the actual prior baseline, rather than trusting only a self-reported count.
+    assert review.get("prior_baseline_commit") == PRIOR_BASELINE_COMMIT
+    prior_proc = subprocess.run(
+        [
+            "git",
+            "show",
+            f"{PRIOR_BASELINE_COMMIT}:scripts/validation/evidence_registry_baseline.json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=ROOT,
+    )
+    assert prior_proc.returncode == 0, prior_proc.stderr
+    prior_baseline = json.loads(prior_proc.stdout)
+    prior_files = set(prior_baseline["findings_by_path"])
+
+    # (2) The committed baseline must decompose as actual prior files + reviewed delta.
     prior_count = int(review["prior_baseline_files_with_findings"])
-    assert len(baseline_files) == prior_count + len(reviewed), (
-        "The committed baseline size does not match prior_boundary + reviewed delta; a new file "
-        "was added to the baseline without an explicit disposition in "
-        "evidence_registry_baseline_review.yaml. Add a reviewed_files entry naming the new "
-        "path and its remediate-or-baseline disposition, or refresh the prior boundary count."
+    assert len(prior_files) == prior_count
+    assert baseline_files - prior_files == reviewed, (
+        "The committed baseline contains a file not present in the anchored prior baseline "
+        "without an explicit disposition in evidence_registry_baseline_review.yaml. Add a "
+        "reviewed_files entry naming the new path and its remediate-or-baseline disposition."
     )
 
-    # (2) Every reviewed entry must still be in the baseline (review stays honest).
+    # (3) Every reviewed entry must still be in the baseline (review stays honest).
     stale_review = reviewed - baseline_files
     assert not stale_review, (
         "evidence_registry_baseline_review.yaml lists files no longer in the baseline: "
         f"{sorted(stale_review)}"
     )
 
-    # (3) Every reviewed entry must carry a valid disposition and list its codes.
+    # (4) Every reviewed entry must carry a valid disposition and list its codes.
     valid_dispositions = {"baseline", "remediate"}
     for entry in reviewed_entries:
         assert entry.get("disposition") in valid_dispositions, (

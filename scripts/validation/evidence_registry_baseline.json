@@ -1,5 +1,5 @@
 {
-  "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for the 359 legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml; remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction. Promote the gate from advisory to blocking by removing continue-on-error in the ratchet CI workflow once the policy has settled.",
+  "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml. Remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction; the blocking evidence-registry workflow enforces the ratchet on its configured paths.",
   "findings_by_path": {
     "docs/context/evidence/camera_ready_all_planners_2026-05-04/campaign/campaign_manifest.json": {
       "dangling_commit": 1,
@@ -323,7 +323,7 @@
       "missing_config_sha256": 1
     }
   },
-  "generated_at": "2026-07-17T09:12:56Z",
+  "generated_at": "2026-07-17T11:47:37Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {

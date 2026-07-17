@@ -17,7 +17,7 @@ decision_summary: >-
   (see scripts/validation/evidence_registry_baseline_review.yaml, issue #5952). The count
   justifications below were refreshed in #5952 and again in #5972 after one further evidence file
   (issue #5948 run_summary_reconstruction.yaml) and twelve other post-baseline files were reviewed
-  and added to the baseline; the committed baseline now reconciles with a clean main (409 findings).
+  and added to the baseline; the committed baseline now reconciles with a clean main (408 findings).
 excluded_codes:
   - code: duplicate_campaign_id
     status: review_cross_bundle_collision
@@ -43,7 +43,7 @@ excluded_codes:
   - code: dangling_commit
     status: historical_commit_unavailable
     justification: >-
-      Declared commits that are not reachable in this checkout (11 at the #5972 refresh).
+      Declared commits that are not reachable in this checkout (10 at the #5972 refresh).
       Requires recovery from a durable remote or archive. Never replace with the current commit.
   - code: config_missing_at_commit
     status: provenance_backfill_required

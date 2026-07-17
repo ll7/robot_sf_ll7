@@ -1,80 +1,134 @@
-# REVIEWED-BASELINE DISPOSITION COMPANION (issue #5952 / issue #5972)
+# Reviewed Baseline Disposition Companion (Issue #5952 / Issue #5972)
 schema_version: evidence_registry_baseline_review.v1
 claim_boundary: >-
-  Explicit per-file disposition for every evidence file added to the committed ratchet baseline
-  since the anchored prior baseline (commit 9fa96c01). The downward ratchet only prevents net-new
-  integrity drift if newly-baselined files are deliberate; this companion records that decision so
-  the invariant authored in tests/dev/test_evidence_registry_ratchet.py holds.
+  Per-file review record for the evidence-registry ratchet baseline refresh (Issues #5952 and
+  #5972). This is NOT an exclusion policy: the strict-CI code-level exclusion policy lives at
+  docs/context/evidence/evidence_registry_strict_ci_policy.yaml. This file records, for each
+  evidence file that gained findings after the #5275/#5317 baseline was first committed, the
+  explicit remediate-or-baseline disposition required by the issue Definition of Done. It exists
+  separately from scripts/validation/evidence_registry_baseline.json so that
+  evidence_registry_ratchet.py --write-baseline can regenerate the machine-counted baseline
+  without clobbering the human review.
+evidence_status: diagnostic-only
+approved_by: ll7
+approved_date: 2026-07-17
+source_issue: 5972
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
+prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-reviewed_disposition: baseline
-reviewed_disposition_rationale: >-
-  Every file listed below carries only finding codes that are already in the strict-CI exclusion
-  policy (docs/context/evidence/evidence_registry_strict_ci_policy.yaml): duplicate_campaign_id,
-  missing_config_path, missing_config_sha256, missing_commit, dangling_commit, config_missing_at_commit,
-  hash_without_artifact_path, uncommitted_artifact_missing_location, artifact_hash_mismatch. The
-  strict linter reports zero ACTIVE findings on a clean main, so no genuinely new integrity defect
-  type is grandfather into the baseline. These are legacy provenance/artifact gaps on evidence
-  bundles merged after the prior baseline was written, classified under the documented policy and
-  excluded from strict CI until backfilled.
+refreshed_baseline_total_findings: 408
+refreshed_baseline_files_with_findings: 86
+decision_summary: >-
+  Thirteen evidence files merged after the 2026-07-11 baseline introduced 49 findings across
+  eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
+  strict-linter finding was introduced (strict mode remains at zero active findings). Each file
+  was reviewed against its source to decide remediate-vs-baseline. All thirteen use the same
+  legacy-debt pattern as the original 359 findings: artifact provenance gaps
+  (external/private/untracked artifacts, ambiguous bare filenames) and campaign provenance gaps
+  (dangling historical commits, missing producing config). None is trivially remediable without
+  recovering external or historical provenance (durable remote commits, committed large
+  artifacts, or external private locations), which is out of scope for this refresh and explicitly
+  out of scope for Issue #5972 (deleting artifacts and suppressing new findings globally are
+  excluded; this is a targeted, reviewed baseline inclusion, not a global suppression).
+  Accordingly each file is dispositioned baseline below. A future maintainer who backfills
+  provenance for any of these files should refresh the baseline with --write-baseline to lock in
+  the reduction.
+disposition_legend:
+  baseline: >-
+    Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
+    downward ratchet gates on net-new findings only.
+  remediate: >-
+    Finding to be fixed in the evidence file itself; not applicable to this refresh because no
+    file admitted a trivial, in-repo repair.
 reviewed_files:
   - path: docs/context/evidence/issue_1496_oracle_trace_collection_job_13520/registration.json
+    codes: [hash_without_artifact_path]
     disposition: baseline
-    codes:
-      - hash_without_artifact_path
+    reason: >-
+      Dataset registered under private-artifact:// URI with a sha256 that cannot bind to a
+      committed artifact path; same artifact-provenance-backfill-required pattern as the legacy
+      77 hash_without_artifact_path findings. Recovering the private dataset location is external
+      maintainer action.
   - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/artifact_manifest.yaml
+    codes: [artifact_hash_mismatch, hash_without_artifact_path, uncommitted_artifact_missing_location]
     disposition: baseline
-    codes:
-      - artifact_hash_mismatch
-      - hash_without_artifact_path
-      - uncommitted_artifact_missing_location
+    reason: >-
+      Package-a transfer manifest. The single artifact_hash_mismatch is the bare filename
+      README.md, which the linter resolves repo-root-relative; the manifest intends the
+      manifest-directory README (whose hash matches), so this is an ambiguous-path provenance gap,
+      not a corrupted artifact. The uncommitted_artifact_missing_location rows are external
+      campaign store / untracked table artifacts; hash_without_artifact_path is the external
+      episode-store checksum. All are provenance-backfill legacy debt.
   - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/registration.json
+    codes: [hash_without_artifact_path]
     disposition: baseline
-    codes:
-      - hash_without_artifact_path
+    reason: >-
+      Source episode store referenced by private-campaign:// URI with a sha256 that cannot bind to
+      a committed repo path; artifact-provenance-backfill-required legacy debt.
   - path: docs/context/evidence/issue_4364_release_0_0_3_post1/artifact_pointer.json
+    codes: [hash_without_artifact_path]
     disposition: baseline
-    codes:
-      - hash_without_artifact_path
+    reason: >-
+      Release bundle and source bundle referenced by GitHub release download URLs with sha256
+      checksums that cannot bind to a committed repo path; external-release artifact provenance
+      backfill.
   - path: docs/context/evidence/issue_4365_job_13378_closeout/summary.json
+    codes: [dangling_commit, missing_config_path, missing_config_sha256]
     disposition: baseline
-    codes:
-      - dangling_commit
-      - missing_config_path
-      - missing_config_sha256
+    reason: >-
+      Job 13378 closeout diagnostic. The dangling_commit is the historical private-ops commit
+      4e4f22af (not reachable in this checkout); missing_config_* are campaign provenance
+      backfill. Requires durable remote/archive recovery, never the current commit.
   - path: docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_uncertainty_reissued.json
+    codes: [hash_without_artifact_path]
     disposition: baseline
-    codes:
-      - hash_without_artifact_path
+    reason: >-
+      Re-issued uncertainty block references durable input / weights / baseline blobs by sha256
+      without a single bindable committed artifact path; artifact-provenance-backfill-required
+      legacy debt.
   - path: docs/context/evidence/issue_5248_salvaged_h600_registration_2026-07/registration.json
+    codes: [uncommitted_artifact_missing_location]
     disposition: baseline
-    codes:
-      - uncommitted_artifact_missing_location
+    reason: >-
+      Registration receipt references reports/ artifacts (campaign_summary.json,
+      seed_episode_rows.csv) that are untracked and lack a durable location marker;
+      artifact-provenance-backfill-required legacy debt.
   - path: docs/context/evidence/issue_5305_certified_archive/acceptance_report.json
+    codes: [config_missing_at_commit]
     disposition: baseline
-    codes:
-      - config_missing_at_commit
+    reason: >-
+      Certified-archive acceptance report declares config_sha256 but the producing
+      campaign_config.json is absent at the declared commit; provenance-backfill-required legacy
+      debt (recover the producing config or commit with source evidence).
   - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_catalog.yaml
+    codes: [uncommitted_artifact_missing_location]
     disposition: baseline
-    codes:
-      - uncommitted_artifact_missing_location
+    reason: >-
+      Campaign atlas catalog references untracked atlas caption/provenance/summary/svg artifacts
+      and a /tmp inventory path; artifact-provenance-backfill-required legacy debt.
   - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_summary.json
+    codes: [missing_commit, missing_config_path, missing_config_sha256]
     disposition: baseline
-    codes:
-      - missing_commit
-      - missing_config_path
-      - missing_config_sha256
+    reason: >-
+      Campaign atlas summary record lacks the producing commit and producing config provenance;
+      provenance-backfill-required legacy debt.
   - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/ensemble_boundary_demo/campaign_atlas_catalog.yaml
+    codes: [uncommitted_artifact_missing_location]
     disposition: baseline
-    codes:
-      - uncommitted_artifact_missing_location
+    reason: >-
+      Ensemble boundary-demo atlas catalog references untracked atlas artifacts; same
+      artifact-provenance-backfill-required legacy debt as the parent atlas catalog.
   - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/candidate_trace_resolution.v1.with_store.json
+    codes: [missing_commit, missing_config_path, missing_config_sha256]
     disposition: baseline
-    codes:
-      - missing_commit
-      - missing_config_path
-      - missing_config_sha256
+    reason: >-
+      Candidate trace resolution record lacks the producing commit and producing config
+      provenance; provenance-backfill-required legacy debt.
   - path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml
+    codes: [hash_without_artifact_path]
     disposition: baseline
-    codes:
-      - hash_without_artifact_path
+    reason: >-
+      Issue #5948 run-summary reconstruction carries a checksum without an adjacent artifact path.
+      This is the legacy provenance gap identified by Issue #5972; repairing the external artifact
+      binding is outside this baseline reconciliation, so the finding is explicitly dispositioned
+      as baseline under the existing strict-CI policy.

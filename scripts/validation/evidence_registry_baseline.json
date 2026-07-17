@@ -290,7 +290,6 @@
       "hash_without_artifact_path": 6
     },
     "docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07/goal/classic_group_crossing_high_seed24_best/metadata.json": {
-      "dangling_commit": 1,
       "duplicate_campaign_id": 1,
       "missing_config_path": 1,
       "missing_config_sha256": 1
@@ -327,14 +326,14 @@
       "hash_without_artifact_path": 1
     }
   },
-  "generated_at": "2026-07-17T12:49:49Z",
+  "generated_at": "2026-07-17T13:22:07Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
       "artifact_hash_mismatch": 15,
       "config_missing_at_commit": 3,
-      "dangling_commit": 11,
+      "dangling_commit": 10,
       "duplicate_campaign_id": 6,
       "hash_without_artifact_path": 85,
       "invalid_sha256": 1,
@@ -344,6 +343,6 @@
       "uncommitted_artifact_missing_location": 158
     },
     "files_with_findings": 86,
-    "total_findings": 409
+    "total_findings": 408
   }
 }

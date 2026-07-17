@@ -382,9 +382,12 @@ def test_staged_eth_loader_returns_traversible_for_native_runner(tmp_path: Path)
         pickle.dump({"resolution": 0.05, "traversible": expected}, handle, protocol=2)
 
     resolution, traversible = socnavbench_eth.load_traversible(root)
+    shape = socnavbench_eth.load_shape_contract(root)
 
     assert resolution == 0.05
     np.testing.assert_array_equal(traversible, expected)
+    assert shape.resolution == 0.05
+    assert shape.traversible_shape == expected.shape
 
 
 def test_cli_canary_runner_emits_receipt_with_test_flag(tmp_path: Path) -> None:

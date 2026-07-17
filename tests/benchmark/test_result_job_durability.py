@@ -74,6 +74,32 @@ def test_private_safe_registry_pointer_is_durable_without_local_file() -> None:
     assert verdict.gate_results["durable_pointer"]
 
 
+@pytest.mark.parametrize("pointer_kind", ["registry_entry", "release_artifact"])
+def test_hydration_pointer_kind_requires_hydration_command(pointer_kind: str) -> None:
+    """A registry/release pointer must carry a hydration_command to be durable.
+
+    The schema description and gate doc state hydration_command is required for
+    registry_entry/release_artifact pointers (the artifact is reproduced by
+    hydrating from the durable pointer on a clean checkout). A manifest that
+    omits it must fail closed on the durable_pointer gate.
+    """
+
+    payload = _payload(PRIVATE_MANIFEST)
+    payload["analysis_input"]["pointer_kind"] = pointer_kind
+    del payload["analysis_input"]["hydration_command"]
+    verdict = result_job_durability_from_dict(payload, manifest_path=PRIVATE_MANIFEST)
+
+    assert not verdict.ok
+    assert verdict.gate_results["durable_pointer"] is False
+    matching = [
+        issue
+        for issue in verdict.issues
+        if issue.gate == "durable_pointer" and "hydration_command" in issue.path
+    ]
+    assert matching, f"expected a hydration_command issue, got {verdict.issues}"
+    assert all(issue.remedy for issue in matching)
+
+
 @pytest.mark.parametrize(
     ("mutate", "failed_gate", "fragment"),
     [

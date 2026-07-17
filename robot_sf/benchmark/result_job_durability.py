@@ -298,10 +298,15 @@ def _semantic_validation_issues(
     pointer_text = analysis_input.get("pointer")
     pointer_kind = analysis_input.get("pointer_kind")
     private_safe = bool(analysis_input.get("private_safe", False))
+    hydration_command = analysis_input.get("hydration_command")
 
     issues.extend(
         _probe_durable_pointer(
-            pointer_text, pointer_kind, private_safe, manifest_path=manifest_path
+            pointer_text,
+            pointer_kind,
+            private_safe,
+            hydration_command=hydration_command,
+            manifest_path=manifest_path,
         )
     )
 
@@ -323,6 +328,7 @@ def _probe_durable_pointer(
     pointer_kind: Any,
     private_safe: bool,
     *,
+    hydration_command: Any = None,
     manifest_path: Path,
 ) -> list[DurabilityIssue]:
     """Verify the analysis-input pointer is durable and resolvable.
@@ -352,8 +358,25 @@ def _probe_durable_pointer(
         return issues
 
     if pointer_kind in _HYDRATION_REQUIRED_POINTER_KINDS:
-        # A registry/release pointer is durable by reference; require a hydration
-        # command but do not insist the artifact is checked into the repository.
+        # A registry/release pointer is durable by reference; it must carry a
+        # hydration command so the artifact can be reproduced on a clean
+        # checkout (the schema and gate doc state this is required). The
+        # artifact itself is checksummed at hydration time, not from the tree.
+        if not isinstance(hydration_command, str) or not hydration_command.strip():
+            issues.append(
+                DurabilityIssue(
+                    gate="durable_pointer",
+                    path="/analysis_input/hydration_command",
+                    message=(
+                        f"{pointer_kind} pointer requires a hydration_command "
+                        "so the input can be reproduced on a clean checkout"
+                    ),
+                    remedy=(
+                        "add analysis_input.hydration_command that hydrates the "
+                        "artifact from the durable pointer into a local cache"
+                    ),
+                )
+            )
         return issues
 
     if pointer_kind == "tracked_path":

@@ -44,6 +44,28 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# Local mirror of the per-suite path-length-ratio metric IDs emitted by
+# ``robot_sf/benchmark/socnavbench_canary.py`` (ROBOT_SF_METRIC_ID / SOCNAVBENCH_METRIC_ID).
+#
+# This helper deliberately imports nothing from ``robot_sf`` so it stays a presence-only,
+# dependency-free readiness check (see module docstring). We therefore mirror the two code
+# constants here rather than importing them. ``_CANARY_METRIC_IDS_SYNC_GUARD`` records the
+# expected set so a test can fail closed if the upstream code constants drift away from this
+# mirror -- that keeps the two sources honest without an import coupling.
+CANARY_METRIC_ID_ROBOT_SF = "robot_sf.path_length_ratio.distance_over_displacement"
+CANARY_METRIC_ID_SOCNAVBENCH = "socnavbench.path_length_ratio.displacement_over_distance"
+# Canonical per-suite keys expected under canary_slice.per_suite_metric_ids.
+CANARY_PER_SUITE_KEYS = ("robot_sf", "socnavbench")
+# Expected ID per suite key; the validate_canary_slice cross-check compares the manifest against
+# these mirrored constants so a colliding/singular metric_id is rejected.
+CANARY_PER_SUITE_METRIC_IDS: dict[str, str] = {
+    "robot_sf": CANARY_METRIC_ID_ROBOT_SF,
+    "socnavbench": CANARY_METRIC_ID_SOCNAVBENCH,
+}
+# The set of metric IDs the code (socnavbench_canary.py) actually emits. Used by the test-side
+# sync guard to detect drift between this mirror and the source constants.
+_CANARY_METRIC_IDS_SYNC_GUARD: frozenset[str] = frozenset(CANARY_PER_SUITE_METRIC_IDS.values())
+
 # Prerequisite family lifecycle states, ordered by escalating readiness. A family is only
 # counted toward "prerequisites ready" when it is ``ready`` or explicitly ``waived``.
 FAMILY_STATES = ("blocked", "waived", "ready")
@@ -402,6 +424,7 @@ class CanarySliceReport:
     seed: int | None
     external_asset_id: str | None
     metric_id: str | None
+    per_suite_metric_ids: dict[str, str]
     limitation_flags: tuple[str, ...]
     errors: list[str]
 
@@ -422,6 +445,7 @@ class CanarySliceReport:
             "seed": self.seed,
             "external_asset_id": self.external_asset_id,
             "metric_id": self.metric_id,
+            "per_suite_metric_ids": dict(self.per_suite_metric_ids),
             "limitation_flags": list(self.limitation_flags),
             "errors": self.errors,
             "claim_boundary": (
@@ -448,6 +472,7 @@ def _canary_slice_missing_report(errors: list[str]) -> CanarySliceReport:
         seed=None,
         external_asset_id=None,
         metric_id=None,
+        per_suite_metric_ids={},
         limitation_flags=(),
         errors=errors,
     )
@@ -470,6 +495,88 @@ def _check_forbidden_tokens(slice_block: dict, errors: list[str]) -> None:
     for token in CANARY_SLICE_FORBIDDEN_TOKENS:
         if token in lowered:
             errors.append(f"canary_slice contains forbidden token {token!r}")
+
+
+def _parse_per_suite_metric_id_entry(
+    key: object,
+    value: object,
+    parsed: dict[str, str],
+    errors: list[str],
+) -> None:
+    """Validate one per-suite metric id entry and append it to ``parsed`` when well-formed."""
+    if not isinstance(key, str) or not str(key).strip():
+        errors.append("canary_slice.per_suite_metric_ids keys must be non-empty strings")
+        return
+    if not isinstance(value, str) or not value.strip():
+        errors.append(f"canary_slice.per_suite_metric_ids.{key} must be a concrete metric id")
+        return
+    parsed[key] = value
+
+
+def _validate_per_suite_metric_ids(
+    slice_block: dict,
+) -> tuple[dict[str, str], list[str]]:
+    """Cross-check the manifest's per-suite metric IDs against the code constants.
+
+    The canary emits two distinct, reciprocal path-length-ratio metric IDs -- one per suite --
+    recorded in the receipt under ``per_suite_metric_specs``. A singular ``metric_id`` (the old
+    colliding ``socnavbench.path_length_ratio`` value) captures only one half and silently
+    equates reciprocal definitions, so this fails closed unless ``per_suite_metric_ids`` pins
+    every expected suite key to exactly the mirrored code constant.
+
+    The code constants are mirrored locally (``CANARY_PER_SUITE_METRIC_IDS``) so this helper
+    keeps its deliberate no-``robot_sf``-import contract; the mirror is guarded by a test against
+    the source constants in ``socnavbench_canary.py`` so the two cannot drift.
+
+    Returns:
+        ``(per_suite_metric_ids, errors)`` where ``per_suite_metric_ids`` is the manifest mapping
+        (or ``{}`` when absent/malformed) and ``errors`` lists every cross-check failure.
+    """
+    errors: list[str] = []
+    raw = slice_block.get("per_suite_metric_ids")
+
+    # Reject the legacy singular colliding id so a silent half-capture cannot creep back in,
+    # regardless of whether per_suite_metric_ids is also present.
+    if "metric_id" in slice_block:
+        errors.append(
+            "canary_slice.metric_id is legacy/singular; use per_suite_metric_ids with both "
+            "suite IDs instead"
+        )
+
+    if not isinstance(raw, dict) or not raw:
+        errors.append(
+            "canary_slice.per_suite_metric_ids must map each suite key to its metric id "
+            "(robot_sf, socnavbench)"
+        )
+        return {}, errors
+
+    parsed: dict[str, str] = {}
+    for key, value in raw.items():
+        _parse_per_suite_metric_id_entry(key, value, parsed, errors)
+
+    # Every expected suite key must be present and pinned to the exact mirrored code constant.
+    for expected_key in CANARY_PER_SUITE_KEYS:
+        if expected_key not in parsed:
+            errors.append(f"canary_slice.per_suite_metric_ids missing suite key {expected_key!r}")
+            continue
+        expected_id = CANARY_PER_SUITE_METRIC_IDS[expected_key]
+        if parsed[expected_key] != expected_id:
+            errors.append(
+                f"canary_slice.per_suite_metric_ids.{expected_key} must be {expected_id!r}, "
+                f"got {parsed[expected_key]!r}"
+            )
+
+    # No unexpected suite keys and no colliding ids between the two suites.
+    unexpected = set(parsed) - set(CANARY_PER_SUITE_KEYS)
+    if unexpected:
+        errors.append(
+            "canary_slice.per_suite_metric_ids unexpected keys: " + ", ".join(sorted(unexpected))
+        )
+    values = set(parsed.values())
+    if len(values) != len(parsed):
+        errors.append("canary_slice.per_suite_metric_ids must use distinct metric ids per suite")
+
+    return parsed, errors
 
 
 def validate_canary_slice(
@@ -538,7 +645,8 @@ def validate_canary_slice(
         errors.append("canary_slice.scenario_mapping.seed must be an integer")
 
     metric_id = slice_block.get("metric_id")
-    _check_concrete_fields(slice_block, (("metric_id", metric_id),), errors)
+    per_suite_metric_ids, metric_errs = _validate_per_suite_metric_ids(slice_block)
+    errors.extend(metric_errs)
 
     raw_limitation_flags = mapping.get("limitation_flags") or slice_block.get("limitation_flags")
     if not isinstance(raw_limitation_flags, list) or not raw_limitation_flags:
@@ -565,6 +673,7 @@ def validate_canary_slice(
         seed=seed if isinstance(seed, int) and not isinstance(seed, bool) else None,
         external_asset_id=external_asset_id if isinstance(external_asset_id, str) else None,
         metric_id=metric_id if isinstance(metric_id, str) else None,
+        per_suite_metric_ids=per_suite_metric_ids,
         limitation_flags=limitation_flags,
         errors=errors,
     )

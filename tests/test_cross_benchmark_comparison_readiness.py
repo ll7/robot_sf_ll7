@@ -13,6 +13,9 @@ import pytest
 
 from scripts.tools.cross_benchmark_comparison_readiness import (
     CAMPAIGN_MANIFEST_PATH,
+    CANARY_METRIC_ID_ROBOT_SF,
+    CANARY_METRIC_ID_SOCNAVBENCH,
+    CANARY_PER_SUITE_METRIC_IDS,
     CANARY_SLICE_FORBIDDEN_TOKENS,
     LIMITATIONS_TEMPLATE_PATH,
     PREREQUISITE_FAMILIES,
@@ -268,8 +271,11 @@ def test_real_canary_slice_is_concrete_and_authorized() -> None:
     assert report.socnavbench_scenario_id
     assert isinstance(report.seed, int)
     assert report.external_asset_id
-    assert report.metric_id
     assert report.limitation_flags
+    assert report.per_suite_metric_ids == {
+        "robot_sf": CANARY_METRIC_ID_ROBOT_SF,
+        "socnavbench": CANARY_METRIC_ID_SOCNAVBENCH,
+    }
     assert report.errors == []
 
 
@@ -358,3 +364,81 @@ def test_canary_slice_forbidden_tokens_cover_known_placeholders() -> None:
     """Guard against drift: the forbidden-token set covers the standing placeholder markers."""
     for token in ("tbd", "blocked_prerequisite", "to_be_selected"):
         assert token in CANARY_SLICE_FORBIDDEN_TOKENS
+
+
+def test_per_suite_metric_ids_mirror_code_constants() -> None:
+    """The readiness helper mirrors the code metric IDs exactly (no import coupling).
+
+    The canary code in ``robot_sf/benchmark/socnavbench_canary.py`` is the source of truth for the
+    two per-suite IDs; this readiness helper mirrors them locally so it stays import-free. If the
+    code constants change, this test fails closed so the two cannot silently drift apart.
+    """
+    from robot_sf.benchmark.socnavbench_canary import (
+        ROBOT_SF_METRIC_ID,
+        SOCNAVBENCH_METRIC_ID,
+    )
+
+    assert CANARY_METRIC_ID_ROBOT_SF == ROBOT_SF_METRIC_ID
+    assert CANARY_METRIC_ID_SOCNAVBENCH == SOCNAVBENCH_METRIC_ID
+    assert CANARY_PER_SUITE_METRIC_IDS == {
+        "robot_sf": ROBOT_SF_METRIC_ID,
+        "socnavbench": SOCNAVBENCH_METRIC_ID,
+    }
+
+
+def test_canary_slice_rejects_legacy_singular_metric_id(tmp_path: Path) -> None:
+    """The old colliding singular metric_id must fail closed, not capture one half silently."""
+    source = CAMPAIGN_MANIFEST_PATH
+    target = tmp_path / source.name
+    text = source.read_text(encoding="utf-8")
+    text = text.replace(
+        "  per_suite_metric_ids:\n"
+        "    robot_sf: robot_sf.path_length_ratio.distance_over_displacement\n"
+        "    socnavbench: socnavbench.path_length_ratio.displacement_over_distance\n",
+        "  metric_id: socnavbench.path_length_ratio\n",
+    )
+    target.write_text(text, encoding="utf-8")
+    report = validate_canary_slice(target)
+    assert report.ok is False
+    assert any("per_suite_metric_ids" in err for err in report.errors)
+    assert any("legacy/singular" in err for err in report.errors)
+
+
+def test_canary_slice_rejects_colliding_per_suite_id(tmp_path: Path) -> None:
+    """A per-suite id that does not match the code constant must fail closed."""
+    source = CAMPAIGN_MANIFEST_PATH
+    target = tmp_path / source.name
+    text = source.read_text(encoding="utf-8").replace(
+        "socnavbench.path_length_ratio.displacement_over_distance",
+        "socnavbench.path_length_ratio",  # the old colliding singular id
+    )
+    target.write_text(text, encoding="utf-8")
+    report = validate_canary_slice(target)
+    assert report.ok is False
+    assert any("displacement_over_distance" in err for err in report.errors)
+
+
+def test_canary_slice_rejects_missing_per_suite_suite_key(tmp_path: Path) -> None:
+    """Dropping one suite key (e.g. robot_sf) must fail closed."""
+    source = CAMPAIGN_MANIFEST_PATH
+    target = tmp_path / source.name
+    text = source.read_text(encoding="utf-8")
+    text = text.replace("    robot_sf: robot_sf.path_length_ratio.distance_over_displacement\n", "")
+    target.write_text(text, encoding="utf-8")
+    report = validate_canary_slice(target)
+    assert report.ok is False
+    assert any("missing suite key" in err for err in report.errors)
+
+
+def test_canary_slice_rejects_duplicate_per_suite_ids(tmp_path: Path) -> None:
+    """Both suites must use distinct metric ids; equating reciprocal definitions is a bug."""
+    source = CAMPAIGN_MANIFEST_PATH
+    target = tmp_path / source.name
+    text = source.read_text(encoding="utf-8").replace(
+        "    socnavbench: socnavbench.path_length_ratio.displacement_over_distance",
+        "    socnavbench: robot_sf.path_length_ratio.distance_over_displacement",
+    )
+    target.write_text(text, encoding="utf-8")
+    report = validate_canary_slice(target)
+    assert report.ok is False
+    assert any("distinct metric ids" in err for err in report.errors)

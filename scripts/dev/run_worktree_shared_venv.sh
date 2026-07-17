@@ -168,7 +168,7 @@ fi
 export UV_PROJECT_ENVIRONMENT="$venv_path"
 export UV_NO_SYNC=1
 if [[ -z "$standalone" ]]; then
-  export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
+  export PYTHONPATH="$repo_root/fast-pysf:$repo_root${PYTHONPATH:+:$PYTHONPATH}"
 fi
 
 if [[ -z "${COVERAGE_FILE:-}" && "$git_common_dir" != "$repo_root/.git" ]]; then

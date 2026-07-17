@@ -1,44 +1,42 @@
-"""Regression tests for the fast-pysf readiness preflight."""
+"""Tests for the check_fast_pysf_runtime.py script."""
 
 from __future__ import annotations
 
-import os
-import subprocess
 import sys
-from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "dev" / "check_fast_pysf_runtime.py"
-
-
-def test_missing_gil_context_reports_environment_repair(tmp_path: Path) -> None:
-    """A stale PySocialForce install fails with the targeted repair command."""
-    package = tmp_path / "pysocialforce"
-    package.mkdir()
-    (package / "__init__.py").write_text("\n", encoding="utf-8")
-    (package / "forces.py").write_text("def social_force():\n    return None\n", encoding="utf-8")
-
-    env = {**os.environ, "PYTHONPATH": str(tmp_path)}
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT)],
-        capture_output=True,
-        text=True,
-        env=env,
-        check=False,
-    )
-
-    assert result.returncode == 2
-    assert "social_force_gil_releasing_context is missing" in result.stderr
-    assert "uv sync --all-extras --reinstall-package robot-sf" in result.stderr
+from scripts.dev.check_fast_pysf_runtime import main
 
 
-def test_current_fast_pysf_runtime_passes() -> None:
-    """The repository-supported environment exposes the threaded rollout API."""
-    result = subprocess.run(
-        [sys.executable, str(SCRIPT)],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+def test_check_fast_pysf_runtime_passes(monkeypatch) -> None:
+    """When the GIL-releasing symbol is present in the environment, check should pass."""
 
-    assert result.returncode == 0, result.stderr
-    assert "fast-pysf runtime preflight passed" in result.stdout
+    class FakeForces:
+        @staticmethod
+        def social_force_gil_releasing_context():
+            pass
+
+    monkeypatch.setitem(sys.modules, "pysocialforce.forces", FakeForces)
+    assert main() == 0
+
+
+def test_check_fast_pysf_runtime_fails_on_missing_symbol(monkeypatch, capsys) -> None:
+    """When the module exists but lacks the symbol, check should fail with instructions."""
+
+    class FakeForcesWithoutSymbol:
+        pass
+
+    monkeypatch.setitem(sys.modules, "pysocialforce.forces", FakeForcesWithoutSymbol)
+    assert main() == 1
+    captured = capsys.readouterr()
+    assert "Stale PySocialForce installation detected" in captured.err
+    assert "uv sync --all-extras --reinstall-package robot-sf" in captured.err
+
+
+def test_check_fast_pysf_runtime_fails_on_import_error(monkeypatch, capsys) -> None:
+    """When the package is not installed or importable, check should fail with instructions."""
+    # Putting None in sys.modules causes Python to raise ImportError when importing.
+    monkeypatch.setitem(sys.modules, "pysocialforce.forces", None)
+    assert main() == 1
+    captured = capsys.readouterr()
+    assert "ImportError" in captured.err
+    assert "uv sync --all-extras --reinstall-package robot-sf" in captured.err

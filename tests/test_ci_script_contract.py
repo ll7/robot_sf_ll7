@@ -775,7 +775,10 @@ def test_worktree_shared_venv_helper_pins_current_checkout_imports() -> None:
     assert 'venv_path="${venv_override:-$main_repo_root/.venv}"' in script_text
     assert 'export UV_PROJECT_ENVIRONMENT="$venv_path"' in script_text
     assert "export UV_NO_SYNC=1" in script_text
-    assert 'export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"' in script_text
+    assert (
+        'export PYTHONPATH="$repo_root/fast-pysf:$repo_root${PYTHONPATH:+:$PYTHONPATH}"'
+        in script_text
+    )
     assert 'exec uv run "${cmd[@]}"' in script_text
 
 

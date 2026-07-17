@@ -129,16 +129,17 @@ def _gh_with_retry(
         stderr = (result.stderr or "").lower()
         stdout = (result.stdout or "").lower()
         combined = f"{stderr} {stdout}"
-        if "not found" in combined or "404" in combined:
+        if not _is_transient_gh_failure(result):
+            if "not found" in combined or "404" in combined:
+                kind = "not_found"
+            elif "authentication" in combined or "unauthorized" in combined or "401" in combined:
+                kind = "auth"
+            else:
+                kind = "permanent"
             raise _PermanentApiError(
-                f"GitHub API not found for {args[0]}: {result.stderr.strip() or result.stdout.strip()}",
-                kind="not_found",
-            )
-        if "authentication" in combined or "unauthorized" in combined or "401" in combined:
-            raise _PermanentApiError(
-                f"GitHub API authentication failed for {args[0]}: "
+                f"GitHub API permanent failure for {args[0]}: "
                 f"{result.stderr.strip() or result.stdout.strip()}",
-                kind="auth",
+                kind=kind,
             )
 
         last_error = subprocess.CalledProcessError(

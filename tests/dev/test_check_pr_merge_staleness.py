@@ -537,17 +537,29 @@ def test_gh_with_retry_succeeds_after_transient_failure() -> None:
     assert mock_sleep.call_count == 1
 
 
-def test_gh_with_retry_permanent_failure_raises_immediately() -> None:
-    """A permanent (auth/not-found) failure raises without any retry sleep."""
+@pytest.mark.parametrize(
+    ("stderr", "expected_kind"),
+    [
+        ("HTTP 404 Not Found", "not_found"),
+        ("graphql: Could not resolve to a Repository", "permanent"),
+        ("HTTP 403 Forbidden", "permanent"),
+        ("HTTP 401 Unauthorized", "auth"),
+    ],
+)
+def test_gh_with_retry_permanent_failure_raises_immediately(
+    stderr: str, expected_kind: str
+) -> None:
+    """Permanent failures raise without any retry sleep."""
     with (
         patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
         patch("scripts.dev.check_pr_merge_staleness.time.sleep") as mock_sleep,
     ):
-        mock_gh.return_value = _gh_response(returncode=1, stderr="HTTP 404 Not Found")
+        mock_gh.return_value = _gh_response(returncode=1, stderr=stderr)
         with pytest.raises(_PermanentApiError) as excinfo:
             _gh_with_retry(["api", "repos/o/r/git/refs/heads/main"])
 
-    assert excinfo.value.kind == "not_found"
+    assert excinfo.value.kind == expected_kind
+    assert mock_gh.call_count == 1
     assert mock_sleep.call_count == 0
 
 

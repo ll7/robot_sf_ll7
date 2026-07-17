@@ -4,6 +4,19 @@
 The default mode is intentionally non-blocking so existing provenance gaps can be
 measured before this checker becomes a CI gate. Use ``--strict`` to make findings
 fail the command.
+
+Artifact path contract (issue #5966)
+------------------------------------
+Artifact ``path`` / ``filename`` entries in evidence manifests are resolved
+**bundle-relative first, then repository-relative**. A bare ``README.md`` in a
+bundle manifest therefore describes the bundle-local ``README.md`` (a sibling of
+the manifest), not the repository-root ``README.md``. Resolution prefers a
+candidate that lands on a tracked file inside the repository; when none is tracked
+it falls back to the first in-repository candidate so the existing "uncommitted /
+missing location" findings still fire. This keeps the integrity contract
+fail-closed: a tracked bundle-local artifact whose bytes do not match the declared
+SHA-256 is still reported as ``artifact_hash_mismatch``. URLs, ``urn:`` values,
+absolute paths, and paths that escape the repository root are rejected.
 """
 
 from __future__ import annotations
@@ -107,16 +120,43 @@ def _is_tracked(repo_root: Path, repo_path: str) -> bool:
     return _git_succeeds(repo_root, "ls-files", "--error-unmatch", "--", repo_path)
 
 
-def _resolve_repo_path(repo_root: Path, value: str) -> tuple[str, Path] | None:
-    """Normalize a repository-relative artifact path, rejecting URLs and escapes."""
+def _resolve_repo_path(
+    repo_root: Path, value: str, bundle_dir: Path | None = None
+) -> tuple[str, Path] | None:
+    """Normalize an artifact path to a repository-relative tracked path.
+
+    Evidence manifests may declare artifact ``path``/``filename`` entries either
+    repository-relative (from the repository root) or bundle-relative (from the
+    owning evidence file's directory). See issue #5966: a bare ``README.md`` in a
+    bundle manifest describes the bundle-local file, not the repository-root
+    ``README.md``. When ``bundle_dir`` is provided, a bundle-relative resolution
+    that lands on a tracked file inside the repository is preferred; otherwise the
+    resolution falls back to repository-root-relative for backward compatibility.
+    Absolute paths and paths that escape the repository root are rejected.
+    """
     if "://" in value or value.startswith("urn:"):
         return None
-    candidate = (repo_root / value).resolve()
-    try:
-        normalized = candidate.relative_to(repo_root.resolve())
-    except ValueError:
+    resolved_root = repo_root.resolve()
+    bases: list[Path] = []
+    if bundle_dir is not None and not Path(value).is_absolute():
+        bases.append(bundle_dir)
+    bases.append(repo_root)
+    normalized_candidates: list[tuple[str, Path]] = []
+    for base in bases:
+        candidate = (base / value).resolve()
+        try:
+            normalized = candidate.relative_to(resolved_root)
+        except ValueError:
+            continue
+        entry = (normalized.as_posix(), candidate)
+        if entry not in normalized_candidates:
+            normalized_candidates.append(entry)
+    if not normalized_candidates:
         return None
-    return normalized.as_posix(), candidate
+    for entry in normalized_candidates:
+        if _is_tracked(repo_root, entry[0]):
+            return entry
+    return normalized_candidates[0]
 
 
 def _load_document(path: Path) -> Any:
@@ -296,6 +336,7 @@ def _artifact_hash_finding(
     declared_hash: str,
     mapping: Mapping[str, Any],
     ancestors: tuple[Mapping[str, Any], ...],
+    bundle_dir: Path | None = None,
 ) -> dict[str, str] | None:
     """Check one artifact hash declaration, returning its finding when invalid."""
     if not SHA256_RE.fullmatch(declared_hash):
@@ -305,7 +346,7 @@ def _artifact_hash_finding(
         return _issue(
             display_path, "hash_without_artifact_path", f"{key} lacks an adjacent artifact path"
         )
-    resolved = _resolve_repo_path(repo_root, artifact_path)
+    resolved = _resolve_repo_path(repo_root, artifact_path, bundle_dir)
     if resolved is None or not _is_tracked(repo_root, resolved[0]):
         if not _has_location(mapping, ancestors):
             return _issue(
@@ -324,7 +365,9 @@ def _artifact_hash_finding(
     return None
 
 
-def _artifact_findings(repo_root: Path, display_path: Path, value: Any) -> list[dict[str, str]]:
+def _artifact_findings(
+    repo_root: Path, display_path: Path, value: Any, bundle_dir: Path | None = None
+) -> list[dict[str, str]]:
     """Validate artifact checksum declarations against tracked artifact paths."""
     if isinstance(value, str):
         return []
@@ -336,7 +379,7 @@ def _artifact_findings(repo_root: Path, display_path: Path, value: Any) -> list[
             if not isinstance(declared_hash, str):
                 continue
             finding = _artifact_hash_finding(
-                repo_root, display_path, key, declared_hash, mapping, ancestors
+                repo_root, display_path, key, declared_hash, mapping, ancestors, bundle_dir
             )
             if finding:
                 findings.append(finding)
@@ -427,7 +470,7 @@ def _lint_document(repo_root: Path, path: Path) -> _DocumentRecord:
         )
     campaign_ids = _campaign_ids(value)
     config_paths, config_hashes, commits = _file_metadata(value)
-    local_findings = _artifact_findings(repo_root, display_path, value)
+    local_findings = _artifact_findings(repo_root, display_path, value, path.parent)
     local_findings.extend(_synthetic_commit_findings(display_path, value))
     return _DocumentRecord(
         path,

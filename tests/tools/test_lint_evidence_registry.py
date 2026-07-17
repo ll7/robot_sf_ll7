@@ -551,3 +551,72 @@ def test_missing_placeholder_passes_synthetic_check(tmp_path: Path) -> None:
 
     synthetic = [i for i in report["issues"] if i["code"] == "synthetic_commit"]
     assert synthetic == []
+
+
+def _write_bundle_manifest(
+    evidence: Path,
+    *,
+    bundle_name: str,
+    artifact_name: str,
+    artifact_bytes: bytes,
+    declared_sha256: str,
+) -> Path:
+    """Create a bundle with a manifest that declares a bundle-relative artifact path."""
+    bundle = evidence / bundle_name
+    bundle.mkdir(parents=True)
+    (bundle / artifact_name).write_bytes(artifact_bytes)
+    manifest = {"files": [{"path": artifact_name, "sha256": declared_sha256}]}
+    manifest_path = bundle / "artifact_manifest.yaml"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest_path
+
+
+def test_bundle_relative_artifact_path_matches_bundle_local_file(tmp_path: Path) -> None:
+    """A bare manifest filename resolves against its own bundle, not the repo root.
+
+    Regression for issue #5966: a bundle-local ``README.md`` whose declared SHA-256
+    matches the bundle file must not report ``artifact_hash_mismatch`` merely because
+    a differently-hashed repository-root ``README.md`` exists.
+    """
+    linter = _load_linter()
+    repo, evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    root_readme = repo / "README.md"
+    root_readme.write_text("# root readme\n", encoding="utf-8")
+    bundle_readme_bytes = b"# bundle-local readme\n"
+    _write_bundle_manifest(
+        evidence,
+        bundle_name="issue_5966_bundle",
+        artifact_name="README.md",
+        artifact_bytes=bundle_readme_bytes,
+        declared_sha256=hashlib.sha256(bundle_readme_bytes).hexdigest(),
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "bundle-relative fixture")
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert [i for i in report["issues"] if i["code"] == "artifact_hash_mismatch"] == []
+
+
+def test_bundle_relative_artifact_hash_still_fails_closed_on_mismatch(tmp_path: Path) -> None:
+    """A tracked bundle-local artifact whose bytes differ from the declared hash fails.
+
+    Regression for issue #5966: making paths bundle-relative must not weaken the
+    integrity contract. A genuinely mismatched tracked artifact still reports
+    ``artifact_hash_mismatch``.
+    """
+    linter = _load_linter()
+    repo, evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    _write_bundle_manifest(
+        evidence,
+        bundle_name="issue_5966_mismatch_bundle",
+        artifact_name="summary.json",
+        artifact_bytes=b'{"result": "actual"}\n',
+        declared_sha256="0" * 64,
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "bundle-relative mismatch fixture")
+
+    report = linter.lint_evidence_registry(repo, evidence)
+
+    assert [i for i in report["issues"] if i["code"] == "artifact_hash_mismatch"]

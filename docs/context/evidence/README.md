@@ -68,6 +68,21 @@ Each bundle writes:
 
 The schema contract lives at `robot_sf/benchmark/schemas/evidence_bundle.v1.json`.
 
+### Artifact path resolution contract (issue #5966)
+
+Artifact `path` / `filename` entries in evidence manifests (for example
+`artifact_manifest.yaml`, `checksums.sha256`, and `*_inventory.json`) are resolved
+**bundle-relative first, then repository-relative** by
+`scripts/tools/lint_evidence_registry.py`. A bare `README.md` in a bundle manifest
+therefore refers to the bundle-local `README.md` next to the manifest, not the
+repository-root `README.md`. Resolution prefers the candidate that lands on a
+tracked file inside the repository, and falls back to repository-relative when no
+bundle-relative tracked file exists. The integrity check stays fail-closed: a
+tracked bundle-local artifact whose bytes do not match its declared SHA-256 is
+reported as `artifact_hash_mismatch`. Prefer bundle-relative bare filenames for
+self-contained bundles; use repository-relative paths only when a manifest
+intentionally references a file outside its own bundle.
+
 For large artifacts that should remain outside git, the same command supports opt-in mirror
 metadata:
 

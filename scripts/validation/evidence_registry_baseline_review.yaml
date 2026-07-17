@@ -16,8 +16,8 @@ source_issue: 5952
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 407
-refreshed_baseline_files_with_findings: 85
+refreshed_baseline_total_findings: 342
+refreshed_baseline_files_with_findings: 83
 decision_summary: >-
   Twelve evidence files merged after the 2026-07-11 baseline introduced 48 findings across eight
   codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -32,6 +32,17 @@ decision_summary: >-
   baseline inclusion, not a global suppression). Accordingly each file is dispositioned `baseline`
   below. A future maintainer who backfills provenance for any of these files should refresh the
   baseline with `--write-baseline` to lock in the reduction.
+  Issue #5966 refresh (2026-07-17): the linter now resolves manifest artifact paths
+  bundle-relative first (see docs/context/evidence/README.md), which removed the ambiguous
+  bare-filename findings (notably the #3078 artifact_manifest.yaml artifact_hash_mismatch and
+  uncommitted_artifact_missing_location rows) and correctly surfaced genuine tracked-artifact
+  mismatches that were previously masked as missing-location findings (issue_3653
+  artifact_inventory.json 1->3 and packet.json 1->2 artifact_hash_mismatch). Net effect: the
+  baseline dropped from 407 findings across 85 files to 342 findings across 83 files. The refresh
+  also re-ran the linter after the #5952 boundary and incidentally absorbed two pre-existing
+  post-#5952 findings (issue_5948 run_summary_reconstruction.yaml hash_without_artifact_path and an
+  issue_4848 metadata.json dangling_commit) that were already failing the live ratchet on main; both
+  are documented (issue_5948 in reviewed_files below) and are not caused by the #5966 change.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -49,15 +60,17 @@ reviewed_files:
       77 hash_without_artifact_path findings. Recovering the private dataset location is external
       maintainer action.
   - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/artifact_manifest.yaml
-    codes: [artifact_hash_mismatch, hash_without_artifact_path, uncommitted_artifact_missing_location]
+    codes: [hash_without_artifact_path]
     disposition: baseline
     reason: >-
-      Package-a transfer manifest. The single artifact_hash_mismatch is the bare filename
-      `README.md`, which the linter resolves repo-root-relative; the manifest intends the
-      manifest-directory README (whose hash matches), so this is an ambiguous-path provenance gap,
-      not a corrupted artifact. The uncommitted_artifact_missing_location rows are external
-      campaign store / untracked table artifacts; hash_without_artifact_path is the external
-      episode-store checksum. All are provenance-backfill legacy debt.
+      Package-a transfer manifest. Issue #5966 resolved the bare-filename path ambiguity: the
+      linter now resolves manifest artifact paths bundle-relative first, so `README.md`,
+      `baseline_table.csv`, and the other bundle-local files bind to the tracked manifest-directory
+      files whose hashes match. This cleared the prior artifact_hash_mismatch (1) and
+      uncommitted_artifact_missing_location (13) findings for this manifest. The remaining
+      hash_without_artifact_path is the external `source_episode_store` checksum
+      (private-campaign:// URI with no committed artifact path); artifact-provenance-backfill-required
+      legacy debt.
   - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/registration.json
     codes: [hash_without_artifact_path]
     disposition: baseline
@@ -123,3 +136,12 @@ reviewed_files:
     reason: >-
       Candidate trace resolution record lacks the producing commit and producing config
       provenance; provenance-backfill-required legacy debt.
+  - path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Doorway butterfly trace re-export provenance record (merged in PR #5954 after the #5952
+      baseline refresh). It declares a reconstructed run-summary sha256 with no bindable committed
+      artifact path; artifact-provenance-backfill-required legacy debt. Surfaced here because the
+      issue #5966 baseline refresh re-ran the linter after the #5952 boundary; not introduced by
+      the #5966 path-contract change.

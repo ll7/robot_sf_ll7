@@ -561,7 +561,12 @@ def _resolve_campaign_planner_batch_result(
             resume_verdict.episodes_found,
             resume_verdict.expected_total,
         )
-        summary = dict(resume_verdict.prior_summary or {})
+        if not isinstance(resume_verdict.prior_summary, dict):
+            raise ValueError(
+                "completed resume arm requires a JSON-object summary.json: "
+                f"{run.planner_dir / 'summary.json'}"
+            )
+        summary = dict(resume_verdict.prior_summary)
         summary.setdefault("total_jobs", resume_verdict.expected_total)
         summary.setdefault("written", resume_verdict.episodes_found)
         summary.setdefault("failed_jobs", 0)

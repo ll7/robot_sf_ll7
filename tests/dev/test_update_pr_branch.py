@@ -76,7 +76,7 @@ def test_main_json_reports_guard_failure(capsys) -> None:  # type: ignore[no-unt
 
 
 def test_gate_worktree_missing_fails_closed_before_update(capsys) -> None:  # type: ignore[no-untyped-def]
-    """A missing gate worktree must fail closed before any branch update request."""
+    """A missing, unrecoverable gate worktree must fail closed before any branch update request."""
     missing_health = {
         "exists": False,
         "classification": "missing",
@@ -84,10 +84,12 @@ def test_gate_worktree_missing_fails_closed_before_update(capsys) -> None:  # ty
         "lease_owner": "auto-smart-routing",
         "lease_pr_number": 5819,
         "lease_gate_id": "gate-5819",
+        "recreated": False,
+        "recreate_error": "worktree missing and no live lease on record; cannot recreate safely",
     }
     with patch(
-        "scripts.dev.update_pr_branch._verify_gate_worktree", return_value=missing_health
-    ) as mock_verify:
+        "scripts.dev.update_pr_branch._ensure_gate_worktree", return_value=missing_health
+    ) as mock_ensure:
         rc = main(
             [
                 "5819",
@@ -102,18 +104,63 @@ def test_gate_worktree_missing_fails_closed_before_update(capsys) -> None:  # ty
         )
 
     assert rc == 1
-    mock_verify.assert_called_once_with("/abs/missing-wt")
+    mock_ensure.assert_called_once_with("/abs/missing-wt", ttl_hours=None)
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "gate_worktree_missing"
     assert payload["updated"] is False
     assert "5819" in (payload["gate_worktree_health"]["cleanup_owner"] or "")
 
 
+def test_gate_worktree_recreated_then_updates(capsys) -> None:  # type: ignore[no-untyped-def]
+    """A missing worktree recreated from its lease lets the guarded update proceed."""
+    recreated_health = {
+        "exists": True,
+        "classification": "healthy",
+        "cleanup_owner": None,
+        "recreated": True,
+        "recreate_error": None,
+    }
+    with (
+        patch("scripts.dev.update_pr_branch._ensure_gate_worktree", return_value=recreated_health),
+        patch("scripts.dev.update_pr_branch._gh") as mock_gh,
+    ):
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps({"head": {"sha": "head_sha"}})),
+            _gh_response(stdout=json.dumps({"message": "queued"})),
+        ]
+        rc = main(
+            [
+                "5819",
+                "--repo",
+                "owner/repo",
+                "--expected-head-sha",
+                "head_sha",
+                "--gate-worktree-path",
+                "/abs/recreated-wt",
+                "--gate-worktree-ttl-hours",
+                "4",
+                "--json",
+            ]
+        )
+
+    assert rc == 0
+    assert mock_gh.call_count == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "update_requested"
+    assert payload["updated"] is True
+
+
 def test_gate_worktree_present_allows_update(capsys) -> None:  # type: ignore[no-untyped-def]
     """A present gate worktree lets the normal guarded update proceed."""
-    present_health = {"exists": True, "classification": "healthy", "cleanup_owner": None}
+    present_health = {
+        "exists": True,
+        "classification": "healthy",
+        "cleanup_owner": None,
+        "recreated": False,
+        "recreate_error": None,
+    }
     with (
-        patch("scripts.dev.update_pr_branch._verify_gate_worktree", return_value=present_health),
+        patch("scripts.dev.update_pr_branch._ensure_gate_worktree", return_value=present_health),
         patch("scripts.dev.update_pr_branch._gh") as mock_gh,
     ):
         mock_gh.side_effect = [

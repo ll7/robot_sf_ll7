@@ -24,11 +24,14 @@
 #     --remote <name>           remote to fetch/push (default: origin)
 #     --no-local-fallback       fail instead of falling back to local rebase/push
 #     --dry-run                 verify and print the plan without mutating
+#     --gate-worktree-path      registered gate worktree path; a vanished worktree
+#                               fails closed before any branch-switch/conflict op
 #     --json                    emit machine-readable JSON (default behavior)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LEASE_HELPER="${SCRIPT_DIR}/pr_gate_lease.py"
+GUARD_HELPER="${SCRIPT_DIR}/gate_worktree_guard.py"
 
 REPO=""
 PR=""
@@ -40,6 +43,7 @@ HEAD_REF=""
 REMOTE="origin"
 LOCAL_FALLBACK=1
 DRY_RUN=0
+GATE_WORKTREE_PATH=""
 
 usage() {
   echo "Usage: $0 <pr> --expected-head-sha <sha> [--repo OWNER/REPO] [options]" >&2
@@ -82,6 +86,11 @@ while [[ $# -gt 0 ]]; do
     --dry-run)
       DRY_RUN=1
       shift
+      ;;
+    --gate-worktree-path)
+      [[ $# -ge 2 ]] || usage
+      GATE_WORKTREE_PATH="$2"
+      shift 2
       ;;
     --json)
       shift
@@ -200,6 +209,31 @@ set -e
 if [[ $REST_RC -eq 0 ]]; then
   emit_result "update_requested" "true" "" "gh_rest_update_branch"
   exit 0
+fi
+
+# --- gate worktree health check before any local branch-switch ----------------
+# The local fallback performs a git rebase and force-with-lease push inside the
+# registered gate worktree. If that worktree has vanished, fail closed and report
+# the lease cleanup owner rather than dying opaquely with
+# "CreateProcess ... No such file or directory" mid-rebase.
+if [[ -n "$GATE_WORKTREE_PATH" ]]; then
+  if [[ ! -f "$GUARD_HELPER" ]]; then
+    emit_result "error" "false" "gate worktree guard helper is missing; refusing unguarded local fallback" "local_fallback"
+    exit 2
+  fi
+  set +e
+  GUARD_JSON="$(python3 "$GUARD_HELPER" verify --path "$GATE_WORKTREE_PATH" --json 2>/dev/null)"
+  GUARD_RC=$?
+  set -e
+  if [[ -z "$GUARD_JSON" ]]; then
+    emit_result "error" "false" "could not verify gate worktree before local fallback" "local_fallback"
+    exit 2
+  fi
+  if ! python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("exists") else 1)' <<<"$GUARD_JSON"; then
+    CLEANUP_OWNER="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("cleanup_owner") or "unknown")' <<<"$GUARD_JSON")"
+    emit_result "gate_worktree_missing" "false" "registered gate worktree vanished before local branch-switch; cleanup owner: ${CLEANUP_OWNER}" "local_fallback"
+    exit 1
+  fi
 fi
 
 # --- fallback to local lease-protected rebase/push ----------------------------

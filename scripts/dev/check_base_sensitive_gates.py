@@ -33,6 +33,8 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+_GUARD_HELPER = REPO_ROOT / "scripts" / "dev" / "gate_worktree_guard.py"
+
 
 def _run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
     """Run a command and return the completed process."""
@@ -43,6 +45,37 @@ def _run(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
         check=check,
         timeout=60,
     )
+
+
+def _verify_gate_worktree(gate_worktree_path: str) -> dict[str, Any] | None:
+    """Verify the registered gate worktree exists; report lease cleanup owner.
+
+    Delegates to ``gate_worktree_guard.verify_gate_worktree``. Returns a dict with
+    at least ``exists`` when the guard runs; when the path is missing but a live
+    lease claims it, the lease owner is reported under ``cleanup_owner``. Returns
+    None when the guard helper is unavailable so the caller can degrade safely.
+    """
+    if not _GUARD_HELPER.exists():
+        return None
+    try:
+        from scripts.dev.gate_worktree_guard import verify_gate_worktree
+
+        health = verify_gate_worktree(Path(gate_worktree_path))
+        return {
+            "exists": health.exists,
+            "classification": health.classification,
+            "cleanup_owner": health.cleanup_owner,
+            "lease_owner": health.lease_owner,
+            "lease_pr_number": health.lease_pr_number,
+            "lease_gate_id": health.lease_gate_id,
+        }
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        return {
+            "exists": False,
+            "classification": "errored",
+            "cleanup_owner": None,
+            "error": str(exc),
+        }
 
 
 def _find_base_sensitive_test_files() -> list[Path]:
@@ -245,8 +278,25 @@ def _check_pr_gate_staleness(
     overall: dict[str, Any],
     *,
     as_json: bool,
+    gate_worktree_path: str = "",
 ) -> int | None:
-    """Check PR gate staleness. Returns exit code or None to continue."""
+    """Check PR gate staleness. Returns exit code or None to continue.
+
+    When ``gate_worktree_path`` is provided, the registered gate worktree is
+    verified to still exist before running the git/gh staleness checks. A vanished
+    worktree fails closed with the lease cleanup owner reported, so the gate does
+    not operate against a missing path.
+    """
+    if gate_worktree_path:
+        health = _verify_gate_worktree(gate_worktree_path)
+        if health is not None and not health.get("exists", False):
+            owner = health.get("cleanup_owner") or "unknown"
+            msg = (
+                f"Registered gate worktree vanished before staleness check; cleanup owner: {owner}"
+            )
+            overall["gate_worktree_health"] = health
+            return _report_gate_error(overall, msg, as_json=as_json)
+
     try:
         result = subprocess.run(
             ["gh", "pr", "view", str(pr_number), "--json", "headRefOid", "--jq", ".headRefOid"],
@@ -353,6 +403,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="List all base-sensitive test files and exit",
     )
+    parser.add_argument(
+        "--gate-worktree-path",
+        default="",
+        help="Registered gate worktree path to verify before the staleness check",
+    )
     args = parser.parse_args(argv)
 
     if args.list_files:
@@ -377,6 +432,7 @@ def main(argv: list[str] | None = None) -> int:
             pr_check,
             overall,
             as_json=args.as_json,
+            gate_worktree_path=args.gate_worktree_path,
         )
         if stale_exit is not None:
             return stale_exit

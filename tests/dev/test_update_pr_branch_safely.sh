@@ -252,6 +252,70 @@ RC=0
 bash "$SCRIPT" --bogus 2>/dev/null || RC=$?
 assert_fail "unknown flag rejected" "$RC"
 
+# 7. A registered gate worktree that has vanished must fail closed before the
+#    local branch-switch/conflict-resolution path, reporting the lease cleanup
+#    owner (issue #5967). The guard helper is mocked to report exists=false with
+#    a cleanup owner; the local fallback must NOT run any git mutation.
+make_gh
+GONE_WT="${MOCK_DIR}/gone-gate-wt"
+mkdir -p "$GONE_WT"
+GUARD_DIR="${MOCK_DIR}/guard"
+mkdir -p "$GUARD_DIR"
+cat > "${GUARD_DIR}/gate_worktree_guard.py" <<'EOF'
+#!/usr/bin/env python3
+import json, sys
+# Mock of the gate worktree guard's `verify` subcommand.
+assert sys.argv[1] == "verify", sys.argv
+path = sys.argv[sys.argv.index("--path") + 1]
+print(json.dumps({
+    "schema": "gate_worktree_guard.v1",
+    "path": path,
+    "exists": False,
+    "classification": "missing",
+    "cleanup_owner": "owner=auto-smart-routing; pr=#5819; gate=gate-5819",
+}))
+sys.exit(1)
+EOF
+chmod +x "${GUARD_DIR}/gate_worktree_guard.py"
+# Point the script's helper resolution at the mock by shadowing via PATH is not
+# possible (it uses SCRIPT_DIR). Instead, write a tiny wrapper that injects the
+# mock path through PYTHONPATH is not honored; use a sed-free approach: copy the
+# real script but rewrite GUARD_HELPER to the mock.
+cp "$SCRIPT" "${MOCK_DIR}/update_pr_branch_safely_wg.sh"
+python3 - "$GONE_WT" "${GUARD_DIR}" "${MOCK_DIR}" <<'PY'
+import sys
+gone, guard_dir, mock_dir = sys.argv[1:]
+src = open(f"{mock_dir}/update_pr_branch_safely_wg.sh").read()
+src = src.replace(
+    'GUARD_HELPER="${SCRIPT_DIR}/gate_worktree_guard.py"',
+    f'GUARD_HELPER="{guard_dir}/gate_worktree_guard.py"',
+)
+open(f"{mock_dir}/update_pr_branch_safely_wg.sh", "w").write(src)
+PY
+chmod +x "${MOCK_DIR}/update_pr_branch_safely_wg.sh"
+RC=0
+OUT="$(PATH="${MOCK_DIR}:$PATH" bash "${MOCK_DIR}/update_pr_branch_safely_wg.sh" \
+  --pr 1 --repo owner/repo --expected-head-sha headsha --gate-worktree-path "$GONE_WT" 2>/dev/null)" || RC=$?
+assert_json "vanished-gate-worktree output is valid JSON" "$OUT"
+assert_fail "vanished gate worktree fails closed" "$RC"
+if echo "$OUT" | grep -q '"status":"gate_worktree_missing"'; then
+  echo "PASS: vanished gate worktree reports gate_worktree_missing"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: vanished gate worktree did not report gate_worktree_missing"
+  FAIL=$((FAIL + 1))
+fi
+if echo "$OUT" | grep -q 'auto-smart-routing'; then
+  echo "PASS: vanished gate worktree reports the lease cleanup owner"
+  PASS=$((PASS + 1))
+else
+  echo "FAIL: vanished gate worktree did not report the cleanup owner"
+  FAIL=$((FAIL + 1))
+fi
+# The local fallback must not have run git rebase/push; there is no git call that
+# would have mutated. The mock git (if any) is absent, so command-not-found would
+# have surfaced; ensure no git rebase reached the stub by checking exit closed.
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ $FAIL -eq 0 ]] || exit 1

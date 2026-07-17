@@ -553,7 +553,7 @@ def test_missing_placeholder_passes_synthetic_check(tmp_path: Path) -> None:
     assert synthetic == []
 
 
-def test_committed_baseline_reproduces_from_write_baseline() -> None:
+def test_committed_baseline_reproduces_from_write_baseline(tmp_path: Path) -> None:
     """The committed ratchet baseline must reproduce from the live evidence set.
 
     Issue #5971: the local readiness gate failed because the committed baseline
@@ -564,18 +564,19 @@ def test_committed_baseline_reproduces_from_write_baseline() -> None:
     (net-new findings still fail) while proving the committed baseline and the
     live evidence set are reconciled.
     """
-    repo_root = ROOT.resolve()
+    repo_root = Path(__file__).resolve().parents[2]
     baseline_path = repo_root / "scripts" / "validation" / "evidence_registry_baseline.json"
     ratchet = repo_root / "scripts" / "dev" / "evidence_registry_ratchet.py"
     assert baseline_path.is_file(), f"committed baseline missing: {baseline_path}"
 
+    repro_baseline = tmp_path / "evidence_registry_baseline_repro.json"
     regenerated = subprocess.run(
         [
             sys.executable,
             str(ratchet),
             "--write-baseline",
             "--baseline",
-            "/tmp/evidence_registry_baseline_repro.json",
+            str(repro_baseline),
         ],
         cwd=repo_root,
         check=False,
@@ -585,9 +586,7 @@ def test_committed_baseline_reproduces_from_write_baseline() -> None:
     assert regenerated.returncode == 0, regenerated.stderr
 
     left = json.loads(baseline_path.read_text(encoding="utf-8"))
-    right = json.loads(
-        Path("/tmp/evidence_registry_baseline_repro.json").read_text(encoding="utf-8")
-    )
+    right = json.loads(repro_baseline.read_text(encoding="utf-8"))
     assert left["findings_by_path"] == right["findings_by_path"], (
         "Committed evidence-registry baseline does not reproduce from the live tracked "
         "evidence set. Refresh it with "
@@ -605,7 +604,7 @@ def test_ratchet_gate_passes_against_committed_baseline() -> None:
     must exit 0 (no net-new findings). This preserves the ratchet's fail-closed
     contract from issue #5275 / #5952.
     """
-    repo_root = ROOT.resolve()
+    repo_root = Path(__file__).resolve().parents[2]
     ratchet = repo_root / "scripts" / "dev" / "evidence_registry_ratchet.py"
     result = subprocess.run(
         [sys.executable, str(ratchet), "--check"],

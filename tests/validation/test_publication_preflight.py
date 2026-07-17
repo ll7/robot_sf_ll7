@@ -1019,3 +1019,29 @@ def test_preflight_snqi_check_reports_malformed_ordering_as_preflight_error(
 
     with pytest.raises(PublicationPreflightError, match="invalid SNQI diagnostics ordering"):
         verify_publication_bundle_preflight(bundle_dir)
+
+
+@pytest.mark.parametrize("invalid_snqi", [True, "0.5"])
+def test_preflight_snqi_check_rejects_non_numeric_stored_field(
+    tmp_path: Path, invalid_snqi: object
+) -> None:
+    """Boolean and string SNQI fields are schema-invalid even when ``float`` accepts them."""
+    bundle_dir = _build_bundle(tmp_path)
+    rows = [_snqi_episode(success=True, seed=1)]
+    rows[0]["metrics"]["snqi"] = invalid_snqi
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", rows)
+    _seed_snqi_diagnostics(
+        bundle_dir,
+        [
+            {
+                "planner_key": "orca",
+                "kinematics": "holonomic",
+                "episode_count": len(rows),
+                "mean_snqi": 0.0,
+                "rank": 1,
+            }
+        ],
+    )
+
+    with pytest.raises(PublicationPreflightError, match="must be a finite JSON number"):
+        verify_publication_bundle_preflight(bundle_dir)

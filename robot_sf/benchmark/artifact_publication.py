@@ -1599,8 +1599,12 @@ def _check_snqi_field_consistency(  # noqa: C901, PLR0912, PLR0915
                 rejections.append(f"{source}: metrics.snqi field is absent")
                 continue
             episode_field_present += 1
+            raw_stored_snqi = metrics["snqi"]
+            if isinstance(raw_stored_snqi, bool) or not isinstance(raw_stored_snqi, (int, float)):
+                rejections.append(f"{source}: metrics.snqi must be a finite JSON number")
+                continue
             try:
-                stored_snqi = float(metrics["snqi"])
+                stored_snqi = float(raw_stored_snqi)
                 if not math.isfinite(stored_snqi):
                     raise ValueError("value is not finite")
             except (TypeError, ValueError) as exc:

@@ -1,0 +1,148 @@
+{
+  "cell_count": 6,
+  "cells": [
+    {
+      "cell_id": "classic_station_platform_medium__heldout_cell_301",
+      "evaluation_seed": 111,
+      "partition_source_seed": 301,
+      "scenario_family": "classic_station_platform"
+    },
+    {
+      "cell_id": "classic_station_platform_medium__heldout_cell_302",
+      "evaluation_seed": 111,
+      "partition_source_seed": 302,
+      "scenario_family": "classic_station_platform"
+    },
+    {
+      "cell_id": "classic_station_platform_medium__heldout_cell_303",
+      "evaluation_seed": 111,
+      "partition_source_seed": 303,
+      "scenario_family": "classic_station_platform"
+    },
+    {
+      "cell_id": "francis2023_intersection_wait__heldout_cell_240",
+      "evaluation_seed": 111,
+      "partition_source_seed": 240,
+      "scenario_family": "francis2023_intersection_wait"
+    },
+    {
+      "cell_id": "francis2023_intersection_wait__heldout_cell_241",
+      "evaluation_seed": 111,
+      "partition_source_seed": 241,
+      "scenario_family": "francis2023_intersection_wait"
+    },
+    {
+      "cell_id": "francis2023_intersection_wait__heldout_cell_242",
+      "evaluation_seed": 111,
+      "partition_source_seed": 242,
+      "scenario_family": "francis2023_intersection_wait"
+    }
+  ],
+  "claim_boundary": "real held-out pilot rows for the existing Package A transfer renderer; claim-card review still controls promotion",
+  "expected_episode_count": 18,
+  "expected_head": "9d65072ecd9d04e2f664a4299665dbff718401d9",
+  "expected_identities": [
+    [
+      "classic_station_platform_medium__heldout_cell_301",
+      "goal",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_301",
+      "orca",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_301",
+      "social_force",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_302",
+      "goal",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_302",
+      "orca",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_302",
+      "social_force",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_303",
+      "goal",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_303",
+      "orca",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_303",
+      "social_force",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_240",
+      "goal",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_240",
+      "orca",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_240",
+      "social_force",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_241",
+      "goal",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_241",
+      "orca",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_241",
+      "social_force",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_242",
+      "goal",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_242",
+      "orca",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_242",
+      "social_force",
+      111
+    ]
+  ],
+  "generated_campaign_config": "private-campaign://job-13521/generated_plan/issue3078_heldout_fullpilot.yaml",
+  "generated_scenario_matrix": "private-campaign://job-13521/generated_plan/issue3078_heldout_six_cells.yaml",
+  "partition_manifest": "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml",
+  "planners": [
+    "goal",
+    "social_force",
+    "orca"
+  ],
+  "schema_version": "issue3078.heldout_fullpilot_plan.v1",
+  "seed": 111,
+  "source_scenario_matrix": "configs/scenarios/sets/issue_2128_heldout_family_transfer_pilot_eval.yaml",
+  "underscale_diagnosis": "job 13506 used the tracked two-scenario pilot matrix directly; the partition cell expansion (three declared source cells per held-out family) never occurred"
+}

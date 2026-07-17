@@ -5,9 +5,9 @@
 # prerequisites for the downstream warm-start training and benchmark comparison so a launch
 # can fail closed when something is missing. It does not collect data, train, or submit Slurm.
 #
-# Current expected state: BLOCKED. The referenced #1397 dataset launch packet is intentionally
-# not training-ready (it carries a `:pending` durable trace URI); the durable dataset lands via
-# issue #1470. Re-run the checker after #1470 publishes concrete durable trace artifact URIs.
+# Current expected state: materialization blocker resolved by job 13520, but full-comparison
+# readiness remains blocked on a larger balanced collection and authorized private-root resolution.
+# The 12-episode dataset is suitable for loader/smoke validation, not the full BC comparison.
 schema_version: oracle-imitation-warm-start-readiness.v1
 experiment_id: issue_1496_oracle_imitation_warm_start_v1
 
@@ -15,9 +15,9 @@ experiment_id: issue_1496_oracle_imitation_warm_start_v1
 # require_training_ready=True (must carry concrete durable trace artifact URIs).
 dataset_launch_packet: configs/training/ppo_imitation/oracle_dataset_issue_1397_launch_packet.yaml
 
-# Durable trace URI registry #1470/#2655; strict gate requires concrete trace
-# artifact URIs and checksums for train, validation, and evaluation.
-trace_uri_registry: configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1470.yaml
+# Job 13520 BC-compatible dataset/trace registry. The private NPZ and raw split traces remain
+# external; strict validation requires the authorized private artifact root.
+trace_uri_registry: configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1496_collection.yaml
 
 # Behaviour-cloning warm-start training config (consumed by
 # scripts/training/pretrain_from_expert.py).

@@ -1,0 +1,169 @@
+{
+  "schema_version": "control-action-latency-snqi-analysis.v1",
+  "issue": 5892,
+  "campaign_issue": 5034,
+  "parent_issue": 4977,
+  "date": "2026-07-16",
+  "evidence_status": "diagnostic-only",
+  "claim_boundary": "internal fixed-scope latency-sensitivity diagnostic, not paper-facing; native claims apply only to native rows, adapter rows remain explicitly labeled diagnostics, and fallback/degraded cells are caveats, not successes.",
+  "provenance": {
+    "job_id": 13516,
+    "label": "5034c-issue5034-latency-sweep",
+    "execution_commit": "c153848d7be2851b5c5e89c11055bf96ea778a84",
+    "raw_rows_sha256": "6b34e690dfe6cc1ccccd9cd19bde8b3f6a3501bbc1b0a0b44639e151557b4134",
+    "fixed_scope_plan_sha256": "968f53ff458b3af81b0646faa581a90e3c81395a0bcf52292f8a4cff52677809",
+    "raw_artifact_classification": "durable-required-private",
+    "raw_artifact_pointer": "private campaign output for label 5034c-issue5034-latency-sweep, job 13516"
+  },
+  "scope_verification": {
+    "status": "verified",
+    "full_episode_row_count": 7344,
+    "full_unique_row_key_count": 7344,
+    "run_cell_count": 153,
+    "scenario_count": 48,
+    "seeds": [111, 112, 113],
+    "planner_groups": [
+      "orca",
+      "default_social_force",
+      "hybrid_rule_v0_minimal"
+    ],
+    "latency_steps": [0, 1, 3],
+    "latency_episode_row_count": 1296,
+    "latency_expected_row_count": 1296,
+    "latency_unique_row_key_count": 1296,
+    "missing_latency_cells": 0,
+    "extra_latency_cells": 0,
+    "duplicate_latency_cells": 0,
+    "fallback_row_count": 0,
+    "degraded_row_count": 0,
+    "unavailable_row_count": 0,
+    "execution_modes": [
+      {
+        "planner_group": "default_social_force",
+        "execution_mode": "native",
+        "full_campaign_row_count": 2448
+      },
+      {
+        "planner_group": "hybrid_rule_v0_minimal",
+        "execution_mode": "adapter",
+        "full_campaign_row_count": 2448
+      },
+      {
+        "planner_group": "orca",
+        "execution_mode": "adapter",
+        "full_campaign_row_count": 2448
+      }
+    ]
+  },
+  "snqi_method": {
+    "primary_metric": "Social Navigation Quality Index (SNQI)",
+    "score_version": "SNQI-v0",
+    "implementation": "robot_sf.benchmark.snqi.compute.compute_snqi",
+    "weights_path": "configs/benchmarks/snqi_weights_camera_ready_v3.json",
+    "weights_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2",
+    "baseline_path": "configs/benchmarks/snqi_baseline_camera_ready_v3.json",
+    "baseline_sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a",
+    "input_mapping": {
+      "success": "episode.success",
+      "time_to_goal_norm": "episode.metrics.time_to_goal_norm",
+      "collisions": "integer episode.collision",
+      "near_misses": "episode.metrics.near_miss_rate multiplied by episode.steps",
+      "comfort_exposure": "episode.metrics.comfort_exposure_mean"
+    },
+    "near_miss_recovery_max_fractional_error": 1.4210854715202004e-14,
+    "neutral_defaulted_terms": [
+      "force_exceed_events",
+      "jerk_mean"
+    ],
+    "slope_model": "ordinary least squares over latency steps [0, 1, 3]; one step is 100 ms-equivalent",
+    "uncertainty": "95% paired cluster-bootstrap interval over 144 scenario-seed units per planner, 10000 resamples, seed 5892"
+  },
+  "point_estimate_robustness_ranking": [
+    {
+      "rank": 1,
+      "planner_group": "default_social_force",
+      "planner": "baseline_social_force",
+      "execution_mode": "native",
+      "paired_units": 144,
+      "snqi_mean_at_0_steps": -0.17916674537606136,
+      "snqi_mean_at_1_step": -0.18155452226489133,
+      "snqi_mean_at_3_steps": -0.18797048025302496,
+      "snqi_delta_at_1_step_vs_0": -0.002387776888829962,
+      "snqi_delta_at_3_steps_vs_0": -0.008803734876963593,
+      "snqi_slope_per_100ms": -0.00297363553542772,
+      "snqi_slope_95pct_ci": [-0.009792257373607541, 0.003716541543963724],
+      "snqi_degradation_per_100ms": 0.00297363553542772
+    },
+    {
+      "rank": 2,
+      "planner_group": "hybrid_rule_v0_minimal",
+      "planner": "hybrid_rule_v0_minimal",
+      "execution_mode": "adapter",
+      "paired_units": 144,
+      "snqi_mean_at_0_steps": -0.14010406096307007,
+      "snqi_mean_at_1_step": -0.15518409532822824,
+      "snqi_mean_at_3_steps": -0.15792305582158644,
+      "snqi_delta_at_1_step_vs_0": -0.015080034365158174,
+      "snqi_delta_at_3_steps_vs_0": -0.017818994858516374,
+      "snqi_slope_per_100ms": -0.005286781423387421,
+      "snqi_slope_95pct_ci": [-0.011916146859981634, 0.0010017639104608826],
+      "snqi_degradation_per_100ms": 0.005286781423387421
+    },
+    {
+      "rank": 3,
+      "planner_group": "orca",
+      "planner": "orca",
+      "execution_mode": "adapter",
+      "paired_units": 144,
+      "snqi_mean_at_0_steps": -0.08880866292159663,
+      "snqi_mean_at_1_step": -0.09516701449382801,
+      "snqi_mean_at_3_steps": -0.12861508847615608,
+      "snqi_delta_at_1_step_vs_0": -0.006358351572231386,
+      "snqi_delta_at_3_steps_vs_0": -0.039806425554559446,
+      "snqi_slope_per_100ms": -0.0137624125857547,
+      "snqi_slope_95pct_ci": [-0.019933367200262793, -0.007928230673387096],
+      "snqi_degradation_per_100ms": 0.0137624125857547
+    }
+  ],
+  "pairwise_slope_uncertainty": [
+    {
+      "comparison": "default_social_force minus hybrid_rule_v0_minimal",
+      "slope_difference": 0.002306180651490491,
+      "slope_difference_95pct_ci": [-0.007144331994361205, 0.011667001112508315],
+      "probability_first_is_more_robust": 0.68635
+    },
+    {
+      "comparison": "default_social_force minus orca",
+      "slope_difference": 0.010788305271029393,
+      "slope_difference_95pct_ci": [0.0017607607729797487, 0.019967186753604996],
+      "probability_first_is_more_robust": 0.9905
+    },
+    {
+      "comparison": "hybrid_rule_v0_minimal minus orca",
+      "slope_difference": 0.008482124619538902,
+      "slope_difference_95pct_ci": [-0.0003387371282022682, 0.01728023816450702],
+      "probability_first_is_more_robust": 0.97105
+    }
+  ],
+  "verdict": {
+    "point_estimate_order": [
+      "default_social_force",
+      "hybrid_rule_v0_minimal",
+      "orca"
+    ],
+    "high_confidence_findings": [
+      "ORCA has a negative SNQI slope whose 95% interval excludes zero.",
+      "default_social_force is more robust than ORCA on the paired slope comparison at the 95% level."
+    ],
+    "uncertain_findings": [
+      "default_social_force and hybrid_rule_v0_minimal are not separated at the 95% level.",
+      "hybrid_rule_v0_minimal and ORCA are not separated at the 95% level because the paired interval narrowly crosses zero."
+    ]
+  },
+  "caveats": [
+    "The strict native-only claim boundary is not satisfied for the full three-planner ranking because ORCA and hybrid_rule_v0_minimal are labeled adapter execution; their rows are retained only as clearly labeled internal diagnostic evidence.",
+    "The raw campaign did not emit force_exceed_events or jerk_mean, so the canonical SNQI-v0 neutral defaults apply to those two terms.",
+    "The bundle generator recorded a different git_head than the execution context; the job execution context and checksummed plan identify c153848d7be2851b5c5e89c11055bf96ea778a84 as the execution commit.",
+    "This is not paper-facing evidence and does not establish simulator realism or sim-to-real validity."
+  ]
+}

@@ -168,33 +168,38 @@ def _require_array(npz: np.lib.npyio.NpzFile, name: str) -> np.ndarray:
     return npz[name]
 
 
-def _observations_array(array: np.ndarray) -> np.ndarray:
-    """Return the per-step observation array, validated as 2-D (episodes, steps).
+def _per_episode_steps(array: np.ndarray, *, name: str) -> list[np.ndarray]:
+    """Return one per-episode step container for each episode, layout-agnostic.
 
-    The expert_traj_v1 schema pads episodes to a common max-step width, so observations are
-    stored as a 2-D object array of structured observation dicts (or ``None`` padding).
+    The ``expert_traj_v1`` collection spec writes per-step fields via
+    ``np.asarray(list_of_per_episode_arrays, dtype=object)``. When episodes share a step count
+    numpy stores a rectangular 2-D ``(episodes, steps)`` object array (each row a step slice);
+    when episode lengths differ numpy stores a ragged 1-D ``(episodes,)`` object array whose
+    elements are the per-episode step arrays. Both are valid outputs of the same writer, so the
+    loader must accept both.
+
+    Args:
+        array: A raw observations/actions (or other per-step) NPZ array.
+        name: Field name used in fail-closed error messages.
+
+    Returns:
+        A list with one entry per episode. For observations each entry is a 1-D object array of
+        observation dicts (possibly containing ``None`` padding on the rectangular layout); for
+        actions each entry is a ``(steps, action_dim)`` array.
+
+    Raises:
+        OracleImitationBcSmokeError: If the array is scalar or otherwise not episode-major.
     """
     data = np.asarray(array)
-    if data.ndim != 2:
+    if data.ndim == 0:
         raise OracleImitationBcSmokeError(
-            f"NPZ array 'observations' expected 2-D (episodes, steps), got shape {data.shape}"
+            f"NPZ array {name!r} expected episode-major per-step data, got scalar shape"
         )
-    return data
-
-
-def _actions_array(array: np.ndarray) -> np.ndarray:
-    """Return the per-step action array, validated as 2-D or 3-D.
-
-    Actions are stored as ``(episodes, steps)`` of action vectors (object dtype) or as
-    ``(episodes, steps, action_dim)``. Both layouts index identically as ``actions[e, s]``.
-    """
-    data = np.asarray(array)
-    if data.ndim not in (2, 3):
-        raise OracleImitationBcSmokeError(
-            f"NPZ array 'actions' expected 2-D or 3-D (episodes, steps[, action_dim]), "
-            f"got shape {data.shape}"
-        )
-    return data
+    if data.ndim == 1:
+        # Ragged layout: each element is already a per-episode step array.
+        return list(data)
+    # Rectangular 2-D (or 3-D for actions): each leading-axis slice is one episode.
+    return list(data)
 
 
 def _episode_identity(array: np.ndarray, *, name: str) -> list[str]:
@@ -291,26 +296,43 @@ def _splits_from_metadata(npz: np.lib.npyio.NpzFile) -> dict[str, list[str]]:
     return out
 
 
+def _step_count(per_episode: np.ndarray) -> int:
+    """Return the step count of one per-episode step container (non-padded length)."""
+    try:
+        return len(per_episode)
+    except TypeError as exc:  # pragma: no cover - defensive: a non-iterable slipped through
+        raise OracleImitationBcSmokeError(
+            f"per-episode step container is not iterable: {type(per_episode).__name__}"
+        ) from exc
+
+
 def _validate_dataset_arrays(arrays: dict[str, np.ndarray]) -> int:
     """Validate array alignment and provenance fields.
+
+    Both the rectangular (2-D) and ragged (1-D) writer layouts are accepted; observations and
+    actions are normalized to per-episode step containers and aligned episode-by-episode so a
+    step-count mismatch on any single episode fails closed.
 
     Returns:
         Number of episodes represented by the aligned observation/action arrays.
     """
-    observations = _observations_array(arrays["observations"])
-    actions = _actions_array(arrays["actions"])
-    if actions.shape[0] != observations.shape[0]:
+    observations = _per_episode_steps(arrays["observations"], name="observations")
+    actions = _per_episode_steps(arrays["actions"], name="actions")
+    if len(actions) != len(observations):
         raise OracleImitationBcSmokeError(
             "actions and observations disagree on episode count: "
-            f"{actions.shape[0]} vs {observations.shape[0]}"
+            f"{len(actions)} vs {len(observations)}"
         )
-    if actions.shape[1] != observations.shape[1]:
-        raise OracleImitationBcSmokeError(
-            "actions and observations disagree on padded step width: "
-            f"{actions.shape[1]} vs {observations.shape[1]}"
-        )
+    for episode_index, (obs_steps, act_steps) in enumerate(zip(observations, actions, strict=True)):
+        obs_len = _step_count(obs_steps)
+        act_len = _step_count(act_steps)
+        if obs_len != act_len:
+            raise OracleImitationBcSmokeError(
+                f"episode {episode_index} observations and actions disagree on step count: "
+                f"{obs_len} vs {act_len}"
+            )
 
-    episode_count = observations.shape[0]
+    episode_count = len(observations)
     for name in _REQUIRED_ARRAYS:
         array = np.asarray(arrays[name])
         if array.ndim == 0 or len(array) != episode_count:
@@ -523,8 +545,8 @@ def flatten_observation_action_pairs(
         records per-split step counts.
     """
     arrays = dataset["arrays"]
-    observations = _observations_array(arrays["observations"])
-    actions = _actions_array(arrays["actions"])
+    observations = _per_episode_steps(arrays["observations"], name="observations")
+    actions = _per_episode_steps(arrays["actions"], name="actions")
     episode_ids = _episode_identity(arrays["episode_ids"], name="episode_ids")
     split_tags = _episode_identity(arrays["splits"], name="splits")
     wanted = set(splits)
@@ -532,15 +554,19 @@ def flatten_observation_action_pairs(
     features: list[np.ndarray] = []
     targets: list[np.ndarray] = []
     per_split_steps: dict[str, int] = dict.fromkeys(splits, 0)
-    for episode in range(observations.shape[0]):
+    for episode in range(len(observations)):
         if split_tags[episode] not in wanted:
             continue
         split = split_tags[episode]
-        for step in range(observations.shape[1]):
-            observation = observations[episode, step]
+        episode_obs = observations[episode]
+        episode_acts = actions[episode]
+        # Per-episode step containers may carry ``None`` observations on the rectangular
+        # (padded) writer layout; skip them. The ragged layout has no padding.
+        for step in range(_step_count(episode_obs)):
+            observation = episode_obs[step]
             if observation is None:
                 continue
-            action = actions[episode, step]
+            action = episode_acts[step]
             features.append(_flatten_observation(observation, feature_fields=_FEATURE_FIELDS))
             targets.append(np.asarray(action, dtype=np.float32).reshape(-1))
             per_split_steps[split] = per_split_steps.get(split, 0) + 1

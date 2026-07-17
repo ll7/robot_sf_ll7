@@ -111,6 +111,14 @@ def test_nonzero_exit_is_retried_then_succeeds() -> None:
     assert [e["filename"] for e in files] == ["x.py"]
 
 
+def test_non_object_file_entry_fails_closed() -> None:
+    """A JSON list containing a scalar must fail closed before output handling."""
+    run_page = _scripted_runner({(1, 1): _proc(stdout=json.dumps(["not-a-file-entry"]))})
+
+    with pytest.raises(PrFilesFetchError, match="unexpected response entry"):
+        fetch_all_pr_files("owner/repo", "1", run_page=run_page, sleep=lambda _d: None)
+
+
 @pytest.mark.parametrize("status", [401, 403, 404])
 def test_permanent_http_errors_are_not_retried(status: int) -> None:
     """Authentication, authorization, and not-found errors fail immediately."""

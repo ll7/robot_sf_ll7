@@ -42,11 +42,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import subprocess
 import sys
+import tempfile
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -154,6 +157,14 @@ def _parse_page(
             f"unexpected response shape (expected a JSON list); snippet: {snippet!r}",
             _is_transient_http_status(status),
         )
+    for index, entry in enumerate(data):
+        if not isinstance(entry, dict):
+            return (
+                None,
+                f"unexpected response entry at index {index} (expected a JSON object); "
+                f"got {type(entry).__name__}",
+                False,
+            )
     return data, None, False
 
 
@@ -371,11 +382,12 @@ def write_outputs(
     out_files_status: str | None = None,
     out_added_files: str | None = None,
 ) -> None:
-    """Write the requested output files atomically (only on full success).
+    """Write requested output files with per-file atomic replacement after validation.
 
-    Outputs are written after the whole list is in hand, so a partial/failed run
-    never leaves a truncated file. ``status`` defaults to an empty string for the
-    rare entry that omits it. Added files are those with ``status == "added"``.
+    The full response is validated before any file is touched, and each individual
+    output is replaced atomically so a failed write cannot leave a truncated file.
+    ``status`` defaults to an empty string for the rare entry that omits it. Added
+    files are those with ``status == "added"``.
     """
     changed = [_filename_of(entry) for entry in files]
     added = [_filename_of(entry) for entry in files if str(entry.get("status", "")) == "added"]
@@ -385,10 +397,8 @@ def write_outputs(
     if out_added_files is not None:
         _write_lines(out_added_files, added)
     if out_files_status is not None:
-        with open(out_files_status, "w", encoding="utf-8") as handle:
-            for entry in files:
-                status = str(entry.get("status", ""))
-                handle.write(f"{status}\t{_filename_of(entry)}\n")
+        status_lines = [f"{entry.get('status', '')!s}\t{_filename_of(entry)}\n" for entry in files]
+        _write_text_atomically(out_files_status, "".join(status_lines))
 
 
 def _filename_of(entry: dict[str, Any]) -> str:
@@ -403,9 +413,28 @@ def _filename_of(entry: dict[str, Any]) -> str:
 
 def _write_lines(path: str, lines: list[str]) -> None:
     """Write newline-delimited lines to *path*."""
-    with open(path, "w", encoding="utf-8") as handle:
-        for line in lines:
-            handle.write(f"{line}\n")
+    _write_text_atomically(path, "".join(f"{line}\n" for line in lines))
+
+
+def _write_text_atomically(path: str, text: str) -> None:
+    """Replace one text file atomically, cleaning up a failed temporary write."""
+    destination = Path(path)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            delete=False,
+        ) as handle:
+            temporary_path = Path(handle.name)
+            handle.write(text)
+        os.replace(temporary_path, destination)
+    except OSError:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def _build_parser() -> argparse.ArgumentParser:

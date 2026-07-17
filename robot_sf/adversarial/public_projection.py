@@ -259,10 +259,10 @@ def _replace_in_string(
     """Replace the private path prefix inside a single string value.
 
     Uses explicit-prefix replacement only: every occurrence of ``target_root``
-    is replaced verbatim with the public URI prefix (without its trailing slash,
-    so the surviving ``/raw/...`` tail joins cleanly). This handles embedded
-    paths (for example a ``replay_command`` shell line) because ``str.replace``
-    rewrites every occurrence.
+    at a path boundary is replaced verbatim with the public URI prefix (without
+    its trailing slash, so the surviving ``/raw/...`` tail joins cleanly). This
+    handles embedded paths (for example a ``replay_command`` shell line) while
+    avoiding prefix collisions such as ``/output`` versus ``/output_backup``.
 
     Paths that are NOT under ``target_root`` are deliberately left untouched.
     A stray absolute path under a different home/worktree is not something this
@@ -287,9 +287,10 @@ def _replace_in_string(
         replacement = public_prefix[:-1]
     else:
         replacement = public_prefix
-    text = text.replace(target_root, replacement)
-    if text != original:
-        state.replacements += 1
+    pattern = re.compile(rf"(?<![A-Za-z0-9_.-]){re.escape(target_root)}(?=$|[/\\\s\"'=,:])")
+    text, replacement_count = pattern.subn(replacement, text)
+    if replacement_count:
+        state.replacements += replacement_count
         if original not in state.offending_paths:
             state.offending_paths.append(original)
         state.rewritten_fields.add("path")

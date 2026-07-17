@@ -247,6 +247,29 @@ def test_projection_records_source_projected_checksums_and_path_only_transform()
     assert len(record["private_root_sha256"]) == 64
 
 
+def test_projection_counts_repeated_root_occurrences() -> None:
+    """The replacement count records each occurrence, including repeats in one string."""
+    archive = {"replay_command": f"cp {PRIVATE_ROOT}/a {PRIVATE_ROOT}/b"}
+    result = project_archive_to_public(
+        archive,
+        config=PublicProjectionConfig(private_root=PRIVATE_ROOT, job_id=13518),
+    )
+
+    assert result.projection["replacement_count"] == 2
+    assert result.projected_archive["replay_command"].count("private-artifact://job-13518/") == 2
+
+
+def test_projection_does_not_rewrite_a_similar_but_outside_root() -> None:
+    """A root-like prefix outside the configured root must fail closed unchanged."""
+    archive = {"path": f"{PRIVATE_ROOT}_backup/raw.json"}
+
+    with pytest.raises(PrivatePathLeakError, match="output_backup"):
+        project_archive_to_public(
+            archive,
+            config=PublicProjectionConfig(private_root=PRIVATE_ROOT, job_id=13518),
+        )
+
+
 def test_projection_checksums_match_independently_recomputed_digests() -> None:
     """Recorded digests match freshly recomputed archive_sha256 over both sides."""
     archive = _private_archive()

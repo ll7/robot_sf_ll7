@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from shapely.geometry import LineString, Point
 
 from robot_sf.benchmark.map_runner_env import build_env_config
 from robot_sf.benchmark.utils import _git_hash_fallback
@@ -59,6 +60,10 @@ from robot_sf.scenario_certification.v1 import (
     GEOMETRICALLY_INFEASIBLE,
     KINODYNAMICALLY_INFEASIBLE,
     ScenarioCertificate,
+    _applicable_routes,
+    _obstacle_union,
+    _polyline_length,
+    _route_start_goal,
     certify_scenario,
 )
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
@@ -1498,6 +1503,158 @@ def _replan_astar_path(
     return [(float(x), float(y)) for x, y in path]
 
 
+def _resolve_scenario_map_and_route(
+    config: Any,
+    scenario: Mapping[str, Any],
+) -> tuple[Any | None, Any | None, Any | None, str | None]:
+    """Resolve exactly one scenario-selected map, start, and goal or a blocker.
+
+    Returns:
+        Map definition, start, goal, and optional blocker message.
+    """
+    map_defs = getattr(getattr(config, "map_pool", None), "map_defs", {}) or {}
+    selected_map_id = getattr(config, "map_id", None)
+    if isinstance(selected_map_id, str) and selected_map_id:
+        map_def = map_defs.get(selected_map_id)
+        if map_def is None:
+            return None, None, None, f"scenario-selected map {selected_map_id!r} is unavailable"
+    elif len(map_defs) == 1:
+        map_def = next(iter(map_defs.values()))
+    else:
+        return None, None, None, "scenario did not resolve exactly one map"
+
+    routes = _applicable_routes(map_def, scenario)
+    if len(routes) != 1:
+        return (
+            None,
+            None,
+            None,
+            f"scenario resolved {len(routes)} applicable robot routes; expected 1",
+        )
+    start, goal = _route_start_goal(routes[0])
+    if start is None or goal is None:
+        return None, None, None, "scenario-selected robot route has fewer than two waypoints"
+    return map_def, start, goal, None
+
+
+def planned_path_clearance_verdict(
+    scenario: Mapping[str, Any],
+    *,
+    scenario_path: Path,
+    robot_radius: float,
+) -> dict[str, Any]:
+    """Corrected planner-path clearance check for issue #5596 (finding #3).
+
+    The certifier reports ``inflated_collision_free_path=True`` from A*, but it
+    measures ``minimum_static_clearance_m`` on the *authored* route line, never
+    re-validating the *planned* A* path against obstacle clearance using the robot
+    envelope. This helper closes that gap: it re-plans the inflated A* path and
+    measures the minimum clearance of every planned vertex to the obstacle union
+    (after radius inflation), flagging any vertex that the robot circle would clip.
+
+    This is diagnostic-only; it does not relabel the cell or change any
+    campaign denominator.
+
+    Args:
+        scenario: Scenario dict with spawn/goal identifiers.
+        scenario_path: Manifest path used to resolve the map pool and robot config.
+        robot_radius: Robot collision-envelope radius in meters.
+
+    Returns:
+        JSON-safe verdict with planned path length, minimum vertex clearance,
+        clipped-vertex count, per-radius applicability, and a fail-closed status
+        when the path cannot be planned or the map geometry is unavailable.
+    """
+    fallback: dict[str, Any] = {
+        "planned_path_clearance_m": None,
+        "planned_path_vertex_clearance_m": None,
+        "planned_path_vertex_clipped_count": None,
+        "planned_path_length_m": None,
+        "planned_path_validated": False,
+        "status": "blocked",
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+    }
+    if not math.isfinite(robot_radius) or robot_radius < 0.0:
+        return {
+            **fallback,
+            "blocker": "invalid robot_radius: expected a finite non-negative value",
+        }
+    try:
+        config = build_robot_config_from_scenario(dict(scenario), scenario_path=scenario_path)
+    except Exception as exc:  # noqa: BLE001
+        return {**fallback, "blocker": f"robot_config_error: {exc}"}
+
+    map_def, start, goal, route_blocker = _resolve_scenario_map_and_route(config, scenario)
+    if route_blocker is not None or map_def is None or start is None or goal is None:
+        return {**fallback, "blocker": route_blocker or "scenario map/route resolution failed"}
+    obstacle_union = _obstacle_union(map_def)
+    if obstacle_union is None or obstacle_union.is_empty:
+        return {**fallback, "blocker": "no inferable map/route geometry"}
+
+    path = _replan_astar_path(
+        map_def,
+        start=start,
+        goal=goal,
+        robot_radius=robot_radius,
+    )
+    if not path or len(path) < 2:
+        return {**fallback, "blocker": "a_star_planner_returned_no_path"}
+
+    try:
+        clipped, min_vertex_clearance, min_path_clearance = _measure_planned_path_clearance(
+            path,
+            obstacle_union,
+            robot_radius,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return {**fallback, "blocker": f"clearance_measurement_error: {exc}"}
+    if min_vertex_clearance is None or min_path_clearance is None:
+        return {**fallback, "blocker": "clearance_measurement_is_non_finite"}
+
+    path_clips_corner = clipped > 0 or min_path_clearance < 0.0
+
+    return {
+        "planned_path_clearance_m": float(min_path_clearance),
+        "planned_path_vertex_clearance_m": float(min_vertex_clearance),
+        "planned_path_vertex_clipped_count": int(clipped),
+        "planned_path_length_m": float(_polyline_length(path)),
+        "planned_path_vertex_count": len(path),
+        "planned_path_validated": True,
+        "planned_path_clips_corner": path_clips_corner,
+        "status": "clipped" if path_clips_corner else "clear",
+        "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+    }
+
+
+def _measure_planned_path_clearance(
+    path: Sequence[tuple[float, float]],
+    obstacle_union: Any,
+    robot_radius: float,
+) -> tuple[int, float | None, float | None]:
+    """Measure vertex and full-polyline clearance of a planned A* path.
+
+    Returns:
+        Tuple of (clipped_vertex_count, minimum_vertex_clearance_m,
+        minimum_path_clearance_m). Any non-finite measurement returns ``None``
+        clearances so the caller can fail closed without emitting non-standard JSON.
+    """
+    clipped = 0
+    min_vertex_clearance: float | None = None
+    for vertex in path:
+        vertex_clearance = float(Point(vertex).distance(obstacle_union) - robot_radius)
+        if not math.isfinite(vertex_clearance):
+            return clipped, None, None
+        if vertex_clearance < 0.0:
+            clipped += 1
+        if min_vertex_clearance is None or vertex_clearance < min_vertex_clearance:
+            min_vertex_clearance = vertex_clearance
+
+    path_clearance = float(LineString(path).distance(obstacle_union) - robot_radius)
+    if not math.isfinite(path_clearance):
+        return clipped, None, None
+    return clipped, min_vertex_clearance, path_clearance
+
+
 def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
     manifest_path: Path,
     *,
@@ -1683,7 +1840,34 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
                 }
             )
 
-    # 4. Mechanism classification.
+    # 4. Corrected planner-path clearance check (issue #5596 finding #3).
+    # The certifier reports inflated_collision_free_path=True but only clears the
+    # authored route line; this re-validates the planned A* path vertices against the
+    # obstacle union using the robot envelope and flags clipped corners.
+    planned_path_clearance: list[dict[str, Any]] = []
+    for radius in radii:
+        try:
+            verdict = planned_path_clearance_verdict(
+                blind_corner,
+                scenario_path=manifest_path,
+                robot_radius=float(radius),
+            )
+            verdict = {**verdict, "envelope_radius_m": float(radius)}
+            planned_path_clearance.append(verdict)
+        except Exception as exc:  # noqa: BLE001
+            planned_path_clearance.append(
+                {
+                    "envelope_radius_m": float(radius),
+                    "planned_path_clearance_m": None,
+                    "planned_path_vertex_clipped_count": None,
+                    "planned_path_validated": False,
+                    "status": "blocked",
+                    "blocker": str(exc),
+                    "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
+                }
+            )
+
+    # 5. Mechanism classification.
     oracle_nominal = oracle_dict["nominal_verdict"]
     oracle_nominal_feasible = oracle_nominal.get("feasible") is True
     route_follow_feasible = route_follow_nominal.get("feasible")
@@ -1692,6 +1876,16 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
     # When both fail -> explanation #2 (route geometry or config).
     explanation_1 = not oracle_nominal_feasible and route_follow_feasible is True
     explanation_2 = not oracle_nominal_feasible and route_follow_feasible is False
+
+    # Corrected-path evidence (finding #3): did the planned A* path actually clip the
+    # inner corner at any probed radius?
+    planned_path_clips = [
+        bool(entry.get("planned_path_clips_corner")) for entry in planned_path_clearance
+    ]
+    planned_path_evidence = any(planned_path_clips)
+    planner_path_clearance_established = bool(planned_path_clearance) and all(
+        entry.get("planned_path_validated") is True for entry in planned_path_clearance
+    )
 
     if explanation_1:
         supported = "scripted_controller_corner_cut"
@@ -1710,6 +1904,8 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
         "oracle_nominal_feasible": oracle_nominal_feasible,
         "route_follow_intervention_feasible": route_follow_feasible,
         "route_follow_intervention_status": route_follow_nominal.get("status"),
+        "planned_path_clips_corner": planned_path_evidence,
+        "planner_path_clearance_established": planner_path_clearance_established,
         "claim_boundary": DIAGNOSTIC_CLAIM_BOUNDARY,
     }
 
@@ -1726,6 +1922,7 @@ def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915
         "oracle_verdict": oracle_dict,
         "route_follow_intervention_verdict": route_follow_verdict,
         "straight_line_vs_route_clearance": clearance_comparison,
+        "planned_path_clearance_verdict": planned_path_clearance,
         "mechanism": mechanism,
     }
 

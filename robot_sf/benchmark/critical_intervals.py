@@ -67,6 +67,39 @@ VALID_ANCHORS = frozenset(
 
 DEFAULT_NEAR_MISS_DIST = 0.7  # metres, aligned with benchmark constants
 
+# Per-step near-miss event signal for ``simulation-step-trace.v1``.
+#
+# Issue #5884: a trace may carry per-step near-miss evidence that never crosses
+# the center-distance threshold used by ``_detect_collision_or_near_miss``.  The
+# supported contract is a single trace-level list aligned 1:1 with the trace
+# steps.  Each element is either ``None`` (no event) or a mapping whose
+# ``step`` equals the index and whose ``metric``/``near_miss`` fields describe
+# the recorded event.  The anchor consumes only the explicit event signal and
+# must NOT conflate center-to-center distance with radius-adjusted clearance;
+# the two are distinct signals with distinct units/semantics.
+#
+# Schema for one event entry (dict):
+#   - ``step``   : int, the step index this event belongs to (fail-closed if
+#                  it does not match the list position).
+#   - ``metric`` : str, one of the accepted near-miss metric names below.
+#   - ``near_miss`` : bool, True when the event is a recorded near-miss.
+STEP_NEAR_MISS_EVENTS_FIELD = "step_near_miss_events"
+
+# Accepted ``metric`` names for a per-step near-miss event.  These are the
+# benchmark near-miss event families that may be recorded in a step trace; see
+# ``robot_sf/benchmark/metrics.py``.  Unknown metric names fail closed.
+ACCEPTED_NEAR_MISS_METRICS = frozenset(
+    [
+        "surface_clearance",
+        "ttc",
+        "occlusion",
+    ]
+)
+
+# Sentinel reported in ``CriticalInterval.source`` when the anchor was produced.
+ANCHOR_SOURCE_CENTER_DISTANCE = "center_distance_threshold"
+ANCHOR_SOURCE_STEP_EVENT = "step_near_miss_event"
+
 # TTC computation tolerances
 _TTC_EPS_DIST = 1e-9  # metres, below this counts as overlap/contact
 _TTC_EPS_SPEED = 1e-9  # m/s, below this counts as not closing
@@ -95,6 +128,12 @@ class CriticalInterval:
         Step index of the anchor event itself.
     reason :
         Human-readable explanation when the anchor is missing or invalid.
+    source :
+        Which signal produced the anchor, if ``status == "available"``.  One of
+        ``ANCHOR_SOURCE_CENTER_DISTANCE`` or ``ANCHOR_SOURCE_STEP_EVENT`` for the
+        ``collision_or_near_miss`` anchor; ``None`` for other anchors or when the
+        anchor is missing/invalid.  This keeps the units/threshold semantics of
+        each signal explicit (issue #5884).
     """
 
     anchor: str
@@ -103,6 +142,7 @@ class CriticalInterval:
     end_step: int | None = None
     anchor_step: int | None = None
     reason: str | None = None
+    source: str | None = None
 
 
 @dataclass
@@ -703,6 +743,98 @@ def _detect_collision_or_near_miss(
     return None
 
 
+def _validate_step_near_miss_events(
+    events: object, *, n_steps: int
+) -> tuple[list[int], str | None]:
+    """Validate a per-step near-miss event list and return event step indices.
+
+    Implements the fail-closed contract for ``STEP_NEAR_MISS_EVENTS_FIELD``
+    (issue #5884).  The list must be aligned 1:1 with the trace steps; each
+    non-``None`` entry is a mapping whose ``step`` matches its position and whose
+    ``metric`` is an accepted near-miss metric.  Center-distance evidence is
+    intentionally NOT accepted here so the step-event signal stays independent
+    from the center-distance threshold used by
+    :func:`_detect_collision_or_near_miss`; only ``surface_clearance``, ``ttc``,
+    and ``occlusion`` metrics qualify as explicit step-level near-miss events,
+    while ``center_distance`` is rejected so the two signals cannot be silently
+    conflated.
+
+    Parameters
+    ----------
+    events :
+        Raw value of ``STEP_NEAR_MISS_EVENTS_FIELD`` from the trace.
+    n_steps :
+        Number of steps in the trace (length of ``robot_pos``).
+
+    Returns
+    -------
+    (event_steps, fail_reason)
+        ``event_steps`` is the list of step indices carrying a near-miss event,
+        in ascending order.  ``fail_reason`` is ``None`` on success, or a
+        human-readable reason string when the schema is invalid (the caller
+        should then mark the anchor as ``invalid_trace``).
+    """
+
+    if not isinstance(events, list):
+        return [], "step_near_miss_events must be a list aligned with trace steps"
+
+    if len(events) != n_steps:
+        return (
+            [],
+            f"step_near_miss_events length {len(events)} does not match trace length {n_steps}",
+        )
+
+    event_steps: list[int] = []
+    for idx, entry in enumerate(events):
+        is_event, fail_reason = _validate_one_step_event(entry, idx=idx)
+        if fail_reason is not None:
+            return [], fail_reason
+        if is_event:
+            event_steps.append(idx)
+
+    return event_steps, None
+
+
+def _validate_one_step_event(entry: object, *, idx: int) -> tuple[bool, str | None]:
+    """Validate one per-step near-miss event entry.
+
+    Returns
+    -------
+    (is_event, fail_reason)
+        ``is_event`` is True when the entry is a valid near-miss event that
+        should anchor the window.  ``fail_reason`` is a non-``None`` string when
+        the entry is malformed (the caller must then mark the anchor invalid).
+    """
+
+    if entry is None:
+        return False, None
+    if not isinstance(entry, dict):
+        return False, f"step_near_miss_events[{idx}] must be a dict or None"
+    step = entry.get("step")
+    if type(step) is not int:
+        return False, (f"step_near_miss_events[{idx}].step is required and must be an integer")
+    if step != idx:
+        return False, (f"step_near_miss_events[{idx}].step ({step}) does not match position {idx}")
+    metric = entry.get("metric")
+    # Center-distance evidence is not a step-event signal; reject so the anchor
+    # cannot silently fuse it with the center-distance threshold.
+    if isinstance(metric, str) and metric == "center_distance":
+        return False, (
+            f"step_near_miss_events[{idx}] metric 'center_distance' is not an "
+            "accepted step-event signal; use the center-distance anchor"
+        )
+    if not isinstance(metric, str):
+        return False, f"step_near_miss_events[{idx}].metric must be a string"
+    if metric not in ACCEPTED_NEAR_MISS_METRICS:
+        return False, f"step_near_miss_events[{idx}] unknown metric {metric!r}"
+    near_miss = entry.get("near_miss")
+    if type(near_miss) is not bool:
+        return False, (f"step_near_miss_events[{idx}].near_miss is required and must be a boolean")
+    if not near_miss:
+        return False, None
+    return True, None
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -755,6 +887,7 @@ def extract_critical_intervals(  # noqa: C901, PLR0912, PLR0915
 
         anchor_step: int | None = None
         reason: str | None = None
+        source: str | None = None
         status: Literal["available", "missing_anchor", "invalid_trace"] = "available"
 
         if anchor == "closest_approach":
@@ -807,14 +940,38 @@ def extract_critical_intervals(  # noqa: C901, PLR0912, PLR0915
                     reason = f"no braking event above {decel_thr} m/s^2"
 
         elif anchor == "collision_or_near_miss":
-            if peds_pos.size == 0:
+            if peds_pos.size == 0 and STEP_NEAR_MISS_EVENTS_FIELD not in trace:
                 status = "missing_anchor"
-                reason = "no pedestrian positions in trace"
+                reason = "no pedestrian positions or step-level near-miss events in trace"
             else:
-                anchor_step = _detect_collision_or_near_miss(robot_pos, peds_pos)
-                if anchor_step is None:
-                    status = "missing_anchor"
-                    reason = "no collision or near-miss event detected"
+                # Issue #5884: prefer the explicit step-level near-miss event
+                # signal (per ``simulation-step-trace.v1``) over the
+                # center-distance threshold.  The two signals have distinct
+                # units/semantics and must not be conflated.  The center-distance
+                # diagnostic is retained as a fallback when no step event exists.
+                if STEP_NEAR_MISS_EVENTS_FIELD in trace:
+                    event_steps, fail_reason = _validate_step_near_miss_events(
+                        trace[STEP_NEAR_MISS_EVENTS_FIELD], n_steps=T
+                    )
+                else:
+                    event_steps, fail_reason = [], None
+                if fail_reason is not None:
+                    status = "invalid_trace"
+                    reason = f"invalid step near-miss event schema: {fail_reason}"
+                elif event_steps:
+                    anchor_step = event_steps[0]
+                    status = "available"
+                    source = ANCHOR_SOURCE_STEP_EVENT
+                else:
+                    anchor_step = _detect_collision_or_near_miss(robot_pos, peds_pos)
+                    if anchor_step is None:
+                        status = "missing_anchor"
+                        reason = (
+                            "no collision or near-miss event detected "
+                            "(center-distance) and no step-level near-miss event"
+                        )
+                    else:
+                        source = ANCHOR_SOURCE_CENTER_DISTANCE
 
         elif anchor == "recovery_after_avoidance":
             nm_step = _detect_collision_or_near_miss(robot_pos, peds_pos)
@@ -863,6 +1020,7 @@ def extract_critical_intervals(  # noqa: C901, PLR0912, PLR0915
                 end_step=end,
                 anchor_step=anchor_step,
                 reason=reason,
+                source=source,
             )
         )
 
@@ -1091,6 +1249,7 @@ def report_to_dict(report: CriticalIntervalReport) -> dict[str, Any]:
             "end_step": iv.end_step,
             "anchor_step": iv.anchor_step,
             "reason": iv.reason,
+            "source": iv.source,
         }
 
     def _metrics_to_dict(im: IntervalMetrics) -> dict[str, Any]:

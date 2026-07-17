@@ -1,0 +1,75 @@
+{
+  "schema_version": "release_artifact_pointer.v1",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "release_tag": "0.0.3.post1",
+  "release_state": "draft_do_not_publish",
+  "draft_release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/untagged-7d3aa3c9034687ce4f66",
+  "published_release_url": "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.3.post1",
+  "concept_doi": "10.5281/zenodo.19482025",
+  "claim_boundary": "Corrected, row-preserving publication of the existing 20,160 release episodes. No simulation was run and no new benchmark or paper claim is introduced. The campaign SNQI contract remains fail-with-warning and must not be promoted as SNQI-contract-valid evidence.",
+  "artifact": {
+    "name": "paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+    "size_bytes": 45072616,
+    "sha256": "9bf6ea35a17ce812f0a9c841c3681bc072dcf7ba8c121cbcf05113b8514f4de1",
+    "draft_asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/untagged-7d3aa3c9034687ce4f66/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+    "published_asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/0.0.3.post1/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected_publication_bundle.tar.gz",
+    "local_staging_classification": "durable-promoted to the draft release; the local copy is a recoverable staging cache"
+  },
+  "source": {
+    "release_tag": "0.0.3",
+    "asset_url": "https://github.com/ll7/robot_sf_ll7/releases/download/0.0.3/paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final_publication_bundle.tar.gz",
+    "sha256": "3cfefaaa39aab6cae541cece9573848a7e0afc5e1d9e4c9a7bbf48df2330b1a7"
+  },
+  "row_contract": {
+    "episode_rows": 20160,
+    "arms": 14,
+    "rows_per_arm": 1440,
+    "simulation": "none",
+    "duplicate_backup_files_in_successor": 0,
+    "goal_timeout_boundary": {
+      "annotated_rows": 1,
+      "unresolved_rows": 0,
+      "disposition": "Retained for frozen-row integrity and excluded from timing-boundary interpretation; stored execution metrics were not reclassified."
+    }
+  },
+  "provenance": {
+    "execution_commit": "a307ef276d701f8d14dead1aa0513f44ee97c0b0",
+    "execution_commit_role": "Produced the frozen simulated trajectories and raw per-episode metrics recorded in every episode event ledger.",
+    "publication_commit": "ded9027d2928512c14bc241397e0ab1d8f586654",
+    "publication_commit_role": "Rebuilt reports, reconciled diagnostics metadata, and packaged the successor bundle without simulation.",
+    "release_manifest": "configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml",
+    "rebuild_command": "uv run python scripts/tools/rebuild_campaign_reports_from_rows.py --manifest configs/benchmarks/releases/paper_experiment_matrix_v2_h600_s30_release_v0_0_3_post1.yaml --campaign-id paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_post1_corrected --mode run"
+  },
+  "snqi_reconciliation": {
+    "status": "pass",
+    "verified_rows": 20160,
+    "declared_weights_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2",
+    "baseline_sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a",
+    "disposition": "Stored metrics.snqi values are retained because all 20,160 match robot_sf.benchmark.metrics.snqi. camera_ready_v3 omits w_curvature, so execution used the scalarizer default w_curvature=1.0; the successor metadata makes this effective weight explicit and recomputes planner_ordering on the same basis."
+  },
+  "verification": {
+    "publication_preflight": {
+      "status": "pass",
+      "tracked_summary": "docs/context/evidence/issue_4364_release_0_0_3_post1/publication_preflight.json",
+      "tracked_summary_sha256": "f0a507bd95c8f941e707c22b434b6b345a2f8affa08c1bf6d8a36418cbc977b8",
+      "staged_output_sha256": "5228f1726530016f33d424028744a7fe92f00b6a6ce4b6877992b3bcf9fb782c"
+    },
+    "root_checksum_log": {
+      "status": "pass",
+      "staged_name": "0_0_3_post1_sha256sum_verification.log",
+      "sha256": "16528a048b2721e9c1872371afb7d578d4e6c0843c3095dd9daffa8fcd80b559"
+    },
+    "snqi_field_gate": {
+      "status": "pass",
+      "tracked_summary": "docs/context/evidence/issue_4364_release_0_0_3_post1/snqi_reconciliation.json",
+      "tracked_summary_sha256": "e509621732a10a5bfaad565a3ac9287d0433879e2b61f5ccdc8fbcda853a21c6",
+      "staged_output_sha256": "e509621732a10a5bfaad565a3ac9287d0433879e2b61f5ccdc8fbcda853a21c6"
+    },
+    "collision_consumer_gate": {
+      "status": "pass",
+      "tracked_summary": "docs/context/evidence/issue_4364_release_0_0_3_post1/collision_reconciliation.json",
+      "tracked_summary_sha256": "82659bd4055c4c66857d8dc3fbc581f4cfaed952a9edfe85c66020cb80e93f5a",
+      "staged_output_sha256": "82659bd4055c4c66857d8dc3fbc581f4cfaed952a9edfe85c66020cb80e93f5a"
+    }
+  }
+}

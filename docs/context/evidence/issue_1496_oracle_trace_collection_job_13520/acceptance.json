@@ -1,0 +1,27 @@
+{
+  "dataset_path": "private-artifact://oracle-imitation/issue1496/oracle-trace-collection/dataset/expert_traj_v1.npz",
+  "dataset_schema_valid": true,
+  "dataset_sha256": "433c797f6e3635f133d7541c9dd9edd3849cdee7b89e23c930b458e463979388",
+  "episode_count": 12,
+  "expected_head": "9d65072ecd9d04e2f664a4299665dbff718401d9",
+  "per_step_observations_actions": true,
+  "artifact_classification": "private_external_data",
+  "registry_path": "configs/training/ppo_imitation/oracle_trace_uri_registry_issue_1496_collection.yaml",
+  "required_registry_gaps_filled": {
+    "evaluation_checksum_inventory": true,
+    "evaluation_combined_jsonl": true,
+    "evaluation_source_manifest": true,
+    "train_checksum_inventory": true,
+    "validation_checksum_inventory": true,
+    "validation_combined_jsonl": true,
+    "validation_source_manifest": true
+  },
+  "schema_version": "issue1496.oracle_trace_collection_acceptance.v1",
+  "split_counts": {
+    "evaluation": 3,
+    "train": 6,
+    "validation": 3
+  },
+  "status": "accepted",
+  "training_performed": false
+}

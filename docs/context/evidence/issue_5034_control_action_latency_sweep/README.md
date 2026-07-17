@@ -84,11 +84,43 @@ SNQI-v0 neutral defaults apply to those terms. Near-miss event counts were exact
 
 Per the issue #691 benchmark fallback policy, excluded rows never contribute to the result metrics above.
 
+## Reproducible SNQI derivation (issue #5912)
+
+The canonical analyzer command
+`scripts/benchmark/analyze_control_action_latency_snqi.py` derives `snqi_analysis.json` and
+`snqi_by_latency.csv` from a **durable sufficient input** rather than the private raw JSONL. The
+input `snqi_latency_inputs.csv` carries exactly the per-episode SNQI-v0 terms (success,
+time-to-goal, collisions, near-miss rate x steps, comfort exposure) for the 1,296 latency cells;
+its provenance sidecar `snqi_latency_inputs.csv.provenance.json` anchors it to the job 13516 raw
+rows by SHA-256 `6b34e690...`. A fresh checkout can rerun:
+
+```bash
+uv run python scripts/benchmark/analyze_control_action_latency_snqi.py \
+  --verify-against docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_analysis.json
+```
+
+The analyzer validates the input checksum, the complete fixed-scope cross-product (3 planner
+groups x 3 latency steps x 3 seeds x 48 scenarios = 1,296 cells), and that no fallback / degraded /
+unavailable / non-native row enters the result set before computing SNQI-v0 per episode, the
+per-unit ordinary-least-squares latency slope, and the paired cluster-bootstrap uncertainty.
+
+Reproducibility contract: SNQI-v0 point estimates (per-planner means, deltas, slopes) are
+deterministic and reproduce the registered packet to within `1e-9` (observed ~2e-16). The
+pairwise slope differences, bootstrap percentile endpoints, and posterior probabilities are
+Monte-Carlo / second-code-path quantities that reproduce within their documented tolerances but
+are not byte-identical, because the registered packet's generating code was never committed and
+its uncertainty block is internally inconsistent (the registered pairwise `slope_difference` does
+not equal the difference of its own per-planner slopes, and the probabilities include half-integer
+counts such as `0.68635 = 6863.5/10000`). This committed analyzer is the canonical deterministic
+generator going forward.
+
 ## Files
 
 - `summary.json`: full promotion packet (aggregate + per-cell + exclusions).
 - `per_cell_metrics.csv`: compact per-cell latency metrics table.
 - `snqi_analysis.json`: exact-scope verification, SNQI method, slopes, uncertainty, and caveats.
 - `snqi_by_latency.csv`: compact planner-by-latency SNQI table.
+- `snqi_latency_inputs.csv`: durable sufficient input for the SNQI analyzer (issue #5912).
+- `snqi_latency_inputs.csv.provenance.json`: provenance anchoring the input to the raw rows.
 - `manifest.sha256`: checksums for promoted compact artifacts.
 - `README.md`: this human-readable summary.

@@ -369,3 +369,23 @@ def test_cli_fails_closed_on_persistent_failure(tmp_path: Path, capsys) -> None:
     assert "NOT a PR body/contract validation failure" in err
     # No partial output file is written on failure.
     assert not changed.exists()
+
+
+def test_cli_fails_closed_on_malformed_file_entry(
+    tmp_path: Path, capsys, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A malformed API entry exits cleanly instead of leaking a traceback."""
+    changed = tmp_path / "changed.txt"
+    import scripts.ci.collect_pr_files as mod
+
+    monkeypatch.setattr(
+        mod,
+        "_run_gh_api_page",
+        _scripted_runner({(1, 1): _proc(stdout=json.dumps([{"status": "modified"}]))}),
+    )
+
+    rc = main(["--repo", "o/r", "--pr-number", "5", "--out-changed-files", str(changed)])
+
+    assert rc == 1
+    assert "without a string 'filename' field" in capsys.readouterr().err
+    assert not changed.exists()

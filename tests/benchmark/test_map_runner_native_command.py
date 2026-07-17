@@ -19,6 +19,18 @@ from robot_sf.benchmark.map_runner_native_command import (
 _FAKE_PLANNER = str(Path(__file__).resolve().parent / "fixtures" / "native_command_fake_planner.py")
 
 
+@pytest.mark.parametrize("exception_type", [OSError, ValueError])
+def test_readline_with_timeout_propagates_expected_io_errors(
+    exception_type: type[Exception],
+) -> None:
+    class ErrorStream:
+        def readline(self) -> str:
+            raise exception_type("read failed")
+
+    with pytest.raises(exception_type, match="read failed"):
+        nc.readline_with_timeout(ErrorStream(), timeout_s=1.0)
+
+
 # ---------------------------------------------------------------------------
 # Command-contract parsing
 # ---------------------------------------------------------------------------

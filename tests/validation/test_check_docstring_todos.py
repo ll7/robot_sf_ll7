@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import textwrap
+from pathlib import Path
 
 from scripts.validation import check_docstring_todos
 
@@ -223,3 +224,28 @@ def test_committed_baseline_matches_base_ref_no_phantom_keys():
 
     assert drift == [], f"baseline is stale vs base ref: {drift}"
     assert reverse == [], f"baseline exceeds base ref (phantom keys): {reverse}"
+
+
+def test_committed_baseline_matches_working_tree_backlog(monkeypatch):
+    """The tracked baseline must equal a fresh working-tree backlog.
+
+    Reproduces issue #5894: after a cleanup PR removes placeholder docstrings,
+    the committed ``docstring_todo_baseline.json`` must be regenerated so the
+    ``verify-baseline`` freshness gate stays green. This guards against the
+    baseline drifting from the actual file tree when such removals merge.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    baseline_path = repo_root / "scripts" / "validation" / "docstring_todo_baseline.json"
+    monkeypatch.chdir(repo_root)
+
+    baseline = check_docstring_todos._read_backlog_baseline(baseline_path, repo_root)
+    assert baseline is not None
+
+    report = check_docstring_todos.build_backlog_report(
+        repo_root,
+        roots=check_docstring_todos.DEFAULT_BACKLOG_ROOTS,
+    )
+    drift, reverse = check_docstring_todos.compare_baseline_drift(report, baseline)
+
+    assert drift == []
+    assert reverse == []

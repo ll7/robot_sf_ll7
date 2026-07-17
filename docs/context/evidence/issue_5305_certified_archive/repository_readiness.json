@@ -1,0 +1,21 @@
+{
+  "archive_id_overlap_count": 0,
+  "archive_sha256": "1d8db3638e3539dca2e06849c0727150aff41ea85a71ee2d22cb1a343bc6d57e",
+  "blocking_reasons": [],
+  "disjoint_split_possible": true,
+  "distinct_family_count": 2,
+  "entries_missing_archive_id": 0,
+  "entries_missing_certification_status": 0,
+  "entries_missing_failure_attribution": 0,
+  "entries_missing_scenario_seed": 0,
+  "entries_not_certified": 0,
+  "entries_unknown_family": 0,
+  "entry_count": 17,
+  "null_test_prerequisites_ready": true,
+  "overlap_metadata_ready": true,
+  "ready": true,
+  "scenario_family_overlap_count": 0,
+  "schema_ok": true,
+  "seed_overlap_count": 0,
+  "status": "ready"
+}

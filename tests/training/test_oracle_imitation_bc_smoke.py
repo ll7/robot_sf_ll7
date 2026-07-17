@@ -215,7 +215,6 @@ def _build_fixture(
             ),
         ]
     if splits_mapping is None:
-        loaded = load_expert_trajectory_dataset  # noqa: F841 (readability anchor)
         splits_mapping = {"train": [], "validation": [], "evaluation": []}
         for episode in episodes:
             splits_mapping.setdefault(episode["split"], []).append(episode["episode_id"])

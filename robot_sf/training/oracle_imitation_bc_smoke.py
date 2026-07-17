@@ -380,11 +380,12 @@ def validate_split_leakage_contract(dataset: dict[str, Any]) -> dict[str, Any]:
 
 
 def _flatten_observation(observation: Any, *, feature_fields: tuple[str, ...]) -> np.ndarray:
-    """Flatten one structured observation dict into a fixed-width float32 feature vector.
+    """Flatten one structured observation dict into a 1-D float32 feature vector.
 
-    Pedestrian fields are padded/truncated to a fixed slot count so every step shares a feature
-    dimension regardless of the live pedestrian count. The occupancy grid is excluded by the
-    field list.
+    Each requested field is ravelled and concatenated in field order; variable-width fields
+    (e.g. pedestrian arrays with differing live counts) keep their own width here and are
+    right-padded to the batch's maximum feature width later by :func:`_stack_fixed_width`.
+    The occupancy grid is excluded by the field list.
 
     Returns:
         Concatenated float32 feature vector for the observation.

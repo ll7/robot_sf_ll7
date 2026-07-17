@@ -28,7 +28,6 @@ DEFAULT_PACKET = Path("configs/analysis/issue_5302_oracle_gap_packet.yaml")
 SCHEMA_VERSION = "issue_5302_oracle_gap_analysis_packet.v1"
 PPO_CONFIG_PATH = "configs/algos/ppo_v3_camera_ready.yaml"
 PPO_MODEL_ID = "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200"
-PPO_CHECKPOINT_SHA256 = "8367af109a27e8879ced0c8913f6eff26df7ec59c31ea88f9a297bb2c141eb09"
 PPO_PROVENANCE_SOURCE = "model/registry.yaml github_release.sha256"
 EXPECTED_PLANNERS = (
     "orca",
@@ -174,28 +173,37 @@ def validate_packet(  # noqa: C901, PLR0915
     _require(ppo_row.get("fallback_to_goal") is False, "PPO fallback_to_goal must be false")
     pinned = _mapping(ppo_row, "pinned_provenance")
     _require(pinned.get("model_id") == PPO_MODEL_ID, "PPO model_id pin is incorrect")
+    packet_sha = str(pinned.get("checkpoint_sha256", "")).strip().lower()
     _require(
-        pinned.get("checkpoint_sha256") == PPO_CHECKPOINT_SHA256,
-        "PPO checkpoint pin is incorrect",
+        len(packet_sha) == 64,
+        "PPO checkpoint pin checkpoint_sha256 must be a 64-hex sha256",
     )
     _require(
         pinned.get("provenance_source") == PPO_PROVENANCE_SOURCE,
         "PPO provenance source must be model/registry.yaml",
+    )
+    # The registry is the single source of the canonical checkpoint hash; the
+    # packet pin must equal it. No second hardcoded copy of the hash exists here,
+    # so the pin cannot drift from the artifact the resolver verifies on download.
+    registry = load_registry(root / "model" / "registry.yaml")
+    registry_entry = registry.get(PPO_MODEL_ID)
+    _require(isinstance(registry_entry, dict), "PPO model_id is missing from model registry")
+    release = registry_entry.get("github_release")
+    _require(isinstance(release, dict), "PPO model registry release metadata is missing")
+    canonical_sha = str(release.get("sha256", "")).strip().lower()
+    _require(
+        len(canonical_sha) == 64,
+        "PPO model registry github_release.sha256 is missing or malformed",
+    )
+    _require(
+        packet_sha == canonical_sha,
+        "PPO checkpoint pin does not match model registry github_release.sha256",
     )
     ppo_config = _load_mapping(root / PPO_CONFIG_PATH, "PPO config")
     _require(ppo_config.get("model_id") == PPO_MODEL_ID, "PPO config model_id does not match pin")
     _require(
         ppo_config.get("fallback_to_goal") is False,
         "PPO config fallback_to_goal must be false",
-    )
-    registry = load_registry(root / "model" / "registry.yaml")
-    registry_entry = registry.get(PPO_MODEL_ID)
-    _require(isinstance(registry_entry, dict), "PPO model_id is missing from model registry")
-    release = registry_entry.get("github_release")
-    _require(isinstance(release, dict), "PPO model registry release metadata is missing")
-    _require(
-        str(release.get("sha256", "")).lower() == PPO_CHECKPOINT_SHA256,
-        "PPO checkpoint pin does not match model registry",
     )
     for row in rows:
         if row["planner_id"] == "orca":

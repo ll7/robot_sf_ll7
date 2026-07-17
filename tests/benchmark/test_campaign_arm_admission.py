@@ -285,6 +285,49 @@ def test_leader_role_with_missing_cited_evidence_fails() -> None:
     assert any("[orca] evidence" in m and "does not resolve" in m for m in messages)
 
 
+def test_provenance_readiness_evidence_names_readiness_not_role() -> None:
+    """A readiness-triggered evidence finding names the readiness label, not the role.
+
+    Regression: when evidence is required by ``candidate_requires_existing_provenance`` (not by a
+    leader role), the finding must label the claim with the readiness label and must not mislabel
+    the unrelated role string as the readiness, nor call it a superiority/leadership claim.
+    """
+    # Missing citation: the finding must reference the readiness label.
+    packet_missing = _packet_with_arms(
+        [
+            {
+                "planner_id": "orca",
+                "role": "plain_candidate",
+                "readiness": "candidate_requires_existing_provenance",
+            }
+        ]
+    )
+    messages_missing = _admit(packet_missing)
+    assert len(messages_missing) == 1
+    missing = messages_missing[0]
+    assert "readiness=candidate_requires_existing_provenance" in missing
+    assert "candidate_requires_existing_provenance" in missing
+    # The unrelated role string must not appear as the labelled claim.
+    assert "readiness=plain_candidate" not in missing
+
+    # Cited-but-missing evidence path: still a readiness claim, not superiority/leadership.
+    packet_cited = _packet_with_arms(
+        [
+            {
+                "planner_id": "orca",
+                "role": "plain_candidate",
+                "readiness": "candidate_requires_existing_provenance",
+                "evidence": "docs/context/evidence/does_not_exist_5961",
+            }
+        ]
+    )
+    messages_cited = _admit(packet_cited)
+    assert len(messages_cited) == 1
+    cited = messages_cited[0]
+    assert "readiness claim" in cited
+    assert "superiority" not in cited
+
+
 # --- roster shape ----------------------------------------------------------
 
 

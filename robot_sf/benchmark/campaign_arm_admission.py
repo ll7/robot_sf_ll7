@@ -772,21 +772,25 @@ def _check_evidence_contract(
         A list of findings (empty when the evidence contract holds).
     """
     findings: list[ArmAdmissionFinding] = []
-    requires_evidence = _role_asserts_superiority(role) or (
-        readiness in _PROVENANCE_REQUIRED_READINESS_LABELS
-    )
+    role_asserts = _role_asserts_superiority(role)
+    requires_evidence = role_asserts or (readiness in _PROVENANCE_REQUIRED_READINESS_LABELS)
     if not requires_evidence:
         return findings
+    # The evidence requirement is triggered either by a superiority/leadership role or by a
+    # provenance-required readiness label. Report the triggering claim kind and its label
+    # accurately: a readiness-triggered claim must not be labelled with the (unrelated) role
+    # string, and a provenance-required readiness is not a "superiority/leadership" claim.
+    claim_kind = "role" if role_asserts else "readiness"
+    claim_label = role if role_asserts else readiness
     if not evidence_path:
-        claim_kind = "role" if _role_asserts_superiority(role) else "readiness"
         findings.append(
             ArmAdmissionFinding(
                 planner_id=planner_id,
                 contract="evidence",
-                declared=f"{claim_kind}={role or readiness}",
+                declared=f"{claim_kind}={claim_label}",
                 observed="no evidence citation",
                 message=(
-                    f"arm '{planner_id}' asserts {claim_kind} '{role or readiness}' that requires "
+                    f"arm '{planner_id}' asserts {claim_kind} '{claim_label}' that requires "
                     "registered evidence but cites none; provide an evidence/evidence_path field "
                     "pointing at a durable result that establishes the claim"
                 ),
@@ -801,12 +805,12 @@ def _check_evidence_contract(
             ArmAdmissionFinding(
                 planner_id=planner_id,
                 contract="evidence",
-                declared=f"{role or readiness} -> {evidence_path}",
+                declared=f"{claim_kind}={claim_label} -> {evidence_path}",
                 observed="cited evidence not found",
                 message=(
                     f"arm '{planner_id}' cites evidence '{evidence_path}' that does not resolve "
-                    "under the repo root; the superiority/leadership claim is unsupported by a "
-                    "registered result"
+                    f"under the repo root; the {claim_kind} claim '{claim_label}' is unsupported "
+                    "by a registered result"
                 ),
             )
         )

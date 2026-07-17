@@ -41,9 +41,9 @@ def main() -> int:
     """Run the fake planner over stdin requests."""
     if sys.stdin.isatty():
         return 0
-    data = sys.stdin.read()
-    requests = [line for line in data.splitlines() if line.strip()]
-    for line in requests:
+    for line in sys.stdin:
+        if not line.strip():
+            continue
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:

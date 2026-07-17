@@ -1055,7 +1055,7 @@ def _create_native_command_policy(
         return command.step(robot_pos, robot_vel, robot_goal, ped_positions, dt)
 
     policy_fn.close = command.close  # type: ignore[attr-defined]
-    policy_fn.diagnostics = command.diagnostics  # type: ignore[attr.define]
+    policy_fn.diagnostics = command.diagnostics  # type: ignore[attr-defined]
 
     metadata = {
         "algorithm": NATIVE_COMMAND_ARM,

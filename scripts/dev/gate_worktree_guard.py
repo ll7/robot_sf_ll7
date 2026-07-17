@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -123,21 +124,32 @@ def _load_active_lease_for_path(path: Path) -> Any | None:
     treat the worktree as missing-without-owner rather than crashing.
     """
     try:
-        from scripts.dev.pr_gate_lease import lease_path, load_lease
+        from scripts.dev.pr_gate_lease import lease_path, legacy_lease_path, load_lease
     except ImportError:
         return None
 
-    try:
-        lease_file = lease_path(path)
-        if not lease_file.exists():
-            return None
-        lease = load_lease(lease_file)
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return None
+    resolved = path.resolve()
+    lease_files = [lease_path(resolved)]
+    legacy_file = legacy_lease_path()
+    if legacy_file not in lease_files:
+        lease_files.append(legacy_file)
 
-    if lease is None or lease.is_expired():
-        return None
-    return lease
+    for lease_file in lease_files:
+        if not lease_file.exists():
+            continue
+        try:
+            lease = load_lease(lease_file)
+        except (OSError, RuntimeError, TypeError, ValueError):
+            continue
+        if lease is None or lease.is_expired():
+            continue
+        # The legacy file was shared by older gate processes. Only attribute it
+        # when its embedded path identifies this exact missing worktree.
+        if lease_file == legacy_file:
+            if not lease.worktree_path or Path(lease.worktree_path).resolve() != resolved:
+                continue
+        return lease
+    return None
 
 
 def verify_gate_worktree(path: str | Path) -> GateWorktreeHealth:
@@ -222,25 +234,64 @@ def recreate_gate_worktree(
         base["error"] = "worktree missing and no live lease on record; cannot recreate safely"
         return GateWorktreeRecreate(**base)
 
-    branch = None
-    if lease.worktree_path:
-        branch = _branch_for_path(lease.worktree_path)
-    if branch is None and lease.gate_id:
-        branch = _branch_for_path(resolved)
+    if ttl_hours is not None and (
+        isinstance(ttl_hours, bool)
+        or not isinstance(ttl_hours, (int, float))
+        or not math.isfinite(ttl_hours)
+        or ttl_hours <= 0
+    ):
+        base["recreated"] = False
+        base["lease_owner"] = lease.owner
+        base["lease_pr_number"] = lease.pr_number
+        base["lease_gate_id"] = lease.gate_id
+        base["error"] = "ttl_hours must be a positive finite number"
+        return GateWorktreeRecreate(**base)
 
-    if not branch:
+    branch, head_sha = _restore_metadata(lease)
+    if not branch and not head_sha:
         base["recreated"] = False
         base["lease_owner"] = lease.owner
         base["lease_pr_number"] = lease.pr_number
         base["lease_gate_id"] = lease.gate_id
         base["error"] = (
-            "live lease found but no branch on record; cannot recreate deterministically"
+            "live lease found but no branch or commit on record; cannot recreate deterministically"
         )
         return GateWorktreeRecreate(**base)
 
-    result = _run_command(
-        ["git", "worktree", "add", "--force", str(resolved), "origin/main", "-b", branch]
-    )
+    if branch:
+        if _local_branch_exists(branch):
+            add_args = ["git", "worktree", "add", "--force", str(resolved), branch]
+        elif not head_sha:
+            base["recreated"] = False
+            base["branch"] = branch
+            base["lease_owner"] = lease.owner
+            base["lease_pr_number"] = lease.pr_number
+            base["lease_gate_id"] = lease.gate_id
+            base["error"] = f"leased branch {branch!r} is unavailable and has no commit fallback"
+            return GateWorktreeRecreate(**base)
+        else:
+            add_args = [
+                "git",
+                "worktree",
+                "add",
+                "--force",
+                "-b",
+                branch,
+                str(resolved),
+                head_sha,
+            ]
+    else:
+        add_args = [
+            "git",
+            "worktree",
+            "add",
+            "--force",
+            "--detach",
+            str(resolved),
+            head_sha,
+        ]
+
+    result = _run_command(add_args)
     if result.returncode != 0:
         base["recreated"] = False
         base["branch"] = branch
@@ -253,9 +304,15 @@ def recreate_gate_worktree(
     try:
         from scripts.dev.pr_gate_lease import heartbeat
 
-        heartbeat()
-    except (ImportError, RuntimeError, OSError):
-        pass
+        heartbeat(worktree_path=resolved, extend_hours=ttl_hours)
+    except (ImportError, RuntimeError, OSError, TypeError, ValueError) as exc:
+        base["recreated"] = False
+        base["branch"] = branch
+        base["lease_owner"] = lease.owner
+        base["lease_pr_number"] = lease.pr_number
+        base["lease_gate_id"] = lease.gate_id
+        base["error"] = f"worktree recreated but lease refresh failed: {exc}"
+        return GateWorktreeRecreate(**base)
 
     base["recreated"] = True
     base["branch"] = branch
@@ -265,13 +322,83 @@ def recreate_gate_worktree(
     return GateWorktreeRecreate(**base)
 
 
+def _normalise_branch(branch: str | None) -> str | None:
+    """Return a usable short branch name, excluding detached-HEAD markers."""
+    if not branch:
+        return None
+    branch = branch.strip()
+    if branch in {"HEAD", "(detached)"}:
+        return None
+    if branch.startswith("refs/heads/"):
+        branch = branch.removeprefix("refs/heads/")
+    return branch or None
+
+
+def _registered_worktree_metadata(path: Path) -> tuple[str | None, str | None]:
+    """Recover a branch and commit from Git's worktree registry when it remains."""
+    result = _run_command(["git", "worktree", "list", "--porcelain"])
+    if result.returncode != 0:
+        return None, None
+
+    current_path: str | None = None
+    current_sha: str | None = None
+    current_branch: str | None = None
+
+    def finish_record() -> tuple[str | None, str | None] | None:
+        if current_path is None or Path(current_path).resolve() != path.resolve():
+            return None
+        return _normalise_branch(current_branch), current_sha
+
+    for line in (*result.stdout.splitlines(), ""):
+        if line.startswith("worktree "):
+            current_path = line.removeprefix("worktree ").strip()
+            current_sha = None
+            current_branch = None
+        elif line.startswith("HEAD "):
+            current_sha = line.removeprefix("HEAD ").strip() or None
+        elif line.startswith("branch "):
+            current_branch = line.removeprefix("branch ").strip() or None
+        elif not line:
+            record = finish_record()
+            if record is not None:
+                return record
+            current_path = None
+            current_sha = None
+            current_branch = None
+    return None, None
+
+
+def _restore_metadata(lease: Any) -> tuple[str | None, str | None]:
+    """Select persisted or Git-registered branch/commit metadata for recreation."""
+    branch = _normalise_branch(getattr(lease, "head_ref", None))
+    head_sha = getattr(lease, "head_sha", None)
+    if branch or head_sha:
+        return branch, head_sha
+
+    # Older leases may predate persisted head metadata. Git can still retain the
+    # worktree registry entry after the directory disappeared, so use it when
+    # available; otherwise fail closed instead of rebuilding from origin/main.
+    if lease.worktree_path:
+        return _registered_worktree_metadata(Path(lease.worktree_path))
+    return None, None
+
+
+def _local_branch_exists(branch: str) -> bool:
+    """Return whether a local branch ref exists for the restore operation."""
+    result = _run_command(["git", "show-ref", "--verify", "--quiet", f"refs/heads/{branch}"])
+    return result.returncode == 0
+
+
 def _branch_for_path(path: str | Path) -> str | None:
-    """Return the checked-out branch for an existing worktree, or None."""
+    """Return the checked-out branch for an existing worktree, or None.
+
+    Kept as a small compatibility helper for callers/tests that inspect a live
+    worktree; missing-path recreation uses persisted or registry metadata instead.
+    """
     result = _run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=str(path))
     if result.returncode != 0:
         return None
-    branch = result.stdout.strip()
-    return branch or None
+    return _normalise_branch(result.stdout)
 
 
 def ensure_gate_worktree(

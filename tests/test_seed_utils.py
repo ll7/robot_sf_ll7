@@ -180,7 +180,7 @@ def test_torch_optional_behavior():
         assert rep.has_torch is False
 
 
-def test_torch_213_python312_313_uses_c_level_determinism_setter(monkeypatch):
+def test_torch_213_python311_plus_uses_c_level_determinism_setter(monkeypatch):
     """Avoid Torch 2.13.0's Python 3.11/3.12/3.13 Dynamo/Triton import path.
 
     The real Torch 2.13.0 ``_C._set_deterministic_algorithms`` builtin takes a

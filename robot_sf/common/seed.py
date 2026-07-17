@@ -54,7 +54,7 @@ def _import_torch():
 def _configure_torch_213_runtime() -> bool:
     """Disable Torch's crashing compile wrapper on the supported 2.13/Python path.
 
-    Torch 2.13.0 on Python 3.12+ can segfault when the first optimizer operation
+    Torch 2.13.0 on Python 3.11+ can segfault when the first optimizer operation
     imports its ``torch._dynamo``/Triton wrapper.  Preloading Triton gives its
     native extension a safe import point before that lazy wrapper is entered.
     ``TORCH_COMPILE_DISABLE=1`` is also set for Torch builds that honor the
@@ -94,7 +94,7 @@ _TORCH_213_RUNTIME_GUARD_APPLIED = _configure_torch_213_runtime()
 def _set_torch_deterministic_algorithms(torch_module: Any, deterministic: bool) -> bool:
     """Set torch's deterministic-algorithm flag without the Torch 2.13.0 CI crash path.
 
-    Torch 2.13.0 on Python 3.12 imports ``torch._inductor.config`` from the public
+    Torch 2.13.0 on Python 3.11+ imports ``torch._inductor.config`` from the public
     ``use_deterministic_algorithms`` wrapper.  That import reaches Dynamo/Triton and can
     segfault in the repository's test and smoke workers.  The C-level setter is already
     loaded with torch and preserves the operation-level determinism flag without loading

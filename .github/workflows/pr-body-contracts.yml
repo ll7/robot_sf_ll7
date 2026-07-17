@@ -31,10 +31,13 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files?per_page=100" \
-            --jq '.[].filename' > "$RUNNER_TEMP/pr_changed_files.txt"
-          echo "Changed files for PR #$PR_NUMBER:"
-          sed -n '1,120p' "$RUNNER_TEMP/pr_changed_files.txt"
+          # Routed through a shared retrying collector (issue #5918): a transient
+          # GitHub API 502/503/504/429 (which arrives as an HTML body that gh can't
+          # JSON-parse) is retried with backoff instead of red-ing this job before
+          # body validation runs. A persistent failure still fails closed.
+          uv run python scripts/ci/collect_pr_files.py \
+            --repo "$REPO" --pr-number "$PR_NUMBER" \
+            --out-changed-files "$RUNNER_TEMP/pr_changed_files.txt"
 
       - name: Validate PR body contracts (advisory)
         env:

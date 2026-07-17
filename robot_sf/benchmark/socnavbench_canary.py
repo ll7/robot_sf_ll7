@@ -218,6 +218,7 @@ def _git_commit_sha(*, repo_root: Path = MODULE_ROOT) -> str:
     A deterministic, non-empty string is required so the policy identity block is always
     populated; a worktree detached-head SHA is acceptable for a canary receipt.
     """
+    config_path = repo_root / "configs" / "algos" / "social_force_holonomic_tuned_tau_low.yaml"
     try:
         result = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -229,7 +230,7 @@ def _git_commit_sha(*, repo_root: Path = MODULE_ROOT) -> str:
         return result.stdout.strip()
     except (subprocess.CalledProcessError, OSError):
         # Worktree/non-git fallback: hash the pinned config so identity stays reproducible.
-        return "dirty:" + _config_digest(PINNED_POLICY_ALGO_CONFIG)[:12]
+        return "dirty:" + _config_digest(config_path)[:12]
 
 
 def _config_digest(path: Path) -> str:

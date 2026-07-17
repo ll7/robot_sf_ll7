@@ -14,10 +14,12 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
+from robot_sf.benchmark import canary_rollout
 from robot_sf.benchmark.canary_rollout import (
     _resolve_pinned_planner_config,
     execute_pinned_policy,
@@ -33,6 +35,8 @@ from robot_sf.benchmark.socnavbench_canary import (
     SOCNAVBENCH_METRIC_ID,
     CanaryError,
     PinnedPolicy,
+    _config_digest,
+    _git_commit_sha,
     materialize_socnavbench_export,
     resolve_pinned_policy,
     resolve_scenario_mapping,
@@ -428,6 +432,68 @@ def test_execute_pinned_policy_rejects_non_mapping_scenario(
     )
     with pytest.raises(ValueError, match="scenario at index 0 must be a mapping"):
         execute_pinned_policy(seed=0, algo_config=PINNED_POLICY_ALGO_CONFIG)
+
+
+def test_execute_pinned_policy_closes_environment_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The rollout must close the simulator even when policy execution raises."""
+
+    class FailingEnvironment:
+        def __init__(self) -> None:
+            self.closed = False
+            self.simulator = SimpleNamespace(robot_pos=np.array([[0.0, 0.0]]))
+
+        def reset(self, *, seed: int) -> tuple[None, dict[str, object]]:
+            return None, {}
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FailingPolicy:
+        def act(self, _obs: object) -> object:
+            raise RuntimeError("synthetic policy failure")
+
+    environment = FailingEnvironment()
+    monkeypatch.setattr(canary_rollout, "load_scenarios", lambda _path: [{"name": "fake"}])
+    monkeypatch.setattr(canary_rollout, "select_scenario", lambda scenarios, _index: scenarios[0])
+    monkeypatch.setattr(
+        canary_rollout,
+        "build_robot_config_from_scenario",
+        lambda *_args, **_kwargs: SimpleNamespace(),
+    )
+
+    def resolve_config(*, algo_config: Path) -> object:
+        return object()
+
+    monkeypatch.setattr(
+        canary_rollout,
+        "_resolve_pinned_planner_config",
+        resolve_config,
+    )
+    monkeypatch.setattr(canary_rollout, "make_social_force_policy", lambda _config: FailingPolicy())
+    monkeypatch.setattr(canary_rollout, "make_robot_env", lambda **_kwargs: environment)
+
+    with pytest.raises(RuntimeError, match="synthetic policy failure"):
+        execute_pinned_policy(seed=0, algo_config=PINNED_POLICY_ALGO_CONFIG)
+
+    assert environment.closed is True
+
+
+def test_git_commit_sha_fallback_uses_custom_repo_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The non-git provenance fallback must hash config under the requested repository root."""
+    config_path = tmp_path / "configs" / "algos" / "social_force_holonomic_tuned_tau_low.yaml"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("custom-root-config\n", encoding="utf-8")
+
+    def fail_git(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(128, ["git", "rev-parse", "HEAD"])
+
+    monkeypatch.setattr("robot_sf.benchmark.socnavbench_canary.subprocess.run", fail_git)
+
+    assert _git_commit_sha(repo_root=tmp_path) == "dirty:" + _config_digest(config_path)[:12]
 
 
 def test_metric_ids_are_distinct_and_reciprocal() -> None:

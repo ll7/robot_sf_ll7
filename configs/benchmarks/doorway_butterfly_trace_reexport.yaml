@@ -1,0 +1,28 @@
+# Issue #5948: doorway butterfly trace re-export config (reconstructed post-hoc from job 13483).
+# This config was originally created ad-hoc in worktree doorway-a307 and lost.
+# Reconstruction based on job 13483's run_summary.yaml (config_hash 846e99aaba7dff51).
+# Note: the spec's minimal variant listed seeds [113, 114]; the actual run used the
+# recommended 30-seed set (111-140). The artifact is authoritative about what ran.
+name: doorway_butterfly_trace_reexport
+paper_facing: false
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+seed_policy:
+  mode: seed-set
+  seed_set: paper_eval_s30
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+planners:
+  - key: ppo
+    algo: ppo
+    planner_group: experimental
+    algo_config: configs/baselines/ppo_15m_grid_socnav.yaml
+    benchmark_profile: experimental
+workers: 1
+dt: 0.1
+horizon: 600
+snqi_enforcement:
+  profile: camera_ready_v3
+  enforcement: warn
+amv_profile:
+  name: amv-paper-v1
+  status: pass
+observation_noise: false

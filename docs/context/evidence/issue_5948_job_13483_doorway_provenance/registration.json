@@ -1,0 +1,61 @@
+{
+  "schema_version": "issue5948.run_provenance_registration.v1",
+  "status": "provenance_preserved_reconstructed_config",
+  "issue": 5948,
+  "job_id": 13483,
+  "label": "doorway-butterfly-trace-reexport",
+  "execution_commit": "a307ef276",
+  "config_hash": "846e99aaba7dff51",
+  "run_summary": {
+    "classification": "private_external_artifact",
+    "uri": "private-artifact://job-13483/doorway-butterfly-trace-reexport/output",
+    "size_bytes": 7549747,
+    "file_count": 46,
+    "committed": false,
+    "preserved_as_bundle": true,
+    "bundle_sha256": "1a434946d774a5550ec3791ec6a829768fab5ce058c7a9ec4db9d43711780dff",
+    "bundle_location": "durable-evidence/job-13483-doorway-provenance.tar.gz"
+  },
+  "reconstructed_config": {
+    "path": "configs/benchmarks/doorway_butterfly_trace_reexport.yaml",
+    "committed": true,
+    "reconstruction_sources": [
+      "job 13483 run_summary.yaml (config_hash 846e99aaba7dff51)",
+      "issue #5948 specification"
+    ]
+  },
+  "run_parameters": {
+    "scenario_matrix": "classic_interactions_francis2023.yaml",
+    "planner": "ppo",
+    "planner_config": "ppo_15m_grid_socnav.yaml",
+    "seed_set": "paper_eval_s30",
+    "seed_range": [111, 140],
+    "seed_count": 30,
+    "horizon": 600,
+    "dt": 0.1,
+    "workers": 1,
+    "snqi_profile": "camera_ready_v3",
+    "snqi_enforcement": "warn",
+    "amv_profile": "amv-paper-v1",
+    "amv_status": "pass",
+    "observation_noise": false,
+    "paper_facing": false
+  },
+  "provenance_discrepancy": {
+    "note": "The spec's minimal variant listed seeds [113, 114]; the run actually used the recommended 30-seed set (111-140). The artifact is authoritative about what ran.",
+    "spec_seeds": [113, 114],
+    "actual_seeds": "111-140 (30 seeds)"
+  },
+  "source_checksums": {
+    "run_summary.yaml": "not_committed_in_original_run",
+    "campaign_manifest.json": "not_committed_in_original_run",
+    "PER_SEED_DIFF.md": "not_committed_in_original_run",
+    "doorway_butterfly_trace_reexport.yaml": "reconstructed_and_committed_in_issue_5948"
+  },
+  "sufficiency": {
+    "provenance_preserved": true,
+    "config_reconstructed": true,
+    "reproducible_from_repo": true,
+    "reason": "Run provenance preserved as checksummed bundle; config reconstructed from run_summary.yaml and committed to repository."
+  }
+}

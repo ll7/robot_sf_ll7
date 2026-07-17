@@ -2006,20 +2006,28 @@ def compute_deadlock_stall(
     if not math.isfinite(data.dt) or data.dt <= 0.0:
         return {
             "deadlock": False,
+            "schema_version": "deadlock-stall.v1",
             "window_steps": int(window_steps),
             "progress_eps_m": float(progress_eps_m),
             "stall_window_count": 0,
             "max_no_progress_run": 0,
+            "status": "not_available",
+            "interpretation": "Deadlock/stall unavailable because episode dt is invalid.",
         }
     n_steps = int(data.robot_pos.shape[0]) if data.robot_pos.ndim >= 2 else 0
     reached = data.reached_goal_step is not None
     if n_steps < 2:
         return {
             "deadlock": False,
+            "schema_version": "deadlock-stall.v1",
             "window_steps": int(window_steps),
             "progress_eps_m": float(progress_eps_m),
             "stall_window_count": 0,
             "max_no_progress_run": 0,
+            "status": "not_available",
+            "interpretation": (
+                "Deadlock/stall unavailable because fewer than two trajectory samples exist."
+            ),
         }
 
     dist_to_goal = np.linalg.norm(data.robot_pos - np.asarray(data.goal, dtype=float), axis=1)

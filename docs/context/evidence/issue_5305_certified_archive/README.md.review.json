@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5305_certified_archive/README.md",
+  "artifact_sha256": "139332cded16d21a2228906bd50237bc4de3cad4d30137d405584298c05563aa",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

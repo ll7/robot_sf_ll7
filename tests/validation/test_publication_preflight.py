@@ -1045,3 +1045,229 @@ def test_preflight_snqi_check_rejects_non_numeric_stored_field(
 
     with pytest.raises(PublicationPreflightError, match="must be a finite JSON number"):
         verify_publication_bundle_preflight(bundle_dir)
+
+
+# ---------------------------------------------------------------------------
+# Issue #5580 fail-closed error branches: malformed diagnostics, ordering, and
+# per-episode rows must be reported as structured self-check violations rather
+# than crashing the preflight (exercises the defensive branches so the release
+# gate cannot silently skip a drifted or corrupt SNQI-bearing bundle).
+# ---------------------------------------------------------------------------
+
+_VALID_SINGLE_ARM_ORDERING = [
+    {
+        "planner_key": "orca",
+        "kinematics": "holonomic",
+        "episode_count": 1,
+        "mean_snqi": 0.0,
+        "rank": 1,
+    }
+]
+
+
+def _diagnostics_path(bundle_dir: Path) -> Path:
+    return bundle_dir / "payload" / "reports" / "snqi_diagnostics.json"
+
+
+def test_snqi_check_reports_malformed_diagnostics_json(tmp_path: Path) -> None:
+    """A non-JSON snqi_diagnostics.json is a fail-closed violation, not a crash."""
+    bundle_dir = _build_bundle(tmp_path)
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", [_snqi_episode(success=True, seed=1)])
+    _write(_diagnostics_path(bundle_dir), "{not-json}\n")
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert result["checked"] is True
+    assert result["violation_count"] == 1
+    assert any("invalid JSON" in v for v in result["violations"])
+
+
+def test_snqi_check_reports_non_object_diagnostics(tmp_path: Path) -> None:
+    """A JSON array in place of the diagnostics object fails closed."""
+    bundle_dir = _build_bundle(tmp_path)
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", [_snqi_episode(success=True, seed=1)])
+    _write(_diagnostics_path(bundle_dir), json.dumps(["not", "an", "object"]) + "\n")
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert result["violation_count"] == 1
+    assert any("expected a JSON object" in v for v in result["violations"])
+
+
+def test_snqi_check_rejects_non_object_ordering_row(tmp_path: Path) -> None:
+    """A planner_ordering entry that is not an object is a structured violation."""
+    bundle_dir = _build_bundle(tmp_path)
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", [_snqi_episode(success=True, seed=1)])
+    _seed_snqi_diagnostics(bundle_dir, ["not-an-object"])
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert any("must be an object" in v for v in result["violations"])
+
+
+def test_snqi_check_rejects_empty_planner_key(tmp_path: Path) -> None:
+    """An empty planner_key cannot form a canonical arm token and fails closed."""
+    bundle_dir = _build_bundle(tmp_path)
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", [_snqi_episode(success=True, seed=1)])
+    _seed_snqi_diagnostics(bundle_dir, [{"planner_key": "", "kinematics": "holonomic", "rank": 1}])
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert any("planner_key must be a non-empty string" in v for v in result["violations"])
+
+
+def test_snqi_check_rejects_empty_kinematics(tmp_path: Path) -> None:
+    """An empty kinematics token cannot form a canonical arm token and fails closed."""
+    bundle_dir = _build_bundle(tmp_path)
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", [_snqi_episode(success=True, seed=1)])
+    _seed_snqi_diagnostics(bundle_dir, [{"planner_key": "orca", "kinematics": "", "rank": 1}])
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert any("kinematics must be a non-empty string" in v for v in result["violations"])
+
+
+def test_snqi_check_rejects_duplicate_ordering_arm(tmp_path: Path) -> None:
+    """Two ordering rows for the same arm are ambiguous and fail closed."""
+    bundle_dir = _build_bundle(tmp_path)
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", [_snqi_episode(success=True, seed=1)])
+    _seed_snqi_diagnostics(
+        bundle_dir,
+        [
+            {"planner_key": "orca", "kinematics": "holonomic", "rank": 1},
+            {"planner_key": "orca", "kinematics": "holonomic", "rank": 2},
+        ],
+    )
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert any("duplicate arm" in v for v in result["violations"])
+
+
+def test_snqi_check_rejects_non_contiguous_ranks(tmp_path: Path) -> None:
+    """Ordering ranks must be unique and contiguous from 1; a gap fails closed."""
+    bundle_dir = _build_bundle(tmp_path)
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", [_snqi_episode(success=True, seed=1)])
+    _seed_snqi_diagnostics(
+        bundle_dir,
+        [
+            {"planner_key": "orca", "kinematics": "holonomic", "rank": 1},
+            {"planner_key": "dwa", "kinematics": "holonomic", "rank": 3},
+        ],
+    )
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert any("unique and contiguous" in v for v in result["violations"])
+
+
+def test_snqi_check_fails_on_baseline_sha_mismatch(tmp_path: Path) -> None:
+    """Diagnostics declaring a non-canonical baseline sha fails closed (twin of weights sha)."""
+    bundle_dir = _build_bundle(tmp_path)
+    rows = [_snqi_episode(success=True, seed=1)]
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", rows)
+    weights_sha256 = hashlib.sha256(_SNQI_WEIGHTS_PATH.read_bytes()).hexdigest()
+    diagnostics = {
+        "weights_version": "snqi_weights_camera_ready_v3",
+        "baseline_version": "snqi_baseline_camera_ready_v3",
+        "weights_sha256": weights_sha256,
+        "baseline_sha256": "0" * 64,  # wrong
+        "planner_ordering": [
+            {
+                "planner_key": "orca",
+                "kinematics": "holonomic",
+                "episode_count": len(rows),
+                "mean_snqi": rows[0]["metrics"]["snqi"],
+                "rank": 1,
+            }
+        ],
+    }
+    _write(_diagnostics_path(bundle_dir), json.dumps(diagnostics) + "\n")
+
+    with pytest.raises(PublicationPreflightError, match="baseline_sha256 does not match"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_snqi_check_reports_missing_canonical_configs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the canonical weights/baseline files are absent the check fails closed."""
+    bundle_dir = _build_bundle(tmp_path)
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", [_snqi_episode(success=True, seed=1)])
+    _seed_snqi_diagnostics(bundle_dir, _VALID_SINGLE_ARM_ORDERING)
+    empty_root = tmp_path / "empty-root"
+    empty_root.mkdir()
+    monkeypatch.setattr(
+        "robot_sf.benchmark.artifact_publication.get_repository_root",
+        lambda: empty_root,
+    )
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert result["checked"] is True
+    assert any("canonical SNQI weights file is missing" in v for v in result["violations"])
+    assert any("canonical SNQI baseline file is missing" in v for v in result["violations"])
+
+
+def test_snqi_check_reports_unreadable_episode_file(tmp_path: Path) -> None:
+    """An episodes.jsonl that cannot be read (here: a directory) fails closed per arm."""
+    bundle_dir = _build_bundle(tmp_path)
+    # Replace the arm's episodes.jsonl with a directory so read_text raises OSError.
+    episodes_path = bundle_dir / "payload" / "runs" / "orca__holonomic" / "episodes.jsonl"
+    episodes_path.parent.mkdir(parents=True, exist_ok=True)
+    if episodes_path.exists():
+        episodes_path.unlink()
+    episodes_path.mkdir()
+    _seed_snqi_diagnostics(bundle_dir, _VALID_SINGLE_ARM_ORDERING)
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert any("cannot read" in v for v in result["violations"])
+
+
+def test_snqi_check_reports_malformed_episode_rows_without_crash(tmp_path: Path) -> None:
+    """Blank, non-JSON, non-object, and snqi-less rows are all structured violations.
+
+    Every row here is either skipped or rejected, so ``episode_field_present`` stays 0 while
+    ``rows`` is positive, which also exercises the "no per-episode metrics.snqi fields" guard.
+    """
+    bundle_dir = _build_bundle(tmp_path)
+    lines = [
+        "",  # blank line -> skipped
+        "{bad json",  # invalid JSON
+        json.dumps([]),  # not a JSON object
+        json.dumps({"metrics": "not-a-mapping"}),  # metrics not an object
+        json.dumps({"metrics": {}}),  # metrics.snqi absent
+    ]
+    episodes_path = bundle_dir / "payload" / "runs" / "orca__holonomic" / "episodes.jsonl"
+    _write(episodes_path, "\n".join(lines) + "\n")
+    _seed_snqi_diagnostics(bundle_dir, _VALID_SINGLE_ARM_ORDERING)
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    violations = result["violations"]
+    assert any("invalid JSON" in v for v in violations)
+    assert any("expected a JSON object" in v for v in violations)
+    assert any("metrics must be an object" in v for v in violations)
+    assert any("metrics.snqi field is absent" in v for v in violations)
+    assert any("no per-episode metrics.snqi fields found" in v for v in violations)
+
+
+def test_snqi_check_rejects_non_finite_stored_snqi(tmp_path: Path) -> None:
+    """A numeric-but-non-finite stored SNQI (NaN) is rejected before recompute."""
+    bundle_dir = _build_bundle(tmp_path)
+    row = _snqi_episode(success=True, seed=1)
+    row["metrics"]["snqi"] = float("nan")
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", [row])
+    _seed_snqi_diagnostics(bundle_dir, _VALID_SINGLE_ARM_ORDERING)
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert any("is not a finite number" in v for v in result["violations"])
+
+
+def test_snqi_check_reports_recompute_failure(tmp_path: Path) -> None:
+    """A finite stored SNQI whose metrics cannot be recomputed fails closed per episode."""
+    bundle_dir = _build_bundle(tmp_path)
+    # Finite stored snqi, but a non-numeric metric makes the scalarizer raise on recompute.
+    row = {
+        "episode_id": "scenario--1",
+        "scenario_id": "scenario",
+        "seed": 1,
+        "event_ledger": {"software_commit": "abc123"},
+        "metrics": {"snqi": 0.5, "collisions": "not-a-number"},
+    }
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", [row])
+    _seed_snqi_diagnostics(bundle_dir, _VALID_SINGLE_ARM_ORDERING)
+
+    result = _check_snqi_field_consistency(bundle_dir / "payload")
+    assert any("curvature-aware recompute failed" in v for v in result["violations"])

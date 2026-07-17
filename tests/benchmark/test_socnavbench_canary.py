@@ -46,8 +46,7 @@ def test_pinned_policy_resolves_concrete_identity() -> None:
     assert policy.config_digest_sha256
     assert policy.source_commit
     assert not any(
-        tok in policy.policy_id.lower()
-        for tok in ("tbd", "placeholder", "blocked", "scaffold")
+        tok in policy.policy_id.lower() for tok in ("tbd", "placeholder", "blocked", "scaffold")
     )
 
 
@@ -107,9 +106,7 @@ def test_materialize_export_returns_rollout_for_reuse(tmp_path: Path) -> None:
 
     policy = resolve_pinned_policy()
     mapping = resolve_scenario_mapping()
-    pre_rollout = execute_pinned_policy(
-        seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG
-    )
+    pre_rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
     _, returned_rollout = materialize_socnavbench_export(
         policy=policy, mapping=mapping, out_dir=tmp_path, rollout=pre_rollout
     )
@@ -149,7 +146,9 @@ def test_robot_sf_receipt_from_rollout_matches_independent_receipt() -> None:
     mapping = resolve_scenario_mapping()
     rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
 
-    from_rollout = run_robot_sf_receipt_from_rollout(policy=policy, mapping=mapping, rollout=rollout)
+    from_rollout = run_robot_sf_receipt_from_rollout(
+        policy=policy, mapping=mapping, rollout=rollout
+    )
     assert from_rollout["suite"] == "Robot SF"
     assert from_rollout["metric_spec"]["metric_id"] == ROBOT_SF_METRIC_ID
     assert isinstance(from_rollout["value"], float)

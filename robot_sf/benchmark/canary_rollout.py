@@ -32,9 +32,7 @@ MODULE_ROOT = Path(__file__).resolve().parents[2]
 
 # The canary pins one Robot SF scenario that resolves to a real, tracked SVG map so
 # the policy executes a genuine navigation episode (no licensed external asset needed).
-CANARY_SCENARIO_MANIFEST = (
-    MODULE_ROOT / "configs" / "scenarios" / "canary_corridor.yaml"
-)
+CANARY_SCENARIO_MANIFEST = MODULE_ROOT / "configs" / "scenarios" / "canary_corridor.yaml"
 CANARY_SCENARIO_INDEX = 0
 CANARY_SIM_HORIZON = 120
 
@@ -128,7 +126,9 @@ def execute_pinned_policy(
     """
     scenarios = load_scenarios(str(scenario_manifest))
     scenario = select_scenario(scenarios, scenario_index)
-    scenario_id = str(scenario.get("name") or scenario.get("scenario_id") or f"scenario[{scenario_index}]")
+    scenario_id = str(
+        scenario.get("name") or scenario.get("scenario_id") or f"scenario[{scenario_index}]"
+    )
 
     cfg = build_robot_config_from_scenario(scenario, scenario_path=scenario_manifest)
     cfg.observation_mode = ObservationMode.SOCNAV_STRUCT

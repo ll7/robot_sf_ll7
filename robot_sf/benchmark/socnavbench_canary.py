@@ -60,6 +60,9 @@ from robot_sf.data.external.socnavbench_eth import (
     ASSET_ID as SOCNAVBENCH_ETH_ASSET_ID,
 )
 from robot_sf.data.external.socnavbench_eth import (
+    SocNavBenchEthDataError,
+)
+from robot_sf.data.external.socnavbench_eth import (
     is_available as socnavbench_eth_is_available,
 )
 from robot_sf.data.external.socnavbench_eth import (
@@ -590,19 +593,18 @@ def run_socnavbench_receipt(
     }
 
 
-def _load_traversible_resolution(
-    export: dict[str, Any], *, allow_synthetic: bool
-) -> float | None:
+def _load_traversible_resolution(export: dict[str, Any], *, allow_synthetic: bool) -> float | None:
     """Load the staged ETH traversible resolution (real) or return synthetic fallback.
 
     Returns:
-        The resolution_m from the staged ETH shape contract, or None if the asset is absent
+        The resolution field of the staged ETH shape contract (used as the receipt
+        resolution_m), or None if the asset is absent
         and allow_synthetic is True (recorded as fallback in the receipt).
     """
     try:
         contract = socnavbench_eth_load_shape_contract()
-        return float(contract.get("resolution_m", 0.1))
-    except Exception:
+        return float(contract.resolution)
+    except SocNavBenchEthDataError:
         if allow_synthetic:
             return None  # synthetic fallback recorded in receipt
         raise  # re-raise; caller should have blocked before reaching here
@@ -715,9 +717,7 @@ def run_canary(*, out_dir: Path, allow_synthetic_traversible: bool = False) -> d
         robot_sf_receipt["metric_spec"]["ratio_direction"]
         == socnavbench_receipt["metric_spec"]["ratio_direction"]
     ):
-        raise CanaryError(
-            "Robot SF and SocNavBench ratio directions must differ (reciprocal)."
-        )
+        raise CanaryError("Robot SF and SocNavBench ratio directions must differ (reciprocal).")
 
     # Denominator guard: both suites use the same geometric start->goal displacement; it must
     # not silently change between suites (guaranteed by sharing the single rollout).

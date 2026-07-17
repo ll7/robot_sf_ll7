@@ -74,15 +74,15 @@ def _francis_manifest_config() -> dict[str, Any]:
     }
 
 
-def test_manifest_build_rejects_francis_forced_population_cell_once(tmp_path: Path) -> None:
-    """Francis single-interaction geometry fails before output despite repeated rows."""
+def test_manifest_build_accepts_francis_forced_population_cell(tmp_path: Path) -> None:
+    """Francis geometry-less maps pass the same spawn preflight as runtime."""
 
     config_path = tmp_path / "francis.yaml"
     config_path.write_text(yaml.safe_dump(_francis_manifest_config()), encoding="utf-8")
     output_path = tmp_path / "manifest.json"
     module = _load_script(BUILD_SCRIPT, "issue_5829_manifest_builder")
 
-    with pytest.raises(ManifestSpawnRealizabilityError) as exc_info:
+    assert (
         _run_main(
             module,
             [
@@ -93,13 +93,18 @@ def test_manifest_build_rejects_francis_forced_population_cell_once(tmp_path: Pa
                 str(output_path),
             ],
         )
+        == 0
+    )
 
-    message = str(exc_info.value)
-    assert "1 scenario/population cell" in message
-    assert "scenario=francis2023_frontal_approach" in message
-    assert "population_size=12" in message
-    assert "remaining 11 background pedestrians" in message
-    assert not output_path.exists()
+    manifest = json.loads(output_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "pending_runtime_capture"
+    assert manifest["row_count"] == 4
+    assert {row["scenario_id"] for row in manifest["manifest_rows"]} == {
+        "francis2023_frontal_approach"
+    }
+    assert {sum(row["arm_population"]["counts"].values()) for row in manifest["manifest_rows"]} == {
+        12
+    }
 
 
 def test_manifest_preflight_rejects_present_but_unsampleable_route(

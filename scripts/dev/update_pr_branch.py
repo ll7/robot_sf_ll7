@@ -11,7 +11,13 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+from pathlib import Path
 from typing import Any
+
+# Default gate worktree path used by the concurrent PR gate. When the gate runs
+# in a linked worktree this lets the update guard verify the worktree is intact
+# before requesting a branch update. Override with --gate-worktree-path.
+DEFAULT_GATE_WORKTREE_PATH = ""
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -69,8 +75,32 @@ def update_pr_branch(
     *,
     repo: str,
     expected_head_sha: str,
+    gate_worktree_path: str = "",
 ) -> dict[str, Any]:
-    """Request a branch update only if the live PR head matches the guard."""
+    """Request a branch update only if the live PR head matches the guard.
+
+    When ``gate_worktree_path`` is provided, the registered gate worktree is
+    verified to still exist before requesting a branch update. A vanished
+    worktree fails closed with the lease cleanup owner reported, so the gate
+    does not die opaquely with ``CreateProcess ... No such file or directory``.
+    """
+    if gate_worktree_path:
+        health = _verify_gate_worktree(gate_worktree_path)
+        if not health.get("exists", False):
+            return {
+                "status": "gate_worktree_missing",
+                "error": (
+                    "Registered gate worktree is missing before branch update; "
+                    f"cleanup owner: {health.get('cleanup_owner') or 'unknown'}"
+                ),
+                "pr": pr_number,
+                "repo": repo,
+                "expected_head_sha": expected_head_sha,
+                "gate_worktree_path": gate_worktree_path,
+                "gate_worktree_health": health,
+                "updated": False,
+            }
+
     live_head_sha, error = _fetch_pr_head_sha(pr_number, repo=repo)
     if live_head_sha is None:
         return {
@@ -135,6 +165,35 @@ def update_pr_branch(
     }
 
 
+def _verify_gate_worktree(gate_worktree_path: str) -> dict[str, Any]:
+    """Verify the registered gate worktree path exists; report lease cleanup owner.
+
+    Delegates to ``gate_worktree_guard.verify_gate_worktree``. Returns a dict with
+    at least ``exists``; when the path is missing but a live lease claims it, the
+    lease owner is reported under ``cleanup_owner``. Failures degrade to
+    ``exists=False, cleanup_owner=None`` so the caller still fails closed.
+    """
+    try:
+        from scripts.dev.gate_worktree_guard import verify_gate_worktree
+
+        health = verify_gate_worktree(Path(gate_worktree_path))
+        return {
+            "exists": health.exists,
+            "classification": health.classification,
+            "cleanup_owner": health.cleanup_owner,
+            "lease_owner": health.lease_owner,
+            "lease_pr_number": health.lease_pr_number,
+            "lease_gate_id": health.lease_gate_id,
+        }
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        return {
+            "exists": False,
+            "classification": "errored",
+            "cleanup_owner": None,
+            "error": f"could not verify gate worktree: {exc}",
+        }
+
+
 def _output(data: dict[str, Any], *, as_json: bool) -> None:
     """Print a result in JSON or concise human-readable form."""
     if as_json:
@@ -147,6 +206,11 @@ def _output(data: dict[str, Any], *, as_json: bool) -> None:
         print(
             f"PR #{data['pr']}: HEAD guard failed (expected {data['expected_head_sha']}, "
             f"live {data['live_head_sha']})"
+        )
+    elif status == "gate_worktree_missing":
+        print(
+            f"PR #{data['pr']}: gate worktree missing before branch update "
+            f"(cleanup owner: {data.get('gate_worktree_health', {}).get('cleanup_owner') or 'unknown'})"
         )
     else:
         print(f"PR #{data.get('pr', '?')}: ERROR: {data.get('error', 'unknown error')}")
@@ -162,6 +226,11 @@ def main(argv: list[str] | None = None) -> int:
         "--expected-head-sha",
         required=True,
         help="Expected current PR head SHA; no update is sent if it changed",
+    )
+    parser.add_argument(
+        "--gate-worktree-path",
+        default=DEFAULT_GATE_WORKTREE_PATH,
+        help="Registered gate worktree path to verify before the branch update",
     )
     parser.add_argument("--json", action="store_true", help="emit JSON output")
     args = parser.parse_args(argv)
@@ -182,6 +251,7 @@ def main(argv: list[str] | None = None) -> int:
             pr_number,
             repo=repo,
             expected_head_sha=args.expected_head_sha,
+            gate_worktree_path=args.gate_worktree_path,
         )
     except FileNotFoundError:
         data = {"status": "error", "error": "gh CLI not found"}
@@ -191,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
     _output(data, as_json=args.json)
     if data.get("status") == "update_requested":
         return 0
-    if data.get("status") == "head_mismatch":
+    if data.get("status") in ("head_mismatch", "gate_worktree_missing"):
         return 1
     return 2
 

@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #5445 successor slice: multimodal-forecast Monte Carlo estimator row.** The matched
+  collision-risk calibration comparison now scores a `multimodal_forecast_mc` estimator backed by
+  the in-repo constant-velocity Gaussian-mixture **surrogate** forecast (symmetric heading-spread
+  modes from PR #5662), instead of reporting that row as unavailable. The estimator shares identical
+  action / actor-history / footprint / horizon inputs with the constant-velocity row and only
+  differs in its forecast model, so the two are directly comparable; each result records its
+  `forecast_model` provenance. Ground-truth generation gained a `multimodal_gmm` family mode so the
+  estimator can be self-consistency-tested against its own mixture model. This is API + fixture
+  evidence only (self-consistency, forecast-model sensitivity), NOT a benchmark claim that
+  multimodality improves calibration, and NOT the learned #5307/#2844 predictor; the `learned_risk_1472`
+  row stays unavailable. No campaign, training, or metric-semantics change.
+
 * **issue #5034 fixed-scope latency evidence coverage gate.** The control-action-latency evidence
   promoter can now consume the serialized fixed-scope run plan and fail closed unless every
   planner-group / latency-variant / seed / scenario cell appears exactly once as a native row with
@@ -188,6 +200,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   safety-performance claim is included.
 
 ### Fixed
+
+* **issue #5935 scenario-evidence crosswalk accepts legacy `safety_predicate.late_evasive.v1`.**
+  The export lane (`trace_predicate_export.py`) already accepted both `late_evasive.v1` and `.v2`
+  to preserve existing campaign provenance, but the crosswalk's schema registry
+  (`scenario_evidence_crosswalk.py`) recognized only `.v2`, so feeding a real legacy export (e.g.
+  the issue4206 trace-capable rerun, which is v1-only: 6291 v1 / 0 v2 records) through
+  `build_scenario_evidence_crosswalk` failed closed with `unknown predicate schema version
+  'safety_predicate.late_evasive.v1'`. The crosswalk now separates `KNOWN_PREDICATE_SCHEMAS`
+  (the current/motivated `.v2` referenced by `motivated_not_exported` records) from
+  `SUPPORTED_PREDICATE_SCHEMAS` (the full accepted provenance set including legacy `.v1`) and
+  validates exported predicate records against the accepted set, retaining the exact source
+  schema version rather than normalizing it away. The v1→v2 bump (#5063) is an additive
+  telemetry-instrumentation change (`latency_unavailable_reason`) with no benchmark metric
+  semantics change, and the crosswalk only records predicate identity + schema provenance +
+  status, so the two versions are compatible for its public contract. Fail-closed behavior on
+  genuinely unknown versions is preserved; no benchmark, metric, or paper-facing claim is
+  upgraded by this compatibility fix.
 
 * **issue #5464 PR Contract Check no longer flags modified evidence files as new.** The
   `pr-contract-check.yml` workflow used `actions/checkout` on `pull_request` without fetching the

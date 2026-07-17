@@ -97,6 +97,15 @@ class TestNoProgressDeadlockDetector:
             detector.update(distance)
         assert detector.active is True
 
+    def test_partial_window_does_not_activate_stall(self) -> None:
+        detector = _NoProgressDeadlockDetector(window_steps=3, progress_threshold_m=0.05)
+        for distance in (10.0, 9.99, 9.99):
+            detector.update(distance)
+        assert detector.active is False
+
+        detector.update(9.98)
+        assert detector.active is True
+
     def test_field_shape(self) -> None:
         detector = _NoProgressDeadlockDetector(window_steps=3, progress_threshold_m=0.05)
         field = detector.as_field()
@@ -198,6 +207,74 @@ class TestNativeCommandPolicyBuilder:
         )
         assert policy({"robot": {}, "goal": {}}) == (0.0, 0.0)
         assert _meta["_native_run_state"]["planner_diagnostics"]["fallback_count"] == 1
+
+    def test_persistent_plan_reuses_process(self) -> None:
+        policy, _ = build_native_command_policy(
+            "native_command",
+            {"command": ["python3", _FAKE_PLANNER], "mode": "persistent"},
+            scenario_id="corridor",
+            seed=111,
+            horizon=500,
+            dt=0.1,
+        )
+        obs = {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [5.0, 0.0]},
+        }
+
+        # Reset must spawn the process
+        policy._planner_reset(seed=111)
+        planner = policy._native_planner
+        proc1 = planner._process
+        assert proc1 is not None
+        assert proc1.poll() is None
+
+        # First plan step
+        linear, _ = policy(obs)
+        assert isinstance(linear, float)
+        assert planner._process is proc1
+
+        # Second plan step
+        _ = policy(obs)
+        assert planner._process is proc1  # Process must be kept alive and reused
+
+        policy._planner_close()
+        assert planner._process is None
+
+    def test_persistent_plan_timeout(self, tmp_path: Path) -> None:
+        import sys
+
+        # A stub that sleeps
+        slow_script = tmp_path / "slow.py"
+        slow_script.write_text("import sys, time\nfor line in sys.stdin:\n    time.sleep(5)\n")
+        policy, _ = build_native_command_policy(
+            "native_command",
+            {
+                "command": [sys.executable, str(slow_script)],
+                "mode": "persistent",
+                "step_timeout_sec": 0.2,
+            },
+            scenario_id="corridor",
+            seed=111,
+            horizon=500,
+            dt=0.1,
+        )
+        policy._planner_reset(seed=111)
+        planner = policy._native_planner
+        proc = planner._process
+        assert proc is not None
+
+        # The map-runner policy converts a bounded native step failure to zero velocity.
+        assert policy({"robot": {"position": [0.0, 0.0]}, "goal": {"current": [5.0, 0.0]}}) == (
+            0.0,
+            0.0,
+        )
+
+        # Check diagnostics
+        diag = planner.diagnostics
+        assert diag["runtime_bound_exits"] == 1
+        assert diag["fallback_count"] == 1
+        assert planner._process is None  # Stopped on timeout
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5305_certified_archive/reference_disjointness.json",
+  "artifact_sha256": "54445f6bd73aea72bbc0d27f441ff58325d1a40bb9fa844f511b90fffa3ca71c",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

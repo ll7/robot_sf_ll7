@@ -345,6 +345,11 @@ class NativeCommandPlanner:
         self._diagnostics: dict[str, Any] = dict.fromkeys(_DIAGNOSTICS_KEYS, 0)
         self._diagnostics["exit_codes"] = []
         self._diagnostics["last_exit_code"] = None
+        # How many times a subprocess was actually launched. This is the observable
+        # that makes the persistent-mode respawn bug (issue #5957) directly visible
+        # in episode diagnostics: a healthy persistent run records exactly one spawn
+        # regardless of horizon, while the per-episode mode records one spawn per step.
+        self._process_spawns = 0
         self._runtimes: list[float] = []
         self._deadlock = _NoProgressDeadlockDetector()
         # Plain serializable run state, updated every step so episode finalization can
@@ -372,6 +377,7 @@ class NativeCommandPlanner:
                 stderr=subprocess.DEVNULL,
                 bufsize=0,
             )
+            self._process_spawns += 1
         except OSError as exc:
             raise NativeCommandContractError(
                 f"failed to launch native command {self._spec.command}: {exc}",
@@ -466,6 +472,9 @@ class NativeCommandPlanner:
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
+            # The child was launched but exceeded the step budget, so it counts as a
+            # spawn (matches the persistent path's "only count an actual launch" rule).
+            self._process_spawns += 1
             self._diagnostics["runtime_bound_exits"] += 1
             self._diagnostics.setdefault("exit_codes", []).append(None)
             self._diagnostics["last_exit_code"] = None
@@ -473,9 +482,13 @@ class NativeCommandPlanner:
                 f"native command exceeded step timeout {self._spec.step_timeout_sec}s",
             ) from exc
         except OSError as exc:
+            # Not counted: the subprocess never launched (contract/launch failure).
             raise NativeCommandContractError(
                 f"failed to launch native command {self._spec.command}: {exc}",
             ) from exc
+        # The child launched and returned; count it even on a nonzero exit, since it
+        # did run (consistent with runner.py's _spawn-then-communicate per-episode path).
+        self._process_spawns += 1
         self._diagnostics.setdefault("exit_codes", []).append(proc.returncode)
         self._diagnostics["last_exit_code"] = proc.returncode
         if proc.returncode != 0:
@@ -572,6 +585,7 @@ class NativeCommandPlanner:
             _RUNTIME_FIELD: [float(value) for value in self._runtimes],
             "exit_codes": list(self._diagnostics["exit_codes"]),
             "last_exit_code": self._diagnostics["last_exit_code"],
+            "process_spawns": int(self._process_spawns),
         }
 
     @property

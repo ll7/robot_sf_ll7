@@ -133,6 +133,65 @@ def test_native_command_persistent_process_runs(tmp_path: Path):
     assert am["command_mode"] == "persistent_process"
     assert am["planner_kinematics"]["execution_mode"] == "native"
     assert len(am["planner_diagnostics"]["planner_step_runtime_seconds"]) == 30
+    # Issue #5957: one persistent child must serve all 30 steps (no per-step respawn).
+    assert am["planner_diagnostics"]["process_spawns"] == 1
+
+
+def test_native_command_persistent_process_single_spawn_across_steps():
+    """A long-lived (loops-over-stdin) persistent planner spawns exactly once across >=5 steps.
+
+    This is the literal regression guard requested by issue #5957: the pre-fix persistent
+    branch called ``process.communicate()`` per step, which closed stdin and forced a
+    respawn every step (N ``_spawn()`` calls for N steps). The new ``process_spawns``
+    diagnostic makes that regression directly observable: a healthy persistent run must
+    record exactly one spawn regardless of how many steps it serves.
+    """
+    policy = runner_mod._NativeCommandPolicy(
+        argv=[sys.executable, "-c", _NATIVE_PERSISTENT_STUB_SRC],
+        env={},
+        timeout_s=2.0,
+        persistent=True,
+    )
+    try:
+        num_steps = 6  # >= 5 as required by the issue
+        for _ in range(num_steps):
+            command = policy.step(np.zeros(2), np.zeros(2), np.ones(2), np.empty((0, 2)), 0.1)
+            assert command.shape == (2,)
+            assert np.all(np.isfinite(command))
+        diag = policy.diagnostics()
+        # The whole point: one persistent child reused across every step.
+        assert diag["process_spawns"] == 1
+        # And the child genuinely served all steps (no per-step fallback).
+        assert diag["fallback_count"] == 0
+        assert diag["runtime_bound_exits"] == 0
+        assert len(diag["planner_step_runtime_seconds"]) == num_steps
+    finally:
+        policy.close()
+
+
+def test_native_command_per_episode_spawns_once_per_step():
+    """Per-episode mode legitimately spawns one fresh child per step.
+
+    This is the contrast case that gives ``process_spawns`` meaning: per-episode mode
+    must record one spawn per step (closing stdin after each request is desired there),
+    so the diagnostic is not pinned to 1 universally — it reflects the actual launch
+    contract of the chosen mode.
+    """
+    policy = runner_mod._NativeCommandPolicy(
+        argv=[sys.executable, "-c", _NATIVE_STUB_SRC],
+        env={},
+        timeout_s=2.0,
+        persistent=False,
+    )
+    try:
+        num_steps = 4
+        for _ in range(num_steps):
+            policy.step(np.zeros(2), np.zeros(2), np.ones(2), np.empty((0, 2)), 0.1)
+        diag = policy.diagnostics()
+        # Per-episode: one spawn per step, as designed.
+        assert diag["process_spawns"] == num_steps
+    finally:
+        policy.close()
 
 
 def test_native_command_persistent_timeout_is_bounded():

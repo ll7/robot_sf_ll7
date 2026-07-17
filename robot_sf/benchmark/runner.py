@@ -562,6 +562,9 @@ class _NativeCommandPolicy:
     diagnostics the issue #5416 analyzer probe requires: per-step runtime,
     runtime-bound exits, fallback count, and expansion/commitment counters
     (zero for the thin native-command wrapper; a real SIPP binary owns those).
+    Also records ``process_spawns`` (the count of subprocess launches), which makes
+    the persistent-mode respawn regression (#5957) directly observable: a healthy
+    persistent run reports exactly one spawn regardless of horizon.
     """
 
     def __init__(
@@ -590,6 +593,11 @@ class _NativeCommandPolicy:
             NATIVE_COMMAND_RUNTIME_FIELD: [],
             "exit_codes": [],
             "last_exit_code": None,
+            # How many times a subprocess was actually launched. Makes the
+            # persistent-mode respawn bug (issue #5957) directly observable in
+            # episode diagnostics: a healthy persistent run records exactly one
+            # spawn regardless of horizon, while per-episode mode records one per step.
+            "process_spawns": 0,
         }
 
     def _spawn(self) -> subprocess.Popen[bytes]:
@@ -600,7 +608,7 @@ class _NativeCommandPolicy:
         """
         child_env = dict(os.environ)
         child_env.update({str(k): str(v) for k, v in self._env.items()})
-        return subprocess.Popen(
+        process = subprocess.Popen(
             self._argv,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -608,6 +616,8 @@ class _NativeCommandPolicy:
             env=child_env,
             bufsize=0,
         )
+        self._diagnostics["process_spawns"] += 1
+        return process
 
     def _ensure_process(self) -> subprocess.Popen[bytes]:
         """Start the persistent child process if needed.

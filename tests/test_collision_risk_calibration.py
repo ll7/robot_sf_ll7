@@ -21,6 +21,7 @@ from robot_sf.nav.predictive_types import PedestrianState
 from robot_sf.research.collision_risk import RiskEstimatorConfig, action_from_constant_velocity
 from robot_sf.research.collision_risk.calibration import (
     AVAILABLE_ESTIMATORS,
+    FORECAST_MODEL_IDS,
     UNAVAILABLE_ESTIMATORS,
     CalibrationInputError,
     EstimatorPrediction,
@@ -28,6 +29,7 @@ from robot_sf.research.collision_risk.calibration import (
     LabeledSample,
     MatchedActionPair,
     MatchedDatasetProvenance,
+    MultimodalForecastConfig,
     average_precision,
     brier_score,
     evaluate_estimator,
@@ -36,6 +38,7 @@ from robot_sf.research.collision_risk.calibration import (
     fnr_at_thresholds,
     generate_matched_dataset,
     log_loss,
+    predict_estimator,
     reliability_curve,
     time_to_warning_summary,
 )
@@ -324,11 +327,154 @@ def test_risk_calibration_report_rejects_null_pair_id(tmp_path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Multimodal forecast estimator (constant-velocity GMM surrogate, #5662 forecast)
+# --------------------------------------------------------------------------- #
+def test_risk_calibration_multimodal_estimator_is_probabilistic_and_bounded() -> None:
+    """The multimodal estimator emits a probability in [0, 1] with provenance."""
+    config = _small_config()
+    action = action_from_constant_velocity(
+        "a", [0, 0], [1.0, 0.0], horizon_steps=config.horizon_steps, dt_s=config.dt_s
+    )
+    ped = (PedestrianState(id=0, position=np.array([2.0, 0.0]), velocity=np.array([-0.5, 0.0])),)
+    sample = LabeledSample("s0", "f", action, ped, True, 5, 1.0, {})
+    predictions = predict_estimator("multimodal_forecast_mc", [sample], config)
+    assert len(predictions) == 1
+    score = predictions[0].score
+    assert predictions[0].is_probability is True
+    assert 0.0 <= score <= 1.0
+    assert predictions[0].latency_ms >= 0.0
+
+
+def test_risk_calibration_multimodal_records_surrogate_forecast_model() -> None:
+    """Each estimator result records which forecast model it scored."""
+    config = _small_config()
+    family = FamilySpec(name="f", n_scenarios=120, gt_velocity_std_m_s=config.velocity_std_m_s)
+    dataset = generate_matched_dataset(
+        [family],
+        config,
+        _provenance(120, horizon_steps=config.horizon_steps, dt_s=config.dt_s, seed=3),
+    )
+    mm = evaluate_estimator("multimodal_forecast_mc", dataset, config, n_bootstrap=0)
+    assert mm["forecast_model"] == FORECAST_MODEL_IDS["multimodal_forecast_mc"]
+    assert mm["forecast_model"] == "constant_velocity_gmm_surrogate.v1"
+    cv = evaluate_estimator("constant_velocity_mc", dataset, config, n_bootstrap=0)
+    assert cv["forecast_model"] == FORECAST_MODEL_IDS["constant_velocity_mc"]
+    # Distinct forecast models prove the two rows are not silently the same.
+    assert cv["forecast_model"] != mm["forecast_model"]
+
+
+def test_risk_calibration_multimodal_self_consistent_against_own_model() -> None:
+    """The multimodal estimator is well-calibrated against its own GMM model.
+
+    Ground-truth labels are drawn from the surrogate K-mode mixture so the
+    multimodal estimator's forecast matches the data-generating model
+    (self-consistency, mirroring the constant-velocity self-consistency test).
+    The CDF is monotone in the horizon by construction. This is fixture evidence
+    only; it is not a claim that the learned #5307/#2844 predictor is calibrated.
+    """
+    config = _small_config()
+    forecast = MultimodalForecastConfig(
+        mode_count=3, heading_spread_rad=0.35, velocity_std_m_s=config.velocity_std_m_s
+    )
+    family = FamilySpec(
+        name="mm_in_model",
+        n_scenarios=200,
+        gt_velocity_std_m_s=config.velocity_std_m_s,
+        gt_forecast_kind="multimodal_gmm",
+        gt_multimodal_forecast=forecast,
+    )
+    dataset = generate_matched_dataset(
+        [family],
+        config,
+        _provenance(200, horizon_steps=config.horizon_steps, dt_s=config.dt_s, seed=config.seed),
+    )
+    result = evaluate_estimator(
+        "multimodal_forecast_mc", dataset, config, n_bootstrap=0, multimodal_forecast=forecast
+    )
+    assert result["kind"] == "probabilistic"
+    # Generous bound for MC noise at n=512, matching the constant-velocity test.
+    assert result["expected_calibration_error"] < 0.12
+    assert result["horizon_monotonicity"]["monotone_fraction"] == pytest.approx(1.0)
+    strat = result["stratified"]["family"]["mm_in_model"]
+    assert strat["n"] == 200
+    assert "expected_calibration_error" in strat
+
+
+def test_risk_calibration_multimodal_single_mode_aligns_with_constant_velocity() -> None:
+    """A one-mode multimodal forecast collapses toward the constant-velocity model.
+
+    With ``mode_count=1`` the surrogate mixture is a single Gaussian around the
+    nominal heading, so its collision score should be close to the
+    constant-velocity estimator's on the same scenario (validating the surrogate
+    reduces to the unimodal baseline rather than diverging).
+    """
+    config = _small_config(n_samples=1024, seed=23)
+    action = action_from_constant_velocity(
+        "a", [0, 0], [1.0, 0.0], horizon_steps=config.horizon_steps, dt_s=config.dt_s
+    )
+    ped = (PedestrianState(id=0, position=np.array([1.8, 0.1]), velocity=np.array([-0.4, 0.0])),)
+    sample = LabeledSample("s0", "f", action, ped, True, 4, 1.0, {})
+    cv_score = predict_estimator("constant_velocity_mc", [sample], config)[0].score
+    unimodal_mm = MultimodalForecastConfig(
+        mode_count=1, heading_spread_rad=0.0, velocity_std_m_s=config.velocity_std_m_s
+    )
+    mm_score = predict_estimator(
+        "multimodal_forecast_mc", [sample], config, multimodal_forecast=unimodal_mm
+    )[0].score
+    # Both estimate the same contact probability; allow MC sampling tolerance.
+    assert mm_score == pytest.approx(cv_score, abs=0.08)
+
+
+def test_risk_calibration_multimodal_heading_spread_changes_score() -> None:
+    """A wider heading spread (more modes) shifts the multimodal score away.
+
+    This proves the multimodal row is a genuinely different forecast model from
+    the unimodal baseline: spreading intent around the heading redistributes
+    collision probability rather than reproducing the straight-line estimate.
+    """
+    config = _small_config(n_samples=1024, seed=29)
+    action = action_from_constant_velocity(
+        "a", [0, 0], [1.0, 0.0], horizon_steps=config.horizon_steps, dt_s=config.dt_s
+    )
+    ped = (PedestrianState(id=0, position=np.array([1.8, 0.0]), velocity=np.array([-0.5, 0.0])),)
+    sample = LabeledSample("s0", "f", action, ped, True, 4, 1.0, {})
+    narrow = MultimodalForecastConfig(
+        mode_count=1, heading_spread_rad=0.0, velocity_std_m_s=config.velocity_std_m_s
+    )
+    wide = MultimodalForecastConfig(
+        mode_count=5, heading_spread_rad=0.9, velocity_std_m_s=config.velocity_std_m_s
+    )
+    narrow_score = predict_estimator(
+        "multimodal_forecast_mc", [sample], config, multimodal_forecast=narrow
+    )[0].score
+    wide_score = predict_estimator(
+        "multimodal_forecast_mc", [sample], config, multimodal_forecast=wide
+    )[0].score
+    assert wide_score != narrow_score
+
+
+def test_risk_calibration_multimodal_forecast_config_validates() -> None:
+    """Bad surrogate forecast configs fail closed rather than producing NaN."""
+    with pytest.raises(CalibrationInputError, match="mode_count"):
+        MultimodalForecastConfig(mode_count=0)
+    with pytest.raises(CalibrationInputError, match="heading_spread_rad"):
+        MultimodalForecastConfig(heading_spread_rad=-0.1)
+    with pytest.raises(CalibrationInputError, match="cross_actor_correlation"):
+        MultimodalForecastConfig(cross_actor_correlation=1.0)
+
+
+# --------------------------------------------------------------------------- #
 # Registry + fail-closed behaviour
 # --------------------------------------------------------------------------- #
 def test_risk_calibration_unavailable_estimators_recorded() -> None:
-    """Contracted-but-missing estimators are named as unavailable, not dropped."""
-    assert "multimodal_forecast_mc" in UNAVAILABLE_ESTIMATORS
+    """Contracted-but-missing estimators are named as unavailable, not dropped.
+
+    ``multimodal_forecast_mc`` was promoted to AVAILABLE once the in-repo
+    constant-velocity GMM surrogate forecast landed (#5662); only the learned
+    collision-risk model #1472 remains contracted-but-missing.
+    """
+    assert "multimodal_forecast_mc" in AVAILABLE_ESTIMATORS
+    assert "multimodal_forecast_mc" not in UNAVAILABLE_ESTIMATORS
     assert "learned_risk_1472" in UNAVAILABLE_ESTIMATORS
     assert set(AVAILABLE_ESTIMATORS).isdisjoint(UNAVAILABLE_ESTIMATORS)
 
@@ -367,6 +513,12 @@ def test_risk_calibration_report_cli_scores_packet(tmp_path: Path) -> None:
     assert ids == set(AVAILABLE_ESTIMATORS)
     for row in report["estimators"]:
         assert row["verdict"] in {"use online", "offline analysis only", "revise", "stop"}
+        assert row["forecast_model"] == FORECAST_MODEL_IDS[row["estimator_id"]]
+    # The promoted multimodal row is now scored with its surrogate forecast model
+    # rather than reported as unavailable.
+    mm_row = next(r for r in report["estimators"] if r["estimator_id"] == "multimodal_forecast_mc")
+    assert mm_row["kind"] == "probabilistic"
+    assert mm_row["forecast_model"] == "constant_velocity_gmm_surrogate.v1"
     unavailable_ids = {row["estimator_id"] for row in report["unavailable_estimators"]}
     assert unavailable_ids == set(UNAVAILABLE_ESTIMATORS)
 

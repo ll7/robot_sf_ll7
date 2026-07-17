@@ -493,7 +493,7 @@ def test_ci_driver_artifact_policy_uses_no_sync() -> None:
     assert "uv run --no-sync python scripts/tools/check_artifact_root.py" in driver_text
 
 
-def test_ci_driver_lint_reports_all_failures_without_short_circuiting() -> None:
+def test_ci_driver_lint_reports_all_failures_without_short_circuiting(tmp_path: Path) -> None:
     """The lint phase must enumerate every failure, not stop at the first (issue #5960).
 
     Reproduces the exact bug class from the issue: a branch with BOTH a format
@@ -506,11 +506,10 @@ def test_ci_driver_lint_reports_all_failures_without_short_circuiting() -> None:
     # Stub `uv` so `uv run <tool> <args>` proxies to the local interpreter (or a
     # failing stub). We map each known lint check to a deterministic pass/fail so we
     # can force BOTH ruff format AND broad-exception failures simultaneously.
-    stub_dir = ROOT / "output" / "ci_driver_lint_stub"
+    stub_dir = tmp_path / "ci_driver_lint_stub"
     stub_dir.mkdir(parents=True, exist_ok=True)
     uv_stub = stub_dir / "uv"
     python_stub = stub_dir / "python"
-    check_broad = stub_dir / "check_broad.py"
 
     # `uv run` forwards to our python stub. We detect which check is running via the
     # args so we can make the broad-exception check fail.
@@ -533,7 +532,6 @@ def test_ci_driver_lint_reports_all_failures_without_short_circuiting() -> None:
         "sys.exit(0)\n",
         encoding="utf-8",
     )
-    check_broad.write_text("", encoding="utf-8")
     uv_stub.chmod(0o755)
     python_stub.chmod(0o755)
 
@@ -562,10 +560,10 @@ def test_ci_driver_lint_reports_all_failures_without_short_circuiting() -> None:
     assert result.returncode != 0, f"lint phase exited zero despite failures:\n{combined}"
 
 
-def test_ci_driver_lint_passes_when_all_checks_pass() -> None:
+def test_ci_driver_lint_passes_when_all_checks_pass(tmp_path: Path) -> None:
     """The lint phase must exit zero when every check passes (issue #5960)."""
 
-    stub_dir = ROOT / "output" / "ci_driver_lint_stub_pass"
+    stub_dir = tmp_path / "ci_driver_lint_stub_pass"
     stub_dir.mkdir(parents=True, exist_ok=True)
     uv_stub = stub_dir / "uv"
     python_stub = stub_dir / "python"

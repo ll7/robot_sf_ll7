@@ -241,15 +241,56 @@ def _normalize_predicate_export(export: Mapping[str, Any] | None) -> dict[str, d
 
 
 def _absorb_predicate_row(row: Mapping[str, Any], entry: dict[str, Any]) -> None:
-    """Fold one predicate-export row's predicates into ``entry`` dicts."""
-    for pred in row.get("predicates", []) or []:
+    """Fold one predicate-export row's predicates into ``entry`` dicts.
+
+    Accepts both crosswalk envelope shapes: a per-row ``predicates`` *list* of
+    ``{predicate, schema_version, status}`` records, and the *raw* #5593 export shape where
+    ``predicates`` is a dict keyed by predicate name (so a real export-lane row flows
+    through without a consumer re-deriving the shape). For raw export rows the block's
+    ``export_status`` (exported/degraded/missing) is mapped to a crosswalk-recognized
+    status so a degraded/missing predicate is never misrepresented as a clean measurement.
+    """
+    raw = row.get("predicates")
+    if isinstance(raw, Mapping):
+        items = [
+            {"predicate": name, **(block if isinstance(block, Mapping) else {})}
+            for name, block in raw.items()
+        ]
+    else:
+        items = raw or []
+    for pred in items:
         if not isinstance(pred, Mapping):
             continue
         name = pred.get("predicate")
         if not isinstance(name, str) or not name:
             continue
         entry["exported"][name] = pred.get("schema_version")
-        entry["predicate_status"][name] = pred.get("status", "ok")
+        entry["predicate_status"][name] = _predicate_row_status(pred)
+
+
+# Statuses the crosswalk classifies as missing/degraded (not clean measurements).
+_CROSSWALK_DEGRADED_STATUSES = frozenset({"degraded", "missing", "unavailable", "fallback"})
+
+
+def _predicate_row_status(pred: Mapping[str, Any]) -> str:
+    """Resolve a predicate record's crosswalk status from explicit status or export_status.
+
+    Prefer an explicit ``status``; otherwise map a raw #5593 ``export_status``
+    (exported/degraded/missing) to the crosswalk's recognized vocabulary so degraded and
+    missing predicates are reported as such rather than silently treated as exported.
+
+    Returns:
+        A crosswalk-recognized status string (``ok``, ``degraded``, ``missing``, or an
+        explicit producer status).
+    """
+
+    status = pred.get("status")
+    if isinstance(status, str) and status:
+        return status
+    export_status = pred.get("export_status")
+    if export_status in _CROSSWALK_DEGRADED_STATUSES:
+        return export_status
+    return "ok"
 
 
 def _predicate_section(

@@ -43,6 +43,12 @@ if TYPE_CHECKING:
 TRACE_PREDICATE_EXPORT_SCHEMA_VERSION = "trace_predicate_export.v1"
 TRACE_PREDICATE_MANIFEST_SCHEMA_VERSION = "trace_predicate_manifest.v1"
 TRACE_PREDICATE_COVERAGE_SCHEMA_VERSION = "trace_predicate_coverage.v1"
+# Envelope schema the downstream scenario-evidence crosswalk (#5602) consumes. The
+# crosswalk expects a single object with this schema version and a ``rows`` list whose
+# per-row ``predicates`` is a *list* of ``{predicate, schema_version, status}`` records;
+# the raw export lane emits per-row ``predicates`` as a *dict* keyed by predicate name, so
+# a real export cannot flow through the crosswalk without the adapter below.
+CROSSWALK_PREDICATE_EXPORT_SCHEMA_VERSION = "trace_predicate_export.v1"
 
 # Predicates motivated by the taxonomy and produced by the shipped producers in
 # robot_sf/benchmark/safety_predicates.py. ``record_key`` is the key under which the
@@ -465,6 +471,145 @@ def export_trace_predicates_from_bundle(
     return export_rows, manifest, coverage, failed_sources
 
 
+def _crosswalk_predicate_status(block: Mapping[str, Any]) -> str:
+    """Map an export predicate block's status to a crosswalk-recognized status.
+
+    The scenario-evidence crosswalk classifies a predicate as missing/degraded only when
+    its ``status`` is in ``{degraded, missing, unavailable, fallback}``. Export blocks
+    carry ``export_status`` (exported/degraded/missing); a degraded block additionally
+    carries a producer ``status`` such as ``not_applicable`` that the crosswalk would
+    otherwise treat as a clean measurement. Map explicitly so a degraded predicate is
+    never misrepresented as exported evidence downstream.
+
+    Returns:
+        ``missing`` for a missing block, ``degraded`` for a degraded block, else ``ok``.
+    """
+
+    export_status = block.get("export_status")
+    if export_status == EXPORT_STATUS_MISSING:
+        return "missing"
+    if export_status == EXPORT_STATUS_DEGRADED:
+        return "degraded"
+    return "ok"
+
+
+def _roll_up_predicates_per_scenario(
+    export_rows: Sequence[Mapping[str, Any]],
+) -> dict[str, dict[str, dict[str, Any]]]:
+    """Roll per-episode predicate blocks up to one entry per scenario/predicate.
+
+    A predicate counts as present for a scenario when at least one episode measured it
+    (exported) or carried it degraded; a predicate missing from every episode is omitted so
+    the crosswalk lists it as ``motivated_not_exported``. Among present statuses prefer
+    ``exported`` over ``degraded`` (a clean measurement in any episode means the predicate
+    was measured for the scenario).
+
+    Returns:
+        Mapping ``scenario_id -> {predicate -> {export_status, schema_version}}``.
+    """
+
+    rank = {EXPORT_STATUS_EXPORTED: 0, EXPORT_STATUS_DEGRADED: 1}
+    per_scenario: dict[str, dict[str, dict[str, Any]]] = {}
+    for row in export_rows:
+        scenario_id = row.get("scenario_id")
+        if not isinstance(scenario_id, str) or not scenario_id:
+            continue
+        blocks = row.get("predicates")
+        if not isinstance(blocks, Mapping):
+            continue
+        bucket = per_scenario.setdefault(scenario_id, {})
+        _absorb_scenario_predicate_blocks(blocks, bucket, rank=rank)
+    return per_scenario
+
+
+def _absorb_scenario_predicate_blocks(
+    blocks: Mapping[str, Any],
+    bucket: dict[str, dict[str, Any]],
+    *,
+    rank: Mapping[str, int],
+) -> None:
+    """Fold one row's per-predicate blocks into a scenario bucket, preferring clean status."""
+
+    for predicate, block in blocks.items():
+        if not isinstance(block, Mapping):
+            continue
+        export_status = block.get("export_status")
+        # Missing records are not "present"; skip so the predicate can surface as
+        # motivated-not-exported when no episode measured it.
+        if export_status not in rank:
+            continue
+        current = bucket.get(predicate)
+        if current is None or rank[export_status] < rank[current["export_status"]]:
+            bucket[predicate] = {
+                "export_status": export_status,
+                "schema_version": block.get("schema_version"),
+            }
+
+
+def build_crosswalk_predicate_export(
+    export_rows: Sequence[Mapping[str, Any]],
+    *,
+    release: str | None = None,
+) -> dict[str, Any]:
+    """Flatten real export-lane rows into the scenario-evidence crosswalk envelope.
+
+    The export lane's canonical artifact (``build_trace_predicate_export``) emits one row
+    per episode whose ``predicates`` field is a *dict* keyed by predicate name, while the
+    downstream scenario-evidence crosswalk (``robot_sf/benchmark/scenario_evidence_crosswalk.py``,
+    issue #5602) consumes a single object with a ``rows`` list whose per-row ``predicates``
+    is a *list* of ``{predicate, schema_version, status}`` records. This adapter is the
+    bridge: it lets a real export-lane output flow through the crosswalk without a consumer
+    re-deriving the shape each time, so the export lane actually serves its documented
+    downstream consumers (issue #5593 motivation).
+
+    ``status`` is derived from each block's ``export_status`` so a degraded/missing
+    predicate is reported as such (``degraded``/``missing``) rather than silently treated
+    as a clean measurement by the crosswalk.
+
+    Episodes are rolled up **per scenario**: the export lane is per-episode while the
+    crosswalk is per-scenario, so a predicate that is cleanly exported in any episode of a
+    scenario is reported ``ok`` for that scenario (it *was* measured); a predicate that is
+    only ever degraded across a scenario's episodes is reported ``degraded``; a predicate
+    absent from every episode of a scenario is omitted so the crosswalk lists it as
+    ``motivated_not_exported`` for that scenario (never silently inferred as measured).
+
+    Args:
+        export_rows: Rows produced by :func:`build_trace_predicate_export`.
+        release: Optional release label carried in the envelope for traceability.
+
+    Returns:
+        Envelope ``{schema_version, release, rows}`` with one row per scenario, each
+        carrying ``scenario_id`` and ``predicates`` as a list of
+        ``{predicate, schema_version, status}`` records, deterministically ordered by
+        ``scenario_id`` and predicate name.
+    """
+
+    per_scenario = _roll_up_predicates_per_scenario(export_rows)
+
+    flat_rows: list[dict[str, Any]] = []
+    for scenario_id in sorted(per_scenario):
+        bucket = per_scenario[scenario_id]
+        predicates: list[dict[str, Any]] = []
+        for predicate in sorted(bucket):
+            block = bucket[predicate]
+            predicates.append(
+                {
+                    "predicate": predicate,
+                    "schema_version": block["schema_version"],
+                    "status": _crosswalk_predicate_status(block),
+                }
+            )
+        flat_rows.append({"scenario_id": scenario_id, "predicates": predicates})
+
+    envelope: dict[str, Any] = {
+        "schema_version": CROSSWALK_PREDICATE_EXPORT_SCHEMA_VERSION,
+        "rows": flat_rows,
+    }
+    if release is not None:
+        envelope["release"] = release
+    return envelope
+
+
 def validate_trace_predicate_export(payload: Mapping[str, Any]) -> list[str]:
     """Validate a single decoded export row against the contract.
 
@@ -542,6 +687,7 @@ def write_trace_predicate_export(
 
 
 __all__ = [
+    "CROSSWALK_PREDICATE_EXPORT_SCHEMA_VERSION",
     "DEGRADED_PREDICATE_STATUSES",
     "EXPORT_STATUS_DEGRADED",
     "EXPORT_STATUS_EXPORTED",
@@ -551,6 +697,7 @@ __all__ = [
     "TRACE_PREDICATE_EXPORT_SCHEMA_VERSION",
     "TRACE_PREDICATE_MANIFEST_SCHEMA_VERSION",
     "TracePredicateExportError",
+    "build_crosswalk_predicate_export",
     "build_trace_predicate_coverage_report",
     "build_trace_predicate_export",
     "build_trace_predicate_manifest",

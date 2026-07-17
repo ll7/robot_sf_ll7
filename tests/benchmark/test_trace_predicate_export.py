@@ -16,6 +16,7 @@ import pytest
 
 from robot_sf.benchmark.identity.hash_utils import read_jsonl as _read_jsonl
 from robot_sf.benchmark.trace_predicate_export import (
+    CROSSWALK_PREDICATE_EXPORT_SCHEMA_VERSION,
     DEGRADED_PREDICATE_STATUSES,
     EXPORT_STATUS_DEGRADED,
     EXPORT_STATUS_EXPORTED,
@@ -25,6 +26,7 @@ from robot_sf.benchmark.trace_predicate_export import (
     TRACE_PREDICATE_EXPORT_SCHEMA_VERSION,
     TRACE_PREDICATE_MANIFEST_SCHEMA_VERSION,
     TracePredicateExportError,
+    build_crosswalk_predicate_export,
     build_trace_predicate_coverage_report,
     build_trace_predicate_export,
     build_trace_predicate_manifest,
@@ -579,8 +581,165 @@ def test_degraded_status_constant_matches_producers() -> None:
     assert "unavailable" in DEGRADED_PREDICATE_STATUSES
 
 
+class TestCrosswalkAdapter:
+    """Adapter that flattens real export rows into the scenario-evidence crosswalk envelope.
+
+    The export lane emits per-episode rows whose ``predicates`` is a dict keyed by name;
+    the crosswalk consumes a single envelope with a ``rows`` list whose per-row
+    ``predicates`` is a *list* of ``{predicate, schema_version, status}``. These tests
+    verify the bridge is correct (per-scenario rollup, degraded surfacing, negative
+    control) and that a real export flows through the crosswalk end-to-end.
+    """
+
+    def test_envelope_shape_and_schema_version(self) -> None:
+        rows = build_trace_predicate_export([_record_with_all_predicates()])
+        envelope = build_crosswalk_predicate_export(rows, release="r1")
+        assert envelope["schema_version"] == CROSSWALK_PREDICATE_EXPORT_SCHEMA_VERSION
+        assert envelope["release"] == "r1"
+        assert isinstance(envelope["rows"], list)
+        assert len(envelope["rows"]) == 1
+        row = envelope["rows"][0]
+        assert row["scenario_id"] == "test-scenario"
+        assert isinstance(row["predicates"], list)
+        names = {p["predicate"] for p in row["predicates"]}
+        assert names == {spec["predicate"] for spec in MOTIVATED_TRACE_PREDICATES}
+        # Clean measurements carry the producer schema version and an 'ok' status.
+        for record in row["predicates"]:
+            assert isinstance(record["schema_version"], str)
+            assert record["status"] == "ok"
+
+    def test_per_scenario_rollup_prefers_clean_measurement(self) -> None:
+        """A clean measurement in any episode wins for the scenario over a degraded one."""
+        clean = _record_with_all_predicates()  # scenario test-scenario, all clean
+        degraded = _record_with_degraded_predicate()  # same scenario, occlusion degraded
+        rows = build_trace_predicate_export([clean, degraded])
+        envelope = build_crosswalk_predicate_export(rows)
+        row = envelope["rows"][0]
+        occ = next(p for p in row["predicates"] if p["predicate"] == "occlusion_near_miss")
+        # ep-001 measured occlusion cleanly, so the scenario rollup reports it clean.
+        assert occ["status"] == "ok"
+
+    def test_degraded_only_rolls_up_as_degraded(self) -> None:
+        """A predicate degraded in every present episode surfaces as degraded."""
+        degraded = _record_with_degraded_predicate()
+        rows = build_trace_predicate_export([degraded])
+        envelope = build_crosswalk_predicate_export(rows)
+        row = envelope["rows"][0]
+        occ = next(p for p in row["predicates"] if p["predicate"] == "occlusion_near_miss")
+        assert occ["status"] == "degraded"
+        # Predicates absent from every episode are omitted (not emitted as 'missing') so the
+        # crosswalk lists them as motivated-not-exported rather than silent measurements.
+        names = {p["predicate"] for p in row["predicates"]}
+        assert "late_evasive" not in names
+        assert "oscillatory_control" not in names
+
+    def test_missing_in_all_episodes_is_omitted(self) -> None:
+        """A predicate absent from every episode must not appear in the rollup."""
+        rows = build_trace_predicate_export([_record_with_no_predicates()])
+        envelope = build_crosswalk_predicate_export(rows)
+        # Scenario with no measured predicates yields an empty predicate list.
+        assert envelope["rows"] == [{"scenario_id": "test-scenario", "predicates": []}]
+
+    def test_one_row_per_scenario_across_episodes(self) -> None:
+        """Multiple episodes for one scenario collapse into one envelope row."""
+        ep1 = _record_with_all_predicates()
+        ep1 = {**ep1, "episode_id": "ep-a", "seed": 1}
+        ep2 = {**_record_with_all_predicates(), "episode_id": "ep-b", "seed": 2}
+        ep2["scenario_id"] = "other-scenario"
+        rows = build_trace_predicate_export([ep1, ep2])
+        envelope = build_crosswalk_predicate_export(rows)
+        scenario_ids = [r["scenario_id"] for r in envelope["rows"]]
+        assert scenario_ids == sorted({"test-scenario", "other-scenario"})
+
+    def test_deterministic_envelope(self) -> None:
+        rows = build_trace_predicate_export(
+            [_record_with_all_predicates(), _record_with_degraded_predicate()]
+        )
+        a = build_crosswalk_predicate_export(rows, release="r")
+        b = build_crosswalk_predicate_export(rows, release="r")
+        assert json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+
+    def test_real_export_flows_through_crosswalk_end_to_end(self) -> None:
+        """Bridge test: a real export-lane output must populate the crosswalk predicates.
+
+        Regression for the integration gap where the crosswalk consumed a hypothetical
+        shape and a real per-episode export (dict predicates) produced an EMPTY
+        per-scenario map. This is the #5593 'serves downstream consumers' acceptance:
+        the produced artifact must actually flow through the documented consumer.
+        """
+        from robot_sf.benchmark.scenario_evidence_crosswalk import (
+            build_scenario_evidence_crosswalk,
+        )
+
+        rows = build_trace_predicate_export(
+            [_record_with_all_predicates(), _record_with_degraded_predicate()]
+        )
+        envelope = build_crosswalk_predicate_export(rows, release="bridge-test")
+        scenarios = [
+            {
+                "scenario_id": "test-scenario",
+                "source_config_hash": "deadbeef",
+                "map_id": "test-map",
+            }
+        ]
+        crosswalk = build_scenario_evidence_crosswalk(
+            scenarios, source="fixture.yaml", predicate_export=envelope
+        )
+        availability = crosswalk["rows"][0]["predicate_availability"]
+        # All three motivated predicates were measured (cleanly, in ep-001) for the
+        # scenario, so they are exported and none are motivated-but-not-exported.
+        assert availability["export_status"] == "available"
+        exported = {p["predicate"] for p in availability["exported_predicates"]}
+        assert exported == {spec["predicate"] for spec in MOTIVATED_TRACE_PREDICATES}
+        assert availability["motivated_not_exported_predicates"] == []
+
+    def test_real_export_flags_motivated_not_exported_scenario(self) -> None:
+        """A scenario where a predicate is never measured surfaces it as not-exported."""
+        from robot_sf.benchmark.scenario_evidence_crosswalk import (
+            build_scenario_evidence_crosswalk,
+        )
+
+        # Only oscillatory measured -> late_evasive / occlusion are motivated-not-exported.
+        partial = {
+            "episode_id": "ep-partial",
+            "scenario_id": "partial-scenario",
+            "seed": 1,
+            "algo": "goal",
+            "safety_predicates": {
+                "oscillatory_control_predicate": {
+                    "schema_version": "safety_predicate.oscillatory_control.v1",
+                    "predicate": "oscillatory_control",
+                    "evidence_kind": "diagnostic_proxy",
+                    "oscillation": True,
+                    "fields": {"heading_rate_sign_changes": 6, "progress_ratio": 0.1},
+                    "thresholds": {},
+                }
+            },
+        }
+        rows = build_trace_predicate_export([partial])
+        envelope = build_crosswalk_predicate_export(rows, release="partial")
+        scenarios = [
+            {
+                "scenario_id": "partial-scenario",
+                "source_config_hash": "deadbeef",
+                "map_id": "test-map",
+            }
+        ]
+        crosswalk = build_scenario_evidence_crosswalk(
+            scenarios, source="fixture.yaml", predicate_export=envelope
+        )
+        availability = crosswalk["rows"][0]["predicate_availability"]
+        exported = {p["predicate"] for p in availability["exported_predicates"]}
+        assert exported == {"oscillatory_control"}
+        motivated_not_exported = {
+            p["predicate"] for p in availability["motivated_not_exported_predicates"]
+        }
+        assert motivated_not_exported == {"late_evasive", "occlusion_near_miss"}
+
+
 def test_schema_versions_versioned() -> None:
     """Export/manifest/coverage schema versions follow the vN convention."""
     assert TRACE_PREDICATE_EXPORT_SCHEMA_VERSION == "trace_predicate_export.v1"
     assert TRACE_PREDICATE_MANIFEST_SCHEMA_VERSION == "trace_predicate_manifest.v1"
     assert TRACE_PREDICATE_COVERAGE_SCHEMA_VERSION == "trace_predicate_coverage.v1"
+    assert CROSSWALK_PREDICATE_EXPORT_SCHEMA_VERSION == "trace_predicate_export.v1"

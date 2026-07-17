@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import textwrap
 from pathlib import Path
 
@@ -249,3 +250,139 @@ def test_committed_baseline_matches_working_tree_backlog(monkeypatch):
 
     assert drift == []
     assert reverse == []
+
+
+def test_detect_working_tree_drift_flags_stale_baseline_after_cleanup(tmp_path):
+    """A cleanup that lowers working-tree debt must be flagged as stale baseline.
+
+    Reproduces the recurring root cause of issue #5894: when a PR removes placeholder
+    docstrings from the working tree but does not regenerate the committed baseline,
+    the baseline over-counts that file. The base-ref comparison alone cannot catch
+    this pre-merge (base still holds the old state), so the working-tree drift
+    detector must surface the exact file and remedy.
+    """
+    baseline = {"files": {"scripts/tool.py": 2}}
+    cleaned_tree = {"files": {"scripts/tool.py": 0}}
+
+    stale = check_docstring_todos.detect_working_tree_drift(cleaned_tree, baseline)
+
+    assert stale == ["scripts/tool.py: working tree has 0, baseline has 2 (exceeds by 2)"]
+
+
+def test_detect_working_tree_drift_ignores_new_debt(tmp_path):
+    """New placeholder debt belongs to the ratchet, not the working-tree drift guard.
+
+    A PR that adds placeholder docstrings should not trip the freshness gate; increases
+    are owned by the ratchet mode. Only baseline-over-counts (reverse drift) are
+    in scope so cleanup PRs are forced to regenerate the baseline they stale.
+    """
+    baseline = {"files": {"scripts/tool.py": 1}}
+    grown_tree = {"files": {"scripts/tool.py": 3, "scripts/new.py": 1}}
+
+    stale = check_docstring_todos.detect_working_tree_drift(grown_tree, baseline)
+
+    assert stale == []
+
+
+def test_run_verify_baseline_check_working_tree_fails_on_stale_baseline(monkeypatch, tmp_path):
+    """``verify-baseline --check-working-tree`` must fail its own cleanup PR.
+
+    Integration-level regression for issue #5894: a cleanup branch that removed a
+    placeholder docstring from the working tree without regenerating the baseline
+    must fail readiness with a clear regenerate-the-baseline remedy, instead of
+    slipping through and breaking the next unrelated PR after merge.
+    """
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "tool.py").write_text(
+        'def stays():\n    """Real docstring."""\n',
+        encoding="utf-8",
+    )
+    baseline_path = tmp_path / "baseline.json"
+    # Baseline still records the removed placeholder -> over-counts by 1.
+    baseline_path.write_text(
+        '{"files": {"scripts/tool.py": 1}}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(check_docstring_todos, "_repo_root", lambda: tmp_path)
+    # Skip the base-ref leg; only the working-tree leg is under test here.
+    monkeypatch.setattr(
+        check_docstring_todos,
+        "build_backlog_report_for_ref",
+        lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
+    )
+
+    namespace = _verify_namespace(baseline=Path("baseline.json"), check_working_tree=True)
+
+    rc = check_docstring_todos._run_verify_baseline(namespace, tmp_path)
+
+    assert rc == 1
+
+
+def test_run_verify_baseline_check_working_tree_passes_when_clean(monkeypatch, tmp_path):
+    """A clean working tree matching the baseline must pass the freshness gate."""
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "tool.py").write_text(
+        'def stays():\n    """TODO docstring."""\n',
+        encoding="utf-8",
+    )
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(
+        '{"files": {"scripts/tool.py": 1}}\n',
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(check_docstring_todos, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        check_docstring_todos,
+        "build_backlog_report_for_ref",
+        lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
+    )
+
+    namespace = _verify_namespace(baseline=Path("baseline.json"), check_working_tree=True)
+
+    rc = check_docstring_todos._run_verify_baseline(namespace, tmp_path)
+
+    assert rc == 0
+
+
+def _verify_namespace(*, baseline, check_working_tree):
+    return argparse.Namespace(
+        baseline=baseline,
+        base="origin/main",
+        roots=None,
+        check_working_tree=check_working_tree,
+    )
+
+
+def _ref_report(files):
+    """Build a minimal ref report payload with totals for stubbed ref builds."""
+    return {
+        "totals": {"files": len(files), "total_occurrences": sum(files.values())},
+        "files": dict(files),
+    }
+
+
+def test_verify_baseline_check_working_tree_flag_is_wired(monkeypatch):
+    """The CLI must expose ``--check-working-tree`` for the freshness gate wiring.
+
+    Guards the issue #5894 pre-merge guard: ``check_docstring_todos_baseline_freshness.sh``
+    passes ``--check-working-tree``, so the argument must stay registered on the
+    ``verify-baseline`` mode and default off for backward compatibility.
+    """
+    monkeypatch.setattr(
+        "sys.argv",
+        ["check_docstring_todos", "--mode", "verify-baseline", "--check-working-tree"],
+    )
+    ns = check_docstring_todos._parse_args()
+
+    assert ns.mode == "verify-baseline"
+    assert ns.check_working_tree is True
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["check_docstring_todos", "--mode", "verify-baseline"],
+    )
+    assert check_docstring_todos._parse_args().check_working_tree is False

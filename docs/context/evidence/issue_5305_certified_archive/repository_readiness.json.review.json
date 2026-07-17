@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5305_certified_archive/repository_readiness.json",
+  "artifact_sha256": "5af048f457de958d537e1007102f30aadbe2f584fcb79f01d9f2565599e53a49",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

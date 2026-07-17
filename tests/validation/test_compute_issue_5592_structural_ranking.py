@@ -229,3 +229,25 @@ def test_metric_output_feedable_to_agreement_builder(
     assert summary["status"] == "ready"
     # Reference: hybrid best; candidate: predictive improved past learned -> a flip exists.
     assert summary["disagreement_row_count"] >= 1
+
+
+def test_rejects_row_missing_required_metric_field(tmp_path: Path) -> None:
+    """A row missing a core metric field must fail closed, not impute a best-case value.
+
+    A missing ``collision_event_rate`` must not be silently treated as 0.0 (best), since
+    that would mask a data problem and rank the class as collision-free.
+    """
+    rows = _rows_with_success({})
+    del rows[0]["collision_event_rate"]
+    out = tmp_path / "out.csv"
+    try:
+        metric.build_ranking_for_matrix(
+            packet_path=PACKET,
+            episode_rows_path=_write_rows(tmp_path, "rows.csv", rows),
+            output_path=out,
+        )
+    except metric.RankingMetricError as exc:
+        assert "collision_event_rate" in str(exc)
+        assert "missing required metric field" in str(exc)
+    else:
+        raise AssertionError("missing required metric field must fail closed")

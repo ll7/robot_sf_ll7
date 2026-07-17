@@ -49,6 +49,15 @@ STRUCTURAL_CLASS_ORDER = [
 
 RANKING_COLUMNS = ["structural_class", "rank", "roster_signature"]
 ROSTER_SIGNATURE_COLUMN = "roster_signature"
+# Core per-planner metric fields every episode-aggregate row must carry so the
+# ranking cannot silently impute a best-case (0.0 collision/timeout) value for a
+# missing safety metric. ``snqi_mean`` remains optional (handled in ``_score``).
+REQUIRED_METRIC_FIELDS = (
+    "success_rate",
+    "collision_event_rate",
+    "near_miss_event_rate",
+    "timeout_rate",
+)
 
 
 class RankingMetricError(ValueError):
@@ -174,7 +183,8 @@ def compute_structural_ranking(
 
     Raises:
         RankingMetricError: If a row is a fallback/degraded execution, a planner key
-            is unknown, or a structural class has no eligible rows.
+            is unknown, a required metric field is missing, or a structural class has
+            no eligible rows.
     """
     by_class: dict[str, list[dict[str, Any]]] = {klass: [] for klass in STRUCTURAL_CLASS_ORDER}
     for row in episode_rows:
@@ -184,15 +194,21 @@ def compute_structural_ranking(
         planner_key = row.get("planner_key") or row.get("planner")
         if planner_key is None:
             raise RankingMetricError("episode row missing planner_key/planner")
+        missing_fields = [field for field in REQUIRED_METRIC_FIELDS if row.get(field) in (None, "")]
+        if missing_fields:
+            raise RankingMetricError(
+                f"episode row for {planner_key!r} missing required metric field(s): "
+                f"{missing_fields}"
+            )
         klass = planner_to_class.get(str(planner_key).strip())
         if klass is None:
             raise RankingMetricError(f"planner not in preregistered roster: {planner_key!r}")
         try:
             aggregate = {
-                "success_rate": float(row.get("success_rate", 0.0)),
-                "collision_event_rate": float(row.get("collision_event_rate", 0.0)),
-                "near_miss_event_rate": float(row.get("near_miss_event_rate", 0.0)),
-                "timeout_rate": float(row.get("timeout_rate", 0.0)),
+                "success_rate": float(row["success_rate"]),
+                "collision_event_rate": float(row["collision_event_rate"]),
+                "near_miss_event_rate": float(row["near_miss_event_rate"]),
+                "timeout_rate": float(row["timeout_rate"]),
                 "snqi_mean": row.get("snqi_mean"),
             }
         except (TypeError, ValueError) as exc:

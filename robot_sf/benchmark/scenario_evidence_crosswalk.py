@@ -253,7 +253,7 @@ def _absorb_predicate_row(row: Mapping[str, Any], entry: dict[str, Any]) -> None
     raw = row.get("predicates")
     if isinstance(raw, Mapping):
         items = [
-            {"predicate": name, **(block if isinstance(block, Mapping) else {})}
+            {**(block if isinstance(block, Mapping) else {}), "predicate": name}
             for name, block in raw.items()
         ]
     else:
@@ -269,7 +269,9 @@ def _absorb_predicate_row(row: Mapping[str, Any], entry: dict[str, Any]) -> None
 
 
 # Statuses the crosswalk classifies as missing/degraded (not clean measurements).
-_CROSSWALK_DEGRADED_STATUSES = frozenset({"degraded", "missing", "unavailable", "fallback"})
+_CROSSWALK_DEGRADED_STATUSES = frozenset(
+    {"degraded", "missing", "unavailable", "fallback", "not_applicable"}
+)
 
 
 def _predicate_row_status(pred: Mapping[str, Any]) -> str:
@@ -284,12 +286,22 @@ def _predicate_row_status(pred: Mapping[str, Any]) -> str:
         explicit producer status).
     """
 
+    export_status = pred.get("export_status")
+    # The export lane's status is authoritative for raw rows. In particular, the producer
+    # may carry ``status=not_applicable`` while the export block correctly carries
+    # ``export_status=degraded``; never let the producer-only value promote the block to
+    # clean evidence.
+    if export_status == "degraded":
+        return "degraded"
+    if export_status == "missing":
+        return "missing"
     status = pred.get("status")
     if isinstance(status, str) and status:
+        if status == "not_applicable":
+            return "degraded"
+        if status in _CROSSWALK_DEGRADED_STATUSES:
+            return status
         return status
-    export_status = pred.get("export_status")
-    if export_status in _CROSSWALK_DEGRADED_STATUSES:
-        return export_status
     return "ok"
 
 

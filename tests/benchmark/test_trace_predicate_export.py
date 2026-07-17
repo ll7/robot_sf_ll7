@@ -627,18 +627,23 @@ class TestCrosswalkAdapter:
         row = envelope["rows"][0]
         occ = next(p for p in row["predicates"] if p["predicate"] == "occlusion_near_miss")
         assert occ["status"] == "degraded"
-        # Predicates absent from every episode are omitted (not emitted as 'missing') so the
-        # crosswalk lists them as motivated-not-exported rather than silent measurements.
-        names = {p["predicate"] for p in row["predicates"]}
-        assert "late_evasive" not in names
-        assert "oscillatory_control" not in names
+        # Missing blocks remain explicit so the crosswalk can distinguish them from
+        # motivated predicates that were never represented in the input.
+        statuses = {p["predicate"]: p["status"] for p in row["predicates"]}
+        assert statuses == {
+            "occlusion_near_miss": "degraded",
+            "late_evasive": "missing",
+            "oscillatory_control": "missing",
+        }
 
-    def test_missing_in_all_episodes_is_omitted(self) -> None:
-        """A predicate absent from every episode must not appear in the rollup."""
+    def test_missing_in_all_episodes_is_retained(self) -> None:
+        """Explicit missing blocks remain distinguishable from motivated-only predicates."""
         rows = build_trace_predicate_export([_record_with_no_predicates()])
         envelope = build_crosswalk_predicate_export(rows)
-        # Scenario with no measured predicates yields an empty predicate list.
-        assert envelope["rows"] == [{"scenario_id": "test-scenario", "predicates": []}]
+        predicates = envelope["rows"][0]["predicates"]
+        assert {(record["predicate"], record["status"]) for record in predicates} == {
+            (spec["predicate"], "missing") for spec in MOTIVATED_TRACE_PREDICATES
+        }
 
     def test_one_row_per_scenario_across_episodes(self) -> None:
         """Multiple episodes for one scenario collapse into one envelope row."""
@@ -693,13 +698,14 @@ class TestCrosswalkAdapter:
         assert exported == {spec["predicate"] for spec in MOTIVATED_TRACE_PREDICATES}
         assert availability["motivated_not_exported_predicates"] == []
 
-    def test_real_export_flags_motivated_not_exported_scenario(self) -> None:
-        """A scenario where a predicate is never measured surfaces it as not-exported."""
+    def test_real_export_preserves_missing_status_scenario(self) -> None:
+        """A scenario with absent producer records preserves explicit missing statuses."""
         from robot_sf.benchmark.scenario_evidence_crosswalk import (
             build_scenario_evidence_crosswalk,
         )
 
-        # Only oscillatory measured -> late_evasive / occlusion are motivated-not-exported.
+        # Only oscillatory measured; the other explicit missing blocks remain distinguishable
+        # from predicates absent from the export entirely.
         partial = {
             "episode_id": "ep-partial",
             "scenario_id": "partial-scenario",
@@ -731,10 +737,14 @@ class TestCrosswalkAdapter:
         availability = crosswalk["rows"][0]["predicate_availability"]
         exported = {p["predicate"] for p in availability["exported_predicates"]}
         assert exported == {"oscillatory_control"}
-        motivated_not_exported = {
-            p["predicate"] for p in availability["motivated_not_exported_predicates"]
+        missing = {
+            (p["predicate"], p["status"]) for p in availability["missing_or_degraded_predicates"]
         }
-        assert motivated_not_exported == {"late_evasive", "occlusion_near_miss"}
+        assert missing == {
+            ("late_evasive", "missing"),
+            ("occlusion_near_miss", "missing"),
+        }
+        assert availability["motivated_not_exported_predicates"] == []
 
 
 def test_schema_versions_versioned() -> None:

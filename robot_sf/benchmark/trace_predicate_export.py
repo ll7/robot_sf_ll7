@@ -498,17 +498,22 @@ def _roll_up_predicates_per_scenario(
 ) -> dict[str, dict[str, dict[str, Any]]]:
     """Roll per-episode predicate blocks up to one entry per scenario/predicate.
 
-    A predicate counts as present for a scenario when at least one episode measured it
-    (exported) or carried it degraded; a predicate missing from every episode is omitted so
-    the crosswalk lists it as ``motivated_not_exported``. Among present statuses prefer
-    ``exported`` over ``degraded`` (a clean measurement in any episode means the predicate
-    was measured for the scenario).
+    A predicate counts as present for a scenario when an episode measured it, carried it
+    degraded, or explicitly recorded it as missing. An explicit missing block is retained so
+    the crosswalk can distinguish missing evidence from a predicate that was never represented
+    in the export at all. Among present statuses prefer ``exported`` over ``degraded`` over
+    ``missing`` (a clean measurement in any episode means the predicate was measured for the
+    scenario).
 
     Returns:
         Mapping ``scenario_id -> {predicate -> {export_status, schema_version}}``.
     """
 
-    rank = {EXPORT_STATUS_EXPORTED: 0, EXPORT_STATUS_DEGRADED: 1}
+    rank = {
+        EXPORT_STATUS_EXPORTED: 0,
+        EXPORT_STATUS_DEGRADED: 1,
+        EXPORT_STATUS_MISSING: 2,
+    }
     per_scenario: dict[str, dict[str, dict[str, Any]]] = {}
     for row in export_rows:
         scenario_id = row.get("scenario_id")
@@ -534,8 +539,6 @@ def _absorb_scenario_predicate_blocks(
         if not isinstance(block, Mapping):
             continue
         export_status = block.get("export_status")
-        # Missing records are not "present"; skip so the predicate can surface as
-        # motivated-not-exported when no episode measured it.
         if export_status not in rank:
             continue
         current = bucket.get(predicate)
@@ -569,9 +572,9 @@ def build_crosswalk_predicate_export(
     Episodes are rolled up **per scenario**: the export lane is per-episode while the
     crosswalk is per-scenario, so a predicate that is cleanly exported in any episode of a
     scenario is reported ``ok`` for that scenario (it *was* measured); a predicate that is
-    only ever degraded across a scenario's episodes is reported ``degraded``; a predicate
-    absent from every episode of a scenario is omitted so the crosswalk lists it as
-    ``motivated_not_exported`` for that scenario (never silently inferred as measured).
+    only ever degraded or missing across a scenario's episodes retains that explicit gap
+    status. A predicate not represented by any input block is omitted so the crosswalk lists it
+    as ``motivated_not_exported`` (never silently inferred as measured).
 
     Args:
         export_rows: Rows produced by :func:`build_trace_predicate_export`.

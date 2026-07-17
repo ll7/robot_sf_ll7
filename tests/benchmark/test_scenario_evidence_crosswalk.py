@@ -142,6 +142,7 @@ def test_predicate_export_consumes_raw_export_lane_shape() -> None:
                     "late_evasive": {
                         "predicate": "late_evasive",
                         "schema_version": KNOWN_PREDICATE_SCHEMAS["late_evasive"],
+                        "status": "not_applicable",
                         "export_status": "degraded",
                     },
                 },

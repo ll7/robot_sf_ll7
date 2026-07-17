@@ -49,9 +49,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 #
 # This helper deliberately imports nothing from ``robot_sf`` so it stays a presence-only,
 # dependency-free readiness check (see module docstring). We therefore mirror the two code
-# constants here rather than importing them. ``_CANARY_METRIC_IDS_SYNC_GUARD`` records the
-# expected set so a test can fail closed if the upstream code constants drift away from this
-# mirror -- that keeps the two sources honest without an import coupling.
+# constants here rather than importing them. ``test_per_suite_metric_ids_mirror_code_constants``
+# imports the source constants and compares them against these mirrored names, so the two
+# sources cannot silently drift apart without a test failure.
 CANARY_METRIC_ID_ROBOT_SF = "robot_sf.path_length_ratio.distance_over_displacement"
 CANARY_METRIC_ID_SOCNAVBENCH = "socnavbench.path_length_ratio.displacement_over_distance"
 # Canonical per-suite keys expected under canary_slice.per_suite_metric_ids.
@@ -62,9 +62,6 @@ CANARY_PER_SUITE_METRIC_IDS: dict[str, str] = {
     "robot_sf": CANARY_METRIC_ID_ROBOT_SF,
     "socnavbench": CANARY_METRIC_ID_SOCNAVBENCH,
 }
-# The set of metric IDs the code (socnavbench_canary.py) actually emits. Used by the test-side
-# sync guard to detect drift between this mirror and the source constants.
-_CANARY_METRIC_IDS_SYNC_GUARD: frozenset[str] = frozenset(CANARY_PER_SUITE_METRIC_IDS.values())
 
 # Prerequisite family lifecycle states, ordered by escalating readiness. A family is only
 # counted toward "prerequisites ready" when it is ``ready`` or explicitly ``waived``.
@@ -834,9 +831,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
     elif args.validate_canary_slice:
         status = "OK" if report["ok"] else "BLOCKED"
+        per_suite = report.get("per_suite_metric_ids") or {}
+        metric_str = ", ".join(f"{suite}={mid}" for suite, mid in sorted(per_suite.items()))
         print(
             f"canary slice {status}: policy={report['policy_id']}@{report['policy_version']} "
-            f"seed={report['seed']} metric={report['metric_id']}"
+            f"seed={report['seed']} metrics={metric_str or '(none)'}"
         )
     else:
         print(render_text(report))

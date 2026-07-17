@@ -354,10 +354,18 @@ def test_canary_slice_rejects_non_mapping_nested_blocks(tmp_path: Path) -> None:
 
 
 def test_main_validate_canary_slice_exit_codes(capsys: pytest.CaptureFixture) -> None:
-    """CLI canary-slice validation exits 0 on the real slice and emits the OK line."""
+    """CLI canary-slice validation exits 0 on the real slice and emits the OK line.
+
+    The OK line must render the per-suite metric IDs (not the now-retired singular
+    ``metric_id``), so a regression that drops back to ``metric=None`` is caught here.
+    """
     assert main(["--validate-canary-slice"]) == 0
     out = capsys.readouterr().out
     assert "canary slice OK" in out
+    assert "metrics=" in out
+    assert CANARY_METRIC_ID_ROBOT_SF in out
+    assert CANARY_METRIC_ID_SOCNAVBENCH in out
+    assert "metric=None" not in out
 
 
 def test_canary_slice_forbidden_tokens_cover_known_placeholders() -> None:

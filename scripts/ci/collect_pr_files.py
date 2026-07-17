@@ -484,24 +484,24 @@ def main(argv: list[str] | None = None) -> int:
             max_delay=args.max_delay,
             timeout=args.timeout,
         )
+
+        write_outputs(
+            files,
+            out_changed_files=args.out_changed_files,
+            out_files_status=args.out_files_status,
+            out_added_files=args.out_added_files,
+        )
+
+        # Echo a short summary so the workflow log shows what was collected.
+        print(f"Collected {len(files)} changed file(s) for PR #{args.pr_number} ({args.repo}).")
+        for entry in files[:120]:
+            print(f"  {entry.get('status', '')}\t{_filename_of(entry)}")
+        if len(files) > 120:
+            print(f"  ... ({len(files) - 120} more)")
+        return 0
     except PrFilesFetchError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-
-    write_outputs(
-        files,
-        out_changed_files=args.out_changed_files,
-        out_files_status=args.out_files_status,
-        out_added_files=args.out_added_files,
-    )
-
-    # Echo a short summary so the workflow log shows what was collected.
-    print(f"Collected {len(files)} changed file(s) for PR #{args.pr_number} ({args.repo}).")
-    for entry in files[:120]:
-        print(f"  {entry.get('status', '')}\t{_filename_of(entry)}")
-    if len(files) > 120:
-        print(f"  ... ({len(files) - 120} more)")
-    return 0
 
 
 if __name__ == "__main__":

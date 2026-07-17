@@ -1,0 +1,177 @@
+{
+  "campaign_issue": 5034,
+  "caveats": [
+    "The re-issued uncertainty block supersedes the unrecoverable registered block for byte-exact reproduction going forward; it does not retroactively make the registered snqi_analysis.json byte-identical, which remains the canonical reference target for the #5923 numeric-tolerance contract.",
+    "This is internal diagnostic-only evidence and is not paper-facing; native claims apply only to the default_social_force native rows, while orca and hybrid_rule_v0_minimal remain explicitly labeled adapter diagnostics.",
+    "No qualitative conclusion changes relative to the registered block: every 95% interval sign and every probability threshold is preserved within the documented tolerances."
+  ],
+  "claim_boundary": "internal fixed-scope latency-sensitivity diagnostic, not paper-facing; native claims apply only to native rows, adapter rows remain explicitly labeled diagnostics, and fallback/degraded cells are caveats, not successes.",
+  "consistency_checks": [
+    {
+      "comparison": "default_social_force minus hybrid_rule_v0_minimal",
+      "implied_resample_count": 6925,
+      "probability_is_integer_resample_count": true,
+      "slope_difference_deviation": 0.0,
+      "slope_difference_equals_slope_A_minus_slope_B": true
+    },
+    {
+      "comparison": "default_social_force minus orca",
+      "implied_resample_count": 9902,
+      "probability_is_integer_resample_count": true,
+      "slope_difference_deviation": 1.734723475976807e-18,
+      "slope_difference_equals_slope_A_minus_slope_B": true
+    },
+    {
+      "comparison": "hybrid_rule_v0_minimal minus orca",
+      "implied_resample_count": 9664,
+      "probability_is_integer_resample_count": true,
+      "slope_difference_deviation": 1.734723475976807e-18,
+      "slope_difference_equals_slope_A_minus_slope_B": true
+    }
+  ],
+  "date": "2026-07-17",
+  "evidence_status": "diagnostic-only",
+  "issue": 5928,
+  "pairwise_slope_uncertainty": [
+    {
+      "comparison": "default_social_force minus hybrid_rule_v0_minimal",
+      "probability_first_is_more_robust": 0.6925,
+      "slope_difference": 0.0023131458879596337,
+      "slope_difference_95pct_ci": [
+        -0.006680674431898732,
+        0.011268880385150077
+      ]
+    },
+    {
+      "comparison": "default_social_force minus orca",
+      "probability_first_is_more_robust": 0.9902,
+      "slope_difference": 0.010788777050326978,
+      "slope_difference_95pct_ci": [
+        0.0017095242430590725,
+        0.01987432864612748
+      ]
+    },
+    {
+      "comparison": "hybrid_rule_v0_minimal minus orca",
+      "probability_first_is_more_robust": 0.9664,
+      "slope_difference": 0.008475631162367344,
+      "slope_difference_95pct_ci": [
+        -0.0006121642755115612,
+        0.01747575111910978
+      ]
+    }
+  ],
+  "parent_issue": 5892,
+  "per_planner_slope_intervals": [
+    {
+      "execution_mode": "native",
+      "planner_group": "default_social_force",
+      "snqi_slope_95pct_ci": [
+        -0.009901227915298128,
+        0.0038813740576418942
+      ],
+      "snqi_slope_per_100ms": -0.0029736355354277547
+    },
+    {
+      "execution_mode": "adapter",
+      "planner_group": "hybrid_rule_v0_minimal",
+      "snqi_slope_95pct_ci": [
+        -0.01167880848237809,
+        0.0008984286935797398
+      ],
+      "snqi_slope_per_100ms": -0.0052867814233873885
+    },
+    {
+      "execution_mode": "adapter",
+      "planner_group": "orca",
+      "snqi_slope_95pct_ci": [
+        -0.020044994707446688,
+        -0.007978880433884557
+      ],
+      "snqi_slope_per_100ms": -0.013762412585754731
+    }
+  ],
+  "point_estimate_slopes": {
+    "description": "Committed per-planner SNQI-v0 latency slopes (per 100 ms-equivalent) that the pairwise slope_difference values below are derived from. Recording them makes the internal consistency of the re-issued block auditable.",
+    "execution_mode_by_group": {
+      "default_social_force": "native",
+      "hybrid_rule_v0_minimal": "adapter",
+      "orca": "adapter"
+    },
+    "slope_per_100ms_by_group": {
+      "default_social_force": -0.0029736355354277547,
+      "hybrid_rule_v0_minimal": -0.0052867814233873885,
+      "orca": -0.013762412585754731
+    }
+  },
+  "provenance": {
+    "baseline_sha256": "329ca5766491e1587979d0a435c7ba676e148ccdff97040a36546bbb9414035a",
+    "durable_input": {
+      "axis": "control_action_latency",
+      "input_rel_path": "snqi_latency_inputs.csv",
+      "input_schema_version": "control-action-latency-snqi-inputs.v1",
+      "input_sha256": "71b5fda8c8919a43348f134fef1ace8fcc4a6630f6d16e9e425e2425471a4094",
+      "promotion_commit": "d7e056667729d1bd990fa0161989ca56cea2340e",
+      "promotion_date": "2026-07-17",
+      "raw_rows_sha256": "6b34e690dfe6cc1ccccd9cd19bde8b3f6a3501bbc1b0a0b44639e151557b4134"
+    },
+    "execution_commit": "c153848d7be2851b5c5e89c11055bf96ea778a84",
+    "generator": {
+      "build_function": "build_snqi_analysis",
+      "identity_note": "The generator is content-addressed by source_sha256 (not a git head) so regenerating from unchanged source and unchanged durable input reproduces this packet byte-for-byte.",
+      "kind": "committed_canonical_analyzer",
+      "module": "robot_sf.benchmark.control_action_latency_snqi",
+      "reissue_function": "build_uncertainty_reissue",
+      "source_rel_path": "robot_sf/benchmark/control_action_latency_snqi.py",
+      "source_sha256": "3e8bb022583f7cb6a04773efc1e3b312dee32a8569883cd0c3cd6319e3dbe8ea"
+    },
+    "job_id": 13516,
+    "job_label": "5034c-issue5034-latency-sweep",
+    "regenerate_command": "uv run python scripts/benchmark/analyze_control_action_latency_snqi.py --reissue-uncertainty",
+    "weights_sha256": "71a67c3c02faff166f8c96bef8bcf898533981ca2b2c4493829988520fb1aeb2"
+  },
+  "recovery_decision": {
+    "decision": "re-issue from the committed canonical analyzer; the original uncertainty generator is unrecoverable",
+    "dod_reference": "issue #5928 Definition of Done #1 (recovery or maintainer decision) and #2 (re-issue from the committed analyzer with a fresh provenance stamp)",
+    "evidence": [
+      "PR #5904 registered docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_analysis.json as a pure output artifact; the introducing commit added the JSON and CSV evidence plus documentation but no generator script.",
+      "No committed Python module other than robot_sf/benchmark/control_action_latency_snqi.py (added by PR #5923) emits the pairwise_slope_uncertainty block under the control-action-latency-snqi-analysis.v1 schema.",
+      "The registered pairwise slope_difference is internally inconsistent with its own per-planner slopes: e.g. the registered dsf-minus-hybrid difference 0.00230618 does not equal slope_A - slope_B = 0.00231315 of the ranking block, proving the uncertainty block came from a second, unrecoverable code path.",
+      "The registered posterior probabilities include half-integer counts (e.g. 0.68635 = 6863.5/10000, 0.97105 = 9710.5/10000), which a simple (diff > 0).mean() over 10000 resamples cannot produce; the estimator is unrecoverable."
+    ],
+    "linked_issues": [
+      5928,
+      5892,
+      5034,
+      4977
+    ],
+    "linked_prs": [
+      5904,
+      5923
+    ],
+    "recovery_path": "unrecoverable"
+  },
+  "reproducibility": {
+    "bootstrap_interval_abs_tol": 0.01,
+    "bootstrap_method": {
+      "method": "paired cluster percentile bootstrap",
+      "pairing": "shared resampling indices across planners",
+      "percentiles": [
+        2.5,
+        97.5
+      ],
+      "resamples": 10000,
+      "seed": 5892,
+      "tolerance_note": "Percentile endpoints are Monte-Carlo quantities; they reproduce the registered intervals within the documented absolute tolerance but are not byte-identical, because the registered packet's generating code was never committed and endpoints depend on the exact resampling stream and numpy version.",
+      "units_per_planner": 144
+    },
+    "bootstrap_probability_abs_tol": 0.015,
+    "byte_reproducible": true,
+    "description": "The re-issued uncertainty block is fully deterministic: a single numpy.random.default_rng(5892) draws one shared resampling-index matrix across planners, percentile endpoints use linear interpolation, and the per-planner unit roster is ordered by (scenario_id, seed). The committed analyzer source (sha256 above) plus the durable input (sha256 above) reproduce this block byte-for-byte on a fixed numpy version. Unlike the registered block, every probability is an exact integer resample count and every slope_difference equals slope_A - slope_B.",
+    "pairwise_slope_difference_abs_tol": 0.001,
+    "point_estimate_abs_tol": 1e-09
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "root_parent_issue": 4977,
+  "schema_version": "control-action-latency-snqi-uncertainty-reissue.v1"
+}

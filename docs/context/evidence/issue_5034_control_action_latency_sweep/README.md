@@ -114,6 +114,45 @@ not equal the difference of its own per-planner slopes, and the probabilities in
 counts such as `0.68635 = 6863.5/10000`). This committed analyzer is the canonical deterministic
 generator going forward.
 
+## Re-issued uncertainty provenance (issue #5928)
+
+Plain-language summary: the **original** job 13516 uncertainty generator was never committed and
+is **unrecoverable**, so issue #5928 re-issues the uncertainty block from the **committed
+canonical analyzer** under a fresh, byte-reproducible provenance stamp rather than leaving the
+provenance gap open.
+
+Recovery decision (recorded in `snqi_uncertainty_reissued.json`):
+
+- **Path selected**: re-issue from the committed canonical analyzer (issue #5928 Definition of
+  Done #2). The original generator cannot be recovered (Definition of Done #1, second branch).
+- **Evidence of unrecoverability**: PR #5904 registered `snqi_analysis.json` as a pure output
+  artifact with no generator script; no committed module other than
+  `robot_sf/benchmark/control_action_latency_snqi.py` (added by #5923) emits the
+  `pairwise_slope_uncertainty` block; the registered pairwise `slope_difference` is internally
+  inconsistent with its own per-planner slopes; and the registered probabilities include
+  half-integer counts (`0.68635`, `0.97105`) that a simple `(diff > 0).mean()` over 10,000
+  resamples cannot produce.
+
+The re-issued block is internally consistent **by construction**: every `slope_difference` equals
+`slope_A - slope_B` of the committed per-planner slopes recorded alongside it, and every
+`probability_first_is_more_robust` is an exact integer multiple of `1/10000` (e.g. `0.6925 =
+6925/10000`, `0.9902`, `0.9664` — no half-integers). Native / adapter execution-mode labels and
+the diagnostic-only claim boundary are preserved unchanged.
+
+The committed `snqi_analysis.json` stays byte-stable as the reference target for the #5923
+numeric-tolerance contract; `snqi_uncertainty_reissued.json` is the byte-reproducible form for
+exact reproduction going forward. Regeneration is content-addressed by the analyzer source SHA-256
+plus the durable-input SHA-256, so rerunning the command below reproduces the committed artifact
+byte-for-byte on a fixed `numpy` version:
+
+```bash
+uv run python scripts/benchmark/analyze_control_action_latency_snqi.py --reissue-uncertainty --date 2026-07-17
+```
+
+No qualitative conclusion changes relative to the registered block: every 95% interval sign and
+every probability threshold is preserved within the documented tolerances. Linked: #5912, #5923,
+#5892, #5034, #4977.
+
 ## Files
 
 - `summary.json`: full promotion packet (aggregate + per-cell + exclusions).
@@ -122,5 +161,9 @@ generator going forward.
 - `snqi_by_latency.csv`: compact planner-by-latency SNQI table.
 - `snqi_latency_inputs.csv`: durable sufficient input for the SNQI analyzer (issue #5912).
 - `snqi_latency_inputs.csv.provenance.json`: provenance anchoring the input to the raw rows.
+- `snqi_uncertainty_reissued.json`: byte-reproducible re-issue of the uncertainty block from the
+  committed canonical analyzer, with a fresh provenance stamp and the recovery decision
+  (issue #5928).
+- `snqi_uncertainty_reissued.json.review.json`: review sidecar for the re-issued packet.
 - `manifest.sha256`: checksums for promoted compact artifacts.
 - `README.md`: this human-readable summary.

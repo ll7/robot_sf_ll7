@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Check that the installed fast-pysf runtime matches the threaded rollout API."""
+"""Check that the installed PySocialForce API matches the codebase contract.
+
+This avoids collection failures in environments with stale installed packages.
+"""
 
 from __future__ import annotations
 
@@ -18,7 +21,7 @@ def check_fast_pysf_runtime() -> str | None:
         return f"could not import pysocialforce.forces ({exc})"
 
     if not callable(getattr(forces, EXPECTED_SYMBOL, None)):
-        return f"pysocialforce.forces.{EXPECTED_SYMBOL} is missing"
+        return f"pysocialforce.forces.{EXPECTED_SYMBOL} is missing or not callable"
     return None
 
 
@@ -37,8 +40,8 @@ def main() -> int:
     print(
         f"Refresh the environment with `{REPAIR_COMMAND}`, then rerun readiness.", file=sys.stderr
     )
-    return 2
+    return 1
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())

@@ -22,6 +22,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from scripts.ci.collect_pr_files import (
+    GITHUB_MAX_PER_PAGE,
     PrFilesFetchError,
     _backoff_delay,
     _run_gh_api_page,
@@ -271,6 +272,55 @@ def test_pagination_collects_all_pages() -> None:
     )
     assert len(files) == 102
     assert files[-1]["filename"] == "c.py"
+
+
+# ── per_page clamping (issue #5924) ───────────────────────────────────────────
+
+
+def test_per_page_above_github_max_is_clamped_and_collects_all_rows() -> None:
+    """per_page=250 must not truncate: the effective page size is capped at 100.
+
+    Reproduces the issue #5924 bug: a 250-item page size compared against a
+    server-capped 100-item page would make ``len(files) < per_page`` always true,
+    stopping after page 1. With clamping, two full 100-item pages plus a partial
+    page collect every row.
+    """
+    page1 = [_entry(f"p1_{i}.py", "modified") for i in range(100)]
+    page2 = [_entry(f"p2_{i}.py", "modified") for i in range(100)]
+    page3 = [_entry("p3.py", "added"), _entry("p4.py", "modified")]
+    run_page = _scripted_runner(
+        {
+            (1, 1): _proc(stdout=json.dumps(page1)),
+            (2, 1): _proc(stdout=json.dumps(page2)),
+            (3, 1): _proc(stdout=json.dumps(page3)),
+            (4, 1): _proc(stdout="[]"),
+        }
+    )
+    files = fetch_all_pr_files(
+        "o/r", "5924", per_page=250, run_page=run_page, sleep=lambda _d: None, rng=lambda: 0.0
+    )
+    assert len(files) == 202
+    assert files[-1]["filename"] == "p4.py"
+
+
+def test_per_page_clamp_does_not_change_requested_page_size_below_max() -> None:
+    """A per_page within the cap is passed through unchanged."""
+    full_page = [_entry(f"a{i}.py", "modified") for i in range(100)]
+    run_page = _scripted_runner(
+        {
+            (1, 1): _proc(stdout=json.dumps(full_page)),
+            (2, 1): _proc(stdout="[]"),
+        }
+    )
+    files = fetch_all_pr_files(
+        "o/r",
+        "1",
+        per_page=GITHUB_MAX_PER_PAGE,
+        run_page=run_page,
+        sleep=lambda _d: None,
+        rng=lambda: 0.0,
+    )
+    assert len(files) == 100
 
 
 # ── outputs: changed / status TSV / added ────────────────────────────────────

@@ -54,6 +54,10 @@ if TYPE_CHECKING:
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_PER_PAGE = 100
+# GitHub caps `per_page` at 100 for the `pulls/{n}/files` endpoint. A larger
+# value is silently ignored by the server and at most 100 items are returned per
+# page, which would otherwise break the last-page termination check below.
+GITHUB_MAX_PER_PAGE = 100
 DEFAULT_MAX_ATTEMPTS = 5
 DEFAULT_BASE_DELAY = 1.0
 DEFAULT_MAX_DELAY = 30.0
@@ -219,7 +223,7 @@ def fetch_all_pr_files(  # noqa: PLR0913
     repo, pr_number:
         GitHub ``owner/repo`` and PR number.
     per_page:
-        Page size (GitHub caps this at 100).
+        Page size (GitHub caps this at 100; larger values are clamped).
     max_attempts:
         Retry attempts *per page* before failing closed.
     base_delay, max_delay:
@@ -232,6 +236,13 @@ def fetch_all_pr_files(  # noqa: PLR0913
         raise ValueError("max_attempts must be at least 1")
     if per_page < 1:
         raise ValueError("per_page must be at least 1")
+
+    # Clamp to the GitHub-documented maximum for this endpoint. This must happen
+    # before the request/termination logic so the *same* value drives both the
+    # query parameter and the `len(files) < per_page` last-page test; otherwise a
+    # caller-passed per_page > 100 would be compared against a server-capped page
+    # of <=100 items and collection would stop after page 1, truncating the list.
+    effective_per_page = min(per_page, GITHUB_MAX_PER_PAGE)
 
     # Resolve injectable seams lazily so tests (and callers) that patch the
     # module-level ``_run_gh_api_page`` / ``time.sleep`` references at runtime are
@@ -251,7 +262,7 @@ def fetch_all_pr_files(  # noqa: PLR0913
             repo,
             pr_number,
             page,
-            per_page,
+            effective_per_page,
             max_attempts=max_attempts,
             base_delay=base_delay,
             max_delay=max_delay,
@@ -276,7 +287,7 @@ def fetch_all_pr_files(  # noqa: PLR0913
         if not files:
             break  # empty page => no more files
         all_files.extend(files)
-        if len(files) < per_page:
+        if len(files) < effective_per_page:
             break  # last (partial) page
         page += 1
     return all_files

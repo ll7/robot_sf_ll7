@@ -1097,6 +1097,9 @@ parser-smoke validation for `maps/svg_maps/socnavbench/socnavbench_eth.svg`.
   [policy_search/contracts/learned_local_policy_eligibility.md](policy_search/contracts/learned_local_policy_eligibility.md)
 * Issue #5004 ty advisory diagnostic baseline + per-module downward ratchet:
   [issue_5004_ty_advisory_ratchet.md](issue_5004_ty_advisory_ratchet.md)
+* Issue #5952 evidence-registry ratchet baseline reconciliation (reviewed baseline refresh +
+  clean-main regression guard):
+  [issue_5952_evidence_registry_ratchet_baseline.md](issue_5952_evidence_registry_ratchet_baseline.md)
 * Note-maintenance skill:
   [.agents/skills/context-note-maintainer/SKILL.md](../../.agents/skills/context-note-maintainer/SKILL.md)
 

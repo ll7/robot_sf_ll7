@@ -340,7 +340,8 @@ def _print_summary(report: dict[str, Any]) -> None:
     print(f"overall prevalence: {report['overall_prevalence']:.3f}")
     for result in report["estimators"]:
         line = (
-            f"  {result['estimator_id']} ({result['kind']}): verdict={result['verdict']} "
+            f"  {result['estimator_id']} ({result['kind']}): "
+            f"forecast={result.get('forecast_model', '?')} verdict={result['verdict']} "
             f"AP={result['average_precision']:.3f} "
             f"latency={result['latency']['classification']}"
         )

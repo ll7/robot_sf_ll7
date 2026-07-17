@@ -562,8 +562,13 @@ not promoted into durable benchmark or paper-facing claims.
 #### Issue-reading with comments (REST-backed)
 
 `gh issue view <number> --comments` fails on GitHub CLI 2.45.x (Ubuntu noble) with a
-`repository.issue.projectCards` GraphQL deprecation error (issue #5729). Use the
-REST-backed helpers for all issue-with-comments reads:
+`repository.issue.projectCards` GraphQL deprecation error (issue #5729), and the
+native-first read also fails with a `GraphQL: API rate limit already exceeded`
+error when the GraphQL quota is exhausted (issue #5896). The `thread` command
+falls back to paginated REST reads for all GraphQL-path failures (deprecated
+field, quota exhaustion, secondary rate limit, generic GraphQL error) while
+keeping authentication, authorization, and repository-resolution failures
+fail-closed. Use the REST-backed helpers for all issue-with-comments reads:
 
 ```bash
 # Preferred: complete thread read with native-first fallback

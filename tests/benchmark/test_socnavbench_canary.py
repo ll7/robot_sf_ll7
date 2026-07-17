@@ -11,6 +11,7 @@ Issue #5842 hardens the canary so that:
 from __future__ import annotations
 
 import json
+import pickle
 import subprocess
 import sys
 from pathlib import Path
@@ -365,6 +366,25 @@ def test_external_data_root_env_is_honored_by_asset_resolver(
     resolved = socnavbench_eth.resolve_root()
     # When the env root is set, resolution must point under it, not under the repo tree.
     assert resolved == fake_root / "socnavbench"
+
+
+def test_staged_eth_loader_returns_traversible_for_native_runner(tmp_path: Path) -> None:
+    """The native runner loader returns the validated staged ETH array and resolution."""
+    from robot_sf.data.external import socnavbench_eth
+
+    root = tmp_path / "socnavbench"
+    layout = socnavbench_eth.expected_layout(root)
+    layout.mesh_dir.mkdir(parents=True)
+    (layout.mesh_dir / "mesh.obj").write_text("# synthetic mesh marker\n", encoding="utf-8")
+    layout.traversible_pickle.parent.mkdir(parents=True)
+    expected = np.array([[True, False], [True, True]], dtype=bool)
+    with layout.traversible_pickle.open("wb") as handle:
+        pickle.dump({"resolution": 0.05, "traversible": expected}, handle, protocol=2)
+
+    resolution, traversible = socnavbench_eth.load_traversible(root)
+
+    assert resolution == 0.05
+    np.testing.assert_array_equal(traversible, expected)
 
 
 def test_cli_canary_runner_emits_receipt_with_test_flag(tmp_path: Path) -> None:

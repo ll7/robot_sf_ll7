@@ -419,7 +419,7 @@ def check_merge_staleness(
     ci_base_sha = _detect_workflow_run_base_sha(repo, pr_number)
     if ci_base_sha:
         if ci_base_sha == parent_sha:
-            stale = _parent_branch_lags_main(parent_sha, main_sha)
+            stale = _parent_branch_lags_main(repo, parent_sha, main_sha)
             if stale:
                 return {
                     "status": "ok",
@@ -485,7 +485,7 @@ def check_merge_staleness(
             "base_ref": base_ref,
         }
 
-    stale = _parent_branch_lags_main(parent_sha, main_sha)
+    stale = _parent_branch_lags_main(repo, parent_sha, main_sha)
     if stale:
         return {
             "status": "ok",
@@ -521,14 +521,19 @@ def check_merge_staleness(
     }
 
 
-def _parent_branch_lags_main(parent_sha: str, main_sha: str) -> bool:
-    """True when the declared parent branch is behind current main.
+def _parent_branch_lags_main(repo: str, parent_sha: str, main_sha: str) -> bool:
+    """Return whether the parent ref is behind or diverged from current main.
 
-    We conservatively treat any parent SHA that differs from main as lagging:
-    without a full merge-base graph walk we cannot tell whether main is an
-    ancestor of the parent.  Differing SHAs are the safe fail-closed signal.
+    A healthy stacked parent can be ahead of main, so SHA inequality alone is
+    not sufficient. GitHub's compare endpoint reports the ancestry relation;
+    an unavailable or malformed response fails closed as lagging.
     """
-    return parent_sha != main_sha
+    if parent_sha == main_sha:
+        return False
+    result = _gh(["api", f"repos/{repo}/compare/{main_sha}...{parent_sha}", "--jq", ".status"])
+    if result.returncode != 0:
+        return True
+    return result.stdout.strip() not in {"ahead", "identical"}
 
 
 def _check_main_targeting_pr(

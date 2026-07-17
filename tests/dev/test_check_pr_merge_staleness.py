@@ -258,11 +258,12 @@ def test_stacked_pr_fresh_when_current_with_declared_base() -> None:
             return_value="parent_sha",
         ),
     ):
-        # main sha + parent ref sha both fetched via _gh; parent equals ci base
-        # and parent equals main, so the PR is genuinely fresh.
+        # main sha + parent ref sha + compare status are fetched via _gh; the
+        # parent is ahead of main, so the stacked PR is genuinely fresh.
         mock_gh.side_effect = [
+            _gh_response(stdout="main_sha"),
             _gh_response(stdout="parent_sha"),
-            _gh_response(stdout="parent_sha"),
+            _gh_response(stdout="ahead"),
         ]
         data = check_merge_staleness(
             "5953",
@@ -274,7 +275,7 @@ def test_stacked_pr_fresh_when_current_with_declared_base() -> None:
     assert data["detection"] == "stacked_base"
     assert data["stale"] is False
     assert data["parent_sha"] == "parent_sha"
-    assert data["main_sha"] == "parent_sha"
+    assert data["main_sha"] == "main_sha"
 
 
 def test_stacked_pr_stale_when_ci_base_older_than_current_parent() -> None:
@@ -315,6 +316,7 @@ def test_stacked_pr_stale_when_parent_lags_main_fallback() -> None:
         mock_gh.side_effect = [
             _gh_response(stdout="main_head"),
             _gh_response(stdout="parent_sha"),
+            _gh_response(stdout="behind"),
         ]
         data = check_merge_staleness(
             "5953",
@@ -368,9 +370,20 @@ def test_main_targeting_pr_preserves_race_check() -> None:
 
 
 def test_parent_branch_lags_main_helper() -> None:
-    """Helper reports lag when parent SHA differs from main."""
-    assert _parent_branch_lags_main("abc", "abc") is False
-    assert _parent_branch_lags_main("abc", "def") is True
+    """Helper uses compare ancestry and fails closed on compare errors."""
+    with patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout="ahead"),
+            _gh_response(stdout="behind"),
+            _gh_response(stdout="diverged"),
+            _gh_response(returncode=1, stderr="compare unavailable"),
+        ]
+        assert _parent_branch_lags_main("owner/repo", "same", "same") is False
+        assert _parent_branch_lags_main("owner/repo", "parent", "main") is False
+        assert _parent_branch_lags_main("owner/repo", "parent", "main") is True
+        assert _parent_branch_lags_main("owner/repo", "parent", "main") is True
+
+    assert "compare/main...parent" in " ".join(mock_gh.call_args_list[0].args[0])
 
 
 def test_fetch_pr_base_ref_reads_ref_field() -> None:

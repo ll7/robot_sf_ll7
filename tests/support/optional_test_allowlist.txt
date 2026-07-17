@@ -34,4 +34,3 @@ tests/unit/test_figure_orchestrator_requirements.py
 tests/unit/test_runner_helper_coverage.py
 tests/unit/test_runner_video.py
 tests/validation/test_publication_preflight.py
-

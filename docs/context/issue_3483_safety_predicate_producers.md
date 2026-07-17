@@ -46,6 +46,16 @@ enough, the dominant goal-planner case) or `hazard_never_visible`. A late-evasiv
 never emits a silent-empty latency; downstream consumers can distinguish "never reacted" from a
 data gap. It is `null` exactly when `response_latency_s` is finite.
 
+**Legacy `v1` compatibility (issue #5935).** Existing durable campaign bundles carry the
+legacy `safety_predicate.late_evasive.v1` record (the issue4206 trace-capable rerun is
+v1-only: 6291 v1 / 0 v2 records). The v1→v2 bump was an *additive* telemetry change with
+`no benchmark metric semantics change`, so both versions are accepted as valid provenance by
+the export lane (`robot_sf/benchmark/trace_predicate_export.py`) and by the scenario-evidence
+crosswalk (`robot_sf/benchmark/scenario_evidence_crosswalk.py`). The crosswalk records the
+exact source schema version rather than normalizing it away: it separates
+`KNOWN_PREDICATE_SCHEMAS` (the current/motivated `v2` referenced by `motivated_not_exported`
+records) from `SUPPORTED_PREDICATE_SCHEMAS` (the full accepted set including legacy `v1`).
+
 ## Producer 3 — `safety_predicate.occlusion_near_miss.v1`
 
 `occlusion_near_miss_predicate(hazard_distances, visible, track_confidence, speeds, *, dt,

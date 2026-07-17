@@ -6,14 +6,14 @@ show_help() {
 Usage: scripts/dev/run_worktree_shared_venv.sh [options] -- <uv-run-command> [args...]
 
 Run a targeted validation command from the current checkout while reusing a shared virtualenv.
-The helper pins imports to this worktree by prepending PYTHONPATH=$PWD and sets UV_NO_SYNC=1 so
+The helper pins imports to this worktree by prepending PYTHONPATH=$PWD/fast-pysf:$PWD and sets UV_NO_SYNC=1 so
 `uv run` does not silently resync or rewrite the shared environment.
 For linked worktrees, the helper also derives a per-worktree COVERAGE_FILE unless one is already
 set, preventing parallel focused pytest runs from sharing output/coverage/.coverage state.
 
 Because the shared env is reused without resync (UV_NO_SYNC=1), a stale owning-checkout .venv can
 lag the current worktree source. The vendored `pysocialforce` package (force-included from
-fast-pysf/pysocialforce and NOT shadowed by PYTHONPATH=$PWD) is especially drift-prone: importing
+fast-pysf/pysocialforce and shadowed by PYTHONPATH=$PWD/fast-pysf:$PWD) is especially drift-prone: importing
 a newer API from a stale install fails mid-collection with a confusing ImportError. The helper
 therefore runs a cheap freshness check comparing the installed `pysocialforce` package against this
 checkout's fast-pysf/pysocialforce source and fails early with an actionable message when they
@@ -114,9 +114,9 @@ fi
 check_shared_venv_freshness() {
   # Guard the shared-venv fast path against a stale owning-checkout environment.
   #
-  # The vendored `pysocialforce` package is force-included from fast-pysf/pysocialforce and is NOT
-  # shadowed by PYTHONPATH=$PWD (the package lives at fast-pysf/pysocialforce, not at the repo
-  # root). With UV_NO_SYNC=1 a reused env can lag the current worktree source, so importing a newer
+  # The vendored `pysocialforce` package is force-included from fast-pysf/pysocialforce and is
+  # shadowed by PYTHONPATH=$PWD/fast-pysf:$PWD. With UV_NO_SYNC=1 a reused env can lag the current
+  # worktree source, so importing a newer
   # API from a stale install fails mid-collection with a confusing ImportError. Compare the
   # installed package's .py files against this checkout's source and fail early on divergence.
   local venv="$1"

@@ -817,7 +817,7 @@ def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
         check=False,
     )
     assert help_result.returncode == 0
-    assert "PYTHONPATH=$PWD" in help_result.stdout
+    assert "PYTHONPATH=$PWD/fast-pysf:$PWD" in help_result.stdout
     assert "UV_PROJECT_ENVIRONMENT" in help_result.stdout
     assert "UV_NO_SYNC=1" in help_result.stdout
     assert "COVERAGE_FILE" in help_result.stdout

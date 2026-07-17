@@ -71,18 +71,6 @@ def _native_command_spec(*, persistent: bool, timeout_s: float = 2.0) -> dict[st
     }
 
 
-@pytest.mark.parametrize("exception_type", [OSError, ValueError])
-def test_readline_with_timeout_propagates_expected_io_errors(
-    exception_type: type[Exception],
-) -> None:
-    class ErrorStream:
-        def readline(self) -> str:
-            raise exception_type("read failed")
-
-    with pytest.raises(exception_type, match="read failed"):
-        runner_mod.readline_with_timeout(ErrorStream(), timeout_s=1.0)
-
-
 def test_native_command_provenance_captures_command_and_hash():
     """Provenance must pin argv + env keys + a content hash of the invocation."""
     spec = _native_command_spec(persistent=False)

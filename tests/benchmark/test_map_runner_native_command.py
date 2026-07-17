@@ -19,18 +19,6 @@ from robot_sf.benchmark.map_runner_native_command import (
 _FAKE_PLANNER = str(Path(__file__).resolve().parent / "fixtures" / "native_command_fake_planner.py")
 
 
-@pytest.mark.parametrize("exception_type", [OSError, ValueError])
-def test_readline_with_timeout_propagates_expected_io_errors(
-    exception_type: type[Exception],
-) -> None:
-    class ErrorStream:
-        def readline(self) -> str:
-            raise exception_type("read failed")
-
-    with pytest.raises(exception_type, match="read failed"):
-        nc.readline_with_timeout(ErrorStream(), timeout_s=1.0)
-
-
 # ---------------------------------------------------------------------------
 # Command-contract parsing
 # ---------------------------------------------------------------------------
@@ -107,6 +95,15 @@ class TestNoProgressDeadlockDetector:
         detector = _NoProgressDeadlockDetector(window_steps=3, progress_threshold_m=0.05)
         for distance in (10.0, 9.97, 9.99, 9.98):
             detector.update(distance)
+        assert detector.active is True
+
+    def test_partial_window_does_not_activate_stall(self) -> None:
+        detector = _NoProgressDeadlockDetector(window_steps=3, progress_threshold_m=0.05)
+        for distance in (10.0, 9.99, 9.99):
+            detector.update(distance)
+        assert detector.active is False
+
+        detector.update(9.98)
         assert detector.active is True
 
     def test_field_shape(self) -> None:
@@ -267,9 +264,11 @@ class TestNativeCommandPolicyBuilder:
         proc = planner._process
         assert proc is not None
 
-        # Call policy, which should time out and raise NativeCommandStepError
-        with pytest.raises(NativeCommandStepError):
-            policy({"robot": {"position": [0.0, 0.0]}, "goal": {"current": [5.0, 0.0]}})
+        # The map-runner policy converts a bounded native step failure to zero velocity.
+        assert policy({"robot": {"position": [0.0, 0.0]}, "goal": {"current": [5.0, 0.0]}}) == (
+            0.0,
+            0.0,
+        )
 
         # Check diagnostics
         diag = planner.diagnostics

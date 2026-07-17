@@ -27,6 +27,7 @@ from robot_sf.benchmark.heterogeneous_population_ablation import (
 )
 from robot_sf.benchmark.map_runner import _build_policy
 from robot_sf.benchmark.map_runner_episode import run_map_episode
+from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.nav.navigation import get_prepared_obstacles
 from robot_sf.ped_npc import ped_population
 from robot_sf.ped_npc.ped_population import PedSpawnConfig
@@ -117,6 +118,12 @@ def assert_manifest_spawn_realizable(
                     obstacle_polygons=get_prepared_obstacles(map_definition),
                     single_pedestrians=map_definition.single_pedestrians,
                     time_step_s=0.1,
+                    map_bounds=map_definition.get_map_bounds(),
+                    reserved_zones=[
+                        *map_definition.robot_spawn_zones,
+                        *map_definition.robot_goal_zones,
+                    ],
+                    reserved_zone_radius=DEFAULT_ROBOT_RADIUS,
                 )
             finally:
                 np.random.set_state(random_state)

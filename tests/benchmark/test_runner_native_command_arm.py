@@ -233,3 +233,12 @@ def test_native_command_missing_argv_fails_closed():
     """A native_command block without argv must fail closed, not spawn blindly."""
     with pytest.raises(ValueError):
         runner_mod._NativeCommandPolicy(argv=[], env={}, timeout_s=1.0, persistent=False)
+
+
+def test_native_command_parser_accepts_holonomic_response():
+    """The standard runner accepts the documented world-frame velocity response."""
+    policy = runner_mod._NativeCommandPolicy(
+        argv=[sys.executable], env={}, timeout_s=1.0, persistent=False
+    )
+    command = policy._parse_response('{"vx": 0.5, "vy": -0.25}')
+    assert command.tolist() == [0.5, -0.25]

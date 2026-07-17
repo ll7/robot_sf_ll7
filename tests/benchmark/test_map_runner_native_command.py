@@ -26,6 +26,10 @@ _FAKE_PLANNER = str(Path(__file__).resolve().parent / "fixtures" / "native_comma
 class TestNativeCommandContract:
     """Validate argv + env contract parsing and template substitution."""
 
+    def test_binary_hash_requires_nonempty_command(self) -> None:
+        with pytest.raises(NativeCommandContractError, match="non-empty argv"):
+            nc._resolve_binary_hash([])
+
     def test_from_config_requires_command(self) -> None:
         with pytest.raises(NativeCommandContractError):
             nc.NativeCommandSpec.from_config({})
@@ -38,6 +42,10 @@ class TestNativeCommandContract:
     def test_invalid_mode_rejected(self) -> None:
         with pytest.raises(NativeCommandContractError):
             nc.NativeCommandSpec.from_config({"command": ["/bin/true"], "mode": "frobnicate"})
+
+    def test_nonpositive_step_timeout_rejected(self) -> None:
+        with pytest.raises(NativeCommandContractError, match="must be positive"):
+            nc.NativeCommandSpec.from_config({"command": ["/bin/true"], "step_timeout_sec": 0.0})
 
     def test_persistent_mode_accepted(self) -> None:
         spec = nc.NativeCommandSpec.from_config({"command": ["/bin/true"], "mode": "persistent"})
@@ -90,6 +98,27 @@ class TestNoProgressDeadlockDetector:
     def test_window_steps_must_be_positive(self) -> None:
         with pytest.raises(ValueError):
             _NoProgressDeadlockDetector(window_steps=0)
+
+    def test_progress_threshold_must_be_nonnegative(self) -> None:
+        with pytest.raises(ValueError, match="must be >= 0"):
+            _NoProgressDeadlockDetector(progress_threshold_m=-0.01)
+
+
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        ("", "empty response"),
+        ("[]", "JSON object"),
+        ("{}", "missing linear_velocity/angular_velocity"),
+    ],
+)
+def test_native_command_response_rejects_unusable_payloads(response: str, message: str) -> None:
+    with pytest.raises(NativeCommandStepError, match=message):
+        nc._parse_response(response)
+
+
+def test_native_command_metadata_rejects_non_mapping() -> None:
+    assert nc.native_command_metadata_for_record(None) == (False, {}, {})  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------

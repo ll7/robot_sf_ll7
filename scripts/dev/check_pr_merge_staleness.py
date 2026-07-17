@@ -16,9 +16,16 @@ since the PR's CI last ran.  Two detection layers are used:
    stale main and both passed individually.
 
 Exit codes:
-  0  PR merge base matches current main (not stale).
-  1  PR is stale; main has moved since CI ran.
-  2  Could not determine; warn and let the caller decide.
+   0  PR merge base matches current main (not stale).
+   1  PR is stale; main has moved since CI ran.
+   2  Could not determine; warn and let the caller decide.
+
+Stacked-PR handling (issue #5965):
+   A PR whose declared base is a branch other than ``main`` is only stale when
+   its CI did not test the *current* declared base ref, or when the declared
+   parent branch itself lags ``main``.  Unrelated movement on ``main`` alone
+   never marks a current stacked base as stale.  Use ``--base-ref`` (or let it
+   auto-detect) to enable this.
 """
 
 from __future__ import annotations
@@ -39,6 +46,8 @@ if TYPE_CHECKING:
 GH_RETRY_MAX_ATTEMPTS = 4
 GH_RETRY_BACKOFF_BASE = 1.0
 GH_RETRY_MAX_BACKOFF = 8.0
+
+DEFAULT_BASE_BRANCH = "main"
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -223,6 +232,16 @@ def _parse_json(stdout: str) -> tuple[dict[str, Any] | None, str | None]:
     return data, None
 
 
+def _get_ref_sha(repo: str, ref: str) -> str | None:
+    """Return the current HEAD SHA of a branch ref, or None on error."""
+    safe_ref = ref.replace("/", "%2F")
+    result = _gh(["api", f"repos/{repo}/git/refs/heads/{safe_ref}", "--jq", ".object.sha"])
+    if result.returncode != 0:
+        return None
+    sha = result.stdout.strip()
+    return sha if sha else None
+
+
 def _get_main_sha(repo: str) -> str | None:
     """Return current main branch HEAD SHA, or None on error.
 
@@ -231,6 +250,26 @@ def _get_main_sha(repo: str) -> str | None:
     a freshness signal).
     """
     return _fetch_main_sha_with_retry(repo).sha
+
+
+def _fetch_pr_base_ref(pr_number: str, *, repo: str) -> str | None:
+    """Return the PR's declared base branch name (e.g. ``main`` or ``feature/x``).
+
+    Returns ``None`` when the base ref name cannot be determined.
+    """
+    result = _gh(["api", f"repos/{repo}/pulls/{pr_number}"])
+    if result.returncode != 0:
+        return None
+    payload, _ = _parse_json(result.stdout)
+    if not isinstance(payload, dict):
+        return None
+    base = payload.get("base")
+    if not isinstance(base, dict):
+        return None
+    ref = base.get("ref")
+    if isinstance(ref, str) and ref:
+        return ref
+    return None
 
 
 def _fetch_pr_head_metadata(pr_number: str, *, repo: str) -> tuple[str | None, str | None]:
@@ -320,13 +359,23 @@ def check_merge_staleness(
     *,
     base_sha: str,
     repo: str,
+    base_ref: str | None = None,
 ) -> dict[str, Any]:
-    """Check whether a PR's CI ran against a stale main.
+    """Check whether a PR's CI ran against a stale merge base.
+
+    For a PR targeting ``main`` this preserves the existing merge-race check:
+    the CI-tested base (or the PR's declared ``base.sha``) must match current
+    main.  For an explicitly stacked PR (``base_ref`` is a non-main branch), the
+    PR is only stale when its CI did **not** test the *current* declared base
+    ref.  Unrelated movement on ``main`` alone never marks a current stacked
+    base as stale, but if the declared parent branch itself lags ``main`` the
+    PR still fails closed with an actionable parent-refresh reason.
 
     Returns a result dict with at minimum:
       - ``stale``: bool | None (None = unknown / error)
       - ``detection``: ``"workflow_run_base_sha"`` | ``"base_vs_main"``
-      - ``pr``, ``base_sha``, ``main_sha``
+                         | ``"stacked_base"`` | ``"stacked_base_stale_parent"``
+      - ``pr``, ``base_sha``, ``main_sha``, ``base_ref``
     """
     main_result = _fetch_main_sha_with_retry(repo)
     if main_result.sha is None:
@@ -343,9 +392,154 @@ def check_merge_staleness(
             "pr": pr_number,
             "base_sha": base_sha,
             "main_sha": None,
+            "base_ref": base_ref,
         }
     main_sha = main_result.sha
 
+    if base_ref is None or base_ref == DEFAULT_BASE_BRANCH:
+        return _check_main_targeting_pr(
+            pr_number, base_sha=base_sha, repo=repo, main_sha=main_sha, base_ref=base_ref
+        )
+
+    # Stacked PR: the relevant merge base is the declared parent branch, not main.
+    parent_sha = _get_ref_sha(repo, base_ref)
+    if parent_sha is None:
+        return {
+            "status": "error",
+            "error": f"Failed to fetch current SHA for base ref {base_ref!r}",
+            "stale": None,
+            "detection": "error",
+            "pr": pr_number,
+            "base_sha": base_sha,
+            "main_sha": main_sha,
+            "base_ref": base_ref,
+        }
+
+    # Layer 1: workflow-run provenance — did CI test the current parent ref?
+    ci_base_sha = _detect_workflow_run_base_sha(repo, pr_number)
+    if ci_base_sha:
+        if ci_base_sha == parent_sha:
+            stale = _parent_branch_lags_main(parent_sha, main_sha)
+            if stale:
+                return {
+                    "status": "ok",
+                    "stale": True,
+                    "detection": "stacked_base_stale_parent",
+                    "reason": (
+                        f"PR is current with its declared base {base_ref!r}, but that "
+                        f"parent branch lags main and must be refreshed (gh pr update-branch "
+                        f"or rebase {base_ref} onto main) before merge."
+                    ),
+                    "pr": pr_number,
+                    "base_sha": base_sha,
+                    "ci_base_sha": ci_base_sha,
+                    "parent_sha": parent_sha,
+                    "main_sha": main_sha,
+                    "base_ref": base_ref,
+                }
+            return {
+                "status": "ok",
+                "stale": False,
+                "detection": "stacked_base",
+                "pr": pr_number,
+                "base_sha": base_sha,
+                "ci_base_sha": ci_base_sha,
+                "parent_sha": parent_sha,
+                "main_sha": main_sha,
+                "base_ref": base_ref,
+            }
+        return {
+            "status": "ok",
+            "stale": True,
+            "detection": "stacked_base",
+            "reason": (
+                f"CI last tested base {ci_base_sha}, but the declared base {base_ref!r} "
+                f"is now at {parent_sha}. Re-run CI against the current base."
+            ),
+            "pr": pr_number,
+            "base_sha": base_sha,
+            "ci_base_sha": ci_base_sha,
+            "parent_sha": parent_sha,
+            "main_sha": main_sha,
+            "base_ref": base_ref,
+        }
+
+    # Fallback: compare the PR's declared base.sha against the current parent ref.
+    if base_sha != parent_sha:
+        return {
+            "status": "ok",
+            "stale": True,
+            "detection": "stacked_base",
+            "reason": (
+                f"PR base {base_sha} differs from current declared base {base_ref!r} "
+                f"({parent_sha}). Re-run CI against the current base."
+            ),
+            "warning": (
+                "Cannot detect the exact workflow-run base SHA CI tested against; "
+                "compared declared base.sha against current parent ref."
+            ),
+            "pr": pr_number,
+            "base_sha": base_sha,
+            "parent_sha": parent_sha,
+            "main_sha": main_sha,
+            "base_ref": base_ref,
+        }
+
+    stale = _parent_branch_lags_main(parent_sha, main_sha)
+    if stale:
+        return {
+            "status": "ok",
+            "stale": True,
+            "detection": "stacked_base_stale_parent",
+            "reason": (
+                f"PR is current with its declared base {base_ref!r}, but that parent "
+                f"branch lags main and must be refreshed before merge."
+            ),
+            "warning": (
+                "Cannot detect the exact workflow-run base SHA CI tested against; "
+                "compared declared base.sha against current parent ref."
+            ),
+            "pr": pr_number,
+            "base_sha": base_sha,
+            "parent_sha": parent_sha,
+            "main_sha": main_sha,
+            "base_ref": base_ref,
+        }
+    return {
+        "status": "ok",
+        "stale": False,
+        "detection": "stacked_base",
+        "warning": (
+            "Cannot detect the exact workflow-run base SHA CI tested against; "
+            "compared declared base.sha against current parent ref."
+        ),
+        "pr": pr_number,
+        "base_sha": base_sha,
+        "parent_sha": parent_sha,
+        "main_sha": main_sha,
+        "base_ref": base_ref,
+    }
+
+
+def _parent_branch_lags_main(parent_sha: str, main_sha: str) -> bool:
+    """True when the declared parent branch is behind current main.
+
+    We conservatively treat any parent SHA that differs from main as lagging:
+    without a full merge-base graph walk we cannot tell whether main is an
+    ancestor of the parent.  Differing SHAs are the safe fail-closed signal.
+    """
+    return parent_sha != main_sha
+
+
+def _check_main_targeting_pr(
+    pr_number: str,
+    *,
+    base_sha: str,
+    repo: str,
+    main_sha: str,
+    base_ref: str | None,
+) -> dict[str, Any]:
+    """Race check for a PR that targets ``main`` (unchanged behaviour)."""
     ci_base_sha = _detect_workflow_run_base_sha(repo, pr_number)
     if ci_base_sha:
         is_stale = ci_base_sha != main_sha
@@ -357,6 +551,7 @@ def check_merge_staleness(
             "base_sha": base_sha,
             "ci_base_sha": ci_base_sha,
             "main_sha": main_sha,
+            "base_ref": base_ref,
         }
 
     # Fallback: conservative base-vs-main comparison.
@@ -374,6 +569,7 @@ def check_merge_staleness(
         "pr": pr_number,
         "base_sha": base_sha,
         "main_sha": main_sha,
+        "base_ref": base_ref,
     }
 
 
@@ -396,8 +592,14 @@ def format_human(data: dict[str, Any]) -> str:
     lines = [f"PR #{pr}: {verdict}  (detection: {detection})"]
     lines.append(f"  base_sha:  {data.get('base_sha', '?')}")
     lines.append(f"  main_sha:  {data.get('main_sha', '?')}")
+    if data.get("base_ref") is not None:
+        lines.append(f"  base_ref:  {data['base_ref']}")
     if "ci_base_sha" in data:
         lines.append(f"  ci_base_sha: {data['ci_base_sha']}")
+    if "parent_sha" in data:
+        lines.append(f"  parent_sha: {data['parent_sha']}")
+    if data.get("reason"):
+        lines.append(f"  reason: {data['reason']}")
     if data.get("warning"):
         lines.append(f"  warning: {data['warning']}")
     return "\n".join(lines)
@@ -461,6 +663,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pr", dest="pr_number_option", help="GitHub PR number alias")
     parser.add_argument("--json", action="store_true", default=False, help="emit JSON output")
     parser.add_argument("--repo", default="", help="owner/repo (default: detect from gh)")
+    parser.add_argument(
+        "--base-ref",
+        default=None,
+        help="PR's declared base branch (default: detect from gh). "
+        "A non-main base enables stacked-PR handling.",
+    )
     args = parser.parse_args(argv)
 
     if args.pr_number and args.pr_number_option and args.pr_number != args.pr_number_option:
@@ -480,7 +688,11 @@ def main(argv: list[str] | None = None) -> int:
             _output({"status": "error", "error": err}, as_json=args.json)
             return 1
 
-        data = check_merge_staleness(pr_number, base_sha=base_sha, repo=repo)
+        base_ref = args.base_ref
+        if base_ref is None:
+            base_ref = _fetch_pr_base_ref(pr_number, repo=repo)
+
+        data = check_merge_staleness(pr_number, base_sha=base_sha, repo=repo, base_ref=base_ref)
     except FileNotFoundError:
         print("gh CLI not found.  Install GitHub CLI: https://cli.github.com/", file=sys.stderr)
         return 1

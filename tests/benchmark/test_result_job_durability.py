@@ -74,6 +74,21 @@ def test_private_safe_registry_pointer_is_durable_without_local_file() -> None:
     assert verdict.gate_results["durable_pointer"]
 
 
+def test_schema_path_directory_fails_closed() -> None:
+    """A schema_path directory must not pass the schema gate."""
+
+    payload = _payload()
+    payload["input_schema"]["schema_path"] = "tests"
+
+    verdict = result_job_durability_from_dict(payload, manifest_path=VALID_MANIFEST)
+
+    assert not verdict.ok
+    assert any(
+        issue.gate == "schema" and "does not resolve to a file on clean checkout" in issue.message
+        for issue in verdict.issues
+    )
+
+
 @pytest.mark.parametrize("pointer_kind", ["registry_entry", "release_artifact"])
 def test_hydration_pointer_kind_requires_hydration_command(pointer_kind: str) -> None:
     """A registry/release pointer must carry a hydration_command to be durable.
@@ -127,7 +142,7 @@ def test_hydration_pointer_kind_requires_hydration_command(pointer_kind: str) ->
                 "schema_path", "robot_sf/benchmark/schemas/missing.v9.json"
             ),
             "schema",
-            "input schema does not resolve on clean checkout",
+            "input schema does not resolve to a file on clean checkout",
         ),
         # rerun_command: a bare host-only stub cannot reproduce the analysis
         (

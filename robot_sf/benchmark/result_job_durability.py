@@ -473,12 +473,12 @@ def _probe_input_schema(
         )
         return issues
     resolved = _resolve_manifest_path(manifest_path, path_text)
-    if not resolved.exists():
+    if not resolved.is_file():
         issues.append(
             DurabilityIssue(
                 gate="schema",
                 path="/input_schema/schema_path",
-                message=f"input schema does not resolve on clean checkout: {path_text}",
+                message=f"input schema does not resolve to a file on clean checkout: {path_text}",
                 remedy="commit the schema or drop schema_path and rely on schema_name+schema_version",
             )
         )
@@ -540,7 +540,7 @@ def _repo_root_for(path: Path) -> Path:
     """Return the nearest repository root, falling back to the manifest dir."""
 
     resolved = path.resolve()
-    for parent in (resolved.parent, *resolved.parents):
+    for parent in resolved.parents:
         if (parent / ".git").exists():
             return parent
     return resolved.parent

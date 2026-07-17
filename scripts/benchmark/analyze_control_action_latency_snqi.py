@@ -37,9 +37,12 @@ from pathlib import Path
 from robot_sf.benchmark.control_action_latency_snqi import (
     ANALYSIS_SCHEMA_VERSION,
     BASELINE_SHA256,
+    UNCERTAINTY_REISSUE_SCHEMA_VERSION,
     WEIGHTS_SHA256,
     SnqiLatencyAnalysisError,
     build_snqi_analysis,
+    build_uncertainty_reissue,
+    build_uncertainty_reissue_review_sidecar,
     derive_inputs_from_raw_rows,
     load_input_provenance,
     load_input_rows,
@@ -52,6 +55,7 @@ from robot_sf.benchmark.control_action_latency_snqi import (
     write_input_provenance,
     write_input_rows,
     write_snqi_analysis,
+    write_uncertainty_reissue,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -61,6 +65,9 @@ DEFAULT_INPUT_PROVENANCE = EVIDENCE_DIR / "snqi_latency_inputs.csv.provenance.js
 DEFAULT_WEIGHTS = REPO_ROOT / "configs/benchmarks/snqi_weights_camera_ready_v3.json"
 DEFAULT_BASELINE = REPO_ROOT / "configs/benchmarks/snqi_baseline_camera_ready_v3.json"
 DEFAULT_REFERENCE = EVIDENCE_DIR / "snqi_analysis.json"
+DEFAULT_REISSUE_OUTPUT = EVIDENCE_DIR / "snqi_uncertainty_reissued.json"
+DEFAULT_REISSUE_REVIEW = EVIDENCE_DIR / "snqi_uncertainty_reissued.json.review.json"
+ANALYZER_SOURCE_REL_PATH = "robot_sf/benchmark/control_action_latency_snqi.py"
 
 
 def _git_head() -> str:
@@ -154,6 +161,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Classify and validate the input without writing the analysis artifacts.",
     )
     parser.add_argument(
+        "--reissue-uncertainty",
+        action="store_true",
+        help=(
+            "Re-issue the job 13516 uncertainty block from the committed canonical "
+            "analyzer with a fresh provenance stamp (issue #5928 DoD #2). Writes "
+            "snqi_uncertainty_reissued.json plus its review sidecar; the registered "
+            "snqi_analysis.json stays byte-stable as the tolerance-contract reference."
+        ),
+    )
+    parser.add_argument(
+        "--reissue-output",
+        default=str(DEFAULT_REISSUE_OUTPUT),
+        help="Output path for the re-issued uncertainty packet (--reissue-uncertainty).",
+    )
+    parser.add_argument(
         "--no-checksum",
         action="store_true",
         help="Skip durable-input checksum verification (diagnostic use only).",
@@ -226,32 +248,127 @@ def _load_inputs(args: argparse.Namespace) -> list:
     input_path = Path(args.input)
     if not input_path.is_absolute():
         input_path = REPO_ROOT / input_path
+    input_provenance = None
     if not args.no_checksum:
         provenance_path = Path(args.input_provenance)
         if not provenance_path.is_absolute():
             provenance_path = REPO_ROOT / provenance_path
-        provenance = load_input_provenance(provenance_path)
-        validate_input_checksum(input_path, provenance)
+        input_provenance = load_input_provenance(provenance_path)
+        validate_input_checksum(input_path, input_provenance)
     return load_input_rows(input_path)
+
+
+def _load_input_provenance(args: argparse.Namespace) -> dict:
+    """Load the durable-input provenance sidecar (anchoring the input to raw rows)."""
+    provenance_path = Path(args.input_provenance)
+    if not provenance_path.is_absolute():
+        provenance_path = REPO_ROOT / provenance_path
+    return load_input_provenance(provenance_path)
+
+
+def _build_canonical_packet(args: argparse.Namespace, inputs: list) -> dict:
+    """Load weights/baseline (checksum-verified) and build the canonical packet."""
+    weights_path = Path(args.weights)
+    baseline_path = Path(args.baseline)
+    validate_file_checksum(weights_path, WEIGHTS_SHA256, label="SNQI weights")
+    validate_file_checksum(baseline_path, BASELINE_SHA256, label="SNQI baseline")
+    weights = _load_json(weights_path)
+    baseline = _load_json(baseline_path)
+    return build_snqi_analysis(
+        inputs, weights=weights, baseline_stats=baseline, date=str(args.date)
+    )
+
+
+def _run_reissue_uncertainty(args: argparse.Namespace, packet: dict) -> int:
+    """Re-issue the uncertainty block from the canonical analyzer (issue #5928)."""
+    from robot_sf.benchmark.identity.hash_utils import sha256_file
+
+    input_path = Path(args.input)
+    if not input_path.is_absolute():
+        input_path = REPO_ROOT / input_path
+    provenance = _load_input_provenance(args)
+    analyzer_source = REPO_ROOT / ANALYZER_SOURCE_REL_PATH
+    reissue_packet = build_uncertainty_reissue(
+        packet,
+        generator_source_sha256=sha256_file(analyzer_source),
+        generator_source_rel_path=ANALYZER_SOURCE_REL_PATH,
+        input_sha256=sha256_file(input_path),
+        input_provenance_anchor=provenance,
+        reissue_date=str(args.date),
+    )
+    output_path = Path(args.reissue_output)
+    if not output_path.is_absolute():
+        output_path = REPO_ROOT / output_path
+    write_uncertainty_reissue(reissue_packet, output_path)
+    review_path = Path(str(output_path) + ".review.json")
+    review_sidecar = build_uncertainty_reissue_review_sidecar(output_path, repo_root=REPO_ROOT)
+    review_path.write_text(
+        json.dumps(review_sidecar, indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
+    result = {
+        "schema_version": UNCERTAINTY_REISSUE_SCHEMA_VERSION,
+        "status": "reissued",
+        "issue": 5928,
+        "informational_generator_git_head": _git_head(),
+        "written_files": [_repo_rel(output_path), _repo_rel(review_path)],
+        "byte_reproducible": reissue_packet["reproducibility"]["byte_reproducible"],
+        "recovery_decision": reissue_packet["recovery_decision"]["decision"],
+        "consistency_checks": reissue_packet["consistency_checks"],
+    }
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+def _resolve_reference_path(args: argparse.Namespace) -> Path | None:
+    """Resolve the reference packet path for --verify-against (explicit or default)."""
+    if args.verify_against:
+        reference_path = Path(args.verify_against)
+        if not reference_path.is_absolute():
+            reference_path = REPO_ROOT / reference_path
+        return reference_path
+    if DEFAULT_REFERENCE.exists():
+        return DEFAULT_REFERENCE
+    return None
+
+
+def _verify_packet(args: argparse.Namespace, packet: dict) -> tuple[dict | None, int | None]:
+    """Verify the packet against the reference; return (report, early-return-code)."""
+    reference_path = _resolve_reference_path(args)
+    if reference_path is None or not reference_path.exists():
+        return None, None
+    reference = _load_json(reference_path)
+    try:
+        return verify_against_reference(packet, reference), None
+    except SnqiLatencyAnalysisError as exc:
+        print(
+            json.dumps(
+                {
+                    "schema_version": ANALYSIS_SCHEMA_VERSION,
+                    "status": "verification_failed",
+                    "issue": 5912,
+                    "reason": str(exc),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return None, 2
 
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = parse_args(argv)
     try:
+        if args.reissue_uncertainty and (args.raw_rows or args.promote_input):
+            raise SnqiLatencyAnalysisError(
+                "--reissue-uncertainty requires the checksummed durable input path; "
+                "combine it with neither --raw-rows nor --promote-input"
+            )
         if args.promote_input:
             return _run_promote_input(args)
 
         inputs = _load_inputs(args)
-        weights_path = Path(args.weights)
-        baseline_path = Path(args.baseline)
-        validate_file_checksum(weights_path, WEIGHTS_SHA256, label="SNQI weights")
-        validate_file_checksum(baseline_path, BASELINE_SHA256, label="SNQI baseline")
-        weights = _load_json(weights_path)
-        baseline = _load_json(baseline_path)
-        packet = build_snqi_analysis(
-            inputs, weights=weights, baseline_stats=baseline, date=str(args.date)
-        )
+        packet = _build_canonical_packet(args, inputs)
     except SnqiLatencyAnalysisError as exc:
         print(
             json.dumps(
@@ -267,33 +384,14 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    report: dict | None = None
-    if args.verify_against:
-        reference_path = Path(args.verify_against)
-        if not reference_path.is_absolute():
-            reference_path = REPO_ROOT / reference_path
-    elif DEFAULT_REFERENCE.exists():
-        reference_path = DEFAULT_REFERENCE
-    else:
-        reference_path = None
-    if reference_path is not None and reference_path.exists():
-        reference = _load_json(reference_path)
-        try:
-            report = verify_against_reference(packet, reference)
-        except SnqiLatencyAnalysisError as exc:
-            print(
-                json.dumps(
-                    {
-                        "schema_version": ANALYSIS_SCHEMA_VERSION,
-                        "status": "verification_failed",
-                        "issue": 5912,
-                        "reason": str(exc),
-                    },
-                    indent=2,
-                    sort_keys=True,
-                )
-            )
-            return 2
+    # The uncertainty re-issue consumes the canonical packet and writes its own
+    # dedicated artifact; it does not rewrite the registered snqi_analysis.json.
+    if args.reissue_uncertainty:
+        return _run_reissue_uncertainty(args, packet)
+
+    report, early_rc = _verify_packet(args, packet)
+    if early_rc is not None:
+        return early_rc
 
     if args.check_only:
         print(

@@ -21,6 +21,7 @@ from robot_sf.benchmark.camera_ready._config import (
 from robot_sf.benchmark.camera_ready._config_types import (
     TUNING_SOURCE_DECLARED,
 )
+from robot_sf.benchmark.camera_ready._resume_plan import verify_resume_context
 from robot_sf.benchmark.camera_ready._route_clearance import (
     _assert_route_clearance_feasible,
     _build_route_clearance_warnings,
@@ -75,6 +76,29 @@ _CHECKPOINT_PREFLIGHT_REPORT_NAME: dict[str, str] = {
 # distinct from a declared ``backfilled`` source: it makes the cross-arm asymmetry visible in the
 # manifest without inventing tuning parameters the author never recorded (issue #5143).
 _TUNING_BACKFILL_PENDING = "backfill_pending"
+
+
+def _verify_existing_resume_context(
+    cfg: CampaignConfig,
+    *,
+    campaign_root: Path,
+    campaign_id: str,
+    config_hash: str,
+) -> None:
+    """Verify an existing resumed campaign before refreshing its manifest."""
+    if not cfg.resume:
+        return
+    runs_dir = campaign_root / "runs"
+    has_prior_arms = any(r.is_dir() for r in runs_dir.iterdir()) if runs_dir.exists() else False
+    if has_prior_arms:
+        # Verify the on-disk context before preflight refresh overwrites the manifest. Otherwise a
+        # fixed-ID resume could normalize an incompatible campaign into the current config and
+        # bypass the resume-plan fail-closed contract (issue #5538).
+        verify_resume_context(
+            campaign_root,
+            campaign_id=campaign_id,
+            config_hash=config_hash,
+        )
 
 
 def _checkpoint_provenance_block(
@@ -714,6 +738,12 @@ def prepare_campaign_preflight(  # noqa: PLR0913
             "snqi_sensitivity_csv": None,
         },
     }
+    _verify_existing_resume_context(
+        cfg,
+        campaign_root=campaign_root,
+        campaign_id=campaign_id,
+        config_hash=config_hash,
+    )
     _write_json(campaign_root / "campaign_manifest.json", manifest_payload)
     return {
         "campaign_id": campaign_id,

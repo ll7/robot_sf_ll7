@@ -3770,28 +3770,33 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         near_dist = max(
             float(self.config.predictive_near_distance) + radius_margin + speed_margin, safe_dist
         )
-        collisions = 0.0
-        near_misses = 0.0
 
         if valid_dists is not None:
             limit = min(steps_val, future_peds.shape[1], valid_dists.shape[1])
-            for t in range(limit):
-                valid_dist = valid_dists[:, t]
-                if valid_dist.size == 0:
-                    continue
-                collisions += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
-                near_misses += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
-        else:
-            dt = max(float(self.config.predictive_rollout_dt), 1e-3)
-            robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
-            for t in range(min(steps_val, future_peds.shape[1])):
-                delta = future_peds[:, t, :] - robot_traj[t].reshape(1, 2)
-                dist = np.linalg.norm(delta, axis=1)
-                valid_dist = dist[mask > 0.5]
-                if valid_dist.size == 0:
-                    continue
-                collisions += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
-                near_misses += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
+            if limit <= 0 or valid_dists[:, :limit].size == 0:
+                return 0.0, 0.0
+            collisions = float(np.sum(np.maximum(0.0, safe_dist - valid_dists[:, :limit])))
+            near_misses = float(np.sum(np.maximum(0.0, near_dist - valid_dists[:, :limit])))
+            return collisions, near_misses
+
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
+        horizon = min(steps_val, future_peds.shape[1])
+        if horizon <= 0:
+            return 0.0, 0.0
+
+        valid_idx = np.where(mask > 0.5)[0]
+        if valid_idx.size == 0:
+            return 0.0, 0.0
+
+        ped = future_peds[valid_idx, :horizon, :]
+        if ped.size == 0:
+            return 0.0, 0.0
+
+        delta = ped - robot_traj[:horizon].reshape(1, horizon, 2)
+        dist = np.linalg.norm(delta, axis=2)
+        collisions = float(np.sum(np.maximum(0.0, safe_dist - dist)))
+        near_misses = float(np.sum(np.maximum(0.0, near_dist - dist)))
         return collisions, near_misses
 
     def _min_clearance(
@@ -3850,28 +3855,37 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         steps_val = max(
             1, int(steps if steps is not None else self.config.predictive_horizon_steps)
         )
-        penalty = 0.0
 
         if valid_dists is not None:
             limit = min(steps_val, future_peds.shape[1], valid_dists.shape[1])
-            for t in range(limit):
-                valid_dist = valid_dists[:, t]
-                if valid_dist.size == 0:
-                    continue
-                shortfall = np.maximum(0.0, threshold - valid_dist)
-                time_weight = 1.0 / (float(t + 1) * dt + self._EPS)
-                penalty += float(np.sum(shortfall * time_weight))
-        else:
-            robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
-            for t in range(min(steps_val, future_peds.shape[1])):
-                delta = future_peds[:, t, :] - robot_traj[t].reshape(1, 2)
-                dist = np.linalg.norm(delta, axis=1)
-                valid_dist = dist[mask > 0.5]
-                if valid_dist.size == 0:
-                    continue
-                shortfall = np.maximum(0.0, threshold - valid_dist)
-                time_weight = 1.0 / (float(t + 1) * dt + self._EPS)
-                penalty += float(np.sum(shortfall * time_weight))
+            if limit <= 0 or valid_dists[:, :limit].size == 0:
+                return 0.0
+            valid_slice = valid_dists[:, :limit]
+            shortfall = np.maximum(0.0, threshold - valid_slice)
+            time_indices = np.arange(1, limit + 1, dtype=float).reshape(1, limit)
+            time_weights = 1.0 / (time_indices * dt + self._EPS)
+            penalty = float(np.sum(shortfall * time_weights))
+            return penalty
+
+        horizon = min(steps_val, future_peds.shape[1])
+        if horizon <= 0:
+            return 0.0
+
+        valid_idx = np.where(mask > 0.5)[0]
+        if valid_idx.size == 0:
+            return 0.0
+
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
+        ped = future_peds[valid_idx, :horizon, :]
+        if ped.size == 0:
+            return 0.0
+
+        delta = ped - robot_traj[:horizon].reshape(1, horizon, 2)
+        dist = np.linalg.norm(delta, axis=2)
+        shortfall = np.maximum(0.0, threshold - dist)
+        time_indices = np.arange(1, horizon + 1, dtype=float).reshape(1, horizon)
+        time_weights = 1.0 / (time_indices * dt + self._EPS)
+        penalty = float(np.sum(shortfall * time_weights))
         return penalty
 
     def _score_action(
@@ -4034,17 +4048,19 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         near_dist = max(float(self.config.predictive_near_distance) + radius_margin, safe_dist)
         ttc_threshold = float(self.config.predictive_ttc_distance) + radius_margin
 
-        for t in range(horizon):
-            delta = future_peds[:, t, :] - local_traj[t].reshape(1, 2)
-            dist = np.linalg.norm(delta, axis=1)
-            valid_dist = dist[mask > 0.5]
-            if valid_dist.size == 0:
-                continue
-            min_clearance = min(min_clearance, float(np.min(valid_dist)))
-            collision_pen += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
-            near_pen += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
-            shortfall = np.maximum(0.0, ttc_threshold - valid_dist)
-            ttc_pen += float(np.sum(shortfall / (float(t + 1) * dt + self._EPS)))
+        valid_idx = np.where(mask > 0.5)[0]
+        if valid_idx.size > 0:
+            ped = future_peds[valid_idx, :horizon, :]
+            if ped.size > 0:
+                delta = ped - local_traj.reshape(1, horizon, 2)
+                dist = np.linalg.norm(delta, axis=2)
+                min_clearance = float(np.min(dist)) if dist.size > 0 else float("inf")
+                collision_pen = float(np.sum(np.maximum(0.0, safe_dist - dist)))
+                near_pen = float(np.sum(np.maximum(0.0, near_dist - dist)))
+                time_indices = np.arange(1, horizon + 1, dtype=float).reshape(1, horizon)
+                time_weights = 1.0 / (time_indices * dt + self._EPS)
+                shortfall = np.maximum(0.0, ttc_threshold - dist)
+                ttc_pen = float(np.sum(shortfall * time_weights))
 
         cos_h = float(np.cos(robot_heading))
         sin_h = float(np.sin(robot_heading))

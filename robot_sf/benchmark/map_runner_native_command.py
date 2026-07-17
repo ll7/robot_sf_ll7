@@ -368,7 +368,6 @@ class NativeCommandPlanner:
 
     def _start_process(self) -> None:
         self._stop_process()
-        self._process_spawns += 1
         try:
             self._process = subprocess.Popen(
                 self._spec.command,
@@ -378,6 +377,7 @@ class NativeCommandPlanner:
                 stderr=subprocess.DEVNULL,
                 bufsize=0,
             )
+            self._process_spawns += 1
         except OSError as exc:
             raise NativeCommandContractError(
                 f"failed to launch native command {self._spec.command}: {exc}",

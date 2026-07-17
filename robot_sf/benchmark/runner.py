@@ -606,10 +606,9 @@ class _NativeCommandPolicy:
         Returns:
             The spawned subprocess.Popen object.
         """
-        self._diagnostics["process_spawns"] += 1
         child_env = dict(os.environ)
         child_env.update({str(k): str(v) for k, v in self._env.items()})
-        return subprocess.Popen(
+        process = subprocess.Popen(
             self._argv,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -617,6 +616,8 @@ class _NativeCommandPolicy:
             env=child_env,
             bufsize=0,
         )
+        self._diagnostics["process_spawns"] += 1
+        return process
 
     def _ensure_process(self) -> subprocess.Popen[bytes]:
         """Start the persistent child process if needed.

@@ -263,19 +263,21 @@ class TestNativeCommandPolicyBuilder:
         policy._planner_reset(seed=111)
         planner = policy._native_planner
 
-        num_steps = 6  # >= 5 as required by the issue
-        for _ in range(num_steps):
-            linear, angular = policy(obs)
-            assert isinstance(linear, float)
-            assert isinstance(angular, float)
+        try:
+            num_steps = 6  # >= 5 as required by the issue
+            for _ in range(num_steps):
+                linear, angular = policy(obs)
+                assert isinstance(linear, float)
+                assert isinstance(angular, float)
 
-        diag = planner.diagnostics
-        # One persistent child reused across every step — the whole point of #5957.
-        assert diag["process_spawns"] == 1
-        # And it genuinely served all steps with no fallback.
-        assert diag["fallback_count"] == 0
-        assert diag["runtime_bound_exits"] == 0
-        policy._planner_close()
+            diag = planner.diagnostics
+            # One persistent child reused across every step — the whole point of #5957.
+            assert diag["process_spawns"] == 1
+            # And it genuinely served all steps with no fallback.
+            assert diag["fallback_count"] == 0
+            assert diag["runtime_bound_exits"] == 0
+        finally:
+            policy._planner_close()
 
     def test_per_episode_plan_spawns_once_per_step(self) -> None:
         """Per-episode mode legitimately launches one fresh child per step.
@@ -299,14 +301,16 @@ class TestNativeCommandPolicyBuilder:
         policy._planner_reset(seed=111)
         planner = policy._native_planner
 
-        num_steps = 4
-        for _ in range(num_steps):
-            policy(obs)
+        try:
+            num_steps = 4
+            for _ in range(num_steps):
+                policy(obs)
 
-        diag = planner.diagnostics
-        # Per-episode: one spawn per step, as designed.
-        assert diag["process_spawns"] == num_steps
-        policy._planner_close()
+            diag = planner.diagnostics
+            # Per-episode: one spawn per step, as designed.
+            assert diag["process_spawns"] == num_steps
+        finally:
+            policy._planner_close()
 
     def test_persistent_plan_timeout(self, tmp_path: Path) -> None:
         import sys

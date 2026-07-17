@@ -20,6 +20,21 @@ geometry alone. Two contract rules from the issue are load-bearing:
 The builder is fail-closed: duplicate scenario ids, empty/stale config hashes,
 unknown predicate schema versions, broken artifact references, and
 provenance-incomplete eligibility are all rejected rather than silently patched.
+
+**Legacy schema compatibility (issue #5935).** The crosswalk accepts the legacy
+``safety_predicate.late_evasive.v1`` schema carried by existing durable campaign
+bundles (e.g. the issue4206 trace-capable rerun) and retains the exact source
+schema version as provenance rather than normalizing it away. The v1->v2 bump
+(PR #5063) is documented as an *additive* telemetry-instrumentation change
+(``latency_unavailable_reason`` plus a seconds-valued latency) with ``no
+benchmark metric semantics change``; the crosswalk only records predicate
+identity + schema provenance + status, so v1 and v2 are compatible for this
+public contract. The current/motivated version referenced by
+``motivated_not_exported`` records remains ``v2`` (see
+:data:`KNOWN_PREDICATE_SCHEMAS`), and the full accepted set is
+:data:`SUPPORTED_PREDICATE_SCHEMAS`. This mirrors the producer
+(:mod:`robot_sf.benchmark.trace_predicate_export`), which already accepts both
+versions and preserves exact source provenance.
 """
 
 from __future__ import annotations
@@ -35,18 +50,45 @@ from typing import Any
 
 from jsonschema import Draft202012Validator
 
+from robot_sf.benchmark.safety_predicates import (
+    LATE_EVASIVE_PREDICATE_SCHEMA,
+    OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
+    OSCILLATORY_PREDICATE_SCHEMA,
+)
 from robot_sf.benchmark.utils import _config_hash
 from robot_sf.common.json_pointer import json_pointer as _render_json_pointer
 
 SCHEMA_VERSION = "scenario_evidence_crosswalk.v1"
 
-#: Predicate schema tags motivated by the failure taxonomy (#5593 lane). These
-#: are the only predicate versions the crosswalk recognizes; any other version
-#: in a supplied export is rejected as an unknown predicate version.
+#: The legacy late-evasive schema carried by existing durable campaign bundles
+#: (e.g. the issue4206 trace-capable rerun). The producer (`trace_predicate_export`)
+#: accepts both v1 and v2; the v1->v2 bump (#5063) is documented as an *additive*
+#: telemetry-instrumentation change (``latency_unavailable_reason`` and a
+#: seconds-valued latency) with ``no benchmark metric semantics change``. The
+#: crosswalk only records predicate identity + schema provenance + status, so v1
+#: and v2 are compatible for this public contract; we retain the exact source
+#: version rather than normalizing, to preserve provenance (issue #5935).
+LEGACY_LATE_EVASIVE_PREDICATE_SCHEMA = "safety_predicate.late_evasive.v1"
+
+#: Predicate schema tags motivated by the failure taxonomy (#5593 lane). Each
+#: entry maps a predicate name to its *current/motivated* schema version, which
+#: is the version referenced by ``motivated_not_exported`` records.
 KNOWN_PREDICATE_SCHEMAS: dict[str, str] = {
-    "oscillatory_control": "safety_predicate.oscillatory_control.v1",
-    "late_evasive": "safety_predicate.late_evasive.v2",
-    "occlusion_near_miss": "safety_predicate.occlusion_near_miss.v1",
+    "oscillatory_control": OSCILLATORY_PREDICATE_SCHEMA,
+    "late_evasive": LATE_EVASIVE_PREDICATE_SCHEMA,
+    "occlusion_near_miss": OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA,
+}
+
+#: Every predicate schema version the crosswalk accepts as valid provenance.
+#: This is a superset of :data:`KNOWN_PREDICATE_SCHEMAS` values: it also retains
+#: legacy versions that durable campaign bundles carry (issue #5935). Any other
+#: version in a supplied export is rejected as an unknown predicate version.
+SUPPORTED_PREDICATE_SCHEMAS: dict[str, frozenset[str]] = {
+    "oscillatory_control": frozenset({OSCILLATORY_PREDICATE_SCHEMA}),
+    "late_evasive": frozenset(
+        {LEGACY_LATE_EVASIVE_PREDICATE_SCHEMA, LATE_EVASIVE_PREDICATE_SCHEMA}
+    ),
+    "occlusion_near_miss": frozenset({OCCLUSION_NEAR_MISS_PREDICATE_SCHEMA}),
 }
 
 PREDICATE_EXPORT_SCHEMA_VERSION = "trace_predicate_export.v1"
@@ -305,6 +347,17 @@ def _predicate_row_status(pred: Mapping[str, Any]) -> str:
     return "ok"
 
 
+def _is_supported_predicate_schema(name: object, version: object) -> bool:
+    """Return whether a predicate name and schema version form a supported pair."""
+    if version is None:
+        return True
+    return (
+        isinstance(name, str)
+        and isinstance(version, str)
+        and version in SUPPORTED_PREDICATE_SCHEMAS.get(name, frozenset())
+    )
+
+
 def _predicate_section(
     scenario_id: str,
     export: Mapping[str, dict[str, Any]],
@@ -342,7 +395,7 @@ def _predicate_section(
         }
 
     for name, version in entry["exported"].items():
-        if version is not None and version not in KNOWN_PREDICATE_SCHEMAS.values():
+        if not _is_supported_predicate_schema(name, version):
             raise ScenarioEvidenceCrosswalkError(
                 f"scenario {scenario_id}: unknown predicate schema version {version!r} for "
                 f"predicate {name!r}"
@@ -710,10 +763,12 @@ def _validate_crosswalk_row(
     pred = row.get("predicate_availability")
     if isinstance(pred, Mapping):
         for rec in pred.get("exported_predicates", []) or []:
+            name = rec.get("predicate")
             version = rec.get("schema_version")
-            if version is not None and version not in KNOWN_PREDICATE_SCHEMAS.values():
+            if not _is_supported_predicate_schema(name, version):
                 errors.append(
-                    f"rows[{index}] ({sid}): unknown predicate schema_version {version!r}"
+                    f"rows[{index}] ({sid}): unknown predicate schema_version {version!r} for "
+                    f"predicate {name!r}"
                 )
 
     evidence = row.get("evidence")
@@ -845,8 +900,10 @@ def write_scenario_evidence_crosswalk(
 
 __all__ = [
     "KNOWN_PREDICATE_SCHEMAS",
+    "LEGACY_LATE_EVASIVE_PREDICATE_SCHEMA",
     "PREDICATE_EXPORT_SCHEMA_VERSION",
     "SCHEMA_VERSION",
+    "SUPPORTED_PREDICATE_SCHEMAS",
     "ScenarioEvidenceCrosswalkError",
     "build_scenario_evidence_crosswalk",
     "crosswalk_markdown",

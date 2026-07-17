@@ -24,6 +24,7 @@ import pytest
 from scripts.ci.collect_pr_files import (
     PrFilesFetchError,
     _backoff_delay,
+    _run_gh_api_page,
     fetch_all_pr_files,
     main,
     write_outputs,
@@ -108,6 +109,66 @@ def test_nonzero_exit_is_retried_then_succeeds() -> None:
         "owner/repo", "1", run_page=run_page, sleep=lambda _d: None, rng=lambda: 0.0
     )
     assert [e["filename"] for e in files] == ["x.py"]
+
+
+@pytest.mark.parametrize("status", [401, 403, 404])
+def test_permanent_http_errors_are_not_retried(status: int) -> None:
+    """Authentication, authorization, and not-found errors fail immediately."""
+    attempts = {"n": 0}
+
+    def run_page(*args, **kwargs):
+        attempts["n"] += 1
+        return _proc(
+            returncode=1,
+            stdout=json.dumps({"message": "permanent failure", "status": str(status)}),
+            stderr=f"gh: permanent failure (HTTP {status})",
+        )
+
+    with pytest.raises(PrFilesFetchError, match="non-retryable"):
+        fetch_all_pr_files(
+            "owner/repo",
+            "5920",
+            max_attempts=5,
+            run_page=run_page,
+            sleep=lambda _d: pytest.fail("permanent errors must not back off"),
+        )
+
+    assert attempts["n"] == 1
+
+
+@pytest.mark.parametrize(
+    ("stdout", "stderr"),
+    [
+        (json.dumps({"message": "rate limited", "status": "429"}), "gh: HTTP 429"),
+        ("", "read: connection reset by peer"),
+    ],
+)
+def test_transient_rate_limit_and_connection_reset_are_retried(stdout: str, stderr: str) -> None:
+    """Rate limits and connection resets retain bounded retry behavior."""
+    run_page = _scripted_runner(
+        {
+            (1, 1): _proc(returncode=1, stdout=stdout, stderr=stderr),
+            (1, 2): _proc(stdout=json.dumps([_entry("ok.py")])),
+            (2, 1): _proc(stdout="[]"),
+        }
+    )
+
+    files = fetch_all_pr_files(
+        "owner/repo", "5920", run_page=run_page, sleep=lambda _d: None, rng=lambda: 0.0
+    )
+
+    assert [entry["filename"] for entry in files] == ["ok.py"]
+
+
+def test_gh_api_page_explicitly_uses_get(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Raw fields must not silently turn the files endpoint request into POST."""
+    run = MagicMock(return_value=_proc(stdout="[]"))
+    monkeypatch.setattr(subprocess, "run", run)
+
+    _run_gh_api_page("owner/repo", "5920", 2, 100)
+
+    argv = run.call_args.args[0]
+    assert argv[:4] == ["gh", "api", "--method", "GET"]
 
 
 def test_timeout_is_treated_as_transient_and_retried() -> None:

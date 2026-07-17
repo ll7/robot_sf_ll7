@@ -1,0 +1,278 @@
+{
+  "combined_reference_union": {
+    "overlap": {
+      "archive_id_overlap": [],
+      "archive_id_overlap_count": 0,
+      "disjointness_checks_passed": true,
+      "disjointness_failure_reasons": [],
+      "eval_families": [
+        "{\"scenario_family\":\"classic_cross_trap_medium\"}",
+        "{\"scenario_family\":\"classic_group_crossing_medium\"}"
+      ],
+      "eval_size": 17,
+      "fit_families": [
+        "{\"policy\":\"goal\",\"primary_failure\":\"collision\",\"scenario_template\":\"configs/scenarios/templates/crossing_ttc.yaml\",\"termination_reason\":\"collision\"}",
+        "{\"policy\":\"orca\",\"primary_failure\":\"collision\",\"scenario_template\":\"configs/scenarios/templates/crossing_ttc.yaml\",\"termination_reason\":\"collision\"}"
+      ],
+      "fit_size": 75,
+      "scenario_family_overlap": [],
+      "scenario_family_overlap_count": 0,
+      "seed_overlap": [],
+      "seed_overlap_count": 0,
+      "seed_overlap_invalidates_held_out_evidence": false,
+      "split_policy": "disjoint_scenario_family"
+    },
+    "reference_entry_count": 75,
+    "reference_issues": [
+      "#1501",
+      "#1502"
+    ]
+  },
+  "comparisons": [
+    {
+      "overlap": {
+        "archive_id_overlap": [],
+        "archive_id_overlap_count": 0,
+        "disjointness_checks_passed": true,
+        "disjointness_failure_reasons": [],
+        "eval_families": [
+          "{\"scenario_family\":\"classic_cross_trap_medium\"}",
+          "{\"scenario_family\":\"classic_group_crossing_medium\"}"
+        ],
+        "eval_size": 17,
+        "fit_families": [
+          "{\"policy\":\"goal\",\"primary_failure\":\"collision\",\"scenario_template\":\"configs/scenarios/templates/crossing_ttc.yaml\",\"termination_reason\":\"collision\"}",
+          "{\"policy\":\"orca\",\"primary_failure\":\"collision\",\"scenario_template\":\"configs/scenarios/templates/crossing_ttc.yaml\",\"termination_reason\":\"collision\"}"
+        ],
+        "fit_size": 15,
+        "scenario_family_overlap": [],
+        "scenario_family_overlap_count": 0,
+        "seed_overlap": [],
+        "seed_overlap_count": 0,
+        "seed_overlap_invalidates_held_out_evidence": false,
+        "split_policy": "disjoint_scenario_family"
+      },
+      "reference": {
+        "archive_ids": [
+          "failure_0000",
+          "failure_0001",
+          "failure_0002",
+          "failure_0003",
+          "failure_0004",
+          "failure_0005",
+          "failure_0006",
+          "failure_0007",
+          "failure_0008",
+          "failure_0009",
+          "failure_0010",
+          "failure_0011",
+          "failure_0012",
+          "failure_0013",
+          "failure_0014"
+        ],
+        "entry_count": 15,
+        "scenario_family_keys": [
+          "{\"policy\":\"goal\",\"primary_failure\":\"collision\",\"scenario_template\":\"configs/scenarios/templates/crossing_ttc.yaml\",\"termination_reason\":\"collision\"}",
+          "{\"policy\":\"orca\",\"primary_failure\":\"collision\",\"scenario_template\":\"configs/scenarios/templates/crossing_ttc.yaml\",\"termination_reason\":\"collision\"}"
+        ],
+        "scenario_seeds": [
+          278,
+          286,
+          320,
+          361,
+          730,
+          787,
+          976,
+          982
+        ]
+      },
+      "reference_file_sha256": "a7da3bf59cb57cbe8231cbac75e184222950037cf24c184a9eac729223a4b393",
+      "reference_issue": "#1501",
+      "reference_path": "docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json"
+    },
+    {
+      "overlap": {
+        "archive_id_overlap": [],
+        "archive_id_overlap_count": 0,
+        "disjointness_checks_passed": true,
+        "disjointness_failure_reasons": [],
+        "eval_families": [
+          "{\"scenario_family\":\"classic_cross_trap_medium\"}",
+          "{\"scenario_family\":\"classic_group_crossing_medium\"}"
+        ],
+        "eval_size": 17,
+        "fit_families": [
+          "{\"policy\":\"goal\",\"primary_failure\":\"collision\",\"scenario_template\":\"configs/scenarios/templates/crossing_ttc.yaml\",\"termination_reason\":\"collision\"}",
+          "{\"policy\":\"orca\",\"primary_failure\":\"collision\",\"scenario_template\":\"configs/scenarios/templates/crossing_ttc.yaml\",\"termination_reason\":\"collision\"}"
+        ],
+        "fit_size": 60,
+        "scenario_family_overlap": [],
+        "scenario_family_overlap_count": 0,
+        "seed_overlap": [],
+        "seed_overlap_count": 0,
+        "seed_overlap_invalidates_held_out_evidence": false,
+        "split_policy": "disjoint_scenario_family"
+      },
+      "reference": {
+        "archive_ids": [
+          "failure_0000",
+          "failure_0001",
+          "failure_0002",
+          "failure_0003",
+          "failure_0004",
+          "failure_0005",
+          "failure_0006",
+          "failure_0007",
+          "failure_0008",
+          "failure_0009",
+          "failure_0010",
+          "failure_0011",
+          "failure_0012",
+          "failure_0013",
+          "failure_0014",
+          "failure_0015",
+          "failure_0016",
+          "failure_0017",
+          "failure_0018",
+          "failure_0019",
+          "failure_0020",
+          "failure_0021",
+          "failure_0022",
+          "failure_0023",
+          "failure_0024",
+          "failure_0025",
+          "failure_0026",
+          "failure_0027",
+          "failure_0028",
+          "failure_0029",
+          "failure_0030",
+          "failure_0031",
+          "failure_0032",
+          "failure_0033",
+          "failure_0034",
+          "failure_0035",
+          "failure_0036",
+          "failure_0037",
+          "failure_0038",
+          "failure_0039",
+          "failure_0040",
+          "failure_0041",
+          "failure_0042",
+          "failure_0043",
+          "failure_0044",
+          "failure_0045",
+          "failure_0046",
+          "failure_0047",
+          "failure_0048",
+          "failure_0049",
+          "failure_0050",
+          "failure_0051",
+          "failure_0052",
+          "failure_0053",
+          "failure_0054",
+          "failure_0055",
+          "failure_0056",
+          "failure_0057",
+          "failure_0058",
+          "failure_0059"
+        ],
+        "entry_count": 60,
+        "scenario_family_keys": [
+          "{\"policy\":\"goal\",\"primary_failure\":\"collision\",\"scenario_template\":\"configs/scenarios/templates/crossing_ttc.yaml\",\"termination_reason\":\"collision\"}",
+          "{\"policy\":\"orca\",\"primary_failure\":\"collision\",\"scenario_template\":\"configs/scenarios/templates/crossing_ttc.yaml\",\"termination_reason\":\"collision\"}"
+        ],
+        "scenario_seeds": [
+          109,
+          129,
+          202,
+          207,
+          224,
+          278,
+          286,
+          308,
+          320,
+          351,
+          354,
+          361,
+          383,
+          388,
+          404,
+          419,
+          447,
+          526,
+          534,
+          548,
+          625,
+          680,
+          730,
+          787,
+          788,
+          909,
+          976,
+          982,
+          991
+        ]
+      },
+      "reference_file_sha256": "222ba50880a1a77830f3c630315c2d5048aa56ab9cf1bf9cede5fadb62426278",
+      "reference_issue": "#1502",
+      "reference_path": "docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/archive.json"
+    }
+  ],
+  "internal_train_eval": {
+    "archive_id_overlap": [],
+    "eval_entry_count": 12,
+    "passed": true,
+    "scenario_family_overlap": [],
+    "scenario_seed_overlap": [],
+    "train_entry_count": 5
+  },
+  "new_archive": {
+    "archive_ids": [
+      "issue5305_classic_cross_trap_medium_34f8c43d3260",
+      "issue5305_classic_cross_trap_medium_7910406dad49",
+      "issue5305_classic_cross_trap_medium_e7cebb2b0b06",
+      "issue5305_classic_cross_trap_medium_fbbd96687d61",
+      "issue5305_classic_cross_trap_medium_fe24f0ff86a1",
+      "issue5305_classic_group_crossing_medium_0405a12b9e1b",
+      "issue5305_classic_group_crossing_medium_16c4a20e71aa",
+      "issue5305_classic_group_crossing_medium_24f49e195565",
+      "issue5305_classic_group_crossing_medium_3537f5d4f870",
+      "issue5305_classic_group_crossing_medium_47bd4c497818",
+      "issue5305_classic_group_crossing_medium_4de6bcf99283",
+      "issue5305_classic_group_crossing_medium_58a4877312cc",
+      "issue5305_classic_group_crossing_medium_5b9f237a8aee",
+      "issue5305_classic_group_crossing_medium_d8b09e0e988a",
+      "issue5305_classic_group_crossing_medium_e3856ba0906d",
+      "issue5305_classic_group_crossing_medium_f32fc5117cfa",
+      "issue5305_classic_group_crossing_medium_fc6bf8300e51"
+    ],
+    "entry_count": 17,
+    "file_sha256": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
+    "path": "docs/context/evidence/issue_5305_certified_archive/archive.json",
+    "scenario_family_keys": [
+      "{\"scenario_family\":\"classic_cross_trap_medium\"}",
+      "{\"scenario_family\":\"classic_group_crossing_medium\"}"
+    ],
+    "scenario_seeds": [
+      11654,
+      12796,
+      13368,
+      14821,
+      14890,
+      20001,
+      20029,
+      20710,
+      20873,
+      21692,
+      21716,
+      22030,
+      22624,
+      22991,
+      24133,
+      24389,
+      24796
+    ]
+  },
+  "schema_version": "issue5305-reference-disjointness.v1",
+  "status": "passed"
+}

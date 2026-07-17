@@ -15,6 +15,8 @@ the committed ``francis2023_blind_corner`` scenario (marked slow; diagnostic-onl
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -30,7 +32,9 @@ from robot_sf.scenario_certification.feasibility_oracle import (
     ISSUE_5596_BLIND_CORNER_SCENARIO_ID,
     ISSUE_5596_DIAGNOSTIC_SCHEMA,
     ROUTE_FOLLOW_ALGO,
+    _scenario_id,
     build_issue_5596_blind_corner_diagnostic,
+    planned_path_clearance_verdict,
 )
 from robot_sf.scenario_certification.v1 import (
     CERT_SCHEMA_VERSION,
@@ -38,6 +42,7 @@ from robot_sf.scenario_certification.v1 import (
     RouteCertificate,
     ScenarioCertificate,
 )
+from robot_sf.training.scenario_loader import load_scenarios
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -243,6 +248,43 @@ def test_issue_5596_report_scopes_to_issue_5596_and_blind_corner(tmp_path: Path)
     assert report["route_follow_intervention_verdict"]["issue"] == "5596"
 
 
+def test_issue_5596_clearance_establishment_is_independent_of_clipping(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fully validated clear paths establish clearance without claiming clipping."""
+    manifest = _manifest(tmp_path, _scenario())
+    monkeypatch.setattr(
+        feasibility_oracle,
+        "planned_path_clearance_verdict",
+        lambda *_a, **_k: {
+            "planned_path_clearance_m": 0.25,
+            "planned_path_vertex_clearance_m": 0.25,
+            "planned_path_vertex_clipped_count": 0,
+            "planned_path_length_m": 10.0,
+            "planned_path_vertex_count": 2,
+            "planned_path_validated": True,
+            "planned_path_clips_corner": False,
+            "status": "clear",
+            "claim_boundary": "diagnostic_only_not_benchmark_evidence",
+        },
+    )
+
+    report = build_issue_5596_blind_corner_diagnostic(
+        manifest,
+        envelope_radii_m=(1.0, 0.5),
+        episode_runner=lambda *_a: {
+            "route_complete": False,
+            "status": "failed",
+            "stateful": True,
+        },
+        certifier=lambda _s, _p: _certificate(VALID),
+    )
+
+    assert report["mechanism"]["planner_path_clearance_established"] is True
+    assert report["mechanism"]["planned_path_clips_corner"] is False
+
+
 def test_issue_5596_report_rejects_missing_blind_corner_cell(tmp_path: Path) -> None:
     """A manifest without the blind-corner cell fails closed."""
     manifest = tmp_path / "no_blind_corner.yaml"
@@ -346,6 +388,234 @@ def test_issue_5596_diagnostic_end_to_end_on_committed_blind_corner() -> None:
     assert len(report["straight_line_vs_route_clearance"]) == 2
     for entry in report["straight_line_vs_route_clearance"]:
         assert entry["envelope_radius_m"] in (1.0, 0.5)
+    # Corrected planner-path clearance check is present for each radius (issue #5596 finding #3).
+    assert len(report["planned_path_clearance_verdict"]) == 2
+    for entry in report["planned_path_clearance_verdict"]:
+        assert entry["envelope_radius_m"] in (1.0, 0.5)
+        assert entry["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
     # Mechanism is bounded and diagnostic.
     assert "supported_explanation" in report["mechanism"]
     assert report["mechanism"]["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
+
+
+@pytest.mark.slow
+def test_issue_5596_diagnostic_is_deterministic_across_repeated_runs() -> None:
+    """Issue #5596 DoD: rerun the canonical diagnostic twice and compare normalized output.
+
+    The diagnostic must be reproducible: building the report twice on the committed
+    blind-corner cell (real certifier, oracle rollout, stateful route-follow, and the
+    corrected planner-path clearance check) yields byte-identical normalized verdicts.
+    ``source_commit`` legitimately varies per run and is excluded from the comparison.
+    It does NOT make any benchmark claim.
+    """
+    pytest.importorskip("robot_sf.benchmark.map_runner")
+    manifest = _REPO_ROOT / "configs/scenarios/francis2023.yaml"
+
+    def normalized_sha(report: dict[str, Any]) -> str:
+        comparable = {k: v for k, v in report.items() if k != "source_commit"}
+        serialized = json.dumps(comparable, sort_keys=True, indent=2)
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    first = build_issue_5596_blind_corner_diagnostic(manifest, envelope_radii_m=(1.0, 0.5))
+    second = build_issue_5596_blind_corner_diagnostic(manifest, envelope_radii_m=(1.0, 0.5))
+
+    # The non-source_commit verdict payload must be reproducible.
+    assert normalized_sha(first) == normalized_sha(second)
+    # Every verdict block is present in both runs (sanity on structure).
+    for key in (
+        "oracle_verdict",
+        "route_follow_intervention_verdict",
+        "straight_line_vs_route_clearance",
+        "planned_path_clearance_verdict",
+        "mechanism",
+    ):
+        assert key in first and key in second
+    # Provenance fields are consistent and diagnostic-scoped.
+    assert first["claim_boundary"] == "diagnostic_only_not_benchmark_evidence"
+    assert first["scenario_id"] == ISSUE_5596_BLIND_CORNER_SCENARIO_ID
+
+
+def test_measure_planned_path_clearance_flags_clipped_vertices() -> None:
+    """The clearance measurer flags clipped vertices and reports negative min clearance.
+
+    Pure unit check of the corrected-path core (finding #3): a vertex inside the
+    inflated obstacle yields negative clearance and is counted as clipped, while a
+    far-away vertex keeps positive clearance.
+    """
+    from shapely.geometry import Polygon
+
+    from robot_sf.scenario_certification.feasibility_oracle import (
+        _measure_planned_path_clearance,
+    )
+
+    obstacle = Polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
+    path = [
+        (1.0, 1.0),  # inside the 1.0 m obstacle (clearance -1.0, clipped)
+        (10.0, 10.0),  # far away (clearance ~8.0)
+    ]
+    clipped, min_vertex_clearance, min_path_clearance = _measure_planned_path_clearance(
+        path, obstacle, robot_radius=1.0
+    )
+    assert clipped == 1
+    assert min_vertex_clearance is not None
+    assert min_vertex_clearance < 0.0
+    assert min_path_clearance is not None
+    assert min_path_clearance < 0.0
+
+    # A path entirely clear of the obstacle reports no clipped vertices and positive min.
+    clear_path = [(5.0, 5.0), (10.0, 10.0)]
+    clipped2, min_vertex2, min_path2 = _measure_planned_path_clearance(
+        clear_path, obstacle, robot_radius=1.0
+    )
+    assert clipped2 == 0
+    assert min_vertex2 is not None
+    assert min_vertex2 > 0.0
+    assert min_path2 is not None
+    assert min_path2 > 0.0
+
+
+def test_measure_planned_path_clearance_detects_segment_corner_cut() -> None:
+    """A segment crossing an obstacle must fail even when both vertices are clear."""
+    from shapely.geometry import Polygon
+
+    from robot_sf.scenario_certification.feasibility_oracle import (
+        _measure_planned_path_clearance,
+    )
+
+    obstacle = Polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
+    path = [(-1.0, 1.0), (3.0, 1.0)]
+
+    clipped, min_vertex_clearance, min_path_clearance = _measure_planned_path_clearance(
+        path, obstacle, robot_radius=0.25
+    )
+
+    assert clipped == 0
+    assert min_vertex_clearance is not None and min_vertex_clearance > 0.0
+    assert min_path_clearance is not None and min_path_clearance < 0.0
+
+
+@pytest.mark.parametrize("invalid_radius", [float("nan"), float("inf"), -0.1])
+def test_planned_path_clearance_verdict_rejects_invalid_radius(invalid_radius: float) -> None:
+    """Invalid radii must block before planning and remain strict-JSON serializable."""
+    verdict = planned_path_clearance_verdict(
+        {}, scenario_path=Path("unused.yaml"), robot_radius=invalid_radius
+    )
+
+    assert verdict["status"] == "blocked"
+    assert verdict["planned_path_validated"] is False
+    assert "invalid robot_radius" in verdict["blocker"]
+    json.dumps(verdict, allow_nan=False)
+
+
+def test_planned_path_clearance_verdict_uses_scenario_selected_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Configured spawn/goal identifiers must select the matching robot route."""
+    from shapely.geometry import Polygon
+
+    route_1 = SimpleNamespace(spawn_id=1, goal_id=2, waypoints=[(0.0, 0.0), (1.0, 0.0)])
+    route_2 = SimpleNamespace(spawn_id=3, goal_id=4, waypoints=[(10.0, 10.0), (11.0, 10.0)])
+    map_def = SimpleNamespace(
+        robot_routes=[route_1, route_2],
+        find_route=lambda spawn_id, goal_id: route_2 if (spawn_id, goal_id) == (3, 4) else None,
+    )
+    config = SimpleNamespace(
+        map_id="selected",
+        map_pool=SimpleNamespace(map_defs={"selected": map_def}),
+    )
+    planned_endpoints: dict[str, tuple[float, float]] = {}
+
+    monkeypatch.setattr(
+        feasibility_oracle, "build_robot_config_from_scenario", lambda *_a, **_k: config
+    )
+    monkeypatch.setattr(
+        feasibility_oracle,
+        "_obstacle_union",
+        lambda _map: Polygon([(20.0, 20.0), (21.0, 20.0), (21.0, 21.0), (20.0, 21.0)]),
+    )
+
+    def fake_replan(_map, *, start, goal, robot_radius):
+        planned_endpoints.update(start=start, goal=goal)
+        return [start, goal]
+
+    monkeypatch.setattr(feasibility_oracle, "_replan_astar_path", fake_replan)
+
+    verdict = planned_path_clearance_verdict(
+        {"robot_spawn_id": 3, "robot_goal_id": 4},
+        scenario_path=Path("unused.yaml"),
+        robot_radius=0.5,
+    )
+
+    assert verdict["planned_path_validated"] is True
+    assert planned_endpoints == {"start": (10.0, 10.0), "goal": (11.0, 10.0)}
+
+
+def test_planned_path_clearance_verdict_blocks_non_finite_measurement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-finite geometry results must produce a blocked strict-JSON verdict."""
+    from shapely.geometry import Polygon
+
+    route = SimpleNamespace(spawn_id=1, goal_id=2, waypoints=[(0.0, 0.0), (1.0, 0.0)])
+    map_def = SimpleNamespace(robot_routes=[route], find_route=lambda *_a: route)
+    config = SimpleNamespace(
+        map_id="selected",
+        map_pool=SimpleNamespace(map_defs={"selected": map_def}),
+    )
+    monkeypatch.setattr(
+        feasibility_oracle, "build_robot_config_from_scenario", lambda *_a, **_k: config
+    )
+    monkeypatch.setattr(
+        feasibility_oracle,
+        "_obstacle_union",
+        lambda _map: Polygon([(20.0, 20.0), (21.0, 20.0), (21.0, 21.0), (20.0, 21.0)]),
+    )
+    monkeypatch.setattr(
+        feasibility_oracle,
+        "_replan_astar_path",
+        lambda *_a, **_k: [(0.0, 0.0), (1.0, 0.0)],
+    )
+    monkeypatch.setattr(
+        feasibility_oracle,
+        "_measure_planned_path_clearance",
+        lambda *_a, **_k: (0, None, None),
+    )
+
+    verdict = planned_path_clearance_verdict(
+        {"robot_spawn_id": 1, "robot_goal_id": 2},
+        scenario_path=Path("unused.yaml"),
+        robot_radius=0.5,
+    )
+
+    assert verdict["status"] == "blocked"
+    assert verdict["planned_path_validated"] is False
+    assert verdict["blocker"] == "clearance_measurement_is_non_finite"
+    json.dumps(verdict, allow_nan=False)
+
+
+def test_planned_path_clearance_verdict_reports_negative_clearance_on_clipped_path() -> None:
+    """The committed blind-corner cell's A* planned path clips the inner corner.
+
+    This is the corrected-path check (finding #3): the A* planned path clips the inner
+    corner at the nominal envelope even though the authored route line keeps nominal
+    clearance, exposing the inconsistency between ``inflated_collision_free_path=True``
+    and the path geometry the oracle consumes.
+    """
+    manifest = _REPO_ROOT / "configs/scenarios/francis2023.yaml"
+    if not manifest.exists():
+        pytest.skip("committed francis2023.yaml manifest not available")
+    pytest.importorskip("robot_sf.benchmark.map_runner")
+
+    # Load the real blind-corner scenario cell so the planner uses its own map/route.
+    scenarios = load_scenarios(manifest)
+    cell = next(s for s in scenarios if _scenario_id(s) == ISSUE_5596_BLIND_CORNER_SCENARIO_ID)
+
+    verdict = planned_path_clearance_verdict(cell, scenario_path=manifest, robot_radius=1.0)
+    assert verdict["planned_path_validated"] is True
+    assert verdict["planned_path_clips_corner"] is True
+    assert verdict["status"] == "clipped"
+    assert verdict["planned_path_vertex_clipped_count"] is not None
+    assert verdict["planned_path_vertex_clipped_count"] >= 1
+    # Negative clearance means a vertex sits inside the inflated obstacle.
+    assert verdict["planned_path_clearance_m"] is not None
+    assert verdict["planned_path_clearance_m"] < 0.0

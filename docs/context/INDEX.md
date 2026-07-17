@@ -1,5 +1,11 @@
 # Context Retrieval Index
 
+Issue #5936 result-job durability gate — producer-side probe (`result_job_durability.v1`) that a completed result job must pass (checksum + versioned schema + canonical rerun command + durable public-safe pointer) before any `analysis:` successor issue may be created or admitted; clean-checkout reproducible, fails closed on local-only pointers:
+[issue_5936_result_job_durability_gate.md](issue_5936_result_job_durability_gate.md).
+
+Issue #5792 one-command demo reproducibility and CPU UX smoke record:
+[issue_5792_demo_validation_2026-07-15.md](evidence/issue_5792_demo_validation_2026-07-15.md).
+
 Issue #5579 MPC tuning-budget archaeology and bounded sensitivity packet (two prediction-MPC arms,
 20-point shared grid, fixed paired slice, and fail-closed diagnostic read):
 [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md).

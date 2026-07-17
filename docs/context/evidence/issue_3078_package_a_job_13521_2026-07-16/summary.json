@@ -1,0 +1,18 @@
+{
+  "command": "uv run --extra orca python scripts/tools/run_camera_ready_benchmark.py --config <generated-fullpilot-config> --mode run",
+  "episode_count": 18,
+  "planner_count": 3,
+  "row_status_counts": {
+    "adapter": 12,
+    "native": 6
+  },
+  "run_count": 1,
+  "run_ids": [
+    "issue3078-heldout-fullpilot-13521"
+  ],
+  "scenario_family_count": 2,
+  "schema_version": "campaign-result-store.v1",
+  "seed_count": 1,
+  "source_commit": "9d65072ecd9d04e2f664a4299665dbff718401d9",
+  "study_id": "issue3078-heldout-fullpilot"
+}

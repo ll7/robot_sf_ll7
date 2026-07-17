@@ -1,0 +1,15 @@
+id: map-validation
+title: Validate repository SVG maps
+purpose: >
+  Run the SVG map verifier over the CI-enabled map set to catch structural,
+  metadata, and runtime-compatibility problems. Use this when you add or edit a
+  map and want to confirm it is well-formed before depending on it.
+runtime: "< 1 min CPU"
+category: maps
+command: >
+  uv run python scripts/validation/verify_maps.py --scope ci --mode local
+configs:
+  - scripts/validation/verify_maps.py
+outputs:
+  - (stdout summary of per-map validation status)
+docs: docs/recipes/README.md

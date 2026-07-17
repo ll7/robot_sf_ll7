@@ -1,0 +1,52 @@
+schema_version: oracle-trace-uri-registry.v1
+dataset_id: expert_traj_v1
+source_issue: 1496
+related_issues: [1470, 2655, 1397]
+claim_boundary: >
+  BC-compatible oracle data collection and private artifact availability only; no training was
+  performed, and the 12-episode collection is not evidence of warm-start quality.
+dataset_artifact:
+  uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/dataset/expert_traj_v1.npz
+  sha256: 433c797f6e3635f133d7541c9dd9edd3849cdee7b89e23c930b458e463979388
+  size_bytes: 363117931
+  episode_count: 12
+  split_counts:
+    train: 6
+    validation: 3
+    evaluation: 3
+  per_step_observations_actions: true
+  committed: false
+traces:
+- split: train
+  trace_id: train__issue1496_oracle_trace_collection
+  source_job: '13520'
+  recovery_status: new_bc_compatible_collection
+  uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/train/train__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
+  sha256: 79347c9674a55ee849eb39fc1872cc4ca11198c53a052ee286f86538c6c892ea
+  retrieval_status: resolvable
+  source_manifest_uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/train/oracle_candidate_trace_manifest.json
+  source_manifest_sha256: 735c6b99b44d0e46e4bee7ddae4fcfa803afdc538978ac00c12c6f113284ce25
+  checksum_inventory_uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/train/checksums.sha256
+  checksum_inventory_sha256: 26df78893d7ddc61d8ad02c78b9aec6955680bc98dc290237baf8508b44336e6
+- split: validation
+  trace_id: validation__issue1496_oracle_trace_collection
+  source_job: '13520'
+  recovery_status: new_bc_compatible_collection
+  uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/validation/validation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
+  sha256: 319a9ff013f48f6cacb2886c8b6093afd0d328d3dbe1c27c6a5171648b68ed9c
+  retrieval_status: resolvable
+  source_manifest_uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/validation/oracle_candidate_trace_manifest.json
+  source_manifest_sha256: 35fe52b60e703a01e0a51fea4a6d7ba07518f4262a9a7ce29cdcfff4f742f08d
+  checksum_inventory_uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/validation/checksums.sha256
+  checksum_inventory_sha256: 0c7cf68f26704ce6066e85e39856389c1a7c8225ce72c7ce8468deade5346af5
+- split: evaluation
+  trace_id: evaluation__issue1496_oracle_trace_collection
+  source_job: '13520'
+  recovery_status: new_bc_compatible_collection
+  uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/evaluation/evaluation__hybrid_rule_v3_static_margin0_waypoint2__combined.jsonl
+  sha256: f26b1c62441c27fa50209ed269d570698816ba0cdafc6f0616a8bf9fb7801720
+  retrieval_status: resolvable
+  source_manifest_uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/evaluation/oracle_candidate_trace_manifest.json
+  source_manifest_sha256: e883d3ebaffb7f5c016fe04fbf89b3a05d95a648bdef74d5e5e787bb7cd7e3a3
+  checksum_inventory_uri: private-artifact://oracle-imitation/issue1496/oracle-trace-collection/evaluation/checksums.sha256
+  checksum_inventory_sha256: 3113fa77db51a0315258c3a266ec8cfc21d467a0eadd7c47eb611a4db5203008

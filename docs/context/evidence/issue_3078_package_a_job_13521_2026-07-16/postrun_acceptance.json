@@ -1,0 +1,8 @@
+{
+  "classification": "diagnostic_review_ready",
+  "episode_count": 18,
+  "heldout_table_episode_count": 18,
+  "issue_result_classification": "diagnostic",
+  "status": "postrun_accepted",
+  "synthetic_fixture_used": false
+}

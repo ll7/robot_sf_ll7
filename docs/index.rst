@@ -32,6 +32,7 @@ references.
    Scenario Contracts <scenario_contracts>
    Scenario Certification <scenario_certification>
    Scenario Perturbation Manifest <scenario_perturbation_manifest>
+   Scenario/Planner Gallery <gallery>
 
 .. toctree::
    :caption: Planner Zoo

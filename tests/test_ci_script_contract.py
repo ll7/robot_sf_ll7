@@ -503,6 +503,7 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     )
     assert "Optional-extra changed files requiring the predictive lane" in script_text
     assert "No changed files require the optional-extra lane." in script_text
+    assert 'git diff --name-only --diff-filter=ACDMRT "$BASE_REF...HEAD"' in script_text
 
     freshness_call = 'uv run python "$SCRIPT_DIR/pr_ready_freshness.py" "${freshness_args[@]}"'
     assert 'freshness_args=(write --base-ref "$BASE_REF")' in script_text
@@ -514,6 +515,38 @@ def test_pr_ready_check_records_freshness_after_successful_gates() -> None:
     assert "followup_args+=(--require-body)" in script_text
     assert script_text.find("followup_args+=(--require-body)") < script_text.find(
         'uv run python "$SCRIPT_DIR/check_pr_followups.py" "${followup_args[@]}"'
+    )
+
+
+def test_pr_ready_check_captures_validated_base_sha_for_drift_guard(tmp_path: Path) -> None:
+    """Issue #5782: the readiness gate must capture the concrete base SHA it validates
+    against and run a final base-drift recheck before recording the freshness stamp.
+
+    The drift guard compares the captured base SHA against the (moving) base ref
+    again before the stamp is written, so a readiness stamp cannot stay green
+    through a silent origin/main advance during the long lanes.
+    """
+    script_text = PR_READY_CHECK.read_text(encoding="utf-8")
+
+    # The gate resolves the concrete base commit before the expensive lanes.
+    assert (
+        'VALIDATED_BASE_SHA="$(git rev-parse --verify --quiet "${BASE_REF}^{commit}"' in script_text
+    )
+    assert "Validated base SHA for this run" in script_text
+
+    # The freshness stamp now records the resolved base SHA.
+    assert 'freshness_args+=(--base-sha "$VALIDATED_BASE_SHA")' in script_text
+
+    # A final lightweight drift recheck runs before the stamp is written.
+    assert 'uv run python "$SCRIPT_DIR/check_base_drift.py"' in script_text
+    assert "--validated-base-sha" in script_text
+    assert "--changed-files" in script_text
+    assert "revalidate against" in script_text
+    # The drift recheck must sit before the freshness stamp write.
+    drift_index = script_text.find('uv run python "$SCRIPT_DIR/check_base_drift.py"')
+    freshness_write_index = script_text.find('uv run python "$SCRIPT_DIR/pr_ready_freshness.py"')
+    assert 0 < drift_index < freshness_write_index, (
+        "base-drift recheck must precede the stamp write"
     )
 
 
@@ -538,7 +571,9 @@ def test_pr_body_contracts_workflow_runs_strict_pr_body_checker() -> None:
     workflow_text = PR_BODY_CONTRACTS_WORKFLOW.read_text(encoding="utf-8")
 
     assert "pull_request:" in workflow_text
-    assert "gh api --paginate" in workflow_text
+    assert "scripts/ci/collect_pr_files.py" in workflow_text
+    assert "--out-changed-files" in workflow_text
+    assert "gh api --paginate" not in workflow_text
     assert "pr_changed_files.txt" in workflow_text
     assert "scripts/dev/check_pr_followups.py" in workflow_text
     for flag in (
@@ -742,7 +777,10 @@ def test_worktree_shared_venv_helper_pins_current_checkout_imports() -> None:
     assert 'venv_path="${venv_override:-$main_repo_root/.venv}"' in script_text
     assert 'export UV_PROJECT_ENVIRONMENT="$venv_path"' in script_text
     assert "export UV_NO_SYNC=1" in script_text
-    assert 'export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"' in script_text
+    assert (
+        'export PYTHONPATH="$repo_root:$repo_root/fast-pysf${PYTHONPATH:+:$PYTHONPATH}"'
+        in script_text
+    )
     assert 'exec uv run "${cmd[@]}"' in script_text
 
 
@@ -781,7 +819,7 @@ def test_worktree_shared_venv_helper_has_valid_shell_and_help() -> None:
         check=False,
     )
     assert help_result.returncode == 0
-    assert "PYTHONPATH=$PWD" in help_result.stdout
+    assert "PYTHONPATH=$PWD:$PWD/fast-pysf" in help_result.stdout
     assert "UV_PROJECT_ENVIRONMENT" in help_result.stdout
     assert "UV_NO_SYNC=1" in help_result.stdout
     assert "COVERAGE_FILE" in help_result.stdout

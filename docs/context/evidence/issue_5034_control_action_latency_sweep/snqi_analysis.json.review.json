@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_analysis.json",
+  "artifact_sha256": "5ba2974cd8f300e61153e9e5d25ffe737dadbfb5efc62fc2659b19f9f9ec3949",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

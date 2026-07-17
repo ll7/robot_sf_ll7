@@ -1,0 +1,32 @@
+{
+  "schema_version": "issue3078.heldout_fullpilot_registration.v1",
+  "status": "diagnostic_review_ready",
+  "issue": 3078,
+  "job_id": 13521,
+  "label": "01e-issue3078-heldout-fullpilot",
+  "execution_commit": "9d65072ecd9d04e2f664a4299665dbff718401d9",
+  "source_episode_store": {
+    "classification": "private_external_artifact",
+    "uri": "private-campaign://job-13521/result_store/episodes.parquet",
+    "sha256": "46466cd3db27d6f8a10181a8ec7c4676b24179bb97902aa8eec686d09a53942b",
+    "committed": false
+  },
+  "source_checksums": {
+    "fullpilot_plan.json": "a69beba13c9f6fe6e64b79e73aa7c9bee36cab2848246c6970c0a8433ddc1530",
+    "postrun_acceptance.json": "c14071a5180eeccdd6727c41156a646a97cd21d662c825367281ffbd008b565b",
+    "row_acceptance.json": "1af7def9ede61ed63848a2677ea612ffba5ea1af49b91e1ef8ae056d3fcde5c0"
+  },
+  "registration_transformation": {
+    "description": "Private source path prefixes were replaced with private-campaign job URIs.",
+    "row_or_metric_values_changed": false
+  },
+  "supersedes": {
+    "job_id": 13506,
+    "reason": "underscaled at two episode rows per planner instead of six"
+  },
+  "episode_count": 18,
+  "unique_identity_count": 18,
+  "rows_per_planner": 6,
+  "fallback_degraded_rows": 0,
+  "synthetic_fixture_used": false
+}

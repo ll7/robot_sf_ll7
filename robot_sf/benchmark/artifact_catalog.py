@@ -345,9 +345,8 @@ def _is_local_only_path(value: str) -> bool:
             if prefix.startswith("/"):
                 if path_str.startswith(prefix):
                     return True
-            else:
-                if len(parts) > 1 and parts[1] == prefix.rstrip("/"):
-                    return True
+            elif len(parts) > 1 and parts[1] == prefix.rstrip("/"):
+                return True
         return False
     local_roots = {prefix.strip("/") for prefix in _LOCAL_ONLY_PREFIXES}
     local_roots.discard("")

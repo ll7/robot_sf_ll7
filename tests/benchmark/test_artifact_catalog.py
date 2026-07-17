@@ -11,12 +11,12 @@ import yaml
 from robot_sf.benchmark.artifact_catalog import (
     ARTIFACT_CATALOG_SCHEMA_VERSION,
     ArtifactCatalogValidationError,
+    _is_local_only_path,
     artifact_catalog_from_dict,
     load_artifact_catalog,
     main,
     sha256_file,
     validate_artifact_catalog,
-    _is_local_only_path,
 )
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "artifact_catalog" / "v1"

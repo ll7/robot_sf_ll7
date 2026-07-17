@@ -1854,12 +1854,9 @@ def run_episode(  # noqa: PLR0913
     # per-step runtime/exit counters captured during the episode are recorded.
     policy_diag = getattr(robot_policy, "diagnostics", None)
     if callable(policy_diag):
-        try:
-            live_diag = policy_diag()
-            if isinstance(live_diag, dict):
-                algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = live_diag
-        except Exception:  # pragma: no cover - defensive diagnostic refresh
-            pass
+        live_diag = policy_diag()
+        if isinstance(live_diag, dict):
+            algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = live_diag
 
     collision = bool(metric_scalar(metrics, "collisions", "collision_rate") > 0.0)
     route_complete = bool(metric_scalar(metrics, "success", "success_rate") > 0.0)

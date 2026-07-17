@@ -321,9 +321,12 @@
       "missing_commit": 1,
       "missing_config_path": 1,
       "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml": {
+      "hash_without_artifact_path": 1
     }
   },
-  "generated_at": "2026-07-17T11:47:37Z",
+  "generated_at": "2026-07-17T13:22:07Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
@@ -332,14 +335,14 @@
       "config_missing_at_commit": 3,
       "dangling_commit": 10,
       "duplicate_campaign_id": 6,
-      "hash_without_artifact_path": 84,
+      "hash_without_artifact_path": 85,
       "invalid_sha256": 1,
       "missing_commit": 28,
       "missing_config_path": 49,
       "missing_config_sha256": 53,
       "uncommitted_artifact_missing_location": 158
     },
-    "files_with_findings": 85,
-    "total_findings": 407
+    "files_with_findings": 86,
+    "total_findings": 408
   }
 }

@@ -12,11 +12,14 @@ the real warm-start policy is good, that BC beats RL, or anything benchmark-faci
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
+import yaml
 
 from robot_sf.training.oracle_imitation_bc_smoke import (
     CLAIM_BOUNDARY,
@@ -28,6 +31,7 @@ from robot_sf.training.oracle_imitation_bc_smoke import (
     run_bc_overfit_smoke,
     validate_split_leakage_contract,
 )
+from scripts.validation import run_oracle_imitation_bc_smoke as bc_smoke_cli
 
 _PED_SLOTS = 64
 
@@ -340,6 +344,147 @@ def test_split_leakage_contract_fails_closed_on_shared_seed(tmp_path: Path) -> N
     dataset = load_expert_trajectory_dataset(dataset_path)
     with pytest.raises(OracleImitationBcSmokeError, match="train seeds reused"):
         validate_split_leakage_contract(dataset)
+
+
+def test_split_leakage_contract_requires_metadata_to_cover_every_episode(tmp_path: Path) -> None:
+    """An unlisted NPZ row must not silently enter the training split."""
+    splits_mapping = {
+        "train": ["train__planner_sanity_simple__seed201"],
+        "validation": ["validation__classic_crossing__seed101"],
+        "evaluation": ["evaluation__classic_doorway__seed111"],
+    }
+    dataset_path = _build_fixture(tmp_path, splits_mapping=splits_mapping)
+    dataset = load_expert_trajectory_dataset(dataset_path)
+
+    with pytest.raises(OracleImitationBcSmokeError, match="cover exactly the NPZ episode ids"):
+        validate_split_leakage_contract(dataset)
+
+
+def test_loader_rejects_missing_episode_identity(tmp_path: Path) -> None:
+    """Missing episode IDs must not be stringified into a valid-looking placeholder."""
+    episodes = [
+        _build_episode(
+            episode_id=None,
+            scenario_id="planner_sanity_simple",
+            seed=201,
+            split="train",
+            steps=4,
+            scenario_bias=1,
+        ),
+        _build_episode(
+            episode_id="validation__ep__seed101",
+            scenario_id="classic_crossing",
+            seed=101,
+            split="validation",
+            steps=4,
+            scenario_bias=2,
+        ),
+        _build_episode(
+            episode_id="evaluation__ep__seed111",
+            scenario_id="classic_doorway",
+            seed=111,
+            split="evaluation",
+            steps=4,
+            scenario_bias=3,
+        ),
+    ]
+    dataset_path = _build_fixture(tmp_path, episodes=episodes)
+
+    with pytest.raises(OracleImitationBcSmokeError, match="episode_ids.*non-empty string"):
+        load_expert_trajectory_dataset(dataset_path)
+
+
+def test_loader_rejects_non_integer_episode_seed(tmp_path: Path) -> None:
+    """Seed provenance must remain integer-typed rather than relying on int() coercion."""
+    episodes = [
+        _build_episode(
+            episode_id="train__ep__seed201",
+            scenario_id="planner_sanity_simple",
+            seed=201,
+            split="train",
+            steps=4,
+            scenario_bias=1,
+        ),
+        _build_episode(
+            episode_id="validation__ep__seed101",
+            scenario_id="classic_crossing",
+            seed=101,
+            split="validation",
+            steps=4,
+            scenario_bias=2,
+        ),
+        _build_episode(
+            episode_id="evaluation__ep__seed111",
+            scenario_id="classic_doorway",
+            seed=111,
+            split="evaluation",
+            steps=4,
+            scenario_bias=3,
+        ),
+    ]
+    episodes[0]["seed"] = "201"
+    dataset_path = _build_fixture(tmp_path, episodes=episodes)
+
+    with pytest.raises(OracleImitationBcSmokeError, match="seeds.*must be an integer"):
+        load_expert_trajectory_dataset(dataset_path)
+
+
+def test_registry_source_requires_and_verifies_dataset_checksum(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Registry mode must fail closed unless the resolved NPZ matches its declared SHA-256."""
+    private_root = tmp_path / "private"
+    dataset = private_root / "dataset" / "expert_traj_v1.npz"
+    dataset.parent.mkdir(parents=True)
+    dataset.write_bytes(b"synthetic dataset bytes\n")
+    digest = hashlib.sha256(dataset.read_bytes()).hexdigest()
+    registry_path = tmp_path / "registry.yaml"
+
+    # The registry validator owns the trace-side contract; this test isolates the dataset
+    # artifact contract enforced by the BC CLI.
+    monkeypatch.setattr(bc_smoke_cli, "validate_trace_uri_registry", lambda *args, **kwargs: {})
+    args = argparse.Namespace(
+        dataset_path=None,
+        private_artifact_root=private_root,
+        registry=registry_path,
+        repo_root=tmp_path,
+    )
+
+    registry_path.write_text(
+        yaml.safe_dump(
+            {"dataset_artifact": {"uri": "private-artifact://dataset/expert_traj_v1.npz"}}
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(OracleImitationBcSmokeError, match="dataset_artifact.sha256"):
+        bc_smoke_cli.resolve_dataset_path(args)
+
+    registry_path.write_text(
+        yaml.safe_dump(
+            {
+                "dataset_artifact": {
+                    "uri": "private-artifact://dataset/expert_traj_v1.npz",
+                    "sha256": digest,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert bc_smoke_cli.resolve_dataset_path(args) == dataset
+
+    registry_path.write_text(
+        yaml.safe_dump(
+            {
+                "dataset_artifact": {
+                    "uri": "private-artifact://dataset/expert_traj_v1.npz",
+                    "sha256": "0" * 64,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(OracleImitationBcSmokeError, match="dataset checksum mismatch"):
+        bc_smoke_cli.resolve_dataset_path(args)
 
 
 def test_flatten_pairs_only_includes_the_training_split(tmp_path: Path) -> None:

@@ -43,6 +43,8 @@ from robot_sf.training.oracle_trace_uri_registry import (
 )
 
 _PRIVATE_ARTIFACT_URI_PREFIX = "private-artifact://"
+_HEX_DIGITS = frozenset("0123456789abcdef")
+_SHA256_LENGTH = 64
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -111,6 +113,55 @@ def _resolve_private_artifact_path(uri: str, private_root: Path) -> Path:
     return candidate
 
 
+def _load_registry(path: Path) -> dict[str, object]:
+    """Load a registry YAML mapping with the CLI's fail-closed exception type."""
+    try:
+        registry = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise OracleImitationBcSmokeError(f"failed to load registry YAML: {path}") from exc
+    if not isinstance(registry, dict):
+        raise OracleImitationBcSmokeError("trace-URI registry must be a YAML mapping")
+    return registry
+
+
+def _dataset_artifact_metadata(registry: dict[str, object]) -> tuple[str, str]:
+    """Return a validated private dataset URI and concrete SHA-256 from a registry."""
+    dataset_artifact = registry.get("dataset_artifact")
+    if not isinstance(dataset_artifact, dict):
+        raise OracleImitationBcSmokeError(
+            "registry dataset_artifact must be a mapping with uri and sha256"
+        )
+    uri = dataset_artifact.get("uri")
+    expected_sha = dataset_artifact.get("sha256")
+    if not isinstance(uri, str) or not uri.startswith(_PRIVATE_ARTIFACT_URI_PREFIX):
+        raise OracleImitationBcSmokeError(
+            "registry dataset_artifact.uri must be a private-artifact:// URI when using --registry"
+        )
+    if not isinstance(expected_sha, str):
+        raise OracleImitationBcSmokeError(
+            "registry dataset_artifact.sha256 must be a concrete 64-character SHA-256 digest"
+        )
+    expected_sha = expected_sha.strip().lower()
+    if len(expected_sha) != _SHA256_LENGTH or not set(expected_sha) <= _HEX_DIGITS:
+        raise OracleImitationBcSmokeError(
+            "registry dataset_artifact.sha256 must be a concrete 64-character SHA-256 digest"
+        )
+    return uri, expected_sha
+
+
+def _validate_registry_contract(args: argparse.Namespace) -> None:
+    """Enforce the full durable trace contract for a registry-backed smoke."""
+    try:
+        validate_trace_uri_registry(
+            args.registry,
+            repo_root=args.repo_root,
+            private_artifact_root=args.private_artifact_root,
+            require_training_ready=True,
+        )
+    except OracleTraceUriRegistryError as exc:
+        raise OracleImitationBcSmokeError(f"registry contract validation failed: {exc}") from exc
+
+
 def resolve_dataset_path(args: argparse.Namespace) -> Path:
     """Resolve and (when via the registry) checksum-verify the dataset artifact path.
 
@@ -129,36 +180,20 @@ def resolve_dataset_path(args: argparse.Namespace) -> Path:
         raise OracleImitationBcSmokeError(
             f"--private-artifact-root is not a directory: {args.private_artifact_root}"
         )
-    registry = yaml.safe_load(args.registry.read_text(encoding="utf-8"))
-    dataset_artifact = registry.get("dataset_artifact") or {}
-    uri = dataset_artifact.get("uri")
-    expected_sha = dataset_artifact.get("sha256")
-    if not isinstance(uri, str) or not uri.startswith(_PRIVATE_ARTIFACT_URI_PREFIX):
-        raise OracleImitationBcSmokeError(
-            "registry dataset_artifact.uri must be a private-artifact:// URI when using --registry"
-        )
-    # Enforce the full durable trace contract (traces + checksums + training_ready) too.
-    try:
-        validate_trace_uri_registry(
-            args.registry,
-            repo_root=args.repo_root,
-            private_artifact_root=args.private_artifact_root,
-            require_training_ready=True,
-        )
-    except OracleTraceUriRegistryError as exc:
-        raise OracleImitationBcSmokeError(f"registry contract validation failed: {exc}") from exc
+    registry = _load_registry(args.registry)
+    uri, expected_sha = _dataset_artifact_metadata(registry)
+    _validate_registry_contract(args)
 
     dataset_path = _resolve_private_artifact_path(uri, args.private_artifact_root)
     if not dataset_path.is_file():
         raise OracleImitationBcSmokeError(
             f"dataset artifact resolved but missing on disk: {dataset_path}"
         )
-    if isinstance(expected_sha, str):
-        actual = sha256_file(dataset_path)
-        if actual != expected_sha.strip().lower():
-            raise OracleImitationBcSmokeError(
-                f"dataset checksum mismatch: expected {expected_sha}, got {actual}"
-            )
+    actual = sha256_file(dataset_path)
+    if actual != expected_sha:
+        raise OracleImitationBcSmokeError(
+            f"dataset checksum mismatch: expected {expected_sha}, got {actual}"
+        )
     return dataset_path
 
 

@@ -198,33 +198,67 @@ def _actions_array(array: np.ndarray) -> np.ndarray:
 
 
 def _episode_identity(array: np.ndarray, *, name: str) -> list[str]:
-    """Read a per-episode identity array (shape (episodes, 1)) as a list of strings.
+    """Read a per-episode identity array as a list of non-empty strings.
 
     Returns:
         Per-episode string identities in storage order.
     """
     data = np.asarray(array)
     if data.ndim == 2 and data.shape[1] == 1:
-        return [str(np.asarray(data[i, 0]).item()) for i in range(data.shape[0])]
-    if data.ndim == 1:
-        return [str(np.asarray(v).item()) for v in data]
-    raise OracleImitationBcSmokeError(
-        f"NPZ identity array {name!r} has unexpected shape {data.shape}"
-    )
+        values = [data[i, 0] for i in range(data.shape[0])]
+    elif data.ndim == 1:
+        values = list(data)
+    else:
+        raise OracleImitationBcSmokeError(
+            f"NPZ identity array {name!r} has unexpected shape {data.shape}"
+        )
+
+    identities: list[str] = []
+    for index, value in enumerate(values):
+        try:
+            scalar = np.asarray(value).item()
+        except (TypeError, ValueError) as exc:
+            raise OracleImitationBcSmokeError(
+                f"NPZ identity array {name!r} entry {index} is not scalar"
+            ) from exc
+        if not isinstance(scalar, str) or not scalar.strip():
+            raise OracleImitationBcSmokeError(
+                f"NPZ identity array {name!r} entry {index} must be a non-empty string"
+            )
+        identities.append(scalar.strip())
+    return identities
 
 
 def _episode_seeds(array: np.ndarray, *, name: str) -> list[int]:
-    """Read a per-episode seed array as a list of ints.
+    """Read a per-episode seed array as a list of integer, non-boolean seeds.
 
     Returns:
         Per-episode integer seeds in storage order.
     """
     data = np.asarray(array)
     if data.ndim == 2 and data.shape[1] == 1:
-        return [int(np.asarray(data[i, 0]).item()) for i in range(data.shape[0])]
-    if data.ndim == 1:
-        return [int(np.asarray(v).item()) for v in data]
-    raise OracleImitationBcSmokeError(f"NPZ seed array {name!r} has unexpected shape {data.shape}")
+        values = [data[i, 0] for i in range(data.shape[0])]
+    elif data.ndim == 1:
+        values = list(data)
+    else:
+        raise OracleImitationBcSmokeError(
+            f"NPZ seed array {name!r} has unexpected shape {data.shape}"
+        )
+
+    seeds: list[int] = []
+    for index, value in enumerate(values):
+        try:
+            scalar = np.asarray(value).item()
+        except (TypeError, ValueError) as exc:
+            raise OracleImitationBcSmokeError(
+                f"NPZ seed array {name!r} entry {index} is not scalar"
+            ) from exc
+        if isinstance(scalar, (bool, np.bool_)) or not isinstance(scalar, (int, np.integer)):
+            raise OracleImitationBcSmokeError(
+                f"NPZ seed array {name!r} entry {index} must be an integer, not boolean"
+            )
+        seeds.append(int(scalar))
+    return seeds
 
 
 def _splits_from_metadata(npz: np.lib.npyio.NpzFile) -> dict[str, list[str]]:
@@ -257,6 +291,58 @@ def _splits_from_metadata(npz: np.lib.npyio.NpzFile) -> dict[str, list[str]]:
     return out
 
 
+def _validate_dataset_arrays(arrays: dict[str, np.ndarray]) -> int:
+    """Validate array alignment and provenance fields.
+
+    Returns:
+        Number of episodes represented by the aligned observation/action arrays.
+    """
+    observations = _observations_array(arrays["observations"])
+    actions = _actions_array(arrays["actions"])
+    if actions.shape[0] != observations.shape[0]:
+        raise OracleImitationBcSmokeError(
+            "actions and observations disagree on episode count: "
+            f"{actions.shape[0]} vs {observations.shape[0]}"
+        )
+    if actions.shape[1] != observations.shape[1]:
+        raise OracleImitationBcSmokeError(
+            "actions and observations disagree on padded step width: "
+            f"{actions.shape[1]} vs {observations.shape[1]}"
+        )
+
+    episode_count = observations.shape[0]
+    for name in _REQUIRED_ARRAYS:
+        array = np.asarray(arrays[name])
+        if array.ndim == 0 or len(array) != episode_count:
+            raise OracleImitationBcSmokeError(
+                f"NPZ array {name!r} has {len(array) if array.ndim else 0} episodes; "
+                f"expected {episode_count}"
+            )
+    _validate_declared_episode_count(arrays, episode_count)
+
+    # Parse required provenance fields while loading so malformed values cannot reach the
+    # split/leakage gate as stringified placeholders or silently coerced seeds.
+    _episode_identity(arrays["episode_ids"], name="episode_ids")
+    _episode_identity(arrays["scenario_ids"], name="scenario_ids")
+    _episode_identity(arrays["splits"], name="splits")
+    _episode_seeds(arrays["seeds"], name="seeds")
+    return episode_count
+
+
+def _validate_declared_episode_count(arrays: dict[str, np.ndarray], episode_count: int) -> None:
+    """Ensure an optional scalar episode-count field agrees with the arrays."""
+    if "episode_count" not in arrays:
+        return
+    try:
+        declared_count = int(np.asarray(arrays["episode_count"]).item())
+    except (TypeError, ValueError) as exc:
+        raise OracleImitationBcSmokeError("NPZ episode_count must be a scalar integer") from exc
+    if declared_count != episode_count:
+        raise OracleImitationBcSmokeError(
+            f"NPZ episode_count declares {declared_count}; arrays contain {episode_count}"
+        )
+
+
 def load_expert_trajectory_dataset(dataset_path: str | Path) -> dict[str, Any]:
     """Load and structurally validate an ``expert_traj_v1.npz`` artifact.
 
@@ -285,25 +371,56 @@ def load_expert_trajectory_dataset(dataset_path: str | Path) -> dict[str, Any]:
             arrays["episode_count"] = npz["episode_count"]
         splits = _splits_from_metadata(npz)
 
-    observations = _observations_array(arrays["observations"])
-    actions = _actions_array(arrays["actions"])
-    if actions.shape[0] != observations.shape[0]:
-        raise OracleImitationBcSmokeError(
-            "actions and observations disagree on episode count: "
-            f"{actions.shape[0]} vs {observations.shape[0]}"
-        )
-    if actions.shape[1] != observations.shape[1]:
-        raise OracleImitationBcSmokeError(
-            "actions and observations disagree on padded step width: "
-            f"{actions.shape[1]} vs {observations.shape[1]}"
-        )
+    episode_count = _validate_dataset_arrays(arrays)
 
     return {
         "dataset_path": path,
         "arrays": arrays,
         "splits": splits,
-        "episode_count": int(actions.shape[0]),
+        "episode_count": episode_count,
     }
+
+
+def _validate_split_metadata_coverage(splits: dict[str, list[str]], all_ids: list[str]) -> None:
+    """Require split metadata to cover exactly the NPZ episode identities."""
+    metadata_ids = [episode_id for ids in splits.values() for episode_id in ids]
+    if len(metadata_ids) != len(all_ids) or set(metadata_ids) != set(all_ids):
+        missing_ids = sorted(set(all_ids) - set(metadata_ids))
+        unexpected_ids = sorted(set(metadata_ids) - set(all_ids))
+        raise OracleImitationBcSmokeError(
+            "split/leakage violation: split metadata must cover exactly the NPZ episode ids; "
+            f"missing={missing_ids}, unexpected={unexpected_ids}"
+        )
+
+
+def _validate_split_identity_uniqueness(episode_ids_by_split: dict[str, list[str]]) -> None:
+    """Reject episode identities repeated within or across split metadata."""
+    seen: dict[str, str] = {}
+    for split, episode_ids in episode_ids_by_split.items():
+        for episode_id in episode_ids:
+            if episode_id in seen:
+                raise OracleImitationBcSmokeError(
+                    f"split/leakage violation: episode {episode_id!r} appears in both "
+                    f"{seen[episode_id]!r} and {split!r}"
+                )
+            seen[episode_id] = split
+
+
+def _validate_split_tags(
+    all_ids: list[str], split_tags: list[str], episode_ids_by_split: dict[str, list[str]]
+) -> None:
+    """Require each NPZ row's split tag to agree with the metadata mapping."""
+    ids_by_split = {split: set(ids) for split, ids in episode_ids_by_split.items()}
+    for episode_id, split_tag in zip(all_ids, split_tags, strict=True):
+        if split_tag not in _REQUIRED_SPLITS:
+            raise OracleImitationBcSmokeError(
+                f"split/leakage violation: episode {episode_id!r} has unknown split {split_tag!r}"
+            )
+        if episode_id not in ids_by_split[split_tag]:
+            raise OracleImitationBcSmokeError(
+                f"split/leakage violation: episode {episode_id!r} metadata split does not "
+                f"match its NPZ row tag {split_tag!r}"
+            )
 
 
 def validate_split_leakage_contract(dataset: dict[str, Any]) -> dict[str, Any]:
@@ -335,19 +452,12 @@ def validate_split_leakage_contract(dataset: dict[str, Any]) -> dict[str, Any]:
     episode_ids_by_split: dict[str, list[str]] = {
         split: list(splits[split]) for split in _REQUIRED_SPLITS
     }
-    # Cross-split leakage: an episode id must belong to exactly one split.
-    seen: dict[str, str] = {}
-    for split in _REQUIRED_SPLITS:
-        for episode_id in episode_ids_by_split[split]:
-            if episode_id in seen:
-                raise OracleImitationBcSmokeError(
-                    f"split/leakage violation: episode {episode_id!r} appears in both "
-                    f"{seen[episode_id]!r} and {split!r}"
-                )
-            seen[episode_id] = split
+    all_ids = _episode_identity(arrays["episode_ids"], name="episode_ids")
+    split_tags = _episode_identity(arrays["splits"], name="splits")
+    _validate_split_metadata_coverage(splits, all_ids)
+    _validate_split_identity_uniqueness(episode_ids_by_split)
 
     # Seed disjointness: train seeds must be disjoint from validation/evaluation seeds.
-    all_ids = _episode_identity(arrays["episode_ids"], name="episode_ids")
     all_seeds = _episode_seeds(arrays["seeds"], name="seeds")
     id_to_seed = dict(zip(all_ids, all_seeds, strict=True))
     train_seeds = {id_to_seed[episode_id] for episode_id in episode_ids_by_split["train"]}
@@ -361,15 +471,7 @@ def validate_split_leakage_contract(dataset: dict[str, Any]) -> dict[str, Any]:
         )
 
     # Per-episode NPZ split tags must match the metadata mapping (defensive consistency check).
-    split_tags = _episode_identity(arrays["splits"], name="splits")
-    tag_by_id = dict(zip(all_ids, split_tags, strict=True))
-    for split in _REQUIRED_SPLITS:
-        for episode_id in episode_ids_by_split[split]:
-            if tag_by_id.get(episode_id) != split:
-                raise OracleImitationBcSmokeError(
-                    f"split/leakage violation: episode {episode_id!r} metadata split is "
-                    f"{split!r} but its NPZ row tag is {tag_by_id.get(episode_id)!r}"
-                )
+    _validate_split_tags(all_ids, split_tags, episode_ids_by_split)
 
     return {
         "episode_ids_by_split": episode_ids_by_split,
@@ -533,7 +635,8 @@ def run_bc_overfit_smoke(config: BCSmokeConfig) -> BCSmokeResult:
         loss = loss_fn(module(feature_tensor), target_tensor)
         loss.backward()
         optimizer.step()
-        final_loss = float(loss.item())
+    with torch.no_grad():
+        final_loss = float(loss_fn(module(feature_tensor), target_tensor).item())
 
     loss_reduction = float(initial_loss - final_loss)
     if not np.isfinite(loss_reduction) or loss_reduction <= 0.0:

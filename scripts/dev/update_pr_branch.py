@@ -185,7 +185,7 @@ def _verify_gate_worktree(gate_worktree_path: str) -> dict[str, Any]:
             "lease_pr_number": health.lease_pr_number,
             "lease_gate_id": health.lease_gate_id,
         }
-    except Exception as exc:  # noqa: BLE001
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
         return {
             "exists": False,
             "classification": "errored",

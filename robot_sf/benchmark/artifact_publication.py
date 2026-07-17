@@ -1443,14 +1443,32 @@ def _snqi_diagnostics_ordering(diagnostics: Mapping[str, Any]) -> dict[str, int]
     Returns:
         Mapping of canonical planner key to the diagnostics-declared rank.
     """
+    raw_ordering = diagnostics.get("planner_ordering")
+    if not isinstance(raw_ordering, list) or not raw_ordering:
+        raise ValueError(
+            "snqi_diagnostics.json planner_ordering must be a non-empty list for an "
+            "SNQI-bearing bundle"
+        )
     ordering: dict[str, int] = {}
-    for row in diagnostics.get("planner_ordering", []):
+    for index, row in enumerate(raw_ordering, start=1):
         if not isinstance(row, Mapping):
-            continue
-        planner = str(row.get("planner_key", "unknown"))
-        kinematics = str(row.get("kinematics", "unknown"))
-        rank = int(row.get("rank", 0))
-        ordering[f"{planner}::{kinematics}"] = rank
+            raise ValueError(f"planner_ordering row {index} must be an object")
+        planner = row.get("planner_key")
+        kinematics = row.get("kinematics")
+        if not isinstance(planner, str) or not planner.strip():
+            raise ValueError(f"planner_ordering row {index} planner_key must be a non-empty string")
+        if not isinstance(kinematics, str) or not kinematics.strip():
+            raise ValueError(f"planner_ordering row {index} kinematics must be a non-empty string")
+        rank = row.get("rank")
+        if isinstance(rank, bool) or not isinstance(rank, int) or rank < 1:
+            raise ValueError(f"planner_ordering row {index} rank must be a positive integer")
+        key = f"{planner}::{kinematics}"
+        if key in ordering:
+            raise ValueError(f"planner_ordering contains duplicate arm {key!r}")
+        ordering[key] = rank
+    expected_ranks = set(range(1, len(ordering) + 1))
+    if set(ordering.values()) != expected_ranks:
+        raise ValueError("planner_ordering ranks must be unique and contiguous from 1")
     return ordering
 
 
@@ -1499,23 +1517,52 @@ def _check_snqi_field_consistency(  # noqa: C901, PLR0912, PLR0915
 
     weights_sha256 = _sha256_file(weights_path)
     baseline_sha256 = _sha256_file(baseline_path)
-    weights = _load_snqi_weight_mapping(weights_path)
-    baseline = _load_snqi_baseline_mapping(baseline_path)
+    try:
+        weights = _load_snqi_weight_mapping(weights_path)
+        baseline = _load_snqi_baseline_mapping(baseline_path)
+    except (OSError, TypeError, ValueError) as exc:
+        return {
+            "checked": True,
+            "violation_count": 1,
+            "violations": [f"canonical SNQI inputs cannot be loaded: {exc}"],
+            "ordering": {},
+            "integrity": {
+                "snqi_weights_sha256": weights_sha256,
+                "snqi_baseline_sha256": baseline_sha256,
+            },
+        }
 
     declared_weights_sha = diagnostics.get("weights_sha256")
     declared_baseline_sha = diagnostics.get("baseline_sha256")
-    if isinstance(declared_weights_sha, str) and declared_weights_sha != weights_sha256:
+    if not isinstance(declared_weights_sha, str) or declared_weights_sha.lower() != weights_sha256:
         rejections.append(
             "snqi_diagnostics.json weights_sha256 does not match the canonical "
-            f"{_SNQI_DEFAULT_WEIGHTS_NAME} ({declared_weights_sha} != {weights_sha256})"
+            f"{_SNQI_DEFAULT_WEIGHTS_NAME} (missing/invalid or {declared_weights_sha!r} != "
+            f"{weights_sha256})"
         )
-    if isinstance(declared_baseline_sha, str) and declared_baseline_sha != baseline_sha256:
+    if (
+        not isinstance(declared_baseline_sha, str)
+        or declared_baseline_sha.lower() != baseline_sha256
+    ):
         rejections.append(
             "snqi_diagnostics.json baseline_sha256 does not match the canonical "
-            f"{_SNQI_DEFAULT_BASELINE_NAME} ({declared_baseline_sha} != {baseline_sha256})"
+            f"{_SNQI_DEFAULT_BASELINE_NAME} (missing/invalid or {declared_baseline_sha!r} != "
+            f"{baseline_sha256})"
         )
 
-    diagnostics_ordering = _snqi_diagnostics_ordering(diagnostics)
+    try:
+        diagnostics_ordering = _snqi_diagnostics_ordering(diagnostics)
+    except (TypeError, ValueError) as exc:
+        return {
+            "checked": True,
+            "violation_count": len(rejections) + 1,
+            "violations": [*rejections, f"invalid SNQI diagnostics ordering: {exc}"],
+            "ordering": {},
+            "integrity": {
+                "snqi_weights_sha256": weights_sha256,
+                "snqi_baseline_sha256": baseline_sha256,
+            },
+        }
 
     rows = 0
     episode_field_present = 0
@@ -1597,7 +1644,7 @@ def _check_snqi_field_consistency(  # noqa: C901, PLR0912, PLR0915
     }
     field_ranked = sorted(field_means, key=lambda a: (-field_means[a], a))
     field_ordering = {_snqi_planner_key(a): rank for rank, a in enumerate(field_ranked, start=1)}
-    if diagnostics_ordering and field_ordering != diagnostics_ordering:
+    if field_ordering != diagnostics_ordering:
         rejections.append(
             "per-episode metrics.snqi arm ordering disagrees with "
             "snqi_diagnostics.json planner_ordering"

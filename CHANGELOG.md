@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **Issue #5445 successor slice: multimodal-forecast Monte Carlo estimator row.** The matched
+  collision-risk calibration comparison now scores a `multimodal_forecast_mc` estimator backed by
+  the in-repo constant-velocity Gaussian-mixture **surrogate** forecast (symmetric heading-spread
+  modes from PR #5662), instead of reporting that row as unavailable. The estimator shares identical
+  action / actor-history / footprint / horizon inputs with the constant-velocity row and only
+  differs in its forecast model, so the two are directly comparable; each result records its
+  `forecast_model` provenance. Ground-truth generation gained a `multimodal_gmm` family mode so the
+  estimator can be self-consistency-tested against its own mixture model. This is API + fixture
+  evidence only (self-consistency, forecast-model sensitivity), NOT a benchmark claim that
+  multimodality improves calibration, and NOT the learned #5307/#2844 predictor; the `learned_risk_1472`
+  row stays unavailable. No campaign, training, or metric-semantics change.
+
 * **issue #5034 fixed-scope latency evidence coverage gate.** The control-action-latency evidence
   promoter can now consume the serialized fixed-scope run plan and fail closed unless every
   planner-group / latency-variant / seed / scenario cell appears exactly once as a native row with

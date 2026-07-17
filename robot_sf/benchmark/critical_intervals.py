@@ -8,9 +8,16 @@ opt-in, offline mechanism that extracts time windows around event anchors in a
 recorded trace, so metric reports can include both whole-run and critical-window
 values.
 
-The API accepts a generic trace dict (as produced by the map runner JSONL
-exports or EpisodeData-backed synthetic traces) together with a YAML config that
-declares which anchors are enabled and how wide each window should be.
+The API accepts either the legacy columnar trace dict (``robot_pos``,
+``peds_pos``, optional ``robot_vel``/``ped_vel``, and ``dt``) or the current
+map-runner ``simulation-step-trace.v1`` dict (``steps[].robot`` and
+``steps[].pedestrians``). :func:`adapt_simulation_step_trace` converts the
+current nested schema before the existing metric logic runs.
+
+The adapter is intentionally thin: it supports the current re-export schema
+and requires the same pedestrian-ID set at every recorded step. It fails
+closed instead of inventing positions when actors appear or disappear. The
+legacy columnar schema remains unchanged and is returned by identity.
 
 Status
 ------
@@ -38,6 +45,7 @@ import yaml
 # ---------------------------------------------------------------------------
 
 SCHEMA_VERSION = "critical-intervals.v1"
+SIMULATION_STEP_TRACE_SCHEMA_VERSION = "simulation-step-trace.v1"
 
 # TTC convention: physical line-of-sight closing speed, result in seconds.
 # Formula: ttc = dist / closing_speed where closing_speed = dot(v_rel, d_vec / dist)
@@ -236,6 +244,192 @@ def load_config(
 # ---------------------------------------------------------------------------
 
 
+def _trace_xy(value: Any, *, field_name: str) -> list[float]:
+    """Validate and normalize one current-schema two-dimensional vector.
+
+    Returns:
+        Finite ``[x, y]`` values as plain floats.
+    """
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        if any(isinstance(component, bool) for component in value):
+            raise ValueError(f"{field_name} must be a finite numeric [x, y] vector")
+        try:
+            x, y = float(value[0]), float(value[1])
+        except (TypeError, ValueError, KeyError, IndexError) as exc:
+            raise ValueError(f"{field_name} must be a numeric [x, y] vector") from exc
+        if math.isfinite(x) and math.isfinite(y):
+            return [x, y]
+        raise ValueError(f"{field_name} must be a finite numeric [x, y] vector")
+
+    try:
+        array = np.asarray(value, dtype=float)
+    except (TypeError, ValueError, KeyError, IndexError) as exc:
+        raise ValueError(f"{field_name} must be a numeric [x, y] vector") from exc
+    if array.shape != (2,) or not np.all(np.isfinite(array)):
+        raise ValueError(f"{field_name} must be a finite numeric [x, y] vector")
+    return [float(array[0]), float(array[1])]
+
+
+def _pedestrian_key(pedestrian: dict[str, Any], index: int) -> tuple[str, Any]:
+    """Return a stable current-schema pedestrian key, falling back to list index."""
+    if "id" not in pedestrian:
+        return ("index", index)
+    pedestrian_id = pedestrian["id"]
+    try:
+        hash(pedestrian_id)
+    except TypeError as exc:
+        raise ValueError(f"pedestrians[{index}].id must be hashable") from exc
+    return ("id", pedestrian_id)
+
+
+def adapt_simulation_step_trace(  # noqa: C901, PLR0912, PLR0915
+    trace: dict[str, Any],
+) -> dict[str, Any]:
+    """Adapt current nested simulation-step traces to the legacy columnar contract.
+
+    Legacy mappings that already contain ``robot_pos`` are returned by identity.
+    Current ``simulation-step-trace.v1`` rows are converted using
+    ``steps[].robot.position/velocity`` and
+    ``steps[].pedestrians[].position/velocity``. Pedestrians are aligned by
+    ``id`` (or by list index when every row omits IDs).
+
+    The bounded adapter deliberately rejects changing pedestrian-ID sets. The
+    current recorder emits a stable set; supporting actor appearance/disappearance
+    would require explicit missing-data semantics throughout the interval metrics.
+
+    Args:
+        trace: Legacy columnar mapping or current nested simulation-step trace.
+
+    Returns:
+        The original legacy mapping or a shallow copy with columnar arrays added.
+
+    Raises:
+        ValueError: The nested current-schema trace is malformed or changes actor IDs.
+    """
+    if "robot_pos" in trace:
+        return trace
+
+    steps = trace.get("steps")
+    schema_version = trace.get("schema_version")
+    if schema_version != SIMULATION_STEP_TRACE_SCHEMA_VERSION:
+        if isinstance(steps, list):
+            raise ValueError(
+                f"Unknown schema_version {schema_version!r}; expected "
+                f"{SIMULATION_STEP_TRACE_SCHEMA_VERSION!r}"
+            )
+        return trace
+    if not isinstance(steps, list):
+        raise ValueError(
+            f"{SIMULATION_STEP_TRACE_SCHEMA_VERSION} requires a list-valued steps field"
+        )
+
+    adapted = dict(trace)
+    if not steps:
+        adapted.update({"robot_pos": [], "peds_pos": []})
+        return adapted
+
+    first_step = steps[0]
+    if not isinstance(first_step, dict):
+        raise ValueError("simulation step 0 must be a mapping")
+    first_pedestrians = first_step.get("pedestrians", [])
+    if not isinstance(first_pedestrians, list):
+        raise ValueError("simulation step 0 pedestrians must be a list")
+
+    pedestrian_keys: list[tuple[str, Any]] = []
+    pedestrian_ids: list[Any] = []
+    for index, pedestrian in enumerate(first_pedestrians):
+        if not isinstance(pedestrian, dict):
+            raise ValueError(f"simulation step 0 pedestrian {index} must be a mapping")
+        key = _pedestrian_key(pedestrian, index)
+        if key in pedestrian_keys:
+            raise ValueError(f"simulation step 0 contains duplicate pedestrian ID {key[1]!r}")
+        pedestrian_keys.append(key)
+        pedestrian_ids.append(key[1])
+
+    robot_pos: list[list[float]] = []
+    robot_vel: list[list[float]] = []
+    peds_pos: list[list[list[float]]] = []
+    ped_vel: list[list[list[float]]] = []
+    all_robot_velocities = True
+    all_pedestrian_velocities = True
+
+    for step_index, step in enumerate(steps):
+        if not isinstance(step, dict):
+            raise ValueError(f"simulation step {step_index} must be a mapping")
+        robot = step.get("robot")
+        if not isinstance(robot, dict):
+            raise ValueError(f"simulation step {step_index} robot must be a mapping")
+        robot_pos.append(
+            _trace_xy(
+                robot.get("position"),
+                field_name=f"steps[{step_index}].robot.position",
+            )
+        )
+        if robot.get("velocity") is None:
+            all_robot_velocities = False
+        else:
+            robot_vel.append(
+                _trace_xy(
+                    robot["velocity"],
+                    field_name=f"steps[{step_index}].robot.velocity",
+                )
+            )
+
+        pedestrians = step.get("pedestrians", [])
+        if not isinstance(pedestrians, list):
+            raise ValueError(f"simulation step {step_index} pedestrians must be a list")
+        by_key: dict[tuple[str, Any], dict[str, Any]] = {}
+        for pedestrian_index, pedestrian in enumerate(pedestrians):
+            if not isinstance(pedestrian, dict):
+                raise ValueError(
+                    f"simulation step {step_index} pedestrian {pedestrian_index} must be a mapping"
+                )
+            key = _pedestrian_key(pedestrian, pedestrian_index)
+            if key in by_key:
+                raise ValueError(
+                    f"simulation step {step_index} contains duplicate pedestrian ID {key[1]!r}"
+                )
+            by_key[key] = pedestrian
+        if len(by_key) != len(pedestrian_keys) or any(key not in by_key for key in pedestrian_keys):
+            raise ValueError(
+                "simulation-step-trace.v1 adaptation requires stable pedestrian IDs "
+                f"across steps; mismatch at step {step_index}"
+            )
+
+        step_positions: list[list[float]] = []
+        step_velocities: list[list[float]] = []
+        for pedestrian_key in pedestrian_keys:
+            pedestrian = by_key[pedestrian_key]
+            step_positions.append(
+                _trace_xy(
+                    pedestrian.get("position"),
+                    field_name=(f"steps[{step_index}].pedestrians[{pedestrian_key[1]!r}].position"),
+                )
+            )
+            if pedestrian.get("velocity") is None:
+                all_pedestrian_velocities = False
+            else:
+                step_velocities.append(
+                    _trace_xy(
+                        pedestrian["velocity"],
+                        field_name=(
+                            f"steps[{step_index}].pedestrians[{pedestrian_key[1]!r}].velocity"
+                        ),
+                    )
+                )
+        peds_pos.append(step_positions)
+        ped_vel.append(step_velocities)
+
+    adapted["robot_pos"] = robot_pos
+    adapted["peds_pos"] = peds_pos
+    adapted["pedestrian_ids"] = pedestrian_ids
+    if all_robot_velocities:
+        adapted["robot_vel"] = robot_vel
+    if all_pedestrian_velocities:
+        adapted["ped_vel"] = ped_vel
+    return adapted
+
+
 def _get_trace_arrays(
     trace: dict[str, Any],
 ) -> tuple[np.ndarray, np.ndarray, float]:
@@ -247,11 +441,13 @@ def _get_trace_arrays(
     """
 
     robot_pos = np.asarray(trace.get("robot_pos", []), dtype=float)
-    if robot_pos.ndim == 1:
+    if robot_pos.size == 0:
+        robot_pos = np.zeros((0, 2), dtype=float)
+    elif robot_pos.ndim == 1:
         robot_pos = robot_pos.reshape(1, -1)
 
     peds_pos_raw = trace.get("peds_pos", [])
-    if len(peds_pos_raw) == 0:
+    if len(peds_pos_raw) == 0 or np.asarray(peds_pos_raw).size == 0:
         peds_pos = np.zeros((max(robot_pos.shape[0], 0), 0, 2), dtype=float)
     else:
         peds_pos = np.asarray(peds_pos_raw, dtype=float)
@@ -662,6 +858,7 @@ def extract_critical_intervals(  # noqa: C901, PLR0912, PLR0915
     List of :class:`CriticalInterval` objects, one per enabled anchor.
     """
 
+    trace = adapt_simulation_step_trace(trace)
     robot_pos, peds_pos, dt = _get_trace_arrays(trace)
     T = robot_pos.shape[0]
 
@@ -843,6 +1040,7 @@ def _compute_interval_metrics_in_window(  # noqa: C901, PLR0912, PLR0915
     dict with metric keys and float values for the given slice.
     """
 
+    trace = adapt_simulation_step_trace(trace)
     robot_pos, peds_pos, dt = _get_trace_arrays(trace)
     T = robot_pos.shape[0]
     if end is None:

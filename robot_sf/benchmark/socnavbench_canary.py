@@ -66,7 +66,7 @@ from robot_sf.data.external.socnavbench_eth import (
     is_available as socnavbench_eth_is_available,
 )
 from robot_sf.data.external.socnavbench_eth import (
-    load_shape_contract as socnavbench_eth_load_shape_contract,
+    load_traversible as socnavbench_eth_load_traversible,
 )
 from robot_sf.data.external.socnavbench_eth import (
     resolve_root as socnavbench_eth_resolve_root,
@@ -120,6 +120,8 @@ ROBOT_SF_DENOMINATOR_KIND = "start_to_goal_displacement_m"
 SOCNAVBENCH_DENOMINATOR_KIND = "start_to_goal_displacement_m"
 ROBOT_SF_MAPPING_CLASS = "approximate"
 SOCNAVBENCH_MAPPING_CLASS = "approximate"
+SYNTHETIC_TRAVERSIBLE_RESOLUTION_M = 0.05
+SYNTHETIC_TRAVERSIBLE_SHAPE = (400, 400)
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,7 +280,10 @@ def resolve_pinned_policy(*, repo_root: Path = MODULE_ROOT) -> PinnedPolicy:
     # Runtime provenance comes from the real rollout configuration (see canary_rollout).
     from robot_sf.benchmark.canary_rollout import _resolve_pinned_planner_config  # noqa: PLC0415
 
-    planner_cfg = _resolve_pinned_planner_config(algo_config=config_path)
+    try:
+        planner_cfg = _resolve_pinned_planner_config(algo_config=config_path)
+    except (OSError, TypeError, ValueError) as exc:
+        raise CanaryError(f"Pinned policy planner config is invalid: {exc}") from exc
     from robot_sf.benchmark.canary_rollout import _planner_config_provenance  # noqa: PLC0415
 
     runtime_config = _planner_config_provenance(planner_cfg)
@@ -383,7 +388,17 @@ def materialize_socnavbench_export(
 
     # Execute the pinned policy exactly once and reuse the result across both suite receipts.
     if rollout is None:
-        rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
+        try:
+            rollout = execute_pinned_policy(
+                seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG
+            )
+        except (OSError, RuntimeError, TypeError, ValueError) as exc:
+            raise CanaryError(f"Robot SF policy rollout failed: {exc}") from exc
+    if rollout.scenario_id != mapping.robot_sf_scenario_id:
+        raise CanaryError(
+            "Executed Robot SF scenario does not match the declared mapping: "
+            f"{rollout.scenario_id!r} != {mapping.robot_sf_scenario_id!r}."
+        )
 
     robot_positions = [list(pos) for pos in rollout.robot_positions]
     goal = list(rollout.goal_position)
@@ -394,6 +409,7 @@ def materialize_socnavbench_export(
         "canary_version": CANARY_VERSION,
         "socnavbench_scenario_id": mapping.socnavbench_scenario_id,
         "robot_sf_scenario_id": mapping.robot_sf_scenario_id,
+        "executed_robot_sf_scenario_id": rollout.scenario_id,
         "seed": mapping.seed,
         "external_asset_id": mapping.external_asset_id,
         "map": {
@@ -442,6 +458,11 @@ def run_robot_sf_receipt_from_rollout(
         JSON-safe Robot SF receipt dict with policy identity (including runtime provenance),
         mapping, metric value, and the suite-specific ratio definition.
     """
+    if rollout.scenario_id != mapping.robot_sf_scenario_id:
+        raise CanaryError(
+            "Executed Robot SF scenario does not match the declared mapping: "
+            f"{rollout.scenario_id!r} != {mapping.robot_sf_scenario_id!r}."
+        )
     episode = _build_episode_from_trajectory(rollout.robot_positions, rollout.goal_position)
     try:
         # Robot SF definition: distance / displacement (>= 1.0 for efficient paths).
@@ -491,7 +512,10 @@ def run_robot_sf_receipt(
         JSON-safe Robot SF receipt dict with policy identity, mapping, metric value, and
         the suite-specific ratio definition.
     """
-    rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
+    try:
+        rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise CanaryError(f"Robot SF policy rollout failed: {exc}") from exc
     return run_robot_sf_receipt_from_rollout(policy=policy, mapping=mapping, rollout=rollout)
 
 
@@ -524,10 +548,22 @@ def run_socnavbench_receipt(
     export_path = Path(export_path)
     if not export_path.is_file():
         raise CanaryError(f"SocNavBench export missing: {export_path}")
-    export = json.loads(export_path.read_text(encoding="utf-8"))
+    try:
+        export = json.loads(export_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CanaryError(f"SocNavBench export could not be read as JSON: {export_path}") from exc
+    if not isinstance(export, dict):
+        raise CanaryError("SocNavBench export root must be a mapping.")
 
     # Fail closed if the export itself carried placeholder metadata.
     _raise_if_placeholder("export.socnavbench_scenario_id", export.get("socnavbench_scenario_id"))
+    export_map = export.get("map")
+    if not isinstance(export_map, dict):
+        raise CanaryError("SocNavBench export map block must be a mapping.")
+    if export_map.get("asset_id") != mapping.external_asset_id:
+        raise CanaryError("SocNavBench export map asset does not match the scenario mapping.")
+    if export_map.get("traversible") != "ETH":
+        raise CanaryError("SocNavBench export must select the ETH traversible.")
 
     # Confirm the staged ETH asset is actually present. The licensed asset is the only real
     # external input; absence means the canary cannot run a runnable invocation.
@@ -541,7 +577,7 @@ def run_socnavbench_receipt(
 
     # The real source harness consumes the export and the staged ETH traversible shape contract.
     # Without the asset the runner falls back to a synthetic traversible (recorded as fallback).
-    traversible_resolution = _load_traversible_resolution(
+    traversible_resolution, traversible, synthetic_traversible = _load_traversible_map(
         export, allow_synthetic=allow_synthetic_traversible
     )
 
@@ -553,8 +589,9 @@ def run_socnavbench_receipt(
         ratio, runner_meta = _run_socnavbench_runner(
             trajectory=trajectory,
             goal=goal,
+            traversible=traversible,
             traversible_resolution=traversible_resolution,
-            allow_synthetic=allow_synthetic_traversible,
+            synthetic_traversible=synthetic_traversible,
         )
     except (AttributeError, ImportError, IndexError, KeyError, TypeError, ValueError) as exc:
         raise CanaryError(f"SocNavBench metric computation failed: {exc}") from exc
@@ -581,9 +618,9 @@ def run_socnavbench_receipt(
         "denominator": denominator,
         "external_asset_id": export.get("external_asset_id"),
         "external_asset_staged": bool(asset_available),
-        "traversible_resolution_m": (
-            None if traversible_resolution is None else float(traversible_resolution)
-        ),
+        "traversible_resolution_m": (float(traversible_resolution)),
+        "traversible_shape": [int(dim) for dim in traversible.shape],
+        "synthetic_traversible": synthetic_traversible,
         "runner": runner_meta,
         "executed_policy": True,
         "is_fallback": fallback,
@@ -593,29 +630,34 @@ def run_socnavbench_receipt(
     }
 
 
-def _load_traversible_resolution(export: dict[str, Any], *, allow_synthetic: bool) -> float | None:
-    """Load the staged ETH traversible resolution (real) or return synthetic fallback.
+def _load_traversible_map(
+    export: dict[str, Any], *, allow_synthetic: bool
+) -> tuple[float, np.ndarray, bool]:
+    """Load the staged ETH traversible or construct an explicit test-only fallback.
 
     Returns:
-        The resolution field of the staged ETH shape contract (used as the receipt
-        resolution_m), or None if the asset is absent
-        and allow_synthetic is True (recorded as fallback in the receipt).
+        ``(resolution, traversible, is_synthetic)`` for the runner.
     """
     try:
-        contract = socnavbench_eth_load_shape_contract()
-        return float(contract.resolution)
-    except SocNavBenchEthDataError:
+        resolution, traversible = socnavbench_eth_load_traversible()
+        return float(resolution), np.asarray(traversible), False
+    except SocNavBenchEthDataError as exc:
         if allow_synthetic:
-            return None  # synthetic fallback recorded in receipt
-        raise  # re-raise; caller should have blocked before reaching here
+            return (
+                SYNTHETIC_TRAVERSIBLE_RESOLUTION_M,
+                np.ones(SYNTHETIC_TRAVERSIBLE_SHAPE, dtype=bool),
+                True,
+            )
+        raise CanaryError(f"SocNavBench ETH traversible could not be loaded: {exc}") from exc
 
 
 def _run_socnavbench_runner(
     *,
     trajectory: np.ndarray,
     goal: np.ndarray,
-    traversible_resolution: float | None,
-    allow_synthetic: bool,
+    traversible: np.ndarray,
+    traversible_resolution: float,
+    synthetic_traversible: bool,
 ) -> tuple[float, dict[str, Any]]:
     """Invoke the vendored SocNavBench source harness over the exported trajectory.
 
@@ -626,8 +668,9 @@ def _run_socnavbench_runner(
     Args:
         trajectory: (N, 2) executed robot path from the export.
         goal: (2,) goal position consumed by the runner.
-        traversible_resolution: Staged ETH traversible resolution, or None for synthetic fallback.
-        allow_synthetic: Whether the synthetic-traversible test escape is active.
+        traversible: Validated staged ETH traversible (or explicit test fallback).
+        traversible_resolution: Traversible map resolution in meters.
+        synthetic_traversible: Whether the explicit test fallback is active.
 
     Returns:
         ``(ratio, runner_meta)`` where ratio is the SocNavBench definition
@@ -638,6 +681,38 @@ def _run_socnavbench_runner(
         sys.path.insert(0, str(vendored_root))
     from metrics.cost_functions import path_length_ratio as _sn_path_length_ratio  # noqa: PLC0415
 
+    trajectory = np.asarray(trajectory, dtype=float)
+    goal = np.asarray(goal, dtype=float)
+    traversible = np.asarray(traversible)
+    if trajectory.ndim != 2 or trajectory.shape[1] != 2 or trajectory.shape[0] < 2:
+        raise ValueError("SocNavBench trajectory must be a non-empty (N, 2) path.")
+    if goal.shape != (2,):
+        raise ValueError("SocNavBench goal must contain exactly two coordinates.")
+    if traversible.ndim != 2 or 0 in traversible.shape:
+        raise ValueError("SocNavBench traversible must be a non-empty 2D array.")
+    if not np.isfinite(trajectory).all() or not np.isfinite(goal).all():
+        raise ValueError("SocNavBench trajectory and goal must contain finite coordinates.")
+    if not np.isfinite(traversible_resolution) or traversible_resolution <= 0:
+        raise ValueError("SocNavBench traversible resolution must be finite and positive.")
+
+    # SocNavBench indexes traversibles as [y, x]. The exported scenario is accepted by the
+    # source metric harness only when its path and aspirational goal land on traversible cells;
+    # this makes the staged map an execution input rather than a presence-only prerequisite.
+    points = np.vstack((trajectory, goal))
+    grid_xy = np.floor(points / traversible_resolution).astype(int)
+    x_indices = grid_xy[:, 0]
+    y_indices = grid_xy[:, 1]
+    if (
+        (x_indices < 0).any()
+        or (y_indices < 0).any()
+        or (x_indices >= traversible.shape[1]).any()
+        or (y_indices >= traversible.shape[0]).any()
+    ):
+        raise ValueError("SocNavBench export path falls outside the staged traversible bounds.")
+    occupied = np.asarray(traversible)[y_indices, x_indices]
+    if not np.asarray(occupied, dtype=bool).all():
+        raise ValueError("SocNavBench export path intersects a non-traversible cell.")
+
     # The vendored SocNavBench function returns displacement / distance (higher = more efficient).
     # This is the reciprocal of the Robot SF definition (distance / displacement). Both are
     # recorded with distinct metric IDs so they cannot be mistakenly equated.
@@ -646,10 +721,10 @@ def _run_socnavbench_runner(
     runner_meta = {
         "harness": "vendored_socnavbench_cost_functions.path_length_ratio",
         "trajectory_points": int(trajectory.shape[0]),
-        "traversible_resolution_m": (
-            None if traversible_resolution is None else float(traversible_resolution)
-        ),
-        "synthetic_traversible": allow_synthetic or traversible_resolution is None,
+        "traversible_resolution_m": float(traversible_resolution),
+        "traversible_shape": [int(dim) for dim in traversible.shape],
+        "traversible_points_checked": int(points.shape[0]),
+        "synthetic_traversible": synthetic_traversible,
     }
     return ratio, runner_meta
 
@@ -679,7 +754,10 @@ def run_canary(*, out_dir: Path, allow_synthetic_traversible: bool = False) -> d
 
     # Execute the pinned policy ONCE and share the rollout across both suite receipts so the
     # trajectory, goal, and denominator are identical on both sides.
-    rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
+    try:
+        rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        raise CanaryError(f"Robot SF policy rollout failed: {exc}") from exc
 
     export_path, _ = materialize_socnavbench_export(
         policy=policy, mapping=mapping, out_dir=out_dir, rollout=rollout
@@ -765,10 +843,10 @@ def run_canary(*, out_dir: Path, allow_synthetic_traversible: bool = False) -> d
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     receipt_path = out_dir / "cross_suite_canary_receipt.json"
+    joint_receipt["receipt_path"] = receipt_path.as_posix()
     receipt_path.write_text(
         json.dumps(joint_receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    joint_receipt["receipt_path"] = receipt_path.as_posix()
     return joint_receipt
 
 

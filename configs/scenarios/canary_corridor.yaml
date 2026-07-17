@@ -1,5 +1,5 @@
 scenarios:
-  - name: canary_corridor_open
+  - name: canary-corridor-uni-low-open
     map_file: "atomic_corridor_test.svg"
     robot_config:
       max_robot_speed: 1.2

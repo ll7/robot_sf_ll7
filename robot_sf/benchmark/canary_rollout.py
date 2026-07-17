@@ -45,6 +45,13 @@ SOCIAL_FORCE_TAU_LOW_KEYS = (
     "social_force_factor",
     "social_force_obstacle_factor",
 )
+_PINNED_PLANNER_CONFIG_KEYS = (
+    "max_linear_speed",
+    "max_angular_speed",
+    "angular_gain",
+    "goal_tolerance",
+    *SOCIAL_FORCE_TAU_LOW_KEYS,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,19 +81,38 @@ def _resolve_pinned_planner_config(*, algo_config: Path) -> SocNavPlannerConfig:
     provenance that tracks the real source of truth; a drifted config changes the receipt.
 
     Returns:
-        SocNavPlannerConfig with values from the tracked YAML, or defaults if keys are absent.
+        SocNavPlannerConfig with values from the tracked YAML.
+
+    Raises:
+        ValueError: If the YAML is not a mapping or omits a pinned parameter.
     """
-    raw = yaml.safe_load(algo_config.read_text(encoding="utf-8")) or {}
+    raw = yaml.safe_load(algo_config.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("Pinned planner config root must be a mapping.")
+    missing = [key for key in _PINNED_PLANNER_CONFIG_KEYS if key not in raw]
+    if missing:
+        raise ValueError(f"Pinned planner config is missing required keys: {', '.join(missing)}")
+
+    values: dict[str, float] = {}
+    for key in _PINNED_PLANNER_CONFIG_KEYS:
+        try:
+            value = float(raw[key])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Pinned planner config value for {key!r} must be numeric.") from exc
+        if not np.isfinite(value):
+            raise ValueError(f"Pinned planner config value for {key!r} must be finite.")
+        values[key] = value
+
     return SocNavPlannerConfig(
-        max_linear_speed=float(raw.get("max_linear_speed", 1.0)),
-        max_angular_speed=float(raw.get("max_angular_speed", 1.0)),
-        angular_gain=float(raw.get("angular_gain", 1.0)),
-        goal_tolerance=float(raw.get("goal_tolerance", 0.25)),
-        social_force_tau=float(raw.get("social_force_tau", 0.5)),
-        social_force_desired_speed=float(raw.get("social_force_desired_speed", 1.0)),
-        social_force_repulsion_weight=float(raw.get("social_force_repulsion_weight", 0.8)),
-        social_force_factor=float(raw.get("social_force_factor", 5.1)),
-        social_force_obstacle_factor=float(raw.get("social_force_obstacle_factor", 10.0)),
+        max_linear_speed=values["max_linear_speed"],
+        max_angular_speed=values["max_angular_speed"],
+        angular_gain=values["angular_gain"],
+        goal_tolerance=values["goal_tolerance"],
+        social_force_tau=values["social_force_tau"],
+        social_force_desired_speed=values["social_force_desired_speed"],
+        social_force_repulsion_weight=values["social_force_repulsion_weight"],
+        social_force_factor=values["social_force_factor"],
+        social_force_obstacle_factor=values["social_force_obstacle_factor"],
     )
 
 
@@ -126,6 +152,11 @@ def execute_pinned_policy(
     """
     scenarios = load_scenarios(str(scenario_manifest))
     scenario = select_scenario(scenarios, scenario_index)
+    if not isinstance(scenario, dict):
+        raise ValueError(
+            f"Canary scenario at index {scenario_index} must be a mapping, got "
+            f"{type(scenario).__name__}."
+        )
     scenario_id = str(
         scenario.get("name") or scenario.get("scenario_id") or f"scenario[{scenario_index}]"
     )

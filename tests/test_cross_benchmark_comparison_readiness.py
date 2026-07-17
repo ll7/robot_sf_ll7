@@ -319,6 +319,34 @@ def test_canary_slice_rejects_missing_block(tmp_path: Path) -> None:
     assert report.status == "missing"
 
 
+def test_canary_slice_rejects_non_mapping_root(tmp_path: Path) -> None:
+    """A malformed YAML root must return a fail-closed report, not raise AttributeError."""
+    target = tmp_path / "non_mapping.yaml"
+    target.write_text("- canary_slice\n", encoding="utf-8")
+    report = validate_canary_slice(target)
+    assert report.ok is False
+    assert any("manifest root" in err for err in report.errors)
+
+
+def test_canary_slice_rejects_non_mapping_nested_blocks(tmp_path: Path) -> None:
+    """Malformed policy and scenario blocks must be reported independently."""
+    target = tmp_path / "non_mapping_blocks.yaml"
+    target.write_text(
+        "canary_slice:\n"
+        "  status: authorized_canary\n"
+        "  canary_authorized: true\n"
+        "  policy: []\n"
+        "  scenario_mapping: scalar\n"
+        "  metric_id: canary.metric\n"
+        "  limitation_flags: [geometry] \n",
+        encoding="utf-8",
+    )
+    report = validate_canary_slice(target)
+    assert report.ok is False
+    assert any("policy must be a mapping" in err for err in report.errors)
+    assert any("scenario_mapping must be a mapping" in err for err in report.errors)
+
+
 def test_main_validate_canary_slice_exit_codes(capsys: pytest.CaptureFixture) -> None:
     """CLI canary-slice validation exits 0 on the real slice and emits the OK line."""
     assert main(["--validate-canary-slice"]) == 0

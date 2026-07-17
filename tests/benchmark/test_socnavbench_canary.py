@@ -10,10 +10,18 @@ Issue #5842 hardens the canary so that:
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
+from robot_sf.benchmark.canary_rollout import (
+    _resolve_pinned_planner_config,
+    execute_pinned_policy,
+)
 from robot_sf.benchmark.socnavbench_canary import (
     CANARY_NAME,
     CANARY_SEED,
@@ -34,6 +42,8 @@ from robot_sf.benchmark.socnavbench_canary import (
     run_socnavbench_receipt,
 )
 from robot_sf.data.external.socnavbench_eth import ASSET_ID as ETH_ASSET_ID
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_pinned_policy_resolves_concrete_identity() -> None:
@@ -78,8 +88,6 @@ def test_materialize_socnavbench_export_writes_real_scenario(tmp_path: Path) -> 
     - The limitation flags and mapping quality.
     - The external asset id (not a placeholder).
     """
-    import json
-
     policy = resolve_pinned_policy()
     mapping = resolve_scenario_mapping()
     export_path, rollout = materialize_socnavbench_export(
@@ -89,6 +97,7 @@ def test_materialize_socnavbench_export_writes_real_scenario(tmp_path: Path) -> 
     export = json.loads(export_path.read_text(encoding="utf-8"))
     assert export["schema_version"]
     assert export["external_asset_id"] == ETH_ASSET_ID
+    assert export["executed_robot_sf_scenario_id"] == mapping.robot_sf_scenario_id
     assert len(export["robot"]["goal"]) == 2
     assert export["pedestrians"]
     # Trajectory must be embedded and non-trivial (at least 2 positions from the real rollout).
@@ -227,6 +236,41 @@ def test_socnavbench_receipt_fails_closed_on_missing_export() -> None:
         )
 
 
+def test_socnavbench_receipt_rejects_non_mapping_export(tmp_path: Path) -> None:
+    """A JSON list at the export boundary must become a clear canary error."""
+    export_path = tmp_path / "invalid.json"
+    export_path.write_text("[]\n", encoding="utf-8")
+    with pytest.raises(CanaryError, match="export root must be a mapping"):
+        run_socnavbench_receipt(
+            export_path=export_path,
+            policy=resolve_pinned_policy(),
+            mapping=resolve_scenario_mapping(),
+            allow_synthetic_traversible=True,
+        )
+
+
+def test_socnavbench_receipt_uses_traversible_cells(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A path outside the loaded traversible must fail the source-harness boundary."""
+    policy = resolve_pinned_policy()
+    mapping = resolve_scenario_mapping()
+    export_path, _rollout = materialize_socnavbench_export(
+        policy=policy, mapping=mapping, out_dir=tmp_path
+    )
+    monkeypatch.setattr(
+        "robot_sf.benchmark.socnavbench_canary.socnavbench_eth_load_traversible",
+        lambda: (1.0, np.ones((1, 1), dtype=bool)),
+    )
+    with pytest.raises(CanaryError, match="outside the staged traversible bounds"):
+        run_socnavbench_receipt(
+            export_path=export_path,
+            policy=policy,
+            mapping=mapping,
+            allow_synthetic_traversible=True,
+        )
+
+
 def test_run_canary_emits_joint_receipt_with_test_flag(tmp_path: Path) -> None:
     """The full canary emits a machine-checkable joint receipt without licensed data."""
     receipt = run_canary(out_dir=tmp_path, allow_synthetic_traversible=True)
@@ -266,6 +310,8 @@ def test_run_canary_emits_joint_receipt_with_test_flag(tmp_path: Path) -> None:
     assert receipt["scenario_mapping"]["limitation_flags"]
     # The receipt file was actually written.
     assert Path(receipt["receipt_path"]).is_file()
+    stored_receipt = json.loads(Path(receipt["receipt_path"]).read_text(encoding="utf-8"))
+    assert stored_receipt["receipt_path"] == receipt["receipt_path"]
 
 
 def test_run_canary_fails_closed_without_test_flag(tmp_path: Path) -> None:
@@ -337,6 +383,51 @@ def test_cli_canary_runner_fails_closed_without_asset(
     exit_code = main(["--out-dir", str(tmp_path / "canary")])
     assert exit_code == 1
     assert "Licensed SocNavBench ETH asset not staged" in capsys.readouterr().err
+
+
+def test_cli_canary_runner_consumes_export_across_process_boundary(tmp_path: Path) -> None:
+    """The public canary entry point must consume its export in a fresh process."""
+    out_dir = tmp_path / "process-canary"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "scripts" / "tools" / "cross_benchmark_canary.py"),
+            "--out-dir",
+            str(out_dir),
+            "--allow-synthetic-traversible",
+            "--json",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    receipt = json.loads(completed.stdout)
+    receipt_path = Path(receipt["receipt_path"])
+    assert receipt_path.is_file()
+    persisted = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert persisted["export_path"] == receipt["export_path"]
+    assert persisted["receipt_path"] == receipt["receipt_path"]
+
+
+def test_pinned_planner_config_rejects_non_mapping_root(tmp_path: Path) -> None:
+    """Malformed pinned planner YAML must not silently use planner defaults."""
+    config = tmp_path / "invalid.yaml"
+    config.write_text("- social_force_tau: 0.2\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="root must be a mapping"):
+        _resolve_pinned_planner_config(algo_config=config)
+
+
+def test_execute_pinned_policy_rejects_non_mapping_scenario(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A malformed selected scenario must fail before environment construction."""
+    monkeypatch.setattr(
+        "robot_sf.benchmark.canary_rollout.select_scenario", lambda _scenarios, _index: None
+    )
+    with pytest.raises(ValueError, match="scenario at index 0 must be a mapping"):
+        execute_pinned_policy(seed=0, algo_config=PINNED_POLICY_ALGO_CONFIG)
 
 
 def test_metric_ids_are_distinct_and_reciprocal() -> None:

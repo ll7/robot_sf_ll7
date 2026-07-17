@@ -356,7 +356,9 @@ def validate_campaign_manifest(
     manifest_path: Path = REPO_ROOT / CAMPAIGN_MANIFEST_PATH,
 ) -> dict:
     """Validate the blocked #3287 campaign-manifest scaffold."""
-    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise CampaignManifestError("Campaign manifest root must be a mapping.")
     errors: list[str] = []
 
     _validate_manifest_header(manifest, errors)
@@ -479,9 +481,12 @@ def validate_canary_slice(
     concrete Robot SF scenario to one SocNavBench scenario with a seed, name a cross-suite
     metric, and list limitation flags. Fails closed on any placeholder/blocked field.
     """
-    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
-    slice_block = manifest.get("canary_slice")
     errors: list[str] = []
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        errors.append("manifest root must be a mapping")
+        return _canary_slice_missing_report(errors)
+    slice_block = manifest.get("canary_slice")
     if not isinstance(slice_block, dict):
         return _canary_slice_missing_report(errors)
 
@@ -493,9 +498,10 @@ def validate_canary_slice(
 
     _check_forbidden_tokens(slice_block, errors)
 
-    policy = slice_block.get("policy") or {}
+    policy = slice_block.get("policy")
     if not isinstance(policy, dict):
         errors.append("canary_slice.policy must be a mapping")
+        policy = {}
     policy_id = policy.get("policy_id")
     policy_version = policy.get("version")
     algo = policy.get("algo")
@@ -511,9 +517,10 @@ def validate_canary_slice(
         errors,
     )
 
-    mapping = slice_block.get("scenario_mapping") or {}
+    mapping = slice_block.get("scenario_mapping")
     if not isinstance(mapping, dict):
         errors.append("canary_slice.scenario_mapping must be a mapping")
+        mapping = {}
     robot_sf_scenario_id = mapping.get("robot_sf_scenario_id")
     socnavbench_scenario_id = mapping.get("socnavbench_scenario_id")
     seed = mapping.get("seed")
@@ -533,11 +540,12 @@ def validate_canary_slice(
     metric_id = slice_block.get("metric_id")
     _check_concrete_fields(slice_block, (("metric_id", metric_id),), errors)
 
-    limitation_flags = tuple(
-        mapping.get("limitation_flags") or slice_block.get("limitation_flags") or ()
-    )
-    if not limitation_flags:
+    raw_limitation_flags = mapping.get("limitation_flags") or slice_block.get("limitation_flags")
+    if not isinstance(raw_limitation_flags, list) or not raw_limitation_flags:
         errors.append("canary_slice.limitation_flags must be a non-empty list")
+        limitation_flags: tuple[str, ...] = ()
+    else:
+        limitation_flags = tuple(str(flag) for flag in raw_limitation_flags)
 
     return CanarySliceReport(
         issue=int(slice_block.get("issue", 5783)),

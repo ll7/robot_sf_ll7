@@ -14,6 +14,7 @@ from robot_sf.benchmark import trace_scene_figure as tsf
 from scripts.repro.trace_series_adapter import (
     TraceSeriesAdapterError,
     build_bundle,
+    main,
     select_row,
 )
 
@@ -191,6 +192,45 @@ def test_zero_pedestrian_frame_fails_closed(tmp_path: Path) -> None:
         )
 
 
+def test_malformed_frame_fails_closed_before_writing(tmp_path: Path) -> None:
+    row = _episode("ppo", 113, "collision")
+    row["algorithm_metadata"]["simulation_step_trace"]["steps"][0]["robot"]["position"] = [
+        "not-a-number",
+        0.0,
+    ]
+    path = _write([row], tmp_path)
+    with pytest.raises(TraceSeriesAdapterError, match="finite number"):
+        build_bundle(
+            path, tmp_path / "out", scenario="classic_doorway_medium", planner="ppo", seed=113
+        )
+    assert not (tmp_path / "out" / "trace_series.json").exists()
+
+
+def test_cli_fails_closed_with_actionable_error(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    row = _episode("ppo", 113, "success")
+    row["algorithm_metadata"]["simulation_step_trace"]["schema_version"] = "v2"
+    path = _write([row], tmp_path)
+    result = main(
+        [
+            "build-bundle",
+            "--episodes-jsonl",
+            str(path),
+            "--scenario",
+            "classic_doorway_medium",
+            "--planner",
+            "ppo",
+            "--seed",
+            "113",
+            "--out-dir",
+            str(tmp_path / "out"),
+        ]
+    )
+    assert result == 1
+    assert "failed closed" in capsys.readouterr().err
+
+
 # ---------------------------------------------------------------------------
 # Deterministic bundles from synthetic fixtures
 # ---------------------------------------------------------------------------
@@ -219,6 +259,21 @@ def test_cross_planner_same_seed_upset_produces_bundle(tmp_path: Path) -> None:
     summary = build_bundle(path, tmp_path / "out" / "orca", episode_id="up-b")
     assert summary["planner"] == "orca"
     assert summary["episode_status"] == "collision"
+
+
+def test_bundle_is_deterministic_and_preserves_source_provenance(tmp_path: Path) -> None:
+    row = _episode("orca", 221, "collision", opts={"episode_id": "deterministic"})
+    path = _write([row], tmp_path)
+    out = tmp_path / "out" / "deterministic"
+    build_bundle(path, out, episode_id="deterministic")
+    first_trace = (out / "trace_series.json").read_bytes()
+    first_metadata = (out / "metadata.json").read_bytes()
+    build_bundle(path, out, episode_id="deterministic")
+    assert (out / "trace_series.json").read_bytes() == first_trace
+    assert (out / "metadata.json").read_bytes() == first_metadata
+    metadata = json.loads(first_metadata)
+    assert metadata["source_provenance"]["config_hash"] == "orca-config"
+    assert metadata["source_provenance"]["simulator_settings"]["dt"] == 0.1
 
 
 # ---------------------------------------------------------------------------

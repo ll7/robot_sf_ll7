@@ -27,7 +27,9 @@ The adapter rejects unsupported inputs instead of papering over them:
 The derived-row computation mirrors the one the renderer independently
 re-derives from the emitted ``frames`` (the same strict-less-than nearest
 neighbour scan over ``frame["pedestrians"]`` in list order), so the two agree
-by construction and the bundle is self-consistent.
+by construction and the bundle is self-consistent. Source provenance is copied
+into the emitted metadata, and generated timestamps are used only when the
+source row supplies one, keeping repeated conversion deterministic.
 
 Usage::
 
@@ -47,7 +49,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from datetime import UTC, datetime
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -113,7 +115,11 @@ def _episode_identity(row: dict[str, Any]) -> dict[str, Any]:
     """Resolve the canonical identity fields used for exact selection."""
     provenance = row.get("result_provenance")
     provenance = provenance if isinstance(provenance, dict) else {}
-    git_commit = provenance.get("repo_commit", row.get("git_hash"))
+    git_commit = provenance.get("repo_commit") or row.get("git_hash")
+    if not isinstance(git_commit, str) or not git_commit.strip():
+        git_commit = None
+    else:
+        git_commit = git_commit.strip()
     return {
         "episode_id": _first(row, ("episode_id",), ("id",)),
         "scenario": _first(
@@ -157,7 +163,7 @@ def _row_matches(
 ) -> bool:
     """Return whether one resolved identity matches the active selection key."""
     if episode_id is not None:
-        return str(identity["episode_id"]) == str(episode_id)
+        return identity["episode_id"] is not None and str(identity["episode_id"]) == str(episode_id)
     return (
         (scenario is None or str(identity["scenario"]) == scenario)
         and (planner is None or str(identity["planner"]) == planner)
@@ -231,22 +237,100 @@ def select_row(
     return matches[0][0]
 
 
-def _validate_provenance(row: dict[str, Any]) -> str:
+def _validate_provenance(row: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Fail closed when execution provenance is missing.
 
     Returns:
-        The resolved execution commit string.
+        The resolved execution commit and source provenance mapping.
     """
+    raw_provenance = row.get("result_provenance")
+    if raw_provenance is not None and not isinstance(raw_provenance, dict):
+        raise TraceSeriesAdapterError("episode row result_provenance must be an object")
+    provenance = dict(raw_provenance) if isinstance(raw_provenance, dict) else {}
     identity = _episode_identity(row)
     git_commit = identity["git_commit"]
     if not git_commit:
         raise TraceSeriesAdapterError(
             "episode row has no execution provenance (missing git_hash/result_provenance.repo_commit)"
         )
-    return git_commit
+    return git_commit, provenance
 
 
-def _nearest_pedestrian(frame: dict[str, Any]) -> tuple[float, int | None]:
+def _finite_number(value: Any, context: str) -> float:
+    """Return one finite JSON number or raise an actionable adapter error."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TraceSeriesAdapterError(f"{context} must be a finite number")
+    result = float(value)
+    if not math.isfinite(result):
+        raise TraceSeriesAdapterError(f"{context} must be a finite number")
+    return result
+
+
+def _integer(value: Any, context: str) -> int:
+    """Return one JSON integer or raise an actionable adapter error."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TraceSeriesAdapterError(f"{context} must be an integer")
+    return value
+
+
+def _xy_vector(value: Any, context: str) -> list[float]:
+    """Return one finite two-dimensional JSON vector."""
+    if not isinstance(value, list) or len(value) != 2:
+        raise TraceSeriesAdapterError(f"{context} must be a finite [x, y] vector")
+    return [_finite_number(value[0], f"{context}[0]"), _finite_number(value[1], f"{context}[1]")]
+
+
+def _validate_pedestrians(pedestrians: Any, context: str) -> None:
+    """Validate one non-empty, duplicate-free pedestrian array."""
+    if not isinstance(pedestrians, list) or not pedestrians:
+        raise TraceSeriesAdapterError(
+            f"{context}.pedestrians has zero pedestrians; a finite nearest distance is required"
+        )
+    seen_ids: set[object] = set()
+    for pedestrian_index, pedestrian in enumerate(pedestrians):
+        ped_context = f"{context}.pedestrians[{pedestrian_index}]"
+        if not isinstance(pedestrian, dict):
+            raise TraceSeriesAdapterError(f"{ped_context} must be an object")
+        pedestrian_id = pedestrian.get("id")
+        if isinstance(pedestrian_id, bool) or not isinstance(pedestrian_id, (int, str)):
+            raise TraceSeriesAdapterError(f"{ped_context}.id must be an integer or string")
+        if pedestrian_id in seen_ids:
+            raise TraceSeriesAdapterError(
+                f"{context} contains duplicate pedestrian id {pedestrian_id!r}"
+            )
+        seen_ids.add(pedestrian_id)
+        _xy_vector(pedestrian.get("position"), f"{ped_context}.position")
+
+
+def _validate_frame(frame: Any, frame_index: int) -> None:
+    """Validate fields consumed by one emitted frame and its derived row."""
+    context = f"simulation_step_trace.steps[{frame_index}]"
+    if not isinstance(frame, dict):
+        raise TraceSeriesAdapterError(f"{context} must be an object")
+    _integer(frame.get("step"), f"{context}.step")
+    _finite_number(frame.get("time_s"), f"{context}.time_s")
+    robot = frame.get("robot")
+    if not isinstance(robot, dict):
+        raise TraceSeriesAdapterError(f"{context}.robot must be an object")
+    _xy_vector(robot.get("position"), f"{context}.robot.position")
+    _xy_vector(robot.get("velocity"), f"{context}.robot.velocity")
+    _finite_number(robot.get("heading"), f"{context}.robot.heading")
+    _validate_pedestrians(frame.get("pedestrians"), context)
+    planner = frame.get("planner")
+    if planner is not None and not isinstance(planner, dict):
+        raise TraceSeriesAdapterError(f"{context}.planner must be an object")
+    if isinstance(planner, dict) and planner.get("selected_action") is not None:
+        if not isinstance(planner["selected_action"], dict):
+            raise TraceSeriesAdapterError(f"{context}.planner.selected_action must be an object")
+
+
+def _validate_frames(frames: list[Any]) -> None:
+    """Validate all fields consumed by the emitted bundle and derived rows."""
+    for frame_index, frame in enumerate(frames):
+        _validate_frame(frame, frame_index)
+
+
+def _nearest_pedestrian(frame: dict[str, Any]) -> tuple[float, int | str | None]:
     """Center-to-center distance and id of the nearest pedestrian in one frame.
 
     Uses the strict-less-than nearest-neighbour scan (in ``frame["pedestrians"]``
@@ -257,7 +341,7 @@ def _nearest_pedestrian(frame: dict[str, Any]) -> tuple[float, int | None]:
     """
     rx, ry = frame["robot"]["position"]
     best_dist = math.inf
-    best_id: int | None = None
+    best_id: int | str | None = None
     for ped in frame.get("pedestrians", []):
         px, py = ped["position"]
         dist = math.hypot(rx - px, ry - py)
@@ -278,31 +362,29 @@ def _build_derived_rows(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     rows: list[dict[str, Any]] = []
     for frame in frames:
-        rx, ry = frame.get("robot", {}).get("position", (None, None))
-        if _coerce_float(rx) is None or _coerce_float(ry) is None:
-            raise TraceSeriesAdapterError(
-                f"frame step={frame.get('step')} has missing/invalid robot position"
-            )
-        rvx, rvy = frame.get("robot", {}).get("velocity", (None, None))
-        speed = math.hypot(_coerce_float(rvx) or 0.0, _coerce_float(rvy) or 0.0)
+        robot = frame["robot"]
+        rx, ry = robot["position"]
+        rvx, rvy = robot["velocity"]
+        speed = math.hypot(rvx, rvy)
         dist, ped_id = _nearest_pedestrian(frame)
         if not math.isfinite(dist):
             raise TraceSeriesAdapterError(
                 f"frame step={frame.get('step')} has zero pedestrians -- cannot compute a "
                 "finite nearest-pedestrian distance for derived_rows"
             )
-        action = frame.get("planner", {}).get("selected_action", {})
-        peds = frame.get("pedestrians", [])
+        planner = frame.get("planner") or {}
+        action = planner.get("selected_action") or {}
+        peds = frame["pedestrians"]
         rows.append(
             {
                 "step": frame["step"],
-                "time_s": frame["time_s"],
+                "time_s": float(frame["time_s"]),
                 "robot_x_m": rx,
                 "robot_y_m": ry,
-                "robot_heading_rad": frame["robot"]["heading"],
+                "robot_heading_rad": robot["heading"],
                 "executed_speed_m_s": speed,
-                "executed_vx_m_s": _coerce_float(rvx) or 0.0,
-                "executed_vy_m_s": _coerce_float(rvy) or 0.0,
+                "executed_vx_m_s": rvx,
+                "executed_vy_m_s": rvy,
                 "commanded_linear_velocity_m_s": action.get("linear_velocity"),
                 "commanded_angular_velocity_rad_s": action.get("angular_velocity"),
                 "min_robot_ped_distance_m": dist,
@@ -338,13 +420,28 @@ def _validate_actor_set(frames: list[dict[str, Any]]) -> None:
 
 
 def _build_metadata(
-    row: dict[str, Any], identity: dict[str, Any], derived_rows: list[dict[str, Any]]
+    row: dict[str, Any],
+    identity: dict[str, Any],
+    provenance: dict[str, Any],
+    derived_rows: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Build the ``metadata`` dict shared by ``trace_series.json`` and
     ``metadata.json`` (minus the ``review_marker`` key ``metadata.json`` adds)."""
+    for field_name in ("planner", "scenario"):
+        if not isinstance(identity[field_name], str) or not identity[field_name].strip():
+            raise TraceSeriesAdapterError(
+                f"episode identity {field_name} must be a non-empty string"
+            )
+    if identity["seed"] is None:
+        raise TraceSeriesAdapterError("episode identity seed is missing or invalid")
+    for field_name in ("status", "termination_reason"):
+        value = row.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            raise TraceSeriesAdapterError(f"episode row {field_name} must be a non-empty string")
+
     dists = [r["min_robot_ped_distance_m"] for r in derived_rows]
     global_min_idx = min(range(len(dists)), key=lambda i: dists[i])
-    return {
+    metadata = {
         "planner": identity["planner"],
         "scenario_id": identity["scenario"],
         "seed": identity["seed"],
@@ -352,9 +449,9 @@ def _build_metadata(
         "episode_status": row.get("status"),
         "termination_reason": row.get("termination_reason"),
         "git_commit": identity["git_commit"],
+        "source_provenance": provenance,
         "source_file": None,  # filled by caller once the source path is known
         "schema_version": METADATA_SCHEMA_VERSION,
-        "generated_at_utc": datetime.now(UTC).isoformat(),
         "review_marker": REVIEW_MARKER,
         "summary": {
             "episode_status": row.get("status"),
@@ -367,6 +464,12 @@ def _build_metadata(
             "termination_reason": row.get("termination_reason"),
         },
     }
+    generated_at = row.get("generated_at_utc")
+    if generated_at is not None:
+        if not isinstance(generated_at, str) or not generated_at.strip():
+            raise TraceSeriesAdapterError("episode row generated_at_utc must be a non-empty string")
+        metadata["generated_at_utc"] = generated_at
+    return metadata
 
 
 def build_bundle(
@@ -390,7 +493,7 @@ def build_bundle(
         planner=planner,
         seed=seed,
     )
-    git_commit = _validate_provenance(row)
+    git_commit, provenance = _validate_provenance(row)
     identity = _episode_identity(row)
     identity["git_commit"] = git_commit
 
@@ -405,9 +508,10 @@ def build_bundle(
     frames = trace.get("steps")
     if not isinstance(frames, list) or not frames:
         raise TraceSeriesAdapterError("simulation_step_trace.steps must be a non-empty array")
+    _validate_frames(frames)
     _validate_actor_set(frames)
     derived_rows = _build_derived_rows(frames)
-    metadata = _build_metadata(row, identity, derived_rows)
+    metadata = _build_metadata(row, identity, provenance, derived_rows)
     metadata["source_file"] = str(episodes_jsonl)
 
     trace_series = {
@@ -466,14 +570,18 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(
             "either --episode-id or the full --scenario/--planner/--seed triple is required"
         )
-    summary = build_bundle(
-        args.episodes_jsonl,
-        args.out_dir,
-        episode_id=args.episode_id,
-        scenario=args.scenario,
-        planner=args.planner,
-        seed=args.seed,
-    )
+    try:
+        summary = build_bundle(
+            args.episodes_jsonl,
+            args.out_dir,
+            episode_id=args.episode_id,
+            scenario=args.scenario,
+            planner=args.planner,
+            seed=args.seed,
+        )
+    except (OSError, TraceSeriesAdapterError) as exc:
+        print(f"trace-series adapter failed closed: {exc}", file=sys.stderr)
+        return 1
     print(json.dumps(summary, indent=2))
     return 0
 

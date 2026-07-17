@@ -133,8 +133,19 @@ def run_linter(repo_root: Path) -> dict[str, Any]:
 
 
 def load_report(path: Path) -> dict[str, Any]:
-    """Load a pre-rendered linter JSON report from ``path``."""
-    return json.loads(path.read_text(encoding="utf-8"))
+    """Load a pre-rendered linter JSON report from ``path``.
+
+    Raises ``RuntimeError`` on a missing or malformed file so the CLI maps a bad
+    ``--report`` to the infra-error exit code (2) instead of an uncaught traceback.
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(f"Could not read report file '{path}': {exc}") from exc
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Could not parse report JSON '{path}': {exc}") from exc
 
 
 def aggregate(report: dict[str, Any]) -> dict[str, dict[str, int]]:

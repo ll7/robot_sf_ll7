@@ -16,8 +16,9 @@ packet exists (see the stop rule below).
 
 Depends on / builds atop the #5444 API merged in PR #5458
 (`robot_sf/research/collision_risk/`). Integrates the comparison intent of #1472 (learned risk) and
-#5307 (planner) without duplicating either; both are reported as `unavailable` estimator rows
-because no learned/multimodal surface is merged in-repo yet.
+#5307 (planner) without duplicating either. The `multimodal_forecast_mc` row scores the in-repo
+constant-velocity GMM **surrogate** forecast (PR #5662); the `learned_risk_1472` row remains
+`unavailable` because the #1472 model is not merged.
 
 ## Preregistration (fixed before scoring)
 
@@ -69,9 +70,20 @@ Overall prevalence 0.633.
 | Estimator | Kind | ECE (CI95) | Brier (baseline) | Log loss | AP | Latency p95 | Verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `constant_velocity_mc` | probabilistic | 0.070 (0.055–0.102) | 0.180 (0.232) | 0.55 | 0.872 | 5.2 ms → online | revise |
+| `multimodal_forecast_mc` | probabilistic | 0.059 (0.051–0.096) | 0.179 (0.232) | 0.55 | 0.872 | online | revise |
 | `deterministic_ttc` | warning | n/a (ranking only) | n/a | n/a | 0.828 | online | revise |
-| `multimodal_forecast_mc` | — | unavailable (no in-repo multimodal sampler) | | | | | unavailable |
 | `learned_risk_1472` | — | unavailable (model not merged) | | | | | unavailable |
+
+> **Successor update (this commit).** `multimodal_forecast_mc` was promoted from `unavailable` to
+> a scored row once the in-repo constant-velocity GMM surrogate forecast landed (PR #5662). It now
+> scores a K-mode Gaussian-mixture **surrogate** forecast (symmetric heading-spread modes), not the
+> learned #5307/#2844 multimodal predictor. On this unimodal-Gaussian-GT packet it is a
+> forecast-model-mismatch case (ECE comparable to the constant-velocity row), **not** a
+> multimodal-self-consistency case. The table values above are from the original 2026-07-13 packet
+> run; re-running the CLI reproduces the current (now three-row) report. This is fixture evidence
+> only — it is **not** a benchmark claim that multimodality improves calibration (the two rows are
+> statistically indistinguishable here, exactly the "simple baselines may match complex estimators"
+> competing explanation in #5445).
 
 **Stratified calibration (constant_velocity_mc, ECE by family):**
 
@@ -111,5 +123,7 @@ action while holding the forecast inputs fixed; it is not a calibration or plann
 ## Out of scope (explicit)
 
 No full benchmark campaign run, no Slurm/GPU submission, no paper/dissertation claim edits, and no
-change to any benchmark metric semantics. Multimodal-forecast and learned-risk estimator rows remain
-`unavailable` until their upstream models merge.
+change to any benchmark metric semantics. The `learned_risk_1472` estimator row remains
+`unavailable` until its upstream model (#1472) merges; replacing the `multimodal_forecast_mc`
+surrogate forecast with the learned #5307/#2844 multimodal predictor is the benchmark-facing upgrade
+and remains out of scope.

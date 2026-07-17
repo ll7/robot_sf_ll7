@@ -323,6 +323,36 @@ def test_per_page_clamp_does_not_change_requested_page_size_below_max() -> None:
     assert len(files) == 100
 
 
+def test_terminal_diagnostic_reports_effective_clamped_per_page() -> None:
+    """The fail-closed diagnostic reports the effective page size, not the raw request.
+
+    A caller asking for ``per_page=250`` is clamped to 100 before the request is
+    sent; the persistent-failure diagnostic must reflect the value that actually
+    hit the wire (``per_page=100``), not the unclamped request, so an operator
+    debugging the failure sees a value consistent with the server's response.
+    """
+    run_page = _scripted_runner(
+        {
+            (1, 1): _proc(stdout=HTML_503),
+            (1, 2): _proc(stdout=HTML_503),
+            (1, 3): _proc(stdout=HTML_503),
+        }
+    )
+    with pytest.raises(PrFilesFetchError) as exc_info:
+        fetch_all_pr_files(
+            "o/r",
+            "5924",
+            per_page=250,
+            max_attempts=3,
+            run_page=run_page,
+            sleep=lambda _d: None,
+            rng=lambda: 0.0,
+        )
+    message = str(exc_info.value)
+    assert f"per_page={GITHUB_MAX_PER_PAGE}" in message
+    assert "per_page=250" not in message
+
+
 # ── outputs: changed / status TSV / added ────────────────────────────────────
 
 

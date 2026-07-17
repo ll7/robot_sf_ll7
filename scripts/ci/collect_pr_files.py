@@ -272,14 +272,16 @@ def fetch_all_pr_files(  # noqa: PLR0913
             rng=rng,
         )
         if files is None:
-            # Persistent failure: fail closed with a single actionable diagnostic.
+            # Permanent or exhausted failure: fail closed with one diagnostic.
+            # Report the *effective* (clamped) page size so the diagnostic matches
+            # the value actually sent over the wire, not the caller's raw request.
             raise PrFilesFetchError(
                 _format_terminal_error(
                     repo,
                     pr_number,
                     page,
                     attempts_used,
-                    per_page,
+                    effective_per_page,
                     error or "unknown error",
                     retryable=retryable,
                 )

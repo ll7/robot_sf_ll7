@@ -11,28 +11,29 @@ analysis or planning -- without launching any benchmark campaign.
 What is (and is not) claimed
 ----------------------------
 The labelled outcomes here are generated from an **explicit, declared forecast
-model** (constant-velocity Gaussian, optionally *misspecified* per scenario
-family), not from a full simulator rollout. That makes this **API + fixture
-evidence**: it exercises and validates the calibration machinery, demonstrates
-self-consistency of the constant-velocity Monte Carlo estimator against its own
-declared distribution, and proves that the machinery *detects* miscalibration
-when the ground-truth distribution is deliberately mismatched. It is **not**
-calibrated benchmark risk for the simulator distribution and never a real-world
-risk claim. A real-distribution calibration run requires eligible simulator
-traces with action-conditioned labels and is explicitly out of scope until that
-compute packet is approved (see the stop rule in issue #5445).
+model** (constant-velocity Gaussian or the in-repo constant-velocity GMM
+surrogate, optionally *misspecified* per scenario family), not from a full
+simulator rollout. That makes this **API + fixture evidence**: it exercises and
+validates the calibration machinery, demonstrates self-consistency of each
+available Monte Carlo estimator against its own declared distribution, and proves
+that the machinery *detects* miscalibration when the ground-truth distribution is
+deliberately mismatched. It is **not** calibrated benchmark risk for the
+simulator distribution and never a real-world risk claim. A real-distribution
+calibration run requires eligible simulator traces with action-conditioned labels
+and is explicitly out of scope until that compute packet is approved (see the
+stop rule in issue #5445).
 
 Contract discipline (matches the #5445 comparison contract)
 -----------------------------------------------------------
-- Probabilistic estimators (constant-velocity MC) are placed on the reliability
-  / Brier / log-loss curve.
+- Probabilistic estimators (constant-velocity MC and the GMM-surrogate MC row) are
+  placed on the reliability / Brier / log-loss curve.
 - Deterministic warnings (TTC / velocity-obstacle / reachability) are graded
   **only** as warnings -- ranking (area under precision-recall), false-negative
   rate at declared thresholds, and time-to-warning. They are never placed on a
   probability calibration curve, because their scores are not probabilities.
-- Estimators that do not yet exist in-repo (multimodal forecast MC, the #1472
-  learned-risk model) are recorded as ``unavailable`` with a reason rather than
-  silently omitted.
+- Estimators that do not yet exist in-repo (currently only the #1472 learned-risk
+  model) are recorded as ``unavailable`` with a reason rather than silently
+  omitted.
 - Hard guards remain authoritative; no ``safe`` verdict is ever emitted.
 """
 
@@ -139,13 +140,15 @@ class MultimodalForecastConfig:
 
     def __post_init__(self) -> None:
         """Validate the surrogate forecast configuration."""
-        if self.mode_count < 1:
+        if not isinstance(self.mode_count, (int, np.integer)) or self.mode_count < 1:
             raise CalibrationInputError("mode_count must be >= 1")
-        if self.heading_spread_rad < 0.0:
+        if not math.isfinite(self.heading_spread_rad) or self.heading_spread_rad < 0.0:
             raise CalibrationInputError("heading_spread_rad must be non-negative")
-        if self.velocity_std_m_s < 0.0:
+        if not math.isfinite(self.velocity_std_m_s) or self.velocity_std_m_s < 0.0:
             raise CalibrationInputError("velocity_std_m_s must be non-negative")
-        if not (0.0 <= self.cross_actor_correlation < 1.0):
+        if not math.isfinite(self.cross_actor_correlation) or not (
+            0.0 <= self.cross_actor_correlation < 1.0
+        ):
             raise CalibrationInputError("cross_actor_correlation must be in [0, 1)")
 
 
@@ -763,6 +766,13 @@ class FamilySpec:
         default_factory=MultimodalForecastConfig
     )
 
+    def __post_init__(self) -> None:
+        """Validate the ground-truth forecast selector, failing closed on typos."""
+        if self.gt_forecast_kind not in {"constant_velocity", "multimodal_gmm"}:
+            raise CalibrationInputError(
+                "gt_forecast_kind must be 'constant_velocity' or 'multimodal_gmm'"
+            )
+
 
 def _draw_scenario(
     family: FamilySpec, config: RiskEstimatorConfig, rng: np.random.Generator, index: int
@@ -1026,7 +1036,12 @@ def evaluate_estimator(
         "fnr_at_thresholds": fnr,
         "time_to_warning": timeliness,
         "latency": latency.to_dict(),
-        "horizon_monotonicity": _horizon_monotonicity(estimator_id, samples, config),
+        "horizon_monotonicity": _horizon_monotonicity(
+            estimator_id,
+            samples,
+            config,
+            multimodal_forecast=multimodal_forecast,
+        ),
     }
 
     baseline_brier = prevalence * (1.0 - prevalence)
@@ -1159,7 +1174,11 @@ def _stratified_metrics(
 
 
 def _horizon_monotonicity(
-    estimator_id: str, samples: Sequence[LabeledSample], config: RiskEstimatorConfig
+    estimator_id: str,
+    samples: Sequence[LabeledSample],
+    config: RiskEstimatorConfig,
+    *,
+    multimodal_forecast: MultimodalForecastConfig | None = None,
 ) -> dict[str, float]:
     """Fraction of samples whose predicted contact CDF is monotone in the horizon.
 
@@ -1174,7 +1193,12 @@ def _horizon_monotonicity(
         return {"applicable": 0.0, "monotone_fraction": float("nan")}
     monotone = 0
     for sample in samples:
-        first_passage = _estimator_first_passage(estimator_id, sample, config)
+        first_passage = _estimator_first_passage(
+            estimator_id,
+            sample,
+            config,
+            multimodal_forecast=multimodal_forecast,
+        )
         cdf = np.cumsum(first_passage)
         if np.all(np.diff(cdf) >= -1e-9):
             monotone += 1
@@ -1185,7 +1209,11 @@ def _horizon_monotonicity(
 
 
 def _estimator_first_passage(
-    estimator_id: str, sample: LabeledSample, config: RiskEstimatorConfig
+    estimator_id: str,
+    sample: LabeledSample,
+    config: RiskEstimatorConfig,
+    *,
+    multimodal_forecast: MultimodalForecastConfig | None = None,
 ) -> tuple[float, ...]:
     """Return the per-sample first-passage distribution for a probabilistic estimator."""
     if estimator_id == "constant_velocity_mc":
@@ -1194,7 +1222,7 @@ def _estimator_first_passage(
         )
         return estimate.first_passage_distribution
     # multimodal_forecast_mc: recompute the mixture first-passage CDF directly.
-    forecast = DEFAULT_MULTIMODAL_FORECAST
+    forecast = multimodal_forecast or DEFAULT_MULTIMODAL_FORECAST
     robot_xy = sample.action.as_array(horizon_steps=config.horizon_steps)
     ped_pos, ped_vel, radii, _ids = pedestrian_arrays(sample.pedestrians, config)
     if ped_pos.shape[0] == 0:

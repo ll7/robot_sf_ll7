@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import robot_sf.research.collision_risk.calibration as calibration_module
 from robot_sf.nav.predictive_types import PedestrianState
 from robot_sf.research.collision_risk import RiskEstimatorConfig, action_from_constant_velocity
 from robot_sf.research.collision_risk.calibration import (
@@ -461,6 +462,46 @@ def test_risk_calibration_multimodal_forecast_config_validates() -> None:
         MultimodalForecastConfig(heading_spread_rad=-0.1)
     with pytest.raises(CalibrationInputError, match="cross_actor_correlation"):
         MultimodalForecastConfig(cross_actor_correlation=1.0)
+    with pytest.raises(CalibrationInputError, match="heading_spread_rad"):
+        MultimodalForecastConfig(heading_spread_rad=float("nan"))
+    with pytest.raises(CalibrationInputError, match="velocity_std_m_s"):
+        MultimodalForecastConfig(velocity_std_m_s=float("nan"))
+
+
+def test_risk_calibration_rejects_unknown_ground_truth_forecast_kind() -> None:
+    """A typo in the ground-truth model selector fails closed."""
+    with pytest.raises(CalibrationInputError, match="gt_forecast_kind"):
+        FamilySpec(name="bad", n_scenarios=1, gt_velocity_std_m_s=0.3, gt_forecast_kind="typo")
+
+
+def test_risk_calibration_threads_custom_forecast_to_horizon_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Horizon monotonicity receives the same surrogate config as prediction."""
+    config = _small_config()
+    forecast = MultimodalForecastConfig(mode_count=5, heading_spread_rad=0.8)
+    family = FamilySpec(name="f", n_scenarios=1, gt_velocity_std_m_s=config.velocity_std_m_s)
+    dataset = generate_matched_dataset(
+        [family],
+        config,
+        _provenance(1, horizon_steps=config.horizon_steps, dt_s=config.dt_s, seed=0),
+    )
+    seen: list[object] = []
+    original = calibration_module._horizon_monotonicity
+
+    def wrapped(*args: object, **kwargs: object) -> dict[str, float]:
+        seen.append(kwargs.get("multimodal_forecast"))
+        return original(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(calibration_module, "_horizon_monotonicity", wrapped)
+    evaluate_estimator(
+        "multimodal_forecast_mc",
+        dataset,
+        config,
+        n_bootstrap=0,
+        multimodal_forecast=forecast,
+    )
+    assert seen == [forecast]
 
 
 # --------------------------------------------------------------------------- #

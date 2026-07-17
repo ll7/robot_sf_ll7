@@ -10,7 +10,12 @@ import pytest
 
 from scripts.dev.check_pr_merge_staleness import (
     _detect_workflow_run_base_sha,
+    _fetch_main_sha_with_retry,
     _fetch_pr_base_sha,
+    _fetch_workflow_runs_with_retry,
+    _gh_with_retry,
+    _is_transient_gh_failure,
+    _PermanentApiError,
     check_merge_staleness,
     format_human,
     main,
@@ -78,7 +83,7 @@ def test_fresh_when_base_matches_main() -> None:
 
 
 def test_error_when_main_sha_fails() -> None:
-    """Error status should propagate when fetching main SHA fails."""
+    """Error status should propagate when fetching main SHA fails (permanent)."""
     with patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh:
         mock_gh.return_value = _gh_response(returncode=1, stderr="not found")
         data = check_merge_staleness("1", base_sha="abc", repo="owner/repo")
@@ -86,7 +91,7 @@ def test_error_when_main_sha_fails() -> None:
     assert data["status"] == "error"
     assert data["stale"] is None
     assert data["detection"] == "error"
-    assert "Failed to fetch current main SHA" in data["error"]
+    assert "Failed to fetch" in data["error"] or "not found" in data["error"]
 
 
 def test_main_sha_empty_string_treated_as_error() -> None:
@@ -160,9 +165,16 @@ def test_detect_workflow_run_base_sha_skips_other_prs() -> None:
 
 def test_detect_workflow_run_base_sha_returns_none_on_api_error() -> None:
     """Actions API failures leave the caller on the documented fallback path."""
-    with patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh:
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep"),
+    ):
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps({"headRefName": "feature/x", "headRefOid": "head_sha"})),
+            # Persistent transient failure exhausts the retry budget.
+            _gh_response(returncode=1, stderr="API unavailable"),
+            _gh_response(returncode=1, stderr="API unavailable"),
+            _gh_response(returncode=1, stderr="API unavailable"),
             _gh_response(returncode=1, stderr="API unavailable"),
         ]
         result = _detect_workflow_run_base_sha("owner/repo", "42")
@@ -350,21 +362,27 @@ def test_main_exit_1_when_stale(capsys: pytest.CaptureFixture) -> None:
 
 
 def test_main_exit_2_on_error(capsys: pytest.CaptureFixture) -> None:
-    """main() should return 2 when the check itself errors."""
+    """main() should return 2 when the check itself errors (persistent transient)."""
     with (
         patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
         patch(
             "scripts.dev.check_pr_merge_staleness._detect_workflow_run_base_sha", return_value=None
         ),
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep") as mock_sleep,
     ):
         mock_gh.side_effect = [
             _gh_response(stdout="ll7/robot_sf_ll7"),
             _gh_response(stdout=json.dumps({"base": {"sha": "abc"}})),
+            # Persistent transient failure: exhausts the retry budget.
+            _gh_response(returncode=1, stderr="network error"),
+            _gh_response(returncode=1, stderr="network error"),
+            _gh_response(returncode=1, stderr="network error"),
             _gh_response(returncode=1, stderr="network error"),
         ]
         rc = main(["1"])
 
     assert rc == 2
+    assert mock_sleep.call_count == 3
     captured = capsys.readouterr()
     assert "ERROR" in captured.out
 
@@ -475,3 +493,172 @@ def test_main_repo_detect_failure(capsys: pytest.CaptureFixture) -> None:
 
     assert rc == 1
     assert "Failed to detect repository" in capsys.readouterr().err
+
+
+# ── retry / backoff (issue #5958) ─────────────────────────────────────────────
+
+
+def test_is_transient_gh_failure_classifies_transient() -> None:
+    """429/5xx/timeout/connection failures are transient and worth retrying."""
+    transient_cases = [
+        _gh_response(returncode=1, stderr="HTTP 429: rate limit"),
+        _gh_response(returncode=1, stderr="HTTP 503 Service Unavailable"),
+        _gh_response(returncode=1, stderr="request timed out"),
+        _gh_response(returncode=1, stderr="connection reset by peer"),
+    ]
+    for resp in transient_cases:
+        assert _is_transient_gh_failure(resp) is True
+
+
+def test_is_transient_gh_failure_classifies_permanent() -> None:
+    """Auth / not-found failures are permanent and must not be retried."""
+    permanent_cases = [
+        _gh_response(returncode=1, stderr="HTTP 404 Not Found"),
+        _gh_response(returncode=1, stderr="graphql: Could not resolve to a Repository"),
+        _gh_response(returncode=1, stderr="HTTP 401 Unauthorized"),
+    ]
+    for resp in permanent_cases:
+        assert _is_transient_gh_failure(resp) is False
+
+
+def test_gh_with_retry_succeeds_after_transient_failure() -> None:
+    """A transient failure followed by success returns the success without sleep."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep") as mock_sleep,
+    ):
+        mock_gh.side_effect = [
+            _gh_response(returncode=1, stderr="HTTP 503"),
+            _gh_response(stdout="main_head_sha"),
+        ]
+        result = _gh_with_retry(["api", "repos/o/r/git/refs/heads/main", "--jq", ".object.sha"])
+
+    assert result.stdout.strip() == "main_head_sha"
+    assert mock_sleep.call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("stderr", "expected_kind"),
+    [
+        ("HTTP 404 Not Found", "not_found"),
+        ("graphql: Could not resolve to a Repository", "permanent"),
+        ("HTTP 403 Forbidden", "permanent"),
+        ("HTTP 401 Unauthorized", "auth"),
+    ],
+)
+def test_gh_with_retry_permanent_failure_raises_immediately(
+    stderr: str, expected_kind: str
+) -> None:
+    """Permanent failures raise without any retry sleep."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep") as mock_sleep,
+    ):
+        mock_gh.return_value = _gh_response(returncode=1, stderr=stderr)
+        with pytest.raises(_PermanentApiError) as excinfo:
+            _gh_with_retry(["api", "repos/o/r/git/refs/heads/main"])
+
+    assert excinfo.value.kind == expected_kind
+    assert mock_gh.call_count == 1
+    assert mock_sleep.call_count == 0
+
+
+def test_gh_with_retry_persistent_transient_raises_unavailable() -> None:
+    """Persistent transient failure exhausts the budget and raises unavailable."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep") as mock_sleep,
+    ):
+        mock_gh.return_value = _gh_response(returncode=1, stderr="HTTP 429 rate limit")
+        with pytest.raises(_PermanentApiError) as excinfo:
+            _gh_with_retry(["api", "repos/o/r/git/refs/heads/main"])
+
+    assert excinfo.value.kind == "unavailable"
+    # max_attempts=4 -> 3 sleeps before the final attempt fails.
+    assert mock_sleep.call_count == 3
+
+
+def test_gh_with_retry_backoff_grows() -> None:
+    """Backoff should grow exponentially and be capped at the maximum."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep") as mock_sleep,
+    ):
+        mock_gh.return_value = _gh_response(returncode=1, stderr="HTTP 503")
+        with pytest.raises(_PermanentApiError):
+            _gh_with_retry(["api", "x"], max_attempts=4, backoff_base=1.0, max_backoff=8.0)
+
+    sleeps = [c.args[0] for c in mock_sleep.call_args_list]
+    assert sleeps == [1.0, 2.0, 4.0]
+
+
+def test_fetch_main_sha_with_retry_returns_sha() -> None:
+    """A transient hiccup resolved on retry still yields the main SHA."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep"),
+    ):
+        mock_gh.side_effect = [
+            _gh_response(returncode=1, stderr="HTTP 503"),
+            _gh_response(stdout="resolved_main_sha"),
+        ]
+        result = _fetch_main_sha_with_retry("owner/repo")
+
+    assert result.sha == "resolved_main_sha"
+    assert result.unavailable is False
+
+
+def test_fetch_main_sha_with_retry_unavailable_on_persistent_failure() -> None:
+    """Persistent transient failure returns an explicit unavailable result."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep"),
+    ):
+        mock_gh.return_value = _gh_response(returncode=1, stderr="HTTP 429 rate limit")
+        result = _fetch_main_sha_with_retry("owner/repo")
+
+    assert result.sha is None
+    assert result.unavailable is True
+    assert "unavailable" in (result.error or "")
+
+
+def test_fetch_main_sha_with_retry_permanent_not_found() -> None:
+    """A permanent not-found failure is reported without exhausting retries."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep") as mock_sleep,
+    ):
+        mock_gh.return_value = _gh_response(returncode=1, stderr="HTTP 404 Not Found")
+        result = _fetch_main_sha_with_retry("owner/repo")
+
+    assert result.sha is None
+    assert result.unavailable is False
+    assert mock_sleep.call_count == 0
+
+
+def test_fetch_workflow_runs_with_retry_returns_none_on_persistent_failure() -> None:
+    """Persistent transient failure returns None (fallback path), not a base SHA."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep"),
+    ):
+        mock_gh.return_value = _gh_response(returncode=1, stderr="HTTP 503")
+        result = _fetch_workflow_runs_with_retry("owner/repo", "feature/x")
+
+    assert result is None
+
+
+def test_check_merge_staleness_error_on_unavailable_main_sha() -> None:
+    """Persistent transient main-SHA failure must not infer freshness; error instead."""
+    with (
+        patch("scripts.dev.check_pr_merge_staleness._gh") as mock_gh,
+        patch("scripts.dev.check_pr_merge_staleness.time.sleep"),
+    ):
+        mock_gh.return_value = _gh_response(returncode=1, stderr="HTTP 429 rate limit")
+        data = check_merge_staleness("1", base_sha="abc", repo="owner/repo")
+
+    assert data["status"] == "error"
+    assert data["stale"] is None
+    assert data["detection"] == "error"
+    assert data["main_sha"] is None
+    assert "persistent transient" in data["error"]

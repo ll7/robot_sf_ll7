@@ -241,6 +241,108 @@ class TestNativeCommandPolicyBuilder:
         policy._planner_close()
         assert planner._process is None
 
+    def test_persistent_plan_single_spawn_across_five_steps(self) -> None:
+        """A long-lived (loops-over-stdin) persistent planner spawns exactly once across >=5 steps.
+
+        The literal regression guard requested by issue #5957: the pre-fix persistent
+        branch respawned the child every step, so the new ``process_spawns`` diagnostic
+        must read exactly 1 for a healthy persistent run, no matter how many steps run.
+        """
+        policy, _ = build_native_command_policy(
+            "native_command",
+            {"command": ["python3", _FAKE_PLANNER], "mode": "persistent"},
+            scenario_id="corridor",
+            seed=111,
+            horizon=500,
+            dt=0.1,
+        )
+        obs = {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [5.0, 0.0]},
+        }
+        policy._planner_reset(seed=111)
+        planner = policy._native_planner
+
+        try:
+            num_steps = 6  # >= 5 as required by the issue
+            for _ in range(num_steps):
+                linear, angular = policy(obs)
+                assert isinstance(linear, float)
+                assert isinstance(angular, float)
+
+            diag = planner.diagnostics
+            # One persistent child reused across every step — the whole point of #5957.
+            assert diag["process_spawns"] == 1
+            # And it genuinely served all steps with no fallback.
+            assert diag["fallback_count"] == 0
+            assert diag["runtime_bound_exits"] == 0
+        finally:
+            policy._planner_close()
+
+    def test_per_episode_plan_spawns_once_per_step(self) -> None:
+        """Per-episode mode legitimately launches one fresh child per step.
+
+        Contrast case giving ``process_spawns`` meaning: per-episode mode must record
+        one spawn per step, so the counter reflects the chosen launch contract rather
+        than being pinned to 1 universally.
+        """
+        policy, _ = build_native_command_policy(
+            "native_command",
+            {"command": ["python3", _FAKE_PLANNER], "mode": "per_episode"},
+            scenario_id="corridor",
+            seed=111,
+            horizon=500,
+            dt=0.1,
+        )
+        obs = {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [5.0, 0.0]},
+        }
+        policy._planner_reset(seed=111)
+        planner = policy._native_planner
+
+        try:
+            num_steps = 4
+            for _ in range(num_steps):
+                policy(obs)
+
+            diag = planner.diagnostics
+            # Per-episode: one spawn per step, as designed.
+            assert diag["process_spawns"] == num_steps
+        finally:
+            policy._planner_close()
+
+    def test_per_episode_failed_launch_not_counted_as_spawn(self) -> None:
+        """A per-episode launch that never starts must not be counted as a spawn.
+
+        Companion to the "count only successful spawns" rule applied to the
+        persistent path: ``process_spawns`` records how many subprocesses were
+        actually launched, so an ``OSError`` launch failure (e.g. a missing
+        binary) must leave the counter at zero even though ``_plan_per_episode``
+        was invoked.
+        """
+        policy, _ = build_native_command_policy(
+            "native_command",
+            {"command": ["/nonexistent/native_planner_binary"], "mode": "per_episode"},
+            scenario_id="corridor",
+            seed=111,
+            horizon=500,
+            dt=0.1,
+        )
+        obs = {
+            "robot": {"position": [0.0, 0.0], "heading": [0.0]},
+            "goal": {"current": [5.0, 0.0]},
+        }
+        planner = policy._native_planner
+
+        try:
+            with pytest.raises(NativeCommandContractError, match="failed to launch native command"):
+                policy(obs)
+            # The launch never happened, so it must not be counted as a spawn.
+            assert planner.diagnostics["process_spawns"] == 0
+        finally:
+            policy._planner_close()
+
     def test_persistent_plan_timeout(self, tmp_path: Path) -> None:
         import sys
 

@@ -7,42 +7,42 @@ run_summary_reconstruction:
   slurm_job_id: 13483
   execution_commit: a307ef276d701f8d14dead1aa0513f44ee97c0b0
   config_hash: 846e99aaba7dff51
-  
+
   scenario:
     matrix: configs/scenarios/classic_interactions_francis2023.yaml
     candidate: classic_doorway_medium
-    
+
   planner:
     key: ppo
     algo: ppo
     config: configs/baselines/ppo_15m_grid_socnav.yaml
-    
+
   seed_policy:
     set_name: paper_eval_s30
     seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
     count: 30
-    
+
   runtime:
     horizon: 600
     dt: 0.1
     workers: 1
-    
+
   snqi_contract:
     enabled: true
     enforcement: warn
     weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
     baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
-    
+
   amv_contract:
     enabled: true
     status: pass
     profile: amv-paper-v1
-    
+
   observation_noise:
     enabled: false
-    
+
   paper_facing: false
-  
+
   output_tree:
     path: output/benchmarks/doorway_butterfly_trace_reexport/job-13483/
     size_mb: 7.2
@@ -51,7 +51,7 @@ run_summary_reconstruction:
       - campaign_manifest.json
       - PER_SEED_DIFF.md
       - episodes.jsonl (per-seed trace exports)
-      
+
   durable_preservation:
     bundle: job-13483-doorway-provenance.tar.gz
     sha256: 1a434946d774a5550ec3791ec6a829768fab5ce058c7a9ec4db9d43711780dff

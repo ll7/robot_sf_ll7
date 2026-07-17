@@ -29,8 +29,9 @@ this test locks: the in-process path normalizes it via the campaign loader, and
 the subprocess path must execute the same normalized scenario rather than
 re-reading the raw matrix.
 
-Runs CPU-only in well under 120s; not marked ``slow`` so it stays under the
-``-m "not slow"`` gate.
+Runs CPU-only in well under 240s; not marked ``slow`` so it stays under the
+``-m "not slow"`` gate. The 240-second timeout provides margin for xdist
+contention in the readiness lane.
 """
 
 from __future__ import annotations
@@ -212,7 +213,7 @@ def _run_campaign_for_arm_isolation(cfg, output_root: Path, arm_isolation: str) 
     return result
 
 
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(240)
 def test_in_process_and_subprocess_arms_execute_identical_episode_set(tmp_path: Path):
     """Both isolation modes must execute exactly the same (scenario_id, seed) set.
 

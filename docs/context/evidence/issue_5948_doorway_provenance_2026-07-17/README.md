@@ -1,3 +1,5 @@
+<!-- AI-GENERATED (robot_sf#5948, 2026-07-17) - NEEDS-REVIEW -->
+
 # Issue #5948: Doorway Butterfly Trace Re-export Provenance
 
 ## Summary
@@ -51,7 +53,7 @@ This is the producer-side sibling of #5936 (result-job durability gate): #5936 r
 
 - `provenance_manifest.json` — Machine-readable provenance pointer
 - `run_summary_reconstruction.yaml` — Key fields from job 13483's run_summary.yaml
-- `config_sha256.txt` — SHA-256 of the reconstructed config file (filled after commit)
+- `config_sha256.txt` — SHA-256 of the committed reconstructed config file
 
 ## Related Issues
 

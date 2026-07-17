@@ -59,7 +59,7 @@ include_videos_in_publication: false
 overwrite_publication_bundle: false
 repository_url: https://github.com/ll7/robot_sf_ll7
 release_tag: "{release_tag}"
-doi: 10.5281/zenodo.<record-id>
+doi: null
 paper_interpretation_profile: diagnostic-trace-reexport-only
 
 # Observation noise disabled per reconstruction (issue #5948)

@@ -1,5 +1,6 @@
 """Test for issue #5948 doorway butterfly trace re-export config provenance."""
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -25,6 +26,18 @@ class TestDoorwayButterflyReexportConfig:
             / "evidence"
             / "issue_5948_doorway_provenance_2026-07-17"
             / "provenance_manifest.json"
+        )
+
+    @pytest.fixture
+    def config_hash_path(self) -> Path:
+        """Return the committed SHA-256 record for the reconstructed config."""
+        return (
+            REPO_ROOT
+            / "docs"
+            / "context"
+            / "evidence"
+            / "issue_5948_doorway_provenance_2026-07-17"
+            / "config_sha256.txt"
         )
 
     def test_config_file_exists(self, config_path: Path) -> None:
@@ -75,6 +88,7 @@ class TestDoorwayButterflyReexportConfig:
 
         # Observation noise disabled
         assert config["observation_noise"]["enabled"] is False
+        assert config["doi"] is None
 
         # Planner
         assert len(config["planners"]) == 1
@@ -101,6 +115,7 @@ class TestDoorwayButterflyReexportConfig:
         assert manifest["issue"] == 5948
         assert manifest["run_identification"]["slurm_job_id"] == 13483
         assert manifest["run_identification"]["config_hash_from_run"] == "846e99aaba7dff51"
+        assert manifest["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
         assert (
             manifest["durable_bundle"]["sha256"]
             == "1a434946d774a5550ec3791ec6a829768fab5ce058c7a9ec4db9d43711780dff"
@@ -123,3 +138,21 @@ class TestDoorwayButterflyReexportConfig:
         assert config["horizon"] == recon["horizon"]
         assert config["dt"] == recon["dt"]
         assert config["workers"] == recon["workers"]
+        assert config["snqi_weights"] == recon["snqi_weights"]
+        assert config["snqi_contract"]["enforcement"] == recon["snqi_enforcement"]
+        assert config["amv_contract"]["profile"] == recon["amv_profile"]
+        assert config["amv_contract"]["status"] == recon["amv_status"]
+        assert config["observation_noise"]["enabled"] == recon["observation_noise_enabled"]
+        assert config["paper_facing"] == recon["paper_facing"]
+
+    def test_config_hash_record_matches_config(
+        self, config_path: Path, config_hash_path: Path
+    ) -> None:
+        """Verify the README-listed config hash is bound to the committed bytes."""
+        assert config_hash_path.exists()
+        lines = config_hash_path.read_text(encoding="utf-8").splitlines()
+        assert lines[0] == "# AI-GENERATED NEEDS-REVIEW"
+        recorded_hash, recorded_path = lines[1].split(maxsplit=1)
+        assert recorded_path == "configs/benchmarks/doorway_butterfly_trace_reexport.yaml"
+        actual_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        assert recorded_hash == actual_hash

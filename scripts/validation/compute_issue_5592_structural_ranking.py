@@ -27,6 +27,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -118,9 +119,10 @@ def _to_float(value: Any) -> float | None:
     if value is None or value == "":
         return None
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _is_fallback_or_degraded(row: Mapping[str, Any]) -> bool:
@@ -163,6 +165,26 @@ def _score(
     )
 
 
+def _parse_metric_aggregate(row: Mapping[str, Any], planner_key: str) -> dict[str, float | None]:
+    """Parse one planner's metrics and reject malformed or non-finite values."""
+    parsed_metrics: dict[str, float | None] = {}
+    for field in REQUIRED_METRIC_FIELDS:
+        parsed = _to_float(row[field])
+        if parsed is None:
+            raise RankingMetricError(
+                f"invalid or non-finite metric field {field!r} for {planner_key!r}"
+            )
+        parsed_metrics[field] = parsed
+
+    raw_snqi = row.get("snqi_mean")
+    parsed_snqi = _to_float(raw_snqi)
+    if raw_snqi not in (None, "") and parsed_snqi is None:
+        raise RankingMetricError(
+            f"invalid or non-finite metric field 'snqi_mean' for {planner_key!r}"
+        )
+    return {**parsed_metrics, "snqi_mean": parsed_snqi}
+
+
 def compute_structural_ranking(
     episode_rows: Sequence[Mapping[str, Any]],
     *,
@@ -203,17 +225,7 @@ def compute_structural_ranking(
         klass = planner_to_class.get(str(planner_key).strip())
         if klass is None:
             raise RankingMetricError(f"planner not in preregistered roster: {planner_key!r}")
-        try:
-            aggregate = {
-                "success_rate": float(row["success_rate"]),
-                "collision_event_rate": float(row["collision_event_rate"]),
-                "near_miss_event_rate": float(row["near_miss_event_rate"]),
-                "timeout_rate": float(row["timeout_rate"]),
-                "snqi_mean": row.get("snqi_mean"),
-            }
-        except (TypeError, ValueError) as exc:
-            raise RankingMetricError(f"invalid metric row for {planner_key!r}: {exc}") from exc
-        by_class[klass].append(aggregate)
+        by_class[klass].append(_parse_metric_aggregate(row, str(planner_key).strip()))
 
     missing_classes = [klass for klass, rows in by_class.items() if not rows]
     if missing_classes:

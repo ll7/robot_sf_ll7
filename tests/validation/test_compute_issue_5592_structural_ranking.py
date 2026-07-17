@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts.validation import compute_issue_5592_structural_ranking as metric
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -23,6 +25,10 @@ PLANNERS_BY_CLASS = {
 
 def _rows_with_success(success_by_planner: dict[str, float]) -> list[dict[str, str]]:
     """Build a per-planner episode-aggregate row set from success-rate overrides."""
+    known_planners = {planner for planners in PLANNERS_BY_CLASS.values() for planner in planners}
+    unknown_planners = set(success_by_planner) - known_planners
+    if unknown_planners:
+        raise KeyError(f"unknown planner override(s): {sorted(unknown_planners)}")
     rows = []
     for planners in PLANNERS_BY_CLASS.values():
         for planner in planners:
@@ -229,6 +235,36 @@ def test_metric_output_feedable_to_agreement_builder(
     assert summary["status"] == "ready"
     # Reference: hybrid best; candidate: predictive improved past learned -> a flip exists.
     assert summary["disagreement_row_count"] >= 1
+
+
+def test_fixture_rejects_unknown_success_override() -> None:
+    """Fixture typos must fail instead of silently changing no planner."""
+    with pytest.raises(KeyError, match="unknown planner override"):
+        _rows_with_success({"typo_planner": 0.9})
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("success_rate", "NaN"),
+        ("collision_event_rate", "Inf"),
+        ("near_miss_event_rate", "-Inf"),
+        ("timeout_rate", "not-a-number"),
+        ("snqi_mean", "NaN"),
+    ],
+)
+def test_rejects_nonfinite_or_malformed_metric_cells(
+    tmp_path: Path, field: str, value: str
+) -> None:
+    """Non-finite or malformed numeric cells must fail closed before ranking."""
+    rows = _rows_with_success({})
+    rows[0][field] = value
+    with pytest.raises(metric.RankingMetricError, match="invalid or non-finite"):
+        metric.build_ranking_for_matrix(
+            packet_path=PACKET,
+            episode_rows_path=_write_rows(tmp_path, "rows.csv", rows),
+            output_path=tmp_path / "out.csv",
+        )
 
 
 def test_rejects_row_missing_required_metric_field(tmp_path: Path) -> None:

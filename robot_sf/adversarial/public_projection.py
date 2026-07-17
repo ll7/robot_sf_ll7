@@ -275,7 +275,18 @@ def _replace_in_string(
         return text
 
     original = text
-    replacement = public_prefix.rstrip("/")
+    # Strip exactly one trailing path separator so the surviving ``/raw/...``
+    # tail joins cleanly, but never consume the ``//`` of the ``<scheme>://``
+    # authority separator. ``rstrip("/")`` would turn ``private-artifact://``
+    # into ``private-artifact:``, which (a) malforms the URI and (b) when an
+    # offending value equals the target root, destroys the whole string into a
+    # bare ``private-artifact:`` and silently loses the path tail (issue #5911).
+    if public_prefix.endswith("://"):
+        replacement = public_prefix
+    elif public_prefix.endswith("/"):
+        replacement = public_prefix[:-1]
+    else:
+        replacement = public_prefix
     text = text.replace(target_root, replacement)
     if text != original:
         state.replacements += 1

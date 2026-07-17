@@ -281,6 +281,66 @@ def test_auto_detect_private_root_matches_explicit_projection() -> None:
     assert auto.projection["private_root_supplied"] is False
 
 
+def test_default_config_preserves_path_tail_without_job_id() -> None:
+    """The default entry point (config=None, job_id=None) must not lose path data.
+
+    Regression for issue #5911: ``rstrip("/")`` on the ``<scheme>://`` authority
+    form stripped the ``//`` separator, so when no job id was supplied (the
+    *default* public entry point) the replacement collapsed to
+    ``private-artifact:`` and either malformed the URI (path tail survived but
+    the ``://`` was lost) or, when an offending value equaled the target root,
+    destroyed the whole string and silently dropped the path tail. Both the
+    default ``config=None`` path and an explicit no-job config must preserve the
+    documented ``<scheme>://`` authority and the surviving path tail.
+    """
+    archive = {
+        "bundle": f"{PRIVATE_ROOT}/raw/seed_1/candidate_0001",
+        "scenario": f"{PRIVATE_ROOT}/raw/seed_1/candidate_0001/scenario.yaml",
+    }
+
+    # Default entry point: config=None selects auto-detect with job_id=None.
+    default = project_archive_to_public(archive)
+    projected = default.projected_archive
+    projected_json = json.dumps(projected)
+    # The ``://`` authority separator survives (no ``private-artifact:`` collapse)
+    # and no private path leaks.
+    assert "private-artifact://" in projected_json
+    assert "private-artifact:" not in projected_json.replace("private-artifact://", "")
+    assert PRIVATE_ROOT not in projected_json
+    assert assert_no_private_paths(projected) == []
+    # The path tail is preserved (no data loss): the surviving component below
+    # the auto-detected common root is retained under the artifact URI rather
+    # than being destroyed into a bare ``private-artifact:``.
+    assert projected["scenario"].endswith("/scenario.yaml")
+    assert projected["scenario"].startswith("private-artifact://")
+
+    # Explicit no-job config over the same archive: same authority, tail kept.
+    explicit_no_job = project_archive_to_public(
+        archive,
+        config=PublicProjectionConfig(private_root=PRIVATE_ROOT, job_id=None),
+    )
+    explicit_json = json.dumps(explicit_no_job.projected_archive)
+    assert "private-artifact://" in explicit_json
+    assert "raw/seed_1/candidate_0001/scenario.yaml" in explicit_json
+
+
+def test_projection_value_equal_to_root_is_not_collapsed() -> None:
+    """An offending value that equals the target root keeps the ``<scheme>://`` form.
+
+    Regression for issue #5911: a field whose value is exactly the private root
+    (so there is no surviving path tail) must project to the bare ``<scheme>://``
+    authority rather than collapsing to ``private-artifact:``, which destroyed
+    the value and silently lost data.
+    """
+    archive = {"root_pointer": PRIVATE_ROOT}
+    result = project_archive_to_public(
+        archive,
+        config=PublicProjectionConfig(private_root=PRIVATE_ROOT, job_id=None),
+    )
+    assert result.projected_archive["root_pointer"] == "private-artifact://"
+    assert PRIVATE_ROOT not in json.dumps(result.projected_archive)
+
+
 def test_projection_fails_closed_when_private_path_remains() -> None:
     """A private path the root cannot reach raises PrivatePathLeakError."""
     archive = _private_archive()

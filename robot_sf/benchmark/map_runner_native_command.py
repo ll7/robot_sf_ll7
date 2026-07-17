@@ -345,6 +345,11 @@ class NativeCommandPlanner:
         self._diagnostics: dict[str, Any] = dict.fromkeys(_DIAGNOSTICS_KEYS, 0)
         self._diagnostics["exit_codes"] = []
         self._diagnostics["last_exit_code"] = None
+        # How many times a subprocess was actually launched. This is the observable
+        # that makes the persistent-mode respawn bug (issue #5957) directly visible
+        # in episode diagnostics: a healthy persistent run records exactly one spawn
+        # regardless of horizon, while the per-episode mode records one spawn per step.
+        self._process_spawns = 0
         self._runtimes: list[float] = []
         self._deadlock = _NoProgressDeadlockDetector()
         # Plain serializable run state, updated every step so episode finalization can
@@ -363,6 +368,7 @@ class NativeCommandPlanner:
 
     def _start_process(self) -> None:
         self._stop_process()
+        self._process_spawns += 1
         try:
             self._process = subprocess.Popen(
                 self._spec.command,
@@ -456,6 +462,7 @@ class NativeCommandPlanner:
         return linear, angular
 
     def _plan_per_episode(self, request: str) -> tuple[list[str], float, float]:
+        self._process_spawns += 1
         try:
             proc = subprocess.run(
                 self._spec.command,
@@ -572,6 +579,7 @@ class NativeCommandPlanner:
             _RUNTIME_FIELD: [float(value) for value in self._runtimes],
             "exit_codes": list(self._diagnostics["exit_codes"]),
             "last_exit_code": self._diagnostics["last_exit_code"],
+            "process_spawns": int(self._process_spawns),
         }
 
     @property

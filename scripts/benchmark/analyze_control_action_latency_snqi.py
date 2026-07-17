@@ -359,6 +359,11 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = parse_args(argv)
     try:
+        if args.reissue_uncertainty and (args.raw_rows or args.promote_input):
+            raise SnqiLatencyAnalysisError(
+                "--reissue-uncertainty requires the checksummed durable input path; "
+                "combine it with neither --raw-rows nor --promote-input"
+            )
         if args.promote_input:
             return _run_promote_input(args)
 

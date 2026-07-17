@@ -615,7 +615,7 @@ def test_build_uncertainty_reissue_has_registered_schema_and_blocks(tmp_path: Pa
     _packet, reissue = _reissue_from_synthetic_packet(tmp_path)
     assert reissue["schema_version"] == UNCERTAINTY_REISSUE_SCHEMA_VERSION
     assert reissue["issue"] == 5928
-    assert reissue["parent_issue"] == 5892
+    assert reissue["parent_issue"] == 5912
     assert reissue["evidence_status"] == "diagnostic-only"
     assert "not paper-facing" in reissue["claim_boundary"]
     for block in (
@@ -638,6 +638,7 @@ def test_build_uncertainty_reissue_records_unrecoverable_decision(tmp_path: Path
     assert decision["recovery_path"] == "unrecoverable"
     assert "committed canonical analyzer" in decision["decision"]
     assert decision["linked_prs"] == [5904, 5923]
+    assert 5912 in decision["linked_issues"]
     # The concrete unrecoverability evidence is carried in the artifact.
     joined = " \n".join(decision["evidence"])
     assert "half-integer" in joined
@@ -687,6 +688,16 @@ def test_build_uncertainty_reissue_preserves_native_adapter_labels(tmp_path: Pat
     }
 
 
+def test_build_uncertainty_reissue_does_not_alias_input_packets(tmp_path: Path) -> None:
+    """Review-time edits to a re-issue do not mutate canonical input objects."""
+    packet, reissue = _reissue_from_synthetic_packet(tmp_path)
+    original_difference = packet["pairwise_slope_uncertainty"][0]["slope_difference"]
+    reissue["pairwise_slope_uncertainty"][0]["slope_difference"] = 123.0
+    reissue["reproducibility"]["bootstrap_method"]["percentiles"].append(99.0)
+    assert packet["pairwise_slope_uncertainty"][0]["slope_difference"] == original_difference
+    assert packet["snqi_method"]["bootstrap_method"]["percentiles"] == [2.5, 97.5]
+
+
 def test_build_uncertainty_reissue_rejects_wrong_schema_packet() -> None:
     """A non-canonical packet is rejected before re-issue."""
     with pytest.raises(SnqiLatencyAnalysisError, match="requires a canonical-analyzer packet"):
@@ -721,7 +732,10 @@ def test_build_uncertainty_reissue_fails_on_half_integer_probability(tmp_path: P
     packet, _reissue = _reissue_from_synthetic_packet(tmp_path)
     tampered = json.loads(json.dumps(packet))
     # 0.68635 = 6863.5/10000 mirrors the registered block's unrecoverable estimator.
-    tampered["pairwise_slope_uncertainty"][0]["probability_first_is_more_robust"] = 0.68635
+    tampered_pairwise = tampered["pairwise_slope_uncertainty"][0]
+    if "probability_first_is_more_robust" not in tampered_pairwise:
+        raise KeyError("probability_first_is_more_robust")
+    tampered_pairwise["probability_first_is_more_robust"] = 0.68635
     with pytest.raises(SnqiLatencyAnalysisError, match="not an exact integer resample count"):
         build_uncertainty_reissue(
             tampered,
@@ -792,6 +806,17 @@ def test_reissue_cli_writes_packet_and_review_sidecar(tmp_path: Path) -> None:
         and c["probability_is_integer_resample_count"]
         for c in payload["consistency_checks"]
     )
+
+
+def test_reissue_cli_rejects_raw_rows() -> None:
+    """Re-issue provenance must come from the checksummed durable input path."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("analyze_cli", ANALYZER_CLI)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.main(["--reissue-uncertainty", "--raw-rows", "raw.jsonl"]) == 1
 
 
 @pytest.mark.skipif(

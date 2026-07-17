@@ -150,8 +150,8 @@ uv run python scripts/benchmark/analyze_control_action_latency_snqi.py --reissue
 ```
 
 No qualitative conclusion changes relative to the registered block: every 95% interval sign and
-every probability threshold is preserved within the documented tolerances. Linked: #5912, #5923,
-#5892, #5034, #4977.
+every probability threshold is preserved within the documented tolerances. Linked: Issue #5912,
+PR #5923, Issue #5892, Issue #5034, and Issue #4977.
 
 ## Files
 

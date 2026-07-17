@@ -32,6 +32,7 @@ resampling stream and ``numpy`` version at generation time.
 
 from __future__ import annotations
 
+import copy
 import csv
 import json
 import math
@@ -69,6 +70,7 @@ INPUT_SCHEMA_VERSION = "control-action-latency-snqi-inputs.v1"
 INPUT_PROVENANCE_SCHEMA_VERSION = "control-action-latency-snqi-inputs-provenance.v1"
 
 ISSUE = 5892
+CANONICAL_ANALYZER_ISSUE = 5912
 CAMPAIGN_ISSUE = 5034
 PARENT_ISSUE = 4977
 
@@ -1505,13 +1507,17 @@ def build_uncertainty_reissue(
             "uncertainty re-issue requires a canonical-analyzer packet with schema "
             f"{ANALYSIS_SCHEMA_VERSION!r}; got {packet.get('schema_version')!r}"
         )
-    pairwise = packet.get("pairwise_slope_uncertainty")
-    ranking = packet.get("point_estimate_robustness_ranking")
-    if not isinstance(pairwise, list) or not isinstance(ranking, list):
+    pairwise_source = packet.get("pairwise_slope_uncertainty")
+    ranking_source = packet.get("point_estimate_robustness_ranking")
+    if not isinstance(pairwise_source, list) or not isinstance(ranking_source, list):
         raise SnqiLatencyAnalysisError(
             "canonical-analyzer packet is missing pairwise_slope_uncertainty / "
             "point_estimate_robustness_ranking"
         )
+    # The returned artifact is an independent packet: callers may annotate or
+    # tamper with it during review without mutating the canonical source packet.
+    pairwise = copy.deepcopy(pairwise_source)
+    ranking = copy.deepcopy(ranking_source)
 
     # Per-planner committed slopes the pairwise differences derive from. Recording
     # them makes the internal consistency of the re-issued block auditable.
@@ -1564,15 +1570,15 @@ def build_uncertainty_reissue(
                 "produce half-integer counts."
             )
 
-    bootstrap_method = packet.get("snqi_method", {}).get("bootstrap_method", {})
-    source = dict(input_provenance_anchor.get("source") or {})
-    promotion = dict(input_provenance_anchor.get("promotion") or {})
+    bootstrap_method = copy.deepcopy(packet.get("snqi_method", {}).get("bootstrap_method", {}))
+    source = copy.deepcopy(dict(input_provenance_anchor.get("source") or {}))
+    promotion = copy.deepcopy(dict(input_provenance_anchor.get("promotion") or {}))
 
     return {
         "review_marker": review_marker_json(),
         "schema_version": UNCERTAINTY_REISSUE_SCHEMA_VERSION,
         "issue": 5928,
-        "parent_issue": ISSUE,
+        "parent_issue": CANONICAL_ANALYZER_ISSUE,
         "campaign_issue": CAMPAIGN_ISSUE,
         "root_parent_issue": PARENT_ISSUE,
         "date": reissue_date,
@@ -1588,7 +1594,13 @@ def build_uncertainty_reissue(
             "dod_reference": "issue #5928 Definition of Done #1 (recovery or maintainer "
             "decision) and #2 (re-issue from the committed analyzer with a fresh provenance "
             "stamp)",
-            "linked_issues": [5928, ISSUE, CAMPAIGN_ISSUE, PARENT_ISSUE],
+            "linked_issues": [
+                5928,
+                CANONICAL_ANALYZER_ISSUE,
+                ISSUE,
+                CAMPAIGN_ISSUE,
+                PARENT_ISSUE,
+            ],
             "linked_prs": [5904, 5923],
         },
         "provenance": {

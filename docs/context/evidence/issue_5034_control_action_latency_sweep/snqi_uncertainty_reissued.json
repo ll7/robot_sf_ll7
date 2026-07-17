@@ -61,7 +61,7 @@
       ]
     }
   ],
-  "parent_issue": 5892,
+  "parent_issue": 5912,
   "per_planner_slope_intervals": [
     {
       "execution_mode": "native",
@@ -123,7 +123,7 @@
       "module": "robot_sf.benchmark.control_action_latency_snqi",
       "reissue_function": "build_uncertainty_reissue",
       "source_rel_path": "robot_sf/benchmark/control_action_latency_snqi.py",
-      "source_sha256": "3e8bb022583f7cb6a04773efc1e3b312dee32a8569883cd0c3cd6319e3dbe8ea"
+      "source_sha256": "6d5263f62f73e322e6ccfec94a529d5e6bfbcd70ab96eb39b6cef822243476ba"
     },
     "job_id": 13516,
     "job_label": "5034c-issue5034-latency-sweep",
@@ -141,6 +141,7 @@
     ],
     "linked_issues": [
       5928,
+      5912,
       5892,
       5034,
       4977

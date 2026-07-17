@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/transfer_delta.csv",
+  "artifact_sha256": "0dec1f6091d513094255f2822fe48669d22cfb3b57da083befa3806db977a5ee",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

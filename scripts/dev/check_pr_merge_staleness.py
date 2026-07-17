@@ -27,7 +27,18 @@ import argparse
 import json
 import subprocess
 import sys
-from typing import Any
+import time
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+# Retry budget for transient GitHub API failures (429/5xx, timeout, connection).
+# Permanent failures (auth, not-found) are never retried.
+GH_RETRY_MAX_ATTEMPTS = 4
+GH_RETRY_BACKOFF_BASE = 1.0
+GH_RETRY_MAX_BACKOFF = 8.0
 
 
 def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
@@ -39,6 +50,165 @@ def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
         timeout=timeout,
         check=False,
     )
+
+
+class _PermanentApiError(Exception):
+    """A GitHub API request failed for a reason that will not be fixed by retrying."""
+
+    def __init__(self, message: str, *, kind: str) -> None:
+        super().__init__(message)
+        self.message = message
+        self.kind = kind
+
+
+def _is_transient_gh_failure(result: subprocess.CompletedProcess) -> bool:
+    """Return True when a failed gh call is worth retrying.
+
+    Transient conditions: HTTP 429 (rate limit), 5xx (server error), or a
+    generic network/timeout error reported by gh.  Permanent conditions such as
+    authentication or not-found are not transient.
+    """
+    if result.returncode == 0:
+        return False
+    stderr = (result.stderr or "").lower()
+    stdout = (result.stdout or "").lower()
+    combined = f"{stderr} {stdout}"
+    # Permanent conditions: do not retry.
+    if "not found" in combined or "404" in combined:
+        return False
+    if "could not resolve" in combined or "repository" in combined:
+        return False
+    if "authentication" in combined or "unauthorized" in combined or "401" in combined:
+        return False
+    if "403" in combined and "rate" not in combined:
+        return False
+    # Transient conditions.
+    if "rate limit" in combined or "429" in combined:
+        return True
+    if any(code in combined for code in ("500", "502", "503", "504")):
+        return True
+    # gh exited non-zero without an explicit permanent marker: treat network /
+    # timeout style failures as transient.
+    if "timeout" in combined or "timed out" in combined or "connection" in combined:
+        return True
+    # gh exited non-zero with no recognizable message (e.g. killed mid-run).
+    return True
+
+
+def _gh_with_retry(
+    args: list[str],
+    *,
+    timeout: int = 30,
+    max_attempts: int = GH_RETRY_MAX_ATTEMPTS,
+    backoff_base: float = GH_RETRY_BACKOFF_BASE,
+    max_backoff: float = GH_RETRY_MAX_BACKOFF,
+    sleep: Callable[[float], None] | None = None,
+) -> subprocess.CompletedProcess:
+    """Run a ``gh`` command with bounded exponential backoff on transient failure.
+
+    Permanent failures (auth, not-found) raise ``_PermanentApiError`` immediately.
+    Persistent transient failure exhausts the retry budget and also raises
+    ``_PermanentApiError`` (kind ``"unavailable"``) so callers fail closed rather
+    than inferring branch freshness from a missing response.
+    """
+    last_error: Exception | None = None
+    do_sleep = sleep if sleep is not None else time.sleep
+    for attempt in range(1, max_attempts + 1):
+        try:
+            result = _gh(args, timeout=timeout)
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            last_error = exc
+            if attempt >= max_attempts:
+                break
+            do_sleep(min(backoff_base * (2 ** (attempt - 1)), max_backoff))
+            continue
+
+        if result.returncode == 0:
+            return result
+
+        stderr = (result.stderr or "").lower()
+        stdout = (result.stdout or "").lower()
+        combined = f"{stderr} {stdout}"
+        if "not found" in combined or "404" in combined:
+            raise _PermanentApiError(
+                f"GitHub API not found for {args[0]}: {result.stderr.strip() or result.stdout.strip()}",
+                kind="not_found",
+            )
+        if "authentication" in combined or "unauthorized" in combined or "401" in combined:
+            raise _PermanentApiError(
+                f"GitHub API authentication failed for {args[0]}: "
+                f"{result.stderr.strip() or result.stdout.strip()}",
+                kind="auth",
+            )
+
+        last_error = subprocess.CalledProcessError(
+            result.returncode, ["gh", *args], result.stdout, result.stderr
+        )
+        if attempt >= max_attempts:
+            break
+        do_sleep(min(backoff_base * (2 ** (attempt - 1)), max_backoff))
+
+    raise _PermanentApiError(
+        f"GitHub API unavailable after retries (persistent transient failure): {last_error}",
+        kind="unavailable",
+    )
+
+
+@dataclass
+class _MainShaResult:
+    """Result of fetching the current main SHA with retry/backoff."""
+
+    sha: str | None
+    error: str | None = None
+    unavailable: bool = False
+
+
+def _fetch_main_sha_with_retry(repo: str) -> _MainShaResult:
+    """Fetch current main HEAD SHA, retrying transient API failures.
+
+    Returns an explicit ``unavailable`` result on persistent transient failure
+    rather than inferring freshness from a missing response.
+    """
+    try:
+        result = _gh_with_retry(["api", f"repos/{repo}/git/refs/heads/main", "--jq", ".object.sha"])
+    except _PermanentApiError as exc:
+        if exc.kind == "unavailable":
+            return _MainShaResult(sha=None, error=exc.message, unavailable=True)
+        return _MainShaResult(sha=None, error=exc.message)
+    sha = result.stdout.strip()
+    if not sha:
+        return _MainShaResult(sha=None, error="GitHub API returned an empty main SHA")
+    return _MainShaResult(sha=sha)
+
+
+def _fetch_workflow_runs_with_retry(repo: str, head_branch: str) -> list[dict[str, Any]] | None:
+    """Fetch workflow runs for a PR head branch, retrying transient failures.
+
+    Returns ``None`` for permanent failures (auth, not-found) and for persistent
+    transient failure (unavailable), leaving the caller on the documented fallback
+    path without inferring a base SHA.
+    """
+    try:
+        result = _gh_with_retry(
+            [
+                "api",
+                f"repos/{repo}/actions/runs",
+                "--method",
+                "GET",
+                "-f",
+                f"branch={head_branch}",
+                "-f",
+                "event=pull_request",
+                "-f",
+                "per_page=100",
+            ]
+        )
+    except _PermanentApiError:
+        return None
+    payload, _ = _parse_json(result.stdout)
+    if not isinstance(payload, dict) or not isinstance(payload.get("workflow_runs"), list):
+        return None
+    return [run for run in payload["workflow_runs"] if isinstance(run, dict)]
 
 
 def _parse_json(stdout: str) -> tuple[dict[str, Any] | None, str | None]:
@@ -53,12 +223,13 @@ def _parse_json(stdout: str) -> tuple[dict[str, Any] | None, str | None]:
 
 
 def _get_main_sha(repo: str) -> str | None:
-    """Return current main branch HEAD SHA, or None on error."""
-    result = _gh(["api", f"repos/{repo}/git/refs/heads/main", "--jq", ".object.sha"])
-    if result.returncode != 0:
-        return None
-    sha = result.stdout.strip()
-    return sha if sha else None
+    """Return current main branch HEAD SHA, or None on error.
+
+    Retries transient API failures; returns None on permanent or persistent
+    transient failure (the caller treats None as an explicit error, never as
+    a freshness signal).
+    """
+    return _fetch_main_sha_with_retry(repo).sha
 
 
 def _fetch_pr_head_metadata(pr_number: str, *, repo: str) -> tuple[str | None, str | None]:
@@ -79,27 +250,12 @@ def _fetch_pr_head_metadata(pr_number: str, *, repo: str) -> tuple[str | None, s
 
 
 def _fetch_workflow_runs(repo: str, head_branch: str) -> list[dict[str, Any]] | None:
-    """Return workflow-run objects for a PR head branch, or ``None`` on API failure."""
-    result = _gh(
-        [
-            "api",
-            f"repos/{repo}/actions/runs",
-            "--method",
-            "GET",
-            "-f",
-            f"branch={head_branch}",
-            "-f",
-            "event=pull_request",
-            "-f",
-            "per_page=100",
-        ],
-    )
-    if result.returncode != 0:
-        return None
-    payload, _ = _parse_json(result.stdout)
-    if not isinstance(payload, dict) or not isinstance(payload.get("workflow_runs"), list):
-        return None
-    return [run for run in payload["workflow_runs"] if isinstance(run, dict)]
+    """Return workflow-run objects for a PR head branch, or ``None`` on API failure.
+
+    Retries transient failures; returns None on permanent or persistent transient
+    failure so the caller falls back without inferring a base SHA.
+    """
+    return _fetch_workflow_runs_with_retry(repo, head_branch)
 
 
 def _find_workflow_run_base_sha(
@@ -171,17 +327,23 @@ def check_merge_staleness(
       - ``detection``: ``"workflow_run_base_sha"`` | ``"base_vs_main"``
       - ``pr``, ``base_sha``, ``main_sha``
     """
-    main_sha = _get_main_sha(repo)
-    if main_sha is None:
+    main_result = _fetch_main_sha_with_retry(repo)
+    if main_result.sha is None:
+        unavailable = (
+            " (persistent transient API failure; not retried further)"
+            if main_result.unavailable
+            else ""
+        )
         return {
             "status": "error",
-            "error": "Failed to fetch current main SHA",
+            "error": (main_result.error or "Failed to fetch current main SHA") + unavailable,
             "stale": None,
             "detection": "error",
             "pr": pr_number,
             "base_sha": base_sha,
             "main_sha": None,
         }
+    main_sha = main_result.sha
 
     ci_base_sha = _detect_workflow_run_base_sha(repo, pr_number)
     if ci_base_sha:

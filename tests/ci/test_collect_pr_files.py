@@ -430,6 +430,33 @@ def test_cli_requires_at_least_one_output() -> None:
     assert rc == 2
 
 
+@pytest.mark.parametrize(
+    ("flag", "value"),
+    [("--per-page", 0), ("--per-page", -1), ("--max-attempts", 0), ("--max-attempts", -3)],
+)
+def test_cli_rejects_invalid_numeric_options_with_single_diagnostic(
+    tmp_path: Path, capsys, flag: str, value: int
+) -> None:
+    """An invalid --per-page / --max-attempts exits 2 with one diagnostic, no traceback.
+
+    Guards the fail-closed contract: these values used to raise an uncaught
+    ``ValueError`` from inside ``fetch_all_pr_files``, printing a traceback.
+    They must instead produce a single actionable stderr line and never start
+    collection (no output file is written, no gh call is made).
+    """
+    changed = tmp_path / "changed.txt"
+    rc = main(
+        ["--repo", "o/r", "--pr-number", "5", flag, str(value), "--out-changed-files", str(changed)]
+    )
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "Traceback" not in err
+    assert flag in err
+    assert "at least 1" in err
+    # No collection started: no partial output and (implicitly) no gh subprocess.
+    assert not changed.exists()
+
+
 def test_cli_fails_closed_on_persistent_failure(tmp_path: Path, capsys) -> None:
     """Persistent failure exits 1, the diagnostic goes to stderr, no partial file."""
     changed = tmp_path / "changed.txt"

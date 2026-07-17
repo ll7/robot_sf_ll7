@@ -487,6 +487,18 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    # Validate the numeric CLI options up front so an invalid value produces a
+    # single actionable diagnostic instead of an uncaught traceback from inside
+    # ``fetch_all_pr_files`` (e.g. ``--per-page 0`` or ``--max-attempts 0``).
+    if args.per_page < 1:
+        print(f"ERROR: --per-page must be at least 1 (got {args.per_page}).", file=sys.stderr)
+        return 2
+    if args.max_attempts < 1:
+        print(
+            f"ERROR: --max-attempts must be at least 1 (got {args.max_attempts}).", file=sys.stderr
+        )
+        return 2
+
     try:
         files = fetch_all_pr_files(
             args.repo,

@@ -4097,22 +4097,17 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             0.0, float(self.config.predictive_hard_clearance_distance) - float(min_clearance)
         )
 
-        phase_cost = 0.0
-        if bool(self.config.predictive_phase_logic_enabled):
-            first_v, _first_w = sequence[0]
-            first_seg_end = min(max(1, segment_steps), max(horizon, 1)) - 1
-            first_heading = robot_heading + (local_headings[first_seg_end] if horizon > 0 else 0.0)
-            goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
-            heading_err = abs(wrap_angle_pi(goal_heading - first_heading))
-            phase_cost += float(self.config.predictive_phase_align_weight) * heading_err
-            if min_clearance >= float(self.config.predictive_phase_commit_clearance):
-                phase_cost -= float(self.config.predictive_phase_commit_weight) * max(0.0, first_v)
-            if min_clearance < float(self.config.predictive_phase_yield_clearance):
-                phase_cost += float(self.config.predictive_phase_yield_weight) * max(0.0, first_v)
-            if min_clearance >= float(
-                self.config.predictive_phase_recover_clearance
-            ) and goal_progress < float(self.config.predictive_phase_recover_progress):
-                phase_cost += float(self.config.predictive_phase_recover_weight)
+        goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
+        phase_cost = self._sequence_phase_cost(
+            sequence=sequence,
+            segment_steps=segment_steps,
+            horizon=horizon,
+            local_headings=local_headings,
+            robot_heading=robot_heading,
+            goal_heading=goal_heading,
+            min_clearance=min_clearance,
+            goal_progress=goal_progress,
+        )
 
         return (
             -float(self.config.predictive_goal_weight) * goal_progress
@@ -4126,6 +4121,41 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             + float(self.config.occupancy_weight) * occ_penalty
             + phase_cost
         )
+
+    def _sequence_phase_cost(
+        self,
+        *,
+        sequence: list[tuple[float, float]],
+        segment_steps: int,
+        horizon: int,
+        local_headings: np.ndarray,
+        robot_heading: float,
+        goal_heading: float,
+        min_clearance: float,
+        goal_progress: float,
+    ) -> float:
+        """Phase-logic cost contribution for a scored action sequence.
+
+        Returns:
+            float: Additional phase cost (may be negative); zero when phase logic is disabled.
+        """
+        if not bool(self.config.predictive_phase_logic_enabled):
+            return 0.0
+        phase_cost = 0.0
+        first_v, _first_w = sequence[0]
+        first_seg_end = min(max(1, segment_steps), max(horizon, 1)) - 1
+        first_heading = robot_heading + (local_headings[first_seg_end] if horizon > 0 else 0.0)
+        heading_err = abs(wrap_angle_pi(goal_heading - first_heading))
+        phase_cost += float(self.config.predictive_phase_align_weight) * heading_err
+        if min_clearance >= float(self.config.predictive_phase_commit_clearance):
+            phase_cost -= float(self.config.predictive_phase_commit_weight) * max(0.0, first_v)
+        if min_clearance < float(self.config.predictive_phase_yield_clearance):
+            phase_cost += float(self.config.predictive_phase_yield_weight) * max(0.0, first_v)
+        if min_clearance >= float(
+            self.config.predictive_phase_recover_clearance
+        ) and goal_progress < float(self.config.predictive_phase_recover_progress):
+            phase_cost += float(self.config.predictive_phase_recover_weight)
+        return phase_cost
 
     def _plan_sequence_search(
         self,

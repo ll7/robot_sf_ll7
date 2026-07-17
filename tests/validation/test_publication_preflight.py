@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import TYPE_CHECKING
 
@@ -711,4 +712,208 @@ def test_preflight_fails_when_manifest_missing_schema_version(tmp_path: Path) ->
     manifest.pop("schema_version", None)
     _save_manifest(bundle_dir, manifest)
     with pytest.raises(PublicationPreflightError, match="missing schema_version"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+# ---------------------------------------------------------------------------
+# Issue #5580: per-episode SNQI field vs diagnostics basis (release-gate self-check)
+# ---------------------------------------------------------------------------
+
+from robot_sf.benchmark.metrics import snqi as curvature_aware_snqi  # noqa: E402
+from robot_sf.benchmark.snqi_scalarization_sensitivity import (  # noqa: E402
+    load_baseline_mapping,
+    load_weight_mapping,
+)
+from robot_sf.common.artifact_paths import get_repository_root  # noqa: E402
+
+_SNQI_WEIGHTS_PATH = (
+    get_repository_root() / "configs" / "benchmarks" / "snqi_weights_camera_ready_v3.json"
+)
+_SNQI_BASELINE_PATH = (
+    get_repository_root() / "configs" / "benchmarks" / "snqi_baseline_camera_ready_v3.json"
+)
+
+
+def _snqi_episode(*, success: bool, seed: int) -> dict:
+    """Build one episode whose stored metrics.snqi is the curvature-aware scalarizer output."""
+    weights = load_weight_mapping(_SNQI_WEIGHTS_PATH)
+    baseline = load_baseline_mapping(_SNQI_BASELINE_PATH)
+    metrics = {
+        "collisions": 0 if success else 1,
+        "success": success,
+        "time_to_goal_norm": 0.5 if success else 1.0,
+        "near_misses": 0,
+        "comfort_exposure": 0.0,
+        "force_exceed_events": 0,
+        "jerk_mean": 0.0,
+        "curvature_mean": 0.1,
+    }
+    metrics["snqi"] = curvature_aware_snqi(metrics, weights, baseline_stats=baseline)
+    return {
+        "episode_id": f"scenario--{seed}",
+        "scenario_id": "scenario",
+        "seed": seed,
+        "event_ledger": {"software_commit": "abc123"},
+        "metrics": metrics,
+    }
+
+
+def _seed_snqi_diagnostics(bundle_dir: Path, ordering: list[dict]) -> None:
+    """Write payload/reports/snqi_diagnostics.json with canonical weights/baseline provenance."""
+    weights_sha256 = hashlib.sha256(_SNQI_WEIGHTS_PATH.read_bytes()).hexdigest()
+    baseline_sha256 = hashlib.sha256(_SNQI_BASELINE_PATH.read_bytes()).hexdigest()
+    diagnostics = {
+        "weights_version": "snqi_weights_camera_ready_v3",
+        "baseline_version": "snqi_baseline_camera_ready_v3",
+        "weights_sha256": weights_sha256,
+        "baseline_sha256": baseline_sha256,
+        "planner_ordering": ordering,
+    }
+    _write(
+        bundle_dir / "payload" / "reports" / "snqi_diagnostics.json",
+        json.dumps(diagnostics) + "\n",
+    )
+
+
+def _seed_snqi_arm(bundle_dir: Path, arm: str, rows: list[dict]) -> None:
+    """Write payload/runs/<arm>/episodes.jsonl for one arm."""
+    episodes_path = bundle_dir / "payload" / "runs" / arm / "episodes.jsonl"
+    episodes_path.parent.mkdir(parents=True, exist_ok=True)
+    episodes_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+
+
+def test_preflight_snqi_check_skipped_without_diagnostics(tmp_path: Path) -> None:
+    """A bundle without snqi_diagnostics.json skips the SNQI self-check (checked=False)."""
+    bundle_dir = _build_bundle(tmp_path)
+    report = verify_publication_bundle_preflight(bundle_dir)
+    assert report["status"] == "pass"
+    assert report["evidence"]["snqi_field_consistency"]["checked"] is False
+
+
+def test_preflight_snqi_check_passes_on_consistent_bundle(tmp_path: Path) -> None:
+    """A bundle whose stored field matches the curvature-aware recompute passes the SNQI gate."""
+    bundle_dir = _build_bundle(tmp_path)
+    rows = [_snqi_episode(success=True, seed=1), _snqi_episode(success=True, seed=2)]
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", rows)
+    mean = sum(r["metrics"]["snqi"] for r in rows) / len(rows)
+    _seed_snqi_diagnostics(
+        bundle_dir,
+        [
+            {
+                "planner_key": "orca",
+                "kinematics": "holonomic",
+                "episode_count": len(rows),
+                "mean_snqi": mean,
+                "rank": 1,
+            }
+        ],
+    )
+
+    report = verify_publication_bundle_preflight(bundle_dir)
+    assert report["status"] == "pass"
+    snqi = report["evidence"]["snqi_field_consistency"]
+    assert snqi["checked"] is True
+    assert snqi["violation_count"] == 0
+    assert snqi["counts"]["rows"] == 2
+    assert snqi["counts"]["episode_field_present"] == 2
+    assert snqi["ordering"]["field_planner_ordering"] == {"orca::holonomic": 1}
+
+
+def test_preflight_snqi_check_fails_on_drifted_stored_field(tmp_path: Path) -> None:
+    """A stored metrics.snqi that disagrees with the curvature-aware recompute fails closed.
+
+    This is the issue #5580 drift scenario: the per-episode field was baked under a different
+    basis than the diagnostics declare, so the recomputation disagrees with the stored value.
+    """
+    bundle_dir = _build_bundle(tmp_path)
+    rows = [_snqi_episode(success=True, seed=1)]
+    rows[0]["metrics"]["snqi"] += 0.5  # corrupt the stored field
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", rows)
+    mean = sum(r["metrics"]["snqi"] for r in rows) / len(rows)
+    _seed_snqi_diagnostics(
+        bundle_dir,
+        [
+            {
+                "planner_key": "orca",
+                "kinematics": "holonomic",
+                "episode_count": len(rows),
+                "mean_snqi": mean,
+                "rank": 1,
+            }
+        ],
+    )
+
+    with pytest.raises(PublicationPreflightError, match="stored SNQI"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_snqi_check_fails_on_ordering_disagreement(tmp_path: Path) -> None:
+    """A field-derived arm ordering that disagrees with diagnostics planner_ordering fails.
+
+    Reproduces the #5580 consequence: aggregates built from the per-episode field can elect a
+    different SNQI-best arm than the diagnostics ordering when the two surfaces have drifted.
+    """
+    bundle_dir = _build_bundle(tmp_path)
+    good_rows = [_snqi_episode(success=True, seed=1), _snqi_episode(success=True, seed=2)]
+    bad_rows = [_snqi_episode(success=False, seed=3)]
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", good_rows)
+    _seed_snqi_arm(bundle_dir, "social_force__differential_drive", bad_rows)
+    good_mean = sum(r["metrics"]["snqi"] for r in good_rows) / len(good_rows)
+    bad_mean = bad_rows[0]["metrics"]["snqi"]
+    # Diagnostics declare social_force as the winner (rank 1), but the curvature-aware field
+    # basis ranks orca first -> the two surfaces disagree and the gate must fail closed.
+    _seed_snqi_diagnostics(
+        bundle_dir,
+        [
+            {
+                "planner_key": "social_force",
+                "kinematics": "differential_drive",
+                "episode_count": len(bad_rows),
+                "mean_snqi": bad_mean,
+                "rank": 1,
+            },
+            {
+                "planner_key": "orca",
+                "kinematics": "holonomic",
+                "episode_count": len(good_rows),
+                "mean_snqi": good_mean,
+                "rank": 2,
+            },
+        ],
+    )
+
+    with pytest.raises(PublicationPreflightError, match="arm ordering disagrees"):
+        verify_publication_bundle_preflight(bundle_dir)
+
+
+def test_preflight_snqi_check_fails_on_provenance_sha_mismatch(tmp_path: Path) -> None:
+    """Diagnostics declaring a non-canonical weights/baseline sha fails closed."""
+    bundle_dir = _build_bundle(tmp_path)
+    rows = [_snqi_episode(success=True, seed=1)]
+    _seed_snqi_arm(bundle_dir, "orca__holonomic", rows)
+    weights_sha256 = hashlib.sha256(_SNQI_WEIGHTS_PATH.read_bytes()).hexdigest()
+    baseline_sha256 = hashlib.sha256(_SNQI_BASELINE_PATH.read_bytes()).hexdigest()
+    diagnostics = {
+        "weights_version": "snqi_weights_camera_ready_v3",
+        "baseline_version": "snqi_baseline_camera_ready_v3",
+        "weights_sha256": "0" * 64,  # wrong
+        "baseline_sha256": baseline_sha256,
+        "planner_ordering": [
+            {
+                "planner_key": "orca",
+                "kinematics": "holonomic",
+                "episode_count": len(rows),
+                "mean_snqi": rows[0]["metrics"]["snqi"],
+                "rank": 1,
+            }
+        ],
+    }
+    _write(
+        bundle_dir / "payload" / "reports" / "snqi_diagnostics.json",
+        json.dumps(diagnostics) + "\n",
+    )
+    # Reference the unused sha to keep the linter honest about intent.
+    assert weights_sha256 != "0" * 64
+
+    with pytest.raises(PublicationPreflightError, match="weights_sha256 does not match"):
         verify_publication_bundle_preflight(bundle_dir)

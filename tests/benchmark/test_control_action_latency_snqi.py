@@ -24,9 +24,12 @@ from robot_sf.benchmark.control_action_latency_snqi import (
     PAIRWISE_DIFF_TOL,
     POINT_TOL,
     PROBABILITY_TOL,
+    UNCERTAINTY_REISSUE_SCHEMA_VERSION,
     WEIGHTS_SHA256,
     SnqiLatencyAnalysisError,
     build_snqi_analysis,
+    build_uncertainty_reissue,
+    build_uncertainty_reissue_review_sidecar,
     classify_input_row,
     derive_inputs_from_raw_rows,
     load_input_provenance,
@@ -38,6 +41,7 @@ from robot_sf.benchmark.control_action_latency_snqi import (
     verify_against_reference,
     write_input_provenance,
     write_input_rows,
+    write_uncertainty_reissue,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +49,10 @@ EVIDENCE_DIR = REPO_ROOT / "docs/context/evidence/issue_5034_control_action_late
 DURABLE_INPUT = EVIDENCE_DIR / "snqi_latency_inputs.csv"
 DURABLE_INPUT_PROVENANCE = EVIDENCE_DIR / "snqi_latency_inputs.csv.provenance.json"
 REGISTERED_REFERENCE = EVIDENCE_DIR / "snqi_analysis.json"
+REISSUED_UNCERTAINTY = EVIDENCE_DIR / "snqi_uncertainty_reissued.json"
+REISSUED_UNCERTAINTY_REVIEW = EVIDENCE_DIR / "snqi_uncertainty_reissued.json.review.json"
+ANALYZER_SOURCE = REPO_ROOT / "robot_sf/benchmark/control_action_latency_snqi.py"
+ANALYZER_CLI = REPO_ROOT / "scripts/benchmark/analyze_control_action_latency_snqi.py"
 WEIGHTS_PATH = REPO_ROOT / "configs/benchmarks/snqi_weights_camera_ready_v3.json"
 BASELINE_PATH = REPO_ROOT / "configs/benchmarks/snqi_baseline_camera_ready_v3.json"
 
@@ -573,3 +581,289 @@ def test_committed_durable_input_has_full_fixed_scope() -> None:
     assert coverage["fallback_row_count"] == 0
     assert coverage["degraded_row_count"] == 0
     assert coverage["unavailable_row_count"] == 0
+
+
+# --- uncertainty re-issue (issue #5928 DoD #2) ----------------------------
+
+
+def _reissue_from_synthetic_packet(tmp_path: Path) -> tuple[dict, dict]:
+    """Build a canonical packet from the synthetic full input and re-issue it."""
+    inputs = [classify_input_row(row) for row in _full_input_set()]
+    packet = build_snqi_analysis(
+        inputs, weights=WEIGHTS, baseline_stats=BASELINE, date="2026-07-17"
+    )
+    provenance = {
+        "input_schema_version": "control-action-latency-snqi-inputs.v1",
+        "input_path": "inputs.csv",
+        "source": {"raw_rows_sha256": "6b34e690" + "0" * 56, "axis": AXIS_KEY},
+        "promotion": {"promoter_git_head": "abc12345", "date": "2026-07-17"},
+    }
+    reissue = build_uncertainty_reissue(
+        packet,
+        generator_source_sha256="deadbeef" + "0" * 56,
+        generator_source_rel_path="robot_sf/benchmark/control_action_latency_snqi.py",
+        input_sha256="feedface" + "0" * 56,
+        input_provenance_anchor=provenance,
+        reissue_date="2026-07-17",
+    )
+    assert tmp_path is not None
+    return packet, reissue
+
+
+def test_build_uncertainty_reissue_has_registered_schema_and_blocks(tmp_path: Path) -> None:
+    """The re-issued packet carries the issue #5928 schema and required blocks."""
+    _packet, reissue = _reissue_from_synthetic_packet(tmp_path)
+    assert reissue["schema_version"] == UNCERTAINTY_REISSUE_SCHEMA_VERSION
+    assert reissue["issue"] == 5928
+    assert reissue["parent_issue"] == 5912
+    assert reissue["evidence_status"] == "diagnostic-only"
+    assert "not paper-facing" in reissue["claim_boundary"]
+    for block in (
+        "recovery_decision",
+        "provenance",
+        "reproducibility",
+        "point_estimate_slopes",
+        "per_planner_slope_intervals",
+        "pairwise_slope_uncertainty",
+        "consistency_checks",
+        "caveats",
+    ):
+        assert block in reissue, f"missing block {block!r}"
+
+
+def test_build_uncertainty_reissue_records_unrecoverable_decision(tmp_path: Path) -> None:
+    """The recovery decision names the unrecoverable path and the DoD branches."""
+    _packet, reissue = _reissue_from_synthetic_packet(tmp_path)
+    decision = reissue["recovery_decision"]
+    assert decision["recovery_path"] == "unrecoverable"
+    assert "committed canonical analyzer" in decision["decision"]
+    assert decision["linked_prs"] == [5904, 5923]
+    assert 5912 in decision["linked_issues"]
+    # The concrete unrecoverability evidence is carried in the artifact.
+    joined = " \n".join(decision["evidence"])
+    assert "half-integer" in joined
+    assert "internally inconsistent" in joined
+
+
+def test_reissued_uncertainty_block_is_internally_consistent(tmp_path: Path) -> None:
+    """Every slope_difference equals slope_A - slope_B and probabilities are integer counts."""
+    packet, reissue = _reissue_from_synthetic_packet(tmp_path)
+    slope_by_group = reissue["point_estimate_slopes"]["slope_per_100ms_by_group"]
+    for entry, check in zip(
+        reissue["pairwise_slope_uncertainty"], reissue["consistency_checks"], strict=True
+    ):
+        first, _, second = entry["comparison"].partition(" minus ")
+        expected_diff = slope_by_group[first] - slope_by_group[second]
+        assert abs(entry["slope_difference"] - expected_diff) <= POINT_TOL
+        assert check["slope_difference_equals_slope_A_minus_slope_B"] is True
+        assert check["probability_is_integer_resample_count"] is True
+        # No half-integer counts: the count reproduces the probability exactly.
+        assert (
+            abs(
+                check["implied_resample_count"] / 10000.0
+                - entry["probability_first_is_more_robust"]
+            )
+            <= 1e-12
+        )
+    # The canonical packet's own pairwise block is carried through unchanged.
+    assert reissue["pairwise_slope_uncertainty"] == packet["pairwise_slope_uncertainty"]
+
+
+def test_build_uncertainty_reissue_preserves_native_adapter_labels(tmp_path: Path) -> None:
+    """Native / adapter execution-mode labels survive the re-issue."""
+    _packet, reissue = _reissue_from_synthetic_packet(tmp_path)
+    assert reissue["point_estimate_slopes"]["execution_mode_by_group"] == {
+        "default_social_force": "native",
+        "hybrid_rule_v0_minimal": "adapter",
+        "orca": "adapter",
+    }
+    modes = {
+        row["planner_group"]: row["execution_mode"]
+        for row in reissue["per_planner_slope_intervals"]
+    }
+    assert modes == {
+        "default_social_force": "native",
+        "hybrid_rule_v0_minimal": "adapter",
+        "orca": "adapter",
+    }
+
+
+def test_build_uncertainty_reissue_does_not_alias_input_packets(tmp_path: Path) -> None:
+    """Review-time edits to a re-issue do not mutate canonical input objects."""
+    packet, reissue = _reissue_from_synthetic_packet(tmp_path)
+    original_difference = packet["pairwise_slope_uncertainty"][0]["slope_difference"]
+    reissue["pairwise_slope_uncertainty"][0]["slope_difference"] = 123.0
+    reissue["reproducibility"]["bootstrap_method"]["percentiles"].append(99.0)
+    assert packet["pairwise_slope_uncertainty"][0]["slope_difference"] == original_difference
+    assert packet["snqi_method"]["bootstrap_method"]["percentiles"] == [2.5, 97.5]
+
+
+def test_build_uncertainty_reissue_rejects_wrong_schema_packet() -> None:
+    """A non-canonical packet is rejected before re-issue."""
+    with pytest.raises(SnqiLatencyAnalysisError, match="requires a canonical-analyzer packet"):
+        build_uncertainty_reissue(
+            {"schema_version": "something.else.v9"},
+            generator_source_sha256="0" * 64,
+            generator_source_rel_path="x.py",
+            input_sha256="0" * 64,
+            input_provenance_anchor={"source": {}},
+            reissue_date="2026-07-17",
+        )
+
+
+def test_build_uncertainty_reissue_fails_on_inconsistent_block(tmp_path: Path) -> None:
+    """A tampered pairwise slope_difference fails the internal-consistency guard."""
+    packet, _reissue = _reissue_from_synthetic_packet(tmp_path)
+    tampered = json.loads(json.dumps(packet))
+    tampered["pairwise_slope_uncertainty"][0]["slope_difference"] += 1.0
+    with pytest.raises(SnqiLatencyAnalysisError, match="deviates from slope_A - slope_B"):
+        build_uncertainty_reissue(
+            tampered,
+            generator_source_sha256="0" * 64,
+            generator_source_rel_path="x.py",
+            input_sha256="0" * 64,
+            input_provenance_anchor={"source": {}},
+            reissue_date="2026-07-17",
+        )
+
+
+def test_build_uncertainty_reissue_fails_on_half_integer_probability(tmp_path: Path) -> None:
+    """A half-integer probability (registered-block style) fails the integer-count guard."""
+    packet, _reissue = _reissue_from_synthetic_packet(tmp_path)
+    tampered = json.loads(json.dumps(packet))
+    # 0.68635 = 6863.5/10000 mirrors the registered block's unrecoverable estimator.
+    tampered_pairwise = tampered["pairwise_slope_uncertainty"][0]
+    if "probability_first_is_more_robust" not in tampered_pairwise:
+        raise KeyError("probability_first_is_more_robust")
+    tampered_pairwise["probability_first_is_more_robust"] = 0.68635
+    with pytest.raises(SnqiLatencyAnalysisError, match="not an exact integer resample count"):
+        build_uncertainty_reissue(
+            tampered,
+            generator_source_sha256="0" * 64,
+            generator_source_rel_path="x.py",
+            input_sha256="0" * 64,
+            input_provenance_anchor={"source": {}},
+            reissue_date="2026-07-17",
+        )
+
+
+def test_write_uncertainty_reissue_is_byte_reproducible(tmp_path: Path) -> None:
+    """Writing the same re-issue packet twice produces byte-identical files."""
+    _packet, reissue = _reissue_from_synthetic_packet(tmp_path)
+    first = tmp_path / "reissued.json"
+    second = tmp_path / "reissued_again.json"
+    write_uncertainty_reissue(reissue, first)
+    write_uncertainty_reissue(reissue, second)
+    assert first.read_bytes() == second.read_bytes()
+
+
+def test_reissue_review_sidecar_matches_artifact(tmp_path: Path) -> None:
+    """The review sidecar mirrors the artifact path and a matching SHA-256."""
+    from robot_sf.benchmark.identity.hash_utils import sha256_file
+
+    _packet, reissue = _reissue_from_synthetic_packet(tmp_path)
+    artifact = tmp_path / "reissued.json"
+    write_uncertainty_reissue(reissue, artifact)
+    sidecar = build_uncertainty_reissue_review_sidecar(artifact, repo_root=tmp_path)
+    assert sidecar["schema_version"] == "evidence-review-marker.v1"
+    assert sidecar["preserved_exact_bytes"] is True
+    assert sidecar["artifact_path"] == "reissued.json"
+    assert sidecar["artifact_sha256"] == sha256_file(artifact)
+
+
+def test_reissue_cli_writes_packet_and_review_sidecar(tmp_path: Path) -> None:
+    """The --reissue-uncertainty CLI writes the packet plus its review sidecar."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("analyze_cli", ANALYZER_CLI)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    out = tmp_path / "reissued.json"
+    argv = [
+        "--input",
+        str(DURABLE_INPUT),
+        "--input-provenance",
+        str(DURABLE_INPUT_PROVENANCE),
+        "--reissue-uncertainty",
+        "--reissue-output",
+        str(out),
+        "--date",
+        "2026-07-17",
+        "--no-checksum",
+    ]
+    rc = module.main(argv)
+    assert rc == 0
+    assert out.is_file()
+    review = Path(str(out) + ".review.json")
+    assert review.is_file()
+    payload = json.loads(out.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == UNCERTAINTY_REISSUE_SCHEMA_VERSION
+    assert payload["issue"] == 5928
+    assert payload["reproducibility"]["byte_reproducible"] is True
+    assert all(
+        c["slope_difference_equals_slope_A_minus_slope_B"]
+        and c["probability_is_integer_resample_count"]
+        for c in payload["consistency_checks"]
+    )
+
+
+def test_reissue_cli_rejects_raw_rows() -> None:
+    """Re-issue provenance must come from the checksummed durable input path."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("analyze_cli", ANALYZER_CLI)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.main(["--reissue-uncertainty", "--raw-rows", "raw.jsonl"]) == 1
+
+
+@pytest.mark.skipif(
+    not DURABLE_INPUT.exists() or not REISSUED_UNCERTAINTY.exists(),
+    reason="committed durable input / re-issued uncertainty not present",
+)
+def test_committed_reissued_uncertainty_reproduces_byte_for_byte() -> None:
+    """The committed re-issued packet regenerates byte-for-byte from the analyzer."""
+    import importlib.util
+    import tempfile
+
+    spec = importlib.util.spec_from_file_location("analyze_cli", ANALYZER_CLI)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out = Path(tmpdir) / "reissued.json"
+        argv = [
+            "--input",
+            str(DURABLE_INPUT),
+            "--input-provenance",
+            str(DURABLE_INPUT_PROVENANCE),
+            "--reissue-uncertainty",
+            "--reissue-output",
+            str(out),
+            "--date",
+            json.loads(REISSUED_UNCERTAINTY.read_text(encoding="utf-8"))["date"],
+            "--no-checksum",
+        ]
+        rc = module.main(argv)
+        assert rc == 0
+        assert out.read_bytes() == REISSUED_UNCERTAINTY.read_bytes()
+
+
+@pytest.mark.skipif(
+    not REISSUED_UNCERTAINTY.exists() or not REISSUED_UNCERTAINTY_REVIEW.exists(),
+    reason="committed re-issued uncertainty / review sidecar not present",
+)
+def test_committed_reissued_uncertainty_review_sidecar_matches() -> None:
+    """The committed review sidecar SHA-256 matches the committed artifact."""
+    from robot_sf.benchmark.identity.hash_utils import sha256_file
+
+    sidecar = json.loads(REISSUED_UNCERTAINTY_REVIEW.read_text(encoding="utf-8"))
+    assert sidecar["schema_version"] == "evidence-review-marker.v1"
+    assert sidecar["preserved_exact_bytes"] is True
+    assert (
+        sidecar["artifact_path"]
+        == "docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_uncertainty_reissued.json"
+    )
+    assert sidecar["artifact_sha256"] == sha256_file(REISSUED_UNCERTAINTY)

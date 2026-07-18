@@ -19,6 +19,7 @@ from scripts.dev.pr_gate_lease import (
     legacy_lease_path,
     load_lease,
     release_lease,
+    save_lease,
     status,
 )
 
@@ -138,6 +139,35 @@ class TestPRGateLeaseHeartbeat:
 
         # Allow some tolerance for execution time
         assert abs((actual_expiry - expected_expiry).total_seconds()) < 1
+
+    def test_heartbeat_refreshes_path_specific_lease(
+        self, mock_git_dirs: None, tmp_path: Path
+    ) -> None:
+        """Heartbeat can refresh a lease whose worktree path differs from cwd."""
+        worktree = tmp_path / "gone-wt"
+        now = datetime.now(UTC)
+        lease = PRGateLease(
+            schema="pr_gate_lease.v1",
+            created_at=now.isoformat(),
+            expires_at=(now + timedelta(hours=2)).isoformat(),
+            pr_number=5819,
+            gate_id="gate-5819",
+            owner="gate-owner",
+            last_heartbeat=now.isoformat(),
+            worktree_path=str(worktree),
+            head_ref="gate/branch",
+            head_sha="head-sha",
+        )
+        path = lease_path(worktree)
+        save_lease(lease, path)
+
+        refreshed = heartbeat(worktree_path=worktree, extend_hours=3.0)
+
+        assert refreshed.worktree_path == str(worktree.resolve())
+        assert refreshed.head_ref == "gate/branch"
+        assert refreshed.head_sha == "head-sha"
+        assert refreshed.expires_at == datetime.fromisoformat(refreshed.expires_at).isoformat()
+        assert load_lease(path) == refreshed
 
     def test_heartbeat_no_lease_raises(self, mock_git_dirs: None) -> None:
         """Heartbeat should raise when no lease exists."""

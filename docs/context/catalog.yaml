@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-16
+updated_at: 2026-07-17
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,26 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/README.md
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/config_sha256.txt
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/provenance_manifest.json
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/issue_5936_result_job_durability_gate.md
+  status: current
+  freshness: policy
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5792_demo_validation_2026-07-15.md
   status: evidence
   freshness: dated
@@ -3769,6 +3789,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
   legacy_dirty_evidence: true
+- path: docs/context/evidence/issue_5305_certified_archive
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4328_h600_seed_sufficiency_candidates_2026-07-03/README.md
   status: evidence
   freshness: evidence
@@ -4519,4 +4543,8 @@ entries:
 - path: docs/context/evidence/issue_5447_ch7_case_capsules/README.md
   status: proposal
   freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5602_scenario_evidence_crosswalk_release_0_0_3_2026-07-17
+  status: evidence
+  freshness: evidence
   area: benchmark_evidence

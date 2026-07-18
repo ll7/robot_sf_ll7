@@ -314,6 +314,36 @@ def compare_baseline_drift(
     return drift, reverse_drift
 
 
+def detect_working_tree_drift(
+    working_tree_report: Mapping[str, Any],
+    baseline: Mapping[str, Any],
+) -> list[str]:
+    """Return files where the committed baseline over-counts the working tree.
+
+    This is the pre-merge half of the issue #5894 drift guard: it catches a
+    cleanup branch that removed placeholder docstrings from the working tree
+    without regenerating the committed baseline, so the cleanup PR fails its own
+    readiness gate instead of slipping through and breaking the next unrelated
+    PR after merge. Forward drift (new placeholder debt) is intentionally
+    ignored here because increases are owned by the ``ratchet`` mode.
+
+    Returns:
+        Reverse-drift lines (baseline exceeds working tree), sorted by path.
+    """
+    tree_files = _files_payload(working_tree_report)
+    baseline_files = _files_payload(baseline)
+    reverse_drift: list[str] = []
+    for path in sorted(set(tree_files) | set(baseline_files)):
+        tree_count = tree_files.get(path, 0)
+        baseline_count = baseline_files.get(path, 0)
+        if baseline_count > tree_count:
+            reverse_drift.append(
+                f"{path}: working tree has {tree_count}, baseline has {baseline_count} "
+                f"(exceeds by {baseline_count - tree_count})"
+            )
+    return reverse_drift
+
+
 def _count_todo_docstrings(path: Path) -> int:
     """Count TODO-docstring placeholder occurrences in definition docstrings."""
     return sum(info.docstring.count(_PLACEHOLDER) for info in _read_defs(path))
@@ -380,6 +410,13 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_BASELINE_PATH,
         help="Backlog baseline path for ratchet/write-baseline modes",
+    )
+    parser.add_argument(
+        "--check-working-tree",
+        action="store_true",
+        help="verify-baseline also fails when the committed baseline over-counts the "
+        "current working tree, so a cleanup PR that removes placeholder docstrings "
+        "must regenerate the baseline in the same PR (issue #5894).",
     )
     parser.add_argument(
         "--root",
@@ -479,7 +516,12 @@ def main() -> int:
 
 
 def _run_verify_baseline(args: argparse.Namespace, repo_root: Path) -> int:
-    """Verify the committed baseline matches the base-ref backlog (drift guard)."""
+    """Verify the committed baseline matches the base-ref backlog (drift guard).
+
+    With ``--check-working-tree`` it also fails when the committed baseline
+    over-counts the current working tree, so a cleanup PR that removes placeholder
+    docstrings must regenerate the baseline in the same PR (issue #5894).
+    """
     baseline_path = repo_root / args.baseline
     baseline = _read_backlog_baseline(baseline_path, repo_root)
     if baseline is None:
@@ -500,6 +542,21 @@ def _run_verify_baseline(args: argparse.Namespace, repo_root: Path) -> int:
     totals = cast("dict[str, int]", ref_report["totals"])
     if not isinstance(totals, dict):
         raise ValueError("docstring TODO report totals must be a mapping")
+    if getattr(args, "check_working_tree", False):
+        working_tree_report = build_backlog_report(repo_root, roots=roots)
+        working_tree_drift = detect_working_tree_drift(working_tree_report, baseline)
+        if working_tree_drift:
+            print(
+                "TODO-docstring baseline over-counts the current working tree "
+                "(regenerate the baseline in this PR so it does not stale after merge):"
+            )
+            for line in working_tree_drift:
+                print(f"- baseline exceeds working tree: {line}")
+            print(
+                "Run: uv run python scripts/validation/check_docstring_todos.py "
+                "--mode write-baseline"
+            )
+            return 1
     print(
         "TODO-docstring baseline matches base "
         f"'{args.base}': {totals['files']} files, {totals['total_occurrences']} occurrences."

@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -49,6 +50,8 @@ class PRGateLease:
     owner: str | None  # e.g., username, session ID
     last_heartbeat: str  # ISO 8601 timestamp
     worktree_path: str | None = None
+    head_ref: str | None = None  # short branch name; None for detached HEAD
+    head_sha: str | None = None  # commit to restore when the branch is unavailable/detached
 
     def is_expired(self) -> bool:
         """Check if the lease has expired."""
@@ -110,6 +113,33 @@ def _validate_duration(val: float, name: str) -> None:
         raise ValueError(f"{name} must be strictly positive")
 
 
+def _head_metadata(worktree_path: Path) -> tuple[str | None, str | None]:
+    """Return the checked-out branch/ref and commit for a worktree when available."""
+    try:
+        ref_result = subprocess.run(
+            ["git", "symbolic-ref", "--quiet", "--short", "HEAD"],
+            cwd=str(worktree_path),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        sha_result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(worktree_path),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None, None
+
+    head_ref = ref_result.stdout.strip() if ref_result.returncode == 0 else None
+    head_sha = sha_result.stdout.strip() if sha_result.returncode == 0 else None
+    return head_ref or None, head_sha or None
+
+
 def lease_path(worktree_path: Path | None = None) -> Path:
     """Return the path to the lease file in the Git common directory."""
     import hashlib
@@ -147,9 +177,13 @@ def create_lease(
     expires = now + timedelta(hours=ttl_hours)
 
     try:
-        wt_path = str(_repo_root().resolve())
+        wt_root = _repo_root().resolve()
+        wt_path = str(wt_root)
     except RuntimeError:
-        wt_path = str(Path.cwd().resolve())
+        wt_root = Path.cwd().resolve()
+        wt_path = str(wt_root)
+
+    head_ref, head_sha = _head_metadata(wt_root)
 
     lease = PRGateLease(
         schema=SCHEMA_VERSION,
@@ -160,6 +194,8 @@ def create_lease(
         owner=owner,
         last_heartbeat=now.isoformat(),
         worktree_path=wt_path,
+        head_ref=head_ref,
+        head_sha=head_sha,
     )
 
     save_lease(lease)
@@ -220,12 +256,14 @@ def save_lease(lease: PRGateLease, path: Path | None = None) -> None:
 def heartbeat(
     *,
     extend_hours: float | None = None,
+    worktree_path: Path | str | None = None,
 ) -> PRGateLease:
     """Refresh the heartbeat on an existing lease.
 
     Args:
         extend_hours: If provided, extend the expiry by this many hours from now.
                      If None, keep the original expiry time.
+        worktree_path: Optional worktree whose path-specific lease should be refreshed.
 
     Returns:
         The updated lease.
@@ -236,7 +274,8 @@ def heartbeat(
     if extend_hours is not None:
         _validate_duration(extend_hours, "extend_hours")
 
-    lease = load_lease()
+    lease_file = lease_path(Path(worktree_path)) if worktree_path is not None else lease_path()
+    lease = load_lease(lease_file)
     if lease is None:
         raise RuntimeError("No active lease to refresh")
 
@@ -251,10 +290,18 @@ def heartbeat(
     else:
         expires_at = lease.expires_at
 
-    try:
-        wt_path = lease.worktree_path or str(_repo_root().resolve())
-    except RuntimeError:
-        wt_path = lease.worktree_path or str(Path.cwd().resolve())
+    if worktree_path is not None:
+        wt_root = Path(worktree_path).resolve()
+        wt_path = str(wt_root)
+    else:
+        try:
+            wt_root = Path(lease.worktree_path).resolve() if lease.worktree_path else _repo_root()
+            wt_path = str(wt_root)
+        except RuntimeError:
+            wt_root = Path.cwd().resolve()
+            wt_path = lease.worktree_path or str(wt_root)
+
+    detected_ref, detected_sha = _head_metadata(wt_root) if wt_root.exists() else (None, None)
 
     updated = PRGateLease(
         schema=lease.schema,
@@ -265,8 +312,10 @@ def heartbeat(
         owner=lease.owner,
         last_heartbeat=new_heartbeat,
         worktree_path=wt_path,
+        head_ref=lease.head_ref or detected_ref,
+        head_sha=lease.head_sha or detected_sha,
     )
-    save_lease(updated)
+    save_lease(updated, lease_file)
     return updated
 
 

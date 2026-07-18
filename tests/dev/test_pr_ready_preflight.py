@@ -755,3 +755,44 @@ def test_pr_ready_check_surfaces_reuse_path_on_unrelated_base_drift(tmp_path: Pa
     assert result.returncode == 0, f"expected reuse success, got: {result.stderr}"
     # The reuse decision must be visible (reviewable), not silently swallowed.
     assert "reuse" in result.stderr.lower()
+
+
+def test_publication_preflight_lane_coverage_routing(preflight_repo: Path) -> None:
+    """Issue #5937: Verify that publication-preflight test and module routing works correctly."""
+    # 1. Assert that the Python conftest side classifies the test file as optional.
+    import tests.conftest as test_conftest
+
+    assert (
+        test_conftest._is_optional_readiness_test_path(
+            "tests/validation/test_publication_preflight.py"
+        )
+        is True
+    )
+
+    # 2. Assert that the bash script classifies robot_sf/benchmark/artifact_publication.py as optional.
+    lane_log = _write_lane_logging_stub(preflight_repo)
+
+    changed_file = preflight_repo / "robot_sf" / "benchmark" / "artifact_publication.py"
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("# publication module changes\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "benchmark publication change")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={
+            "BASE_REF": "HEAD~1",
+            "PR_READY_MODE": "interim",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    lane_lines = lane_log.read_text(encoding="utf-8").splitlines()
+    # When an optional file changes, both core and optional lanes must be run
+    assert lane_lines == [
+        "core --lane core",
+        "optional --lane optional",
+    ]
+    assert "Optional-extra changed files requiring the predictive lane" in result.stderr
+    assert "robot_sf/benchmark/artifact_publication.py" in result.stderr

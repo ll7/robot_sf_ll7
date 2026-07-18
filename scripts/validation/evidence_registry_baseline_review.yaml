@@ -16,13 +16,13 @@ source_issue: 5972
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 408
-refreshed_baseline_files_with_findings: 86
+refreshed_baseline_total_findings: 411
+refreshed_baseline_files_with_findings: 87
 decision_summary: >-
-  Thirteen evidence files merged after the 2026-07-11 baseline introduced 49 findings across
+  Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
   strict-linter finding was introduced (strict mode remains at zero active findings). Each file
-  was reviewed against its source to decide remediate-vs-baseline. All thirteen use the same
+  was reviewed against its source to decide remediate-vs-baseline. All fourteen use the same
   legacy-debt pattern as the original 359 findings: artifact provenance gaps
   (external/private/untracked artifacts, ambiguous bare filenames) and campaign provenance gaps
   (dangling historical commits, missing producing config). None is trivially remediable without
@@ -100,6 +100,15 @@ reviewed_files:
       Certified-archive acceptance report declares config_sha256 but the producing
       campaign_config.json is absent at the declared commit; provenance-backfill-required legacy
       debt (recover the producing config or commit with source evidence).
+  - path: docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/preregistration_config_registry.json
+    codes: [config_missing_at_commit, dangling_commit]
+    disposition: baseline
+    reason: >-
+      The preregistration registry records the planned factorial campaign's producing config and
+      commit, but the declared config is absent at that historical commit and the commit is not
+      reachable in this checkout. This is diagnostic provenance debt for an unrun campaign, not
+      evidence of a benchmark result; recovering the historical config/commit is a provenance
+      backfill task rather than a safe in-place rewrite of the preregistration record.
   - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_catalog.yaml
     codes: [uncommitted_artifact_missing_location]
     disposition: baseline

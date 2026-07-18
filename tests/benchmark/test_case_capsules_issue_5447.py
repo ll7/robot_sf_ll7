@@ -404,10 +404,28 @@ def test_materialize_issue_5447_writes_pinned_artifact_set(tmp_path, monkeypatch
     assert ledger["candidate_manifest"]["archetypes"] == ["planner_upset", "seed_flip"]
     assert ledger["selection_result"]["n_admitted"] == 2
 
-    # Sidecar names every emitted file with a checksum.
+    # Sidecar uses strict per-directory sha256sum semantics: emitted files are
+    # listed next to a shell-style evidence marker, while the external input
+    # hash remains in the manifest and ledger provenance fields.
     sums = sums_path.read_text(encoding="utf-8")
+    assert sums.startswith("# AI-GENERATED NEEDS-REVIEW\n")
     assert "ch7_case_capsule_manifest.v1.json" in sums
     assert "pre_selection_ledger.v1.json" in sums
+    assert "build_command.v1.txt" in sums
+    assert str(cand_rel) not in sums
+
+    import shutil
+    import subprocess
+
+    if shutil.which("sha256sum") is not None:
+        proc = subprocess.run(
+            ["sha256sum", "-c", "SHA256SUMS"],
+            cwd=evid,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
 
 
 def test_materialize_issue_5447_is_deterministic(tmp_path, monkeypatch):

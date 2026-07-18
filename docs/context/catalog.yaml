@@ -20,6 +20,22 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/README.md
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/config_sha256.txt
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/provenance_manifest.json
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml
+  status: evidence
+  freshness: dated
+  area: reproducibility
 - path: docs/context/issue_5936_result_job_durability_gate.md
   status: current
   freshness: policy

@@ -571,7 +571,9 @@ def test_pr_body_contracts_workflow_runs_strict_pr_body_checker() -> None:
     workflow_text = PR_BODY_CONTRACTS_WORKFLOW.read_text(encoding="utf-8")
 
     assert "pull_request:" in workflow_text
-    assert "gh api --paginate" in workflow_text
+    assert "scripts/ci/collect_pr_files.py" in workflow_text
+    assert "--out-changed-files" in workflow_text
+    assert "gh api --paginate" not in workflow_text
     assert "pr_changed_files.txt" in workflow_text
     assert "scripts/dev/check_pr_followups.py" in workflow_text
     for flag in (

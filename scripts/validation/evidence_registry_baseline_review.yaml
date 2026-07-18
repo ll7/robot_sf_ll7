@@ -17,13 +17,8 @@ source_issue_addendum: 5981
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-<<<<<<< HEAD
 refreshed_baseline_total_findings: 411
 refreshed_baseline_files_with_findings: 87
-=======
-refreshed_baseline_total_findings: 409
-refreshed_baseline_files_with_findings: 86
->>>>>>> d88eae2cd (fix: make evidence baseline increases reviewable)
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -156,17 +151,6 @@ reviewed_files:
       This is the legacy provenance gap identified by Issue #5972; repairing the external artifact
       binding is outside this baseline reconciliation, so the finding is explicitly dispositioned
       as baseline under the existing strict-CI policy.
-reviewed_baseline_increases:
-  - path: docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07/goal/classic_group_crossing_high_seed24_best/metadata.json
-    codes: [dangling_commit]
-    disposition: baseline
-    reason: >-
-      Campaign-level aggregation for issue4206_trace_capable_h600_rerun_20260704 attributes the
-      unresolved producer commit 62e08add1c2a5a750a6fd68a823319280c2dccd6 from the issue #4891
-      records to this canonical path. The target issue #4848 metadata itself references
-      0b0214ced856eac77fa9a4c15b02921eabab1661, but the shared campaign identity makes the
-      provenance set inconsistent. Carry the per-code increase explicitly until #5986 repairs
-      the campaign provenance; do not treat this as a new-file disposition.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07/goal/classic_group_crossing_high_seed24_best/metadata.json
     codes: [dangling_commit]

@@ -45,45 +45,25 @@ def test_shipped_packet_structural_contract_is_ready() -> None:
     """The structural contract still validates against tracked sources (shape checks)."""
     result = checker.validate_packet(_packet(), repo_root=REPO_ROOT, check_admission=False)
     assert result["status"] == "ok"
-    assert result["planner_count"] == 5
+    assert result["planner_count"] == 6
     assert result["ceiling_count"] == 4
     assert result["campaign_execution_allowed"] is False
 
 
-def test_shipped_packet_fails_admission_until_amended() -> None:
-    """The shipped packet declares arms that cannot instantiate as declared (issue #5961).
-
-    This is the acceptance criterion: the CURRENT packet fails the instantiability admission
-    check until its PPO readiness/fallback and hybrid-leader claims are amended. The checker
-    must surface every defect, not pass on shape alone.
-    """
-    with pytest.raises(checker.PacketError, match="cannot instantiate as declared") as exc_info:
-        checker.validate_packet(_packet(), repo_root=REPO_ROOT)
-    message = str(exc_info.value)
-    # The ppo arm is declared artifact_qualified_only but the resolved model is only a
-    # benchmark_candidate, and the paper-grade gate is not satisfied.
-    assert "artifact_qualified_only" in message
-    assert "benchmark_candidate" in message
-    assert "paper-grade gate" in message
-    # The ppo fallback flag contradicts the packet's own execution_boundary.
-    assert "fallback_to_goal" in message
-    assert "fallback_or_degraded_success_allowed" in message
-    # The hybrid leader role asserts superiority without citing registered evidence.
-    assert "scenario_adaptive_hybrid_leader" in message
+def test_shipped_packet_admission_is_ready() -> None:
+    """The amended packet's declared six-arm roster passes real-loader admission."""
+    result = checker.validate_packet(_packet(), repo_root=REPO_ROOT)
+    assert result["status"] == "ok"
+    assert result["planner_count"] == 6
 
 
-def test_shipped_packet_admission_summary_reports_four_defects() -> None:
-    """The admission summary resolves exactly the four S30-class defects in the shipped packet."""
+def test_shipped_packet_admission_summary_is_clean() -> None:
+    """The admission summary confirms every amended roster arm is instantiable as declared."""
     summary = check_campaign_arm_admission(_packet(), repo_root=REPO_ROOT)
-    assert summary.admissible is False
-    assert summary.arm_count == 5
-    # Four distinct defects: ppo readiness (model not promoted), ppo readiness (paper gate),
-    # ppo fallback contradiction, hybrid leader without evidence.
-    assert summary.finding_count == 4
-    contracts = {finding.contract for finding in summary.findings}
-    assert contracts == {"readiness", "fallback", "evidence"}
-    failing_arms = {finding.planner_id for finding in summary.findings}
-    assert failing_arms == {"ppo", "scenario_adaptive_hybrid_orca_v1"}
+    assert summary.admissible is True
+    assert summary.arm_count == 6
+    assert summary.finding_count == 0
+    assert not summary.findings
 
 
 def test_missing_packet_raises_file_not_found(tmp_path: Path) -> None:
@@ -104,6 +84,86 @@ def test_rejects_roster_expansion() -> None:
         checker.validate_packet(packet, repo_root=REPO_ROOT)
 
 
+def test_rejects_stale_planner_count_wording() -> None:
+    """The report exclusion rule must use the amended six-planner cardinality."""
+    packet = _packet()
+    policy = packet["row_status_policy"]
+    assert isinstance(policy, dict)
+    policy["exclusion_rule"] = "An incomplete five-planner episode blocks the report."
+    with pytest.raises(checker.PacketError, match="six-planner completeness"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_ppo_checkpoint_pin_drift() -> None:
+    """The packet must retain the maintainer-approved PPO checkpoint identity."""
+    packet = _packet()
+    roster = packet["planner_roster"]
+    assert isinstance(roster, dict)
+    ppo = roster["required"][1]
+    assert isinstance(ppo, dict)
+    pinned = ppo["pinned_provenance"]
+    assert isinstance(pinned, dict)
+    pinned["checkpoint_sha256"] = "0" * 64
+    with pytest.raises(checker.PacketError, match="PPO checkpoint pin"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_ppo_fallback_enablement() -> None:
+    """The amended PPO arm must remain fail-closed when its artifact is unavailable."""
+    packet = _packet()
+    roster = packet["planner_roster"]
+    assert isinstance(roster, dict)
+    ppo = roster["required"][1]
+    assert isinstance(ppo, dict)
+    ppo["fallback_to_goal"] = True
+    with pytest.raises(checker.PacketError, match="PPO fallback_to_goal"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_ppo_readiness_revert() -> None:
+    """Reverting PPO to artifact-qualified readiness must fail closed."""
+    packet = _packet()
+    _arm(packet, "ppo")["readiness"] = "artifact_qualified_only"
+    with pytest.raises(checker.PacketError, match="PPO readiness"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_missing_pinned_provenance() -> None:
+    """Deleting the complete PPO provenance pin must not silently pass."""
+    packet = _packet()
+    _arm(packet, "ppo").pop("pinned_provenance")
+    with pytest.raises(checker.PacketError, match="pinned_provenance"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_missing_checkpoint_sha256() -> None:
+    """A PPO provenance pin without a SHA-256 digest is invalid."""
+    packet = _packet()
+    pinned = _arm(packet, "ppo")["pinned_provenance"]
+    assert isinstance(pinned, dict)
+    pinned.pop("checkpoint_sha256")
+    with pytest.raises(checker.PacketError, match="checkpoint_sha256 must be a 64-hex"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_ppo_config_path_repoint() -> None:
+    """Repointing PPO away from its pinned configuration must fail closed."""
+    packet = _packet()
+    _arm(packet, "ppo")["config_path"] = "configs/algos/prediction_mpc_cv.yaml"
+    with pytest.raises(checker.PacketError, match="PPO config path must remain pinned"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
+def test_rejects_ppo_model_id_pin_drift() -> None:
+    """Changing the pinned PPO model identity must fail closed."""
+    packet = _packet()
+    pinned = _arm(packet, "ppo")["pinned_provenance"]
+    assert isinstance(pinned, dict)
+    pinned["model_id"] = "some_other_model_id_for_test"
+    with pytest.raises(checker.PacketError, match="PPO model_id pin"):
+        checker.validate_packet(packet, repo_root=REPO_ROOT)
+
+
 def test_missing_planner_config_raises_file_not_found() -> None:
     """A required planner config cannot be treated as a generic packet error."""
     packet = _packet()
@@ -111,9 +171,9 @@ def test_missing_planner_config_raises_file_not_found() -> None:
     assert isinstance(roster, dict)
     required = roster["required"]
     assert isinstance(required, list)
-    ppo = required[1]
-    assert isinstance(ppo, dict)
-    ppo["config_path"] = "configs/algos/missing.yaml"
+    prediction_planner = required[2]
+    assert isinstance(prediction_planner, dict)
+    prediction_planner["config_path"] = "configs/algos/missing.yaml"
     with pytest.raises(FileNotFoundError, match="planner config missing"):
         checker.validate_packet(packet, repo_root=REPO_ROOT)
 
@@ -251,9 +311,7 @@ def test_admission_fails_when_qualified_readiness_lacks_provenance() -> None:
     """
     packet = _packet()
     ppo = _arm(packet, "ppo")
-    # Point the ppo arm at a config with a paper profile but no provenance, so the real
-    # ``_ppo_paper_gate_status`` gate fails on missing provenance exactly as the issue describes.
-    ppo["config_path"] = "configs/algos/ppo_v3_camera_ready.yaml"
+    ppo["readiness"] = "artifact_qualified_only"
     findings = _findings_for(packet, "ppo")
     readiness_findings = [f for f in findings if f.contract == "readiness"]
     assert readiness_findings, "expected a readiness finding for the unqualified PPO arm"
@@ -290,7 +348,7 @@ def test_admission_fails_when_checkpoint_points_at_nonexistent_id(
     assert any("definitely_not_a_real_model_id_5961" in f.message for f in checkpoint_findings)
 
 
-def test_admission_fails_on_fallback_contradiction(tmp_path: Path) -> None:
+def test_admission_fails_on_fallback_contradiction() -> None:
     """Reintroducing the fallback contradiction fails the fallback contract.
 
     Re-break condition 4: the packet forbids fallback/degraded success, but the arm config enables
@@ -298,7 +356,7 @@ def test_admission_fails_on_fallback_contradiction(tmp_path: Path) -> None:
     real config loader.
     """
     packet = _packet()
-    # The shipped ppo config already sets fallback_to_goal: true; confirm the gate catches it.
+    _arm(packet, "ppo")["config_path"] = "configs/baselines/ppo.yaml"
     findings = _findings_for(packet, "ppo")
     fallback_findings = [f for f in findings if f.contract == "fallback"]
     assert fallback_findings, (
@@ -315,6 +373,9 @@ def test_admission_fails_when_leader_role_lacks_evidence() -> None:
     ``leader`` role cannot be admitted without a citation that establishes the separation.
     """
     packet = _packet()
+    hybrid = _arm(packet, "scenario_adaptive_hybrid_orca_v1")
+    hybrid["role"] = "scenario_adaptive_hybrid_leader"
+    hybrid.pop("evidence", None)
     findings = _findings_for(packet, "scenario_adaptive_hybrid_orca_v1")
     evidence_findings = [f for f in findings if f.contract == "evidence"]
     assert evidence_findings, "expected an evidence finding for the leader role without a citation"
@@ -325,6 +386,7 @@ def test_admission_passes_when_leader_role_cites_existing_evidence() -> None:
     """A leader role that cites a durable registered result is admissible on the evidence contract."""
     packet = _packet()
     hybrid = _arm(packet, "scenario_adaptive_hybrid_orca_v1")
+    hybrid["role"] = "scenario_adaptive_hybrid_leader"
     # Cite a real durable evidence file that backs the hybrid roster interpretation.
     hybrid["evidence"] = "docs/context/evidence/issue_3810_h600_interpretation_2026-07/README.md"
     findings = _findings_for(packet, "scenario_adaptive_hybrid_orca_v1")
@@ -355,9 +417,8 @@ def test_admission_summary_summary_shape() -> None:
     """The admission summary exposes admissibility, per-arm reports, and flat findings."""
     packet = _packet()
     summary = check_campaign_arm_admission(packet, repo_root=REPO_ROOT)
-    assert summary.arm_count == 5
-    assert len(summary.arms) == 5
-    # orca and prediction_mpc instantiate cleanly as declared.
+    assert summary.arm_count == 6
+    assert len(summary.arms) == 6
     clean_arms = {arm.planner_id for arm in summary.arms if not arm.findings}
     assert {"orca", "prediction_planner", "prediction_mpc"} <= clean_arms
 
@@ -374,8 +435,10 @@ def test_main_reports_admission_failure_as_json(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """The CLI emits structured JSON for an admission failure instead of a traceback."""
+    packet = _packet()
+    _arm(packet, "orca")["readiness"] = "not_a_real_readiness_label"
     path = tmp_path / "packet.yaml"
-    path.write_text(yaml.safe_dump(_packet()), encoding="utf-8")
+    path.write_text(yaml.safe_dump(packet), encoding="utf-8")
     assert checker.main(["--packet", str(path), "--json"]) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "not_ready"

@@ -38,23 +38,32 @@ def test_adoption_path_claim_boundary_is_explicit(adoption_text: str) -> None:
     assert "not measured per-scenario capabilities" in adoption_text
 
 
-def test_adoption_path_artifact_locations_are_documented(adoption_text: str) -> None:
-    """The visible demo and gallery outputs have stable, documented locations."""
-    for artifact in (
+@pytest.mark.parametrize(
+    "artifact",
+    (
         "output/demo/latest",
         "episode.jsonl",
         "summary.json",
         "viewer/index.html",
         "thumbnail.png",
         "output/gallery/index.html",
-    ):
-        assert artifact in adoption_text
+    ),
+)
+def test_adoption_path_artifact_locations_are_documented(adoption_text: str, artifact: str) -> None:
+    """The visible demo and gallery outputs have stable, documented locations."""
+    assert artifact in adoption_text, (
+        f"Expected artifact '{artifact}' to be documented in adoption text"
+    )
 
 
 def test_adoption_path_commands_are_registered_by_the_umbrella_cli() -> None:
     """The route names in the guide must remain available in the top-level parser."""
     parser = _build_parser()
-    subparser_action = next(action for action in parser._actions if action.dest == "cmd")
+    subparser_action = next(
+        (action for action in parser._actions if action.dest == "cmd"),
+        None,
+    )
+    assert subparser_action is not None, "Subcommand action 'cmd' not found in parser"
     assert {
         "doctor",
         "demo",

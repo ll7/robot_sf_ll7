@@ -61,6 +61,7 @@ planner_roster:
       role: scenario_adaptive_selector_representative
       readiness: candidate_requires_existing_provenance
       config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+      evidence: docs/context/issue_1454_s10_h500_candidate_comparison.md
       notes: >-
         Role renamed from scenario_adaptive_hybrid_leader on 2026-07-17: "leader"
         asserted evidence that does not exist. v1 and v2_collision_guard are a
@@ -79,6 +80,7 @@ planner_roster:
       role: strongest_fixed_hybrid
       readiness: candidate_requires_existing_provenance
       config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+      evidence: docs/context/evidence/issue_4882_s30_interpretation_2026-07-13/s30_arm_statistics.csv
       notes: >-
         Added 2026-07-17 (maintainer sign-off) as the strongest known fixed hybrid
         planner. S30 n=1440/arm success 0.7715 - the top hybrid, above

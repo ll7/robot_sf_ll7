@@ -19,6 +19,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -348,21 +349,48 @@ def test_committed_baseline_exists_and_is_valid() -> None:
 def test_committed_baseline_reproduces_from_write_baseline(
     live_lint_report: dict[str, object],
 ) -> None:
-    """The committed baseline must match `--write-baseline` output byte-for-byte.
+    """ADVISORY (non-blocking): committed baseline reproduces from ``--write-baseline``.
 
-    This is the reproducibility half of the #5952 guard: the committed counts must be
-    machine-generated, so that a regenerated baseline is a true refresh and not a silent
-    hand-edit. If this fails, the baseline was edited by hand or the linter output changed
-    without a refresh; regenerate with `evidence_registry_ratchet.py --write-baseline`.
+    Historically this asserted the committed baseline matched ``--write-baseline`` output
+    byte-for-byte, proving the counts were machine-generated rather than hand-edited. In
+    practice it became a self-inflicted treadmill: the ``dangling_commit`` counts depend on
+    which commits are present in the checkout, and the blocking ``fast-feedback`` CI job uses a
+    shallow checkout (``actions/checkout`` default ``fetch-depth: 1``) while the committed
+    baseline is generated with full history. Every merged PR that shifts the shallow graft
+    point re-drifts the counts, reddening ``main`` and jamming the whole merge sweep.
+
+    Maintainer ruling (2026-07-17, tracked in issue #5991; origin guard #5952): development
+    speed outweighs this one reproducibility check, so on drift it is ADVISORY -- it emits a
+    loud warning and ``xfail``s instead of failing the build, so it can never jam ``main``.
+
+    The genuinely-protective ratchet behaviour is unchanged and stays fail-closed: net-new
+    integrity findings are still caught by
+    ``test_committed_baseline_passes_live_check_on_clean_main`` and the CLI ``--check`` gate
+    (evidence-registry-ratchet workflow, ``fetch-depth: 0``), structural tamper by
+    ``test_committed_baseline_exists_and_is_valid``, and net-new strict findings by
+    ``test_strict_ci_policy_has_zero_active_findings_on_clean_main``. Only the byte-for-byte
+    reproduce assertion is downgraded.
     """
     regenerated = ratchet.build_baseline_payload(live_lint_report)
     committed = json.loads(BASELINE.read_text(encoding="utf-8"))
     # Compare the machine-generated fields (generated_at is a timestamp by design).
-    for key in ("findings_by_path", "summary", "linter", "schema_version"):
-        assert committed.get(key) == regenerated.get(key), (
-            f"evidence-registry baseline field '{key}' does not reproduce from "
-            "--write-baseline; regenerate with `evidence_registry_ratchet.py --write-baseline`."
+    drifted = [
+        key
+        for key in ("findings_by_path", "summary", "linter", "schema_version")
+        if committed.get(key) != regenerated.get(key)
+    ]
+    if drifted:
+        message = (
+            "ADVISORY (non-blocking, maintainer ruling 2026-07-17, issue #5991): the committed "
+            f"evidence-registry baseline no longer reproduces from --write-baseline; drifted "
+            f"fields: {drifted}. This is the environment-sensitive reproducibility treadmill "
+            "(dangling_commit counts depend on checkout git-state); it is intentionally NOT a "
+            "hard failure so it can never jam main. Refresh with "
+            "`scripts/dev/evidence_registry_ratchet.py --write-baseline` when convenient. "
+            "Net-new integrity regressions remain fail-closed via the live ratchet check."
         )
+        warnings.warn(message, stacklevel=2)
+        pytest.xfail(message)
 
 
 @pytest.mark.slow

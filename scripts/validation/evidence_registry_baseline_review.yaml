@@ -1,37 +1,48 @@
-# AI-GENERATED NEEDS-REVIEW
+# Reviewed Baseline Disposition Companion (Issue #5952 / Issue #5972)
 schema_version: evidence_registry_baseline_review.v1
 claim_boundary: >-
-  Per-file review record for the evidence-registry ratchet baseline refresh (issue #5952).
-  This is NOT an exclusion policy: the strict-CI code-level exclusion policy lives at
+  Per-file review record for the evidence-registry ratchet baseline refresh (Issues #5952 and
+  #5972). This is NOT an exclusion policy: the strict-CI code-level exclusion policy lives at
   docs/context/evidence/evidence_registry_strict_ci_policy.yaml. This file records, for each
   evidence file that gained findings after the #5275/#5317 baseline was first committed, the
   explicit remediate-or-baseline disposition required by the issue Definition of Done. It exists
   separately from scripts/validation/evidence_registry_baseline.json so that
-  `evidence_registry_ratchet.py --write-baseline` can regenerate the machine-counted baseline
+  evidence_registry_ratchet.py --write-baseline can regenerate the machine-counted baseline
   without clobbering the human review.
 evidence_status: diagnostic-only
 approved_by: ll7
 approved_date: 2026-07-17
-source_issue: 5952
+source_issue: 5972
+source_issue_addendum: 5981
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 407
-refreshed_baseline_files_with_findings: 85
+refreshed_baseline_total_findings: 411
+refreshed_baseline_files_with_findings: 87
 decision_summary: >-
-  Twelve evidence files merged after the 2026-07-11 baseline introduced 48 findings across eight
-  codes. Every introduced code is already in the strict-CI exclusion policy, so no active
-  strict-linter finding was introduced (strict mode remains at zero active findings). Each file was
-  reviewed against its source to decide remediate-vs-baseline. All twelve use the same legacy-debt
-  pattern as the original 359 findings: artifact provenance gaps (external/private/untracked
-  artifacts, ambiguous bare filenames) and campaign provenance gaps (dangling historical commits,
-  missing producing config). None is trivially remediable without recovering external or historical
-  provenance (durable remote commits, committed large artifacts, or external private locations),
-  which is out of scope for this refresh and explicitly out of scope for issue #5952 ("deleting
-  artifacts" and "suppressing new findings globally" are excluded; this is a targeted, reviewed
-  baseline inclusion, not a global suppression). Accordingly each file is dispositioned `baseline`
-  below. A future maintainer who backfills provenance for any of these files should refresh the
-  baseline with `--write-baseline` to lock in the reduction.
+  Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
+  eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
+  strict-linter finding was introduced (strict mode remains at zero active findings). Each file
+  was reviewed against its source to decide remediate-vs-baseline. All fourteen use the same
+  legacy-debt pattern as the original 359 findings: artifact provenance gaps
+  (external/private/untracked artifacts, ambiguous bare filenames) and campaign provenance gaps
+  (dangling historical commits, missing producing config). None is trivially remediable without
+  recovering external or historical provenance (durable remote commits, committed large
+  artifacts, or external private locations), which is out of scope for this refresh and explicitly
+  out of scope for Issue #5972 (deleting artifacts and suppressing new findings globally are
+  excluded; this is a targeted, reviewed baseline inclusion, not a global suppression).
+  Accordingly each file is dispositioned baseline below. A future maintainer who backfills
+  provenance for any of these files should refresh the baseline with --write-baseline to lock in
+  the reduction.
+  Review addendum (issue #5983): campaign-level aggregation for
+  `issue4206_trace_capable_h600_rerun_20260704` attributes the unresolved producer commit
+  62e08add1c2a5a750a6fd68a823319280c2dccd6 from the issue #4891 records to the canonical Issue
+  #4848 metadata path. The Issue #4848 metadata itself references
+  0b0214ced856eac77fa9a4c15b02921eabab1661, which resolves, but the shared campaign identity
+  makes the provenance set inconsistent. The current clean checkout therefore reports a
+  `dangling_commit` increase, which is explicitly recorded below as a reviewed baseline increase
+  until follow-up issue #5986 repairs the campaign provenance. This is not a silent suppression or
+  a claim that the historical provenance is not complete.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -53,7 +64,7 @@ reviewed_files:
     disposition: baseline
     reason: >-
       Package-a transfer manifest. The single artifact_hash_mismatch is the bare filename
-      `README.md`, which the linter resolves repo-root-relative; the manifest intends the
+      README.md, which the linter resolves repo-root-relative; the manifest intends the
       manifest-directory README (whose hash matches), so this is an ambiguous-path provenance gap,
       not a corrupted artifact. The uncommitted_artifact_missing_location rows are external
       campaign store / untracked table artifacts; hash_without_artifact_path is the external
@@ -63,7 +74,7 @@ reviewed_files:
     disposition: baseline
     reason: >-
       Source episode store referenced by private-campaign:// URI with a sha256 that cannot bind to
-      a committed artifact path; artifact-provenance-backfill-required legacy debt.
+      a committed repo path; artifact-provenance-backfill-required legacy debt.
   - path: docs/context/evidence/issue_4364_release_0_0_3_post1/artifact_pointer.json
     codes: [hash_without_artifact_path]
     disposition: baseline
@@ -99,6 +110,15 @@ reviewed_files:
       Certified-archive acceptance report declares config_sha256 but the producing
       campaign_config.json is absent at the declared commit; provenance-backfill-required legacy
       debt (recover the producing config or commit with source evidence).
+  - path: docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/preregistration_config_registry.json
+    codes: [config_missing_at_commit, dangling_commit]
+    disposition: baseline
+    reason: >-
+      The preregistration registry records the planned factorial campaign's producing config and
+      commit, but the declared config is absent at that historical commit and the commit is not
+      reachable in this checkout. This is diagnostic provenance debt for an unrun campaign, not
+      evidence of a benchmark result; recovering the historical config/commit is a provenance
+      backfill task rather than a safe in-place rewrite of the preregistration record.
   - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_catalog.yaml
     codes: [uncommitted_artifact_missing_location]
     disposition: baseline
@@ -123,3 +143,22 @@ reviewed_files:
     reason: >-
       Candidate trace resolution record lacks the producing commit and producing config
       provenance; provenance-backfill-required legacy debt.
+  - path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Issue #5948 run-summary reconstruction carries a checksum without an adjacent artifact path.
+      This is the legacy provenance gap identified by Issue #5972; repairing the external artifact
+      binding is outside this baseline reconciliation, so the finding is explicitly dispositioned
+      as baseline under the existing strict-CI policy.
+reviewed_baseline_increases:
+  - path: docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07/goal/classic_group_crossing_high_seed24_best/metadata.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      Campaign-level aggregation for issue4206_trace_capable_h600_rerun_20260704 attributes the
+      unresolved producer commit 62e08add1c2a5a750a6fd68a823319280c2dccd6 from the issue #4891
+      records to this canonical path. The target issue #4848 metadata itself references
+      0b0214ced856eac77fa9a4c15b02921eabab1661, but the shared campaign identity makes the
+      provenance set inconsistent. Carry the per-code increase explicitly until #5986 repairs
+      the campaign provenance; do not treat this as a new-file disposition.

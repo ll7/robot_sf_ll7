@@ -1,4 +1,4 @@
-<!-- AI-GENERATED (robot_sf#5248, 2026-07-15) - NEEDS-REVIEW -->
+<!-- AI-GENERATED (robot_sf#5248, 2026-07-16) - NEEDS-REVIEW -->
 # Salvaged h600 harvest registration
 
 Evidence status: `diagnostic-only`; registration is `blocked_campaign_registration`.
@@ -21,6 +21,16 @@ The campaign source artifacts are present and structurally valid:
 The job was salvaged after the exit-code conflation fixed by #5240; the completed 6,480-episode
 result confirms the FAILED mislabel was spurious. That provenance does **not** promote this packet
 to benchmark, planner, paper, or dissertation evidence.
+
+The host-pinned revalidation on `imech156-u` on 2026-07-16 reported:
+
+```text
+total_episodes=6480, status_completed
+status: blocked_campaign_registration
+```
+
+The first line verifies that the harvest itself is complete. The second is the separate,
+fail-closed trace-label registration decision described below; it does not invalidate the harvest.
 
 ## Why the campaign IS trace-capable (correction to #5654)
 
@@ -71,7 +81,7 @@ uv run python scripts/validation/check_issue_5248_salvaged_trace_rerun.py \
   --mechanism-sidecar \
     docs/context/evidence/issue_4831_trace_verified_failure_mechanisms/mechanism_labels.csv \
   --output-dir docs/context/evidence/issue_5248_salvaged_h600_registration_2026-07 \
-  --generated-at 2026-07-15T103000Z
+  --generated-at 2026-07-16T125218Z
 ```
 
 Expected result: exit code `2` and status `blocked_campaign_registration`, with

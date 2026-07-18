@@ -110,13 +110,14 @@ def require_available(root: Path | str | None = None) -> SocNavBenchEthLayout:
     )
 
 
-def load_shape_contract(root: Path | str | None = None) -> SocNavBenchEthShapeContract:
-    """Load and validate the cheap traversible-map shape contract.
+def load_traversible(root: Path | str | None = None) -> tuple[float, np.ndarray]:
+    """Load and validate the staged ETH traversible for a real runner.
 
     Returns:
-        A structural summary of the staged ETH traversible pickle.
+        A ``(resolution, traversible)`` pair from the staged ETH pickle. The same
+        restricted-pickle and structural validation used by the shape contract is
+        applied before the array is returned to a caller.
     """
-
     layout = require_available(root)
     try:
         with layout.traversible_pickle.open("rb") as handle:
@@ -165,8 +166,18 @@ def load_shape_contract(root: Path | str | None = None) -> SocNavBenchEthShapeCo
             "SocNavBench ETH traversible array contains non-finite values."
         )
 
+    return resolution_float, traversible
+
+
+def load_shape_contract(root: Path | str | None = None) -> SocNavBenchEthShapeContract:
+    """Load and validate the cheap traversible-map shape contract.
+
+    Returns:
+        A structural summary of the staged ETH traversible pickle.
+    """
+    resolution, traversible = load_traversible(root)
     return SocNavBenchEthShapeContract(
-        resolution=resolution_float,
+        resolution=resolution,
         traversible_shape=(int(traversible.shape[0]), int(traversible.shape[1])),
         traversible_dtype=str(traversible.dtype),
     )

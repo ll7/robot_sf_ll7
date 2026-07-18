@@ -12,8 +12,11 @@ versions with an error like::
 That breaks autonomous workflows that read an issue and its comments before
 editing (see issues #5021 and #5092). The ``thread`` command first tries the
 concise GitHub CLI route and falls back to paginated REST reads only for the
-known ``repository.issue.projectCards`` failure. The existing ``view`` command
-and library functions remain explicit REST-backed interfaces.
+known GraphQL-path failures: the deprecated ``repository.issue.projectCards``
+field, GraphQL API rate-limit exhaustion, secondary rate limits, and other
+GraphQL errors. Authentication, authorization, and repository-resolution failures
+stay fail-closed. The existing ``view`` command and library functions remain
+explicit REST-backed interfaces.
 
 Public library API
 ------------------
@@ -60,6 +63,28 @@ DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_MAX_COMMENT_PAGES = 10
 COMMENTS_PAGE_SIZE = 100
 PROJECT_CARDS_ERROR_MARKER = "repository.issue.projectCards"
+
+# Native-first reads can fail for reasons that are *not* a real auth/repo/connectivity
+# problem but just mean the GraphQL-backed ``gh issue view`` path is unavailable. These
+# markers classify that class of failure as REST-fallback-eligible (issue #5896):
+# GraphQL quota exhaustion and GraphQL deprecation notices. They must NOT cover
+# authentication, authorization, or repository-resolution failures, which stay fail-closed.
+FALLBACK_ELIGIBLE_MARKERS = (PROJECT_CARDS_ERROR_MARKER, "graphql:")
+
+# ``gh issue view`` reports authentication, authorization, and repository lookup
+# failures through its GraphQL client too. These errors must win over the generic
+# ``GraphQL:`` fallback marker so REST never masks a fail-closed failure.
+FAIL_CLOSED_ERROR_MARKERS = (
+    "bad credentials",
+    "requires authentication",
+    "authentication required",
+    "resource not accessible by integration",
+    "forbidden",
+    "permission denied",
+    "could not resolve to a repository",
+    "could not resolve to an issue",
+    "repository not found",
+)
 
 # Fields exposed in the normalized issue payload, in a stable order.
 ISSUE_FIELDS = (
@@ -336,6 +361,21 @@ def render_issue_plain(payload: dict[str, Any]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _is_fallback_eligible(native_error: str) -> bool:
+    """Return True when a native-first failure is safe to retry via REST.
+
+    Fallback is only for GraphQL-path unavailability (deprecated field, quota
+    exhaustion, secondary rate limit, generic GraphQL error). Authentication,
+    authorization, repository-resolution, and malformed-response failures are
+    deliberately NOT fallback-eligible so they fail closed instead of masking a
+    real problem behind an unrelated REST read.
+    """
+    normalized_error = native_error.casefold()
+    if any(marker in normalized_error for marker in FAIL_CLOSED_ERROR_MARKERS):
+        return False
+    return any(marker.casefold() in normalized_error for marker in FALLBACK_ELIGIBLE_MARKERS)
+
+
 def read_complete_issue_thread(
     number: int,
     *,
@@ -360,7 +400,7 @@ def read_complete_issue_thread(
         "\n".join(output for output in (native.stderr.strip(), native.stdout.strip()) if output)
         or f"gh issue view exited with code {native.returncode}"
     )
-    if PROJECT_CARDS_ERROR_MARKER not in native_error:
+    if not _is_fallback_eligible(native_error):
         return {
             "number": number,
             "status": "error",
@@ -380,8 +420,8 @@ def read_complete_issue_thread(
             "status": "error",
             "source": "rest_fallback",
             "error": (
-                f"issue {number} native thread read hit {PROJECT_CARDS_ERROR_MARKER}; "
-                f"REST fallback failed: {fallback_error}"
+                f"issue {number} native thread read hit GraphQL fallback-eligible error "
+                f"({native_error}); REST fallback failed: {fallback_error}"
             ),
         }
     return {

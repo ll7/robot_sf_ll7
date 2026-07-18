@@ -9,6 +9,16 @@
 # and changes no benchmark metric semantics. A real-distribution run needs
 # eligible simulator traces and is out of scope until an approved compute packet
 # exists (see stop_rule below).
+#
+# Estimator rows scored from this packet:
+#   - constant_velocity_mc      : single-Gaussian constant-velocity Monte Carlo.
+#   - multimodal_forecast_mc    : K-mode constant-velocity GMM surrogate forecast
+#                                 (heading-spread modes; NOT the learned #5307/#2844
+#                                 predictor). Scored against the unimodal-Gaussian
+#                                 GT below, so it is a forecast-model-mismatch case,
+#                                 not a self-consistency case for this packet.
+#   - deterministic_ttc         : deterministic TTC/clearance warning (ranking only).
+# The learned collision-risk model #1472 stays unavailable (contracted-but-missing).
 description: >-
   Matched calibration comparison of online collision-risk estimators for issue
   #5445. All estimators receive identical scenario histories, candidate actions,

@@ -38,10 +38,30 @@ import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Local mirror of the per-suite path-length-ratio metric IDs emitted by
+# ``robot_sf/benchmark/socnavbench_canary.py`` (ROBOT_SF_METRIC_ID / SOCNAVBENCH_METRIC_ID).
+#
+# This helper deliberately imports nothing from ``robot_sf`` so it stays a presence-only,
+# dependency-free readiness check (see module docstring). We therefore mirror the two code
+# constants here rather than importing them. ``test_per_suite_metric_ids_mirror_code_constants``
+# imports the source constants and compares them against these mirrored names, so the two
+# sources cannot silently drift apart without a test failure.
+CANARY_METRIC_ID_ROBOT_SF = "robot_sf.path_length_ratio.distance_over_displacement"
+CANARY_METRIC_ID_SOCNAVBENCH = "socnavbench.path_length_ratio.displacement_over_distance"
+# Canonical per-suite keys expected under canary_slice.per_suite_metric_ids.
+CANARY_PER_SUITE_KEYS = ("robot_sf", "socnavbench")
+# Expected ID per suite key; the validate_canary_slice cross-check compares the manifest against
+# these mirrored constants so a colliding/singular metric_id is rejected.
+CANARY_PER_SUITE_METRIC_IDS: dict[str, str] = {
+    "robot_sf": CANARY_METRIC_ID_ROBOT_SF,
+    "socnavbench": CANARY_METRIC_ID_SOCNAVBENCH,
+}
 
 # Prerequisite family lifecycle states, ordered by escalating readiness. A family is only
 # counted toward "prerequisites ready" when it is ``ready`` or explicitly ``waived``.
@@ -355,7 +375,9 @@ def validate_campaign_manifest(
     manifest_path: Path = REPO_ROOT / CAMPAIGN_MANIFEST_PATH,
 ) -> dict:
     """Validate the blocked #3287 campaign-manifest scaffold."""
-    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        raise CampaignManifestError("Campaign manifest root must be a mapping.")
     errors: list[str] = []
 
     _validate_manifest_header(manifest, errors)
@@ -366,6 +388,292 @@ def validate_campaign_manifest(
     if errors:
         raise CampaignManifestError("; ".join(errors))
     return manifest
+
+
+# Tokens that must never appear in the authorized canary slice (issue #5783): they would mean
+# the slice regressed to a placeholder/blocked scaffold instead of a concrete runnable canary.
+CANARY_SLICE_FORBIDDEN_TOKENS = (
+    "tbd",
+    "to_be_selected",
+    "to_be_selected_when_unblocked",
+    "blocked_prerequisite",
+    "blocked_external_input",
+    "scaffold_only",
+    "unvalidated_scaffold",
+    "campaign_authorized: false",
+)
+
+
+@dataclass
+class CanarySliceReport:
+    """Result of validating the issue #5783 canary slice in the campaign manifest."""
+
+    issue: int
+    status: str
+    canary_authorized: bool
+    ok: bool
+    policy_id: str | None
+    policy_version: str | None
+    algo: str | None
+    algo_config: str | None
+    robot_sf_scenario_id: str | None
+    socnavbench_scenario_id: str | None
+    seed: int | None
+    external_asset_id: str | None
+    metric_id: str | None
+    per_suite_metric_ids: dict[str, str]
+    limitation_flags: tuple[str, ...]
+    errors: list[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the canary-slice report to a JSON-friendly mapping."""
+        return {
+            "schema": "cross_benchmark_canary_slice.v1",
+            "issue": self.issue,
+            "status": self.status,
+            "canary_authorized": self.canary_authorized,
+            "ok": self.ok,
+            "policy_id": self.policy_id,
+            "policy_version": self.policy_version,
+            "algo": self.algo,
+            "algo_config": self.algo_config,
+            "robot_sf_scenario_id": self.robot_sf_scenario_id,
+            "socnavbench_scenario_id": self.socnavbench_scenario_id,
+            "seed": self.seed,
+            "external_asset_id": self.external_asset_id,
+            "metric_id": self.metric_id,
+            "per_suite_metric_ids": dict(self.per_suite_metric_ids),
+            "limitation_flags": list(self.limitation_flags),
+            "errors": self.errors,
+            "claim_boundary": (
+                "diagnostic sim-to-sim canary only; not simulator equivalence, policy "
+                "superiority, or a campaign/benchmark/paper claim"
+            ),
+        }
+
+
+def _canary_slice_missing_report(errors: list[str]) -> CanarySliceReport:
+    """Build the fail-closed report returned when the canary_slice block is absent."""
+    errors.append("canary_slice block missing or not a mapping")
+    return CanarySliceReport(
+        issue=5783,
+        status="missing",
+        canary_authorized=False,
+        ok=False,
+        policy_id=None,
+        policy_version=None,
+        algo=None,
+        algo_config=None,
+        robot_sf_scenario_id=None,
+        socnavbench_scenario_id=None,
+        seed=None,
+        external_asset_id=None,
+        metric_id=None,
+        per_suite_metric_ids={},
+        limitation_flags=(),
+        errors=errors,
+    )
+
+
+def _check_concrete_fields(
+    block: dict,
+    fields: tuple[tuple[str, Any], ...],
+    errors: list[str],
+) -> None:
+    """Append an error for every required concrete field that is empty/placeholder."""
+    for label, value in fields:
+        if not value or not str(value).strip():
+            errors.append(f"canary_slice.{label} must be concrete (no empty/placeholder)")
+
+
+def _check_forbidden_tokens(slice_block: dict, errors: list[str]) -> None:
+    """Append an error for every forbidden placeholder/blocked token found in the slice."""
+    lowered = yaml.safe_dump(slice_block, default_flow_style=True).lower()
+    for token in CANARY_SLICE_FORBIDDEN_TOKENS:
+        if token in lowered:
+            errors.append(f"canary_slice contains forbidden token {token!r}")
+
+
+def _parse_per_suite_metric_id_entry(
+    key: object,
+    value: object,
+    parsed: dict[str, str],
+    errors: list[str],
+) -> None:
+    """Validate one per-suite metric id entry and append it to ``parsed`` when well-formed."""
+    if not isinstance(key, str) or not str(key).strip():
+        errors.append("canary_slice.per_suite_metric_ids keys must be non-empty strings")
+        return
+    if not isinstance(value, str) or not value.strip():
+        errors.append(f"canary_slice.per_suite_metric_ids.{key} must be a concrete metric id")
+        return
+    parsed[key] = value
+
+
+def _validate_per_suite_metric_ids(
+    slice_block: dict,
+) -> tuple[dict[str, str], list[str]]:
+    """Cross-check the manifest's per-suite metric IDs against the code constants.
+
+    The canary emits two distinct, reciprocal path-length-ratio metric IDs -- one per suite --
+    recorded in the receipt under ``per_suite_metric_specs``. A singular ``metric_id`` (the old
+    colliding ``socnavbench.path_length_ratio`` value) captures only one half and silently
+    equates reciprocal definitions, so this fails closed unless ``per_suite_metric_ids`` pins
+    every expected suite key to exactly the mirrored code constant.
+
+    The code constants are mirrored locally (``CANARY_PER_SUITE_METRIC_IDS``) so this helper
+    keeps its deliberate no-``robot_sf``-import contract; the mirror is guarded by a test against
+    the source constants in ``socnavbench_canary.py`` so the two cannot drift.
+
+    Returns:
+        ``(per_suite_metric_ids, errors)`` where ``per_suite_metric_ids`` is the manifest mapping
+        (or ``{}`` when absent/malformed) and ``errors`` lists every cross-check failure.
+    """
+    errors: list[str] = []
+    raw = slice_block.get("per_suite_metric_ids")
+
+    # Reject the legacy singular colliding id so a silent half-capture cannot creep back in,
+    # regardless of whether per_suite_metric_ids is also present.
+    if "metric_id" in slice_block:
+        errors.append(
+            "canary_slice.metric_id is legacy/singular; use per_suite_metric_ids with both "
+            "suite IDs instead"
+        )
+
+    if not isinstance(raw, dict) or not raw:
+        errors.append(
+            "canary_slice.per_suite_metric_ids must map each suite key to its metric id "
+            "(robot_sf, socnavbench)"
+        )
+        return {}, errors
+
+    parsed: dict[str, str] = {}
+    for key, value in raw.items():
+        _parse_per_suite_metric_id_entry(key, value, parsed, errors)
+
+    # Every expected suite key must be present and pinned to the exact mirrored code constant.
+    for expected_key in CANARY_PER_SUITE_KEYS:
+        if expected_key not in parsed:
+            errors.append(f"canary_slice.per_suite_metric_ids missing suite key {expected_key!r}")
+            continue
+        expected_id = CANARY_PER_SUITE_METRIC_IDS[expected_key]
+        if parsed[expected_key] != expected_id:
+            errors.append(
+                f"canary_slice.per_suite_metric_ids.{expected_key} must be {expected_id!r}, "
+                f"got {parsed[expected_key]!r}"
+            )
+
+    # No unexpected suite keys and no colliding ids between the two suites.
+    unexpected = set(parsed) - set(CANARY_PER_SUITE_KEYS)
+    if unexpected:
+        errors.append(
+            "canary_slice.per_suite_metric_ids unexpected keys: " + ", ".join(sorted(unexpected))
+        )
+    values = set(parsed.values())
+    if len(values) != len(parsed):
+        errors.append("canary_slice.per_suite_metric_ids must use distinct metric ids per suite")
+
+    return parsed, errors
+
+
+def validate_canary_slice(
+    manifest_path: Path = REPO_ROOT / CAMPAIGN_MANIFEST_PATH,
+) -> CanarySliceReport:
+    """Validate the concrete, authorized issue #5783 canary slice.
+
+    The slice must be authorized, pin a concrete policy (no TBD/blocked tokens), map one
+    concrete Robot SF scenario to one SocNavBench scenario with a seed, name a cross-suite
+    metric, and list limitation flags. Fails closed on any placeholder/blocked field.
+    """
+    errors: list[str] = []
+    manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
+    if not isinstance(manifest, dict):
+        errors.append("manifest root must be a mapping")
+        return _canary_slice_missing_report(errors)
+    slice_block = manifest.get("canary_slice")
+    if not isinstance(slice_block, dict):
+        return _canary_slice_missing_report(errors)
+
+    status = slice_block.get("status")
+    if status != "authorized_canary":
+        errors.append(f"canary_slice.status must be 'authorized_canary', got {status!r}")
+    if not slice_block.get("canary_authorized", False):
+        errors.append("canary_slice.canary_authorized must be true")
+
+    _check_forbidden_tokens(slice_block, errors)
+
+    policy = slice_block.get("policy")
+    if not isinstance(policy, dict):
+        errors.append("canary_slice.policy must be a mapping")
+        policy = {}
+    policy_id = policy.get("policy_id")
+    policy_version = policy.get("version")
+    algo = policy.get("algo")
+    algo_config = policy.get("algo_config")
+    _check_concrete_fields(
+        policy if isinstance(policy, dict) else {},
+        (
+            ("policy.policy_id", policy_id),
+            ("policy.version", policy_version),
+            ("policy.algo", algo),
+            ("policy.algo_config", algo_config),
+        ),
+        errors,
+    )
+
+    mapping = slice_block.get("scenario_mapping")
+    if not isinstance(mapping, dict):
+        errors.append("canary_slice.scenario_mapping must be a mapping")
+        mapping = {}
+    robot_sf_scenario_id = mapping.get("robot_sf_scenario_id")
+    socnavbench_scenario_id = mapping.get("socnavbench_scenario_id")
+    seed = mapping.get("seed")
+    external_asset_id = mapping.get("external_asset_id")
+    _check_concrete_fields(
+        mapping if isinstance(mapping, dict) else {},
+        (
+            ("scenario_mapping.robot_sf_scenario_id", robot_sf_scenario_id),
+            ("scenario_mapping.socnavbench_scenario_id", socnavbench_scenario_id),
+            ("scenario_mapping.external_asset_id", external_asset_id),
+        ),
+        errors,
+    )
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        errors.append("canary_slice.scenario_mapping.seed must be an integer")
+
+    metric_id = slice_block.get("metric_id")
+    per_suite_metric_ids, metric_errs = _validate_per_suite_metric_ids(slice_block)
+    errors.extend(metric_errs)
+
+    raw_limitation_flags = mapping.get("limitation_flags") or slice_block.get("limitation_flags")
+    if not isinstance(raw_limitation_flags, list) or not raw_limitation_flags:
+        errors.append("canary_slice.limitation_flags must be a non-empty list")
+        limitation_flags: tuple[str, ...] = ()
+    else:
+        limitation_flags = tuple(str(flag) for flag in raw_limitation_flags)
+
+    return CanarySliceReport(
+        issue=int(slice_block.get("issue", 5783)),
+        status=str(status) if status is not None else "missing",
+        canary_authorized=bool(slice_block.get("canary_authorized", False)),
+        ok=not errors,
+        policy_id=policy_id if isinstance(policy_id, str) else None,
+        policy_version=policy_version if isinstance(policy_version, str) else None,
+        algo=algo if isinstance(algo, str) else None,
+        algo_config=algo_config if isinstance(algo_config, str) else None,
+        robot_sf_scenario_id=(
+            robot_sf_scenario_id if isinstance(robot_sf_scenario_id, str) else None
+        ),
+        socnavbench_scenario_id=(
+            socnavbench_scenario_id if isinstance(socnavbench_scenario_id, str) else None
+        ),
+        seed=seed if isinstance(seed, int) and not isinstance(seed, bool) else None,
+        external_asset_id=external_asset_id if isinstance(external_asset_id, str) else None,
+        metric_id=metric_id if isinstance(metric_id, str) else None,
+        per_suite_metric_ids=per_suite_metric_ids,
+        limitation_flags=limitation_flags,
+        errors=errors,
+    )
 
 
 def validate_waivers(waivers: dict[str, str]) -> dict[str, str]:
@@ -485,6 +793,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Validate the issue #3287 campaign-manifest scaffold before reporting readiness.",
     )
+    parser.add_argument(
+        "--validate-canary-slice",
+        action="store_true",
+        help=(
+            "Validate the issue #5783 canary slice (concrete policy, scenario mapping, "
+            "metric, and limitation flags). Fails closed on placeholder/blocked fields."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -498,17 +814,33 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
         waivers = _parse_waiver_args(args.waive)
-        if args.validate_manifest:
+        if args.validate_canary_slice:
+            report = validate_canary_slice(args.repo_root / CAMPAIGN_MANIFEST_PATH).to_dict()
+            if not report["ok"]:
+                raise CampaignManifestError("; ".join(report["errors"]))
+        elif args.validate_manifest:
             validate_campaign_manifest(args.repo_root / CAMPAIGN_MANIFEST_PATH)
-        report = evaluate_readiness(args.repo_root, waivers)
+            report = evaluate_readiness(args.repo_root, waivers)
+        else:
+            report = evaluate_readiness(args.repo_root, waivers)
     except (WaiverError, CampaignManifestError) as exc:
         # Diagnostics go to stderr so stdout stays reserved for the text/JSON report.
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
+    elif args.validate_canary_slice:
+        status = "OK" if report["ok"] else "BLOCKED"
+        per_suite = report.get("per_suite_metric_ids") or {}
+        metric_str = ", ".join(f"{suite}={mid}" for suite, mid in sorted(per_suite.items()))
+        print(
+            f"canary slice {status}: policy={report['policy_id']}@{report['policy_version']} "
+            f"seed={report['seed']} metrics={metric_str or '(none)'}"
+        )
     else:
         print(render_text(report))
+    if args.validate_canary_slice:
+        return 0 if report["ok"] else 1
     return 0 if report["prerequisites_status"] == "ready" else 1
 
 

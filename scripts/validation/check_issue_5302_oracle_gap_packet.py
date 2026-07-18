@@ -14,6 +14,10 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.campaign_arm_admission import (
+    CampaignArmAdmissionError,
+    check_campaign_arm_admission,
+)
 from scripts.validation.check_preregistration_inference_contract import (
     InferenceContractError,
     check_inference_contract,
@@ -100,9 +104,17 @@ def load_packet(path: Path) -> dict[str, Any]:
 
 
 def validate_packet(  # noqa: C901, PLR0915
-    packet: dict[str, Any], *, repo_root: Path | None = None
+    packet: dict[str, Any], *, repo_root: Path | None = None, check_admission: bool = True
 ) -> dict[str, Any]:
-    """Validate the issue #5302 contract and return a compact summary."""
+    """Validate the issue #5302 contract and return a compact summary.
+
+    Args:
+        packet: The parsed packet mapping.
+        repo_root: Repository root for resolving config/evidence paths.
+        check_admission: When True (default), also resolve every declared arm through the real
+            loaders and fail closed when the declared roster cannot instantiate as declared
+            (issue #5961 admission check). Set False to validate only the structural contract.
+    """
     root = repo_root or Path(__file__).resolve().parents[2]
     try:
         check_inference_contract(packet, repo_root=root)
@@ -312,6 +324,34 @@ def validate_packet(  # noqa: C901, PLR0915
     ):
         _require(readiness.get(key) is False, f"readiness_decision.{key} must be false")
 
+    # Instantiability admission (issue #5961): the structural checks above only validate shape.
+    # This resolves every declared arm through the real loaders (algorithm_readiness,
+    # _ppo_paper_gate_status, the model registry, the real algo-config YAML, and cited evidence)
+    # and fails closed when the declared roster differs from what would actually instantiate --
+    # the S30 declared-roster != instantiated-roster failure class.
+    if not check_admission:
+        return {
+            "status": "ok",
+            "issue": 5302,
+            "schema_version": SCHEMA_VERSION,
+            "planner_count": len(planner_ids),
+            "ceiling_count": len(estimands),
+            "required_metric_count": len(metric_values),
+            "durable_evidence_path": durable_path,
+            "campaign_execution_allowed": False,
+            "arm_admission": {"admissible": None, "arm_count": None, "finding_count": None},
+        }
+    try:
+        admission = check_campaign_arm_admission(packet, repo_root=root)
+    except CampaignArmAdmissionError as exc:
+        raise PacketError(f"arm admission roster malformed: {exc}") from exc
+    if not admission.admissible:
+        bullets = "\n".join(f"  - {line}" for line in admission.failure_messages())
+        raise PacketError(
+            "packet declares arms that cannot instantiate as declared (issue #5961 "
+            "admission check):\n" + bullets
+        )
+
     return {
         "status": "ok",
         "issue": 5302,
@@ -321,6 +361,11 @@ def validate_packet(  # noqa: C901, PLR0915
         "required_metric_count": len(metric_values),
         "durable_evidence_path": durable_path,
         "campaign_execution_allowed": False,
+        "arm_admission": {
+            "admissible": admission.admissible,
+            "arm_count": admission.arm_count,
+            "finding_count": admission.finding_count,
+        },
     }
 
 

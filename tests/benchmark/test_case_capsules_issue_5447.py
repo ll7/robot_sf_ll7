@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -433,3 +434,78 @@ def test_materialize_issue_5447_is_deterministic(tmp_path, monkeypatch):
     a = (evid_a / "ch7_case_capsule_manifest.v1.json").read_bytes()
     b = (evid_b / "ch7_case_capsule_manifest.v1.json").read_bytes()
     assert hashlib.sha256(a).hexdigest() == hashlib.sha256(b).hexdigest()
+
+
+def test_issue_5447_committed_sha256sums_verifies_with_sha256sum_c():
+    """The committed #5447 SHA256SUMS sidecar must verify with `sha256sum -c`.
+
+    Regression guard for the provenance sidecar contract required by issue
+    #5447's acceptance criteria ("machine-readable provenance sidecars pass the
+    repository publication style/provenance checks"). An earlier committed
+    sidecar failed this contract from every directory: it used an HTML
+    `<!-- AI-GENERATED -->` header (which `sha256sum -c` rejects as improperly
+    formatted) and a cross-directory candidate-manifest line (which fails
+    `No such file or directory` when verified from the sidecar's own
+    directory). This test asserts the committed sidecar parses as a strict
+    per-directory `sha256sum` manifest and that every listed file verifies, and
+    -- when the `sha256sum` binary is present -- additionally runs the real tool
+    so the exact user-facing provenance command cannot regress.
+
+    Note: the generating driver
+    (`scripts/analysis/materialize_issue_5447_capsules.py`) still emits the
+    legacy broken format and needs the same fix; `scripts/` is outside this
+    slice's allowed paths, so that generator fix is tracked as remaining work.
+    Until then, re-running the generator would re-introduce the defect, which
+    this test catches.
+    """
+    import re
+    import shutil
+    import subprocess
+
+    # Resolve the committed sidecar relative to the repo root regardless of cwd.
+    repo_root = Path(__file__).resolve().parents[2]
+    evid_dir = repo_root / "docs/context/evidence/issue_5447_ch7_case_capsules"
+    sums_path = evid_dir / "SHA256SUMS"
+    assert sums_path.is_file(), f"missing committed sidecar: {sums_path}"
+
+    text = sums_path.read_text(encoding="utf-8")
+    # Strict per-directory sha256sum semantics: the only acceptable non-checksum
+    # lines are blank lines and `#` comments. Any other line (e.g. an HTML
+    # `<!-- ... -->` marker) is a malformation that `sha256sum -c` rejects.
+    line_re = re.compile(r"^(?P<hash>[0-9a-fA-F]{64})\s+\*?(?P<path>.+)$")
+    checked = 0
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = line_re.match(stripped)
+        assert match, (
+            f"{sums_path}: line {line_no} is not a valid sha256sum line or `#` comment: {line!r}"
+        )
+        target = evid_dir / match.group("path")
+        # Per-directory resolution: a listed path must live inside the sidecar's
+        # own directory (no cross-directory lines that break `sha256sum -c`
+        # run from this dir).
+        assert target.is_file(), (
+            f"{sums_path}: line {line_no} target not found next to the sidecar: {target}"
+        )
+        actual = hashlib.sha256(target.read_bytes()).hexdigest()
+        assert actual == match.group("hash").lower(), (
+            f"{sums_path}: line {line_no} checksum mismatch for {target}"
+        )
+        checked += 1
+    assert checked > 0, f"{sums_path} listed no verifiable files"
+
+    # When the real tool is available, exercise the exact user-facing command.
+    if shutil.which("sha256sum") is not None:
+        proc = subprocess.run(
+            ["sha256sum", "-c", "SHA256SUMS"],
+            cwd=evid_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, (
+            f"`sha256sum -c SHA256SUMS` failed from {evid_dir}\n"
+            f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+        )

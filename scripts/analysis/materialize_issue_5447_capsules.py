@@ -32,7 +32,7 @@ from robot_sf.benchmark.case_capsules import (
     canonical_sha256,
     validate_ch7_case_capsule_manifest,
 )
-from robot_sf.evidence.writers import write_json, write_text
+from robot_sf.evidence.writers import review_marker_comment, write_json, write_text
 
 EVID_DIR = Path("docs/context/evidence/issue_5447_ch7_case_capsules")
 CANDIDATE_REL = (
@@ -166,7 +166,7 @@ def materialize() -> int:
 
     # Sidecar checksums.
     sums_path = EVID_DIR / "SHA256SUMS"
-    lines = []
+    lines = [review_marker_comment()]
     for name in (
         "ch7_case_capsule_manifest.v1.json",
         "pre_selection_ledger.v1.json",
@@ -175,11 +175,9 @@ def materialize() -> int:
         p = EVID_DIR / name
         if p.exists():
             lines.append(f"{_sha256_file(p)}  {name}")
-    lines.append(f"{_sha256_file(candidate_path)}  {CANDIDATE_REL}")
     write_text(
         sums_path,
         "\n".join(lines) + "\n",
-        issue_ref="robot_sf#5447 cheap-lane worker",
     )
 
     return manifest["summary"]["n_admitted"]

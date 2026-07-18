@@ -1,0 +1,36 @@
+schema_version: package-a-transfer-artifact-manifest.v1
+issue: 3078
+artifact_policy: compact_tracked_evidence_only
+source_episode_store:
+  uri: private-campaign://job-13521/result_store/episodes.parquet
+  sha256: 46466cd3db27d6f8a10181a8ec7c4676b24179bb97902aa8eec686d09a53942b
+  committed: false
+files:
+- path: README.md
+  sha256: 9861273a845e3f53fdb0939984566b0fd200e3c32a413e1c4c12f6d93dce1c1a
+- path: baseline_table.csv
+  sha256: 7838bb2e893843f1bc65a272939cc108dfa6d6f33c9a5d56b3dcc3ae81be2d6c
+- path: claim_card.yaml
+  sha256: 4cb971986cf736fbdfedb03733288375837920915f5bbcf3ce73e6e183e44e40
+- path: fullpilot_plan.json
+  sha256: c7c67dc8f46af5b0a598dc33133e725fe5865d89abdba9b6ce1e2e5c1bc8b0f0
+- path: heldout_family_table.csv
+  sha256: 2099ff73ce49df3ef23bbaf98343ebddb98abf3042e5e614e80c60f65ab8f63c
+- path: leakage_audit.md
+  sha256: bed248399764372c9c1ccdad99c978bec1882e1a2017dff5763dec6b196e872a
+- path: package_a_decision_packet.json
+  sha256: dc83fe1757e04ab5d578c2ac68e234290f0ed19b79a07309660fbe6b13ea3280
+- path: postrun_acceptance.json
+  sha256: c14071a5180eeccdd6727c41156a646a97cd21d662c825367281ffbd008b565b
+- path: registration.json
+  sha256: 962c775496a34930696c3b5c735d4e0d5162e92ff09f14334b86e4bf9428a0db
+- path: reproduction.md
+  sha256: 3e3c240d70b382d6a26a98531166c6ce8ea1776e33ab8d727c9494c6708b5e3a
+- path: row_acceptance.json
+  sha256: 9f18142fc8ab4b56c6984a231dd8b6bf4ba992f414aaba8b8d0bd0f5b17e02db
+- path: summary.json
+  sha256: 1774e710113abd92871d751894ce78cfbdea1bfaf77e4abfe04af0026f01c529
+- path: tables/manifest.json
+  sha256: 9642687207cba3c84890c3925bcad29d3041811dcd121f9a8e94654a6de49039
+- path: transfer_delta.csv
+  sha256: 0dec1f6091d513094255f2822fe48669d22cfb3b57da083befa3806db977a5ee

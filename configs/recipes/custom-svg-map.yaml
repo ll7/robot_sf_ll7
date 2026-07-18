@@ -1,0 +1,16 @@
+id: custom-svg-map
+title: Simulate on a bundled custom SVG map
+purpose: >
+  Load an SVG map into Robot SF and run a short random-policy rollout on it.
+  This is the starting point for bringing your own map into the simulator
+  before authoring scenarios on top of it.
+runtime: "< 30s CPU"
+category: maps
+command: >
+  uv run python examples/quickstart/03_custom_map.py
+configs:
+  - examples/quickstart/03_custom_map.py
+  - maps/svg_maps/debug_06.svg
+outputs:
+  - "(stdout only: map-conversion logs and rollout progress)"
+docs: docs/recipes/README.md

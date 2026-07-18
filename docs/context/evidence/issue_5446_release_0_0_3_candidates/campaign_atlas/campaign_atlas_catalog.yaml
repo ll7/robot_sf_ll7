@@ -1,0 +1,26 @@
+# AI-GENERATED NEEDS-REVIEW
+artifacts:
+- artifact_id: campaign_atlas
+  artifact_kind: figure
+  caption_file:
+    path: campaign_atlas_caption.md
+    sha256: 5a70719611218996b6c97fec5770f0c3499fa2ebe2731d3dc0dddac2c3b71d62
+  claim_boundary: diagnostic_only
+  generation_command: build_campaign_atlas_issue_5616.py --inventory /tmp/issue5446final/atlas_inventory.jsonl
+    --out-dir /tmp/issue5446final/campaign_atlas --campaign-id paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final
+    --commit a307ef276d701f8d14dead1aa0513f44ee97c0b0
+  generation_commit: a307ef276d701f8d14dead1aa0513f44ee97c0b0
+  outputs:
+    svg:
+      path: campaign_atlas.svg
+      sha256: 91bd3cb3b43f94b20e2673a7a4cf6fbc6f74d40dcc746bfdce114d5ebe2c63a9
+  source_files:
+  - path: campaign_atlas_summary.json
+    sha256: fe7cdfcecbbc762012095981b6d829d32e02c14e5e23e162de7fb9d82951aeb6
+  - path: campaign_atlas_provenance.json
+    sha256: 55930ec073ecd20aba2a2ac40d80e12f0de10eb43748803405c8699367507c27
+  - path: /tmp/issue5446final/atlas_inventory.jsonl
+    sha256: ea2528c1353039d86e526c099462b81e8af140f2fdf66da340aea36782841685
+  source_kind: campaign_inventory
+catalog_id: campaign_atlas_paper_experiment_matrix_v2_h600_s30_extended_release_v0_0_3_final
+schema_version: artifact_catalog.v1

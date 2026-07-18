@@ -1,0 +1,233 @@
+{
+  "archive_entry_count": 17,
+  "archive_path": "docs/context/evidence/issue_5305_certified_archive/archive.json",
+  "archive_sha256": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
+  "campaign_id": "issue5305-certified-archive-13518",
+  "commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+  "config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+  "partition_overlap": {
+    "archive_id_overlap": [],
+    "archive_id_overlap_count": 0,
+    "disjointness_checks_passed": true,
+    "disjointness_failure_reasons": [],
+    "eval_families": [
+      "{\"scenario_family\":\"classic_group_crossing_medium\"}"
+    ],
+    "eval_size": 12,
+    "fit_families": [
+      "{\"scenario_family\":\"classic_cross_trap_medium\"}"
+    ],
+    "fit_size": 5,
+    "scenario_family_overlap": [],
+    "scenario_family_overlap_count": 0,
+    "seed_overlap": [],
+    "seed_overlap_count": 0,
+    "seed_overlap_invalidates_held_out_evidence": false,
+    "split_policy": "disjoint_scenario_family"
+  },
+  "schema_version": "issue5305_archive_generation_summary.v1",
+  "search_runs": [
+    {
+      "budget": 64,
+      "manifest_path": "raw/classic_cross_trap_medium/seed_530501/manifest.json",
+      "manifest_sha256": "2d10f82a7783d7bfba993b7b48869a1716bf8f451adb36e2c20901eb2bc854af",
+      "num_candidates": 64,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 29,
+      "num_valid_candidates": 35,
+      "scenario_family": "classic_cross_trap_medium",
+      "search_seed": 530501,
+      "target_planner": "goal"
+    },
+    {
+      "budget": 64,
+      "manifest_path": "raw/classic_cross_trap_medium/seed_530502/manifest.json",
+      "manifest_sha256": "862e7889bdf77f41dc36590a718e0d7f4492b365346b3a17afc63691489a7463",
+      "num_candidates": 64,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 31,
+      "num_valid_candidates": 33,
+      "scenario_family": "classic_cross_trap_medium",
+      "search_seed": 530502,
+      "target_planner": "goal"
+    },
+    {
+      "budget": 64,
+      "manifest_path": "raw/classic_cross_trap_medium/seed_530503/manifest.json",
+      "manifest_sha256": "133ae1114679d28756e515c0906e3fb3028dbbbd0a3ba2e21b2fd285a0e7a5ad",
+      "num_candidates": 64,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 35,
+      "num_valid_candidates": 29,
+      "scenario_family": "classic_cross_trap_medium",
+      "search_seed": 530503,
+      "target_planner": "goal"
+    },
+    {
+      "budget": 64,
+      "manifest_path": "raw/classic_group_crossing_medium/seed_530511/manifest.json",
+      "manifest_sha256": "5e9b7efa076921765ccd2d9f089154a7d3469d5d9701f6c4764750345a33f163",
+      "num_candidates": 64,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 36,
+      "num_valid_candidates": 28,
+      "scenario_family": "classic_group_crossing_medium",
+      "search_seed": 530511,
+      "target_planner": "social_force"
+    },
+    {
+      "budget": 64,
+      "manifest_path": "raw/classic_group_crossing_medium/seed_530512/manifest.json",
+      "manifest_sha256": "37036ee5925f43a60ace23ce30fc51abbafcf320c70243927954e708091ac91f",
+      "num_candidates": 64,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 33,
+      "num_valid_candidates": 31,
+      "scenario_family": "classic_group_crossing_medium",
+      "search_seed": 530512,
+      "target_planner": "social_force"
+    },
+    {
+      "budget": 64,
+      "manifest_path": "raw/classic_group_crossing_medium/seed_530513/manifest.json",
+      "manifest_sha256": "e4707b15cb325104d83bb60cb53a3829b37e6650092a30e3940ef6ee8ed05176",
+      "num_candidates": 64,
+      "num_failed_evaluations": 0,
+      "num_invalid_candidates": 45,
+      "num_valid_candidates": 19,
+      "scenario_family": "classic_group_crossing_medium",
+      "search_seed": 530513,
+      "target_planner": "social_force"
+    }
+  ],
+  "selection": {
+    "classic_cross_trap_medium": {
+      "fully_checked_count": 24,
+      "provisional_failure_count": 41,
+      "rejections": [
+        {
+          "reason": "independent_seed_confirmation:1<3",
+          "scenario_seed": 12500,
+          "source_candidate_index": 3,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530501/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 13146,
+          "source_candidate_index": 6,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530501/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:0<3",
+          "scenario_seed": 13155,
+          "source_candidate_index": 14,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530501/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 10898,
+          "source_candidate_index": 24,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530501/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 13232,
+          "source_candidate_index": 37,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530501/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:1<3",
+          "scenario_seed": 11179,
+          "source_candidate_index": 38,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530501/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 11433,
+          "source_candidate_index": 47,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530501/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:1<3",
+          "scenario_seed": 12922,
+          "source_candidate_index": 59,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530501/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 12209,
+          "source_candidate_index": 62,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530501/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:0<3",
+          "scenario_seed": 11494,
+          "source_candidate_index": 2,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530502/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 13163,
+          "source_candidate_index": 5,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530502/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:1<3",
+          "scenario_seed": 10579,
+          "source_candidate_index": 8,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530502/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 10390,
+          "source_candidate_index": 11,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530502/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:1<3",
+          "scenario_seed": 10868,
+          "source_candidate_index": 13,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530502/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 10421,
+          "source_candidate_index": 28,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530502/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 10338,
+          "source_candidate_index": 38,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530502/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 12224,
+          "source_candidate_index": 41,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530502/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:2<3",
+          "scenario_seed": 11399,
+          "source_candidate_index": 45,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530502/manifest.json"
+        },
+        {
+          "reason": "independent_seed_confirmation:1<3",
+          "scenario_seed": 13761,
+          "source_candidate_index": 46,
+          "source_manifest": "raw/classic_cross_trap_medium/seed_530502/manifest.json"
+        }
+      ],
+      "retained_count": 5
+    },
+    "classic_group_crossing_medium": {
+      "fully_checked_count": 12,
+      "provisional_failure_count": 73,
+      "rejections": [],
+      "retained_count": 12
+    }
+  },
+  "source_archive_sha256": "1318e210bc4771fb0ab4b30d5bc6739f9ecd416e039f61e7da4cd7411f3baa6d"
+}

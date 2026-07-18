@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
+from loguru import logger
 
+from robot_sf.common.logging import safe_sink
 from scripts.validation import check_issue_5592_cross_matrix_preregistration as checker
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -31,6 +34,15 @@ def test_packet_rejects_transient_routing_state() -> None:
     packet["target_host"] = "imech036"
 
     with pytest.raises(checker.PacketError, match="transient routing state"):
+        checker.validate_packet(packet)
+
+
+def test_packet_rejects_malformed_required_files_type() -> None:
+    """Malformed artifact file collections fail as packet errors, not TypeError."""
+    packet = checker.load_packet(PACKET)
+    packet["artifact_contract"]["required_files"] = 42
+
+    with pytest.raises(checker.PacketError, match="complete integration artifact set"):
         checker.validate_packet(packet)
 
 
@@ -68,3 +80,30 @@ def test_cli_emits_machine_readable_ready_status(capsys) -> None:
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["status"] == "ready"
     assert payload["campaign_execution_allowed"] is False
+
+
+def test_json_cli_preserves_caller_loguru_sink(capsys) -> None:
+    """JSON validation must not remove process-global sinks installed by callers.
+
+    The sink is bound through :func:`safe_sink` so that, if ``capsys`` tears
+    down its captured ``sys.stdout`` after the test finishes but before the
+    handler is removed, the late write is dropped instead of raising
+    ``ValueError: I/O operation on closed file`` under ``pytest-xdist``
+    workers (see issue #5849).
+    """
+    sink_id = logger.add(safe_sink(sys.stdout), format="{message}")
+    try:
+        exit_code = checker.main(["--json"])
+        captured = capsys.readouterr()
+
+        assert exit_code == 0
+        assert json.loads(captured.out)["status"] == "ready"
+        assert captured.err
+
+        logger.info("caller sink remains active")
+        assert capsys.readouterr().out.strip() == "caller sink remains active"
+    finally:
+        try:
+            logger.remove(sink_id)
+        except ValueError:
+            pass

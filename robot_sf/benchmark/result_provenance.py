@@ -11,6 +11,7 @@ Schema version: ``benchmark_result_provenance.v1``
 from __future__ import annotations
 
 import json
+import os
 import platform
 import shlex
 import sys
@@ -20,6 +21,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from robot_sf._numerical_thread_env import THREAD_ENV_VARS as _THREAD_ENV_VARS
 from robot_sf.benchmark.utils import _config_hash, _git_hash_fallback
 
 if TYPE_CHECKING:
@@ -67,6 +69,56 @@ def _sha256_of_file(path: str | Path) -> str | None:
         return sha256(Path(path).read_bytes()).hexdigest()
     except (OSError, FileNotFoundError):
         return None
+
+
+def _thread_env_snapshot() -> dict[str, str | None]:
+    """Capture the numerical-thread environment used by BLAS/OpenMP.
+
+    Returns:
+        Mapping of thread-control env var name to its current value (or
+        ``None`` when unset). These are the knobs that pinnable thread
+        determinism for trace re-executions across nodes.
+    """
+    return {name: os.environ.get(name) for name in _THREAD_ENV_VARS}
+
+
+def _cpu_model() -> str:
+    """Best-effort CPU model string for the executing host.
+
+    Returns:
+        CPU model string, or ``"Unknown CPU"`` when not determinable.
+    """
+    try:
+        with Path("/proc/cpuinfo").open(encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                if line.lower().startswith("model name") and ":" in line:
+                    model = line.split(":", 1)[1].strip()
+                    if model:
+                        return model
+    except OSError:
+        pass
+    return platform.processor() or "Unknown CPU"
+
+
+def build_execution_context_provenance() -> dict[str, Any]:
+    """Capture the execution-context provenance of the current run.
+
+    The benchmark path is per-context deterministic but diverges across
+    execution contexts (CPU/BLAS/threading) at the ulp level, chaotically
+    amplified in contact-rich scenarios. Recording hostname, CPU model, and
+    thread-env alongside the commit makes cross-context trajectory comparisons
+    detectable after the fact (see issue #5817 / #5816).
+
+    Returns:
+        Execution-context provenance dict.
+    """
+    return {
+        "hostname": platform.node(),
+        "cpu_model": _cpu_model(),
+        "python_version": platform.python_version(),
+        "platform": platform.platform(),
+        "thread_env": _thread_env_snapshot(),
+    }
 
 
 def build_simulator_settings_provenance(
@@ -312,6 +364,7 @@ def build_result_provenance_manifest(  # noqa: PLR0913
             "benchmark_profile": str(benchmark_profile),
             "runner": "map_runner.run_map_batch",
             "protocol_version": BENCHMARK_PROTOCOL_VERSION,
+            "execution_context": build_execution_context_provenance(),
         },
         "inputs": {
             "schema_path": schema_entry,
@@ -477,6 +530,7 @@ __all__ = [
     "ProvenanceRequiredFieldError",
     "ProvenanceRowLinkError",
     "ProvenanceValidationError",
+    "build_execution_context_provenance",
     "build_result_provenance_manifest",
     "build_row_result_provenance",
     "build_simulator_settings_provenance",

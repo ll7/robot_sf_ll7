@@ -16,8 +16,9 @@ packet exists (see the stop rule below).
 
 Depends on / builds atop the #5444 API merged in PR #5458
 (`robot_sf/research/collision_risk/`). Integrates the comparison intent of #1472 (learned risk) and
-#5307 (planner) without duplicating either; both are reported as `unavailable` estimator rows
-because no learned/multimodal surface is merged in-repo yet.
+#5307 (planner) without duplicating either. The `multimodal_forecast_mc` row scores the in-repo
+constant-velocity GMM **surrogate** forecast (PR #5662); the `learned_risk_1472` row remains
+`unavailable` because the #1472 model is not merged.
 
 ## Preregistration (fixed before scoring)
 
@@ -41,6 +42,10 @@ report `provenance` block so the comparison cannot be tuned post hoc:
 - **Stop rule:** stop before any real-distribution run until eligible simulator traces,
   target-distribution provenance, and action-conditioned labels exist; stop promotion of an
   estimator whose calibration CI includes the simple baseline while its runtime is worse.
+- **Action-sensitivity fixture:** two explicit actor states, each paired with a higher-risk
+  centerline action and a lower-risk sidestep action. Each pair reuses the same actor state and
+  fixed Monte Carlo seed for both candidates; pair rows are diagnostic only and are not added to
+  the 880 calibration labels.
 
 ## Reported metrics (per the acceptance criteria)
 
@@ -65,9 +70,20 @@ Overall prevalence 0.633.
 | Estimator | Kind | ECE (CI95) | Brier (baseline) | Log loss | AP | Latency p95 | Verdict |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `constant_velocity_mc` | probabilistic | 0.070 (0.055–0.102) | 0.180 (0.232) | 0.55 | 0.872 | 5.2 ms → online | revise |
+| `multimodal_forecast_mc` | probabilistic | 0.059 (0.051–0.096) | 0.179 (0.232) | 0.55 | 0.872 | online | revise |
 | `deterministic_ttc` | warning | n/a (ranking only) | n/a | n/a | 0.828 | online | revise |
-| `multimodal_forecast_mc` | — | unavailable (no in-repo multimodal sampler) | | | | | unavailable |
 | `learned_risk_1472` | — | unavailable (model not merged) | | | | | unavailable |
+
+> **Successor update (this commit).** `multimodal_forecast_mc` was promoted from `unavailable` to
+> a scored row once the in-repo constant-velocity GMM surrogate forecast landed (PR #5662). It now
+> scores a K-mode Gaussian-mixture **surrogate** forecast (symmetric heading-spread modes), not the
+> learned #5307/#2844 multimodal predictor. On this unimodal-Gaussian-GT packet it is a
+> forecast-model-mismatch case (ECE comparable to the constant-velocity row), **not** a
+> multimodal-self-consistency case. The table values above are from the original 2026-07-13 packet
+> run; re-running the CLI reproduces the current (now three-row) report. This is fixture evidence
+> only — it is **not** a benchmark claim that multimodality improves calibration (the two rows are
+> statistically indistinguishable here, exactly the "simple baselines may match complex estimators"
+> competing explanation in #5445).
 
 **Stratified calibration (constant_velocity_mc, ECE by family):**
 
@@ -78,10 +94,17 @@ Overall prevalence 0.633.
 | `misspecified_biased` | 220 | 0.673 | 0.075 |
 | `misspecified_underconfident` | 220 | 0.605 | 0.166 |
 
+**Matched action sensitivity (constant_velocity_mc):** 2/2 pairs were ordered in the
+predeclared direction. This is fixture evidence that the estimator responds to the candidate
+action while holding the forecast inputs fixed; it is not a calibration or planning-benefit claim.
+
 ## Reading of the fixture result (honest, bounded)
 
 - **Self-consistency holds:** in-model families are close to calibrated (ECE ≈ 0.05–0.07), and the
   first-passage CDF is monotone in the horizon for 100% of samples.
+- **Action conditioning is exercised:** both explicit same-state pairs ranked the centerline
+  action above the sidestep action under common forecast draws (2/2). The pair check is a narrow
+  diagnostic, not evidence that the ranking transfers to simulator traces.
 - **Miscalibration is detected** where it is strong: the *underconfident* misspecification (ground
   truth noisier than assumed) drives ECE to 0.166, well above the in-model band.
 - **A weak shift is only weakly detectable:** the *biased* misspecification at this magnitude
@@ -100,5 +123,7 @@ Overall prevalence 0.633.
 ## Out of scope (explicit)
 
 No full benchmark campaign run, no Slurm/GPU submission, no paper/dissertation claim edits, and no
-change to any benchmark metric semantics. Multimodal-forecast and learned-risk estimator rows remain
-`unavailable` until their upstream models merge.
+change to any benchmark metric semantics. The `learned_risk_1472` estimator row remains
+`unavailable` until its upstream model (#1472) merges; replacing the `multimodal_forecast_mc`
+surrogate forecast with the learned #5307/#2844 multimodal predictor is the benchmark-facing upgrade
+and remains out of scope.

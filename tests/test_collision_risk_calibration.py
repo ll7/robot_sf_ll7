@@ -17,23 +17,29 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+import robot_sf.research.collision_risk.calibration as calibration_module
 from robot_sf.nav.predictive_types import PedestrianState
 from robot_sf.research.collision_risk import RiskEstimatorConfig, action_from_constant_velocity
 from robot_sf.research.collision_risk.calibration import (
     AVAILABLE_ESTIMATORS,
+    FORECAST_MODEL_IDS,
     UNAVAILABLE_ESTIMATORS,
     CalibrationInputError,
     EstimatorPrediction,
     FamilySpec,
     LabeledSample,
+    MatchedActionPair,
     MatchedDatasetProvenance,
+    MultimodalForecastConfig,
     average_precision,
     brier_score,
     evaluate_estimator,
+    evaluate_matched_action_sensitivity,
     expected_calibration_error,
     fnr_at_thresholds,
     generate_matched_dataset,
     log_loss,
+    predict_estimator,
     reliability_curve,
     time_to_warning_summary,
 )
@@ -221,12 +227,295 @@ def test_risk_calibration_deterministic_signal_not_on_probability_curve() -> Non
     assert "average_precision" in result
 
 
+def test_risk_calibration_action_sensitivity_uses_shared_forecast_inputs() -> None:
+    """Two actions on one actor state are ordered with common forecast draws."""
+    config = _small_config(n_samples=512, seed=19)
+    pedestrians = (
+        PedestrianState(id=1, position=np.array([1.5, 0.2]), velocity=np.array([-0.4, 0.0])),
+        PedestrianState(id=2, position=np.array([1.5, -0.2]), velocity=np.array([-0.4, 0.0])),
+    )
+    pairs = tuple(
+        MatchedActionPair(
+            pair_id=f"pair-{index}",
+            pedestrians=pedestrians,
+            higher_risk_action=action_from_constant_velocity(
+                f"pair-{index}:higher",
+                [0.0, 0.0],
+                [1.0, 0.0],
+                horizon_steps=config.horizon_steps,
+                dt_s=config.dt_s,
+            ),
+            lower_risk_action=action_from_constant_velocity(
+                f"pair-{index}:lower",
+                [0.0, 0.0],
+                [0.2, 1.2],
+                horizon_steps=config.horizon_steps,
+                dt_s=config.dt_s,
+            ),
+        )
+        for index in range(2)
+    )
+
+    result = evaluate_matched_action_sensitivity(pairs, config)
+
+    assert result["status"] == "scored"
+    assert result["matched_forecast_inputs"] is True
+    assert result["forecast_seed"] == 19
+    assert result["n_pairs"] == 2
+    assert result["fraction_correct"] == pytest.approx(1.0)
+    assert all(pair["direction_as_expected"] for pair in result["pairs"])
+
+
+def test_risk_calibration_action_sensitivity_fails_closed_without_pairs() -> None:
+    """An absent action fixture cannot become a successful zero-denominator report."""
+    with pytest.raises(CalibrationInputError, match="at least one pair"):
+        evaluate_matched_action_sensitivity((), _small_config())
+
+
+def test_risk_calibration_report_rejects_explicit_null_action_fixture(tmp_path: Path) -> None:
+    """An explicit null action fixture cannot silently select legacy compatibility."""
+    pytest.importorskip("yaml")
+    import yaml
+
+    from scripts.analysis.collision_risk_calibration_report import build_report
+
+    with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    data["evaluation"]["action_sensitivity"] = None
+    packet = tmp_path / "null-action-sensitivity.yaml"
+    with packet.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle)
+
+    with pytest.raises(CalibrationInputError, match="action_sensitivity must be a mapping"):
+        build_report(packet)
+
+
+@pytest.mark.parametrize("value", [None, "2", 2.0, True])
+def test_risk_calibration_report_rejects_malformed_min_pairs(tmp_path: Path, value: object) -> None:
+    """Malformed minimum-pair values fail with the structured config error."""
+    pytest.importorskip("yaml")
+    import yaml
+
+    from scripts.analysis.collision_risk_calibration_report import build_report
+
+    with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    data["evaluation"]["action_sensitivity"]["min_pairs"] = value
+    packet = tmp_path / "malformed-min-pairs.yaml"
+    with packet.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle)
+
+    with pytest.raises(CalibrationInputError, match="min_pairs must be a positive integer"):
+        build_report(packet)
+
+
+def test_risk_calibration_report_rejects_null_pair_id(tmp_path: Path) -> None:
+    """A null pair identifier cannot become the string ``None``."""
+    pytest.importorskip("yaml")
+    import yaml
+
+    from scripts.analysis.collision_risk_calibration_report import build_report
+
+    with CONFIG_PATH.open("r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    data["evaluation"]["action_sensitivity"]["pairs"][0]["pair_id"] = None
+    packet = tmp_path / "null-pair-id.yaml"
+    with packet.open("w", encoding="utf-8") as handle:
+        yaml.safe_dump(data, handle)
+
+    with pytest.raises(CalibrationInputError, match="has no pair_id"):
+        build_report(packet)
+
+
+# --------------------------------------------------------------------------- #
+# Multimodal forecast estimator (constant-velocity GMM surrogate, #5662 forecast)
+# --------------------------------------------------------------------------- #
+def test_risk_calibration_multimodal_estimator_is_probabilistic_and_bounded() -> None:
+    """The multimodal estimator emits a probability in [0, 1] with provenance."""
+    config = _small_config()
+    action = action_from_constant_velocity(
+        "a", [0, 0], [1.0, 0.0], horizon_steps=config.horizon_steps, dt_s=config.dt_s
+    )
+    ped = (PedestrianState(id=0, position=np.array([2.0, 0.0]), velocity=np.array([-0.5, 0.0])),)
+    sample = LabeledSample("s0", "f", action, ped, True, 5, 1.0, {})
+    predictions = predict_estimator("multimodal_forecast_mc", [sample], config)
+    assert len(predictions) == 1
+    score = predictions[0].score
+    assert predictions[0].is_probability is True
+    assert 0.0 <= score <= 1.0
+    assert predictions[0].latency_ms >= 0.0
+
+
+def test_risk_calibration_multimodal_records_surrogate_forecast_model() -> None:
+    """Each estimator result records which forecast model it scored."""
+    config = _small_config()
+    family = FamilySpec(name="f", n_scenarios=120, gt_velocity_std_m_s=config.velocity_std_m_s)
+    dataset = generate_matched_dataset(
+        [family],
+        config,
+        _provenance(120, horizon_steps=config.horizon_steps, dt_s=config.dt_s, seed=3),
+    )
+    mm = evaluate_estimator("multimodal_forecast_mc", dataset, config, n_bootstrap=0)
+    assert mm["forecast_model"] == FORECAST_MODEL_IDS["multimodal_forecast_mc"]
+    assert mm["forecast_model"] == "constant_velocity_gmm_surrogate.v1"
+    cv = evaluate_estimator("constant_velocity_mc", dataset, config, n_bootstrap=0)
+    assert cv["forecast_model"] == FORECAST_MODEL_IDS["constant_velocity_mc"]
+    # Distinct forecast models prove the two rows are not silently the same.
+    assert cv["forecast_model"] != mm["forecast_model"]
+
+
+def test_risk_calibration_multimodal_self_consistent_against_own_model() -> None:
+    """The multimodal estimator is well-calibrated against its own GMM model.
+
+    Ground-truth labels are drawn from the surrogate K-mode mixture so the
+    multimodal estimator's forecast matches the data-generating model
+    (self-consistency, mirroring the constant-velocity self-consistency test).
+    The CDF is monotone in the horizon by construction. This is fixture evidence
+    only; it is not a claim that the learned #5307/#2844 predictor is calibrated.
+    """
+    config = _small_config()
+    forecast = MultimodalForecastConfig(
+        mode_count=3, heading_spread_rad=0.35, velocity_std_m_s=config.velocity_std_m_s
+    )
+    family = FamilySpec(
+        name="mm_in_model",
+        n_scenarios=200,
+        gt_velocity_std_m_s=config.velocity_std_m_s,
+        gt_forecast_kind="multimodal_gmm",
+        gt_multimodal_forecast=forecast,
+    )
+    dataset = generate_matched_dataset(
+        [family],
+        config,
+        _provenance(200, horizon_steps=config.horizon_steps, dt_s=config.dt_s, seed=config.seed),
+    )
+    result = evaluate_estimator(
+        "multimodal_forecast_mc", dataset, config, n_bootstrap=0, multimodal_forecast=forecast
+    )
+    assert result["kind"] == "probabilistic"
+    # Generous bound for MC noise at n=512, matching the constant-velocity test.
+    assert result["expected_calibration_error"] < 0.12
+    assert result["horizon_monotonicity"]["monotone_fraction"] == pytest.approx(1.0)
+    strat = result["stratified"]["family"]["mm_in_model"]
+    assert strat["n"] == 200
+    assert "expected_calibration_error" in strat
+
+
+def test_risk_calibration_multimodal_single_mode_aligns_with_constant_velocity() -> None:
+    """A one-mode multimodal forecast collapses toward the constant-velocity model.
+
+    With ``mode_count=1`` the surrogate mixture is a single Gaussian around the
+    nominal heading, so its collision score should be close to the
+    constant-velocity estimator's on the same scenario (validating the surrogate
+    reduces to the unimodal baseline rather than diverging).
+    """
+    config = _small_config(n_samples=1024, seed=23)
+    action = action_from_constant_velocity(
+        "a", [0, 0], [1.0, 0.0], horizon_steps=config.horizon_steps, dt_s=config.dt_s
+    )
+    ped = (PedestrianState(id=0, position=np.array([1.8, 0.1]), velocity=np.array([-0.4, 0.0])),)
+    sample = LabeledSample("s0", "f", action, ped, True, 4, 1.0, {})
+    cv_score = predict_estimator("constant_velocity_mc", [sample], config)[0].score
+    unimodal_mm = MultimodalForecastConfig(
+        mode_count=1, heading_spread_rad=0.0, velocity_std_m_s=config.velocity_std_m_s
+    )
+    mm_score = predict_estimator(
+        "multimodal_forecast_mc", [sample], config, multimodal_forecast=unimodal_mm
+    )[0].score
+    # Both estimate the same contact probability; allow MC sampling tolerance.
+    assert mm_score == pytest.approx(cv_score, abs=0.08)
+
+
+def test_risk_calibration_multimodal_heading_spread_changes_score() -> None:
+    """A wider heading spread (more modes) shifts the multimodal score away.
+
+    This proves the multimodal row is a genuinely different forecast model from
+    the unimodal baseline: spreading intent around the heading redistributes
+    collision probability rather than reproducing the straight-line estimate.
+    """
+    config = _small_config(n_samples=1024, seed=29)
+    action = action_from_constant_velocity(
+        "a", [0, 0], [1.0, 0.0], horizon_steps=config.horizon_steps, dt_s=config.dt_s
+    )
+    ped = (PedestrianState(id=0, position=np.array([1.8, 0.0]), velocity=np.array([-0.5, 0.0])),)
+    sample = LabeledSample("s0", "f", action, ped, True, 4, 1.0, {})
+    narrow = MultimodalForecastConfig(
+        mode_count=1, heading_spread_rad=0.0, velocity_std_m_s=config.velocity_std_m_s
+    )
+    wide = MultimodalForecastConfig(
+        mode_count=5, heading_spread_rad=0.9, velocity_std_m_s=config.velocity_std_m_s
+    )
+    narrow_score = predict_estimator(
+        "multimodal_forecast_mc", [sample], config, multimodal_forecast=narrow
+    )[0].score
+    wide_score = predict_estimator(
+        "multimodal_forecast_mc", [sample], config, multimodal_forecast=wide
+    )[0].score
+    assert wide_score != narrow_score
+
+
+def test_risk_calibration_multimodal_forecast_config_validates() -> None:
+    """Bad surrogate forecast configs fail closed rather than producing NaN."""
+    with pytest.raises(CalibrationInputError, match="mode_count"):
+        MultimodalForecastConfig(mode_count=0)
+    with pytest.raises(CalibrationInputError, match="heading_spread_rad"):
+        MultimodalForecastConfig(heading_spread_rad=-0.1)
+    with pytest.raises(CalibrationInputError, match="cross_actor_correlation"):
+        MultimodalForecastConfig(cross_actor_correlation=1.0)
+    with pytest.raises(CalibrationInputError, match="heading_spread_rad"):
+        MultimodalForecastConfig(heading_spread_rad=float("nan"))
+    with pytest.raises(CalibrationInputError, match="velocity_std_m_s"):
+        MultimodalForecastConfig(velocity_std_m_s=float("nan"))
+
+
+def test_risk_calibration_rejects_unknown_ground_truth_forecast_kind() -> None:
+    """A typo in the ground-truth model selector fails closed."""
+    with pytest.raises(CalibrationInputError, match="gt_forecast_kind"):
+        FamilySpec(name="bad", n_scenarios=1, gt_velocity_std_m_s=0.3, gt_forecast_kind="typo")
+
+
+def test_risk_calibration_threads_custom_forecast_to_horizon_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Horizon monotonicity receives the same surrogate config as prediction."""
+    config = _small_config()
+    forecast = MultimodalForecastConfig(mode_count=5, heading_spread_rad=0.8)
+    family = FamilySpec(name="f", n_scenarios=1, gt_velocity_std_m_s=config.velocity_std_m_s)
+    dataset = generate_matched_dataset(
+        [family],
+        config,
+        _provenance(1, horizon_steps=config.horizon_steps, dt_s=config.dt_s, seed=0),
+    )
+    seen: list[object] = []
+    original = calibration_module._horizon_monotonicity
+
+    def wrapped(*args: object, **kwargs: object) -> dict[str, float]:
+        seen.append(kwargs.get("multimodal_forecast"))
+        return original(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(calibration_module, "_horizon_monotonicity", wrapped)
+    evaluate_estimator(
+        "multimodal_forecast_mc",
+        dataset,
+        config,
+        n_bootstrap=0,
+        multimodal_forecast=forecast,
+    )
+    assert seen == [forecast]
+
+
 # --------------------------------------------------------------------------- #
 # Registry + fail-closed behaviour
 # --------------------------------------------------------------------------- #
 def test_risk_calibration_unavailable_estimators_recorded() -> None:
-    """Contracted-but-missing estimators are named as unavailable, not dropped."""
-    assert "multimodal_forecast_mc" in UNAVAILABLE_ESTIMATORS
+    """Contracted-but-missing estimators are named as unavailable, not dropped.
+
+    ``multimodal_forecast_mc`` was promoted to AVAILABLE once the in-repo
+    constant-velocity GMM surrogate forecast landed (#5662); only the learned
+    collision-risk model #1472 remains contracted-but-missing.
+    """
+    assert "multimodal_forecast_mc" in AVAILABLE_ESTIMATORS
+    assert "multimodal_forecast_mc" not in UNAVAILABLE_ESTIMATORS
     assert "learned_risk_1472" in UNAVAILABLE_ESTIMATORS
     assert set(AVAILABLE_ESTIMATORS).isdisjoint(UNAVAILABLE_ESTIMATORS)
 
@@ -257,10 +546,20 @@ def test_risk_calibration_report_cli_scores_packet(tmp_path: Path) -> None:
     report = build_report(CONFIG_PATH)
     assert report["status"] == "scored"
     assert report["provenance"]["n_samples"] == 880
+    assert report["action_sensitivity"]["status"] == "scored"
+    assert report["action_sensitivity"]["min_pairs"] == 2
+    assert report["action_sensitivity"]["n_pairs"] == 2
+    assert report["action_sensitivity"]["fraction_correct"] == pytest.approx(1.0)
     ids = {row["estimator_id"] for row in report["estimators"]}
     assert ids == set(AVAILABLE_ESTIMATORS)
     for row in report["estimators"]:
         assert row["verdict"] in {"use online", "offline analysis only", "revise", "stop"}
+        assert row["forecast_model"] == FORECAST_MODEL_IDS[row["estimator_id"]]
+    # The promoted multimodal row is now scored with its surrogate forecast model
+    # rather than reported as unavailable.
+    mm_row = next(r for r in report["estimators"] if r["estimator_id"] == "multimodal_forecast_mc")
+    assert mm_row["kind"] == "probabilistic"
+    assert mm_row["forecast_model"] == "constant_velocity_gmm_surrogate.v1"
     unavailable_ids = {row["estimator_id"] for row in report["unavailable_estimators"]}
     assert unavailable_ids == set(UNAVAILABLE_ESTIMATORS)
 

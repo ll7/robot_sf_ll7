@@ -1,0 +1,60 @@
+# Risk-layer ablation configuration (issue #5832)
+#
+# Progressive hazard-model scoring for planner evaluation. Each layer adds a
+# hazard dimension and maps to an SNQI weight configuration consumed by
+# robot_sf.benchmark.risk_layer_ablation.
+#
+# Layer contract:
+#   L0_geometry_only     - static obstacles / hard contact geometry (baseline).
+#   L1_plus_dynamics     - L0 + moving-pedestrian near-field and motion comfort.
+#   L2_plus_semantic_risk- L1 + zone/context (semantic) risk weighting.
+#
+# When a scenario family carries no zone metadata, the L2 semantic-risk term
+# (metrics.semantic_risk_exposure) is unavailable and L2 is scored on its
+# remaining active terms only. This is by design, not an error.
+
+schema_version: "risk_layer_ablation.v1"
+risk_layer_version: "risk-layers.v1"
+group_by: "scenario_params.algo"
+fallback_group_by: "algo"
+bootstrap:
+  seed: 20260716
+  samples: 200
+
+layers:
+  - name: "L0_geometry_only"
+    level: 0
+    description: "Static obstacles and hard contact geometry only."
+    adds: ["geometry"]
+    weights:
+      w_success: 2.0
+      w_collisions: 2.0
+      w_force_exceed: 1.0
+      w_near: 0.0
+      w_comfort: 0.0
+      w_time: 0.0
+      w_semantic_risk: 0.0
+  - name: "L1_plus_dynamics"
+    level: 1
+    description: "L0 plus moving-pedestrian dynamics: near-field exposure and motion comfort."
+    adds: ["dynamics"]
+    weights:
+      w_success: 2.0
+      w_collisions: 2.0
+      w_force_exceed: 1.0
+      w_near: 1.5
+      w_comfort: 1.0
+      w_time: 0.0
+      w_semantic_risk: 0.0
+  - name: "L2_plus_semantic_risk"
+    level: 2
+    description: "L1 plus semantic/zone risk weighting from scenario zone metadata."
+    adds: ["semantic_risk"]
+    weights:
+      w_success: 2.0
+      w_collisions: 2.0
+      w_force_exceed: 1.0
+      w_near: 1.5
+      w_comfort: 1.0
+      w_time: 0.0
+      w_semantic_risk: 1.5

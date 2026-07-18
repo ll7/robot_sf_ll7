@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_by_latency.csv",
+  "artifact_sha256": "aedf2ecef126745a8db8a09ef8cda97471ba9a0e0f141faf76b854f34c02bc5d",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

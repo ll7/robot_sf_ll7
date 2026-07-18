@@ -551,3 +551,66 @@ def test_missing_placeholder_passes_synthetic_check(tmp_path: Path) -> None:
 
     synthetic = [i for i in report["issues"] if i["code"] == "synthetic_commit"]
     assert synthetic == []
+
+
+def test_committed_baseline_reproduces_from_write_baseline(tmp_path: Path) -> None:
+    """The committed ratchet baseline must reproduce from the live evidence set.
+
+    Issue #5971: the local readiness gate failed because the committed baseline
+    no longer matched the live tracked evidence set (a new evidence file drifted
+    in). The baseline at scripts/validation/evidence_registry_baseline.json must
+    be exactly what ``evidence_registry_ratchet.py --write-baseline`` would
+    regenerate against current ``origin/main``. This keeps the ratchet fail-closed
+    (net-new findings still fail) while proving the committed baseline and the
+    live evidence set are reconciled.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    baseline_path = repo_root / "scripts" / "validation" / "evidence_registry_baseline.json"
+    ratchet = repo_root / "scripts" / "dev" / "evidence_registry_ratchet.py"
+    assert baseline_path.is_file(), f"committed baseline missing: {baseline_path}"
+
+    repro_baseline = tmp_path / "evidence_registry_baseline_repro.json"
+    regenerated = subprocess.run(
+        [
+            sys.executable,
+            str(ratchet),
+            "--write-baseline",
+            "--baseline",
+            str(repro_baseline),
+        ],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert regenerated.returncode == 0, regenerated.stderr
+
+    left = json.loads(baseline_path.read_text(encoding="utf-8"))
+    right = json.loads(repro_baseline.read_text(encoding="utf-8"))
+    assert left["findings_by_path"] == right["findings_by_path"], (
+        "Committed evidence-registry baseline does not reproduce from the live tracked "
+        "evidence set. Refresh it with "
+        "`uv run python scripts/dev/evidence_registry_ratchet.py --write-baseline` and add a "
+        "per-file disposition to scripts/validation/evidence_registry_baseline_review.yaml."
+    )
+    assert left["summary"]["total_findings"] == right["summary"]["total_findings"]
+
+
+def test_ratchet_gate_passes_against_committed_baseline() -> None:
+    """The fail-closed ratchet must hold on current origin/main after reconciliation.
+
+    Companion to test_committed_baseline_reproduces_from_write_baseline: once the
+    committed baseline reproduces from the live evidence set, the ``--check`` gate
+    must exit 0 (no net-new findings). This preserves the ratchet's fail-closed
+    contract from issue #5275 / #5952.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    ratchet = repo_root / "scripts" / "dev" / "evidence_registry_ratchet.py"
+    result = subprocess.run(
+        [sys.executable, str(ratchet), "--check"],
+        cwd=repo_root,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr

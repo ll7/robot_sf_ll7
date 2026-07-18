@@ -117,7 +117,8 @@ conditions (same commit, same manifest, `workers: 1`) on 2026-04-10:
   - **The residual nondeterminism is upstream, in the pedestrian dynamics.**
     `pysocialforce.forces` computes per-agent forces with `@njit(fastmath=True)`;
     the resulting trajectories can cross the 0.5 m clearance threshold at
-    knife-edge timesteps, so a sub-ULP trajectory difference can flip a
+    knife-edge timesteps, so a sub-unit-in-the-last-place (ULP) trajectory
+    difference can flip a
     near-miss count. The residual is *machine-/compiler-conditional*, not a
     property of the metric definition.
   - **Tolerance quantification.** `measure_exact_repeat_nondeterminism` runs `N`
@@ -143,6 +144,45 @@ publication tables — report it with an explicit tolerance (measured via
 `measure_exact_repeat_nondeterminism`) or omit it from primary claims. SNQI
 consumers should propagate the measured near-miss tolerance through
 `snqi_near_miss_propagation_bound` before claiming a composite precision.
+
+## Cross-Context Reproducibility (issue #5816)
+
+Trace re-executions in this benchmark are **bit-reproducible within a single
+execution context** (identical `(commit, config, node, thread env)` → sha-equal
+step traces) but **not trajectory-stable across execution contexts**.
+
+- **What is stable across contexts:** the *outcomes* are attractor-stable. In the
+  2026-07-16 doorway-butterfly re-export (pinned commit `a307ef2`), 28/30 seeds
+  agreed with the release; only 2 knife-edge seeds (128, 130) flipped, and the
+  flipped seeds were consistent per context.
+- **What diverges across contexts:** the *trajectories* diverge for the same seed.
+  In that re-export, seed 114 produced 62 near-misses on the release box
+  (`workers=32`) vs 78 on a Slurm node (`workers=1`) vs 37 on the login node
+  (`workers=1`). There was no code delta — the commit was pinned on both sides.
+- **Mechanism:** ULP-level float differences from CPU, Basic Linear Algebra
+  Subprograms (BLAS), and threading context are chaotically amplified in
+  contact-rich scenarios (the same upstream
+  `pysocialforce.forces` `@njit(fastmath=True)` dynamics described above).
+
+**Rules for comparing runs:**
+
+- Never compare *trajectories* across executions without labeling the execution
+  context. Always label any cross-context comparison with hostname, CPU model,
+  and thread environment.
+- Compare *outcomes* (success/collision counts), not per-step traces, when the
+  execution context differs.
+- For trace-level re-exports, re-run in the *same* execution context that produced
+  the baseline, or expect knife-edge seeds to flip.
+
+**What the pipeline now pins and records:**
+
+- The camera-ready runner (`scripts/tools/run_camera_ready_benchmark.py`) pins
+  `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, and `MKL_NUM_THREADS` to `1`,
+  overriding inherited values for this reproducibility-focused entry point.
+  This makes re-executions at least thread-deterministic.
+- Each campaign `run_meta.json` now carries an `execution_context` block with
+  `hostname`, `cpu_model` (from `/proc/cpuinfo`), and the resolved `thread_env`
+  mapping, so divergent execution contexts are detectable after the fact.
 
 ## What Counts As Comparable vs Non-Comparable
 

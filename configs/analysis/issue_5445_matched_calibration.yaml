@@ -9,6 +9,16 @@
 # and changes no benchmark metric semantics. A real-distribution run needs
 # eligible simulator traces and is out of scope until an approved compute packet
 # exists (see stop_rule below).
+#
+# Estimator rows scored from this packet:
+#   - constant_velocity_mc      : single-Gaussian constant-velocity Monte Carlo.
+#   - multimodal_forecast_mc    : K-mode constant-velocity GMM surrogate forecast
+#                                 (heading-spread modes; NOT the learned #5307/#2844
+#                                 predictor). Scored against the unimodal-Gaussian
+#                                 GT below, so it is a forecast-model-mismatch case,
+#                                 not a self-consistency case for this packet.
+#   - deterministic_ttc         : deterministic TTC/clearance warning (ranking only).
+# The learned collision-risk model #1472 stays unavailable (contracted-but-missing).
 description: >-
   Matched calibration comparison of online collision-risk estimators for issue
   #5445. All estimators receive identical scenario histories, candidate actions,
@@ -105,7 +115,31 @@ evaluation:
     ece_use_online_max: 0.05
     ece_revise_max: 0.15
     min_ap_over_prevalence: 1.5
-  # Action-sensitivity pairs are left empty for the fixture packet; the harness
-  # supports (higher_risk_scenario_id, lower_risk_scenario_id) pairs when a packet
-  # supplies matched-state action variants.
-  action_pairs: []
+  # These pairs are a separate diagnostic fixture: each pair stores one actor
+  # state and scores two candidate actions against the same forecast draws. They
+  # are not added to the 880 calibration labels or treated as benchmark evidence.
+  action_sensitivity:
+    min_pairs: 2
+    pairs:
+      - pair_id: two_actor_centerline_vs_sidestep
+        start_position: [0.0, 0.0]
+        higher_risk_velocity: [1.0, 0.0]
+        lower_risk_velocity: [0.2, 1.2]
+        pedestrians:
+          - id: 1
+            position: [1.5, 0.2]
+            velocity: [-0.4, 0.0]
+          - id: 2
+            position: [1.5, -0.2]
+            velocity: [-0.4, 0.0]
+      - pair_id: offset_centerline_vs_sidestep
+        start_position: [0.0, 0.0]
+        higher_risk_velocity: [1.1, 0.0]
+        lower_risk_velocity: [0.1, 1.1]
+        pedestrians:
+          - id: 1
+            position: [2.0, 0.25]
+            velocity: [-0.3, 0.0]
+          - id: 2
+            position: [2.0, -0.25]
+            velocity: [-0.3, 0.0]

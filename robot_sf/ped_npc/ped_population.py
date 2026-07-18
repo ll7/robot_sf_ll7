@@ -35,7 +35,8 @@ from math import atan2, ceil, cos, dist, sin
 
 import numpy as np
 from shapely.geometry import Point as _ShapelyPoint
-from shapely.prepared import PreparedGeometry
+from shapely.geometry import Polygon as _ShapelyPolygon
+from shapely.prepared import PreparedGeometry, prep
 
 from robot_sf.common.types import PedGrouping, PedState, Vec2D, Zone, ZoneAssignments
 from robot_sf.nav.map_config import GlobalRoute
@@ -133,6 +134,8 @@ class PedSpawnConfig:
             "spread" spaces groups along the route length.
         route_spawn_jitter_frac: Fraction of spacing used as random jitter when spreading.
         route_spawn_seed: Optional RNG seed for deterministic spawn placement/jitter.
+        force_population_size: Optional exact total pedestrian count across route,
+            crowded-zone, and explicitly defined single-pedestrian spawns.
     """
 
     peds_per_area_m2: float
@@ -703,7 +706,260 @@ def populate_single_pedestrians(
     return ped_states, metadata
 
 
-def populate_simulation(  # noqa: PLR0913
+def _spawn_configs_for_forced_population(
+    spawn_config: PedSpawnConfig,
+    ped_routes: list[GlobalRoute],
+    ped_crowded_zones: list[Zone],
+    single_pedestrians: list | None,
+) -> tuple[PedSpawnConfig, PedSpawnConfig, bool]:
+    """Budget a forced total across explicit, crowded-zone, and route pedestrians.
+
+    Returns:
+        Crowd and route spawn configs plus whether archetype factors must be applied
+        after the population is merged.
+    """
+    forced_population_size = spawn_config.force_population_size
+    if forced_population_size is None:
+        return spawn_config, spawn_config, False
+
+    single_pedestrian_count = len(single_pedestrians or [])
+    if single_pedestrian_count > forced_population_size:
+        raise ValueError(
+            "force_population_size cannot be smaller than the number of explicitly defined "
+            f"single pedestrians ({forced_population_size} < {single_pedestrian_count})"
+        )
+    background_population_size = forced_population_size - single_pedestrian_count
+    apply_archetypes_to_forced_population = spawn_config.archetype_composition is not None
+    # Direct callers of ``populate_ped_routes`` retain their existing archetype behavior.
+    # Here the final merged population owns the composition, so defer factor assignment
+    # until explicit pedestrians have been appended and every simulator index is known.
+    background_spawn_config = (
+        replace(spawn_config, archetype_composition=None)
+        if apply_archetypes_to_forced_population
+        else spawn_config
+    )
+    if background_population_size > 0 and not (ped_crowded_zones or ped_routes):
+        # ``populate_simulation`` realizes this share in an in-memory crowded zone spanning
+        # free map space. Treat it as the crowd share so build-time dry runs see the same budget.
+        zone_share = background_population_size
+        route_share = 0
+    elif ped_crowded_zones and ped_routes:
+        zone_share = background_population_size // 2
+        route_share = background_population_size - zone_share
+    elif ped_crowded_zones:
+        zone_share = background_population_size
+        route_share = 0
+    else:
+        zone_share = 0
+        route_share = background_population_size
+
+    return (
+        replace(background_spawn_config, force_population_size=zone_share),
+        replace(background_spawn_config, force_population_size=route_share),
+        apply_archetypes_to_forced_population,
+    )
+
+
+def _zone_polygon(zone: Zone) -> _ShapelyPolygon:
+    """Expand a three-corner map rectangle into its four-corner Shapely polygon.
+
+    Returns:
+        The rectangular zone polygon.
+    """
+    a, b, c = zone
+    d = (a[0] + c[0] - b[0], a[1] + c[1] - b[1])
+    return _ShapelyPolygon((a, b, c, d))
+
+
+def _scatter_exclusions(
+    obstacle_polygons: list[PreparedGeometry],
+    reserved_zones: list[Zone],
+    single_pedestrians: list,
+    ped_radius: float,
+    reserved_zone_radius: float,
+) -> list[PreparedGeometry]:
+    """Build radius-inflated exclusions for obstacles, robot zones, and scripted actors.
+
+    Returns:
+        Prepared exclusion geometries with pedestrian-radius clearance applied.
+    """
+    exclusions = [prep(obstacle.context.buffer(ped_radius)) for obstacle in obstacle_polygons]
+    zone_clearance = ped_radius + reserved_zone_radius
+    exclusions.extend(prep(_zone_polygon(zone).buffer(zone_clearance)) for zone in reserved_zones)
+    exclusions.extend(
+        prep(_ShapelyPoint(ped.start).buffer(2 * ped_radius)) for ped in single_pedestrians
+    )
+    return exclusions
+
+
+def _synthetic_crowd_zones(
+    map_bounds: tuple[float, float, float, float],
+    ped_radius: float,
+) -> list[Zone]:
+    """Split radius-inset rectangular map bounds into two crowd-behavior triangles.
+
+    Returns:
+        Two triangles covering the collision-radius-inset map rectangle.
+    """
+    x_min, x_max, y_min, y_max = map_bounds
+    x_min += ped_radius
+    x_max -= ped_radius
+    y_min += ped_radius
+    y_max -= ped_radius
+    if x_min >= x_max or y_min >= y_max:
+        raise ValueError(
+            "force_population_size cannot synthesize background pedestrians: map bounds "
+            f"{map_bounds!r} have no interior after applying ped_radius={ped_radius}"
+        )
+    return [
+        ((x_min, y_min), (x_max, y_min), (x_max, y_max)),
+        ((x_min, y_min), (x_max, y_max), (x_min, y_max)),
+    ]
+
+
+def _sample_scatter_point(
+    zone: Zone,
+    rng: np.random.Generator,
+    exclusions: list[PreparedGeometry],
+    accepted_positions: list[Vec2D],
+    ped_radius: float,
+    *,
+    max_attempts: int = 1000,
+) -> Vec2D:
+    """Sample one seeded free-space point clear of all occupied geometry.
+
+    Returns:
+        A collision-free point inside ``zone``.
+    """
+    a, b, c = (np.asarray(vertex, dtype=float) for vertex in zone)
+    for _attempt in range(max_attempts):
+        rel_width, rel_height = rng.uniform(0.0, 1.0, 2)
+        if rel_width + rel_height > 1.0:
+            rel_width = 1.0 - rel_width
+            rel_height = 1.0 - rel_height
+        candidate_array = b + rel_width * (a - b) + rel_height * (c - b)
+        candidate = (float(candidate_array[0]), float(candidate_array[1]))
+        point = _ShapelyPoint(candidate)
+        if any(exclusion.intersects(point) for exclusion in exclusions):
+            continue
+        if any(dist(candidate, occupied) < 2 * ped_radius for occupied in accepted_positions):
+            continue
+        return candidate
+    raise RuntimeError(
+        "Failed to scatter-spawn a forced background pedestrian after "
+        f"{max_attempts} attempts with ped_radius={ped_radius}. The map may not have "
+        "enough collision-free walkable space for the requested population."
+    )
+
+
+def _populate_scattered_background(
+    config: PedSpawnConfig,
+    num_pedestrians: int,
+    map_bounds: tuple[float, float, float, float],
+    exclusions: list[PreparedGeometry],
+    ped_radius: float,
+) -> tuple[PedState, list[PedGrouping], ZoneAssignments, list[Zone], np.random.Generator]:
+    """Create seeded collision-free background groups using standard crowded-zone behavior.
+
+    Returns:
+        Pedestrian states, group memberships, zone assignments, synthetic zones, and RNG.
+    """
+    zones = _synthetic_crowd_zones(map_bounds, ped_radius)
+    scatter_seed = config.route_spawn_seed
+    if scatter_seed is None:
+        scatter_seed = config.archetype_seed
+    if scatter_seed is None:
+        scatter_seed = config.response_law_seed
+    rng = np.random.default_rng(0 if scatter_seed is None else scatter_seed)
+    ped_states = np.zeros((num_pedestrians, 6))
+    groups: list[PedGrouping] = []
+    zone_assignments: ZoneAssignments = {}
+    accepted_positions: list[Vec2D] = []
+    num_unassigned = num_pedestrians
+
+    while num_unassigned > 0:
+        group_size = int(
+            rng.choice(len(config.group_member_probs), p=config.group_member_probs) + 1
+        )
+        group_size = min(group_size, num_unassigned)
+        first_id = num_pedestrians - num_unassigned
+        ped_ids = list(range(first_id, first_id + group_size))
+        zone_id: int | None = None
+        spawn_points: list[Vec2D] | None = None
+        group_goal: Vec2D | None = None
+        last_capacity_error: RuntimeError | None = None
+        for candidate_zone_id in rng.permutation(len(zones)):
+            candidate_zone = zones[int(candidate_zone_id)]
+            candidate_points: list[Vec2D] = []
+            try:
+                for _ped_id in ped_ids:
+                    candidate_points.append(
+                        _sample_scatter_point(
+                            candidate_zone,
+                            rng,
+                            exclusions,
+                            [*accepted_positions, *candidate_points],
+                            ped_radius,
+                        )
+                    )
+                candidate_goal = _sample_scatter_point(
+                    candidate_zone,
+                    rng,
+                    exclusions,
+                    [],
+                    ped_radius,
+                )
+            except RuntimeError as error:
+                last_capacity_error = error
+                continue
+            zone_id = int(candidate_zone_id)
+            spawn_points = candidate_points
+            group_goal = candidate_goal
+            break
+        if zone_id is None or spawn_points is None or group_goal is None:
+            raise RuntimeError(
+                f"No synthetic crowd zone can fit forced background group of size {group_size}."
+            ) from last_capacity_error
+
+        groups.append(set(ped_ids))
+        accepted_positions.extend(spawn_points)
+        centroid = np.mean(spawn_points, axis=0)
+        heading = atan2(group_goal[1] - centroid[1], group_goal[0] - centroid[0])
+        velocity = np.asarray([cos(heading), sin(heading)]) * config.initial_speed
+        ped_states[ped_ids, 0:2] = spawn_points
+        ped_states[ped_ids, 2:4] = velocity
+        ped_states[ped_ids, 4:6] = group_goal
+        for ped_id in ped_ids:
+            zone_assignments[ped_id] = zone_id
+        num_unassigned -= group_size
+
+    return ped_states, groups, zone_assignments, zones, rng
+
+
+def _apply_forced_population_contract(
+    ped_states: np.ndarray,
+    spawn_config: PedSpawnConfig,
+    apply_archetypes: bool,
+) -> None:
+    """Verify the forced count and apply one composition across the merged population."""
+    forced_population_size = spawn_config.force_population_size
+    if forced_population_size is not None and ped_states.shape[0] != forced_population_size:
+        raise RuntimeError(
+            "forced pedestrian population accounting failed: "
+            f"instantiated {ped_states.shape[0]}, expected {forced_population_size}"
+        )
+    if not apply_archetypes or ped_states.shape[0] == 0:
+        return
+    speed_factors = assign_archetype_speed_factors(
+        ped_states.shape[0],
+        spawn_config.archetype_composition,
+        spawn_config.archetype_speed_factors,
+        seed=spawn_config.archetype_seed,
+    )
+    ped_states[:, 2:4] *= speed_factors[:, np.newaxis]
+
+
+def populate_simulation(  # noqa: C901,PLR0913
     tau: float,
     spawn_config: PedSpawnConfig,
     ped_routes: list[GlobalRoute],
@@ -713,6 +969,10 @@ def populate_simulation(  # noqa: PLR0913
     time_step_s: float = 0.1,
     single_ped_goal_threshold: float | None = None,
     add_ego_state: bool = False,
+    map_bounds: tuple[float, float, float, float] | None = None,
+    reserved_zones: list[Zone] | None = None,
+    ped_radius: float = 0.4,
+    reserved_zone_radius: float = 0.0,
 ) -> tuple[PedestrianStates, PedestrianGroupings, list[PedestrianBehavior]]:
     """Orchestrate complete pedestrian population initialization for simulation.
 
@@ -737,6 +997,10 @@ def populate_simulation(  # noqa: PLR0913
         time_step_s: Simulation step time in seconds (used for wait behavior).
         single_ped_goal_threshold: Optional distance threshold for single-ped waypoint arrival.
         add_ego_state: If True, adds a pedestrian state for the ego agent at the end of the array.
+        map_bounds: Optional free-space bounds used only for geometry-less forced backgrounds.
+        reserved_zones: Robot spawn/goal zones excluded from synthesized background placement.
+        ped_radius: Pedestrian collision radius used by synthesized placement.
+        reserved_zone_radius: Additional agent radius applied around reserved zones.
 
     Returns:
         Tuple of (pysf_state, groups, ped_behaviors):
@@ -755,30 +1019,78 @@ def populate_simulation(  # noqa: PLR0913
         >>> # Use pysf_state and behaviors in physics simulation
     """
     prepared_obstacles = prepare_obstacle_polygons(obstacle_polygons or [])
+    single_pedestrians = single_pedestrians or []
 
-    # ``force_population_size`` sets the EXACT total pedestrian count. Both the crowded-zone
-    # and route spawners honor the field independently, so when a scenario declares both
-    # routes and crowded zones a naive pass would spawn ``2 * force_population_size`` peds
-    # (issue #4618 R4). Split the forced total between the two active spawners so the merged
-    # population matches the requested size; any odd remainder is assigned to routes.
-    crowd_spawn_config = spawn_config
-    route_spawn_config = spawn_config
-    if spawn_config.force_population_size is not None and ped_crowded_zones and ped_routes:
-        zone_share = spawn_config.force_population_size // 2
-        route_share = spawn_config.force_population_size - zone_share
-        crowd_spawn_config = replace(spawn_config, force_population_size=zone_share)
-        route_spawn_config = replace(spawn_config, force_population_size=route_share)
+    # ``force_population_size`` sets the exact total across every spawn channel. Reserve
+    # map-defined single pedestrians first, then split the remaining background budget
+    # between crowded zones and routes. Without the reservation, a map with one explicit
+    # pedestrian and a forced route population of 12 instantiated 13 pedestrians.
+    crowd_spawn_config, route_spawn_config, apply_archetypes_to_forced_population = (
+        _spawn_configs_for_forced_population(
+            spawn_config,
+            ped_routes,
+            ped_crowded_zones,
+            single_pedestrians,
+        )
+    )
 
-    crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
-        crowd_spawn_config,
-        ped_crowded_zones,
-        obstacle_polygons=prepared_obstacles,
+    forced_size = spawn_config.force_population_size
+    background_size = None if forced_size is None else forced_size - len(single_pedestrians)
+    synthesize_background = bool(
+        background_size is not None
+        and background_size > 0
+        and not ped_crowded_zones
+        and not ped_routes
     )
-    route_ped_states_np, route_groups, route_assignments, initial_sections = populate_ped_routes(
-        route_spawn_config,
-        ped_routes,
-        obstacle_polygons=prepared_obstacles,
-    )
+    synthetic_behavior_exclusions: list[PreparedGeometry] | None = None
+    synthetic_rng: np.random.Generator | None = None
+    behavior_crowded_zones = ped_crowded_zones
+    if synthesize_background:
+        if map_bounds is None:
+            raise ValueError(
+                "force_population_size requires map_bounds to synthesize the remaining "
+                f"{background_size} background pedestrians"
+            )
+        if ped_radius <= 0 or reserved_zone_radius < 0:
+            raise ValueError(
+                "geometry-less forced population synthesis requires ped_radius > 0 and "
+                "reserved_zone_radius >= 0"
+            )
+        synthetic_behavior_exclusions = _scatter_exclusions(
+            prepared_obstacles,
+            reserved_zones or [],
+            single_pedestrians,
+            ped_radius,
+            reserved_zone_radius,
+        )
+        (
+            crowd_ped_states_np,
+            crowd_groups,
+            zone_assignments,
+            behavior_crowded_zones,
+            synthetic_rng,
+        ) = _populate_scattered_background(
+            crowd_spawn_config,
+            int(background_size),
+            map_bounds,
+            synthetic_behavior_exclusions,
+            ped_radius,
+        )
+        route_ped_states_np = np.zeros((0, 6))
+        route_groups, route_assignments, initial_sections = [], {}, []
+    else:
+        crowd_ped_states_np, crowd_groups, zone_assignments = populate_crowded_zones(
+            crowd_spawn_config,
+            ped_crowded_zones,
+            obstacle_polygons=prepared_obstacles,
+        )
+        route_ped_states_np, route_groups, route_assignments, initial_sections = (
+            populate_ped_routes(
+                route_spawn_config,
+                ped_routes,
+                obstacle_polygons=prepared_obstacles,
+            )
+        )
 
     # Populate single pedestrians if provided
     if single_pedestrians:
@@ -792,6 +1104,11 @@ def populate_simulation(  # noqa: PLR0913
     # Combine all pedestrian states: crowd + route + single
     combined_ped_states_np = np.concatenate(
         (crowd_ped_states_np, route_ped_states_np, single_ped_states_np[:, :6]),
+    )
+    _apply_forced_population_contract(
+        combined_ped_states_np,
+        spawn_config,
+        apply_archetypes_to_forced_population,
     )
     taus = np.full((combined_ped_states_np.shape[0]), tau)
     ped_states = np.concatenate((combined_ped_states_np, np.expand_dims(taus, -1)), axis=-1)
@@ -840,7 +1157,14 @@ def populate_simulation(  # noqa: PLR0913
     for ped_ids in route_groups:
         route_groupings.new_group(ped_ids)
 
-    crowd_behavior = CrowdedZoneBehavior(crowd_groupings, zone_assignments, ped_crowded_zones)
+    crowd_behavior = CrowdedZoneBehavior(
+        crowd_groupings,
+        zone_assignments,
+        behavior_crowded_zones,
+        obstacle_polygons=synthetic_behavior_exclusions,
+        rng=synthetic_rng,
+        goal_sample_max_attempts_per_point=1000 if synthesize_background else 20,
+    )
     route_behavior = FollowRouteBehavior(
         route_groupings,
         route_assignments,

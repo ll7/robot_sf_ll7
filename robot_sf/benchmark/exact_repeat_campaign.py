@@ -11,7 +11,8 @@ Every requested ``(scenario, planner, seed)`` target needs exactly three
 repeats.  A target is bitwise-identical only when its binary outcome and
 SHA-256 trajectory digest agree for all repeats.  A differing target must name
 its first divergence.  Two verified host reports can then be compared only when
-their pinned NumPy and Numba versions agree.
+their execution provenance agrees; NumPy and Numba mismatches remain separately
+visible for the predeclared near-miss comparison.
 """
 
 from __future__ import annotations
@@ -44,6 +45,13 @@ CROSS_HOST_SCHEMA_VERSION = "scenario_exact_repeat_cross_host.v1"
 RESOLVED_DEFINITIONS_SCHEMA_VERSION = "scenario_exact_repeat_resolved_definitions.v1"
 DEFAULT_REPEATS = 3
 SOURCE_IDENTITY_REVISION = "a5516b432fceffa71573e458aaee31c00a0b6c81"
+_CROSS_HOST_PROVENANCE_FIELDS = (
+    "numpy_version",
+    "numba_version",
+    "python_version",
+    "git_commit",
+    "lockfile_sha256",
+)
 
 # Explicit per-cell disposition for planners the exact-repeat ``execute`` path
 # cannot construct on current main (for example, a planner registered only in a
@@ -61,15 +69,25 @@ MIXED_DISPOSITION = "mixed_runnability"
 DEGRADED_DISPOSITION = "degraded_fallback"
 _DEGRADED_STATUS_PREFIXES = ("policy_step_timeout_fallback", "policy_step_error_fallback")
 
+# A target whose repeats could not be produced *natively* because the planner-step
+# isolation boundary itself failed (for example an xdist-forked pytest worker that
+# cannot safely fork again, a dead/reparented planner worker under CPU starvation,
+# or a model-cache miss that only manifests under parallel process isolation). This
+# is a process-isolation / environment failure, *not* evidence that the planner is
+# unrunnable on current main. Issue #5781: such a cause must be recorded explicitly
+# and fail closed (still excluded from the bitwise-identical claim) rather than
+# misfiled as ``unrunnable_on_current_main`` or as a genuine planner degradation.
+PROCESS_ISOLATION_DISPOSITION = "process_isolation_failure"
+
 
 def _record_is_degraded(record: Any) -> bool:
     """Return True when an episode record is a degraded fallback rather than native output.
 
     A target is degraded when the planner step fell back to a zero-velocity action
-    inside the isolation worker. Two signals are checked: the planner
-    ``algorithm_metadata.status`` prefix and the outcome ``timeout_event`` that the
-    runner sets when every step fell back. Either one is sufficient evidence that the
-    repeats do not represent native planner behavior.
+    inside the isolation worker. The runner reports that through the planner status
+    and the explicit ``policy_step_timeout.fallback_actions`` counter. Episode-level
+    ``outcome.timeout_event`` is deliberately not used: it also represents a native
+    episode reaching its configured horizon and is not planner-degradation evidence.
     """
     if not isinstance(record, Mapping):
         return False
@@ -78,10 +96,83 @@ def _record_is_degraded(record: Any) -> bool:
         status = metadata.get("status")
         if isinstance(status, str) and status.startswith(_DEGRADED_STATUS_PREFIXES):
             return True
-    outcome = record.get("outcome")
-    if isinstance(outcome, Mapping) and outcome.get("timeout_event") is True:
+        timeout_metadata = metadata.get("policy_step_timeout")
+        if isinstance(timeout_metadata, Mapping):
+            fallback_actions = timeout_metadata.get("fallback_actions")
+            if not isinstance(fallback_actions, bool):
+                try:
+                    if float(fallback_actions) > 0:
+                        return True
+                except (TypeError, ValueError):
+                    pass
+    return False
+
+
+# Substrings that identify a process-isolation / environment failure rather than a
+# genuine planner degradation. These are the exact error messages emitted by the
+# forked planner-step worker lifecycle in ``robot_sf.benchmark.runner``. When any
+# repeats carry them the target failed at the isolation boundary, not in the
+# planner policy itself.
+_PROCESS_ISOLATION_FAILURE_SIGNATURES = (
+    "planner step worker was unavailable",
+    "planner step worker exited before returning an action",
+    "planner step worker exited without returning an action",
+    "planner step worker failed to start",
+    "planner step worker failed to initialize",
+    "policy_step_isolation_unavailable",
+    "policy step isolation unavailable",
+)
+
+
+def _record_is_isolation_failure(record: Any) -> bool:
+    """Return True when a record failed at the planner-step isolation boundary.
+
+    A record that *did* produce a policy action but whose isolation worker died
+    (handshake failure, dead worker, or unavailable fork under xdist) is an
+    environment/process failure, not evidence that the planner is unrunnable on
+    main. The runner surfaces this through the explicit ``fallback_reason``
+    metadata field and, when the worker is entirely unavailable, through a status
+    of ``policy_step_isolation_unavailable``. This helper distinguishes that class
+    from a genuine planner ``policy_step_*_fallback`` (a real zero-action policy
+    substitute that still executed inside the worker).
+    """
+    if not isinstance(record, Mapping):
+        return False
+    metadata = record.get("algorithm_metadata")
+    if not isinstance(metadata, Mapping):
+        return True
+    if metadata.get("status") == "policy_step_isolation_unavailable":
+        return True
+    reason = metadata.get("fallback_reason")
+    if isinstance(reason, str):
+        if any(sig in reason for sig in _PROCESS_ISOLATION_FAILURE_SIGNATURES):
+            return True
+    # If a repeat carries no usable policy metadata at all, the worker boundary
+    # failed before/around action production; treat it as an isolation failure so
+    # it is not silently promoted to a determinism verdict (fail-closed).
+    if metadata.get("status") is None and not metadata.get("config_hash"):
         return True
     return False
+
+
+def _classify_repeat_failure(records: Sequence[Any]) -> tuple[bool, bool]:
+    """Classify repeat-level failures for a target.
+
+    Returns:
+        ``(any_degraded, any_isolation_failure)`` where ``any_degraded`` marks a
+        genuine planner-policy fallback (zero-action substitute produced inside
+        the worker) and ``any_isolation_failure`` marks a process-isolation /
+        environment failure at the worker boundary. A target can be both, but the
+        isolation failure takes precedence: it is not a planner-runnability defect.
+    """
+    any_degraded = False
+    any_isolation = False
+    for record in records:
+        if _record_is_degraded(record):
+            any_degraded = True
+        if _record_is_isolation_failure(record):
+            any_isolation = True
+    return any_degraded, any_isolation
 
 
 def canonical_sha256(value: Any) -> str:
@@ -550,7 +641,7 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
         result = indexed_results[key]
         disposition = result.get("disposition")
         if disposition is not None:
-            if disposition != UNRUNNABLE_DISPOSITION:
+            if disposition not in (UNRUNNABLE_DISPOSITION, PROCESS_ISOLATION_DISPOSITION):
                 raise ValueError(f"target {key} has an unsupported disposition {disposition!r}")
             repeats = result.get("repeats")
             if "repeats" in result and (not isinstance(repeats, list) or repeats):
@@ -560,11 +651,23 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
             disposition_reason = _require_text(
                 result.get("disposition_reason"), f"target {key} disposition_reason"
             )
+            # A process-isolation failure is an environment/process failure, not a
+            # planner-runnability defect on main. It is still excluded from the
+            # bitwise-identical claim (fail-closed), and is surfaced with a distinct
+            # ``isolation_failure`` flag so the determinism signal is not polluted by
+            # transient xdist/worker infra failures (issue #5781).
+            isolation_failure = result.get("isolation_failure", False)
+            if not isinstance(isolation_failure, bool):
+                raise ValueError(f"target {key} isolation_failure must be a boolean")
+            expected_isolation_failure = disposition == PROCESS_ISOLATION_DISPOSITION
+            if isolation_failure != expected_isolation_failure:
+                raise ValueError(f"target {key} disposition and isolation_failure disagree")
             verified = {
                 "scenario_id": key[0],
                 "planner": key[1],
                 "seed": key[2],
                 "unrunnable": True,
+                "isolation_failure": isolation_failure,
                 "disposition": disposition,
                 "disposition_reason": disposition_reason,
                 "bitwise_identical": None,
@@ -603,12 +706,17 @@ def verify_host_report(  # noqa: C901, PLR0912, PLR0915 - each rejected report s
         n_runnable_targets = len(runnable)
         n_unrunnable_targets = n_targets - n_runnable_targets
         if not runnable:
+            dispositions = {item["disposition"] for item in target_results}
+            cell_disposition = dispositions.pop() if len(dispositions) == 1 else MIXED_DISPOSITION
             cells.append(
                 {
                     "scenario_id": scenario_id,
                     "planner": planner,
                     "unrunnable": True,
-                    "disposition": UNRUNNABLE_DISPOSITION,
+                    "isolation_failure": any(
+                        item.get("isolation_failure") is True for item in target_results
+                    ),
+                    "disposition": cell_disposition,
                     "exact_repeat_determinism": None,
                     "first_divergence": None,
                     "n_targets": n_targets,
@@ -683,8 +791,9 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     """Build the fail-closed two-host exact-repeat comparison matrix.
 
     Returns:
-        A matrix whose cells are identical only with matching runtime versions
-        and matching repeat fingerprints.
+        A matrix whose cells are identical only with matching execution provenance
+        and matching repeat fingerprints. Provenance drift is returned explicitly
+        so it cannot be mistaken for a native determinism result.
     """
     targets, _ = _check_manifest(manifest)
     for report in (first, second):
@@ -701,6 +810,12 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     version_match = all(
         first_env.get(key) == second_env.get(key) for key in ("numpy_version", "numba_version")
     )
+    provenance_mismatches = {
+        key: {"first": first_env.get(key), "second": second_env.get(key)}
+        for key in _CROSS_HOST_PROVENANCE_FIELDS
+        if first_env.get(key) != second_env.get(key)
+    }
+    provenance_match = not provenance_mismatches
 
     def index(report: Mapping[str, Any]) -> dict[tuple[str, str, int], Mapping[str, Any]]:
         rows = report.get("targets")
@@ -750,7 +865,7 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
             )
             continue
         target_matches = cells[cell_key]
-        identical = version_match and all(target_matches)
+        identical = provenance_match and all(target_matches)
         matrix.append(
             {
                 "scenario_id": scenario_id,
@@ -769,13 +884,15 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
         "manifest_sha256": manifest["manifest_sha256"],
         "hosts": [first_machine, second_machine],
         "pinned_runtime_versions_match": version_match,
+        "provenance_match": provenance_match,
+        "provenance_mismatches": provenance_mismatches,
         "matrix": matrix,
         "summary": {
             "n_cells": len(matrix),
             "n_runnable_cells": len(runnable_rows),
             "n_unrunnable_cells": len(unrunnable_rows),
             "n_mixed_cells": len(mixed_rows),
-            "all_cells_bitwise_identical": version_match
+            "all_cells_bitwise_identical": provenance_match
             and bool(runnable_rows)
             and all(row["bitwise_identical"] for row in runnable_rows),
         },
@@ -1117,12 +1234,44 @@ def execute_campaign(  # noqa: C901, PLR0912, PLR0915 - fail-closed execution tr
                 }
             )
 
-        # Issue #5498: a planner that constructs but degrades any repeat to a
-        # no-op fallback (for example a forked planner-step worker that times out
-        # or crashes, leaving the robot motionless) must not be promoted to a
-        # determinism verdict. Record it as an explicit unrunnable disposition so
-        # the verifier excludes it, with a degraded flag and reason.
-        if records and any(_record_is_degraded(record) for record in records):
+        # Issue #5498 / #5781: a planner that constructs but does not produce
+        # native repeats must not be promoted to a determinism verdict. Two distinct
+        # failure classes exist, and they must not be conflated:
+        #
+        #  * genuine planner degradation (``policy_step_*_fallback``) — a zero-action
+        #    substitute produced *inside* the worker. Recorded with the
+        #    ``unrunnable_on_current_main`` disposition (degraded flag set) so the
+        #    verifier excludes it from the bitwise-identical claim.
+        #  * process-isolation / environment failure at the planner-step worker
+        #    boundary (handshake failure, dead/reparented worker, unsupported fork
+        #    under xdist, model-cache miss under parallel isolation). This is NOT a
+        #    planner-runnability defect on main, so it must be recorded with the
+        #    separate ``process_isolation_failure`` disposition and fail closed
+        #    rather than misfiled as ``unrunnable_on_current_main``. Issue #5781:
+        #    this keeps the native-PPO exact-repeat test deterministic under xdist
+        #    and prevents transient infra failures from poisoning the determinism
+        #    signal. Both classes preserve the assertion that a disposition is not
+        #    success evidence.
+        any_degraded, any_isolation = _classify_repeat_failure(records)
+        if records and any_isolation:
+            result_entry = {
+                "scenario_id": scenario_id,
+                "planner": planner,
+                "seed": seed,
+                "horizon": horizon,
+                "source_config_hash": target["source_config_hash"],
+                "repeats": [],
+                "isolation_failure": True,
+                "disposition": PROCESS_ISOLATION_DISPOSITION,
+                "disposition_reason": (
+                    f"planner {planner_algo!r} could not execute natively because the "
+                    "planner-step isolation boundary failed (worker handshake/death or "
+                    "fork/process-isolation failure under parallel execution); this is an "
+                    "environment/process failure, not a planner-runnability defect on "
+                    "current main, and is not valid exact-repeat evidence"
+                ),
+            }
+        elif records and any_degraded:
             result_entry = {
                 "scenario_id": scenario_id,
                 "planner": planner,

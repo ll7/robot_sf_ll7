@@ -93,11 +93,14 @@ def cross_benchmark_metric_mappings() -> tuple[CrossBenchmarkMetricMapping, ...]
             robot_sf_source="socnavbench_path_length_ratio",
             units="ratio",
             denominator="straight_line_start_to_goal_distance_m",
-            mapping_class="exact",
+            mapping_class="approximate",
             evidence_tier="trace-derived",
             semantic_notes=(
-                "Uses the vendored SocNavBench-style path length ratio helper over the Robot SF "
-                "episode trajectory and goal displacement."
+                "Robot SF computes path length ratio as distance / displacement (>= 1.0; higher "
+                "means less efficient). The vendored SocNavBench definition is the reciprocal: "
+                "displacement / distance (<= 1.0; higher means more efficient). These are "
+                "opposite in direction and must be reported with distinct suite-specific metric "
+                "IDs; this row maps the Robot SF helper as an approximate correspondence only."
             ),
         ),
         CrossBenchmarkMetricMapping(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import subprocess
@@ -28,6 +29,7 @@ CI_JOB_TIMEOUTS = {
     "xdist-scratch-isolation": 15,
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
+    "notebooks-smoke": 30,
     "ci": 5,
 }
 PHASE_PATTERN = re.compile(
@@ -158,6 +160,46 @@ def _workflow_jobs() -> dict[str, Any]:
 def _pyproject() -> dict[str, Any]:
     """Return parsed project metadata."""
     return tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+
+
+def test_torch_213_constraint_is_shared_by_training_and_gpu_extras() -> None:
+    """Keep both Torch installation paths on the tested 2.13 release line (issue #5556)."""
+    project = _pyproject()["project"]
+    optional_dependencies = project["optional-dependencies"]
+    training_requirement = next(
+        requirement
+        for value in optional_dependencies["training"]
+        if (requirement := Requirement(value)).name == "torch"
+    )
+    gpu_requirement = next(
+        requirement
+        for value in optional_dependencies["gpu"]
+        if (requirement := Requirement(value)).name == "torch"
+    )
+    expected = Requirement("torch>=2.13.0,<2.14.0").specifier
+
+    assert training_requirement.specifier == expected
+    assert gpu_requirement.specifier == expected
+    assert gpu_requirement.extras == {"cuda"}
+
+    lock_data = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    locked_project = next(item for item in lock_data["package"] if item["name"] == "robot-sf")
+    locked_metadata = locked_project.get("metadata", {})
+    assert isinstance(locked_metadata, dict)
+    requires_dist = locked_metadata.get("requires-dist", [])
+    assert isinstance(requires_dist, list)
+    locked_torch = {
+        (item.get("marker"), tuple(item.get("extras", []))): item
+        for item in requires_dist
+        if isinstance(item, dict) and item.get("name") == "torch"
+    }
+
+    training_lock = locked_torch.get(("extra == 'training'", ()))
+    gpu_lock = locked_torch.get(("extra == 'gpu'", ("cuda",)))
+    assert training_lock is not None, "uv.lock is missing the training Torch entry"
+    assert gpu_lock is not None, "uv.lock is missing the gpu Torch entry"
+    assert training_lock.get("specifier") == ">=2.13.0,<2.14.0"
+    assert gpu_lock.get("specifier") == ">=2.13.0,<2.14.0"
 
 
 def test_extract_workflow_phases_handles_multiple_phase_args() -> None:
@@ -308,6 +350,16 @@ def test_ci_workflow_examples_smoke_is_independent_and_required_by_aggregate() -
     assert "examples-smoke" in workflow["jobs"]["ci"]["needs"]
 
 
+def test_ci_workflow_notebooks_smoke_is_independent_and_required_by_aggregate() -> None:
+    """Keep notebook execution in a separately timed job required by aggregate CI."""
+    workflow = yaml.safe_load(_workflow_text())
+
+    assert "notebooks-smoke" in workflow["jobs"]
+    assert _workflow_job_phases("notebooks-smoke") == {"notebooks-smoke"}
+    assert "needs" not in workflow["jobs"]["notebooks-smoke"]
+    assert "notebooks-smoke" in workflow["jobs"]["ci"]["needs"]
+
+
 def test_ci_workflow_wheel_smoke_is_independent_and_required_by_aggregate() -> None:
     """Keep wheel install smoke in a separately timed job required by aggregate CI."""
     workflow = yaml.safe_load(_workflow_text())
@@ -439,3 +491,103 @@ def test_ci_driver_artifact_policy_uses_no_sync() -> None:
     """
     driver_text = CI_DRIVER.read_text(encoding="utf-8")
     assert "uv run --no-sync python scripts/tools/check_artifact_root.py" in driver_text
+
+
+def test_ci_driver_lint_reports_all_failures_without_short_circuiting(tmp_path: Path) -> None:
+    """The lint phase must enumerate every failure, not stop at the first (issue #5960).
+
+    Reproduces the exact bug class from the issue: a branch with BOTH a format
+    violation (ruff format) and a new broad exception must report BOTH in one run.
+    We stub ``uv``/``python`` so the real ``run_lint_phase`` logic in ci_driver.sh
+    executes without a Python environment, then assert that all failing checks ran
+    and the phase still exits non-zero.
+    """
+
+    # Stub `uv` so `uv run <tool> <args>` proxies to the local interpreter (or a
+    # failing stub). We map each known lint check to a deterministic pass/fail so we
+    # can force BOTH ruff format AND broad-exception failures simultaneously.
+    stub_dir = tmp_path / "ci_driver_lint_stub"
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    uv_stub = stub_dir / "uv"
+    python_stub = stub_dir / "python"
+
+    # `uv run` forwards to our python stub. We detect which check is running via the
+    # args so we can make the broad-exception check fail.
+    uv_stub.write_text(
+        '#!/usr/bin/env bash\nset -- "${@:3}"\nexec "' + str(python_stub) + '" "$@"\n',
+        encoding="utf-8",
+    )
+    python_stub.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        "# ruff format --check -> fail (format violation)\n"
+        "if 'format' in sys.argv and '--check' in sys.argv:\n"
+        "    sys.stderr.write('would reformat file.py\\n')\n"
+        "    sys.exit(1)\n"
+        "# check_broad_exceptions -> fail (new broad exception)\n"
+        "if 'check_broad_exceptions' in sys.argv[0] or sys.argv[-1].endswith('check_broad_exceptions.py'):\n"
+        "    sys.stderr.write('broad exception ratchet increased\\n')\n"
+        "    sys.exit(1)\n"
+        "# ruff check -> pass; version alignment -> pass\n"
+        "sys.exit(0)\n",
+        encoding="utf-8",
+    )
+    uv_stub.chmod(0o755)
+    python_stub.chmod(0o755)
+
+    env = dict(os.environ)
+    env["PATH"] = f"{stub_dir}:{env.get('PATH', '')}"
+    env["CI_DRIVER_GITHUB_REF"] = "refs/heads/feature"
+    env["CI_DRIVER_EVENT_NAME"] = "pull_request"
+
+    result = subprocess.run(
+        [str(CI_DRIVER), "lint"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=ROOT,
+        env=env,
+    )
+
+    combined = result.stdout + result.stderr
+    # Both independent failures must appear in a single run.
+    assert "would reformat" in combined, f"format failure not surfaced:\n{combined}"
+    assert "broad exception ratchet increased" in combined, (
+        f"broad-exception failure not surfaced:\n{combined}"
+    )
+    # The phase must still fail overall.
+    assert result.returncode != 0, f"lint phase exited zero despite failures:\n{combined}"
+
+
+def test_ci_driver_lint_passes_when_all_checks_pass(tmp_path: Path) -> None:
+    """The lint phase must exit zero when every check passes (issue #5960)."""
+
+    stub_dir = tmp_path / "ci_driver_lint_stub_pass"
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    uv_stub = stub_dir / "uv"
+    python_stub = stub_dir / "python"
+
+    uv_stub.write_text(
+        '#!/usr/bin/env bash\nset -- "${@:3}"\nexec "' + str(python_stub) + '" "$@"\n',
+        encoding="utf-8",
+    )
+    python_stub.write_text("#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n", encoding="utf-8")
+    uv_stub.chmod(0o755)
+    python_stub.chmod(0o755)
+
+    env = dict(os.environ)
+    env["PATH"] = f"{stub_dir}:{env.get('PATH', '')}"
+    env["CI_DRIVER_GITHUB_REF"] = "refs/heads/main"
+    env["CI_DRIVER_EVENT_NAME"] = "push"
+
+    result = subprocess.run(
+        [str(CI_DRIVER), "lint"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=ROOT,
+        env=env,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

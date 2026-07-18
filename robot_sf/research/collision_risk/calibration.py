@@ -11,28 +11,29 @@ analysis or planning -- without launching any benchmark campaign.
 What is (and is not) claimed
 ----------------------------
 The labelled outcomes here are generated from an **explicit, declared forecast
-model** (constant-velocity Gaussian, optionally *misspecified* per scenario
-family), not from a full simulator rollout. That makes this **API + fixture
-evidence**: it exercises and validates the calibration machinery, demonstrates
-self-consistency of the constant-velocity Monte Carlo estimator against its own
-declared distribution, and proves that the machinery *detects* miscalibration
-when the ground-truth distribution is deliberately mismatched. It is **not**
-calibrated benchmark risk for the simulator distribution and never a real-world
-risk claim. A real-distribution calibration run requires eligible simulator
-traces with action-conditioned labels and is explicitly out of scope until that
-compute packet is approved (see the stop rule in issue #5445).
+model** (constant-velocity Gaussian or the in-repo constant-velocity GMM
+surrogate, optionally *misspecified* per scenario family), not from a full
+simulator rollout. That makes this **API + fixture evidence**: it exercises and
+validates the calibration machinery, demonstrates self-consistency of each
+available Monte Carlo estimator against its own declared distribution, and proves
+that the machinery *detects* miscalibration when the ground-truth distribution is
+deliberately mismatched. It is **not** calibrated benchmark risk for the
+simulator distribution and never a real-world risk claim. A real-distribution
+calibration run requires eligible simulator traces with action-conditioned labels
+and is explicitly out of scope until that compute packet is approved (see the
+stop rule in issue #5445).
 
 Contract discipline (matches the #5445 comparison contract)
 -----------------------------------------------------------
-- Probabilistic estimators (constant-velocity MC) are placed on the reliability
-  / Brier / log-loss curve.
+- Probabilistic estimators (constant-velocity MC and the GMM-surrogate MC row) are
+  placed on the reliability / Brier / log-loss curve.
 - Deterministic warnings (TTC / velocity-obstacle / reachability) are graded
   **only** as warnings -- ranking (area under precision-recall), false-negative
   rate at declared thresholds, and time-to-warning. They are never placed on a
   probability calibration curve, because their scores are not probabilities.
-- Estimators that do not yet exist in-repo (multimodal forecast MC, the #1472
-  learned-risk model) are recorded as ``unavailable`` with a reason rather than
-  silently omitted.
+- Estimators that do not yet exist in-repo (currently only the #1472 learned-risk
+  model) are recorded as ``unavailable`` with a reason rather than silently
+  omitted.
 - Hard guards remain authoritative; no ``safe`` verdict is ever emitted.
 """
 
@@ -64,17 +65,31 @@ CALIBRATION_SCHEMA_VERSION = "collision_risk_calibration.v1"
 # Estimators exercised on the matched inputs. ``kind`` controls how the estimator
 # is graded: "probabilistic" outputs go on the reliability/Brier curve, "warning"
 # outputs are graded as rankings/warnings only.
-AVAILABLE_ESTIMATORS = ("constant_velocity_mc", "deterministic_ttc")
+#
+# ``multimodal_forecast_mc`` scores a K-mode Gaussian-mixture pedestrian forecast
+# (the in-repo ``constant_velocity_gmm_surrogate`` forecast, issue #5307 successor
+# slice #5662) instead of a single Gaussian. It is a **surrogate forecast model**:
+# the modes are spread symmetrically around the heading rather than learned, so it
+# exercises the #5445 multimodal-vs-constant-velocity comparison on matched inputs
+# today. It is NOT the learned #5307/#2844 multimodal predictor, which remains the
+# benchmark-facing upgrade; the row is diagnostic/self-consistency evidence only.
+AVAILABLE_ESTIMATORS = ("constant_velocity_mc", "multimodal_forecast_mc", "deterministic_ttc")
+
+# Forecast model identifier recorded in each estimator result so the report is
+# explicit about which forecast each probabilistic estimator used. This is a
+# provenance/claim-boundary field, not a benchmark label.
+FORECAST_MODEL_IDS = {
+    "constant_velocity_mc": "constant_velocity_gaussian.v1",
+    "multimodal_forecast_mc": "constant_velocity_gmm_surrogate.v1",
+    "deterministic_ttc": "deterministic_ttc.v1",
+}
 
 # Estimators named by the #5445 comparison contract that do not yet exist in this
 # repository. They are reported as unavailable (with a reason) so the comparison
-# never silently drops a contracted row.
+# never silently drops a contracted row. (``multimodal_forecast_mc`` was promoted
+# to AVAILABLE once the in-repo GMM surrogate forecast landed in #5662; only the
+# learned collision-risk model #1472 remains contracted-but-missing.)
 UNAVAILABLE_ESTIMATORS = {
-    "multimodal_forecast_mc": (
-        "multimodal pedestrian forecast sampler is not implemented in-repo; the "
-        "constant-velocity model is the only forecast baseline available (issue #5307 "
-        "predictor family not merged)"
-    ),
     "learned_risk_1472": (
         "learned collision-risk model from issue #1472 is not merged; no learned "
         "probability surface is available to score"
@@ -85,13 +100,62 @@ CLAIM_BOUNDARY = (
     "API + fixture evidence: calibration is measured against a declared forecast "
     "model, not full simulator rollouts. Self-consistency and miscalibration "
     "detection are demonstrated; this is not calibrated benchmark risk for the "
-    "simulator distribution and never a real-world risk claim. Hard guards remain "
-    "authoritative; no safe verdict is emitted."
+    "simulator distribution and never a real-world risk claim. The "
+    "multimodal_forecast_mc row uses a constant-velocity GMM surrogate forecast "
+    "(symmetric heading-spread modes), not the learned #5307/#2844 multimodal "
+    "predictor. Hard guards remain authoritative; no safe verdict is emitted."
 )
 
 
 class CalibrationInputError(ValueError):
     """Raised, fail-closed, when calibration inputs or provenance are insufficient."""
+
+
+@dataclass(frozen=True)
+class MultimodalForecastConfig:
+    """K-mode Gaussian-mixture surrogate forecast model for ``multimodal_forecast_mc``.
+
+    This mirrors the in-repo ``constant_velocity_gmm`` surrogate forecast
+    (issue #5307 successor slice #5662): a constant-velocity mean per pedestrian
+    with ``mode_count`` modes spread symmetrically around the heading. It is a
+    **surrogate**, not the learned #5307/#2844 multimodal predictor; it exists so
+    the #5445 multimodal-vs-constant-velocity calibration comparison is runnable
+    on CPU today against a clearly-declared mixture model.
+
+    Attributes:
+        mode_count: Number of Gaussian modes per pedestrian (>= 1). ``1`` collapses
+            to the unimodal constant-velocity model.
+        heading_spread_rad: Symmetric angular spread of extra modes around the
+            nominal heading (radians).
+        velocity_std_m_s: Per-axis position-noise standard deviation of each mode
+            (m/s applied to velocity, matching the unimodal estimator's noise).
+        cross_actor_correlation: Shared latent correlation ``rho`` in ``[0, 1)``
+            of the per-mode velocity noise across actors.
+    """
+
+    mode_count: int = 3
+    heading_spread_rad: float = 0.35
+    velocity_std_m_s: float = 0.3
+    cross_actor_correlation: float = 0.0
+
+    def __post_init__(self) -> None:
+        """Validate the surrogate forecast configuration."""
+        if not isinstance(self.mode_count, (int, np.integer)) or self.mode_count < 1:
+            raise CalibrationInputError("mode_count must be >= 1")
+        if not math.isfinite(self.heading_spread_rad) or self.heading_spread_rad < 0.0:
+            raise CalibrationInputError("heading_spread_rad must be non-negative")
+        if not math.isfinite(self.velocity_std_m_s) or self.velocity_std_m_s < 0.0:
+            raise CalibrationInputError("velocity_std_m_s must be non-negative")
+        if not math.isfinite(self.cross_actor_correlation) or not (
+            0.0 <= self.cross_actor_correlation < 1.0
+        ):
+            raise CalibrationInputError("cross_actor_correlation must be in [0, 1)")
+
+
+# Default surrogate forecast for the ``multimodal_forecast_mc`` estimator row. The
+# velocity noise mirrors the estimator config's assumed scale; callers override it
+# when the matched packet declares a different surrogate.
+DEFAULT_MULTIMODAL_FORECAST = MultimodalForecastConfig()
 
 
 # --------------------------------------------------------------------------- #
@@ -181,6 +245,22 @@ class MatchedDataset:
         if total <= 0.0:
             raise CalibrationInputError("total sample weight must be positive")
         return float((weights * labels).sum() / total)
+
+
+@dataclass(frozen=True)
+class MatchedActionPair:
+    """Two candidate actions scored on one shared actor state.
+
+    The pair deliberately stores the pedestrian state once so both candidates
+    receive identical forecast inputs. The estimator's fixed seed then also
+    gives both candidates the same Monte Carlo forecast draws, isolating the
+    action-conditioned difference in the diagnostic comparison.
+    """
+
+    pair_id: str
+    pedestrians: tuple[PedestrianState, ...]
+    higher_risk_action: CandidateAction
+    lower_risk_action: CandidateAction
 
 
 @dataclass(frozen=True)
@@ -456,6 +536,128 @@ def _predict_constant_velocity_mc(
     )
 
 
+def _multimodal_mode_headings(
+    ped_vel: np.ndarray, forecast: MultimodalForecastConfig
+) -> np.ndarray:
+    """Return per-actor mode headings ``(K_actors, mode_count)`` for the surrogate.
+
+    Mode 0 keeps the nominal heading; extra modes spread symmetrically around it
+    by ``heading_spread_rad`` (mirroring ``build_constant_velocity_gmm_forecast``).
+    Zero-speed actors keep heading 0 for every mode so the surrogate does not
+    manufacture motion from a stationary pedestrian.
+    """
+    n_actors = ped_vel.shape[0]
+    speed = np.linalg.norm(ped_vel, axis=1)
+    base_heading = np.arctan2(ped_vel[:, 1], ped_vel[:, 0] + 1e-9)
+    zero_speed = speed < 1e-6
+    headings = np.zeros((n_actors, forecast.mode_count), dtype=float)
+    for mode in range(forecast.mode_count):
+        if mode == 0:
+            offset = 0.0
+        else:
+            offset = forecast.heading_spread_rad * (1.0 if mode % 2 == 1 else -1.0)
+            offset *= float((mode + 1) // 2)
+        headings[:, mode] = np.where(zero_speed, 0.0, base_heading + offset)
+    return headings
+
+
+def _sample_multimodal_positions(
+    ped_pos: np.ndarray,
+    ped_vel: np.ndarray,
+    config: RiskEstimatorConfig,
+    forecast: MultimodalForecastConfig,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Sample K-mode Gaussian-mixture actor rollouts ``(S, K_actors, H + 1, 2)``.
+
+    For each Monte Carlo draw each actor first selects a mode by its (equal)
+    mixture weight, then propagates at that mode's heading and speed with the
+    shared per-axis Gaussian velocity perturbation. This is the mixture analogue
+    of the estimators' constant-velocity Gaussian sampler, so the multimodal and
+    constant-velocity estimators share identical contact geometry and only differ
+    in their forecast model (the point of the #5445 comparison).
+
+    Returns:
+        ``(S, K_actors, H + 1, 2)`` sampled actor positions over the horizon.
+    """
+    n_actors = ped_pos.shape[0]
+    horizon = config.horizon_steps
+    sigma = forecast.velocity_std_m_s
+    rho = forecast.cross_actor_correlation
+    speed = np.linalg.norm(ped_vel, axis=1)
+    headings = _multimodal_mode_headings(ped_vel, forecast)  # (K_actors, M)
+    directions = np.stack((np.cos(headings), np.sin(headings)), axis=-1)  # (K, M, 2)
+    # Per-draw, per-actor mode selection (equal weights => uniform categorical).
+    mode_index = rng.integers(0, forecast.mode_count, size=(config.n_samples, n_actors))
+    # (S, K_actors, 2): the chosen mode's unit direction scaled by the nominal speed.
+    # Zero-speed actors have speed ~ 0 so they stay put regardless of mode heading.
+    chosen_direction = np.take_along_axis(directions[None], mode_index[:, :, None, None], axis=2)[
+        :, :, 0, :
+    ]
+    base_velocity = chosen_direction * speed[None, :, None]  # (S, K_actors, 2)
+    independent = rng.standard_normal((config.n_samples, n_actors, 2))
+    shared = rng.standard_normal((config.n_samples, 1, 2))
+    eps = sigma * (math.sqrt(1.0 - rho) * independent + math.sqrt(rho) * shared)
+    sampled_vel = base_velocity + eps  # (S, K_actors, 2)
+    steps = np.arange(horizon + 1, dtype=float)
+    return (
+        ped_pos[None, :, None, :]
+        + steps[None, None, :, None] * config.dt_s * sampled_vel[:, :, None, :]
+    )
+
+
+def _predict_multimodal_forecast_mc(
+    sample: LabeledSample,
+    config: RiskEstimatorConfig,
+    forecast: MultimodalForecastConfig,
+    *,
+    warn_threshold: float,
+) -> EstimatorPrediction:
+    """Score a sample with the multimodal Gaussian-mixture Monte Carlo estimator.
+
+    The estimator scores the SAME candidate action, actor history, footprint and
+    horizon as the constant-velocity estimator; only the forecast model differs
+    (a K-mode GMM surrogate instead of a single Gaussian). Joint contact
+    probability is the fraction of Monte Carlo draws in which any actor's
+    footprint touches the robot's within the horizon -- identical in spirit to
+    the constant-velocity estimator so the two are comparable.
+
+    Returns:
+        The estimator prediction (joint contact probability as the score).
+    """
+    start_ns = time.perf_counter_ns()
+    robot_xy = sample.action.as_array(horizon_steps=config.horizon_steps)
+    ped_pos, ped_vel, radii, _ids = pedestrian_arrays(sample.pedestrians, config)
+    radii_sum = radii + config.robot_radius_m
+    if ped_pos.shape[0] == 0:
+        joint = 0.0
+        first_passage: tuple[float, ...] = tuple(0.0 for _ in range(config.horizon_steps))
+    else:
+        rng = np.random.default_rng(config.seed)
+        sampled = _sample_multimodal_positions(ped_pos, ped_vel, config, forecast, rng)
+        seg_dist = segment_min_distance(robot_xy, sampled)  # (S, K_actors, H)
+        contact = seg_dist - radii_sum[None, :, None] <= 0.0  # (S, K_actors, H)
+        contact_any = contact.any(axis=(1, 2))  # (S,)
+        joint = float(contact_any.mean())
+        # First-passage CDF over the horizon for time-to-warning (monotone by
+        # construction: cumulative per-step first-contact fractions).
+        step_contact = contact.any(axis=1)  # (S, H)
+        has_contact = step_contact.any(axis=1)
+        first_step = np.where(has_contact, np.argmax(step_contact, axis=1), -1)
+        counts = np.zeros(config.horizon_steps, dtype=float)
+        for step in first_step[first_step >= 0]:
+            counts[int(step)] += 1.0
+        first_passage = tuple(float(v) for v in counts / config.n_samples)
+    latency_ms = (time.perf_counter_ns() - start_ns) / 1e6
+    warning_step = _warning_step_from_first_passage(first_passage, warn_threshold)
+    return EstimatorPrediction(
+        score=joint,
+        is_probability=True,
+        warning_step=warning_step,
+        latency_ms=latency_ms,
+    )
+
+
 def _predict_deterministic_ttc(
     sample: LabeledSample, config: RiskEstimatorConfig, *, clearance_scale_m: float
 ) -> EstimatorPrediction:
@@ -503,6 +705,7 @@ def predict_estimator(
     *,
     warn_threshold: float = 0.5,
     clearance_scale_m: float = 0.5,
+    multimodal_forecast: MultimodalForecastConfig | None = None,
 ) -> list[EstimatorPrediction]:
     """Produce predictions for every sample with the named available estimator.
 
@@ -512,6 +715,12 @@ def predict_estimator(
     if estimator_id == "constant_velocity_mc":
         return [
             _predict_constant_velocity_mc(s, config, warn_threshold=warn_threshold) for s in samples
+        ]
+    if estimator_id == "multimodal_forecast_mc":
+        forecast = multimodal_forecast or DEFAULT_MULTIMODAL_FORECAST
+        return [
+            _predict_multimodal_forecast_mc(s, config, forecast, warn_threshold=warn_threshold)
+            for s in samples
         ]
     if estimator_id == "deterministic_ttc":
         return [
@@ -532,6 +741,13 @@ class FamilySpec:
     ``gt_velocity_std_m_s`` or ``gt_velocity_bias_m_s`` differ from that, the
     family is *misspecified* and a well-built calibration harness must report a
     larger calibration error for it.
+
+    ``gt_forecast_kind`` selects the ground-truth pedestrian dynamics:
+    ``"constant_velocity"`` (default) draws a single Gaussian velocity
+    perturbation, while ``"multimodal_gmm"`` draws a realized mode from the
+    surrogate K-mode mixture so the ``multimodal_forecast_mc`` estimator can be
+    exercised against its own declared mixture model (self-consistency). The
+    mixture parameters come from ``gt_multimodal_forecast``.
     """
 
     name: str
@@ -545,6 +761,17 @@ class FamilySpec:
     ped_inbound_vx_range: tuple[float, float] = (-0.7, 0.1)
     ped_vy_range: tuple[float, float] = (-0.4, 0.4)
     strata: dict[str, str] = field(default_factory=dict)
+    gt_forecast_kind: str = "constant_velocity"
+    gt_multimodal_forecast: MultimodalForecastConfig = field(
+        default_factory=MultimodalForecastConfig
+    )
+
+    def __post_init__(self) -> None:
+        """Validate the ground-truth forecast selector, failing closed on typos."""
+        if self.gt_forecast_kind not in {"constant_velocity", "multimodal_gmm"}:
+            raise CalibrationInputError(
+                "gt_forecast_kind must be 'constant_velocity' or 'multimodal_gmm'"
+            )
 
 
 def _draw_scenario(
@@ -618,8 +845,15 @@ def _realize_contact(
         return False, -1
 
     bias = np.asarray(family.gt_velocity_bias_m_s, dtype=float).reshape(2)
-    noise = rng.normal(0.0, family.gt_velocity_std_m_s, size=(n_actors, 2))
-    realized_vel = ped_vel + bias[None, :] + noise
+    if family.gt_forecast_kind == "multimodal_gmm":
+        # Realize one trajectory per actor from the surrogate K-mode mixture so the
+        # multimodal_forecast_mc estimator can be calibrated against its own model.
+        forecast = family.gt_multimodal_forecast
+        realized_vel = _realize_multimodal_velocity(ped_vel, forecast, rng)
+    else:
+        noise = rng.normal(0.0, family.gt_velocity_std_m_s, size=(n_actors, 2))
+        realized_vel = ped_vel + noise
+    realized_vel = realized_vel + bias[None, :]
     steps = np.arange(config.horizon_steps + 1, dtype=float)
     realized_pos = (
         ped_pos[:, None, :] + steps[None, :, None] * config.dt_s * realized_vel[:, None, :]
@@ -630,6 +864,33 @@ def _realize_contact(
     if not bool(contact_any_step.any()):
         return False, -1
     return True, int(np.argmax(contact_any_step))
+
+
+def _realize_multimodal_velocity(
+    ped_vel: np.ndarray, forecast: MultimodalForecastConfig, rng: np.random.Generator
+) -> np.ndarray:
+    """Draw one realized per-actor velocity from the surrogate K-mode mixture.
+
+    Each actor independently selects a mode (equal weights) and takes that mode's
+    heading-direction velocity (scaled by its nominal speed) plus a per-axis
+    Gaussian perturbation at the forecast noise scale. This is the single-draw
+    ground-truth analogue of :func:`_sample_multimodal_positions` so labels are
+    drawn from the same declared mixture the estimator forecasts.
+
+    Returns:
+        ``(K_actors, 2)`` realized per-actor velocity array.
+    """
+    n_actors = ped_vel.shape[0]
+    speed = np.linalg.norm(ped_vel, axis=1)
+    headings = _multimodal_mode_headings(ped_vel, forecast)  # (K_actors, M)
+    directions = np.stack((np.cos(headings), np.sin(headings)), axis=-1)  # (K, M, 2)
+    mode_index = rng.integers(0, forecast.mode_count, size=(n_actors,))
+    chosen_direction = np.take_along_axis(directions, mode_index[:, None, None], axis=1)[
+        :, 0, :
+    ]  # (K_actors, 2)
+    base_velocity = chosen_direction * speed[:, None]
+    noise = rng.normal(0.0, forecast.velocity_std_m_s, size=(n_actors, 2))
+    return base_velocity + noise
 
 
 def generate_matched_dataset(
@@ -738,6 +999,7 @@ def evaluate_estimator(
     fnr_thresholds: Sequence[float] = (0.1, 0.25, 0.5),
     n_bootstrap: int = 200,
     thresholds: VerdictThresholds | None = None,
+    multimodal_forecast: MultimodalForecastConfig | None = None,
 ) -> dict[str, object]:
     """Evaluate one available estimator against the matched dataset.
 
@@ -748,7 +1010,9 @@ def evaluate_estimator(
     """
     thresholds = thresholds or VerdictThresholds(deadline_ms=config.deadline_ms)
     samples = dataset.samples
-    predictions = predict_estimator(estimator_id, samples, config)
+    predictions = predict_estimator(
+        estimator_id, samples, config, multimodal_forecast=multimodal_forecast
+    )
     scores, labels, weights = _as_arrays(predictions, samples)
     prevalence = dataset.prevalence()
     kind = "probabilistic" if predictions[0].is_probability else "warning"
@@ -765,13 +1029,19 @@ def evaluate_estimator(
         "estimator_id": estimator_id,
         "kind": kind,
         "available": True,
+        "forecast_model": FORECAST_MODEL_IDS.get(estimator_id, "unknown"),
         "n_samples": len(samples),
         "prevalence": prevalence,
         "average_precision": ap,
         "fnr_at_thresholds": fnr,
         "time_to_warning": timeliness,
         "latency": latency.to_dict(),
-        "horizon_monotonicity": _horizon_monotonicity(estimator_id, samples, config),
+        "horizon_monotonicity": _horizon_monotonicity(
+            estimator_id,
+            samples,
+            config,
+            multimodal_forecast=multimodal_forecast,
+        ),
     }
 
     baseline_brier = prevalence * (1.0 - prevalence)
@@ -904,31 +1174,71 @@ def _stratified_metrics(
 
 
 def _horizon_monotonicity(
-    estimator_id: str, samples: Sequence[LabeledSample], config: RiskEstimatorConfig
+    estimator_id: str,
+    samples: Sequence[LabeledSample],
+    config: RiskEstimatorConfig,
+    *,
+    multimodal_forecast: MultimodalForecastConfig | None = None,
 ) -> dict[str, float]:
     """Fraction of samples whose predicted contact CDF is monotone in the horizon.
 
-    Only meaningful for the probabilistic estimator, whose first-passage CDF must
+    Only meaningful for a probabilistic estimator, whose first-passage CDF must
     be non-decreasing; the deterministic warning has no probability CDF and is
     reported as ``not_applicable``.
 
     Returns:
         A mapping with ``applicable`` and the monotone-CDF ``monotone_fraction``.
     """
-    if estimator_id != "constant_velocity_mc":
+    if estimator_id not in {"constant_velocity_mc", "multimodal_forecast_mc"}:
         return {"applicable": 0.0, "monotone_fraction": float("nan")}
     monotone = 0
     for sample in samples:
-        estimate = estimate_action_conditioned_risk(
-            sample.action, sample.pedestrians, config, measure_latency=False
+        first_passage = _estimator_first_passage(
+            estimator_id,
+            sample,
+            config,
+            multimodal_forecast=multimodal_forecast,
         )
-        cdf = np.cumsum(estimate.first_passage_distribution)
+        cdf = np.cumsum(first_passage)
         if np.all(np.diff(cdf) >= -1e-9):
             monotone += 1
     return {
         "applicable": 1.0,
         "monotone_fraction": monotone / len(samples) if samples else float("nan"),
     }
+
+
+def _estimator_first_passage(
+    estimator_id: str,
+    sample: LabeledSample,
+    config: RiskEstimatorConfig,
+    *,
+    multimodal_forecast: MultimodalForecastConfig | None = None,
+) -> tuple[float, ...]:
+    """Return the per-sample first-passage distribution for a probabilistic estimator."""
+    if estimator_id == "constant_velocity_mc":
+        estimate = estimate_action_conditioned_risk(
+            sample.action, sample.pedestrians, config, measure_latency=False
+        )
+        return estimate.first_passage_distribution
+    # multimodal_forecast_mc: recompute the mixture first-passage CDF directly.
+    forecast = multimodal_forecast or DEFAULT_MULTIMODAL_FORECAST
+    robot_xy = sample.action.as_array(horizon_steps=config.horizon_steps)
+    ped_pos, ped_vel, radii, _ids = pedestrian_arrays(sample.pedestrians, config)
+    if ped_pos.shape[0] == 0:
+        return tuple(0.0 for _ in range(config.horizon_steps))
+    radii_sum = radii + config.robot_radius_m
+    rng = np.random.default_rng(config.seed)
+    sampled = _sample_multimodal_positions(ped_pos, ped_vel, config, forecast, rng)
+    seg_dist = segment_min_distance(robot_xy, sampled)
+    contact = seg_dist - radii_sum[None, :, None] <= 0.0
+    step_contact = contact.any(axis=1)
+    has_contact = step_contact.any(axis=1)
+    first_step = np.where(has_contact, np.argmax(step_contact, axis=1), -1)
+    counts = np.zeros(config.horizon_steps, dtype=float)
+    for step in first_step[first_step >= 0]:
+        counts[int(step)] += 1.0
+    return tuple(float(v) for v in counts / config.n_samples)
 
 
 def action_sensitivity(
@@ -973,22 +1283,110 @@ def action_sensitivity(
     }
 
 
+def evaluate_matched_action_sensitivity(
+    pairs: Sequence[MatchedActionPair], config: RiskEstimatorConfig
+) -> dict[str, object]:
+    """Evaluate action ordering on explicitly shared forecast inputs.
+
+    This is a diagnostic fixture check, not a calibration metric. A pair is
+    valid only when the higher- and lower-risk candidates are constructed from
+    the same actor state; :class:`MatchedActionPair` makes that shared input
+    explicit instead of relying on scenario-id conventions. Empty pair sets or
+    duplicate identifiers fail closed so an absent action-sensitivity fixture
+    cannot be reported as a successful zero-denominator result.
+
+    Returns:
+        A JSON-safe action-sensitivity record with matched-input provenance and
+        one result for each pair.
+    """
+    if not pairs:
+        raise CalibrationInputError("action-sensitivity fixture must contain at least one pair")
+
+    pair_ids = [pair.pair_id.strip() for pair in pairs]
+    if any(not pair_id for pair_id in pair_ids):
+        raise CalibrationInputError("action-sensitivity pair identifiers must be non-empty")
+    if len(set(pair_ids)) != len(pair_ids):
+        raise CalibrationInputError("action-sensitivity pair identifiers must be unique")
+
+    details: list[dict[str, object]] = []
+    correct = 0
+    for pair, pair_id in zip(pairs, pair_ids, strict=True):
+        if not pair.pedestrians:
+            raise CalibrationInputError(f"action-sensitivity pair {pair_id!r} has no actors")
+        if pair.higher_risk_action.action_id == pair.lower_risk_action.action_id:
+            raise CalibrationInputError(
+                f"action-sensitivity pair {pair_id!r} reuses the same action identifier"
+            )
+        higher_waypoints = pair.higher_risk_action.as_array(horizon_steps=config.horizon_steps)
+        lower_waypoints = pair.lower_risk_action.as_array(horizon_steps=config.horizon_steps)
+        if not np.allclose(higher_waypoints[0], lower_waypoints[0]):
+            raise CalibrationInputError(
+                f"action-sensitivity pair {pair_id!r} must share the robot start state"
+            )
+
+        higher_sample = LabeledSample(
+            scenario_id=f"{pair_id}:higher_risk",
+            family="action_sensitivity_fixture",
+            action=pair.higher_risk_action,
+            pedestrians=pair.pedestrians,
+            realized_contact=False,
+            realized_first_contact_step=-1,
+        )
+        lower_sample = LabeledSample(
+            scenario_id=f"{pair_id}:lower_risk",
+            family="action_sensitivity_fixture",
+            action=pair.lower_risk_action,
+            pedestrians=pair.pedestrians,
+            realized_contact=False,
+            realized_first_contact_step=-1,
+        )
+        higher = _predict_constant_velocity_mc(higher_sample, config, warn_threshold=0.5)
+        lower = _predict_constant_velocity_mc(lower_sample, config, warn_threshold=0.5)
+        direction_as_expected = higher.score > lower.score
+        correct += int(direction_as_expected)
+        details.append(
+            {
+                "pair_id": pair_id,
+                "higher_risk_action": pair.higher_risk_action.action_id,
+                "lower_risk_action": pair.lower_risk_action.action_id,
+                "higher_score": higher.score,
+                "lower_score": lower.score,
+                "direction_as_expected": direction_as_expected,
+            }
+        )
+
+    return {
+        "status": "scored",
+        "estimator_id": "constant_velocity_mc",
+        "matched_forecast_inputs": True,
+        "forecast_seed": config.seed,
+        "n_pairs": len(pairs),
+        "fraction_correct": correct / len(pairs),
+        "pairs": details,
+    }
+
+
 __all__ = [
     "AVAILABLE_ESTIMATORS",
     "CALIBRATION_SCHEMA_VERSION",
     "CLAIM_BOUNDARY",
+    "DEFAULT_MULTIMODAL_FORECAST",
+    "FORECAST_MODEL_IDS",
     "UNAVAILABLE_ESTIMATORS",
     "CalibrationInputError",
     "EstimatorPrediction",
     "FamilySpec",
     "LabeledSample",
+    "MatchedActionPair",
     "MatchedDataset",
     "MatchedDatasetProvenance",
+    "MultimodalForecastConfig",
     "VerdictThresholds",
     "action_sensitivity",
     "average_precision",
     "brier_score",
     "evaluate_estimator",
+    "evaluate_matched_action_sensitivity",
     "expected_calibration_error",
     "fnr_at_thresholds",
     "generate_matched_dataset",

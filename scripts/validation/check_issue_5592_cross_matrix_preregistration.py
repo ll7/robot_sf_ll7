@@ -11,10 +11,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
+from loguru import logger
 
 from robot_sf.training.scenario_loader import load_scenarios
 
@@ -36,6 +39,13 @@ EXPECTED_ROSTER = {
     "predictive": ("prediction_planner", "prediction_mpc", "prediction_mpc_cbf"),
     "baseline_reactive": ("goal", "social_force", "orca", "socnav_sampling", "sacadrl"),
 }
+EXPECTED_ARTIFACT_FILES = (
+    "README.md",
+    "metadata.json",
+    "cross_matrix_agreement.csv",
+    "integration_report.md",
+    "SHA256SUMS",
+)
 FORBIDDEN_TRANSIENT_KEYS = {
     "target_host",
     "packet_lineage",
@@ -266,8 +276,9 @@ def validate_packet(packet: dict[str, Any], *, repo_root: Path | None = None) ->
     )
     required_files = artifact.get("required_files")
     _require(
-        isinstance(required_files, list) and "SHA256SUMS" in required_files,
-        "artifact checksum contract missing",
+        isinstance(required_files, (list, tuple))
+        and tuple(required_files) == EXPECTED_ARTIFACT_FILES,
+        "artifact contract must declare the complete integration artifact set",
     )
 
     readiness = _mapping(packet, "readiness_decision")
@@ -293,12 +304,56 @@ def validate_packet(packet: dict[str, Any], *, repo_root: Path | None = None) ->
     }
 
 
+def _configure_machine_readable_logging() -> None:
+    """Route validation diagnostics to stderr so JSON stdout stays parseable."""
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG")
+
+
+def _run_machine_readable_validation(packet: Path) -> int:
+    """Run JSON validation without mutating the caller's process-global Loguru sinks."""
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--packet",
+        str(packet),
+        "--json",
+        "--machine-readable-child",
+    ]
+    try:
+        completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    except OSError as exc:
+        print(f"isolated validation failed: {exc}", file=sys.stderr)
+        print(json.dumps({"status": "not_ready", "error": str(exc)}))
+        return 1
+
+    if completed.stderr:
+        sys.stderr.write(completed.stderr)
+    try:
+        json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        if completed.stdout:
+            sys.stderr.write(completed.stdout)
+        print(
+            json.dumps({"status": "not_ready", "error": "isolated validation emitted invalid JSON"})
+        )
+        return completed.returncode or 1
+
+    sys.stdout.write(completed.stdout)
+    return completed.returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     """Validate the packet and emit a compact JSON or text result."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--packet", type=Path, default=DEFAULT_PACKET)
     parser.add_argument("--json", action="store_true", dest="as_json")
+    parser.add_argument("--machine-readable-child", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.as_json and not args.machine_readable_child:
+        return _run_machine_readable_validation(args.packet)
+    if args.as_json:
+        _configure_machine_readable_logging()
     try:
         result = validate_packet(load_packet(args.packet))
     except (OSError, PacketError, ValueError, TypeError, KeyError, yaml.YAMLError) as exc:

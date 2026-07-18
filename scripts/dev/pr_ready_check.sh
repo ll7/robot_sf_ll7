@@ -269,6 +269,16 @@ while IFS= read -r changed_file; do
   fi
 done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
 
+# The existing readiness lanes intentionally exclude deleted paths from their
+# optional-test classification.  The base-drift guard has a stronger contract:
+# every path changed by the PR must participate in the intersection, including a
+# path deleted by the PR, because main can modify that path during the run.
+drift_changed_files=()
+while IFS= read -r changed_file; do
+  [[ -z "$changed_file" ]] && continue
+  drift_changed_files+=("$changed_file")
+done < <(git diff --name-only --diff-filter=ACDMRT "$BASE_REF...HEAD")
+
 if [[ ${#changed_files[@]} -gt 0 ]]; then
   if [[ "$pr_ready_final" == "1" ]]; then
     printf 'Changed files vs %s:\n' "$BASE_REF" >&2
@@ -284,6 +294,16 @@ fi
 if [[ ${#optional_changed_files[@]} -gt 0 ]]; then
   printf 'Optional-extra changed files requiring the predictive lane:\n' >&2
   printf '%s\n' "${optional_changed_files[@]}" >&2
+fi
+
+# Issue #5782: capture the concrete base SHA this readiness run validates against
+# BEFORE the expensive lanes start, so a later base-drift recheck can compare the
+# moving base to the SHA we actually proved the PR against.  When BASE_REF does not
+# resolve locally (handled by resolve_base_ref's HEAD fallback), leave VALIDATED_BASE_SHA
+# empty so the drift check and freshness stamp fall back to the base_ref string.
+VALIDATED_BASE_SHA="$(git rev-parse --verify --quiet "${BASE_REF}^{commit}" 2>/dev/null || true)"
+if [[ -n "$VALIDATED_BASE_SHA" ]]; then
+  printf 'Validated base SHA for this run: %s\n' "${VALIDATED_BASE_SHA:0:8}" >&2
 fi
 
 followup_args=()
@@ -320,6 +340,7 @@ fi
 "$SCRIPT_DIR/check_changed_coverage.sh"
 "$SCRIPT_DIR/check_docstring_todos_diff.sh"
 "$SCRIPT_DIR/check_docstring_todos_ratchet.sh"
+"$SCRIPT_DIR/check_docstring_todos_baseline_freshness.sh"
 uv run python "$SCRIPT_DIR/check_optional_import_pr_freshness.py" --base-ref "$BASE_REF"
 uv run python "$SCRIPT_DIR/../validation/check_broad_exceptions.py"
 
@@ -356,6 +377,9 @@ check_no_orphaned_pytest_workers() {
 }
 
 freshness_args=(write --base-ref "$BASE_REF")
+if [[ -n "$VALIDATED_BASE_SHA" ]]; then
+  freshness_args+=(--base-sha "$VALIDATED_BASE_SHA")
+fi
 if [[ "$pr_ready_final" == "1" ]]; then
   freshness_args+=(--require-clean-tree)
 elif [[ "$(worktree_state)" != "clean" ]]; then
@@ -363,6 +387,55 @@ elif [[ "$(worktree_state)" != "clean" ]]; then
   printf 'Interim readiness is not changed-file proof for the dirty paths listed above.\n' >&2
   printf 'Use PR_READY_MODE=final BASE_REF=%q %q for final committed-HEAD PR proof.\n' "$BASE_REF" "$0" >&2
 fi
+
+# Issue #5782: final base-drift recheck immediately before recording the stamp.
+# The base may have advanced during the long lanes; if the drift intersects the
+# PR's changed files, fail closed and name the exact base SHA to revalidate.  If
+# drift is unrelated to the changed paths, the check recommends reuse (exit 0) so
+# a passing run is not needlessly re-run; the reuse message is surfaced so the
+# decision is reviewable.  Either way the resolved SHA is recorded in the stamp so
+# a later freshness status check still catches any residual drift.
+if [[ -n "$VALIDATED_BASE_SHA" ]]; then
+  changed_files_tmp="$(mktemp)"
+  if [[ ${#drift_changed_files[@]} -gt 0 ]]; then
+    printf '%s\n' "${drift_changed_files[@]}" > "$changed_files_tmp"
+  fi
+  # ``set -e`` would exit on the failing command substitution before ``drift_rc`` is
+  # captured, so append ``|| drift_rc=$?`` to record the exit code without aborting.
+  drift_rc=0
+  drift_msg="$(uv run python "$SCRIPT_DIR/check_base_drift.py" \
+    --base-ref "$BASE_REF" \
+    --validated-base-sha "$VALIDATED_BASE_SHA" \
+    --changed-files "$changed_files_tmp")" || drift_rc=$?
+  rm -f "$changed_files_tmp"
+  case "$drift_rc" in
+    0)
+      # rc 0 covers both "current" (no drift) and "reuse_recommended" (drift
+      # unrelated to the PR's changed paths).  Surface the reuse message so the
+      # reviewable reuse path is visible, then record the stamp as-is.
+      if [[ -n "$drift_msg" ]]; then
+        printf '%s\n' "$drift_msg" >&2
+      fi
+      ;;
+    1)
+      # Drift intersects the PR's changed files: the validated base no longer
+      # matches reality, so the stamp would be misleading.  Fail closed and name
+      # the exact base to revalidate.
+      printf '%s\n' "$drift_msg" >&2
+      printf 'Base drifted during readiness lanes and touches PR-changed files; ' >&2
+      printf 'revalidate against %s before recording the stamp (issue #5782).\n' "$BASE_REF" >&2
+      exit 1
+      ;;
+    *)
+      # Indeterminate (rc 2): the base ref could not be resolved/compared (e.g.
+      # offline checkout).  Do not block on a check that cannot run; record the
+      # stamp and report the indeterminate result so it is not silently ignored.
+      printf 'Final base-drift recheck returned rc=%d; recording stamp regardless (issue #5782).\n' \
+        "$drift_rc" >&2
+      ;;
+  esac
+fi
+
 uv run python "$SCRIPT_DIR/pr_ready_freshness.py" "${freshness_args[@]}"
 
 # Final orphan guard (issue #5594): after all lanes exit, assert no worktree-owned

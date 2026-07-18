@@ -9,12 +9,13 @@ and worker-lane labeling.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 # Best-effort helpers below shell out to git/gh, parse JSON, and read files; these
 # are the only errors those operations realistically raise. Catching this explicit
@@ -38,6 +39,24 @@ CLOSING_PATTERN = re.compile(
     r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+`?(?:#(\d+)|https?://github\.com/[^/\s]+/[^/\s]+/issues/(\d+))\b",
     re.IGNORECASE,
 )
+EVIDENCE_PATH_PREFIX = "docs/context/evidence/"
+EVIDENCE_REVIEW_SIDECAR_SUFFIX = ".review.json"
+EVIDENCE_REVIEW_SCHEMA_VERSION = "evidence-review-marker.v1"
+LOWERCASE_SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
+
+# Issue #5856: ratchet against NEW placeholder docstrings introduced in a PR diff.
+# Only ADDED lines count (pre-existing stubs are grandfathered), so unrelated PRs
+# that merely touch a file already carrying old stubs still pass.
+PLACEHOLDER_DOCSTRING_PATTERNS = [
+    re.compile(r"^\s*(?:[ru]{0,2})?(?:\"\"\"|''')\s*TODO docstring", re.IGNORECASE),
+    re.compile(
+        r"^\s*(?:[ru]{0,2})?(?:\"\"\"|''')\s*Document this "
+        r"(?:function|class|module|method)",
+        re.IGNORECASE,
+    ),
+    re.compile(r'^\s*"""\."""\s*$'),  # trivially-empty docstring """."""
+    re.compile(r"^\s*'''\.'''\s*$", re.IGNORECASE),  # trivially-empty docstring '''.
+]
 
 
 def is_negated(text: str, match_start: int) -> bool:
@@ -243,6 +262,169 @@ def check_state_refresh_only(changed_files: list[str], title: str, body: str) ->
     return []
 
 
+def _evidence_relative_path(path: str) -> str | None:
+    """Return the repository-relative evidence path embedded in ``path``."""
+    normalized = path.replace("\\", "/").strip()
+    prefix_index = normalized.find(EVIDENCE_PATH_PREFIX)
+    if prefix_index == -1:
+        return None
+    return normalized[prefix_index:]
+
+
+def _is_safe_repository_relative_path(path: str) -> bool:
+    """Reject absolute, normalized, or traversal-bearing repository paths."""
+    normalized = path.replace("\\", "/").strip()
+    if (
+        not normalized
+        or normalized.startswith("/")
+        or "\\" in path
+        or PureWindowsPath(normalized).drive
+    ):
+        return False
+    return all(part not in {"", ".", ".."} for part in normalized.split("/"))
+
+
+def _path_matches_evidence_path(path: str, expected_path: str) -> bool:
+    """Match relative and temporary absolute paths to one evidence path."""
+    normalized = path.replace("\\", "/").strip()
+    return normalized == expected_path or _evidence_relative_path(normalized) == expected_path
+
+
+def _is_new_evidence_path(
+    path: str,
+    relative_path: str,
+    base_ref: str,
+    added_files: set[str] | None,
+    new_files: set[str],
+) -> bool:
+    """Resolve whether an evidence path was added, using the authoritative signal when present."""
+    if added_files is not None:
+        return any(
+            _path_matches_evidence_path(candidate, relative_path) for candidate in added_files
+        )
+    if any(_path_matches_evidence_path(candidate, relative_path) for candidate in new_files):
+        return True
+    return is_file_new(path, base_ref)
+
+
+def _collect_string_values(value: object) -> list[str]:
+    """Collect marker strings from the supported JSON scalar/container forms."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        values: list[str] = []
+        for item in value:
+            values.extend(_collect_string_values(item))
+        return values
+    if isinstance(value, dict):
+        values = []
+        for item in value.values():
+            values.extend(_collect_string_values(item))
+        return values
+    return []
+
+
+def _sidecar_contains_review_markers(sidecar: dict[str, object]) -> bool:
+    """Return whether the sidecar's explicit marker field contains both markers."""
+    marker_values: list[str] = []
+    for field in ("review_marker", "markers", "marker_values"):
+        marker_values.extend(_collect_string_values(sidecar.get(field)))
+    marker_text = " ".join(marker_values)
+    return "AI-GENERATED" in marker_text and "NEEDS-REVIEW" in marker_text
+
+
+def _sha256_file(path: str) -> str:
+    """Hash a file incrementally so large immutable artifacts stay bounded in memory."""
+    digest = hashlib.sha256()
+    with open(path, "rb") as artifact_file:
+        while True:
+            chunk = artifact_file.read(64 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _check_evidence_review_sidecar(  # noqa: C901
+    artifact_path: str, artifact_filesystem_path: str, sidecar_filesystem_path: str
+) -> str | None:
+    """Validate the exact same-PR sidecar that can authorize marker-less evidence."""
+    if not _is_safe_repository_relative_path(artifact_path):
+        return (
+            f"BLOCKER: Evidence review sidecar for '{artifact_filesystem_path}' cannot use "
+            f"unsafe repository path '{artifact_path}'."
+        )
+
+    try:
+        with open(sidecar_filesystem_path, encoding="utf-8") as sidecar_file:
+            sidecar = json.load(sidecar_file)
+    except _BEST_EFFORT_ERRORS as exc:
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' is not valid JSON: "
+            f"{exc}."
+        )
+
+    if not isinstance(sidecar, dict):
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must contain a "
+            "JSON object."
+        )
+
+    if sidecar.get("schema_version") != EVIDENCE_REVIEW_SCHEMA_VERSION:
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must declare "
+            f"schema_version '{EVIDENCE_REVIEW_SCHEMA_VERSION}'."
+        )
+
+    declared_path = sidecar.get("artifact_path")
+    if (
+        not isinstance(declared_path, str)
+        or not _is_safe_repository_relative_path(declared_path)
+        or declared_path != artifact_path
+    ):
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must name the "
+            f"exact safe repository-relative artifact_path '{artifact_path}'."
+        )
+
+    declared_hash = sidecar.get("artifact_sha256")
+    if (
+        not isinstance(declared_hash, str)
+        or LOWERCASE_SHA256_PATTERN.fullmatch(declared_hash) is None
+    ):
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must contain "
+            "artifact_sha256 as 64 lowercase hexadecimal characters."
+        )
+
+    if sidecar.get("preserved_exact_bytes") is not True:
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must set "
+            "preserved_exact_bytes to true."
+        )
+
+    if not _sidecar_contains_review_markers(sidecar):
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' must contain "
+            "the AI-GENERATED and NEEDS-REVIEW marker values."
+        )
+
+    try:
+        actual_hash = _sha256_file(artifact_filesystem_path)
+    except _BEST_EFFORT_ERRORS as exc:
+        return (
+            f"BLOCKER: Could not hash evidence artifact '{artifact_filesystem_path}' for "
+            f"review sidecar validation: {exc}."
+        )
+
+    if declared_hash != actual_hash:
+        return (
+            f"BLOCKER: Evidence review sidecar '{sidecar_filesystem_path}' has an "
+            f"artifact_sha256 that does not match '{artifact_filesystem_path}'."
+        )
+    return None
+
+
 def check_evidence_tree_hygiene(  # noqa: C901, PLR0912
     changed_files: list[str], base_ref: str, added_files: set[str] | None = None
 ) -> list[str]:
@@ -264,37 +446,56 @@ def check_evidence_tree_hygiene(  # noqa: C901, PLR0912
         if not f_norm:
             continue
 
-        # Determine relative path for validation checks
-        f_rel = f_norm
-        for pattern in ("docs/context/evidence/", "docs/context/"):
-            if pattern in f_norm:
-                f_rel = f_norm[f_norm.index(pattern) :]
-                break
-
-        if not f_rel.startswith("docs/context/evidence/"):
+        f_rel = _evidence_relative_path(f_norm)
+        if f_rel is None:
             continue
         if not os.path.exists(f):
             continue
 
         try:
-            with open(f, encoding="utf-8") as file_obj:
-                content = file_obj.read()
+            file_bytes = Path(f).read_bytes()
         except _BEST_EFFORT_ERRORS:
             continue
+        try:
+            content = file_bytes.decode("utf-8")
+        except ValueError:
+            # Marker and provenance text cannot be inspected in a non-text artifact, but a
+            # valid sidecar may still bind its exact bytes cryptographically.
+            content = ""
 
         # 1. Marker check for new evidence files
-        if added_files is not None:
-            # Authoritative GitHub-API signal: a file is new iff it was "added". This
-            # does not depend on origin/main being fetched in the runner (issue #5464).
-            is_new = f_norm in added_files
-        else:
-            is_new = (f in new_files) or is_file_new(f, base_ref)
+        is_new = _is_new_evidence_path(f, f_rel, base_ref, added_files, new_files)
         if is_new:
             if "AI-GENERATED" not in content or "NEEDS-REVIEW" not in content:
-                blockers.append(
-                    f"BLOCKER: New evidence file '{f}' is missing the required AI-GENERATED "
-                    f"and NEEDS-REVIEW marker convention."
-                )
+                if f_rel.endswith(EVIDENCE_REVIEW_SIDECAR_SUFFIX):
+                    blockers.append(
+                        f"BLOCKER: New evidence file '{f}' is missing the required AI-GENERATED "
+                        f"and NEEDS-REVIEW marker convention."
+                    )
+                else:
+                    sidecar_relative_path = f"{f_rel}{EVIDENCE_REVIEW_SIDECAR_SUFFIX}"
+                    sidecar_filesystem_path = f"{f}{EVIDENCE_REVIEW_SIDECAR_SUFFIX}"
+                    sidecar_is_new = os.path.exists(
+                        sidecar_filesystem_path
+                    ) and _is_new_evidence_path(
+                        sidecar_filesystem_path,
+                        sidecar_relative_path,
+                        base_ref,
+                        added_files,
+                        new_files,
+                    )
+                    if not sidecar_is_new:
+                        blockers.append(
+                            f"BLOCKER: New evidence file '{f}' is missing the required "
+                            "AI-GENERATED and NEEDS-REVIEW marker convention and has no "
+                            f"same-PR added review sidecar '{sidecar_relative_path}'."
+                        )
+                    else:
+                        sidecar_blocker = _check_evidence_review_sidecar(
+                            f_rel, f, sidecar_filesystem_path
+                        )
+                        if sidecar_blocker is not None:
+                            blockers.append(sidecar_blocker)
 
         # 2. Evidence README claims check
         if "README" in os.path.basename(f).upper():
@@ -324,7 +525,7 @@ def check_evidence_tree_hygiene(  # noqa: C901, PLR0912
         # 3. Distance-convention field on distance-like series (issue #5141).
         # Only enforced for NEW evidence files so the pre-existing evidence tree
         # (which predates the field) is not retroactively flagged.
-        if is_new:
+        if is_new and not f_rel.endswith(EVIDENCE_REVIEW_SIDECAR_SUFFIX):
             blocker = _check_distance_convention_for_file(f, content)
             if blocker is not None:
                 blockers.append(blocker)
@@ -524,6 +725,123 @@ def post_or_update_comment(pr_number: str, repo: str, comment_body: str) -> None
             print(f"Error creating comment: {e}", file=sys.stderr)
 
 
+def _diff_added_python_lines(base_ref: str, repo_root: str | None = None) -> dict[str, list[int]]:
+    """Return the set of NEW-file line numbers added per Python file vs ``base_ref``.
+
+    Parses zero-context ``git diff`` hunk headers and keeps only ``+``-prefixed
+    new-file line numbers. This is the ratchet signal: only ADDED content can
+    introduce new placeholder docstrings; removed/context lines are ignored so
+    pre-existing stubs are grandfathered (issue #5856). When ``repo_root`` is
+    given, the diff runs scoped to that git repository so callers (notably tests
+    in a nested throwaway repo) are not polluted by a parent checkout's history.
+    """
+    added: dict[str, list[int]] = {}
+    git_cmd = ["git"]
+    if repo_root is not None:
+        git_cmd += [f"--git-dir={repo_root}/.git", f"--work-tree={repo_root}"]
+    try:
+        res = subprocess.run(
+            git_cmd
+            + [
+                "diff",
+                "--unified=0",
+                "--src-prefix=a/",
+                "--dst-prefix=b/",
+                f"{base_ref}...HEAD",
+                "--",
+                "*.py",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if res.returncode != 0:
+            return added
+        current_file: str | None = None
+        for line in res.stdout.splitlines():
+            if line.startswith("+++ b/"):
+                current_file = line[len("+++ b/") :].strip()
+                added.setdefault(current_file, [])
+                continue
+            if current_file is None or not line.startswith("@@"):
+                continue
+            span = _parse_added_line_span(line)
+            if span is None:
+                continue
+            start, count = span
+            added[current_file].extend(range(start, start + count))
+    except _BEST_EFFORT_ERRORS:
+        return {}
+    return added
+
+
+def _parse_added_line_span(hunk_header: str) -> tuple[int, int] | None:
+    """Parse the ``+c,d`` part of a ``git diff --unified=0`` hunk header.
+
+    Returns ``(start, count)`` for the added lines, or ``None`` when the header
+    cannot be parsed. A missing ``,count`` means a single added line.
+    """
+    try:
+        new_part = hunk_header.split("+", 1)[1].split("@@", 1)[0].strip()
+    except IndexError:
+        return None
+    try:
+        if "," in new_part:
+            start = int(new_part.split(",", 1)[0])
+            count = int(new_part.split(",", 1)[1])
+        else:
+            start = int(new_part)
+            count = 1
+    except ValueError:
+        return None
+    if count <= 0:
+        return None
+    return start, count
+
+
+def check_placeholder_docstrings(base_ref: str, repo_root: str | None = None) -> list[str]:
+    """Rule 8: Reject NEW placeholder docstrings added in the PR diff (issue #5856).
+
+    Only ADDED lines (vs ``base_ref``) are inspected. Pre-existing stubs that the
+    PR merely touches are grandfathered and do not fail. Returns BLOCKER messages
+    that name the exact added file:line for each flagged placeholder. When
+    ``repo_root`` is given the scan is scoped to that repository (used by tests).
+    """
+    blockers: list[str] = []
+    added = _diff_added_python_lines(base_ref, repo_root)
+    for rel_path, line_numbers in sorted(added.items()):
+        if not line_numbers:
+            continue
+        path = rel_path.replace("\\", "/").strip()
+        # When the diff was scoped to a throwaway repo (tests), resolve the file
+        # against that root; otherwise open relative to the current working dir.
+        fs_path = os.path.join(repo_root, path) if repo_root else path
+        try:
+            with open(fs_path, encoding="utf-8") as handle:
+                file_lines = handle.readlines()
+        except _BEST_EFFORT_ERRORS:
+            continue
+        for lineno in line_numbers:
+            idx = lineno - 1
+            if idx < 0 or idx >= len(file_lines):
+                continue
+            text = file_lines[idx].rstrip("\n")
+            matched = None
+            for pattern in PLACEHOLDER_DOCSTRING_PATTERNS:
+                if pattern.search(text):
+                    matched = pattern.pattern
+                    break
+            if matched is not None:
+                blockers.append(
+                    f"BLOCKER: PR diff adds placeholder docstring content at "
+                    f"'{path}:{lineno}' matching /{matched}/. New placeholder docstrings "
+                    f"('TODO docstring', 'Document this function/class/module/method', "
+                    f'or trivially-empty \'"""."""\') are rejected by the issue #5856 ratchet. '
+                    f"Replace it with a real one-line docstring."
+                )
+    return blockers
+
+
 def run_all_checks(
     title: str,
     body: str,
@@ -565,6 +883,9 @@ def run_all_checks(
     lane_info, _ = check_worker_lane_provenance(body, pr_number, repo)
     infos.append(lane_info)
 
+    # 8. Placeholder docstring ratchet (issue #5856): reject NEW placeholder docstrings.
+    blockers.extend(check_placeholder_docstrings(base_ref))
+
     return blockers, warnings, infos
 
 
@@ -601,6 +922,11 @@ def build_comment_body(
     lane_detected = "Added 'cheap-lane' label" in "".join(infos)
     rows.append(
         f"| 7. Worker-lane label | {'🏷️ cheap-lane' if lane_detected else '⚪ None'} | Label PRs from cheap worker lane |"
+    )
+    rows.append(
+        f"| 8. Placeholder docstring ratchet | "
+        f"{get_status_str(any('placeholder docstring' in b.lower() for b in blockers))} | "
+        f"Reject NEW TODO/empty docstrings in added diff lines |"
     )
 
     comment = [

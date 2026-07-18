@@ -29,6 +29,19 @@ class _SlowPlanner:
         return {"algorithm": "random", "status": "ok", "seed": self.seed}
 
 
+class _SlowFirstStepPlanner:
+    """Planner whose one-time inference warm-up exceeds the steady-state budget."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def step(self, _obs: Any) -> dict[str, float]:
+        self.calls += 1
+        if self.calls == 1:
+            time.sleep(0.1)
+        return {"vx": 1.0, "vy": 0.0}
+
+
 class _FailingPlanner:
     """Planner stub whose worker step raises a diagnostic error."""
 
@@ -158,6 +171,21 @@ def test_planner_step_timeout_fails_fast_and_reports_metadata(
     assert timeout_metadata["step_timeout_s"] == 0.05
     assert timeout_metadata["step_timeouts"] == 1
     assert timeout_metadata["fallback_actions"] == 1
+
+
+@pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")
+def test_planner_step_process_allows_one_time_inference_warmup() -> None:
+    """The first inference gets a startup budget; later steps use the strict budget."""
+    step_process = runner._PlannerStepProcess(
+        _SlowFirstStepPlanner(),
+        timeout_s=0.02,
+        first_step_timeout_s=0.5,
+    )
+    try:
+        assert step_process.step({"obs": "cold"}) == {"vx": 1.0, "vy": 0.0}
+        assert step_process.step({"obs": "warm"}) == {"vx": 1.0, "vy": 0.0}
+    finally:
+        step_process.close()
 
 
 @pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")

@@ -4,12 +4,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import ast
+from pathlib import Path
 
 from scripts.ci.check_evidence_writer_usage import check_changed_files, check_file
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _write_fixture(tmp_path: Path, source: str, name: str = "fixture.py") -> Path:
@@ -134,6 +132,61 @@ OUTPUT.joinpath('report.md').write_text('# report', encoding='utf-8')
     blockers = check_file(path)
     assert len(blockers) == 1
     assert "empty evidence-writer exemption reason" in blockers[0]
+
+
+def test_issue_5903_prediction_mpc_factorial_fixture_writes_are_exempt(tmp_path: Path) -> None:
+    """Issue #5903: the live regression must not flag merged PR #5880 fixture writes.
+
+    PR #5880 introduced five ``write_text`` calls in
+    ``tests/test_prediction_mpc_factorial.py`` (around lines 467, 469, 588, 619,
+    and 623). Each writes a temporary config/registry fixture into ``tmp_path`` so
+    the fail-closed readiness-gate readers can be exercised; none targets
+    ``docs/context/evidence``, so no durable evidence can be produced. The file
+    carries a justified ``# evidence-writer-exempt`` marker. This test locks that
+    contract: the guard must classify the file as clean, while the separate
+    ``test_markerless_direct_writer_is_caught`` test proves the same guard still
+    fails a genuine evidence-tree write (the checker is not weakened globally).
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    target = repo_root / "tests" / "test_prediction_mpc_factorial.py"
+    assert target.is_file(), "expected tests/test_prediction_mpc_factorial.py to exist"
+    source = target.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(target))
+    tmp_path_names: set[str] = set()
+    writer_receivers: list[ast.expr] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and any(
+            isinstance(child, ast.Name) and child.id == "tmp_path" for child in ast.walk(node.value)
+        ):
+            tmp_path_names.update(
+                target_node.id for target_node in node.targets if isinstance(target_node, ast.Name)
+            )
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in {"write_text", "write_bytes"}
+        ):
+            writer_receivers.append(node.func.value)
+
+    assert writer_receivers, f"expected temporary fixture writes in {target}"
+    assert all(
+        isinstance(receiver, ast.Name) and receiver.id in tmp_path_names
+        for receiver in writer_receivers
+    ), "every direct writer in the exempt file must target a tmp_path-derived fixture"
+    assert check_file(target) == []
+
+    # Sanity: the guard still catches a genuine evidence-tree write replayed in a
+    # sibling file, so the reconciliation did not weaken the global check.
+    genuine = _write_fixture(
+        tmp_path,
+        """
+from pathlib import Path
+OUTPUT = Path('docs/context/evidence/example')
+OUTPUT.joinpath('report.md').write_text('# report', encoding='utf-8')
+""",
+    )
+    genuine_blockers = check_file(genuine)
+    assert any("write_text" in blocker for blocker in genuine_blockers)
 
 
 def test_pr_contract_check_reports_guard_violation(tmp_path: Path) -> None:

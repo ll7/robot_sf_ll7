@@ -4,14 +4,14 @@
       "robot_sf/benchmark/camera_ready/campaign.py": 1,
       "robot_sf/benchmark/camera_ready/resource_lifecycle.py": 2,
       "robot_sf/benchmark/candidate_trace_resolution.py": 1,
-      "robot_sf/benchmark/doctor.py": 1,
+      "robot_sf/benchmark/doctor.py": 2,
       "robot_sf/benchmark/forecast_lane_inventory.py": 1,
       "robot_sf/benchmark/helper_catalog.py": 2,
       "robot_sf/benchmark/learned_predictor_capability_inventory.py": 1,
       "robot_sf/benchmark/map_runner.py": 2,
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner_env.py": 1,
-      "robot_sf/benchmark/runner.py": 7,
+      "robot_sf/benchmark/runner.py": 8,
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/snqi/cli.py": 3,
       "robot_sf/benchmark/snqi/compute.py": 1,
@@ -104,7 +104,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 174
+    "total": 176
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -150,6 +150,15 @@
       "fingerprint": "c68a0e0b1fcaafb1",
       "handler": "Exception",
       "lineno": 207,
+      "path": "robot_sf/benchmark/doctor.py",
+      "source": "except Exception as exc:"
+    },
+    {
+      "col_offset": 4,
+      "context": "_resolve_quickstart_examples",
+      "fingerprint": "fcee4a1031e8281c",
+      "handler": "Exception",
+      "lineno": 320,
       "path": "robot_sf/benchmark/doctor.py",
       "source": "except Exception as exc:"
     },
@@ -244,11 +253,20 @@
       "source": "except Exception as exc:  # noqa: BLE001 - provenance must never break a benchmark run."
     },
     {
+      "col_offset": 4,
+      "context": "_planner_step_worker",
+      "fingerprint": "3f7dbbaed386afda",
+      "handler": "Exception",
+      "lineno": 306,
+      "path": "robot_sf/benchmark/runner.py",
+      "source": "except Exception as exc:"
+    },
+    {
       "col_offset": 12,
       "context": "_planner_step_worker",
       "fingerprint": "a8cc46e15ae90443",
       "handler": "Exception",
-      "lineno": 303,
+      "lineno": 327,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # pragma: no cover - defensive child-process path"
     },
@@ -257,7 +275,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "6a761009a771ebe5",
       "handler": "Exception",
-      "lineno": 1661,
+      "lineno": 1702,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover - progress best-effort"
     },
@@ -266,7 +284,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "e7dc39de4571ff10",
       "handler": "Exception",
-      "lineno": 1663,
+      "lineno": 1704,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - error path"
     },
@@ -275,7 +293,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "92d92f1cb4a3a0e5",
       "handler": "Exception",
-      "lineno": 1679,
+      "lineno": 1720,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
     },
@@ -284,7 +302,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "6a475b0e80195804",
       "handler": "Exception",
-      "lineno": 1763,
+      "lineno": 1804,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
     },
@@ -293,7 +311,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "448c5c0fff47cfc4",
       "handler": "Exception",
-      "lineno": 1765,
+      "lineno": 1806,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover"
     },
@@ -302,7 +320,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "6a475b0e80195804",
       "handler": "Exception",
-      "lineno": 1781,
+      "lineno": 1822,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
     },

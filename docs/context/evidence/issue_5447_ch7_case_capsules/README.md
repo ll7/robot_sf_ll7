@@ -20,8 +20,11 @@ A **reproducible, pinned case-capsule artifact set** built from the validated
   — full candidate-pool → chosen/unavailable audit (rejects cannot be hidden).
 - `docs/context/evidence/issue_5447_ch7_case_capsules/build_command.v1.txt`
   — exact build + downstream figure/export commands.
-- `docs/context/evidence/issue_5447_ch7_case_capsules/SHA256SUMS` — sidecar
-  checksums of every emitted file plus the pinned candidate manifest.
+- `docs/context/evidence/issue_5447_ch7_case_capsules/SHA256SUMS` — per-directory
+  `sha256sum -c` checksum sidecar for the emitted files (verify from this dir:
+  `sha256sum -c SHA256SUMS`). The pinned #5446 candidate-manifest hash is recorded
+  inside the manifest `inputs.candidate_manifest_sha256` and the ledger
+  `candidate_manifest` block, not as a cross-directory SHA256SUMS line.
 
 The builder/validator itself (`robot_sf/benchmark/case_capsules.py`) and the
 one-off CLI (`scripts/analysis/build_ch7_case_capsules_issue_5447.py`) were

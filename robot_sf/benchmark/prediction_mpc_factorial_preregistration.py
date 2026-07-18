@@ -9,15 +9,28 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.hierarchical_paired_release_inputs import (
+    BLOCKED_MISSING_SUCCESSOR_ROWS,
+    evaluate_hierarchical_paired_release_inputs,
+    load_hierarchical_paired_release_input_manifest,
+)
 from robot_sf.planner.prediction_mpc import (
     PredictionMPCPlannerAdapter,
     build_prediction_mpc_config,
+)
+
+# The issue #5351 analysis input-gate delivered by #5776: a tracked manifest plus
+# the checker module that evaluates it. The factorial readiness gate verifies this
+# input contract is present, then separately checks whether the successor-release
+# rows the analysis consumes actually exist (they do not until #4364 publishes them).
+DEFAULT_HIERARCHICAL_INPUT_MANIFEST_RELATIVE_PATH = (
+    "configs/benchmarks/releases/hierarchical_paired_release_analysis_issue_5351.yaml"
 )
 
 SCHEMA_VERSION = "robot_sf.issue_5355_prediction_mpc_factorial_preregistration.v1"
@@ -347,6 +360,38 @@ def _readiness_dependency_blockers(dependencies: Any) -> list[str]:
     return blockers
 
 
+def _record_hierarchical_input_gate_criterion(
+    record: Callable[[str, bool, str], None],
+) -> None:
+    """Record the issue #5351 analysis input-gate reconciliation criterion.
+
+    The #5776 input-gate deliverable is verified present; the still-missing #4364
+    successor-release rows keep this criterion fail-closed.
+
+    Args:
+        record: The gate's ``_record(name, ok, detail)`` callback.
+    """
+
+    # The config may be an override or a temporary test fixture, so it cannot
+    # safely locate the checkout. This module has a stable repository location.
+    repo_root = Path(__file__).resolve().parents[2]
+    gate = assess_hierarchical_input_gate(repo_root)
+    if not gate["input_gate_delivered"]:
+        record("hierarchical_input_gate_reconciled", False, gate["detail"])
+    elif gate["input_gate_status"] == BLOCKED_MISSING_SUCCESSOR_ROWS:
+        record(
+            "hierarchical_input_gate_reconciled",
+            False,
+            f"{gate['detail']}; successor-release rows absent (blocker: #4364)",
+        )
+    else:
+        record(
+            "hierarchical_input_gate_reconciled",
+            True,
+            f"{gate['detail']}; successor-release rows present",
+        )
+
+
 def assess_campaign_readiness(
     config_path: str | Path,
     *,
@@ -426,6 +471,14 @@ def assess_campaign_readiness(
     else:
         _record("dependencies_resolved", False, "skipped: preregistration config invalid")
 
+    # Criterion 5: the issue #5351 analysis input-gate delivered by #5776 is
+    # present and evaluates the input contract, and the #4364 successor-release
+    # rows it consumes actually exist. The input-gate deliverable is verified; the
+    # still-missing analysis rows keep the gate fail-closed. PR #5776 removed the
+    # cheap-lane blocker for the input contract while the analysis data stays
+    # pending on #4364.
+    _record_hierarchical_input_gate_criterion(_record)
+
     return {
         "schema_version": "robot_sf.issue_5355_prediction_mpc_factorial_readiness.v1",
         "issue": 5355,
@@ -438,6 +491,75 @@ def assess_campaign_readiness(
             "GPU/Slurm submission is authorized by a ready verdict."
         ),
     }
+
+
+def assess_hierarchical_input_gate(
+    repo_root: str | Path,
+    *,
+    manifest_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Reconcile the issue #5351 analysis input-gate delivered by #5776.
+
+    The hierarchical paired analysis (#5351) is downstream of the #4364 successor
+    release. PR #5776 landed the *input contract* for that analysis — a tracked
+    manifest plus the fail-closed checker that evaluates it. This function verifies
+    that input-gate deliverable is present and importable, and captures the frozen
+    input-gate evaluation so the #5355 readiness receipt records achieved progress
+    without fabricating unavailable analysis data.
+
+    The gate passes when the #5776 manifest and checker are present and evaluate the
+    input contract deterministically. It intentionally does **not** pass on the
+    missing successor-release rows: those remain the #5351 analysis blocker, and are
+    surfaced separately by :data:`HIERARCHICAL_INPUT_GATE_BLOCKER` when absent.
+
+    Returns:
+        Reconciliation report: ``input_gate_delivered`` bool, the ``input_gate_status``
+        string from the #5776 evaluation, ``claim_boundary``, and ``detail``.
+    """
+
+    root = Path(repo_root).resolve()
+    if manifest_path is None:
+        manifest = _resolve_existing_path(
+            DEFAULT_HIERARCHICAL_INPUT_MANIFEST_RELATIVE_PATH, config_path=root / "configs"
+        )
+    else:
+        manifest = Path(manifest_path)
+
+    report: dict[str, Any] = {
+        "schema_version": "robot_sf.issue_5355_hierarchical_input_gate_reconciliation.v1",
+        "issue": 5355,
+        "input_gate_issue": 5351,
+        "input_gate_delivered": False,
+        "input_gate_status": "unknown",
+        "claim_boundary": (
+            "Input-contract reconciliation only; no hierarchical analysis has run and no "
+            "benchmark, release, paper, or dissertation claim is supported."
+        ),
+        "detail": "",
+    }
+
+    if not manifest.is_file():
+        report["detail"] = f"#5776 input-gate manifest not found: {manifest}"
+        return report
+
+    try:
+        manifest_data = load_hierarchical_paired_release_input_manifest(manifest)
+        evaluation = evaluate_hierarchical_paired_release_inputs(manifest_data, repo_root=root)
+    except (ValueError, OSError) as exc:
+        report["detail"] = f"#5776 input-gate evaluation failed: {exc}"
+        return report
+
+    report["input_gate_delivered"] = True
+    report["input_gate_status"] = str(evaluation.get("status"))
+    report["detail"] = f"#5776 input-gate present; evaluation status={evaluation.get('status')}"
+    return report
+
+
+# Token the readiness gate uses to record the still-missing #5351 analysis data.
+HIERARCHICAL_INPUT_GATE_BLOCKER = (
+    "hierarchical_input_gate: #5776 input contract delivered but #4364 successor-release "
+    "rows are absent, so the #5351 analysis cannot run"
+)
 
 
 def _check_registry_pinned(config_path: Path, registry_path: str | Path | None) -> tuple[bool, str]:
@@ -589,8 +711,10 @@ def _reject_transient_routing_state(config: Mapping[str, Any]) -> None:
 
 
 __all__ = [
+    "DEFAULT_HIERARCHICAL_INPUT_MANIFEST_RELATIVE_PATH",
     "DEFAULT_REGISTRY_RELATIVE_PATH",
     "EXPECTED_FACTORIAL_ARMS",
+    "HIERARCHICAL_INPUT_GATE_BLOCKER",
     "PAIRING_KEY_FIELDS",
     "RESOLVED_DEPENDENCY_STATES",
     "SCHEMA_VERSION",

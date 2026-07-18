@@ -218,6 +218,29 @@ def test_failed_comparison_only_mode_is_tolerated_when_row_matches() -> None:
     assert report["blockers"] == []
 
 
+def test_current_head_measurement_remains_not_met_for_in_process_candidates() -> None:
+    """Pin the current-main verdict without admitting the faster comparison-only mode."""
+    current_commit = "af54719e0619b81f35e81bf6f80bf72c593e3c2b"
+    evidence = _evidence(
+        current_commit=current_commit,
+        speedups={
+            "dummy": 1.105,
+            "subproc": 2.236,
+            "threaded": 1.015,
+            "threaded_lidar_batch": 0.859,
+        },
+    )
+
+    report = _adjudicate(evidence, current_commit)
+
+    assert report["status"] == "not_met"
+    assert report["acceptance_met"] is False
+    assert report["best_mode"] == "threaded"
+    assert report["best_speedup_vs_baseline"] == pytest.approx(1.015, abs=0.001)
+    assert report["blockers"] == []
+    assert report["source_commit"] == current_commit
+
+
 @pytest.mark.parametrize(
     ("failures", "status", "expected_blocker"),
     [

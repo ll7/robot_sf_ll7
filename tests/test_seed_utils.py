@@ -109,8 +109,8 @@ def test_model_package_preloads_torch_runtime_before_direct_ppo_import():
         version = seed_module.package_version("torch")
     except PackageNotFoundError:
         pytest.skip("Torch is not installed")
-    if sys.version_info[:2] < (3, 12) or not str(version).split("+", 1)[0].startswith("2.13.0"):
-        pytest.skip("the model-import boundary guard only applies to Torch 2.13/Python 3.12+")
+    if sys.version_info[:2] < (3, 11) or not str(version).split("+", 1)[0].startswith("2.13.0"):
+        pytest.skip("the model-import boundary guard only applies to Torch 2.13/Python 3.11+")
     if importlib.util.find_spec("stable_baselines3") is None:
         pytest.skip("Stable-Baselines3 is not installed")
 
@@ -138,7 +138,7 @@ def test_model_package_preloads_torch_runtime_before_direct_ppo_import():
 
 def test_torch_213_runtime_guard_is_limited_to_supported_versions(monkeypatch):
     """Do not disable Torch compilation for unaffected interpreter/version pairs."""
-    monkeypatch.setattr(sys, "version_info", (3, 11))
+    monkeypatch.setattr(sys, "version_info", (3, 10))
     monkeypatch.setattr(seed_module, "package_version", lambda _name: "2.13.0+cpu")
     monkeypatch.setenv("TORCH_COMPILE_DISABLE", "0")
 
@@ -180,15 +180,15 @@ def test_torch_optional_behavior():
         assert rep.has_torch is False
 
 
-def test_torch_213_python312_313_uses_c_level_determinism_setter(monkeypatch):
-    """Avoid Torch 2.13.0's Python 3.12/3.13 Dynamo/Triton import path.
+def test_torch_213_python311_plus_uses_c_level_determinism_setter(monkeypatch):
+    """Avoid Torch 2.13.0's Python 3.11/3.12/3.13 Dynamo/Triton import path.
 
     The real Torch 2.13.0 ``_C._set_deterministic_algorithms`` builtin takes a
     single positional ``enabled`` flag. The double mirrors that exact arity so
     the test fails if the helper regresses to the 2-arg call that raised
     ``TypeError`` under the actual Torch 2.13.0 graph (issue #5556).
     """
-    for py_ver in [(3, 12), (3, 13)]:
+    for py_ver in [(3, 11), (3, 12), (3, 13)]:
         monkeypatch.setattr(sys, "version_info", py_ver)
 
         calls: list[bool] = []
@@ -253,3 +253,50 @@ def test_torch_determinism_reports_unavailable_setter(monkeypatch):
     assert report.to_dict()["seed"] == 11
     assert report.torch_deterministic is None
     assert report.notes == "torch deterministic algorithm flag could not be applied"
+
+
+torch = _import_torch()
+_HAS_CUDA = torch is not None and torch.cuda.is_available()
+requires_cuda = pytest.mark.skipif(
+    not _HAS_CUDA,
+    reason="CUDA device required to exercise the Torch 2.13.0 GPU determinism path (issue #5556)",
+)
+
+
+@requires_cuda
+def test_torch_213_determinism_guard_runs_on_cuda_device():
+    """Exercise the merged Torch 2.13.0 determinism helpers on a real CUDA device.
+
+    This is the remaining Definition-of-DoD item for issue #5556: prove the
+    ``_set_torch_deterministic_algorithms`` C-level path does not segfault and
+    actually enables deterministic algorithms when ``set_global_seed`` runs on a
+    GPU. Skipped when no CUDA device is present, so it stays cheap-lane safe on
+    CPU-only runners (it does not duplicate the mocked CPU-path coverage).
+    """
+    assert torch is not None and torch.cuda.is_available()
+
+    report = set_global_seed(42, deterministic=True)
+    assert report.has_torch is True
+    assert report.torch_deterministic is True
+    # The C-level setter must have flipped the global flag on, not silently no-op'd.
+    assert torch.are_deterministic_algorithms_enabled() is True
+    if hasattr(torch.backends, "cudnn"):
+        assert torch.backends.cudnn.deterministic is True
+
+
+@requires_cuda
+def test_torch_213_cuda_seed_is_reproducible_across_calls():
+    """A seeded CUDA RNG must produce identical tensors across two seeded calls.
+
+    Reproduces the original regression contract (deterministic benchmark RNG) on
+    the GPU without importing the Dynamo/Triton wrapper that segfaulted before the
+    Torch 2.13.0 fix landed.
+    """
+    assert torch is not None
+    set_global_seed(7, deterministic=True)
+    a = torch.randn(4, 4, device="cuda")
+
+    set_global_seed(7, deterministic=True)
+    b = torch.randn(4, 4, device="cuda")
+
+    assert torch.equal(a, b)

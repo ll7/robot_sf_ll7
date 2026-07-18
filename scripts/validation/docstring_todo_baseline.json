@@ -5,42 +5,26 @@
       "occurrences": 0
     },
     "robot_sf": {
-      "files": 11,
-      "occurrences": 174
+      "files": 0,
+      "occurrences": 0
     },
     "scripts": {
-      "files": 32,
-      "occurrences": 753
+      "files": 24,
+      "occurrences": 587
     },
     "tests": {
-      "files": 186,
-      "occurrences": 1290
+      "files": 181,
+      "occurrences": 1254
     }
   },
   "files": {
-    "robot_sf/gym_env/_factory_compat.py": 4,
-    "robot_sf/gym_env/abstract_envs.py": 15,
-    "robot_sf/gym_env/robot_env.py": 2,
-    "robot_sf/ped_ego/unicycle_drive.py": 18,
-    "robot_sf/render/sim_view.py": 7,
-    "robot_sf/sensor/fusion_adapter.py": 9,
-    "robot_sf/sensor/range_sensor.py": 10,
-    "robot_sf/telemetry/progress.py": 67,
-    "robot_sf/telemetry/recommendations.py": 3,
-    "robot_sf/telemetry/run_registry.py": 4,
-    "robot_sf/telemetry/sampler.py": 35,
     "scripts/PPO_training/train_ppo_punish_action.py": 2,
-    "scripts/analyze_feature_extractors.py": 27,
-    "scripts/benchmark02.py": 2,
-    "scripts/benchmark_workers.py": 10,
     "scripts/compare_slow_tests.py": 10,
     "scripts/debug_trained_policy.py": 1,
     "scripts/evaluate.py": 24,
     "scripts/generate_figures.py": 51,
-    "scripts/hparam_opt.py": 36,
     "scripts/multi_extractor_training.py": 75,
     "scripts/perf/baseline_factory_creation.py": 11,
-    "scripts/play_recordings.py": 1,
     "scripts/ranking_table.py": 8,
     "scripts/recompute_snqi_weights.py": 40,
     "scripts/research/compare_ablations.py": 3,
@@ -48,14 +32,12 @@
     "scripts/run_social_navigation_benchmark.py": 8,
     "scripts/scale_svgs_to_50m.py": 2,
     "scripts/snqi_sensitivity_analysis.py": 52,
-    "scripts/snqi_weight_optimization.py": 71,
     "scripts/telemetry/run_perf_tests.py": 26,
     "scripts/tools/analyze_imitation_results.py": 24,
     "scripts/tools/check_artifact_root.py": 16,
     "scripts/tools/compare_training_runs.py": 2,
     "scripts/tools/migrate_artifacts.py": 16,
     "scripts/tools/run_tracker_cli.py": 139,
-    "scripts/training/collect_expert_trajectories.py": 18,
     "scripts/training/train_ppo.py": 11,
     "scripts/training/train_ppo_with_pretrained_policy.py": 6,
     "scripts/validation/performance_smoke_test.py": 26,
@@ -75,7 +57,6 @@
     "tests/benchmark_full/test_integration_adaptive_stop.py": 3,
     "tests/benchmark_full/test_integration_aggregate_effect_sizes.py": 4,
     "tests/benchmark_full/test_integration_effect_sizes_present.py": 2,
-    "tests/benchmark_full/test_integration_performance_smoke.py": 2,
     "tests/benchmark_full/test_integration_precision_report.py": 2,
     "tests/benchmark_full/test_integration_resume.py": 14,
     "tests/benchmark_full/test_integration_smoke_run.py": 3,
@@ -91,17 +72,15 @@
     "tests/classic_interactions/test_seed_determinism.py": 2,
     "tests/classic_interactions/test_smoke_demo.py": 2,
     "tests/classic_interactions/test_summary_schema.py": 2,
-    "tests/conftest.py": 15,
+    "tests/conftest.py": 12,
     "tests/contract/test_multi_extractor_summary_json.py": 2,
     "tests/contract/test_multi_extractor_summary_markdown.py": 2,
     "tests/examples/test_examples_run.py": 13,
-    "tests/factories/test_deprecation_mapping.py": 9,
     "tests/factories/test_factory_import_purity.py": 1,
     "tests/factories/test_factory_logging_enforcement.py": 1,
     "tests/factories/test_incompatible_combinations.py": 5,
     "tests/factories/test_logging_diagnostics.py": 12,
     "tests/factories/test_normalization.py": 6,
-    "tests/factories/test_option_dataclasses_api.py": 9,
     "tests/factories/test_recording_integration.py": 2,
     "tests/fixtures/minimal_manifests/generator.py": 17,
     "tests/integration/test_classic_benchmark_alg_grouping.py": 4,
@@ -126,7 +105,6 @@
     "tests/research/test_schemas.py": 12,
     "tests/research/test_success_criteria.py": 4,
     "tests/robot_env_simple_reward_test.py": 1,
-    "tests/sensor/test_fusion_adapter_merge.py": 7,
     "tests/sensor/test_sensor_registry.py": 12,
     "tests/sim/test_backend_registry.py": 1,
     "tests/sim/test_backend_selector.py": 8,
@@ -142,13 +120,12 @@
     "tests/test_cli_plot_distributions.py": 6,
     "tests/test_cli_plot_distributions_ci.py": 6,
     "tests/test_cli_ranking.py": 6,
-    "tests/test_cli_run.py": 3,
     "tests/test_cli_run_snqi.py": 3,
     "tests/test_cli_run_snqi_from.py": 7,
     "tests/test_cli_run_video.py": 3,
     "tests/test_cli_seed_variance.py": 6,
     "tests/test_cli_snqi_ablation.py": 5,
-    "tests/test_cli_table.py": 6,
+    "tests/test_cli_table.py": 3,
     "tests/test_cli_table_tex.py": 6,
     "tests/test_collision_sanity.py": 2,
     "tests/test_env.py": 2,
@@ -255,7 +232,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 229,
-    "total_occurrences": 2217
+    "files": 205,
+    "total_occurrences": 1841
   }
 }

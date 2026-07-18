@@ -1,0 +1,18 @@
+{
+  "files": [
+    {
+      "path": "baseline_table.csv",
+      "role": "baseline_table"
+    },
+    {
+      "path": "heldout_family_table.csv",
+      "role": "heldout_family_table"
+    },
+    {
+      "path": "transfer_delta.csv",
+      "role": "transfer_delta"
+    }
+  ],
+  "issue": 3078,
+  "schema_version": "package-a-transfer-report-tables-manifest.v1"
+}

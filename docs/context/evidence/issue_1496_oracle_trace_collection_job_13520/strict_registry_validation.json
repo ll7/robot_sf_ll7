@@ -1,0 +1,28 @@
+{
+  "dataset_id": "expert_traj_v1",
+  "retrieval_status": {
+    "evaluation__issue1496_oracle_trace_collection": "resolvable",
+    "train__issue1496_oracle_trace_collection": "resolvable",
+    "validation__issue1496_oracle_trace_collection": "resolvable"
+  },
+  "schema_version": "oracle-trace-uri-registry.v1",
+  "source_manifests": {
+    "evaluation__issue1496_oracle_trace_collection": "private-artifact://oracle-imitation/issue1496/oracle-trace-collection/evaluation/oracle_candidate_trace_manifest.json",
+    "train__issue1496_oracle_trace_collection": "private-artifact://oracle-imitation/issue1496/oracle-trace-collection/train/oracle_candidate_trace_manifest.json",
+    "validation__issue1496_oracle_trace_collection": "private-artifact://oracle-imitation/issue1496/oracle-trace-collection/validation/oracle_candidate_trace_manifest.json"
+  },
+  "splits": {
+    "evaluation": [
+      "evaluation__issue1496_oracle_trace_collection"
+    ],
+    "train": [
+      "train__issue1496_oracle_trace_collection"
+    ],
+    "validation": [
+      "validation__issue1496_oracle_trace_collection"
+    ]
+  },
+  "status": "valid",
+  "trace_count": 3,
+  "training_ready": true
+}

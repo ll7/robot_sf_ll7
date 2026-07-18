@@ -1,5 +1,3 @@
-<!-- AI-GENERATED (robot_sf#5749, 2026-07-16) - NEEDS-REVIEW -->
-
 # Slurm job 13378 frozen-campaign closeout
 
 ## Disposition

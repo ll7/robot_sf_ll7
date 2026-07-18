@@ -1,6 +1,6 @@
 <!-- AI-GENERATED (robot_sf#5602 / robot_sf#5593, 2026-07-17) - NEEDS-REVIEW -->
 
-# Scenario-Evidence Crosswalk Instance: Release 0.0.3 Scenario Matrix
+# Issue #5602 — Scenario-Evidence Crosswalk Instance: Release 0.0.3 Scenario Matrix
 
 Evidence status: **schema/taxonomy join only; no benchmark, ranking, or paper-facing claim.**
 

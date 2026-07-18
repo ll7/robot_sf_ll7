@@ -4544,3 +4544,7 @@ entries:
   status: proposal
   freshness: dated
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5602_scenario_evidence_crosswalk_release_0_0_3_2026-07-17
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

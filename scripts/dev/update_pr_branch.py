@@ -11,12 +11,14 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 # Default gate worktree path used by the concurrent PR gate. When the gate runs
-# in a linked worktree this lets the update guard verify the worktree is intact
-# before requesting a branch update. Override with --gate-worktree-path.
+# in a linked worktree this lets the update guard verify (and recreate from the
+# surviving lease) the worktree is intact before requesting a branch update.
+# Override with --gate-worktree-path.
 DEFAULT_GATE_WORKTREE_PATH = ""
 
 
@@ -76,22 +78,29 @@ def update_pr_branch(
     repo: str,
     expected_head_sha: str,
     gate_worktree_path: str = "",
+    gate_worktree_ttl_hours: float | None = None,
 ) -> dict[str, Any]:
     """Request a branch update only if the live PR head matches the guard.
 
     When ``gate_worktree_path`` is provided, the registered gate worktree is
     verified to still exist before requesting a branch update. A vanished
-    worktree fails closed with the lease cleanup owner reported, so the gate
-    does not die opaquely with ``CreateProcess ... No such file or directory``.
+    worktree is first recreated from the surviving lease (report-only/opt-in
+    semantics) so the gate can resume rather than die opaquely with
+    ``CreateProcess ... No such file or directory``. If the worktree cannot be
+    recovered, the call fails closed with the lease cleanup owner reported and
+    issues no remote branch update.
     """
     if gate_worktree_path:
-        health = _verify_gate_worktree(gate_worktree_path)
+        health = _ensure_gate_worktree(
+            gate_worktree_path,
+            ttl_hours=gate_worktree_ttl_hours,
+        )
         if not health.get("exists", False):
             return {
                 "status": "gate_worktree_missing",
                 "error": (
-                    "Registered gate worktree is missing before branch update; "
-                    f"cleanup owner: {health.get('cleanup_owner') or 'unknown'}"
+                    "Registered gate worktree is missing and could not be recreated "
+                    f"before branch update; cleanup owner: {health.get('cleanup_owner') or 'unknown'}"
                 ),
                 "pr": pr_number,
                 "repo": repo,
@@ -165,32 +174,44 @@ def update_pr_branch(
     }
 
 
-def _verify_gate_worktree(gate_worktree_path: str) -> dict[str, Any]:
-    """Verify the registered gate worktree path exists; report lease cleanup owner.
+def _ensure_gate_worktree(
+    gate_worktree_path: str, *, ttl_hours: float | None = None
+) -> dict[str, Any]:
+    """Verify the registered gate worktree; recreate from a surviving lease if missing.
 
-    Delegates to ``gate_worktree_guard.verify_gate_worktree``. Returns a dict with
+    Delegates to ``gate_worktree_guard.ensure_gate_worktree``. Returns a dict with
     at least ``exists``; when the path is missing but a live lease claims it, the
-    lease owner is reported under ``cleanup_owner``. Failures degrade to
-    ``exists=False, cleanup_owner=None`` so the caller still fails closed.
+    lease owner is reported under ``cleanup_owner`` and the worktree is recreated
+    when possible. Failures degrade to ``exists=False, cleanup_owner=None`` so the
+    caller still fails closed and issues no remote branch update.
     """
     try:
-        from scripts.dev.gate_worktree_guard import verify_gate_worktree
+        repo_root = str(Path(__file__).resolve().parents[2])
+        if repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
+        from scripts.dev.gate_worktree_guard import ensure_gate_worktree
 
-        health = verify_gate_worktree(Path(gate_worktree_path))
-        return {
-            "exists": health.exists,
-            "classification": health.classification,
+        health, recreate = ensure_gate_worktree(Path(gate_worktree_path), ttl_hours=ttl_hours)
+        result = {
+            "exists": health.exists or bool(recreate and recreate.recreated),
+            "classification": (
+                "healthy" if recreate is not None and recreate.recreated else health.classification
+            ),
             "cleanup_owner": health.cleanup_owner,
             "lease_owner": health.lease_owner,
             "lease_pr_number": health.lease_pr_number,
             "lease_gate_id": health.lease_gate_id,
         }
+        if recreate is not None:
+            result["recreated"] = recreate.recreated
+            result["recreate_error"] = recreate.error
+        return result
     except (ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
         return {
             "exists": False,
             "classification": "errored",
             "cleanup_owner": None,
-            "error": f"could not verify gate worktree: {exc}",
+            "error": f"could not verify/recreate gate worktree: {exc}",
         }
 
 
@@ -230,7 +251,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--gate-worktree-path",
         default=DEFAULT_GATE_WORKTREE_PATH,
-        help="Registered gate worktree path to verify before the branch update",
+        help="Registered gate worktree path to verify (and recreate) before the branch update",
+    )
+    parser.add_argument(
+        "--gate-worktree-ttl-hours",
+        type=float,
+        default=None,
+        help="Lease TTL to (re)apply after recreating a missing gate worktree, in hours",
     )
     parser.add_argument("--json", action="store_true", help="emit JSON output")
     args = parser.parse_args(argv)
@@ -252,6 +279,7 @@ def main(argv: list[str] | None = None) -> int:
             repo=repo,
             expected_head_sha=args.expected_head_sha,
             gate_worktree_path=args.gate_worktree_path,
+            gate_worktree_ttl_hours=args.gate_worktree_ttl_hours,
         )
     except FileNotFoundError:
         data = {"status": "error", "error": "gh CLI not found"}

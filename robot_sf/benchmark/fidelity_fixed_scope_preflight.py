@@ -300,7 +300,7 @@ def _check_primary_metric(
         Primary-metric identifiability record.
     """
     ranking = validated["ranking"]
-    primary = str(ranking["metric"])
+    primary = str(ranking["primary_metric"])
     metric_entries = {
         str(entry.get("name")): entry
         for entry in validated["metrics"]

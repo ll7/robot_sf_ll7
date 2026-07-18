@@ -290,6 +290,7 @@
       "hash_without_artifact_path": 6
     },
     "docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07/goal/classic_group_crossing_high_seed24_best/metadata.json": {
+      "dangling_commit": 1,
       "duplicate_campaign_id": 1,
       "missing_config_path": 1,
       "missing_config_sha256": 1
@@ -306,6 +307,10 @@
     "docs/context/evidence/issue_5305_certified_archive/acceptance_report.json": {
       "config_missing_at_commit": 1
     },
+    "docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/preregistration_config_registry.json": {
+      "config_missing_at_commit": 1,
+      "dangling_commit": 1
+    },
     "docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_catalog.yaml": {
       "uncommitted_artifact_missing_location": 5
     },
@@ -321,25 +326,28 @@
       "missing_commit": 1,
       "missing_config_path": 1,
       "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml": {
+      "hash_without_artifact_path": 1
     }
   },
-  "generated_at": "2026-07-17T11:47:37Z",
+  "generated_at": "2026-07-18T04:59:02Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
       "artifact_hash_mismatch": 15,
-      "config_missing_at_commit": 3,
-      "dangling_commit": 10,
+      "config_missing_at_commit": 4,
+      "dangling_commit": 12,
       "duplicate_campaign_id": 6,
-      "hash_without_artifact_path": 84,
+      "hash_without_artifact_path": 85,
       "invalid_sha256": 1,
       "missing_commit": 28,
       "missing_config_path": 49,
       "missing_config_sha256": 53,
       "uncommitted_artifact_missing_location": 158
     },
-    "files_with_findings": 85,
-    "total_findings": 407
+    "files_with_findings": 87,
+    "total_findings": 411
   }
 }

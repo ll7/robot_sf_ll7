@@ -24,6 +24,7 @@ from robot_sf.benchmark.hierarchical_paired_release_analysis import (
     HIERARCHICAL_PAIRED_RELEASE_ANALYSIS_REPORT_SCHEMA,
     AnalysisPolicy,
     HierarchicalPairedReleaseAnalysisError,
+    _paired_mcnemar_p_value,
     build_matched_cells_from_ledger_rows,
     censored_completion_time,
     estimate_paired_effects,
@@ -151,6 +152,27 @@ def test_build_matched_cells_rejects_non_ledger_rows() -> None:
         build_matched_cells_from_ledger_rows([], planner_pair=("alpha", "beta"))
 
 
+def test_build_matched_cells_requires_v2_well_formed_event_blocks() -> None:
+    """Legacy and malformed event blocks cannot turn into false zero outcomes."""
+
+    legacy = _ledger_row(scenario_id="x", seed=1, planner="alpha")
+    legacy["schema_version"] = "EpisodeEventLedger.v1"
+    with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="EpisodeEventLedger.v2"):
+        build_matched_cells_from_ledger_rows([legacy], planner_pair=("alpha", "beta"))
+
+    malformed = _ledger_row(scenario_id="x", seed=1, planner="alpha")
+    malformed["exact_events"] = "not-a-mapping"
+    with pytest.raises(
+        HierarchicalPairedReleaseAnalysisError, match="exact_events must be a mapping"
+    ):
+        build_matched_cells_from_ledger_rows([malformed], planner_pair=("alpha", "beta"))
+
+    missing_near_miss = _ledger_row(scenario_id="x", seed=1, planner="alpha")
+    missing_near_miss["surrogate_events"] = {}
+    with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="near_miss must be a bool"):
+        build_matched_cells_from_ledger_rows([missing_near_miss], planner_pair=("alpha", "beta"))
+
+
 def test_estimate_paired_effects_reports_exact_risk_difference_and_sign() -> None:
     """A constant 4/4 vs 0/4 split yields risk difference +1.0 favouring beta."""
 
@@ -183,6 +205,51 @@ def test_estimate_paired_effects_identical_arms_yield_zero_difference() -> None:
     assert effect.odds_ratio == pytest.approx(1.0)
     # The interval should straddle zero when there is no signal.
     assert effect.risk_difference_ci_low <= 0.0 <= effect.risk_difference_ci_high
+
+
+def test_estimate_paired_effects_uses_consistent_zero_risk_odds_ratio() -> None:
+    """All-zero point and bootstrap odds ratios use the same neutral convention."""
+
+    rows = [
+        _ledger_row(scenario_id=f"scn-{index}", seed=index, planner=planner)
+        for index in range(4)
+        for planner in ("alpha", "beta")
+    ]
+    cells = build_matched_cells_from_ledger_rows(rows, planner_pair=("alpha", "beta"))
+    effect = estimate_paired_effects(
+        cells, outcome="collision", policy=AnalysisPolicy(bootstrap_samples=100, bootstrap_seed=8)
+    )
+
+    assert effect.odds_ratio == pytest.approx(1.0)
+    assert effect.odds_ratio_ci_low == pytest.approx(1.0)
+    assert effect.odds_ratio_ci_high == pytest.approx(1.0)
+
+
+def test_exact_mcnemar_avoids_underflow_for_large_balanced_discordance() -> None:
+    """A large balanced discordant set remains non-significant rather than underflowing."""
+
+    rows: list[dict[str, Any]] = []
+    for index in range(1200):
+        alpha_collision = index < 600
+        rows.extend(
+            (
+                _ledger_row(
+                    scenario_id=f"scn-{index}",
+                    seed=index,
+                    planner="alpha",
+                    collision=alpha_collision,
+                ),
+                _ledger_row(
+                    scenario_id=f"scn-{index}",
+                    seed=index,
+                    planner="beta",
+                    collision=not alpha_collision,
+                ),
+            )
+        )
+    cells = build_matched_cells_from_ledger_rows(rows, planner_pair=("alpha", "beta"))
+
+    assert _paired_mcnemar_p_value(cells, outcome="collision") == pytest.approx(1.0)
 
 
 def test_holm_multiplicity_monotonizes_adjusted_p_values_and_rejects_small() -> None:
@@ -267,7 +334,9 @@ def test_censored_completion_time_treats_timeouts_as_censored() -> None:
     by_planner = {s.planner: s for s in summaries}
     assert by_planner["alpha"].n_censored == 2
     assert by_planner["alpha"].censoring_rate == pytest.approx(0.5)
-    assert by_planner["alpha"].mean_observed <= 20.0
+    assert by_planner["alpha"].n_observed == 2
+    assert by_planner["alpha"].mean_observed == pytest.approx(8.0)
+    assert by_planner["alpha"].median_observed == pytest.approx(8.0)
     assert by_planner["beta"].n_censored == 0
     assert by_planner["beta"].mean_observed == pytest.approx(6.0)
 
@@ -286,6 +355,23 @@ def test_normalized_near_miss_exposure_normalizes_by_exposure_window() -> None:
     assert by_planner["alpha"].normalized_rate == pytest.approx(0.5)
     # beta: 0 near-miss.
     assert by_planner["beta"].normalized_rate == pytest.approx(0.0)
+
+
+def test_exposure_and_completion_time_fallbacks_fail_closed_or_read_metric_values() -> None:
+    """Exposure is required while row-level metric values remain a valid time source."""
+
+    rows = _two_arm_rows()
+    rows[0]["provenance"] = {"exposure": 2.0}
+    rows[0]["metrics"] = {"completion_time": {"value": 7.5}}
+    cells = build_matched_cells_from_ledger_rows(rows, planner_pair=("alpha", "beta"))
+    assert cells[0].completion_time_a == pytest.approx(7.5)
+
+    invalid_exposure = _two_arm_rows()
+    invalid_exposure[0]["provenance"]["exposure"] = 0.0
+    with pytest.raises(
+        HierarchicalPairedReleaseAnalysisError, match="exposure must be a finite positive"
+    ):
+        build_matched_cells_from_ledger_rows(invalid_exposure, planner_pair=("alpha", "beta"))
 
 
 def test_run_analysis_emits_machine_readable_report_with_blocked_claim_gate() -> None:
@@ -323,6 +409,7 @@ def test_run_analysis_emits_machine_readable_report_with_blocked_claim_gate() ->
     conformance = {row["id"]: row["status"] for row in report["protocol_conformance"]}
     assert conformance["paired_effects"] == "delivered_analysis_pending_release_input"
     assert conformance["censored_completion_time"] == "delivered_analysis_pending_release_input"
+    assert conformance["sensitivity_analyses"] == "declared_pending_analysis"
     # Deterministic across runs given the seeded policy.
     again = run_hierarchical_paired_release_analysis(
         _manifest(),
@@ -347,6 +434,48 @@ def test_run_analysis_rejects_empty_rows_and_missing_pairs() -> None:
             successor_rows=[_ledger_row(scenario_id="x", seed=1, planner="gamma")],
             planner_pairs=[("alpha", "beta")],
         )
+    with pytest.raises(
+        HierarchicalPairedReleaseAnalysisError, match="planner_pairs must not be empty"
+    ):
+        run_hierarchical_paired_release_analysis(
+            _manifest(), successor_rows=_two_arm_rows(), planner_pairs=[]
+        )
+    with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="outcomes must not be empty"):
+        run_hierarchical_paired_release_analysis(
+            _manifest(),
+            successor_rows=_two_arm_rows(),
+            planner_pairs=[("alpha", "beta")],
+            outcomes=[],
+        )
+    with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="bootstrap_samples"):
+        run_hierarchical_paired_release_analysis(
+            _manifest(),
+            successor_rows=_two_arm_rows(),
+            planner_pairs=[("alpha", "beta")],
+            policy=AnalysisPolicy(bootstrap_samples=0),
+        )
+
+
+def test_run_analysis_emits_summaries_for_every_planner_pair() -> None:
+    """Every declared pair receives its own completion and exposure summaries."""
+
+    rows = _two_arm_rows()
+    for row in _two_arm_rows():
+        copied = dict(row)
+        copied["planner"] = "gamma" if row["planner"] == "alpha" else "delta"
+        rows.append(copied)
+    report = run_hierarchical_paired_release_analysis(
+        _manifest(),
+        successor_rows=rows,
+        planner_pairs=[("alpha", "beta"), ("gamma", "delta")],
+        horizon=20.0,
+        policy=AnalysisPolicy(bootstrap_samples=100, bootstrap_seed=4),
+    )
+
+    assert len(report["censored_completion_time"]) == 4
+    assert len(report["normalized_near_miss_exposure"]) == 4
+    pairs = {tuple(summary["planner_pair"]) for summary in report["censored_completion_time"]}
+    assert pairs == {("alpha", "beta"), ("gamma", "delta")}
 
 
 def test_fail_closed_analysis_from_manifest_reports_blocked_analysis_not_run() -> None:

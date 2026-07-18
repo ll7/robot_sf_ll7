@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from robot_sf.benchmark.event_ledger import (
-    SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS,
+    EPISODE_EVENT_LEDGER_SCHEMA_VERSION,
 )
 from robot_sf.benchmark.finite_checks import require_finite_scalar
 from robot_sf.benchmark.hierarchical_paired_release_inputs import (
@@ -312,7 +312,7 @@ def estimate_paired_effects(
     risk_b = float(np.mean(outcomes_b))
     odds_a = _empirical_odds(risk_a)
     odds_b = _empirical_odds(risk_b)
-    odds_ratio = odds_a / odds_b if odds_b > 0.0 else 1e6
+    odds_ratio = _odds_ratio(risk_a, risk_b)
     return PairedEffect(
         comparison=comparison,
         n_cells=len(cells),
@@ -419,7 +419,6 @@ def censored_completion_time(
             is_censored = bool(getattr(cell, censored_attr))
             if is_censored:
                 n_censored += 1
-                observed_times.append(min(raw_time, horizon))
             else:
                 observed_times.append(max(min(raw_time, horizon), 0.0))
         observed = np.asarray(observed_times, dtype=np.float64)
@@ -469,8 +468,15 @@ def normalized_near_miss_exposure(
         (cells[0].planner_b, "near_miss_b", "exposure_b"),
     ):
         total_near_miss = sum(int(getattr(cell, miss_attr)) for cell in cells)
-        total_exposure = sum(float(getattr(cell, exposure_attr)) for cell in cells)
-        rate = total_near_miss / total_exposure if total_exposure > 0.0 else 0.0
+        exposures = [float(getattr(cell, exposure_attr)) for cell in cells]
+        if any(not math.isfinite(exposure) or exposure <= 0.0 for exposure in exposures):
+            raise HierarchicalPairedReleaseAnalysisError(
+                f"{planner} has missing, non-finite, or non-positive exposure"
+            )
+        total_exposure = sum(exposures)
+        if not math.isfinite(total_exposure) or total_exposure <= 0.0:
+            raise HierarchicalPairedReleaseAnalysisError(f"{planner} has invalid total exposure")
+        rate = total_near_miss / total_exposure
         summaries.append(
             NearMissExposureSummary(
                 planner=planner,
@@ -567,9 +573,15 @@ def run_hierarchical_paired_release_analysis(
         raise HierarchicalPairedReleaseAnalysisError(
             "cannot run analysis on empty successor row set"
         )
+    if not planner_pairs:
+        raise HierarchicalPairedReleaseAnalysisError("planner_pairs must not be empty")
+    if not outcomes:
+        raise HierarchicalPairedReleaseAnalysisError("outcomes must not be empty")
     paired_effects: list[dict[str, Any]] = []
     multiplicity_inputs: list[float] = []
     multiplicity_labels: list[str] = []
+    completion_summaries: list[dict[str, Any]] | None = [] if horizon is not None else None
+    near_miss_summaries: list[dict[str, Any]] = []
     for pair in planner_pairs:
         cells = build_matched_cells_from_ledger_rows(
             successor_rows, planner_pair=pair, family_of=family_of
@@ -600,6 +612,21 @@ def run_hierarchical_paired_release_analysis(
             )
             multiplicity_inputs.append(p_value)
             multiplicity_labels.append(f"{pair[0]}:{pair[1]}:{outcome}")
+        if horizon is not None:
+            completion_summaries.extend(
+                {
+                    "planner_pair": list(pair),
+                    **_dataclass_to_dict(summary),
+                }
+                for summary in censored_completion_time(cells, horizon=horizon)
+            )
+        near_miss_summaries.extend(
+            {
+                "planner_pair": list(pair),
+                **_dataclass_to_dict(summary),
+            }
+            for summary in normalized_near_miss_exposure(cells, policy=resolved_policy)
+        )
     multiplicity = holm_multiplicity(multiplicity_inputs)
     for label, decision in zip(multiplicity_labels, multiplicity, strict=True):
         paired_effects_with_adj = [
@@ -610,20 +637,6 @@ def run_hierarchical_paired_release_analysis(
         if paired_effects_with_adj:
             paired_effects_with_adj[0]["holm_adjusted_p_value"] = decision.adjusted_p_value
             paired_effects_with_adj[0]["rejected_at_family_wise_alpha"] = decision.rejected
-    first_pair_cells = build_matched_cells_from_ledger_rows(
-        successor_rows, planner_pair=planner_pairs[0], family_of=family_of
-    )
-    completion_summaries: list[dict[str, Any]] | None = None
-    near_miss_summaries: list[dict[str, Any]] | None = None
-    if horizon is not None:
-        completion_summaries = [
-            _dataclass_to_dict(summary)
-            for summary in censored_completion_time(first_pair_cells, horizon=horizon)
-        ]
-    near_miss_summaries = [
-        _dataclass_to_dict(summary)
-        for summary in normalized_near_miss_exposure(first_pair_cells, policy=resolved_policy)
-    ]
     return {
         "schema_version": HIERARCHICAL_PAIRED_RELEASE_ANALYSIS_REPORT_SCHEMA,
         "issue": 5351,
@@ -710,16 +723,33 @@ def _validate_ledger_row(row: Mapping[str, Any], *, index: int) -> None:
             f"successor row[{index}] must be a mapping, got {type(row).__name__}"
         )
     schema = row.get("schema_version")
-    if schema not in SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS:
+    if schema != EPISODE_EVENT_LEDGER_SCHEMA_VERSION:
         raise HierarchicalPairedReleaseAnalysisError(
-            f"successor row[{index}] schema_version must be one of "
-            f"{sorted(SUPPORTED_EVENT_LEDGER_SCHEMA_VERSIONS)}, got {schema!r}"
+            f"successor row[{index}] schema_version must be "
+            f"{EPISODE_EVENT_LEDGER_SCHEMA_VERSION!r}, got {schema!r}"
         )
-    for required in ("scenario_id", "seed", "planner", "exact_events"):
+    for required in ("scenario_id", "seed", "planner", "exact_events", "surrogate_events"):
         if required not in row:
             raise HierarchicalPairedReleaseAnalysisError(
                 f"successor row[{index}] missing required field {required!r}"
             )
+    exact_events = row["exact_events"]
+    if not isinstance(exact_events, Mapping):
+        raise HierarchicalPairedReleaseAnalysisError(
+            f"successor row[{index}] exact_events must be a mapping"
+        )
+    for field in ("collision", "goal_reached", "timeout", "invalid_run"):
+        if not isinstance(exact_events.get(field), bool):
+            raise HierarchicalPairedReleaseAnalysisError(
+                f"successor row[{index}] exact_events.{field} must be a bool"
+            )
+    surrogate_events = row["surrogate_events"]
+    if not isinstance(surrogate_events, Mapping) or not isinstance(
+        surrogate_events.get("near_miss"), bool
+    ):
+        raise HierarchicalPairedReleaseAnalysisError(
+            f"successor row[{index}] surrogate_events.near_miss must be a bool"
+        )
 
 
 def _select_outcome(cells: Sequence[MatchedCell], outcome: str) -> tuple[list[int], list[int]]:
@@ -779,6 +809,10 @@ def _cluster_bootstrap_paired(
         ``(diff_samples, ratio_samples)`` arrays of per-draw risk differences and odds ratios.
     """
 
+    if isinstance(policy.bootstrap_samples, bool) or not isinstance(policy.bootstrap_samples, int):
+        raise HierarchicalPairedReleaseAnalysisError("bootstrap_samples must be a positive integer")
+    if policy.bootstrap_samples <= 0:
+        raise HierarchicalPairedReleaseAnalysisError("bootstrap_samples must be a positive integer")
     a = np.asarray(outcomes_a, dtype=np.float64)
     b = np.asarray(outcomes_b, dtype=np.float64)
     family_blocks = [np.asarray(block, dtype=np.int64) for block in families]
@@ -796,7 +830,7 @@ def _cluster_bootstrap_paired(
         rate_a = float(np.mean(a[indices]))
         rate_b = float(np.mean(b[indices]))
         diff_samples[draw] = rate_a - rate_b
-        ratio_samples[draw] = _empirical_odds(rate_a) / max(_empirical_odds(rate_b), 1e-12)
+        ratio_samples[draw] = _odds_ratio(rate_a, rate_b)
     return diff_samples, ratio_samples
 
 
@@ -834,6 +868,18 @@ def _empirical_odds(rate: float) -> float:
     return clamped / (1.0 - clamped)
 
 
+def _odds_ratio(risk_a: float, risk_b: float) -> float:
+    """Return a finite odds ratio with one shared degenerate-rate convention."""
+
+    odds_a = _empirical_odds(risk_a)
+    odds_b = _empirical_odds(risk_b)
+    if odds_a == 0.0 and odds_b == 0.0:
+        return 1.0
+    if odds_b == 0.0:
+        return 1e6
+    return odds_a / odds_b
+
+
 def _paired_mcnemar_p_value(cells: Sequence[MatchedCell], *, outcome: str) -> float:
     """Exact two-sided McNemar p-value for the discordant paired cells.
 
@@ -865,8 +911,8 @@ def _paired_mcnemar_p_value(cells: Sequence[MatchedCell], *, outcome: str) -> fl
     # Upper-tail probability of observing at least ``larger`` events in one
     # direction under Binomial(discordant, 0.5); double it for the two-sided
     # test and cap at 1.0.
-    upper_tail = sum(
-        math.comb(discordant, k) * (0.5**discordant) for k in range(larger, discordant + 1)
+    upper_tail = sum(math.comb(discordant, k) for k in range(larger, discordant + 1)) / (
+        2**discordant
     )
     return min(1.0, 2.0 * upper_tail)
 
@@ -886,7 +932,7 @@ def _protocol_conformance(
     delivered = {
         "paired_effects": True,
         "hierarchical_intervals": True,
-        "sensitivity_analyses": True,
+        "sensitivity_analyses": False,
         "multiplicity_control": True,
         "practical_effect_reporting": True,
         "censored_completion_time": completion_time_delivered,
@@ -950,7 +996,7 @@ def _completion_time(row: Mapping[str, Any]) -> float:
         candidate = provenance.get("completion_time")
         if isinstance(candidate, (int, float)) and math.isfinite(float(candidate)):
             return max(float(candidate), 0.0)
-    metrics = row.get("metric_definitions")
+    metrics = row.get("metrics")
     if isinstance(metrics, Mapping) and isinstance(metrics.get("completion_time"), Mapping):
         candidate = metrics["completion_time"].get("value")
         if isinstance(candidate, (int, float)) and math.isfinite(float(candidate)):
@@ -961,16 +1007,24 @@ def _completion_time(row: Mapping[str, Any]) -> float:
 def _exposure(row: Mapping[str, Any]) -> float:
     """Read a positive interaction-exposure window from the row's provenance.
 
+    Raises:
+        HierarchicalPairedReleaseAnalysisError: If exposure is absent, non-finite,
+            or not strictly positive.
+
     Returns:
-        The exposure clamped to be non-negative, or ``1.0`` when absent.
+        The validated, strictly positive interaction-exposure value.
     """
 
     provenance = row.get("provenance")
     if isinstance(provenance, Mapping):
         candidate = provenance.get("exposure")
-        if isinstance(candidate, (int, float)) and math.isfinite(float(candidate)):
-            return max(float(candidate), 0.0)
-    return 1.0
+        if isinstance(candidate, (int, float)) and not isinstance(candidate, bool):
+            exposure = float(candidate)
+            if math.isfinite(exposure) and exposure > 0.0:
+                return exposure
+    raise HierarchicalPairedReleaseAnalysisError(
+        "exposure must be a finite positive provenance.exposure value"
+    )
 
 
 def _as_int(value: Any) -> int:

@@ -1,5 +1,5 @@
 {
-  "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for the 359 legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml; remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction. Promote the gate from advisory to blocking by removing continue-on-error in the ratchet CI workflow once the policy has settled.",
+  "description": "Evidence-registry integrity downward ratchet (issue #5275). The ratchet gates on per-file, per-code finding counts: a clean file (absent here) that gains a finding fails, and a tracked file whose per-code count increases fails. The committed baseline is the explicitly-approved grandfathered exclusion policy for legacy findings classified by docs/context/evidence/evidence_registry_dispositions.yaml. Remediate a category and refresh this baseline with `scripts/dev/evidence_registry_ratchet.py --write-baseline` to lock in the reduction; the blocking evidence-registry workflow enforces the ratchet on its configured paths.",
   "findings_by_path": {
     "docs/context/evidence/camera_ready_all_planners_2026-05-04/campaign/campaign_manifest.json": {
       "dangling_commit": 1,
@@ -88,6 +88,9 @@
       "missing_config_path": 1,
       "missing_config_sha256": 1
     },
+    "docs/context/evidence/issue_1496_oracle_trace_collection_job_13520/registration.json": {
+      "hash_without_artifact_path": 1
+    },
     "docs/context/evidence/issue_1554_job_13198_constraints_first_analysis/artifact_inventory.json": {
       "artifact_hash_mismatch": 1,
       "uncommitted_artifact_missing_location": 4
@@ -156,6 +159,14 @@
     },
     "docs/context/evidence/issue_2946_mechanism_figure_pack_2026-06-19/figure_pack_manifest.json": {
       "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/artifact_manifest.yaml": {
+      "artifact_hash_mismatch": 1,
+      "hash_without_artifact_path": 1,
+      "uncommitted_artifact_missing_location": 13
+    },
+    "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/registration.json": {
+      "hash_without_artifact_path": 1
     },
     "docs/context/evidence/issue_3202_ammv_anticipatory_conflict/summary.json": {
       "hash_without_artifact_path": 2
@@ -263,6 +274,14 @@
     "docs/context/evidence/issue_4207_interacting_smoke_2026-07/summary.json": {
       "hash_without_artifact_path": 2
     },
+    "docs/context/evidence/issue_4364_release_0_0_3_post1/artifact_pointer.json": {
+      "hash_without_artifact_path": 3
+    },
+    "docs/context/evidence/issue_4365_job_13378_closeout/summary.json": {
+      "dangling_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
     "docs/context/evidence/issue_4445_ch8_statistics_reproducibility/source_manifest.json": {
       "invalid_sha256": 1,
       "uncommitted_artifact_missing_location": 2
@@ -275,27 +294,55 @@
       "missing_config_path": 1,
       "missing_config_sha256": 1
     },
+    "docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_uncertainty_reissued.json": {
+      "hash_without_artifact_path": 1
+    },
     "docs/context/evidence/issue_5088_braking_authority_sensitivity_smoke/report.json": {
       "hash_without_artifact_path": 2
+    },
+    "docs/context/evidence/issue_5248_salvaged_h600_registration_2026-07/registration.json": {
+      "uncommitted_artifact_missing_location": 2
+    },
+    "docs/context/evidence/issue_5305_certified_archive/acceptance_report.json": {
+      "config_missing_at_commit": 1
+    },
+    "docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_catalog.yaml": {
+      "uncommitted_artifact_missing_location": 5
+    },
+    "docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_summary.json": {
+      "missing_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/ensemble_boundary_demo/campaign_atlas_catalog.yaml": {
+      "uncommitted_artifact_missing_location": 10
+    },
+    "docs/context/evidence/issue_5446_release_0_0_3_candidates/candidate_trace_resolution.v1.with_store.json": {
+      "missing_commit": 1,
+      "missing_config_path": 1,
+      "missing_config_sha256": 1
+    },
+    "docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml": {
+      "hash_without_artifact_path": 1
     }
   },
-  "generated_at": "2026-07-11T08:53:40Z",
+  "generated_at": "2026-07-17T13:22:07Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
-      "artifact_hash_mismatch": 14,
-      "config_missing_at_commit": 2,
-      "dangling_commit": 9,
+      "artifact_hash_mismatch": 15,
+      "config_missing_at_commit": 3,
+      "dangling_commit": 10,
       "duplicate_campaign_id": 6,
-      "hash_without_artifact_path": 77,
+      "hash_without_artifact_path": 85,
       "invalid_sha256": 1,
-      "missing_commit": 26,
-      "missing_config_path": 46,
-      "missing_config_sha256": 50,
-      "uncommitted_artifact_missing_location": 128
+      "missing_commit": 28,
+      "missing_config_path": 49,
+      "missing_config_sha256": 53,
+      "uncommitted_artifact_missing_location": 158
     },
-    "files_with_findings": 73,
-    "total_findings": 359
+    "files_with_findings": 86,
+    "total_findings": 408
   }
 }

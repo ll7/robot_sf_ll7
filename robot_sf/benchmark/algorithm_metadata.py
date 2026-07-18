@@ -78,6 +78,7 @@ _BASELINE_CATEGORY_BY_CANONICAL: dict[str, str] = {
     "chance_constrained_mpc": "classical",
     "learned_prediction_mpc": "learning",
     "sipp_lattice": "classical",
+    "native_command": "diagnostic",
 }
 
 _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
@@ -141,6 +142,7 @@ _POLICY_SEMANTICS_BY_CANONICAL: dict[str, str] = {
     "chance_constrained_mpc": "gmm_chance_constrained_model_predictive_local_planner",
     "learned_prediction_mpc": "learned_short_horizon_prediction_mpc_local_planner",
     "sipp_lattice": "bounded_kinodynamic_state_time_sipp_search_with_commitment",
+    "native_command": "declared_external_native_command_invocation_arm",
 }
 
 _DEFAULT_OBSERVATION_SPEC: dict[str, Any] = {
@@ -1154,6 +1156,20 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
         "projection_documented": True,
         "testing_only_adapter": True,
         "prototype_only": True,
+    },
+    "native_command": {
+        "planner_command_space": "unicycle_vw",
+        "supports_native_commands": True,
+        "supports_adapter_commands": False,
+        "default_execution_mode": "native",
+        "benchmark_command_space": "unicycle_vw",
+        "projection_policy": "declared_native_command_produces_unicycle_vw",
+        "projection_documented": True,
+        "description": (
+            "Runner-side native-command arm (issue #5887): a declared external planner "
+            "binary invoked as a first-class arm via argv+env, with per-step timeout, "
+            "exit-code semantics, and command provenance capture."
+        ),
     },
 }
 

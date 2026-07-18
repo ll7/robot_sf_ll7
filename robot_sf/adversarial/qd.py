@@ -24,13 +24,17 @@ from __future__ import annotations
 import json
 import math
 from dataclasses import dataclass, field
+from itertools import count
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
+
+import yaml
 
 from robot_sf.adversarial.certification import candidate_allowed
 from robot_sf.adversarial.config import (
     CandidateEvaluation,
     CandidateSpec,
+    SearchConfig,
     SearchSpaceConfig,
 )
 from robot_sf.adversarial.io import read_first_jsonl_record
@@ -300,6 +304,52 @@ class QDSearchConfig:
         if self.budget < 1:
             raise ValueError("budget must be >= 1")
 
+    def to_search_config(  # noqa: PLR0913
+        self,
+        *,
+        policy: str,
+        scenario_template: str | Path,
+        output_dir: str | Path,
+        algo_config_path: str | Path | None = None,
+        horizon: int | None = None,
+        dt: float | None = None,
+        workers: int = 1,
+        record_forces: bool = True,
+        benchmark_profile: str = "baseline-safe",
+        snqi_weights_path: str | Path | None = None,
+        snqi_baseline_path: str | Path | None = None,
+    ) -> SearchConfig:
+        """Build the production ``SearchConfig`` needed to evaluate QD candidates.
+
+        The MAP-Elites capability slice keeps the cheap-lane contract (no scenario
+        template / policy), so the production fields required by the real evaluator are
+        supplied here when wiring ``run_map_elites`` to ``production_qd_evaluator``.
+        """
+        search_space_path = Path(output_dir) / "qd_search_space.yaml"
+        search_space_path.parent.mkdir(parents=True, exist_ok=True)
+        search_space_path.write_text(
+            yaml.safe_dump(self.search_space.to_json(), sort_keys=False), encoding="utf-8"
+        )
+        return SearchConfig(
+            policy=policy,
+            scenario_template=Path(scenario_template),
+            search_space_path=search_space_path,
+            search_space=self.search_space,
+            objective=self.objective,
+            output_dir=Path(output_dir),
+            budget=self.budget,
+            seed=self.seed,
+            algo_config_path=Path(algo_config_path) if algo_config_path else None,
+            horizon=horizon,
+            dt=dt,
+            workers=workers,
+            record_forces=record_forces,
+            require_certification=self.require_certification,
+            benchmark_profile=benchmark_profile,
+            snqi_weights_path=Path(snqi_weights_path) if snqi_weights_path else None,
+            snqi_baseline_path=Path(snqi_baseline_path) if snqi_baseline_path else None,
+        )
+
 
 @dataclass(frozen=True)
 class QDSearchResult:
@@ -325,6 +375,7 @@ def run_map_elites(
     evaluator: QDEvaluator,
     certifier: Any | None = None,
     emitters: list[QDEmitter] | None = None,
+    archive: QDArchive | None = None,
 ) -> QDSearchResult:
     """Run a bounded MAP-Elites search over the configured emitters.
 
@@ -337,6 +388,8 @@ def run_map_elites(
         certifier: Optional callable (candidate) -> CertificationStatus; when omitted
             the evaluation's own certification status is used as the gate.
         emitters: Optional list of emitters; defaults to Random + CoordinateRefinement.
+        archive: Optional live archive shared with stateful emitters. Its grid and
+            certification policy must match ``config``.
 
     Returns:
         QDSearchResult with the populated archive and run counters.
@@ -347,7 +400,12 @@ def run_map_elites(
     )
     if not active_emitters:
         raise ValueError("emitters must contain at least one emitter")
-    archive = QDArchive(grid=config.grid, require_certification=config.require_certification)
+    if archive is None:
+        archive = QDArchive(grid=config.grid, require_certification=config.require_certification)
+    elif (
+        archive.grid != config.grid or archive.require_certification != config.require_certification
+    ):
+        raise ValueError("archive grid and certification policy must match QDSearchConfig")
 
     num_evaluated = 0
     num_admitted = 0
@@ -408,6 +466,44 @@ def write_qd_archive(result: QDSearchResult, output_path: str | Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result.to_json(), indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return path
+
+
+def production_qd_evaluator(
+    search_config: SearchConfig,
+    *,
+    candidate_evaluator: Any | None = None,
+    certifier: Any | None = None,
+) -> QDEvaluator:
+    """Adapt the canonical production pipeline to the MAP-Elites ``QDEvaluator`` contract.
+
+    Returns a callable ``(qd_config, candidate) -> CandidateEvaluation`` that runs the
+    real validation -> materialization -> certification -> benchmark-evaluation sequence
+    (``search.production_candidate_evaluator``) for each QD candidate. This wires
+    ``run_map_elites`` to the actual adversarial evaluator instead of an injected stub,
+    which is the first deferred integration item for issue #5308.
+
+    Each candidate is evaluated under ``search_config.output_dir / f"candidate_{index:04d}"``;
+    the internal index advances deterministically per call so QD bundles stay replayable.
+
+    Args:
+        search_config: Production configuration carrying the scenario template, policy,
+            output dir, and all evaluator settings.
+        candidate_evaluator: Optional injected four-argument production evaluator.
+        certifier: Optional injected production certifier.
+    """
+    search_config.validate()
+    from robot_sf.adversarial.search import production_candidate_evaluator  # noqa: PLC0415
+
+    production_step = production_candidate_evaluator(
+        evaluator=candidate_evaluator, certifier=certifier
+    )
+    counter = count()
+
+    def _evaluate(qd_config: QDSearchConfig, candidate: CandidateSpec) -> CandidateEvaluation:
+        index = next(counter)
+        return production_step(search_config, candidate, index)
+
+    return _evaluate
 
 
 @dataclass(frozen=True)
@@ -541,6 +637,7 @@ __all__ = [
     "QDSearchResult",
     "compare_qd_vs_single_objective",
     "default_behavior_descriptor",
+    "production_qd_evaluator",
     "run_map_elites",
     "write_qd_archive",
 ]

@@ -4,6 +4,10 @@ Validates config parsing, toggle behavior, and preregistration harness
 for the prediction on/off x constraint-handling on/off factorial.
 """
 
+# evidence-writer-exempt: every write in this file targets tmp_path fixtures
+# (never docs/context/evidence), so no durable evidence can be produced; they
+# only exercise the fail-closed readiness-gate readers (issue #5903).
+
 from __future__ import annotations
 
 import hashlib
@@ -602,8 +606,9 @@ class TestCampaignReadinessGate:
         assert report["ready"] is False
         assert report["criteria"]["preregistration_config_valid"]["ready"] is False
 
-    def test_ready_when_dependencies_resolved_and_registry_matches(self, tmp_path):
-        """End-to-end ready verdict once the declared dependencies are marked resolved."""
+    def test_resolved_dependencies_pass_but_input_gate_still_blocks(self, tmp_path):
+        """Resolving declared deps clears the dependency criterion, but the #5776
+        input-gate criterion still blocks on the missing #4364 successor-release rows."""
         import hashlib
         import json
 
@@ -632,5 +637,119 @@ class TestCampaignReadinessGate:
         )
 
         report = assess_campaign_readiness(cfg, registry_path=registry)
-        assert report["ready"] is True, report["blockers"]
-        assert all(c["ready"] for c in report["criteria"].values())
+        # Declared dependencies are now resolved...
+        assert report["criteria"]["dependencies_resolved"]["ready"] is True
+        # ...but the campaign is still not ready because the #4364 successor rows
+        # the #5351 analysis consumes are absent.
+        assert report["ready"] is False
+        assert report["criteria"]["hierarchical_input_gate_reconciled"]["ready"] is False
+        assert any("#4364" in blocker for blocker in report["blockers"])
+
+
+class TestHierarchicalInputGateReconciliationIssue5776:
+    """After #5776, the readiness gate verifies the #5351 input contract is delivered.
+
+    The input-gate deliverable (manifest + checker) is present, but the successor-release
+    rows from #4364 are absent, so the gate stays fail-closed with a distinct #4364 blocker.
+    """
+
+    CONFIG_PATH = REPO_ROOT / "configs/research/prediction_mpc_factorial_v1.yaml"
+
+    def test_input_gate_criterion_present_and_reconciled(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        report = assess_campaign_readiness(self.CONFIG_PATH)
+        assert "hierarchical_input_gate_reconciled" in report["criteria"]
+        criterion = report["criteria"]["hierarchical_input_gate_reconciled"]
+        # The #5776 input-gate deliverable is present and evaluates the contract.
+        assert "#5776 input-gate present" in criterion["detail"]
+
+    def test_input_gate_records_missing_successor_rows_blocker(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        report = assess_campaign_readiness(self.CONFIG_PATH)
+        joined = " ".join(report["blockers"])
+        assert "#4364" in joined
+        assert "successor-release rows" in joined
+
+    def test_gate_still_fails_closed_with_input_gate_present(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_campaign_readiness,
+        )
+
+        report = assess_campaign_readiness(self.CONFIG_PATH)
+        assert report["ready"] is False
+        assert report["criteria"]["hierarchical_input_gate_reconciled"]["ready"] is False
+
+    def test_assess_hierarchical_input_gate_function(self):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_hierarchical_input_gate,
+        )
+
+        report = assess_hierarchical_input_gate(REPO_ROOT)
+        assert report["input_gate_delivered"] is True
+        assert report["input_gate_status"] == "blocked_missing_successor_release_rows"
+
+    def test_assess_hierarchical_input_gate_missing_manifest(self, tmp_path):
+        from robot_sf.benchmark.prediction_mpc_factorial_preregistration import (
+            assess_hierarchical_input_gate,
+        )
+
+        report = assess_hierarchical_input_gate(tmp_path, manifest_path=tmp_path / "nope.yaml")
+        assert report["input_gate_delivered"] is False
+        assert "not found" in report["detail"]
+
+
+class TestFreezeReadinessReceipt:
+    """The frozen readiness receipt aggregates the gate and the #5776 input-gate."""
+
+    def test_receipt_records_input_gate_and_remaining_blockers(self, tmp_path):
+        from scripts.validation.freeze_issue_5355_factorial_readiness_receipt import freeze_receipt
+
+        receipt = freeze_receipt(REPO_ROOT)
+        assert receipt["issue"] == 5355
+        assert receipt["ready"] is False
+        assert receipt["hierarchical_input_gate"]["present"] is True
+        assert receipt["hierarchical_input_gate"]["status"] == (
+            "blocked_missing_successor_release_rows"
+        )
+        assert receipt["input_gate_consistent_with_audit"] is True
+        assert receipt["campaign_run_status"] == "not_run"
+        joined = " ".join(receipt["readiness_blockers"])
+        assert "#5351" in joined
+        assert "#4364" in joined
+
+    def test_receipt_writes_deterministic_artifact(self, tmp_path):
+        from scripts.validation.freeze_issue_5355_factorial_readiness_receipt import (
+            RECEIPT_RELATIVE_PATH,
+            freeze_receipt,
+        )
+
+        receipt = freeze_receipt(REPO_ROOT, config_path=None, input_manifest_path=None)
+        out = tmp_path / RECEIPT_RELATIVE_PATH
+        out.parent.mkdir(parents=True, exist_ok=True)
+        import json
+
+        out.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        assert out.is_file()
+        written = json.loads(out.read_text(encoding="utf-8"))
+        assert written["schema_version"] == "robot_sf.issue_5355_factorial_readiness_receipt.v1"
+        assert written["hierarchical_input_gate"]["present"] is True
+
+    def test_malformed_input_manifest_is_a_structured_blocker(self, tmp_path):
+        from scripts.validation.freeze_issue_5355_factorial_readiness_receipt import freeze_receipt
+
+        manifest = tmp_path / "malformed.yaml"
+        manifest.write_text("successor_release: [", encoding="utf-8")
+
+        receipt = freeze_receipt(REPO_ROOT, input_manifest_path=manifest)
+
+        input_gate = receipt["hierarchical_input_gate"]
+        assert input_gate["present"] is True
+        assert input_gate["status"] == "blocked_invalid_input_manifest"
+        assert "error" in input_gate
+        assert receipt["input_gate_consistent_with_audit"] is False

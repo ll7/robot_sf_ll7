@@ -18,6 +18,8 @@ def sample_zone(
     num_samples: int,
     obstacle_polygons: list[list[Vec2D]] | list[PreparedGeometry] | None = None,
     max_attempts_per_point: int = 20,
+    *,
+    rng: np.random.Generator | None = None,
 ) -> list[Vec2D]:
     """
     Generate random sample points within a triangular zone, avoiding obstacles when provided.
@@ -27,11 +29,14 @@ def sample_zone(
         num_samples: Number of points to sample.
         obstacle_polygons: Optional list of polygon vertex lists to reject points inside.
         max_attempts_per_point: Attempts before giving up per requested sample.
+        rng: Optional deterministic random generator. The legacy global NumPy RNG is used
+            when omitted.
 
     Returns:
         list[Vec2D]: Sampled points that do not intersect obstacles.
     """
     prepared_polygons = prepare_obstacle_polygons(obstacle_polygons or [])
+    rng_local = np.random if rng is None else rng
     a, b, c = zone
     a, b, c = np.array(a), np.array(b), np.array(c)
     vec_ba, vec_bc = a - b, c - b
@@ -44,8 +49,8 @@ def sample_zone(
     while len(samples) < num_samples and attempts < max_attempts:
         remaining = num_samples - len(samples)
         current_batch = max(batch_size, remaining)
-        rel_width = np.random.uniform(0, 1, current_batch)
-        rel_height = np.random.uniform(0, 1, current_batch)
+        rel_width = rng_local.uniform(0, 1, current_batch)
+        rel_height = rng_local.uniform(0, 1, current_batch)
         fold_mask = rel_width + rel_height > 1.0
         rel_width[fold_mask] = 1.0 - rel_width[fold_mask]
         rel_height[fold_mask] = 1.0 - rel_height[fold_mask]

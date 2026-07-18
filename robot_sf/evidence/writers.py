@@ -107,6 +107,53 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(marked_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+REVIEW_SIDECAR_SCHEMA_VERSION = "evidence-review-marker.v1"
+
+
+def write_review_sidecar(
+    artifact_path: Path,
+    *,
+    repo_root: Path | None = None,
+    preserved_exact_bytes: bool = True,
+) -> Path:
+    """Write a ``<artifact>.review.json`` sidecar carrying the review marker.
+
+    Issue #5911: evidence artifacts whose byte-stable content must not be
+    altered (for example a public-projected archive whose committed SHA-256 is
+    recorded elsewhere) cannot carry an inline ``review_marker`` without
+    changing their digest. This writer emits the canonical
+    ``evidence-review-marker.v1`` sidecar next to the artifact so the required
+    ``AI-GENERATED NEEDS-REVIEW`` marker is present via the shared convention
+    without mutating the artifact bytes.
+
+    Args:
+        artifact_path: The evidence artifact the sidecar describes.
+        repo_root: Optional repository root for a repo-relative ``artifact_path``
+            field. Defaults to the current git worktree root.
+        preserved_exact_bytes: Recorded as ``preserved_exact_bytes``; True means
+            the artifact bytes were not modified after hashing.
+
+    Returns:
+        The path of the written sidecar (``<artifact_path>.review.json``).
+    """
+    root = repo_root if repo_root is not None else _repo_root()
+    try:
+        rel = artifact_path.resolve().relative_to(root.resolve())
+        artifact_field = rel.as_posix()
+    except ValueError:
+        artifact_field = artifact_path.name
+    sidecar_path = artifact_path.with_name(artifact_path.name + ".review.json")
+    payload = {
+        "schema_version": REVIEW_SIDECAR_SCHEMA_VERSION,
+        "artifact_path": artifact_field,
+        "artifact_sha256": sha256_file(artifact_path),
+        "review_marker": review_marker_json(),
+        "preserved_exact_bytes": preserved_exact_bytes,
+    }
+    sidecar_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return sidecar_path
+
+
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     """Write CSV rows with review marker header."""
     if not rows:

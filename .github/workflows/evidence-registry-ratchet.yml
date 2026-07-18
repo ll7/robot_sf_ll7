@@ -1,0 +1,74 @@
+name: Evidence-registry ratchet
+
+# Downward ratchet over committed evidence-registry integrity findings (issue #5275).
+# Re-runs `scripts/tools/lint_evidence_registry.py` in report mode, diffs the per-file,
+# per-code finding counts against the committed baseline at
+# `scripts/validation/evidence_registry_baseline.json`, and fails on net-new integrity
+# findings: a clean file (absent from the baseline) that gains a finding, or any per-code
+# count increase. The baseline is the explicitly-approved grandfathered exclusion set; new
+# evidence files must be added to it only through an explicit per-file review recorded in
+# `scripts/validation/evidence_registry_baseline_review.yaml` (issue #5952).
+#
+# Scope boundary: this gate is blocking because the baseline is reconciled and every tracked
+# file has an explicit remediate-or-baseline disposition. A failure means the PR introduced a
+# net-new integrity finding that the baseline does not grandfather; either remediate the
+# finding or refresh the baseline with `evidence_registry_ratchet.py --write-baseline` and
+# record the new file's disposition in evidence_registry_baseline_review.yaml.
+
+on:
+  pull_request:
+    paths:
+      - "docs/context/evidence/**"
+      - "scripts/dev/evidence_registry_ratchet.py"
+      - "scripts/tools/lint_evidence_registry.py"
+      - "scripts/validation/evidence_registry_baseline.json"
+      - "scripts/validation/evidence_registry_baseline_review.yaml"
+      - "docs/context/evidence/evidence_registry_dispositions.yaml"
+      - "docs/context/evidence/evidence_registry_strict_ci_policy.yaml"
+      - "tests/dev/test_evidence_registry_ratchet.py"
+      - ".github/workflows/evidence-registry-ratchet.yml"
+  schedule:
+    - cron: "17 5 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evidence-registry-ratchet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run evidence-registry ratchet
+        id: ratchet
+        run: |
+          mkdir -p output/evidence
+          uv run python scripts/dev/evidence_registry_ratchet.py --check 2>&1 | tee output/evidence/ratchet.log
+
+      - name: Summarize ratchet outcome
+        if: always()
+        run: |
+          printf 'evidence-registry ratchet exit: %s\n' "${{ steps.ratchet.outcome }}"
+          printf 'Committed baseline findings: '
+          python -c "import json;print(json.load(open('scripts/validation/evidence_registry_baseline.json'))['summary']['total_findings'])" || true
+
+      - name: Upload ratchet log
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evidence-registry-ratchet-log
+          path: output/evidence/ratchet.log
+          if-no-files-found: warn

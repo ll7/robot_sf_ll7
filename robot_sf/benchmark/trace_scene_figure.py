@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
 from matplotlib.patches import Polygon
+from matplotlib.patheffects import withStroke
 from matplotlib.transforms import Bbox
 
 from robot_sf.analysis_workbench.simulation_trace_export import (
@@ -57,7 +58,9 @@ _LONG_EPISODE_THRESHOLD_S = 25.0
 _STATIONARY_MARKER_DISPLACEMENT_M = 0.5
 _ZONE_LABEL_SUPPRESSION_RADIUS_M = 2.0
 _LABEL_AXES_MARGIN_PX = 4.0
-_LABEL_COLLISION_PADDING_PX = 1.5
+# Strictly above the figure-QA text-overlap tolerance (2.0 px): two labels that the
+# placement pass considers clear must also be clear for the linter.
+_LABEL_COLLISION_PADDING_PX = 2.5
 _LABEL_LEADER_THRESHOLD_PX = 18.0
 _TELEPORT_STEP_M = (
     3.0  # a walking ped moves <0.3 m/0.1s step; respawns jump ~25 m -> break the line
@@ -883,13 +886,406 @@ def _move_text_in_display_space(text: Any, shift_x: float, shift_y: float) -> No
     text.set_position(transform.inverted().transform(display_position + (shift_x, shift_y)))
 
 
-def _place_scene_annotations(ax: Axes) -> None:
-    """Place scene annotations without label collisions or panel-boundary overflow.
+_ZONE_LABEL_GID = "trace-scene-zone-label"
+_LABEL_LINE_PADDING_PX = 1.0
+_LABEL_MARKER_PADDING_PX = 2.5
 
-    Matplotlib resolves text extents only after a canvas draw. This pass works in display pixels,
-    prioritizes key-frame labels, and tries compact north/east/south/west offsets before larger
-    displacements. Labels that require a substantial move retain their anchor context through a
-    thin leader line.
+
+def _segment_hits_bbox(
+    p0: tuple[float, float],
+    p1: tuple[float, float],
+    bbox: Bbox,
+    tolerance: float,
+) -> bool:
+    """Return True when the display-space segment p0->p1 enters *bbox* (padded).
+
+    Liang-Barsky parametric clipping, mirroring the figure-QA overlap test so the
+    placement pass avoids exactly what the linter would flag.
+    """
+
+    dx = p1[0] - p0[0]
+    dy = p1[1] - p0[1]
+    t_enter, t_exit = 0.0, 1.0
+    for p, q in (
+        (-dx, p0[0] - (bbox.x0 - tolerance)),
+        (dx, (bbox.x1 + tolerance) - p0[0]),
+        (-dy, p0[1] - (bbox.y0 - tolerance)),
+        (dy, (bbox.y1 + tolerance) - p0[1]),
+    ):
+        if abs(p) < 1e-12:
+            if q < 0:
+                return False
+        else:
+            t = q / p
+            if p < 0:
+                t_enter = max(t_enter, t)
+            else:
+                t_exit = min(t_exit, t)
+            if t_enter > t_exit:
+                return False
+    return True
+
+
+def _polyline_hits_bbox(points: np.ndarray, bbox: Bbox, tolerance: float) -> bool:
+    """Return True when any segment of a display-space polyline enters *bbox*.
+
+    A vectorized same-side rejection prunes segments that cannot intersect before
+    the exact per-segment test runs on the survivors.
+    """
+
+    if len(points) < 2:
+        return False
+    x0, y0 = points[:-1, 0], points[:-1, 1]
+    x1, y1 = points[1:, 0], points[1:, 1]
+    left = bbox.x0 - tolerance
+    right = bbox.x1 + tolerance
+    bottom = bbox.y0 - tolerance
+    top = bbox.y1 + tolerance
+    outside = (
+        ((x0 < left) & (x1 < left))
+        | ((x0 > right) & (x1 > right))
+        | ((y0 < bottom) & (y1 < bottom))
+        | ((y0 > top) & (y1 > top))
+    )
+    candidate_indices = np.nonzero(~outside)[0]
+    return any(
+        _segment_hits_bbox(
+            (float(x0[index]), float(y0[index])),
+            (float(x1[index]), float(y1[index])),
+            bbox,
+            tolerance,
+        )
+        for index in candidate_indices
+    )
+
+
+def _finite_polyline_runs(xdata: Any, ydata: Any) -> list[np.ndarray]:
+    """Return contiguous finite ``(x, y)`` runs with at least two points.
+
+    Non-finite points split a line instead of being dropped and bridging the
+    surrounding finite points with an artificial obstacle segment.
+    """
+    x = np.ma.asarray(xdata, dtype=float).filled(np.nan).reshape(-1)
+    y = np.ma.asarray(ydata, dtype=float).filled(np.nan).reshape(-1)
+    if x.shape != y.shape or x.size < 2:
+        return []
+    finite = np.isfinite(x) & np.isfinite(y)
+    transitions = np.flatnonzero(np.diff(np.concatenate(([False], finite, [False]))))
+    return [
+        np.column_stack((x[start:end], y[start:end]))
+        for start, end in zip(transitions[::2], transitions[1::2], strict=True)
+        if end - start >= 2
+    ]
+
+
+def _collect_line_obstacles(ax: Axes) -> list[np.ndarray]:
+    """Collect display-space polylines of the visible data lines and zone outlines.
+
+    Besides trajectory/reference ``Line2D`` artists, the outlines of unfilled polygons
+    (start/goal zone rectangles) count as obstacles so labels do not straddle a zone
+    border.
+
+    Returns:
+        list[np.ndarray]: One (N, 2) display-space point array per polyline.
+    """
+
+    polylines: list[np.ndarray] = []
+    for child in ax.get_children():
+        if not child.get_visible():
+            continue
+        if isinstance(child, Line2D):
+            for run in _finite_polyline_runs(child.get_xdata(), child.get_ydata()):
+                polylines.append(child.get_transform().transform(run))
+        elif isinstance(child, Polygon) and not child.get_fill():
+            vertices = np.ma.asarray(child.get_xy(), dtype=float).filled(np.nan)
+            for run in _finite_polyline_runs(vertices[:, 0], vertices[:, 1]):
+                polylines.append(child.get_transform().transform(run))
+    return polylines
+
+
+def _collect_marker_obstacles(ax: Axes) -> np.ndarray:
+    """Collect display-space marker points (scatter offsets + point markers).
+
+    Returns:
+        np.ndarray: (N, 2) display-space marker positions.
+    """
+
+    from matplotlib.collections import PathCollection  # noqa: PLC0415
+
+    points: list[np.ndarray] = []
+    for child in ax.get_children():
+        if isinstance(child, PathCollection) and child.get_visible():
+            offsets = np.ma.asarray(child.get_offsets(), dtype=float).filled(np.nan)
+            if offsets.size:
+                finite_offsets = offsets[np.all(np.isfinite(offsets), axis=1)]
+                if finite_offsets.size:
+                    points.append(child.get_offset_transform().transform(finite_offsets))
+        elif (
+            isinstance(child, Line2D)
+            and child.get_visible()
+            and child.get_marker() not in (None, "None", "none", "")
+        ):
+            xdata = np.ma.asarray(child.get_xdata(), dtype=float).filled(np.nan).reshape(-1)
+            ydata = np.ma.asarray(child.get_ydata(), dtype=float).filled(np.nan).reshape(-1)
+            if xdata.shape != ydata.shape:
+                continue
+            finite = np.isfinite(xdata) & np.isfinite(ydata)
+            if finite.any():
+                marker_data = np.column_stack((xdata[finite], ydata[finite]))
+                points.append(child.get_transform().transform(marker_data))
+    if not points:
+        return np.empty((0, 2))
+    return np.vstack(points)
+
+
+def _bbox_contains_markers(bbox: Bbox, markers: np.ndarray, tolerance: float) -> bool:
+    if markers.size == 0:
+        return False
+    inside = (
+        (markers[:, 0] >= bbox.x0 - tolerance)
+        & (markers[:, 0] <= bbox.x1 + tolerance)
+        & (markers[:, 1] >= bbox.y0 - tolerance)
+        & (markers[:, 1] <= bbox.y1 + tolerance)
+    )
+    return bool(inside.any())
+
+
+def _count_bbox_line_hits(
+    bbox: Bbox,
+    line_obstacles: Sequence[np.ndarray],
+    leader_segments: Sequence[tuple[tuple[float, float], tuple[float, float]]],
+) -> int:
+    """Count line/leader obstacles crossing a candidate label bbox.
+
+    Returns:
+        int: Number of crossing polylines (0 means the position is clean).
+    """
+
+    hits = sum(
+        _polyline_hits_bbox(polyline, bbox, _LABEL_LINE_PADDING_PX) for polyline in line_obstacles
+    )
+    hits += sum(
+        _segment_hits_bbox(p0, p1, bbox, _LABEL_LINE_PADDING_PX) for p0, p1 in leader_segments
+    )
+    return hits
+
+
+#: Escape rings for the placement search: radii in screen-design px (scaled by the
+#: label-density factor but capped against the panel size so labels are not flung
+#: to the panel border on small print canvases), eight compass directions each.
+_CANDIDATE_RING_RADII_PX = (6.0, 12.0, 24.0, 40.0, 56.0, 80.0, 110.0)
+_CANDIDATE_RING_DIRECTIONS = (
+    (0.0, 1.0),
+    (1.0, 0.0),
+    (0.0, -1.0),
+    (-1.0, 0.0),
+    (0.7071, 0.7071),
+    (0.7071, -0.7071),
+    (-0.7071, -0.7071),
+    (-0.7071, 0.7071),
+)
+_MAX_OFFSET_PANEL_FRACTION = 0.42
+
+
+def _candidate_shifts(
+    offset_scale: float, max_offset_x_px: float, max_offset_y_px: float
+) -> tuple[tuple[float, float], ...]:
+    """Build the ordered, deduplicated candidate offset list for one panel.
+
+    Offsets are capped per axis (a tall, narrow panel allows longer vertical than
+    horizontal escapes), preserving the nearest-first search order.
+
+    Returns:
+        tuple[tuple[float, float], ...]: Display-space (dx, dy) candidates, nearest first.
+    """
+
+    shifts: list[tuple[float, float]] = [(0.0, 0.0)]
+    seen = {(0.0, 0.0)}
+    for radius in _CANDIDATE_RING_RADII_PX:
+        effective = radius * offset_scale
+        for direction_x, direction_y in _CANDIDATE_RING_DIRECTIONS:
+            shift_x = direction_x * effective
+            shift_y = direction_y * effective
+            shift = (
+                round(math.copysign(min(abs(shift_x), max_offset_x_px), shift_x), 1),
+                round(math.copysign(min(abs(shift_y), max_offset_y_px), shift_y), 1),
+            )
+            if shift not in seen:
+                seen.add(shift)
+                shifts.append(shift)
+    return tuple(shifts)
+
+
+def _trim_leader_end(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    bbox: Bbox,
+    gap_px: float = 2.0,
+) -> tuple[float, float]:
+    """Shorten a leader line so it stops just short of the label bbox it points to.
+
+    A leader drawn to the bbox CENTER always crosses the label's own glyphs; ending it
+    at the padded bbox boundary keeps the pointer readable and lint-clean.
+
+    Returns:
+        tuple[float, float]: The trimmed end point in display space.
+    """
+
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    padded = bbox.padded(gap_px)
+    t_entry = 0.0
+    for p, q in (
+        (-dx, start[0] - padded.x0),
+        (dx, padded.x1 - start[0]),
+        (-dy, start[1] - padded.y0),
+        (dy, padded.y1 - start[1]),
+    ):
+        if abs(p) > 1e-12 and p < 0:
+            t_entry = max(t_entry, q / p)
+    t_entry = min(max(t_entry, 0.0), 1.0)
+    return (start[0] + t_entry * dx, start[1] + t_entry * dy)
+
+
+def _leader_crosses_labels(
+    p0: tuple[float, float],
+    p1: tuple[float, float],
+    label_bboxes: Sequence[Bbox],
+) -> int:
+    """Count already-placed labels a prospective leader line would cross.
+
+    Returns:
+        int: Number of label bboxes the segment enters (endpoints trimmed slightly
+        so touching its own label edge does not count).
+    """
+
+    dx, dy = p1[0] - p0[0], p1[1] - p0[1]
+    trimmed_p0 = (p0[0] + 0.05 * dx, p0[1] + 0.05 * dy)
+    trimmed_p1 = (p1[0] - 0.05 * dx, p1[1] - 0.05 * dy)
+    return sum(_segment_hits_bbox(trimmed_p0, trimmed_p1, bbox, 0.0) for bbox in label_bboxes)
+
+
+@dataclass
+class _PlacementObstacles:
+    """Mutable obstacle state shared across one annotation-placement pass."""
+
+    placed_bboxes: list[Bbox]
+    line_obstacles: list[np.ndarray]
+    leader_segments: list[tuple[tuple[float, float], tuple[float, float]]]
+    marker_obstacles: np.ndarray
+
+
+def _select_label_position(
+    original_bbox: Bbox,
+    original_center: tuple[float, float],
+    candidate_offsets: Sequence[tuple[float, float]],
+    axes_bbox: Bbox,
+    obstacles: _PlacementObstacles,
+    *,
+    avoid_obstacles: bool,
+) -> tuple[float, float, Bbox]:
+    """Pick the best display-space shift for one label.
+
+    Accepts the first (nearest) candidate free of label collisions, obstacle hits,
+    and leader crossings; otherwise falls back to the lowest-cost candidate.
+
+    Returns:
+        tuple[float, float, Bbox]: Chosen (shift_x, shift_y) and the shifted bbox.
+    """
+
+    def _cost(candidate: tuple[float, float, Bbox]) -> tuple[int, int, int, int, float, float]:
+        shift_x, shift_y, bbox = candidate
+        label_collisions = sum(_bboxes_collide(bbox, placed) for placed in obstacles.placed_bboxes)
+        text_overlap = sum(_bbox_overlap_area(bbox, placed) for placed in obstacles.placed_bboxes)
+        marker_hits = 0
+        line_hits = 0
+        if avoid_obstacles:
+            # Markers draw above data lines and can sit under a label, so they get
+            # their own cost tier: worse than a line crossing, but never worth
+            # trading for a label-on-label overlap (the one hard defect class).
+            if _bbox_contains_markers(bbox, obstacles.marker_obstacles, _LABEL_MARKER_PADDING_PX):
+                marker_hits = 1
+            line_hits = _count_bbox_line_hits(
+                bbox, obstacles.line_obstacles, obstacles.leader_segments
+            )
+        leader_crossings = 0
+        if math.hypot(shift_x, shift_y) >= _LABEL_LEADER_THRESHOLD_PX:
+            final_center = (bbox.x0 + bbox.width / 2, bbox.y0 + bbox.height / 2)
+            leader_crossings = _leader_crosses_labels(
+                original_center, final_center, obstacles.placed_bboxes
+            )
+        return (
+            label_collisions,
+            marker_hits,
+            leader_crossings,
+            line_hits,
+            text_overlap,
+            math.hypot(shift_x, shift_y),
+        )
+
+    candidates: list[tuple[float, float, Bbox]] = []
+    for offset_x, offset_y in candidate_offsets:
+        candidate_bbox = _shifted_bbox(original_bbox, offset_x, offset_y)
+        clamp_x, clamp_y = _clamp_bbox_shift(candidate_bbox, axes_bbox)
+        shift_x = offset_x + clamp_x
+        shift_y = offset_y + clamp_y
+        candidates.append((shift_x, shift_y, _shifted_bbox(original_bbox, shift_x, shift_y)))
+
+    best_candidate = candidates[0]
+    best_cost = _cost(best_candidate)
+    for candidate in candidates:
+        cost = _cost(candidate)
+        if cost < best_cost:
+            best_candidate, best_cost = candidate, cost
+        if cost[0] == 0 and cost[1] == 0 and cost[2] == 0 and cost[3] == 0:
+            return candidate
+    return best_candidate
+
+
+def _add_label_leader(
+    ax: Axes,
+    original_center: tuple[float, float],
+    final_bbox: Bbox,
+    leader_segments: list[tuple[tuple[float, float], tuple[float, float]]],
+) -> None:
+    """Draw a thin leader from a label's anchor context to its displaced position."""
+
+    final_center = (
+        final_bbox.x0 + final_bbox.width / 2,
+        final_bbox.y0 + final_bbox.height / 2,
+    )
+    # The leader stops at the label's padded bbox edge: drawn to the bbox
+    # center it would strike through the label's own glyphs.
+    leader_end = _trim_leader_end(original_center, final_center, final_bbox)
+    # Anchor the leader in DATA coordinates: raw display pixels are only valid
+    # at the layout pass's canvas dpi, so a leader kept in display space lands
+    # in the wrong place in the saved PDF (72 dpi) or a high-dpi PNG.
+    data_from_display = ax.transData.inverted().transform
+    original_data = data_from_display(original_center)
+    leader_end_data = data_from_display(leader_end)
+    leader_segments.append((original_center, leader_end))
+    ax.add_line(
+        Line2D(
+            [original_data[0], leader_end_data[0]],
+            [original_data[1], leader_end_data[1]],
+            color=GRAY,
+            linewidth=0.45,
+            alpha=0.65,
+            zorder=6,
+            clip_on=True,
+        )
+    )
+
+
+def _place_scene_annotations(ax: Axes) -> None:
+    """Place scene annotations clear of labels, tracks, markers, and leader lines.
+
+    Matplotlib resolves text extents only after a canvas draw. This pass works in display
+    pixels, prioritizes key-frame labels, and tries compact north/east/south/west offsets
+    before larger displacements. Besides other labels, candidate positions avoid the data
+    lines (trajectories, reference connectors), marker points, and the leader lines drawn
+    for earlier labels, so no annotation text lands on another label or on a track. Labels
+    that require a substantial move retain their anchor context through a thin leader line;
+    a prospective leader that would cross an already-placed label is penalized.
     """
 
     figure = ax.figure
@@ -898,98 +1294,53 @@ def _place_scene_annotations(ax: Axes) -> None:
     axes_bbox = ax.get_window_extent(renderer)
     labels = [text for text in ax.texts if text.get_visible() and text.get_text().strip()]
     labels.sort(key=lambda text: (_scene_label_priority(text.get_text()), ax.texts.index(text)))
+    for text in labels:
+        # Cartography-style white halo, drawn above every data artist: where a dense
+        # scene leaves no fully clear position, the glyphs stay legible over any
+        # track, marker, or reference line instead of being painted over by them.
+        text.set_path_effects([withStroke(linewidth=_fs(2.2), foreground="white", alpha=0.9)])
+        text.set_zorder(11)
+    line_obstacles = _collect_line_obstacles(ax)
+    marker_obstacles = _collect_marker_obstacles(ax)
     placed_bboxes: list[Bbox] = []
+    leader_segments: list[tuple[tuple[float, float], tuple[float, float]]] = []
     # Print layouts search proportionally farther: the same px offset covers a larger
     # fraction of the smaller canvas, but the (font-scaled) labels are also wider in px
-    # relative to it, so the escape distances must grow with the label-density scale.
-    offset_scale = _LABEL_GAP_SCALE
-    candidate_offsets = tuple(
-        (dx * offset_scale, dy * offset_scale)
-        for dx, dy in (
-            (0.0, 0.0),
-            (0.0, 12.0),
-            (12.0, 0.0),
-            (0.0, -12.0),
-            (-12.0, 0.0),
-            (12.0, 12.0),
-            (12.0, -12.0),
-            (-12.0, -12.0),
-            (-12.0, 12.0),
-            (0.0, 24.0),
-            (24.0, 0.0),
-            (0.0, -24.0),
-            (-24.0, 0.0),
-            (24.0, 24.0),
-            (24.0, -24.0),
-            (-24.0, -24.0),
-            (-24.0, 24.0),
-            (0.0, 40.0),
-            (40.0, 0.0),
-            (0.0, -40.0),
-            (-40.0, 0.0),
-        )
+    # relative to it, so the escape distances must grow with the label-density scale --
+    # capped against the panel size so a small print panel cannot fling its labels to
+    # the border.
+    candidate_offsets = _candidate_shifts(
+        _LABEL_GAP_SCALE,
+        _MAX_OFFSET_PANEL_FRACTION * axes_bbox.width,
+        _MAX_OFFSET_PANEL_FRACTION * axes_bbox.height,
     )
 
+    obstacles = _PlacementObstacles(
+        placed_bboxes=placed_bboxes,
+        line_obstacles=line_obstacles,
+        leader_segments=leader_segments,
+        marker_obstacles=marker_obstacles,
+    )
     for text in labels:
         original_bbox = text.get_window_extent(renderer)
-        candidates: list[tuple[float, float, Bbox]] = []
-        for offset_x, offset_y in candidate_offsets:
-            candidate_bbox = _shifted_bbox(original_bbox, offset_x, offset_y)
-            clamp_x, clamp_y = _clamp_bbox_shift(candidate_bbox, axes_bbox)
-            shift_x = offset_x + clamp_x
-            shift_y = offset_y + clamp_y
-            candidates.append((shift_x, shift_y, _shifted_bbox(original_bbox, shift_x, shift_y)))
-
-        collision_free = next(
-            (
-                candidate
-                for candidate in candidates
-                if not any(
-                    _bboxes_collide(candidate[2], placed_bbox) for placed_bbox in placed_bboxes
-                )
-            ),
-            None,
+        original_center = (
+            original_bbox.x0 + original_bbox.width / 2,
+            original_bbox.y0 + original_bbox.height / 2,
         )
-        if collision_free is None:
-            collision_free = min(
-                candidates,
-                key=lambda candidate: (
-                    sum(
-                        _bbox_overlap_area(candidate[2], placed_bbox)
-                        for placed_bbox in placed_bboxes
-                    ),
-                    math.hypot(candidate[0], candidate[1]),
-                ),
-            )
-        shift_x, shift_y, final_bbox = collision_free
+        shift_x, shift_y, final_bbox = _select_label_position(
+            original_bbox,
+            original_center,
+            candidate_offsets,
+            axes_bbox,
+            obstacles,
+            # Zone/corner captions stay anchored to the region they name: they only
+            # take part in label-on-label avoidance, not track/marker avoidance.
+            avoid_obstacles=text.get_gid() != _ZONE_LABEL_GID,
+        )
         _move_text_in_display_space(text, shift_x, shift_y)
         placed_bboxes.append(final_bbox)
         if math.hypot(shift_x, shift_y) >= _LABEL_LEADER_THRESHOLD_PX:
-            original_center = (
-                original_bbox.x0 + original_bbox.width / 2,
-                original_bbox.y0 + original_bbox.height / 2,
-            )
-            final_center = (
-                final_bbox.x0 + final_bbox.width / 2,
-                final_bbox.y0 + final_bbox.height / 2,
-            )
-            # Anchor the leader in DATA coordinates: raw display pixels are only valid
-            # at the layout pass's canvas dpi, so a leader kept in display space lands
-            # in the wrong place in the saved PDF (72 dpi) or a high-dpi PNG.
-            data_from_display = ax.transData.inverted().transform
-            original_data = data_from_display(original_center)
-            final_data = data_from_display(final_center)
-            ax.add_line(
-                Line2D(
-                    [original_data[0], final_data[0]],
-                    [original_data[1], final_data[1]],
-                    color=GRAY,
-                    linewidth=0.45,
-                    alpha=0.65,
-                    zorder=6,
-                    clip_on=True,
-                )
-            )
+            _add_label_leader(ax, original_center, final_bbox, leader_segments)
 
 
 def _draw_robot_time_markers(
@@ -1156,7 +1507,7 @@ def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tu
                 center_y = sum(point[1] for point in vertices) / len(vertices)
                 center = (center_x, center_y)
                 if math.dist(center, marker_point) > _ZONE_LABEL_SUPPRESSION_RADIUS_M:
-                    ax.text(
+                    zone_text = ax.text(
                         center_x,
                         center_y,
                         label,
@@ -1165,6 +1516,7 @@ def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tu
                         ha="center",
                         va="center",
                     )
+                    zone_text.set_gid(_ZONE_LABEL_GID)
                     drawn_label_centers.append(center)
     return drawn_label_centers
 
@@ -1404,7 +1756,7 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
 
     # No scale bar: the axes are labelled in metres with numeric ticks, so it is redundant.
     if pedestrian_selection.filtered_count:
-        ax.text(
+        corner_note = ax.text(
             0.02,
             0.02,
             f"{pedestrian_selection.filtered_count} distant pedestrians not drawn "
@@ -1415,6 +1767,7 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
             fontsize=_fs(11),
             color=GRAY,
         )
+        corner_note.set_gid(_ZONE_LABEL_GID)
     _draw_key_frames(ax, episode)
 
     ax.set_xlim(*limits[0])
@@ -1458,7 +1811,11 @@ def _draw_timeline(
     span = max(upper_data - lower_data, 1.0)
     padding = max(0.5, 0.08 * span)
     ax.set_ylim(0.0, upper_data + padding)  # start the distance axis at 0
-    ax.annotate(
+    # A white glyph halo keeps the reference label legible where the distance/speed
+    # curves or the marker gridlines pass underneath it on narrow print panels,
+    # while the curves stay visible between the letters.
+    reference_label_halo = [withStroke(linewidth=_fs(2.0), foreground="white", alpha=0.9)]
+    envelope_label = ax.annotate(
         f"collision envelope ({collision_envelope_m:g} m)",
         (0.99, collision_envelope_m),
         xycoords=ax.get_yaxis_transform(),
@@ -1469,7 +1826,9 @@ def _draw_timeline(
         fontsize=_fs(11),
         ha="right",
         va="bottom",
+        zorder=4,
     )
+    envelope_label.set_path_effects(reference_label_halo)
     lower_y, upper_y = ax.get_ylim()
     if (
         not math.isclose(comfort_distance_m, collision_envelope_m)
@@ -1486,19 +1845,22 @@ def _draw_timeline(
         )
         # Print layouts drop the label below its line: on a narrow final-size panel the
         # two above-line reference labels would meet mid-panel (text_text_overlap).
+        # The anchor sits a few points right of x=0 so the text clears the y-axis spine.
         below_line = _LABEL_GAP_SCALE > 1.0
-        ax.annotate(
+        comfort_label = ax.annotate(
             "personal space",
-            (0.01, comfort_distance_m),
+            (0.0, comfort_distance_m),
             xycoords=ax.get_yaxis_transform(),
-            xytext=(0, -3) if below_line else (0, 3),
+            xytext=(4, -3) if below_line else (4, 3),
             textcoords="offset points",
             color=GRAY,
             alpha=0.7,
             fontsize=_fs(11),
             ha="left",
             va="top" if below_line else "bottom",
+            zorder=4,
         )
+        comfort_label.set_path_effects(reference_label_halo)
     ax.set_xlabel("time (s)")
     # Print layouts wrap the y-label: the rotated one-line form is taller than the
     # final-size timeline panel and would be clipped at the exact-width canvas edge.

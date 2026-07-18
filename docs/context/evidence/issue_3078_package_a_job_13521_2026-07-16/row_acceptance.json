@@ -1,0 +1,116 @@
+{
+  "cell_count": 6,
+  "episode_count": 18,
+  "expected_head": "9d65072ecd9d04e2f664a4299665dbff718401d9",
+  "fallback_degraded_rows": 0,
+  "identities": [
+    [
+      "classic_station_platform_medium__heldout_cell_301",
+      "goal",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_301",
+      "orca",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_301",
+      "social_force",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_302",
+      "goal",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_302",
+      "orca",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_302",
+      "social_force",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_303",
+      "goal",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_303",
+      "orca",
+      111
+    ],
+    [
+      "classic_station_platform_medium__heldout_cell_303",
+      "social_force",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_240",
+      "goal",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_240",
+      "orca",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_240",
+      "social_force",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_241",
+      "goal",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_241",
+      "orca",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_241",
+      "social_force",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_242",
+      "goal",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_242",
+      "orca",
+      111
+    ],
+    [
+      "francis2023_intersection_wait__heldout_cell_242",
+      "social_force",
+      111
+    ]
+  ],
+  "planners": [
+    "goal",
+    "social_force",
+    "orca"
+  ],
+  "result_store": "private-campaign://job-13521/result_store",
+  "result_store_valid": true,
+  "row_status_counts": {
+    "adapter": 12,
+    "native": 6
+  },
+  "schema_version": "issue3078.heldout_fullpilot_acceptance.v1",
+  "seeds": [
+    111
+  ],
+  "status": "accepted",
+  "synthetic_fixture_used": false,
+  "unique_identity_count": 18
+}

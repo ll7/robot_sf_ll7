@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-15
+updated_at: 2026-07-17
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,26 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/README.md
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/config_sha256.txt
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/provenance_manifest.json
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml
+  status: evidence
+  freshness: dated
+  area: reproducibility
+- path: docs/context/issue_5936_result_job_durability_gate.md
+  status: current
+  freshness: policy
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5792_demo_validation_2026-07-15.md
   status: evidence
   freshness: dated
@@ -93,6 +113,34 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5580_release_0_0_3_snqi_field_consistency/summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/SHA256SUMS.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/artifact_pointer.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/publication_preflight.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/snqi_reconciliation.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_4364_release_0_0_3_post1/collision_reconciliation.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
@@ -3709,6 +3757,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_3556_seed_sufficiency_handoff_2026-07-03/README.md
   status: evidence
   freshness: evidence
@@ -3737,6 +3789,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
   legacy_dirty_evidence: true
+- path: docs/context/evidence/issue_5305_certified_archive
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4328_h600_seed_sufficiency_candidates_2026-07-03/README.md
   status: evidence
   freshness: evidence
@@ -3797,6 +3853,10 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5034_parent_4977_classification_2026-07-16
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_4302_snqi_provenance_terminality_2026-07-04.md
   status: evidence
   freshness: evidence
@@ -3837,6 +3897,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_1496_closure_audit_2026-07-04.md
+  status: evidence
+  freshness: evidence
+  area: training_evidence
+- path: docs/context/evidence/issue_1496_oracle_trace_collection_job_13520
   status: evidence
   freshness: evidence
   area: training_evidence
@@ -4465,6 +4529,10 @@ entries:
   freshness: evidence
   area: workflow_evidence
 - path: docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/preregistration_config_registry.json
+  status: evidence
+  freshness: evidence
+  area: predictive_planner
+- path: docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/issue_5355_factorial_readiness_receipt.json
   status: evidence
   freshness: evidence
   area: predictive_planner

@@ -14,6 +14,7 @@ from robot_sf.ped_npc.ped_grouping import PedestrianGroupings, PedestrianStates
 from robot_sf.ped_npc.ped_zone import sample_zone
 
 if TYPE_CHECKING:
+    import numpy as np
     from shapely.prepared import PreparedGeometry
 
 #: Fail-open release time (seconds) for a proximity hold when no ``hold_timeout_s`` is configured.
@@ -63,6 +64,25 @@ class CrowdedZoneBehavior:
     zone_assignments: dict[int, int]
     crowded_zones: list[Zone]
     goal_proximity_threshold: float = 1
+    obstacle_polygons: list["PreparedGeometry"] | None = None
+    rng: "np.random.Generator | None" = None
+    goal_sample_max_attempts_per_point: int = 20
+
+    def _sample_goal(self, zone: Zone) -> Vec2D:
+        """Sample a zone goal, preserving the legacy call when unconstrained.
+
+        Returns:
+            A sampled goal inside ``zone``.
+        """
+        if self.obstacle_polygons is None and self.rng is None:
+            return sample_zone(zone, 1)[0]
+        return sample_zone(
+            zone,
+            1,
+            obstacle_polygons=self.obstacle_polygons,
+            max_attempts_per_point=self.goal_sample_max_attempts_per_point,
+            rng=self.rng,
+        )[0]
 
     def step(self):
         """
@@ -79,7 +99,7 @@ class CrowdedZoneBehavior:
             if dist_to_goal < self.goal_proximity_threshold:
                 any_pid = next(iter(self.groups.groups[gid]))
                 zone = self.crowded_zones[self.zone_assignments[any_pid]]
-                new_goal = sample_zone(zone, 1)[0]
+                new_goal = self._sample_goal(zone)
                 self.groups.redirect_group(gid, new_goal)
 
     def reset(self):
@@ -92,7 +112,7 @@ class CrowdedZoneBehavior:
         for gid in self.groups.group_ids:
             any_pid = next(iter(self.groups.groups[gid]))
             zone = self.crowded_zones[self.zone_assignments[any_pid]]
-            new_goal = sample_zone(zone, 1)[0]
+            new_goal = self._sample_goal(zone)
             self.groups.redirect_group(gid, new_goal)
 
 

@@ -1,0 +1,18 @@
+{
+  "input_path": "snqi_latency_inputs.csv",
+  "input_schema_version": "control-action-latency-snqi-inputs.v1",
+  "input_sha256": "71b5fda8c8919a43348f134fef1ace8fcc4a6630f6d16e9e425e2425471a4094",
+  "promotion": {
+    "date": "2026-07-17",
+    "description": "Per-episode SNQI-v0 input terms extracted from the job 13516 raw campaign rows for the control_action_latency axis. The raw JSONL is private/non-durable; this checksummed table is the deliberately promoted sufficient input that lets a fresh checkout reproduce the registered SNQI analysis.",
+    "promoter_git_head": "d7e056667729d1bd990fa0161989ca56cea2340e"
+  },
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "control-action-latency-snqi-inputs-provenance.v1",
+  "source": {
+    "axis": "control_action_latency",
+    "kind": "raw_campaign_episode_rows",
+    "raw_rows_path": "/tmp/job13516/episode_rows.jsonl",
+    "raw_rows_sha256": "6b34e690dfe6cc1ccccd9cd19bde8b3f6a3501bbc1b0a0b44639e151557b4134"
+  }
+}

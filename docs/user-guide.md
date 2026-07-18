@@ -10,6 +10,8 @@ internals or research methodology.
 
 ## 1. Install and first run
 
+- [Adoption path](./adoption_path.md) — the shortest install → doctor → demo → examples → recipes
+  → gallery journey.
 - [Quickstart Map](./quickstart.md) — first local checks, install, and one-command demos.
 - [Development Guide](./dev_guide.md#setup) — full `uv sync --all-extras` setup, virtualenv, and
   pre-commit hooks.
@@ -19,6 +21,8 @@ internals or research methodology.
 
 ## 2. Run a demo
 
+- The [Adoption path](./adoption_path.md) shows the complete beginner flow and the claim boundary
+  for its local smoke/inspection artifacts.
 - [Examples Index](../examples/README.md) — quickstart, advanced, benchmark, and plotting workflows.
   + `examples/quickstart/01_basic_robot.py` — minimal robot simulation.
   + `examples/quickstart/02_trained_model.py` — run a trained model.

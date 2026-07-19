@@ -518,6 +518,37 @@ def test_raw_review_comments_artifact_rejects_invalid_repo(tmp_path) -> None:  #
     mock_gh.assert_not_called()
 
 
+def test_main_output_writes_snapshot_without_changing_stdout(
+    tmp_path,
+    capsys,
+) -> None:  # type: ignore[no-untyped-def]
+    """The --output path should receive the same compact payload printed by the CLI."""
+    artifact = tmp_path / "nested" / "snapshot.json"
+    pr_payload = {
+        "number": 2698,
+        "title": "output PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/2698",
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc998",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        rc = main(["--prs", "2698", "--output", str(artifact), "--json"])
+
+    stdout_payload = json.loads(capsys.readouterr().out)
+    artifact_payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert rc == 0
+    assert artifact_payload == stdout_payload
+    assert artifact.read_text(encoding="utf-8").endswith("\n")
+
+
 def test_main_raw_review_artifact_keeps_hunks_out_of_stdout(
     tmp_path,
     capsys,

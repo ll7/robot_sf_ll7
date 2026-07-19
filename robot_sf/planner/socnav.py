@@ -1318,6 +1318,25 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         point: np.ndarray
         direction: np.ndarray
 
+    @dataclass
+    class _Rvo2Scene:
+        """Immutable simulator parameters plus mutable agent state for one ORCA step."""
+
+        time_step: float
+        neighbor_dist: float
+        max_neighbors: int
+        time_horizon: float
+        time_horizon_obst: float
+        robot_radius: float
+        max_speed: float
+        robot_pos: np.ndarray
+        robot_velocity_world: np.ndarray
+        ped_positions: np.ndarray
+        ped_vel_world: np.ndarray
+        ped_radius: float
+        ped_max_speeds: tuple[float, ...]
+        obstacle_vertices: tuple[tuple[tuple[float, float], ...], ...]
+
     _EPS = 1e-6
 
     def __init__(self, config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False):
@@ -1327,6 +1346,10 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self._fallback_warned = False
         self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
         self._bound_static_obstacle_spacing = 0.0
+        self._rvo2_sim: Any | None = None
+        self._rvo2_signature: tuple[Any, ...] | None = None
+        self._rvo2_robot_id: int | None = None
+        self._rvo2_ped_ids: list[int] = []
         self.reset()
 
     def reset(self) -> None:
@@ -1335,13 +1358,25 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self._last_goal_distance: float | None = None
         self._commit_side = 0
         self._commit_side_ttl = 0
+        self._clear_rvo2_simulator()
+
+    def _clear_rvo2_simulator(self) -> None:
+        """Discard cached rvo2 state at an explicit lifecycle boundary."""
+        self._rvo2_sim = None
+        self._rvo2_signature = None
+        self._rvo2_robot_id = None
+        self._rvo2_ped_ids = []
 
     def bind_static_obstacle_points(self, points: Any, *, spacing: float) -> None:
         """Bind sampled exact static obstacle points for use during planning."""
+        previous_points = self._bound_static_obstacle_points
+        previous_spacing = self._bound_static_obstacle_spacing
         arr = np.asarray(points, dtype=float)
         if arr.size == 0:
             self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
             self._bound_static_obstacle_spacing = 0.0
+            if previous_points.size or previous_spacing != 0.0:
+                self._clear_rvo2_simulator()
             return
         if arr.ndim == 1:
             if arr.size % 2 != 0:
@@ -1351,6 +1386,11 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             raise ValueError("Static obstacle points must be convertible to an (N, 2) array.")
         self._bound_static_obstacle_points = np.asarray(arr[:, :2], dtype=float)
         self._bound_static_obstacle_spacing = float(max(spacing, self._EPS))
+        if (
+            not np.array_equal(previous_points, self._bound_static_obstacle_points)
+            or previous_spacing != self._bound_static_obstacle_spacing
+        ):
+            self._clear_rvo2_simulator()
 
     def _extract_bound_static_obstacle_points(
         self,
@@ -2278,6 +2318,69 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             observation=observation,
         )
 
+    def _rvo2_simulator_for(self, scene: _Rvo2Scene) -> tuple[Any, int, list[int]]:
+        """Return a simulator reused only for an identical immutable scene signature."""
+        signature = (
+            scene.time_step,
+            scene.neighbor_dist,
+            scene.max_neighbors,
+            scene.time_horizon,
+            scene.time_horizon_obst,
+            scene.robot_radius,
+            scene.max_speed,
+            len(scene.ped_max_speeds),
+            scene.ped_radius,
+            scene.ped_max_speeds,
+            scene.obstacle_vertices,
+        )
+        if self._rvo2_sim is not None and self._rvo2_signature == signature:
+            assert self._rvo2_robot_id is not None
+            return self._rvo2_sim, self._rvo2_robot_id, self._rvo2_ped_ids
+
+        sim = rvo2.PyRVOSimulator(
+            scene.time_step,
+            scene.neighbor_dist,
+            scene.max_neighbors,
+            scene.time_horizon,
+            scene.time_horizon_obst,
+            scene.robot_radius,
+            scene.max_speed,
+        )
+        robot_id = sim.addAgent(
+            tuple(scene.robot_pos),
+            scene.neighbor_dist,
+            scene.max_neighbors,
+            scene.time_horizon,
+            scene.time_horizon_obst,
+            scene.robot_radius,
+            scene.max_speed,
+            tuple(scene.robot_velocity_world),
+        )
+        ped_ids = []
+        for idx, ped_max_speed in enumerate(scene.ped_max_speeds):
+            ped_ids.append(
+                sim.addAgent(
+                    tuple(scene.ped_positions[idx]),
+                    scene.neighbor_dist,
+                    scene.max_neighbors,
+                    scene.time_horizon,
+                    scene.time_horizon_obst,
+                    scene.ped_radius,
+                    ped_max_speed,
+                    tuple(scene.ped_vel_world[idx]),
+                )
+            )
+        for vertices in scene.obstacle_vertices:
+            sim.addObstacle(list(vertices))
+        if scene.obstacle_vertices:
+            sim.processObstacles()
+
+        self._rvo2_sim = sim
+        self._rvo2_signature = signature
+        self._rvo2_robot_id = robot_id
+        self._rvo2_ped_ids = ped_ids
+        return sim, robot_id, ped_ids
+
     def _rvo2_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame velocity using the rvo2 ORCA solver.
 
@@ -2341,61 +2444,47 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         time_horizon = float(self.config.orca_time_horizon)
         time_horizon_obst = float(self.config.orca_time_horizon_obst)
         max_speed = float(self.config.max_linear_speed)
-
-        sim = rvo2.PyRVOSimulator(
-            time_step,
-            neighbor_dist,
-            max_neighbors,
-            time_horizon,
-            time_horizon_obst,
-            robot_radius,
-            max_speed,
-        )
-        robot_id = sim.addAgent(
-            tuple(robot_pos),
-            neighbor_dist,
-            max_neighbors,
-            time_horizon,
-            time_horizon_obst,
-            robot_radius,
-            max_speed,
-            tuple(robot_velocity_world),
-        )
-
-        ped_ids: list[int] = []
-        for idx in range(ped_count):
-            ped_speed = float(np.linalg.norm(ped_vel_world[idx]))
-            ped_max_speed = max(ped_speed, max_speed)
-            ped_id = sim.addAgent(
-                tuple(ped_positions[idx]),
-                neighbor_dist,
-                max_neighbors,
-                time_horizon,
-                time_horizon_obst,
-                ped_radius,
-                ped_max_speed,
-                tuple(ped_vel_world[idx]),
-            )
-            ped_ids.append(ped_id)
-
         obstacle_positions, obstacle_radii = self._extract_obstacles_from_grid(
             observation, robot_pos, robot_heading
         )
-        if obstacle_positions.size:
-            for center, radius in zip(obstacle_positions, obstacle_radii, strict=False):
-                half = float(radius)
-                vertices = [
-                    (float(center[0] - half), float(center[1] - half)),
-                    (float(center[0] + half), float(center[1] - half)),
-                    (float(center[0] + half), float(center[1] + half)),
-                    (float(center[0] - half), float(center[1] + half)),
-                ]
-                sim.addObstacle(vertices)
-            sim.processObstacles()
+        obstacle_vertices: tuple[tuple[tuple[float, float], ...], ...] = tuple(
+            (
+                (float(center[0] - radius), float(center[1] - radius)),
+                (float(center[0] + radius), float(center[1] - radius)),
+                (float(center[0] + radius), float(center[1] + radius)),
+                (float(center[0] - radius), float(center[1] + radius)),
+            )
+            for center, radius in zip(obstacle_positions, obstacle_radii, strict=False)
+        )
+        ped_max_speeds = tuple(
+            max(float(np.linalg.norm(ped_vel_world[idx])), max_speed) for idx in range(ped_count)
+        )
+        scene = self._Rvo2Scene(
+            time_step=time_step,
+            neighbor_dist=neighbor_dist,
+            max_neighbors=max_neighbors,
+            time_horizon=time_horizon,
+            time_horizon_obst=time_horizon_obst,
+            robot_radius=robot_radius,
+            max_speed=max_speed,
+            robot_pos=robot_pos,
+            robot_velocity_world=robot_velocity_world,
+            ped_positions=ped_positions,
+            ped_vel_world=ped_vel_world,
+            ped_radius=ped_radius,
+            ped_max_speeds=ped_max_speeds,
+            obstacle_vertices=obstacle_vertices,
+        )
+        sim, robot_id, ped_ids = self._rvo2_simulator_for(scene)
 
+        # The cached simulator carries state across doStep(), so reset every mutable agent field.
+        sim.setAgentPosition(robot_id, tuple(robot_pos))
+        sim.setAgentVelocity(robot_id, tuple(robot_velocity_world))
         sim.setAgentPrefVelocity(robot_id, tuple(preferred_velocity_world))
-        for ped_id, vel in zip(ped_ids, ped_vel_world, strict=False):
-            sim.setAgentPrefVelocity(ped_id, tuple(vel))
+        for ped_id, position, velocity in zip(ped_ids, ped_positions, ped_vel_world, strict=False):
+            sim.setAgentPosition(ped_id, tuple(position))
+            sim.setAgentVelocity(ped_id, tuple(velocity))
+            sim.setAgentPrefVelocity(ped_id, tuple(velocity))
 
         sim.doStep()
         new_velocity_world = np.asarray(sim.getAgentVelocity(robot_id), dtype=float)

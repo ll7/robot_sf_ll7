@@ -669,6 +669,97 @@ def test_pr_ready_check_final_mode_preflights_analytics_dependencies(tmp_path: P
     assert "ruff_fix_format" not in result.stderr
 
 
+def test_pr_ready_check_rejects_process_substitution_body_paths(tmp_path: Path) -> None:
+    """Process substitution fails at the wrapper boundary; regular files reach preflight."""
+    repo = tmp_path / "repo"
+    script_dir = repo / "scripts" / "dev"
+    fake_bin = repo / "fake-bin"
+    script_dir.mkdir(parents=True)
+    fake_bin.mkdir()
+
+    for script_name in ("pr_ready_check.sh", "common_setup.sh"):
+        source = ROOT / "scripts" / "dev" / script_name
+        target = script_dir / script_name
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        target.chmod(0o755)
+
+    fake_uv = fake_bin / "uv"
+    fake_uv.write_text(
+        "#!/usr/bin/env bash\necho 'duckdb, pyarrow' >&2\nexit 1\n",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True, text=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.email=agent@example.invalid",
+            "-c",
+            "user.name=Agent",
+            "commit",
+            "-m",
+            "fixture",
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    env = {
+        **os.environ,
+        "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
+        "BASE_REF": "HEAD",
+        "PR_READY_MODE": "final",
+    }
+
+    process_substitution = subprocess.run(
+        [
+            "bash",
+            "-c",
+            'body_source=<(printf "## Summary\\nbody\\n"); PR_READY_PR_BODY_FILE="$body_source" "$1"',
+            "bash",
+            str(script_dir / "pr_ready_check.sh"),
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert process_substitution.returncode == 2
+    assert (
+        "PR_READY_PR_BODY_FILE must name an existing readable regular file"
+        in process_substitution.stderr
+    )
+    assert "Process-substitution paths are not supported" in process_substitution.stderr
+    assert "mktemp" in process_substitution.stderr
+    assert "Final PR readiness requires analytics dependencies" not in process_substitution.stderr
+
+    body_file = tmp_path / "pr-body.md"
+    body_file.write_text("## Summary\nbody\n", encoding="utf-8")
+    regular_file = subprocess.run(
+        [str(script_dir / "pr_ready_check.sh")],
+        cwd=repo,
+        env={**env, "PR_READY_PR_BODY_FILE": str(body_file)},
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert regular_file.returncode == 2
+    assert "Final PR readiness requires analytics dependencies" in regular_file.stderr
+    assert (
+        "PR_READY_PR_BODY_FILE must name an existing readable regular file"
+        not in regular_file.stderr
+    )
+
+
 def test_pr_ready_check_help_long() -> None:
     """pr_ready_check.sh --help prints usage and exits 0."""
     result = subprocess.run(

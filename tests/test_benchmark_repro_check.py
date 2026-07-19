@@ -86,3 +86,24 @@ def test_main_writes_structured_report_before_pipeline_failure_exit(tmp_path: Pa
     assert report["stage"] == "run1.aggregate_validation"
     assert report["error"] == {"missing_metrics": ["collisions"]}
     assert report["reproducible"] is False
+
+
+def test_main_reports_expected_setup_error_with_narrow_handler(tmp_path: Path, monkeypatch):
+    """Expected filesystem setup failures retain the structured-report contract."""
+
+    def fail_setup(**_kwargs) -> None:
+        raise OSError("artifact root unavailable")
+
+    monkeypatch.setattr(MODULE, "REPOSITORY_ROOT", tmp_path)
+    monkeypatch.setattr(MODULE, "ensure_canonical_tree", fail_setup)
+
+    assert MODULE.main() == 1
+
+    report = json.loads(
+        (tmp_path / "output" / "benchmarks" / "reproducibility_check.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert report["status"] == "failed"
+    assert report["stage"] == "setup_or_execution"
+    assert report["error"] == "OSError: artifact root unavailable"

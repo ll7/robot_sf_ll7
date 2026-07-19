@@ -360,7 +360,7 @@ def main():
             )
             print("🎉 Reproducibility check PASSED")
             return 0
-    except Exception as exc:
+    except (KeyError, OSError, TypeError, ValueError) as exc:
         error = f"{type(exc).__name__}: {exc}"
         print(f"❌ Reproducibility check failed during setup or execution: {error}")
         try:
@@ -373,7 +373,7 @@ def main():
                 run1=results1,
                 run2=results2,
             )
-        except Exception as report_exc:
+        except (OSError, TypeError, ValueError) as report_exc:
             print(f"❌ Could not write reproducibility report: {report_exc}")
         return 1
 

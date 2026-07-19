@@ -919,7 +919,7 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
     },
     "hybrid_rule_local_planner": {
         "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
+        "supports_native_commands": True,
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "HybridRuleLocalPlannerAdapter",
@@ -1086,7 +1086,7 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
     },
     "dwa": {
         "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
+        "supports_native_commands": True,
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "DWAPlannerAdapter",
@@ -1097,7 +1097,7 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
     },
     "teb": {
         "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
+        "supports_native_commands": True,
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "TEBCommitmentPlannerAdapter",
@@ -1107,7 +1107,7 @@ _KINEMATICS_PROFILE_BY_CANONICAL: dict[str, dict[str, Any]] = {
     },
     "nmpc_social": {
         "planner_command_space": "unicycle_vw",
-        "supports_native_commands": False,
+        "supports_native_commands": True,
         "supports_adapter_commands": True,
         "default_execution_mode": "adapter",
         "default_adapter_name": "NMPCSocialPlannerAdapter",

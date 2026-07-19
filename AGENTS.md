@@ -100,10 +100,11 @@ common Git dir, symlink the main `local.machine.md` when present, then run
 alone may silently detect and reuse the main checkout's `.venv` without creating one locally,
 leaving `.venv/bin/activate` missing. After sync, verify `.venv/bin/python` exists before
 continuing; if absent, the environment is not usable and the caller must fail closed. Then
-`source .venv/bin/activate` before Python tooling. For quick targeted validation that intentionally
-reuses the main checkout virtualenv, prefer `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`
-so `PYTHONPATH` points at the active worktree. Use a full local `.venv` and final PR readiness for
-merge proof. Do not include CARLA in routine `--all-extras`; opt into `--group carla` only for
+`source .venv/bin/activate` before Python tooling. For quick targeted validation, prefer
+`scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`: it uses an initialized current-worktree
+`.venv` when available, otherwise reuses the main checkout virtualenv, while `PYTHONPATH` points at
+the active worktree. Use a full local `.venv` and final PR readiness for merge proof. Do not include
+CARLA in routine `--all-extras`; opt into `--group carla` only for
 CARLA-capable worktrees and prove runtime with `scripts/dev/check_carla_runtime.sh` when needed.
 
 If the current branch is not `main`, fetch latest `origin/main` and merge it early:

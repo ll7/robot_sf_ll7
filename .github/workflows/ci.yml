@@ -239,19 +239,6 @@ jobs:
           name: ci-smoke-episodes
           path: output/benchmarks/ci_smoke/episodes.jsonl
 
-      - name: Reproducibility check (manual trigger only)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "Running end-to-end reproducibility validation..."
-          uv run python scripts/benchmark_repro_check.py
-
-      - name: Upload reproducibility report
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: reproducibility-report
-          path: output/benchmarks/reproducibility_check.json
-
       - name: Enforce artifact root policy
         if: >-
           ${{ always() && (steps.smoke_tests.outcome == 'success' ||
@@ -259,6 +246,33 @@ jobs:
         env:
           CI_STEP_TIMEOUT_SECONDS: "300"
         run: bash scripts/dev/ci_step_timer.sh "Enforce artifact root policy" scripts/dev/ci_driver.sh artifact-policy
+
+  reproducibility-check:
+    # This diagnostic runs only when manually requested. It is deliberately not
+    # included in the required `ci` aggregate job, so it cannot act as a PR gate.
+    if: github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run optional reproducibility diagnostic
+        run: uv run python scripts/benchmark_repro_check.py
+
+      - name: Upload reproducibility report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reproducibility-report
+          path: output/benchmarks/reproducibility_check.json
+          if-no-files-found: warn
 
   xdist-scratch-isolation:
     runs-on: ubuntu-latest

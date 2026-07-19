@@ -180,7 +180,7 @@ checked.
 
 For quick, targeted checks in a sibling worktree, prefer
 `scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`: it uses an initialized
-current-worktree `.venv` when available, otherwise the main checkout virtualenv, while pinning
+current-worktree `.venv` when available, otherwise the main checkout `.venv`, while pinning
 imports to the current worktree:
 
 ```bash
@@ -193,7 +193,7 @@ scripts/dev/run_worktree_shared_venv.sh --standalone -- \
 The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the selected
 `.venv`, and sets `UV_NO_SYNC=1`. By default it also prepends the worktree root to `PYTHONPATH`.
 This is intended for fast local feedback when dependencies are already current. It should fail if
-the selected virtualenv is missing instead of silently installing into the wrong checkout.
+the selected `.venv` is missing instead of silently installing into the wrong checkout.
 
 Use `--standalone` for a dependency-light command whose tests verify that it does not import
 `robot_sf` or other project packages. This mode still reuses third-party dependencies from the

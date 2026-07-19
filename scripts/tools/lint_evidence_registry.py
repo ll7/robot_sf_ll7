@@ -147,7 +147,12 @@ def _is_tracked(repo_root: Path, repo_path: str) -> bool:
 
 
 def _resolve_repo_path(repo_root: Path, value: str) -> tuple[str, Path] | None:
-    """Normalize a repository-relative artifact path, rejecting URLs and escapes."""
+    """Normalize a repository-root-relative path, rejecting URLs and escapes.
+
+    Manifest path fields are never relative to the manifest or its evidence bundle.
+    A sibling artifact must therefore use its full repository path, such as
+    ``docs/context/evidence/<bundle>/README.md``.
+    """
     if "://" in value or value.startswith("urn:"):
         return None
     candidate = (repo_root / value).resolve()

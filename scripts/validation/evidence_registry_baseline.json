@@ -163,7 +163,6 @@
       "hash_without_artifact_path": 2
     },
     "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/artifact_manifest.yaml": {
-      "artifact_hash_mismatch": 1,
       "hash_without_artifact_path": 1,
       "uncommitted_artifact_missing_location": 13
     },
@@ -338,7 +337,7 @@
   "schema_version": 1,
   "summary": {
     "by_code": {
-      "artifact_hash_mismatch": 15,
+      "artifact_hash_mismatch": 14,
       "config_missing_at_commit": 4,
       "dangling_commit": 17,
       "duplicate_campaign_id": 6,
@@ -350,6 +349,6 @@
       "uncommitted_artifact_missing_location": 158
     },
     "files_with_findings": 87,
-    "total_findings": 416
+    "total_findings": 415
   }
 }

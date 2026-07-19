@@ -122,9 +122,7 @@ def _rasterize_segments(
             fractions = np.clip(np.sum((points - start) * direction, axis=-1) / length_sq, 0, 1)
             projections = start + fractions[..., np.newaxis] * direction
             distance_sq = np.sum((points - projections) ** 2, axis=-1)
-        occupied[row_start : row_stop + 1, col_start : col_stop + 1] |= (
-            distance_sq <= radius_sq
-        )
+        occupied[row_start : row_stop + 1, col_start : col_stop + 1] |= distance_sq <= radius_sq
     return occupied
 
 
@@ -151,9 +149,7 @@ def _occupancy_observation(request: dict[str, Any], config: dict[str, Any]) -> d
         raise RequestError("pedestrian position/velocity counts differ")
     ped_positions = [_vector(value, "pedestrians.positions", 2) for value in positions]
     ped_velocities = [_vector(value, "pedestrians.velocities", 2) for value in velocities]
-    count_values = _vector(
-        pedestrians.get("count", [len(ped_positions)]), "pedestrians.count", 1
-    )
+    count_values = _vector(pedestrians.get("count", [len(ped_positions)]), "pedestrians.count", 1)
     count = int(count_values[0])
     if count < 0 or float(count) != count_values[0] or count > len(ped_positions):
         raise RequestError("pedestrians.count must select available active rows")

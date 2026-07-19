@@ -241,10 +241,7 @@ def _render_request(obs: dict[str, Any], static_geometry: dict[str, Any] | None 
         robot_block = dict(robot_block)
         if "speed" not in robot_block and obs.get("robot_speed") is not None:
             robot_block["speed"] = obs["robot_speed"]
-        if (
-            "angular_velocity" not in robot_block
-            and obs.get("robot_angular_velocity") is not None
-        ):
+        if "angular_velocity" not in robot_block and obs.get("robot_angular_velocity") is not None:
             robot_block["angular_velocity"] = obs["robot_angular_velocity"]
     else:
         pos = obs.get("robot_position")
@@ -851,7 +848,9 @@ def native_command_metadata_for_record(
     run_state = algo_meta.get("_native_run_state")
     if isinstance(run_state, dict) and "deadlock_field" in run_state:
         diagnostics = run_state.get("planner_diagnostics", {})
-        fallback_count = diagnostics.get("fallback_count", 0) if isinstance(diagnostics, dict) else 0
+        fallback_count = (
+            diagnostics.get("fallback_count", 0) if isinstance(diagnostics, dict) else 0
+        )
         fallback_or_degraded = not isinstance(fallback_count, int) or fallback_count != 0
         algo_meta["fallback_or_degraded"] = fallback_or_degraded
         native_metadata = algo_meta.get("native_command")

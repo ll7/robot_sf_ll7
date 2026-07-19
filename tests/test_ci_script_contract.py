@@ -774,7 +774,10 @@ def test_worktree_shared_venv_helper_pins_current_checkout_imports() -> None:
 
     assert 'repo_root="$(git rev-parse --show-toplevel)"' in script_text
     assert 'main_repo_root="$(cd "$git_common_dir/.." && pwd)"' in script_text
-    assert 'venv_path="${venv_override:-$main_repo_root/.venv}"' in script_text
+    assert 'if [[ -n "$venv_override" ]]; then' in script_text
+    assert 'elif [[ -x "$repo_root/.venv/bin/python" ]]; then' in script_text
+    assert 'venv_path="$repo_root/.venv"' in script_text
+    assert 'venv_path="$main_repo_root/.venv"' in script_text
     assert 'export UV_PROJECT_ENVIRONMENT="$venv_path"' in script_text
     assert "export UV_NO_SYNC=1" in script_text
     assert (
@@ -897,7 +900,7 @@ def _make_freshness_fixture_repo(
     """
     repo = tmp_path / "repo"
     fake_bin = repo / "fake-bin"
-    venv = repo / "shared-venv"
+    venv = repo / ".venv"
     site_packages = venv / "lib" / "python3.12" / "site-packages"
     installed_pkg = site_packages / "pysocialforce"
     src_pkg = repo / "fast-pysf" / "pysocialforce"
@@ -913,6 +916,7 @@ def _make_freshness_fixture_repo(
     # Installed copy is whatever the caller passes (matching = fresh, divergent = stale).
     (installed_pkg / "scene.py").write_text(installed_scene, encoding="utf-8")
     (installed_pkg / "__init__.py").write_text("", encoding="utf-8")
+    (repo / ".gitignore").write_text(".venv/\n", encoding="utf-8")
 
     # The helper only checks venv presence via bin/python executability.
     py = venv / "bin" / "python"
@@ -922,6 +926,7 @@ def _make_freshness_fixture_repo(
     fake_uv = fake_bin / "uv"
     fake_uv.write_text(
         '#!/usr/bin/env bash\nprintf "uv-reached %s\\n" "$*" >&2\n'
+        'printf "venv=%s\\n" "${UV_PROJECT_ENVIRONMENT-}" >&2\n'
         'printf "pythonpath=%s\\n" "${PYTHONPATH-}" >&2\nexit 7\n',
         encoding="utf-8",
     )
@@ -1021,6 +1026,78 @@ def test_worktree_shared_venv_freshness_check_passes_on_fresh_env(
     # The freshness gate passes, so the helper reaches the underlying command (fake uv exits 7).
     assert result.returncode == 7
     assert "uv-reached" in result.stderr
+    assert "Shared virtualenv is stale" not in result.stderr
+
+
+def test_worktree_shared_venv_prefers_initialized_local_env(tmp_path: Path) -> None:
+    """A linked worktree selects its usable local env before a stale main env (issue #5984)."""
+    matching_scene = "def normalize_integration_scheme(value=None):\n    return value\n"
+    repo, main_venv, env = _make_freshness_fixture_repo(
+        tmp_path,
+        installed_scene="# stale main install\n",
+    )
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    local_venv = worktree / ".venv"
+    local_site_packages = local_venv / "lib" / "python3.12" / "site-packages" / "pysocialforce"
+    local_site_packages.mkdir(parents=True)
+    (local_venv / "bin").mkdir()
+    local_python = local_venv / "bin" / "python"
+    local_python.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    local_python.chmod(0o755)
+    (local_site_packages / "scene.py").write_text(matching_scene, encoding="utf-8")
+    (local_site_packages / "__init__.py").write_text("", encoding="utf-8")
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert f"venv={local_venv}" in result.stderr
+    assert f"venv={main_venv}" not in result.stderr
+    assert "Shared virtualenv is stale" not in result.stderr
+
+
+def test_worktree_shared_venv_falls_back_to_main_env_without_local_env(tmp_path: Path) -> None:
+    """A linked worktree without an executable local env selects the fresh main env (issue #5984)."""
+    matching_scene = "def normalize_integration_scheme(value=None):\n    return value\n"
+    repo, main_venv, env = _make_freshness_fixture_repo(tmp_path, installed_scene=matching_scene)
+    worktree = tmp_path / "worktree"
+    subprocess.run(
+        ["git", "worktree", "add", "--detach", str(worktree)],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    incomplete_local_venv = worktree / ".venv" / "bin"
+    incomplete_local_venv.mkdir(parents=True)
+    (incomplete_local_venv / "python").write_text("not executable\n", encoding="utf-8")
+
+    result = subprocess.run(
+        [str(RUN_WORKTREE_SHARED_VENV), "--", "python", "-V"],
+        cwd=worktree,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 7
+    assert f"venv={main_venv}" in result.stderr
     assert "Shared virtualenv is stale" not in result.stderr
 
 

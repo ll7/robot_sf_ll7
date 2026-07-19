@@ -109,8 +109,10 @@ presence, so `merge_ready` still requires the intended-design and proof gates be
 
 ## Review Workflow
 
-1. Build queue snapshot with `scripts/dev/snapshot_pr_queue.py` (labels, draft status, checks,
-   head SHA, last update time) before broad `gh pr view` fields.
+1. Build the broad review queue snapshot with
+   `uv run python scripts/dev/snapshot_pr_queue.py --active` (labels, draft status, checks, head
+   SHA, last update time) before broad `gh pr view` fields. For a review already scoped to one PR,
+   use `uv run python scripts/dev/snapshot_pr_queue.py <pr-number>` instead.
 2. Sort/prioritize queue (or follow explicit user order).
 3. For each PR:
    - capture issue link and head SHA,

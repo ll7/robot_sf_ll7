@@ -2454,7 +2454,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
                 (float(center[0] + radius), float(center[1] + radius)),
                 (float(center[0] - radius), float(center[1] + radius)),
             )
-            for center, radius in zip(obstacle_positions, obstacle_radii, strict=False)
+            for center, radius in zip(obstacle_positions, obstacle_radii, strict=True)
         )
         ped_max_speeds = tuple(
             max(float(np.linalg.norm(ped_vel_world[idx])), max_speed) for idx in range(ped_count)
@@ -2481,7 +2481,7 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         sim.setAgentPosition(robot_id, tuple(robot_pos))
         sim.setAgentVelocity(robot_id, tuple(robot_velocity_world))
         sim.setAgentPrefVelocity(robot_id, tuple(preferred_velocity_world))
-        for ped_id, position, velocity in zip(ped_ids, ped_positions, ped_vel_world, strict=False):
+        for ped_id, position, velocity in zip(ped_ids, ped_positions, ped_vel_world, strict=True):
             sim.setAgentPosition(ped_id, tuple(position))
             sim.setAgentVelocity(ped_id, tuple(velocity))
             sim.setAgentPrefVelocity(ped_id, tuple(velocity))

@@ -34,10 +34,12 @@
       "missing_config_sha256": 1
     },
     "docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/nominal_campaign_summary.json": {
+      "dangling_commit": 1,
       "missing_config_path": 1,
       "missing_config_sha256": 1
     },
     "docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/stress_campaign_summary.json": {
+      "dangling_commit": 1,
       "missing_config_path": 1,
       "missing_config_sha256": 1
     },
@@ -63,7 +65,7 @@
     },
     "docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/campaign_manifest.json": {
       "config_missing_at_commit": 1,
-      "dangling_commit": 1,
+      "dangling_commit": 2,
       "duplicate_campaign_id": 1,
       "missing_config_sha256": 1
     },
@@ -76,7 +78,7 @@
       "missing_config_sha256": 1
     },
     "docs/context/evidence/issue_1454_stage_a_fixed_h100_2026-05-22/reports/campaign_analysis.json": {
-      "dangling_commit": 1,
+      "dangling_commit": 2,
       "missing_config_path": 1,
       "missing_config_sha256": 1
     },
@@ -84,7 +86,7 @@
       "hash_without_artifact_path": 4
     },
     "docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/campaign_manifest.json": {
-      "dangling_commit": 1,
+      "dangling_commit": 2,
       "missing_config_path": 1,
       "missing_config_sha256": 1
     },
@@ -331,14 +333,14 @@
       "hash_without_artifact_path": 1
     }
   },
-  "generated_at": "2026-07-18T04:59:02Z",
+  "generated_at": "2026-07-19T07:07:43Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
       "artifact_hash_mismatch": 15,
       "config_missing_at_commit": 4,
-      "dangling_commit": 12,
+      "dangling_commit": 17,
       "duplicate_campaign_id": 6,
       "hash_without_artifact_path": 85,
       "invalid_sha256": 1,
@@ -348,6 +350,6 @@
       "uncommitted_artifact_missing_location": 158
     },
     "files_with_findings": 87,
-    "total_findings": 411
+    "total_findings": 416
   }
 }

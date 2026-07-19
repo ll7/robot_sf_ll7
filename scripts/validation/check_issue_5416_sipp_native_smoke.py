@@ -166,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
             workers=args.workers,
             output_dir=args.output_dir,
         )
-    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError) as exc:
+    except Exception as exc:  # noqa: BLE001 - CLI boundary must emit fail-closed JSON.
         result = {"status": "blocked", "error": str(exc)}
     print(json.dumps(result, sort_keys=True) if args.json else result)
     return 0 if result.get("status") == "ready" else 1

@@ -225,22 +225,16 @@ def test_artifact_manifest_paths_are_repository_root_relative(tmp_path: Path) ->
     manifest_path = evidence / "package" / "artifact_manifest.yaml"
     bundle_hash = hashlib.sha256(bundle_readme.read_bytes()).hexdigest()
     manifest_path.write_text(
-        "files:\n"
-        "  - path: README.md\n"
-        f"    sha256: {bundle_hash}\n",
+        f"files:\n  - path: README.md\n    sha256: {bundle_hash}\n",
         encoding="utf-8",
     )
 
     bare_filename_report = linter.lint_evidence_registry(repo, evidence)
 
-    assert {issue["code"] for issue in bare_filename_report["issues"]} == {
-        "artifact_hash_mismatch"
-    }
+    assert {issue["code"] for issue in bare_filename_report["issues"]} == {"artifact_hash_mismatch"}
 
     manifest_path.write_text(
-        "files:\n"
-        "  - path: docs/context/evidence/package/README.md\n"
-        f"    sha256: {bundle_hash}\n",
+        f"files:\n  - path: docs/context/evidence/package/README.md\n    sha256: {bundle_hash}\n",
         encoding="utf-8",
     )
 

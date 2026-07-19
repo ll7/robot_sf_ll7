@@ -227,7 +227,9 @@ class NativeCommandSpec:
         )
 
 
-def _render_request(obs: dict[str, Any], static_geometry: dict[str, Any] | None = None) -> str:
+def _render_request(  # noqa: C901
+    obs: dict[str, Any], static_geometry: dict[str, Any] | None = None
+) -> str:
     """Render a policy observation as the subprocess request payload.
 
     Returns:
@@ -269,6 +271,11 @@ def _render_request(obs: dict[str, Any], static_geometry: dict[str, Any] | None 
             "next": list(gnext) if _is_sequence(gnext) else None,
         }
     request: dict[str, Any] = {"robot": robot_block, "goal": goal_block}
+    sim_block = obs.get("sim")
+    if isinstance(sim_block, dict):
+        request["sim"] = dict(sim_block)
+    elif obs.get("dt") is not None:
+        request["dt"] = obs["dt"]
     ped = obs.get("pedestrians")
     if isinstance(ped, dict):
         request["pedestrians"] = ped
@@ -292,8 +299,10 @@ def _is_sequence(value: object) -> bool:
     )
 
 
-def _parse_response(text: str) -> tuple[float, float]:
-    """Parse a subprocess response into a ``(linear, angular)`` command pair.
+def _parse_response_payload(
+    text: str,
+) -> tuple[float, float, dict[str, Any] | None]:
+    """Parse a subprocess response and optional geometry-consumption proof.
 
     Returns:
         Linear and angular command parsed from the ``linear_velocity`` /
@@ -327,7 +336,20 @@ def _parse_response(text: str) -> tuple[float, float]:
         ) from exc
     if not all(math.isfinite(value) for value in values):
         raise NativeCommandStepError("native command response must contain finite velocities")
-    return values
+    geometry_consumption = payload.get("geometry_consumption")
+    if geometry_consumption is not None and not isinstance(geometry_consumption, dict):
+        raise NativeCommandStepError("native command geometry_consumption must be a JSON object")
+    return values[0], values[1], geometry_consumption
+
+
+def _parse_response(text: str) -> tuple[float, float]:
+    """Parse a subprocess response into a ``(linear, angular)`` command pair.
+
+    Returns:
+        Linear and angular velocity command.
+    """
+    linear, angular, _geometry_consumption = _parse_response_payload(text)
+    return linear, angular
 
 
 class _NoProgressDeadlockDetector:
@@ -417,6 +439,7 @@ class NativeCommandPlanner:
             "deadlock_active": False,
             "deadlock_field": self._deadlock.as_field(),
             "planner_diagnostics": self.diagnostics,
+            "geometry_input_received": False,
             "geometry_input_verified": False,
         }
 
@@ -455,6 +478,45 @@ class NativeCommandPlanner:
             "obstacle_segment_count": len(segments),
             "boundary_segment_count": len(bounds),
         }
+        self.run_state["geometry_input_received"] = True
+        self.run_state["geometry_input_verified"] = False
+
+    def _verify_geometry_consumption(
+        self,
+        geometry_consumption: dict[str, Any] | None,
+    ) -> None:
+        """Verify the subprocess populated the planner-consumed geometry channels."""
+        if not self._spec.require_static_geometry:
+            return
+        if self._static_geometry is None:
+            raise NativeCommandStepError("native command static geometry was not bound")
+        if not isinstance(geometry_consumption, dict):
+            raise NativeCommandStepError(
+                "native command omitted required geometry-consumption proof"
+            )
+        if geometry_consumption.get("schema_version") != "native-command-geometry-consumption.v1":
+            raise NativeCommandStepError("native command geometry-consumption schema mismatch")
+        if geometry_consumption.get("geometry_sha256") != self._static_geometry.get("sha256"):
+            raise NativeCommandStepError("native command geometry-consumption hash mismatch")
+        try:
+            obstacle_cells = int(geometry_consumption["obstacle_occupied_cells"])
+            pedestrian_cells = int(geometry_consumption["pedestrian_occupied_cells"])
+            combined_cells = int(geometry_consumption["combined_occupied_cells"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise NativeCommandStepError(
+                "native command geometry-consumption cell counts are invalid"
+            ) from exc
+        if obstacle_cells <= 0:
+            raise NativeCommandStepError("native command planner-facing obstacle channel is empty")
+        if pedestrian_cells < 0 or combined_cells < max(obstacle_cells, pedestrian_cells):
+            raise NativeCommandStepError(
+                "native command planner-facing combined channel is incomplete"
+            )
+        if geometry_consumption.get("combined_matches_union") is not True:
+            raise NativeCommandStepError(
+                "native command combined channel does not match geometry union"
+            )
+        self.run_state["geometry_consumption"] = dict(geometry_consumption)
         self.run_state["geometry_input_verified"] = True
 
     def reset(self, *, seed: int | None = None) -> None:
@@ -513,13 +575,16 @@ class NativeCommandPlanner:
         """
         if self._spec.require_static_geometry and self._static_geometry is None:
             raise NativeCommandContractError("native command static geometry was not bound")
+        if self._spec.require_static_geometry:
+            self.run_state["geometry_input_verified"] = False
         request = _render_request(obs, self._static_geometry)
         started = time.perf_counter()
         try:
             if self._spec.mode == "persistent":
-                _cmd, linear, angular = self._plan_persistent(request)
+                _cmd, linear, angular, geometry_consumption = self._plan_persistent(request)
             else:
-                _cmd, linear, angular = self._plan_per_episode(request)
+                _cmd, linear, angular, geometry_consumption = self._plan_per_episode(request)
+            self._verify_geometry_consumption(geometry_consumption)
         except NativeCommandStepError:
             # A malformed response, timeout, non-zero exit, or broken persistent
             # stream is a per-step fallback, not a batch-wide crash. Contract and
@@ -559,7 +624,9 @@ class NativeCommandPlanner:
         self.run_state["planner_diagnostics"] = self.diagnostics
         return linear, angular
 
-    def _plan_per_episode(self, request: str) -> tuple[list[str], float, float]:
+    def _plan_per_episode(
+        self, request: str
+    ) -> tuple[list[str], float, float, dict[str, Any] | None]:
         try:
             proc = subprocess.run(
                 self._spec.command,
@@ -594,10 +661,14 @@ class NativeCommandPlanner:
                 f"native command exited with code {proc.returncode}: "
                 f"{proc.stderr.decode('utf-8', errors='replace').strip()}",
             )
-        linear, angular = _parse_response(proc.stdout.decode("utf-8", errors="replace"))
-        return self._spec.command, linear, angular
+        linear, angular, geometry_consumption = _parse_response_payload(
+            proc.stdout.decode("utf-8", errors="replace")
+        )
+        return self._spec.command, linear, angular, geometry_consumption
 
-    def _plan_persistent(self, request: str) -> tuple[list[str], float, float]:
+    def _plan_persistent(
+        self, request: str
+    ) -> tuple[list[str], float, float, dict[str, Any] | None]:
         if self._process is None or self._process.poll() is not None:
             self._start_process()
         assert self._process is not None
@@ -633,8 +704,8 @@ class NativeCommandPlanner:
             raise NativeCommandStepError(
                 f"persistent native command exited with code {exit_code}",
             )
-        linear, angular = _parse_response(line)
-        return self._spec.command, linear, angular
+        linear, angular, geometry_consumption = _parse_response_payload(line)
+        return self._spec.command, linear, angular, geometry_consumption
 
     def _readline_with_timeout(self) -> str:
         """Read one persistent response line without allowing an unbounded block.
@@ -816,7 +887,8 @@ def build_native_command_policy(  # noqa: PLR0913
         static_geometry = planner.run_state.get("static_geometry")
         if isinstance(static_geometry, dict):
             meta["native_command"]["static_geometry"] = static_geometry
-            meta["native_command"]["geometry_input_verified"] = True
+            meta["native_command"]["geometry_input_received"] = True
+            meta["native_command"]["geometry_input_verified"] = False
 
     _policy._planner_bind_env = _bind_env  # type: ignore[attr-defined]
     _policy._native_planner = planner  # type: ignore[attr-defined]
@@ -856,6 +928,15 @@ def native_command_metadata_for_record(
         native_metadata = algo_meta.get("native_command")
         if isinstance(native_metadata, dict):
             native_metadata["fallback_or_degraded"] = fallback_or_degraded
+            native_metadata["geometry_input_received"] = bool(
+                run_state.get("geometry_input_received", False)
+            )
+            native_metadata["geometry_input_verified"] = bool(
+                run_state.get("geometry_input_verified", False)
+            )
+            geometry_consumption = run_state.get("geometry_consumption")
+            if isinstance(geometry_consumption, dict):
+                native_metadata["geometry_consumption"] = dict(geometry_consumption)
         return True, run_state.get("deadlock_field", {}), diagnostics
     kinematics = algo_meta.get("planner_kinematics")
     is_native = isinstance(kinematics, dict) and kinematics.get("execution_mode") == "native"

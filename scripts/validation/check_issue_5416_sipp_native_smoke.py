@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Fail-closed one-row native SIPP smoke validator for issue #5416.
+"""Fail-closed native #5416 smoke validator.
 
 This validator first checks the frozen four-geometry packet, then runs exactly
-one ``classic_head_on_corridor_low``/111 episode through the tracked native SIPP
-command. It proves transport and analyzer eligibility only; it does not run a
-campaign or interpret benchmark outcomes.
+one ``classic_head_on_corridor_low``/111 episode through a tracked native
+planner command.  Its five-planner helper combines the frozen SIPP and
+comparator one-cell rows.  It proves transport and analyzer eligibility only;
+it does not run a campaign or interpret benchmark outcomes.
 """
 
 from __future__ import annotations
@@ -25,6 +26,13 @@ from scripts.validation.check_issue_5416_sipp_four_geometry_packet import (
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
+_FROZEN_NATIVE_CONFIGS = (
+    ("sipp_lattice", REPO_ROOT / "configs/algos/sipp_lattice_native_command.yaml"),
+    ("hybrid_rule_v0_minimal", REPO_ROOT / "configs/algos/hybrid_rule_v0_minimal.yaml"),
+    ("teb", REPO_ROOT / "configs/algos/teb_commitment_camera_ready.yaml"),
+    ("nmpc_social", REPO_ROOT / "configs/algos/nmpc_social_exploratory.yaml"),
+    ("dwa", REPO_ROOT / "configs/algos/dwa_classic.yaml"),
+)
 
 
 class SmokeError(ValueError):
@@ -46,7 +54,7 @@ def _selected_scenario(packet: dict[str, Any], scenario_id: str, seed: int) -> d
     raise SmokeError(f"scenario {scenario_id!r} is absent from the frozen scenario matrix")
 
 
-def validate_smoke(
+def validate_smoke(  # noqa: PLR0913
     *,
     packet_path: Path,
     native_config_path: Path,
@@ -56,8 +64,9 @@ def validate_smoke(
     dt: float,
     workers: int,
     output_dir: Path,
+    expected_planner_id: str = "sipp_lattice",
 ) -> dict[str, Any]:
-    """Execute and inspect the exact one-row native SIPP smoke contract."""
+    """Execute and inspect one exact frozen native smoke row."""
     if (scenario_id, seed, horizon, dt, workers) != (
         "classic_head_on_corridor_low",
         111,
@@ -100,6 +109,20 @@ def validate_smoke(
     native = metadata.get("native_command")
     if not isinstance(native, dict) or not native.get("geometry_input_verified"):
         raise SmokeError("native smoke row does not prove static geometry reached the command")
+    geometry_consumption = native.get("geometry_consumption")
+    if (
+        not isinstance(geometry_consumption, dict)
+        or geometry_consumption.get("obstacle_occupied_cells", 0) <= 0
+        or geometry_consumption.get("combined_occupied_cells", 0)
+        < max(
+            geometry_consumption.get("obstacle_occupied_cells", 0),
+            geometry_consumption.get("pedestrian_occupied_cells", 0),
+        )
+        or geometry_consumption.get("combined_matches_union") is not True
+    ):
+        raise SmokeError(
+            "native smoke row does not prove canonical planner channels consumed geometry"
+        )
     report = build_analysis(
         episode_paths=[episodes_path], output_dir=output_dir / "analyzer", packet_path=packet_path
     )
@@ -116,10 +139,11 @@ def validate_smoke(
         "planner_diagnostics_present": isinstance(diagnostics, dict)
         and bool(diagnostics.get("planner_step_runtime_seconds")),
         "geometry_input_verified": bool(native.get("geometry_input_verified")),
+        "geometry_consumption": geometry_consumption,
         "episode_path": str(episodes_path),
     }
     expected = {
-        "planner_id": "sipp_lattice",
+        "planner_id": expected_planner_id,
         "execution_mode": "native",
         "fallback_or_degraded": False,
         "eligible_rows": 1,
@@ -130,8 +154,45 @@ def validate_smoke(
     }
     failures = {key: checks[key] for key, value in expected.items() if checks[key] != value}
     if failures:
-        raise SmokeError(f"native SIPP smoke contract failed: {failures}")
+        raise SmokeError(f"native smoke contract failed: {failures}")
     return {"status": "ready", **checks}
+
+
+def validate_five_planner_smoke(*, packet_path: Path, output_dir: Path) -> dict[str, Any]:
+    """Run the exact one-cell native rows for the frozen five-planner roster."""
+    rows = {}
+    episode_paths = []
+    for planner_id, config_path in _FROZEN_NATIVE_CONFIGS:
+        result = validate_smoke(
+            packet_path=packet_path,
+            native_config_path=config_path,
+            scenario_id="classic_head_on_corridor_low",
+            seed=111,
+            horizon=500,
+            dt=0.1,
+            workers=1,
+            output_dir=output_dir / planner_id,
+            expected_planner_id=planner_id,
+        )
+        rows[planner_id] = result
+        episode_paths.append(Path(result["episode_path"]))
+    report = build_analysis(
+        episode_paths=episode_paths,
+        output_dir=output_dir / "five_planner_analyzer",
+        packet_path=packet_path,
+    )
+    matrix = report.get("matrix", {})
+    if matrix.get("eligible_rows") != 5 or matrix.get("excluded_rows") != 0:
+        raise SmokeError(
+            "five-planner native smoke contract failed: "
+            f"eligible_rows={matrix.get('eligible_rows')}, excluded_rows={matrix.get('excluded_rows')}"
+        )
+    return {
+        "status": "ready",
+        "planners": rows,
+        "eligible_rows": matrix["eligible_rows"],
+        "excluded_rows": matrix["excluded_rows"],
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -153,19 +214,28 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dt", required=True, type=float)
     parser.add_argument("--workers", required=True, type=int)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--expected-planner-id", default="sipp_lattice")
+    parser.add_argument("--five-planner-smoke", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     try:
-        result = validate_smoke(
-            packet_path=args.packet,
-            native_config_path=args.native_config,
-            scenario_id=args.scenario_id,
-            seed=args.seed,
-            horizon=args.horizon,
-            dt=args.dt,
-            workers=args.workers,
-            output_dir=args.output_dir,
-        )
+        if args.five_planner_smoke:
+            result = validate_five_planner_smoke(
+                packet_path=args.packet,
+                output_dir=args.output_dir,
+            )
+        else:
+            result = validate_smoke(
+                packet_path=args.packet,
+                native_config_path=args.native_config,
+                scenario_id=args.scenario_id,
+                seed=args.seed,
+                horizon=args.horizon,
+                dt=args.dt,
+                workers=args.workers,
+                output_dir=args.output_dir,
+                expected_planner_id=args.expected_planner_id,
+            )
     # Convert expected validation, I/O, and assertion failures into auditable
     # blocked output. Fatal process conditions deliberately remain unhandled.
     except (

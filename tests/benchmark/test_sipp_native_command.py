@@ -104,7 +104,9 @@ def _run(request: dict[str, object]) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         check=False,
         cwd=REPO_ROOT,
-        timeout=15,
+        # A one-shot test process includes cold Python/import startup and final
+        # interpreter teardown; the runner itself verifies its per-step bound.
+        timeout=30,
     )
 
 

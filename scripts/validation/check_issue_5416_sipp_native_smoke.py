@@ -166,7 +166,18 @@ def main(argv: list[str] | None = None) -> int:
             workers=args.workers,
             output_dir=args.output_dir,
         )
-    except Exception as exc:  # noqa: BLE001 - CLI boundary must emit fail-closed JSON.
+    # Convert expected validation, I/O, and assertion failures into auditable
+    # blocked output. Fatal process conditions deliberately remain unhandled.
+    except (
+        AssertionError,
+        AttributeError,
+        IndexError,
+        KeyError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:
         result = {"status": "blocked", "error": str(exc)}
     print(json.dumps(result, sort_keys=True) if args.json else result)
     return 0 if result.get("status") == "ready" else 1

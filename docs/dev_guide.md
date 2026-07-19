@@ -178,8 +178,10 @@ checked.
 
 ### Targeted shared-venv worktree validation
 
-For quick, targeted checks in a sibling worktree, you can reuse the main checkout virtualenv while
-pinning imports to the current worktree:
+For quick, targeted checks in a sibling worktree, prefer
+`scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`: it uses an initialized
+current-worktree `.venv` when available, otherwise the main checkout virtualenv, while pinning
+imports to the current worktree:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
@@ -188,10 +190,10 @@ scripts/dev/run_worktree_shared_venv.sh --standalone -- \
   python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
 ```
 
-The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the shared
+The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the selected
 `.venv`, and sets `UV_NO_SYNC=1`. By default it also prepends the worktree root to `PYTHONPATH`.
 This is intended for fast local feedback when dependencies are already current. It should fail if
-the shared virtualenv is missing instead of silently installing into the wrong checkout.
+the selected virtualenv is missing instead of silently installing into the wrong checkout.
 
 Use `--standalone` for a dependency-light command whose tests verify that it does not import
 `robot_sf` or other project packages. This mode still reuses third-party dependencies from the

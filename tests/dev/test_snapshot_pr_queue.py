@@ -549,6 +549,38 @@ def test_main_output_writes_snapshot_without_changing_stdout(
     assert artifact.read_text(encoding="utf-8").endswith("\n")
 
 
+def test_main_output_write_failure_returns_controlled_error(capsys) -> None:  # type: ignore[no-untyped-def]
+    """An unwritable output path should fail without printing a traceback or payload."""
+    pr_payload = {
+        "number": 2699,
+        "title": "output error PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/2699",
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc999",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [],
+        "reviews": [],
+        "comments": [],
+    }
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh,
+        patch(
+            "scripts.dev.snapshot_pr_queue.write_snapshot_artifact",
+            side_effect=OSError("disk full"),
+        ),
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        rc = main(["--prs", "2699", "--output", "snapshot.json", "--json"])
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+    assert captured.err == "snapshot output write failed: disk full\n"
+
+
 def test_main_raw_review_artifact_keeps_hunks_out_of_stdout(
     tmp_path,
     capsys,

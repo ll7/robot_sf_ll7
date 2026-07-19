@@ -653,6 +653,19 @@ def write_snapshot_artifact(payload: dict[str, Any], path: Path | None) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def emit_snapshot(
+    payload: dict[str, Any], path: Path | None, *, as_json: bool, exit_code: int
+) -> int:
+    """Write an optional snapshot artifact, emit stdout, and return the CLI status."""
+    try:
+        write_snapshot_artifact(payload, path)
+    except OSError as exc:
+        print(f"snapshot output write failed: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(payload, indent=2, sort_keys=True) if as_json else json.dumps(payload))
+    return exit_code
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("prs", nargs="*", type=int, help="PR numbers to snapshot.")
@@ -749,11 +762,14 @@ def main(argv: list[str] | None = None) -> int:
     except subprocess.TimeoutExpired as exc:
         print(f"snapshot command timed out: {exc}", file=sys.stderr)
         return 1
-    write_snapshot_artifact(payload, args.output)
-    print(json.dumps(payload, indent=2, sort_keys=True) if args.json else json.dumps(payload))
     has_pr_errors = any(pr.get("status") == "error" for pr in payload["prs"])
     has_artifact_errors = payload.get("raw_review_comments_artifact_status") == "error"
-    return 1 if has_pr_errors or has_artifact_errors else 0
+    return emit_snapshot(
+        payload,
+        args.output,
+        as_json=args.json,
+        exit_code=1 if has_pr_errors or has_artifact_errors else 0,
+    )
 
 
 if __name__ == "__main__":

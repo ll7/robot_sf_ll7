@@ -26,8 +26,8 @@ Standalone commands with a verified boundary that does not import project packag
 to PYTHONPATH, while still reusing the shared environment for third-party dependencies.
 
 Options:
-  --venv PATH            Shared virtualenv path exported as UV_PROJECT_ENVIRONMENT. Defaults to the
-                         main checkout .venv for linked worktrees.
+  --venv PATH            Shared virtualenv path exported as UV_PROJECT_ENVIRONMENT. Defaults to an
+                         initialized current-worktree .venv, otherwise the main checkout .venv.
   --standalone           Run a command that is verified not to import project packages. This skips
                          the project-source freshness check and does not prepend the worktree root
                          to PYTHONPATH.
@@ -100,7 +100,13 @@ if [[ "$git_common_dir" != /* ]]; then
 fi
 main_repo_root="$(cd "$git_common_dir/.." && pwd)"
 
-venv_path="${venv_override:-$main_repo_root/.venv}"
+if [[ -n "$venv_override" ]]; then
+  venv_path="$venv_override"
+elif [[ -x "$repo_root/.venv/bin/python" ]]; then
+  venv_path="$repo_root/.venv"
+else
+  venv_path="$main_repo_root/.venv"
+fi
 if [[ "$venv_path" != /* ]]; then
   venv_path="$repo_root/$venv_path"
 fi

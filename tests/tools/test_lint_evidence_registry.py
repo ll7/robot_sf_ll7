@@ -109,6 +109,40 @@ def test_dangling_commit_is_classified(tmp_path: Path) -> None:
     assert {issue["code"] for issue in report["issues"]} >= {"dangling_commit"}
 
 
+def test_commit_on_unrelated_ref_stays_dangling_until_head_reaches_it(
+    tmp_path: Path,
+) -> None:
+    """Incidental branch or tag objects must not change provenance resolution."""
+    linter = _load_linter()
+    repo, evidence, base_commit, config_sha256 = _make_repo(tmp_path)
+    artifact_sha256 = hashlib.sha256((evidence / "artifact.json").read_bytes()).hexdigest()
+
+    _git(repo, "checkout", "-qb", "unrelated-provenance")
+    _git(repo, "commit", "--allow-empty", "-qm", "unrelated provenance")
+    unrelated_commit = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "tag", "unrelated-provenance-tag", unrelated_commit)
+    _git(repo, "checkout", "--detach", "-q", base_commit)
+
+    _write_entry(
+        evidence,
+        campaign_id="campaign-unrelated-ref",
+        commit=unrelated_commit,
+        config_sha256=config_sha256,
+        artifact_sha256=artifact_sha256,
+        name="unrelated-ref.json",
+    )
+
+    unrelated_report = linter.lint_evidence_registry(repo, evidence)
+    assert any(
+        issue["code"] == "dangling_commit" and unrelated_commit in issue["message"]
+        for issue in unrelated_report["issues"]
+    )
+
+    _git(repo, "checkout", "--detach", "-q", unrelated_commit)
+    reachable_report = linter.lint_evidence_registry(repo, evidence)
+    assert not any(issue["code"] == "dangling_commit" for issue in reachable_report["issues"])
+
+
 def test_hash_mismatch_is_classified(tmp_path: Path) -> None:
     """A hash next to a committed artifact must match its current tracked bytes."""
     linter = _load_linter()

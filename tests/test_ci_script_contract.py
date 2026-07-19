@@ -48,6 +48,7 @@ RUN_WORKTREE_SHARED_VENV = ROOT / "scripts" / "dev" / "run_worktree_shared_venv.
 BOOTSTRAP_WORKTREE = ROOT / "scripts" / "dev" / "bootstrap_worktree.sh"
 CHECK_RUNTIME_REQUIREMENTS = ROOT / "scripts" / "dev" / "check_runtime_requirements.sh"
 CHECK_CARLA_RUNTIME = ROOT / "scripts" / "dev" / "check_carla_runtime.sh"
+EVIDENCE_REGISTRY_RATCHET = ROOT / "scripts" / "dev" / "evidence_registry_ratchet.py"
 
 
 def test_ci_driver_smoke_uses_runtime_schema_and_output_matrix_path() -> None:
@@ -1601,6 +1602,19 @@ def test_run_ci_local_help_does_not_invoke_setup(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "Usage:" in result.stdout
     assert "uv should not be called" not in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# evidence_registry_ratchet.py contract tests (issue #5994)
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_registry_ratchet_is_directly_executable() -> None:
+    """Keep the canonical evidence-registry ratchet invocation executable."""
+    assert EVIDENCE_REGISTRY_RATCHET.exists(), f"Missing: {EVIDENCE_REGISTRY_RATCHET}"
+    assert EVIDENCE_REGISTRY_RATCHET.stat().st_mode & 0o111, (
+        "evidence_registry_ratchet.py is not executable"
+    )
 
 
 # ---------------------------------------------------------------------------

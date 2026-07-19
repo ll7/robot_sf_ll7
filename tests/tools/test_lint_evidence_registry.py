@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 LINTER = ROOT / "scripts" / "tools" / "lint_evidence_registry.py"
 
@@ -141,6 +143,54 @@ def test_commit_on_unrelated_ref_stays_dangling_until_head_reaches_it(
     _git(repo, "checkout", "--detach", "-q", unrelated_commit)
     reachable_report = linter.lint_evidence_registry(repo, evidence)
     assert not any(issue["code"] == "dangling_commit" for issue in reachable_report["issues"])
+
+
+def test_shallow_repository_fails_before_commit_classification(
+    tmp_path: Path,
+) -> None:
+    """Unknown shallow ancestors must not become misleading lint findings."""
+    linter = _load_linter()
+    source, _evidence, _commit, _config_sha256 = _make_repo(tmp_path)
+    _git(source, "commit", "--allow-empty", "-qm", "shallow clone tip")
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--quiet",
+            "--depth",
+            "1",
+            source.as_uri(),
+            str(shallow),
+        ],
+        check=True,
+    )
+    assert _git(shallow, "rev-parse", "--is-shallow-repository") == "true"
+    registry = shallow / "docs" / "context" / "evidence"
+
+    with pytest.raises(
+        linter.ShallowRepositoryError,
+        match=r"full-history Git repository.*git fetch --unshallow",
+    ):
+        linter.lint_evidence_registry(shallow, registry)
+
+    cli = subprocess.run(
+        [
+            sys.executable,
+            str(LINTER),
+            "--repo-root",
+            str(shallow),
+            "--registry-root",
+            "docs/context/evidence",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert cli.returncode == 2
+    assert cli.stdout == ""
+    assert "shallow repository detected" in cli.stderr
+    assert "git fetch --unshallow" in cli.stderr
 
 
 def test_hash_mismatch_is_classified(tmp_path: Path) -> None:

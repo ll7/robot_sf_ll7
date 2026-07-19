@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -78,6 +79,30 @@ def _git_succeeds(repo_root: Path, *args: str) -> bool:
         ).returncode
         == 0
     )
+
+
+class ShallowRepositoryError(RuntimeError):
+    """Raised when commit reachability cannot be classified completely."""
+
+
+def _require_full_history(repo_root: Path) -> None:
+    """Fail before classifying commits when Git history is shallow."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=repo_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("evidence-registry linter could not determine Git repository depth")
+    if result.stdout.strip().lower() == "true":
+        raise ShallowRepositoryError(
+            "evidence-registry commit reachability requires a full-history Git "
+            "repository; shallow repository detected. Run `git fetch --unshallow` "
+            "(or use a full-history checkout) before rerunning."
+        )
 
 
 def _commit_is_head_reachable(repo_root: Path, commit: str) -> bool:
@@ -509,6 +534,7 @@ def lint_evidence_registry(
 ) -> dict[str, Any]:
     """Return a deterministic integrity report for every supported evidence file."""
     repo_root = repo_root.resolve()
+    _require_full_history(repo_root)
     registry_root = registry_root.resolve()
     campaigns: dict[str, list[_DocumentRecord]] = defaultdict(list)
     findings: list[dict[str, str]] = []
@@ -642,7 +668,11 @@ def main(argv: list[str] | None = None) -> int:
         exclude_codes = exclude_codes | frozenset(
             code.strip() for code in args.exclude_codes.split(",") if code.strip()
         )
-    report = lint_evidence_registry(repo_root, registry_root, disposition_path, exclude_codes)
+    try:
+        report = lint_evidence_registry(repo_root, registry_root, disposition_path, exclude_codes)
+    except ShallowRepositoryError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     print(json.dumps(report, indent=2, sort_keys=True))
     return 1 if args.strict and report["summary"]["findings"] > 0 else 0
 

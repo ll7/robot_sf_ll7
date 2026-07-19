@@ -12,10 +12,11 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from scripts.dev.snapshot_pr_queue import main
+from scripts.dev.snapshot_pr_queue import _parse_args, main
 
 DOC_PATH = (
     Path(__file__).resolve().parents[2] / "docs" / "templates" / "token_efficient_thread_profile.md"
@@ -28,6 +29,11 @@ SNAPSHOT_COMMAND_RE = re.compile(
 def _snapshot_invocations(doc_text: str) -> list[str]:
     """Return the argument strings for each documented ``snapshot_pr_queue.py`` invocation."""
     return [match.group("args").strip() for match in SNAPSHOT_COMMAND_RE.finditer(doc_text)]
+
+
+def _parsed_documented_invocation(args: str):  # type: ignore[no-untyped-def]
+    """Parse one documented shell argument string using the production CLI parser."""
+    return _parse_args(shlex.split(args))
 
 
 def test_documented_snapshot_command_is_present() -> None:
@@ -58,10 +64,8 @@ def test_documented_snapshot_command_is_not_the_bare_rejected_form() -> None:
     invocations = _snapshot_invocations(doc_text)
 
     for args in invocations:
-        tokens = args.split()
-        has_selector = bool(set(tokens) & {"--active", "--prs"}) or any(
-            token.isdigit() for token in tokens
-        )
+        parsed = _parsed_documented_invocation(args)
+        has_selector = parsed.active or bool(parsed.prs_option or parsed.prs)
         assert has_selector, (
             f"documented snapshot_pr_queue.py invocation lacks a CLI selector: {args!r}"
         )
@@ -76,7 +80,9 @@ def test_documented_snapshot_command_succeeds_against_cli(capsys) -> None:  # ty
     """
     doc_text = DOC_PATH.read_text(encoding="utf-8")
     invocations = _snapshot_invocations(doc_text)
-    active_invocations = [args for args in invocations if "--active" in args.split()]
+    active_invocations = [
+        args for args in invocations if _parsed_documented_invocation(args).active
+    ]
     assert active_invocations, (
         "documented snapshot_pr_queue.py invocation must use --active so the command succeeds"
     )
@@ -100,7 +106,7 @@ def test_documented_snapshot_command_succeeds_against_cli(capsys) -> None:  # ty
     ]
     with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
         mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
-        rc = main(active_invocation.split())
+        rc = main(shlex.split(active_invocation))
 
     assert rc == 0, (
         f"documented command 'snapshot_pr_queue.py {active_invocation}' failed against the CLI"

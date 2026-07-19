@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 from robot_sf.benchmark.map_runner_native_command import (
     _render_request,
     build_native_command_policy,
     native_command_metadata_for_record,
 )
+from scripts.benchmark import sipp_native_command
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts/benchmark/sipp_native_command.py"
@@ -127,3 +131,32 @@ def test_native_sipp_rejects_missing_static_geometry() -> None:
     result = _run(request)
     assert result.returncode == 2
     assert "static_geometry" in result.stderr
+
+
+def test_native_sipp_emits_structured_failure_for_unexpected_request_errors(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Unexpected request-time failures must preserve the fail-closed protocol."""
+
+    class UnexpectedPlanner:
+        """Raise an exception outside the expected request-validation hierarchy."""
+
+        def plan(self, observation: dict[str, object]) -> tuple[float, float]:
+            raise AssertionError("unexpected planner fault")
+
+        def diagnostics(self) -> dict[str, object]:
+            return {"last_decision": {}}
+
+    monkeypatch.setattr(sipp_native_command, "_load_config", lambda _path: {})
+    monkeypatch.setattr(
+        sipp_native_command,
+        "build_sipp_lattice_search_adapter",
+        lambda _config: UnexpectedPlanner(),
+    )
+    monkeypatch.setattr(
+        sipp_native_command.sys, "stdin", io.StringIO(json.dumps(_request([])) + "\n")
+    )
+
+    assert sipp_native_command.run(CONFIG) == 2
+    payload = json.loads(capsys.readouterr().err)
+    assert payload == {"error": "unexpected planner fault", "status": "invalid_request"}

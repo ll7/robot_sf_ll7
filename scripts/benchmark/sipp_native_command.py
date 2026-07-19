@@ -236,7 +236,9 @@ def run(config_path: Path) -> int:
                 ),
                 flush=True,
             )
-        except (RequestError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        # The persistent protocol must leave callers with a structured, non-zero
+        # result for every ordinary request-time failure, including planner bugs.
+        except Exception as exc:  # noqa: BLE001
             print(json.dumps({"error": str(exc), "status": "invalid_request"}), file=sys.stderr)
             return 2
     return 0

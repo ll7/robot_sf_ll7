@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import hashlib
 import json
@@ -234,10 +235,11 @@ def _manifest_planner_order(manifest: dict[str, Any]) -> list[str]:
 
 
 def _csv_row(record: dict[str, Any]) -> dict[str, Any]:
-    trace = record["algorithm_metadata"]["pedestrian_control_trace"]
     mean_value = ""
     cvar_value = ""
     try:
+        metadata = record.get("algorithm_metadata")
+        trace = metadata.get("pedestrian_control_trace") if isinstance(metadata, dict) else None
         observations = pedestrian_metric_observations_from_control_trace(
             trace, "clearance_m", reducer="mean"
         )
@@ -743,7 +745,7 @@ def _merge_reduced(
             str(row["population_arm"]),
         )
     )
-    combined_readiness = dict(ordered_shards[0][1]["integration_readiness"])
+    combined_readiness = copy.deepcopy(ordered_shards[0][1]["integration_readiness"])
     combined_readiness["expected_row_count"] = expected_count
     combined_readiness["observed_row_count"] = observed_count
     combined_readiness["row_readiness"] = row_readiness

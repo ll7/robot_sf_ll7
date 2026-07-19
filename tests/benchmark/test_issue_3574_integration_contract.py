@@ -206,6 +206,23 @@ def test_report_metric_direction_contract_is_explicit_and_fail_closed() -> None:
         module.metric_higher_is_safer("unknown_safety_metric")
 
 
+def test_csv_row_leaves_trace_metrics_blank_when_metadata_is_missing() -> None:
+    """Malformed optional trace metadata does not crash CSV rendering."""
+
+    config = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8"))
+    assert isinstance(config, dict)
+    manifest = _single_planner_manifest(
+        build_mean_matched_harness_manifest(config, config_path=str(CONFIG_PATH)), "goal"
+    )
+    record = _fixture_records(manifest)[0]
+    record["algorithm_metadata"] = None
+
+    row = _load_report_cli()._csv_row(record)
+
+    assert row["mean_clearance_m"] == ""
+    assert row["cvar_clearance_m"] == ""
+
+
 def test_tracked_manifest_metrics_flow_into_per_archetype_report(tmp_path: Path) -> None:
     """Every declared trace metric receives an aligned per-archetype report."""
 

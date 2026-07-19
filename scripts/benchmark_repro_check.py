@@ -126,7 +126,7 @@ def _write_reproducibility_report(
     return report_path
 
 
-def run_benchmark_pipeline(work_dir: Path, seed: int = 123):
+def run_benchmark_pipeline(work_dir: Path, seed: int = 123) -> dict[str, Any]:
     """Run complete benchmark pipeline in isolated directory."""
     from robot_sf.benchmark.aggregate import compute_aggregates_with_ci, read_jsonl
     from robot_sf.benchmark.runner import run_batch
@@ -212,7 +212,7 @@ def run_benchmark_pipeline(work_dir: Path, seed: int = 123):
     }
 
 
-def compare_reproducibility(results1, results2):
+def compare_reproducibility(results1: dict[str, Any], results2: dict[str, Any]) -> bool:
     """Compare two benchmark runs for reproducibility."""
     print("\n=== Reproducibility Analysis ===")
 
@@ -272,7 +272,7 @@ def compare_reproducibility(results1, results2):
     return reproducible
 
 
-def main():
+def main() -> int:
     """Run end-to-end reproducibility validation."""
     print("Social Navigation Benchmark - Reproducibility Check")
     print("=" * 60)

@@ -20,8 +20,12 @@ Environment variables:
                       Ignored when PR_READY_MODE is set.
   PR_READY_SKIP_PREFLIGHT  Set to "1" to skip cheap preflight checks for
                       test-collection dependencies and the bundled fast-pysf API.
-  PR_READY_PR_BODY_FILE  Optional markdown PR body. When set, readiness checks
-                      that deferred work has a linked issue or explicit NA.
+  PR_READY_PR_BODY_FILE  Optional markdown PR body from an existing readable
+                      regular file.
+                      Process-substitution paths such as /dev/fd/63 are rejected
+                      because their descriptors do not survive into downstream
+                      readiness processes. When set, readiness checks that
+                      deferred work has a linked issue or explicit NA.
   PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES
                       Set to "0" to skip open-state verification for linked
                       follow-up issues when PR_READY_PR_BODY_FILE is set.
@@ -50,6 +54,32 @@ export PR_READY_MODE="${PR_READY_MODE:-}"
 export PR_READY_SKIP_PREFLIGHT="${PR_READY_SKIP_PREFLIGHT:-0}"
 export PR_READY_PR_BODY_FILE="${PR_READY_PR_BODY_FILE:-}"
 export PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES="${PR_READY_REQUIRE_OPEN_FOLLOWUP_ISSUES:-1}"
+
+validate_pr_body_file() {
+  local body_file="$PR_READY_PR_BODY_FILE"
+  [[ -z "$body_file" ]] && return
+
+  if [[ -f "$body_file" && -r "$body_file" ]]; then
+    return
+  fi
+
+  printf 'PR_READY_PR_BODY_FILE must name an existing readable regular file; received %q.\n' \
+    "$body_file" >&2
+  case "$body_file" in
+    /dev/fd/*|/proc/*/fd/*)
+      printf 'Process-substitution paths are not supported because their file descriptors are not inherited by readiness subprocesses.\n' >&2
+      printf 'Write the body to a persistent file first, for example:\n' >&2
+      printf '  body_file="%s"; gh pr view ... --json body --jq .body >"%s"; PR_READY_PR_BODY_FILE="%s" %q\n' \
+        '$(mktemp)' '$body_file' '$body_file' "$0" >&2
+      ;;
+    *)
+      printf 'Create the file first, then rerun with PR_READY_PR_BODY_FILE=/path/to/body.md.\n' >&2
+      ;;
+  esac
+  exit 2
+}
+
+validate_pr_body_file
 
 worktree_state() {
   if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then

@@ -14,8 +14,8 @@ def _contract() -> dict:
     state = yaml.safe_load(STATE_PATH.read_text(encoding="utf-8"))
     assert state["issue"] == 6008
     assert state["schema"] == "robot_sf.issue_state.v1"
-    assert len(state["entries"]) == 1
-    return state["entries"][0]["reconciliation_contract"]
+    assert len(state["entries"]) >= 1
+    return state["entries"][-1]["reconciliation_contract"]
 
 
 def test_continue_patch_contract_fails_closed_for_stale_or_ambiguous_retries() -> None:

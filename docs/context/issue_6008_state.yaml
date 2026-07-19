@@ -5,7 +5,7 @@
 # durable reconciliation behavior only; it intentionally excludes target hosts,
 # worktree paths, packet lineage, and other transient queue-routing state.
 issue: 6008
-title: "friction: reconcile stale continue-patch retries before dispatch"
+title: "Friction: Reconcile Stale Continue-Patch Retries Before Dispatch (#6008)"
 schema: robot_sf.issue_state.v1
 state_surface: continue_patch_retry_reconciliation
 

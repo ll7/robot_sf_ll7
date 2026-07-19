@@ -208,11 +208,11 @@ def main(argv: list[str] | None = None) -> int:
         type=Path,
         default=REPO_ROOT / "configs/algos/sipp_lattice_native_command.yaml",
     )
-    parser.add_argument("--scenario-id", required=True)
-    parser.add_argument("--seed", required=True, type=int)
-    parser.add_argument("--horizon", required=True, type=int)
-    parser.add_argument("--dt", required=True, type=float)
-    parser.add_argument("--workers", required=True, type=int)
+    parser.add_argument("--scenario-id")
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("--horizon", type=int)
+    parser.add_argument("--dt", type=float)
+    parser.add_argument("--workers", type=int)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--expected-planner-id", default="sipp_lattice")
     parser.add_argument("--five-planner-smoke", action="store_true")
@@ -225,6 +225,18 @@ def main(argv: list[str] | None = None) -> int:
                 output_dir=args.output_dir,
             )
         else:
+            required_standard_args = (
+                args.scenario_id,
+                args.seed,
+                args.horizon,
+                args.dt,
+                args.workers,
+            )
+            if any(value is None for value in required_standard_args):
+                parser.error(
+                    "--scenario-id, --seed, --horizon, --dt, and --workers are required "
+                    "unless --five-planner-smoke is set"
+                )
             result = validate_smoke(
                 packet_path=args.packet,
                 native_config_path=args.native_config,

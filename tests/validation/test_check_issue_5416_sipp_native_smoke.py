@@ -59,3 +59,29 @@ def test_main_reports_unexpected_standard_exception_as_blocked(
     assert capsys.readouterr().out == (
         '{"error": "unexpected validation failure", "status": "blocked"}\n'
     )
+
+
+def test_five_planner_mode_omits_single_row_arguments(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """The frozen five-planner mode needs only its own packet and output inputs."""
+
+    monkeypatch.setattr(
+        smoke_validator,
+        "validate_five_planner_smoke",
+        lambda **_: {"status": "ready", "eligible_rows": 5, "excluded_rows": 0},
+    )
+
+    result = smoke_validator.main(["--five-planner-smoke", "--output-dir", str(tmp_path), "--json"])
+
+    assert result == 0
+    assert capsys.readouterr().out == (
+        '{"eligible_rows": 5, "excluded_rows": 0, "status": "ready"}\n'
+    )
+
+
+def test_standard_mode_still_requires_single_row_arguments(tmp_path: Path) -> None:
+    """Relaxing the five-planner parser must not broaden the standard smoke contract."""
+
+    with pytest.raises(SystemExit, match="2"):
+        smoke_validator.main(["--output-dir", str(tmp_path)])

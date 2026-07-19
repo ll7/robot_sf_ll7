@@ -212,7 +212,7 @@ def test_hash_mismatch_is_classified(tmp_path: Path) -> None:
 
 
 def test_artifact_manifest_paths_are_repository_root_relative(tmp_path: Path) -> None:
-    """A bare filename must not resolve relative to its declaring evidence bundle."""
+    """Ensure canonical paths prevent a bare filename from resolving ambiguously."""
     linter = _load_linter()
     repo, evidence, _commit, _config_sha256 = _make_repo(tmp_path)
     root_readme = repo / "README.md"

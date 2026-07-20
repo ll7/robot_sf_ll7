@@ -49,11 +49,11 @@
 
 - Pre-push unresolved inline review threads: none.
 - Resolved thread IDs: none.
-- Post-push unresolved threads: re-queried at head `301f8ae2905d46c7c9530651295d789ee2d5de40`; none were present.
+- Post-push unresolved threads: re-queried at head `47b013937e9d2d880e5e914e608fe1349e4927dd`; none were present.
 
 ## Live PR state after push
 
-- PR head after the fix push: `301f8ae2905d46c7c9530651295d789ee2d5de40` on
+- PR head after the final report push: `47b013937e9d2d880e5e914e608fe1349e4927dd` on
   `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - Hosted `reproducibility-check` is `SKIPPED` because the workflow is intentionally
   `workflow_dispatch`-only; this lease cannot submit compute or dispatch it.

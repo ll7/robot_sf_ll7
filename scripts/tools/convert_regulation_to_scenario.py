@@ -354,12 +354,11 @@ def _extract_zone(text: str) -> tuple[str, list[dict[str, Any]]]:
     "shared space" wins over a generic "space". Returns the template name plus
     an audit record of which keyword matched.
     """
-    lowered = text.lower()
     # Order by descending key length so multi-word zones take precedence.
     for key in sorted(ZONE_TO_TEMPLATE, key=len, reverse=True):
         if key == "default":
             continue
-        if key in lowered:
+        if _contains_keyword(text, key):
             template = ZONE_TO_TEMPLATE[key]
             return template, [
                 {"parameter": "zone_template", "value": template, "matched_keyword": key}

@@ -33,6 +33,7 @@ from scripts.tools.convert_regulation_to_scenario import (
     REGULATION_RECORD_SCHEMA_VERSION,
     TEMPLATE_TO_MAP,
     _build_scenario_payload,
+    _extract_zone,
     _find_float_after_keywords,
     _find_float_before_units,
     _map_file_for_output,
@@ -205,7 +206,7 @@ class TestCompilation:
         assert params.ped_density == DEFAULT_DENSITY_VALUE
 
     def test_zone_from_excerpt(self) -> None:
-        params = compile_regulation_excerpt("In shared spaces the robot moves slowly.")
+        params = compile_regulation_excerpt("In a shared space the robot moves slowly.")
         assert params.zone_template == "shared_space"
 
     def test_zone_from_hint(self) -> None:
@@ -217,6 +218,14 @@ class TestCompilation:
     def test_zone_default_when_unknown(self) -> None:
         params = compile_regulation_excerpt("The robot shall operate safely.")
         assert params.zone_template == "shared_space"
+
+    @pytest.mark.parametrize(
+        "text", ["The stationary area is restricted.", "Use the platforming area."]
+    )
+    def test_zone_match_requires_whole_keyword(self, text: str) -> None:
+        template, extracted = _extract_zone(text)
+        assert template == "shared_space"
+        assert extracted[0]["matched_keyword"] is None
 
     def test_unmatched_clauses_recorded(self) -> None:
         params = compile_regulation_excerpt(
@@ -256,7 +265,7 @@ class TestCompilation:
         assert params.max_episode_steps == 250
 
     def test_extracted_audit_records_zone_keyword(self) -> None:
-        params = compile_regulation_excerpt("In shared spaces the robot moves slowly.")
+        params = compile_regulation_excerpt("In a shared space the robot moves slowly.")
         zone_entry = next(e for e in params.extracted if e["parameter"] == "zone_template")
         assert zone_entry["matched_keyword"] == "shared space"
 

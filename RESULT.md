@@ -53,8 +53,9 @@ All three review threads are currently resolved; no unresolved threads remain.
 
 ## Post-push state
 
-- Commit SHA: `b40d31cbf0bfc986ae4de74979fb565dbd10165a`.
-- PR head at the final pre-record review-thread query: `b40d31cbf0bfc986ae4de74979fb565dbd10165a`.
+- Commit SHA: `86c00f203a978ff04a934e8ff31304d1301daa8d` (final RESULT-only
+  handoff update pushed after the prior blocker-record commit).
+- PR head at the final post-push review-thread query: `86c00f203a978ff04a934e8ff31304d1301daa8d`.
 - Post-push review-thread re-query: zero unresolved threads; all three existing
   threads remain resolved. No thread mutation was needed.
 - PR blocker comment requesting maintainer/domain action:

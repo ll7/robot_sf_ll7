@@ -149,7 +149,7 @@ def _process_group_is_current(*, process_group_id: int, session_id: int) -> bool
     """Check that the original session still owns the target process group."""
     try:
         completed = subprocess.run(
-            ["ps", "-axo", "pid=,pgid="],
+            ["ps", "-axo", "pgid=,sid="],
             check=False,
             capture_output=True,
             text=True,
@@ -163,9 +163,8 @@ def _process_group_is_current(*, process_group_id: int, session_id: int) -> bool
         if len(fields) != 2:
             continue
         try:
-            observed_pid, observed_group_id = (int(value) for value in fields)
-            observed_session_id = os.getsid(observed_pid)
-        except (OSError, ValueError):
+            observed_group_id, observed_session_id = (int(value) for value in fields)
+        except ValueError:
             continue
         if observed_group_id == process_group_id and observed_session_id == session_id:
             return True
@@ -177,28 +176,30 @@ def _terminate_process_group(
 ) -> None:
     """Terminate the recorded native session, including children after its leader exits."""
     if os.name == "posix":
-        if process_group_id is None or session_id is None:
-            return
-        if not _process_group_is_current(
-            process_group_id=process_group_id,
-            session_id=session_id,
-        ):
-            return
-        try:
-            os.killpg(process_group_id, signal.SIGTERM)
-        except (PermissionError, ProcessLookupError):
-            return
-        time.sleep(_WATCHDOG_TERMINATE_GRACE_SECONDS)
-        if _process_group_is_current(
-            process_group_id=process_group_id,
-            session_id=session_id,
+        if (
+            process_group_id is not None
+            and session_id is not None
+            and _process_group_is_current(
+                process_group_id=process_group_id,
+                session_id=session_id,
+            )
         ):
             try:
-                os.killpg(process_group_id, signal.SIGKILL)
+                os.killpg(process_group_id, signal.SIGTERM)
             except (PermissionError, ProcessLookupError):
-                # macOS can report EPERM after SIGTERM has already removed the
-                # session leader and every remaining group member.
                 pass
+            else:
+                time.sleep(_WATCHDOG_TERMINATE_GRACE_SECONDS)
+                if _process_group_is_current(
+                    process_group_id=process_group_id,
+                    session_id=session_id,
+                ):
+                    try:
+                        os.killpg(process_group_id, signal.SIGKILL)
+                    except (PermissionError, ProcessLookupError):
+                        # macOS can report EPERM after SIGTERM has already removed the
+                        # session leader and every remaining group member.
+                        pass
     elif process.poll() is None:  # pragma: no cover - the frozen native comparator is POSIX-only.
         process.terminate()
     if process.poll() is None:
@@ -231,57 +232,49 @@ def _run_native_row_with_watchdog(
     )
     process_group_id = process.pid if os.name == "posix" else None
     session_id = process.pid if os.name == "posix" else None
-    started_at = time.monotonic()
-    last_progress_at = started_at
-    progress_token = _episode_progress_token(episodes_path)
-    while process.poll() is None:
-        now = time.monotonic()
-        current_token = _episode_progress_token(episodes_path)
-        if current_token != progress_token:
-            progress_token = current_token
-            last_progress_at = now
-        if now - started_at >= timeout_seconds:
-            _terminate_process_group(
-                process,
-                process_group_id=process_group_id,
-                session_id=session_id,
-            )
-            raise SmokeWatchdogError(
-                "native smoke exceeded its end-to-end watchdog timeout",
-                details={
-                    "failure_kind": "native_end_to_end_timeout",
-                    "planner_id": planner_id,
-                    "timeout_seconds": timeout_seconds,
-                    "progress_timeout_seconds": progress_timeout_seconds,
-                    "episode_path": str(episodes_path),
-                    "child_process_terminated": True,
-                },
-            )
-        if now - last_progress_at >= progress_timeout_seconds:
-            _terminate_process_group(
-                process,
-                process_group_id=process_group_id,
-                session_id=session_id,
-            )
-            raise SmokeWatchdogError(
-                "native smoke made no episode-output progress before its watchdog deadline",
-                details={
-                    "failure_kind": "native_progress_timeout",
-                    "planner_id": planner_id,
-                    "timeout_seconds": timeout_seconds,
-                    "progress_timeout_seconds": progress_timeout_seconds,
-                    "episode_path": str(episodes_path),
-                    "child_process_terminated": True,
-                },
-            )
-        time.sleep(_WATCHDOG_POLL_SECONDS)
-    _terminate_process_group(
-        process,
-        process_group_id=process_group_id,
-        session_id=session_id,
-    )
-    if process.returncode != 0:
-        raise SmokeError(f"native smoke child exited with status {process.returncode}")
+    try:
+        started_at = time.monotonic()
+        last_progress_at = started_at
+        progress_token = _episode_progress_token(episodes_path)
+        while process.poll() is None:
+            now = time.monotonic()
+            current_token = _episode_progress_token(episodes_path)
+            if current_token != progress_token:
+                progress_token = current_token
+                last_progress_at = now
+            if now - started_at >= timeout_seconds:
+                raise SmokeWatchdogError(
+                    "native smoke exceeded its end-to-end watchdog timeout",
+                    details={
+                        "failure_kind": "native_end_to_end_timeout",
+                        "planner_id": planner_id,
+                        "timeout_seconds": timeout_seconds,
+                        "progress_timeout_seconds": progress_timeout_seconds,
+                        "episode_path": str(episodes_path),
+                        "child_process_terminated": True,
+                    },
+                )
+            if now - last_progress_at >= progress_timeout_seconds:
+                raise SmokeWatchdogError(
+                    "native smoke made no episode-output progress before its watchdog deadline",
+                    details={
+                        "failure_kind": "native_progress_timeout",
+                        "planner_id": planner_id,
+                        "timeout_seconds": timeout_seconds,
+                        "progress_timeout_seconds": progress_timeout_seconds,
+                        "episode_path": str(episodes_path),
+                        "child_process_terminated": True,
+                    },
+                )
+            time.sleep(_WATCHDOG_POLL_SECONDS)
+        if process.returncode != 0:
+            raise SmokeError(f"native smoke child exited with status {process.returncode}")
+    finally:
+        _terminate_process_group(
+            process,
+            process_group_id=process_group_id,
+            session_id=session_id,
+        )
 
 
 def validate_smoke(  # noqa: PLR0913

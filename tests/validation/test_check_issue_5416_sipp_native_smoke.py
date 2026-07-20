@@ -4,14 +4,31 @@ from __future__ import annotations
 
 import errno
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from scripts.validation import check_issue_5416_sipp_native_smoke as smoke_validator
 from scripts.validation.check_issue_5416_sipp_native_smoke import SmokeError, validate_smoke
+
+
+def test_process_group_check_reads_session_ids_from_ps(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The group check avoids a racy `getsid` call for every host process."""
+    observed_command: list[str] = []
+
+    def fake_run(command: list[str], **_: object) -> SimpleNamespace:
+        observed_command.extend(command)
+        return SimpleNamespace(returncode=0, stdout="123 456\n")
+
+    monkeypatch.setattr(smoke_validator.subprocess, "run", fake_run)
+    monkeypatch.setattr(os, "getsid", lambda _: pytest.fail("unexpected getsid call"))
+
+    assert smoke_validator._process_group_is_current(process_group_id=123, session_id=456)
+    assert observed_command == ["ps", "-axo", "pgid=,sid="]
 
 
 def test_smoke_arguments_are_pinned_before_expensive_execution(tmp_path: Path) -> None:
@@ -176,6 +193,53 @@ def test_native_watchdog_resets_progress_deadline_when_episode_output_changes(
 
     assert raised.value.details["failure_kind"] == "native_progress_timeout"
     assert episodes_path.read_text(encoding="utf-8") == "first\nsecond\n"
+
+
+def test_native_watchdog_terminates_when_progress_probe_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An unexpected watchdog probe error cannot bypass child cleanup."""
+    terminated: list[subprocess.Popen[bytes]] = []
+
+    def record_termination(process: subprocess.Popen[bytes], **_: object) -> None:
+        terminated.append(process)
+        process.kill()
+        process.wait()
+
+    monkeypatch.setattr(
+        smoke_validator,
+        "_episode_progress_token",
+        lambda _: (_ for _ in ()).throw(OSError("episode path became unreadable")),
+    )
+    monkeypatch.setattr(smoke_validator, "_terminate_process_group", record_termination)
+
+    with pytest.raises(OSError, match="unreadable"):
+        smoke_validator._run_native_row_with_watchdog(
+            command=[sys.executable, "-c", "import time; time.sleep(30)"],
+            episodes_path=tmp_path / "episodes.jsonl",
+            timeout_seconds=1.0,
+            progress_timeout_seconds=0.5,
+            planner_id="teb",
+        )
+
+    assert len(terminated) == 1
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group cleanup is POSIX-specific")
+def test_group_lookup_failure_still_reaps_watchdog_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Failed group validation falls through to direct-child cleanup."""
+    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    monkeypatch.setattr(smoke_validator, "_process_group_is_current", lambda **_: False)
+
+    smoke_validator._terminate_process_group(
+        process,
+        process_group_id=process.pid,
+        session_id=process.pid,
+    )
+
+    assert process.returncode is not None
 
 
 @pytest.mark.skipif(os.name != "posix", reason="process-group cleanup is POSIX-specific")

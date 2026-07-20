@@ -1,6 +1,6 @@
 # PR #6063 Review Blocker Result
 
-Reviewed at PR head `e7768248a2ca1e328dbbd87286c6af96f2a9d8a0`.
+Reviewed at PR head `a913cd570103c634c3ae4a1840ed16b11ffbbd47`.
 
 ## Fixed comments
 
@@ -21,6 +21,7 @@ All three review threads are currently resolved; no unresolved threads remain.
 - `uv run ruff format --check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
 - `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 32 passed.
 - `git diff --check` — passed.
+- PR body evidence count reconciled from 27 to 32 tests.
 - Live PR-body contract check — `pending_domain_approval` (exit 2).
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — exit 2. The canonical
   changed-file proof is unavailable because the five preserved untracked
@@ -29,9 +30,9 @@ All three review threads are currently resolved; no unresolved threads remain.
 
 ## Commit
 
-- PR head verified before this update: `e7768248a2ca1e328dbbd87286c6af96f2a9d8a0`.
+- PR head verified before this update: `a913cd570103c634c3ae4a1840ed16b11ffbbd47`.
 - Review-fix commit: `0b96de53f381f38c9c27876aeab3b7f84850612f`.
-- Post-push state-record commit: `0afafa286ff9a89cb4fc1ad980e4392d60089384`.
+- Prior state-record commit: `0afafa286ff9a89cb4fc1ad980e4392d60089384`.
 
 ## Unresolved threads
 
@@ -51,7 +52,7 @@ All three review threads are currently resolved; no unresolved threads remain.
 
 - Commit SHA: `0afafa286ff9a89cb4fc1ad980e4392d60089384` (state-record commit;
   review-fix commit is listed above).
-- Post-push PR head at the review-thread query: `0afafa286ff9a89cb4fc1ad980e4392d60089384`.
+- Current PR head at the review-thread query: `a913cd570103c634c3ae4a1840ed16b11ffbbd47`.
 - Post-push review-thread re-query: zero unresolved threads; all three existing
   threads remain resolved. No thread mutation was needed.
 - PR blocker comment requesting maintainer/domain action:

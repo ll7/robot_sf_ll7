@@ -20,8 +20,8 @@
 ## Commit and review state
 
 - Implementation commit pushed: `3b600b6dc2c52926ac66d06b4d561e5c1dbd1269`.
-- PR head verified after push: `3b600b6dc2c52926ac66d06b4d561e5c1dbd1269`.
+- Result handoff commit pushed: `273de4082`.
+- Final PR head after the handoff push: `273de4082`.
 - Unresolved threads after push: none.
 - Remaining blockers: none for the accepted P1. Existing catalog entries 3 and 4 remain a separate
   full-audit data-debt limitation.
-

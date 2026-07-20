@@ -16,8 +16,10 @@ from scripts.validation import check_issue_5416_sipp_native_smoke as smoke_valid
 from scripts.validation.check_issue_5416_sipp_native_smoke import SmokeError, validate_smoke
 
 
-def test_process_group_check_reads_session_ids_from_ps(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The group check avoids a racy `getsid` call for every host process."""
+def test_process_group_check_reads_portable_session_ids_from_ps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The group check uses macOS-compatible ``ps`` session fields without `getsid`."""
     observed_command: list[str] = []
 
     def fake_run(command: list[str], **_: object) -> SimpleNamespace:
@@ -28,7 +30,42 @@ def test_process_group_check_reads_session_ids_from_ps(monkeypatch: pytest.Monke
     monkeypatch.setattr(os, "getsid", lambda _: pytest.fail("unexpected getsid call"))
 
     assert smoke_validator._process_group_is_current(process_group_id=123, session_id=456)
-    assert observed_command == ["ps", "-axo", "pgid=,sid="]
+    assert observed_command == ["ps", "-axo", "pgid=,sess="]
+
+
+def test_process_session_field_reads_macos_compatible_ps_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Capture the session value in the spelling both macOS and Linux accept."""
+    observed_command: list[str] = []
+
+    def fake_run(command: list[str], **_: object) -> SimpleNamespace:
+        observed_command.extend(command)
+        return SimpleNamespace(returncode=0, stdout="0\n")
+
+    monkeypatch.setattr(smoke_validator.subprocess, "run", fake_run)
+
+    assert smoke_validator._process_session_field(123) == 0
+    assert observed_command == ["ps", "-o", "sess=", "-p", "123"]
+
+
+def test_process_session_field_rejects_missing_or_malformed_ps_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cleanup fails closed when the platform cannot identify its child session."""
+    monkeypatch.setattr(
+        smoke_validator.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=1, stdout=""),
+    )
+    assert smoke_validator._process_session_field(123) is None
+
+    monkeypatch.setattr(
+        smoke_validator.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="not-a-session\n"),
+    )
+    assert smoke_validator._process_session_field(123) is None
 
 
 def test_smoke_arguments_are_pinned_before_expensive_execution(tmp_path: Path) -> None:

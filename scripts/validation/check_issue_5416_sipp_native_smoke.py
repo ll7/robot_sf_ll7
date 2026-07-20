@@ -149,7 +149,11 @@ def _process_group_is_current(*, process_group_id: int, session_id: int) -> bool
     """Check that the original session still owns the target process group."""
     try:
         completed = subprocess.run(
-            ["ps", "-axo", "pgid=,sid="],
+            # ``sess`` is the portable POSIX ``ps`` session field spelling.  In
+            # particular, macOS rejects Linux/procps' ``sid`` alias here, which
+            # otherwise makes the watchdog fall back to direct-child cleanup
+            # and leaves an exited parent's descendants behind.
+            ["ps", "-axo", "pgid=,sess="],
             check=False,
             capture_output=True,
             text=True,
@@ -169,6 +173,25 @@ def _process_group_is_current(*, process_group_id: int, session_id: int) -> bool
         if observed_group_id == process_group_id and observed_session_id == session_id:
             return True
     return False
+
+
+def _process_session_field(process_id: int) -> int | None:
+    """Read the platform's portable ``ps`` session field for one process."""
+    try:
+        completed = subprocess.run(
+            ["ps", "-o", "sess=", "-p", str(process_id)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if completed.returncode != 0:
+        return None
+    try:
+        return int(completed.stdout.strip())
+    except ValueError:
+        return None
 
 
 def _terminate_process_group(
@@ -231,7 +254,11 @@ def _run_native_row_with_watchdog(
         start_new_session=os.name == "posix",
     )
     process_group_id = process.pid if os.name == "posix" else None
-    session_id = process.pid if os.name == "posix" else None
+    # macOS reports its session through ``sess`` (often ``0`` for detached
+    # processes), whereas Linux reports the session-leader PID.  Record the
+    # platform's own value rather than assuming the Linux form so descendant
+    # cleanup remains both safe and effective on either host.
+    session_id = _process_session_field(process.pid) if os.name == "posix" else None
     try:
         started_at = time.monotonic()
         last_progress_at = started_at

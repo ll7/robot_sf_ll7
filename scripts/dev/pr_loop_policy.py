@@ -3,13 +3,19 @@
 
 Classifies PR state from compact snapshots and recommends one bounded action:
 stop, continue, reroute, escalate, wait_ci, inspect_failed_ci, verify_artifacts,
-refresh_snapshot, mark_ready_candidate, or no_action.
+refresh_snapshot, mark_ready_candidate, await_gate_verdict, or no_action.
 
 Every PolicyDecision also emits a high-level ``flow_decision`` — one of exactly
 ``stop``, ``continue``, ``reroute``, or ``escalate`` — for machine consumption.
 
 Review state (e.g. CHANGES_REQUESTED, APPROVED, COMMENTED) from the snapshot
 is incorporated: CHANGES_REQUESTED forces a non-continue flow decision.
+
+Gate-verdict contract (issue #6019): an exact head is only eligible to advance
+toward merge when every required check is green AND a current exact-head
+``gate-verdict: accepted @ <head_sha>`` trailer exists. The dispatcher rejects
+(fail closed) any head missing such a trailer, classifying it as
+``pending_gate_verdict`` instead of ``ready_to_merge``.
 
 Accepts a compact PR queue snapshot JSON (as emitted by snapshot_pr_queue.py)
 or a single-PR mock, and emits JSON or concise text with the next action and
@@ -20,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -44,6 +51,7 @@ VALID_ACTIONS = frozenset(
         "verify_artifacts",
         "refresh_snapshot",
         "mark_ready_candidate",
+        "await_gate_verdict",
         "no_action",
     }
 )
@@ -57,9 +65,23 @@ VALID_STATES = frozenset(
         "failed_validation",
         "missing_artifacts",
         "stale_worktree",
+        "pending_gate_verdict",
         "ready_to_merge",
         "no_action",
     }
+)
+
+# Minimum overlap (hex chars) required to treat an abbreviated trailer SHA as a
+# match for a longer head SHA. Seven mirrors git's default short SHA width.
+GATE_VERDICT_MIN_SHA_OVERLAP = 7
+
+# Matches ``gate-verdict: accepted @ <sha>`` trailers embedded in comment or
+# review body excerpts, capturing the hex SHA. The verdict word is matched
+# case-insensitively so a human- or bot-authored ``Accepted`` still satisfies
+# the contract; surrounding markdown/code fences are tolerated.
+_GATE_VERDICT_RE = re.compile(
+    r"gate-verdict\s*:\s*accepted\s*@\s*([0-9a-fA-F]{7,40})\b",
+    re.IGNORECASE,
 )
 
 
@@ -137,6 +159,142 @@ def _compact_artifacts_from_pr(
     return compact_raw if isinstance(compact_raw, dict) else None
 
 
+def _gate_verdict_sha_from_item(item: Any) -> str | None:
+    """Return the accepted SHA from one explicit gate-verdict record, if any."""
+    if isinstance(item, str):
+        return None
+    if not isinstance(item, dict):
+        return None
+    verdict = str(item.get("verdict", "")).lower()
+    accepted_flag = item.get("accepted")
+    sha = str(item.get("sha") or item.get("head_sha") or "")
+    if sha and (verdict == "accepted" or accepted_flag is True):
+        return sha
+    return None
+
+
+def _explicit_gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
+    """Return synthesized trailer texts from explicit gate-verdict fields."""
+    texts: list[str] = []
+    explicit_list = pr.get("gate_verdicts")
+    if isinstance(explicit_list, list):
+        for item in explicit_list:
+            if isinstance(item, str):
+                texts.append(item)
+                continue
+            sha = _gate_verdict_sha_from_item(item)
+            if sha:
+                texts.append(f"gate-verdict: accepted @ {sha}")
+    explicit = pr.get("gate_verdict")
+    sha = _gate_verdict_sha_from_item(explicit)
+    if sha:
+        texts.append(f"gate-verdict: accepted @ {sha}")
+    return texts
+
+
+def _snapshot_body_texts(pr: dict[str, Any]) -> list[str]:
+    """Return comment/review body excerpts that may carry a gate-verdict trailer."""
+    texts: list[str] = []
+    for key in ("comment_snapshot", "review_snapshot"):
+        snapshot = pr.get(key)
+        if not isinstance(snapshot, dict):
+            continue
+        latest = snapshot.get("latest")
+        if not isinstance(latest, list):
+            continue
+        for entry in latest:
+            if isinstance(entry, dict) and isinstance(entry.get("body_excerpt"), str):
+                texts.append(entry["body_excerpt"])
+    return texts
+
+
+def _gate_verdict_texts(pr: dict[str, Any]) -> list[str]:
+    """Return candidate text blobs that may carry a gate-verdict trailer.
+
+    Sources, in priority order:
+      - explicit ``gate_verdicts`` list of strings or ``{"sha": ...}`` dicts,
+      - explicit ``gate_verdict`` dict (``{"verdict": "accepted", "sha": ...}``
+        or ``{"accepted": True, "head_sha": ...}``),
+      - compact ``comment_snapshot.latest[].body_excerpt`` blobs,
+      - compact ``review_snapshot.latest[].body_excerpt`` blobs.
+
+    The snapshot producer truncates bodies to ``COMMENT_BODY_LIMIT`` (180), which
+    is ample for a ``gate-verdict: accepted @ <40-char-sha>`` trailer.
+    """
+    return _explicit_gate_verdict_texts(pr) + _snapshot_body_texts(pr)
+
+
+def _accepted_gate_verdict_shas(pr: dict[str, Any]) -> set[str]:
+    """Return the set of lowercased SHAs with an accepted gate-verdict trailer."""
+    shas: set[str] = set()
+    for text in _gate_verdict_texts(pr):
+        for match in _GATE_VERDICT_RE.finditer(text):
+            shas.add(match.group(1).lower())
+    return shas
+
+
+def _sha_matches_head(trailer_sha: str, head_sha: str) -> bool:
+    """Return True when trailer_sha identifies the same commit as head_sha.
+
+    A trailer may carry either a full 40-char SHA or git's abbreviated short
+    form. Both are compared case-insensitively; an abbreviated trailer is only
+    accepted when it is a prefix of the head SHA with at least
+    ``GATE_VERDICT_MIN_SHA_OVERLAP`` hex chars of overlap. Anything shorter is
+    ambiguous and fails closed.
+    """
+    trailer = trailer_sha.lower()
+    head = head_sha.lower()
+    if not trailer or not head:
+        return False
+    if trailer == head:
+        return True
+    if len(trailer) < GATE_VERDICT_MIN_SHA_OVERLAP:
+        return False
+    return head.startswith(trailer)
+
+
+def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool:
+    """Return True iff a current exact-head ``gate-verdict: accepted`` trailer exists.
+
+    Fail-closed by design: an empty head SHA, a missing trailer, or a trailer
+    whose SHA does not identify the exact head all return False. This is the
+    gate described in issue #6019 — the dispatcher must reject any exact head
+    unless every required check is green AND such a trailer is present.
+    """
+    if not isinstance(pr, dict) or not head_sha:
+        return False
+    accepted = _accepted_gate_verdict_shas(pr)
+    return any(_sha_matches_head(sha, head_sha) for sha in accepted)
+
+
+def _label_names(pr: dict[str, Any]) -> list[str]:
+    """Return compact label-name strings from a PR dict."""
+    labels = pr.get("labels") or []
+    if not isinstance(labels, list):
+        return []
+    return [str(label) for label in labels]
+
+
+def _merge_ready_state(
+    pr: dict[str, Any],
+    *,
+    label_names: list[str],
+    overall: str,
+    head_sha: str,
+) -> str | None:
+    """Return the merge-readiness state for a green, merge-ready PR, or None.
+
+    Gate-verdict contract (issue #6019): reject any exact head unless a current
+    exact-head ``gate-verdict: accepted @ <head_sha>`` trailer exists. Fail
+    closed when the trailer is missing or stale.
+    """
+    if "merge-ready" not in label_names or overall != "success":
+        return None
+    if not has_current_accepted_gate_verdict(pr, head_sha):
+        return "pending_gate_verdict"
+    return "ready_to_merge"
+
+
 def classify_pr_state(
     pr: dict[str, Any],
     *,
@@ -154,11 +312,7 @@ def classify_pr_state(
         return "no_action"
     checks = pr.get("checks") or {}
     overall = str(checks.get("overall", ""))
-    labels = pr.get("labels") or []
-    if isinstance(labels, list):
-        label_names = [str(label) for label in labels]
-    else:
-        label_names = []
+    label_names = _label_names(pr)
     is_draft = bool(pr.get("draft", False))
     head_sha = str(pr.get("head_sha", ""))
     expected = str(pr.get("expected_head_sha", ""))
@@ -174,9 +328,15 @@ def classify_pr_state(
     artifact_state = _artifact_state(artifacts, compact_artifacts=compact_artifacts)
     if artifact_state is not None:
         return artifact_state
-    if "merge-ready" in label_names and overall == "success":
-        return "ready_to_merge"
-    return "no_action"
+    return (
+        _merge_ready_state(
+            pr,
+            label_names=label_names,
+            overall=overall,
+            head_sha=head_sha,
+        )
+        or "no_action"
+    )
 
 
 def _review_state(pr: dict[str, Any]) -> str:
@@ -216,6 +376,7 @@ def _compute_flow_decision(
       - budget_exhausted -> stop
       - CHANGES_REQUESTED -> escalate (review blocker overrides other routing)
       - pending_ci -> continue
+      - pending_gate_verdict -> continue (wait for current exact-head gate verdict)
       - ready_to_merge -> continue
       - failed_ci, failed_validation, missing_artifacts, stale_worktree -> reroute
       - no_action -> stop
@@ -225,7 +386,7 @@ def _compute_flow_decision(
     if review_state == "CHANGES_REQUESTED":
         return "escalate"
     match state:
-        case "pending_ci" | "ready_to_merge":
+        case "pending_ci" | "pending_gate_verdict" | "ready_to_merge":
             return "continue"
         case "failed_ci" | "failed_validation" | "missing_artifacts" | "stale_worktree":
             return "reroute"
@@ -323,7 +484,19 @@ def recommend_action(
                 action="mark_ready_candidate",
                 state=state,
                 flow_decision=flow_decision,
-                reason="CI green and merge-ready label present",
+                reason="CI green, merge-ready label, and current exact-head gate verdict present",
+                actions_remaining=remaining,
+            )
+        case "pending_gate_verdict":
+            return PolicyDecision(
+                pr=pr_number,
+                action="await_gate_verdict",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    "CI green and merge-ready but no current exact-head "
+                    "gate-verdict: accepted trailer; reject head"
+                ),
                 actions_remaining=remaining,
             )
         case _:

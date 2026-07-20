@@ -80,7 +80,7 @@ GATE_VERDICT_MIN_SHA_OVERLAP = 7
 # case-insensitively so a human- or bot-authored ``Accepted`` still satisfies
 # the contract; surrounding markdown/code fences are tolerated.
 _GATE_VERDICT_RE = re.compile(
-    r"gate-verdict\s*:\s*accepted\s*@\s*([0-9a-fA-F]{7,40})(?![0-9a-fA-F])",
+    r"gate-verdict\s*:\s*accepted\s*@\s*([0-9a-fA-F]{7,40})\b",
     re.IGNORECASE,
 )
 

@@ -433,6 +433,12 @@ def test_has_current_accepted_gate_verdict_rejects_overlong_hex_trailer() -> Non
     assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
 
 
+def test_has_current_accepted_gate_verdict_rejects_word_suffix() -> None:
+    """A 40-character trailer followed by a word character is not complete."""
+    pr = _pr(3011, head_sha=FULL_SHA, gate_verdict=f"{FULL_SHA}_suffix")
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
 def test_has_current_accepted_gate_verdict_empty_head() -> None:
     """Empty head SHA should return False even with a trailer present."""
     pr = _pr(3012, head_sha=FULL_SHA, gate_verdict=FULL_SHA)

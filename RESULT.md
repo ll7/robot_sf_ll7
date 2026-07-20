@@ -17,7 +17,7 @@
   remains unavailable, and `0b0214ced856eac77fa9a4c15b02921eabab1661` is described only as the
   separate published integration pointer, not as the generation commit.
 - No unresolved inline review threads were present before the fix; no thread was resolved.
-- The pre-push PR head was verified as `eb7d97712fe5cbe1e2b14c2061e16035948c5ef8`.
+- The PR head was verified as `cb537c6c661a1347baa4248870b38eb3810f2712` before this report refresh.
 
 ## Validation
 
@@ -49,11 +49,11 @@
 
 - Pre-push unresolved inline review threads: none.
 - Resolved thread IDs: none.
-- Post-push unresolved threads: re-queried at head `47b013937e9d2d880e5e914e608fe1349e4927dd`; none were present.
+- Post-push unresolved threads: re-queried at head `cb537c6c661a1347baa4248870b38eb3810f2712`; none were present.
 
 ## Live PR state after push
 
-- PR head after the final report push: `47b013937e9d2d880e5e914e608fe1349e4927dd` on
+- PR head at the final pre-refresh verification: `cb537c6c661a1347baa4248870b38eb3810f2712` on
   `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - Hosted `reproducibility-check` is `SKIPPED` because the workflow is intentionally
   `workflow_dispatch`-only; this lease cannot submit compute or dispatch it.

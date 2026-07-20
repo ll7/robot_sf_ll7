@@ -25,13 +25,13 @@ the pre-fix query.
 
 ## Commit
 
-- Fix commit SHA: `1f34523d3` before this result update; final RESULT update commit is to be recorded after push.
-- PR head: re-query after push.
+- Fix commit SHA: `211b40932159982449eba58d8fc4cb43957b94a4`.
+- PR head after push: `211b40932159982449eba58d8fc4cb43957b94a4`.
 
 ## Unresolved threads
 
 - Pre-fix GraphQL review-thread query: zero unresolved threads.
-- Post-push GraphQL review-thread query: to be recorded after push; only addressed threads may be resolved.
+- Post-push GraphQL review-thread query: zero unresolved threads; no thread mutation was needed.
 
 ## Remaining blockers
 

@@ -26,6 +26,7 @@ CI_JOB_TIMEOUTS = {
     "compat-matrix": 30,
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
+    "reproducibility-check": 10,
     "xdist-scratch-isolation": 15,
     "wheel-smoke-install": 20,
     "examples-smoke": 30,

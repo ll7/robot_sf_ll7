@@ -1,5 +1,5 @@
 version: 1
-updated_at: 2026-07-17
+updated_at: 2026-07-19
 policy: context-catalog.v1
 description: 'Machine-readable catalog for the current retrieval-first context index.
   This is not a full inventory of docs/context; it covers curated entry points from
@@ -20,6 +20,10 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/issue_6008_state.yaml
+  status: current
+  freshness: maintained
+  area: workflow_evidence
 - path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/README.md
   status: evidence
   freshness: dated
@@ -4543,6 +4547,22 @@ entries:
 - path: docs/context/evidence/issue_5447_ch7_case_capsules/README.md
   status: proposal
   freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5447_ch7_case_capsules/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5447_ch7_case_capsules/build_command.v1.txt
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5447_ch7_case_capsules/ch7_case_capsule_manifest.v1.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5447_ch7_case_capsules/pre_selection_ledger.v1.json
+  status: evidence
+  freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5602_scenario_evidence_crosswalk_release_0_0_3_2026-07-17
   status: evidence

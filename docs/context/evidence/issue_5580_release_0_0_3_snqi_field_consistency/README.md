@@ -53,6 +53,20 @@ The gate reads the archive without extracting it and fails closed on archive/has
 missing `snqi_diagnostics.json`, SHA-256 mismatch with the configured weights/baseline, or any
 ordering disagreement.
 
+### Automatic release-gate integration
+
+The same self-check is wired into the publication preflight
+(`robot_sf.benchmark.artifact_publication.verify_publication_bundle_preflight`) as Check 6, so
+any SNQI-bearing bundle (one declaring `payload/reports/snqi_diagnostics.json`) is audited
+automatically at bundle-build time: the per-episode `metrics.snqi` field is recomputed with the
+curvature-aware scalarizer and the field-derived arm ordering is compared to the diagnostics
+`planner_ordering`. A drifted bundle fails the preflight closed (raises
+`PublicationPreflightError`) before it can be published. Bundles without SNQI diagnostics report
+`evidence.snqi_field_consistency.checked == false` and are unaffected. The archive-level gate
+above remains the canonical post-publication audit (it additionally pins the release asset
+SHA-256 and tag); the preflight integration is the build-time twin that closes the "cannot drift
+silently" loop for new bundles.
+
 ## Classification and claim boundary
 
 - `schema_version`: `release_snqi_field_consistency.v1`

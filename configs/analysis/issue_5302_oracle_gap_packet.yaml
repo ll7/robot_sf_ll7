@@ -22,8 +22,11 @@ execution_boundary:
 
 planner_roster:
   selection_policy: >-
-    Compare exactly these five mechanism-stratified planner keys. Do not
-    silently expand to all registered keys.
+    Compare exactly these six mechanism-stratified planner keys. Do not
+    silently expand to all registered keys. Amended 2026-07-17 (maintainer
+    sign-off, orchestrator session): roster grew from five to six arms and the
+    PPO arm entered as experimental-with-pinned-provenance. See the amendment
+    block at the end of this packet.
   required:
     - planner_id: orca
       role: baseline_reactive
@@ -31,20 +34,61 @@ planner_roster:
       config_path: null
     - planner_id: ppo
       role: learned_policy
-      readiness: artifact_qualified_only
+      readiness: experimental_explicit_opt_in
       config_path: configs/algos/ppo_v3_camera_ready.yaml
+      fallback_to_goal: false
+      pinned_provenance:
+        model_id: ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200
+        checkpoint_sha256: 8367af109a27e8879ced0c8913f6eff26df7ec59c31ea88f9a297bb2c141eb09
+        provenance_source: "model/registry.yaml github_release.sha256"
+      notes: >-
+        Experimental-with-pinned-provenance, NOT artifact/paper-qualified.
+        Readiness reuses the existing experimental_explicit_opt_in vocabulary
+        token (honest: experimental, explicit opt-in, not qualified); provenance
+        is pinned via model_id + checkpoint_sha256 above. fallback_to_goal is
+        false to honor execution_boundary.fallback_or_degraded_success_allowed:
+        false (the S30 precedent config also used false). Gate facts for the
+        record: _ppo_paper_gate_status -> (False, "missing 'provenance' mapping")
+        when forced to the paper profile, and the only paper-profile config for
+        this model_id fail-closes at measured 0.872 < 0.900. No gate threshold
+        was lowered and no provenance mapping was fabricated; paper-qualification
+        is a separate future evidence event.
     - planner_id: prediction_planner
       role: predictive
       readiness: checkpoint_qualified_only
       config_path: configs/algos/prediction_planner_camera_ready.yaml
     - planner_id: scenario_adaptive_hybrid_orca_v1
-      role: scenario_adaptive_hybrid_leader
+      role: scenario_adaptive_selector_representative
       readiness: candidate_requires_existing_provenance
       config_path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v1.yaml
+      evidence: docs/context/issue_1454_s10_h500_candidate_comparison.md
+      notes: >-
+        Role renamed from scenario_adaptive_hybrid_leader on 2026-07-17: "leader"
+        asserted evidence that does not exist. v1 and v2_collision_guard are a
+        statistical tie in every campaign - h500 both 0.8729
+        (docs/context/issue_1454_s10_h500_candidate_comparison.md); h600 job 13282
+        packet states verbatim "treat the four arms as a statistical tie among
+        themselves"; S30 n=1440/arm both 0.7535 (docs/context/evidence/
+        issue_4882_s30_interpretation_2026-07-13/s30_arm_statistics.csv). This arm
+        is the selector-representative, still pinned to
+        scenario_adaptive_hybrid_orca_v1.
     - planner_id: prediction_mpc
       role: predictive_mpc
       readiness: experimental_explicit_opt_in
       config_path: configs/algos/prediction_mpc_cv.yaml
+    - planner_id: hybrid_rule_v3_fast_progress_static_escape_continuous
+      role: strongest_fixed_hybrid
+      readiness: candidate_requires_existing_provenance
+      config_path: configs/policy_search/candidates/hybrid_rule_v3_fast_progress_static_escape_continuous.yaml
+      evidence: docs/context/evidence/issue_4882_s30_interpretation_2026-07-13/s30_arm_statistics.csv
+      notes: >-
+        Added 2026-07-17 (maintainer sign-off) as the strongest known fixed hybrid
+        planner. S30 n=1440/arm success 0.7715 - the top hybrid, above
+        scenario_adaptive_hybrid_orca_v1/v2 at 0.7535 (docs/context/evidence/
+        issue_4882_s30_interpretation_2026-07-13/s30_arm_statistics.csv); h600 job
+        13282 success 0.799. Rationale: a best-fixed-planner baseline that omits the
+        strongest known fixed planner overstates the oracle gap and makes the
+        pre-registered STOP-selector branch untrustworthy.
   gated_or_deferred:
     - planner_id: risk_dwa
       condition: issue_5262_zero_over_69_diagnosis_resolved
@@ -81,7 +125,7 @@ input_contract:
     selection_and_evaluation_family_sets_must_be_disjoint: true
     scenario_cell_is_frozen_before_execution: true
     same_episode_set_across_planners: true
-    required_planner_count_per_episode: 5
+    required_planner_count_per_episode: 6
   provenance:
     required_paths:
       - robot_sf/benchmark/algorithm_readiness.py
@@ -221,7 +265,7 @@ row_status_policy:
     - blocked
   exclusion_rule: >-
     Any missing provenance, non-native execution, invalid row status, duplicate
-    planner/episode key, incomplete five-planner episode, or split leakage
+    planner/episode key, incomplete six-planner episode, or split leakage
     blocks the report; weak rows remain visible and never count as evidence.
 
 decision_rule:
@@ -273,3 +317,25 @@ readiness_decision:
   selector_training: false
   paper_claim_edits: false
   fallback_degraded_success_allowed: false
+
+amendment:
+  date: 2026-07-17
+  approved_by: "maintainer sign-off (orchestrator session)"
+  summary: >-
+    Roster expanded from five to six arms; PPO reclassified from
+    artifact_qualified_only to experimental-with-pinned-provenance. This is a
+    pre-registered roster amendment, not a metric-semantics change.
+  changes:
+    - "Renamed scenario_adaptive_hybrid_orca_v1 role scenario_adaptive_hybrid_leader -> scenario_adaptive_selector_representative (v1/v2_collision_guard are a statistical tie; 'leader' overclaimed)."
+    - "Added hybrid_rule_v3_fast_progress_static_escape_continuous (role strongest_fixed_hybrid); omitting the strongest fixed planner would overstate the oracle gap and the STOP-selector branch."
+    - "PPO readiness artifact_qualified_only -> experimental_explicit_opt_in with pinned model_id + checkpoint_sha256 and fallback_to_goal: false."
+  tie_evidence:
+    h500: "scenario_adaptive_hybrid_orca_v1 and _v2_collision_guard both 0.8729 (docs/context/issue_1454_s10_h500_candidate_comparison.md)"
+    h600_job_13282: "treat the four arms as a statistical tie among themselves"
+    s30_n1440_per_arm: "v1 0.7535, v2_collision_guard 0.7535, hybrid_rule_v3_fast_progress_static_escape_continuous 0.7715 (top hybrid) - docs/context/evidence/issue_4882_s30_interpretation_2026-07-13/s30_arm_statistics.csv"
+  ppo_gate_facts:
+    forced_paper_profile: "_ppo_paper_gate_status -> (False, missing 'provenance' mapping)"
+    paper_profile_config: "fail-closes at measured 0.872 < 0.900"
+    note: >-
+      No gate threshold lowered and no provenance mapping fabricated;
+      paper-qualification is a separate future evidence event.

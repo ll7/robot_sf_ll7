@@ -144,6 +144,57 @@ def test_native_command_metadata_rejects_non_mapping() -> None:
     assert nc.native_command_metadata_for_record(None) == (False, {}, {})  # type: ignore[arg-type]
 
 
+def test_geometry_verification_requires_planner_consumption_proof() -> None:
+    """Receiving geometry alone cannot verify an empty planner-facing channel."""
+    spec = nc.NativeCommandSpec.from_config(
+        {
+            "command": ["/bin/true"],
+            "require_static_geometry": True,
+        }
+    )
+    planner = nc.NativeCommandPlanner(spec)
+    planner._static_geometry = {"sha256": "expected"}
+    planner.run_state["geometry_input_received"] = True
+
+    assert planner.run_state["geometry_input_verified"] is False
+    with pytest.raises(NativeCommandStepError, match="omitted"):
+        planner._verify_geometry_consumption(None)
+    with pytest.raises(NativeCommandStepError, match="obstacle channel is empty"):
+        planner._verify_geometry_consumption(
+            {
+                "schema_version": "native-command-geometry-consumption.v1",
+                "geometry_sha256": "expected",
+                "obstacle_occupied_cells": 0,
+                "pedestrian_occupied_cells": 0,
+                "combined_occupied_cells": 0,
+                "combined_matches_union": True,
+            }
+        )
+    with pytest.raises(NativeCommandStepError, match="combined channel is incomplete"):
+        planner._verify_geometry_consumption(
+            {
+                "schema_version": "native-command-geometry-consumption.v1",
+                "geometry_sha256": "expected",
+                "obstacle_occupied_cells": 1,
+                "pedestrian_occupied_cells": 999,
+                "combined_occupied_cells": 1,
+                "combined_matches_union": True,
+            }
+        )
+    assert planner.run_state["geometry_input_verified"] is False
+    planner._verify_geometry_consumption(
+        {
+            "schema_version": "native-command-geometry-consumption.v1",
+            "geometry_sha256": "expected",
+            "obstacle_occupied_cells": 5,
+            "pedestrian_occupied_cells": 2,
+            "combined_occupied_cells": 7,
+            "combined_matches_union": True,
+        }
+    )
+    assert planner.run_state["geometry_input_verified"] is True
+
+
 # ---------------------------------------------------------------------------
 # Native-command policy builder
 # ---------------------------------------------------------------------------

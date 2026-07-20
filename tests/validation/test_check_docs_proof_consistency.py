@@ -539,6 +539,83 @@ def test_selected_context_catalog_keeps_strict_catalog_diagnostics(tmp_path: Pat
     assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
 
 
+def test_selected_context_catalog_scopes_row_diagnostics_to_requested_entries(
+    tmp_path: Path,
+) -> None:
+    """Mixed catalog selections must not surface unrelated catalog-row debt."""
+    repo_root = tmp_path
+    _write_catalog_with_output_pointer(repo_root)
+    requested = repo_root / "docs/context/requested.md"
+    requested.write_text("requested\n", encoding="utf-8")
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.write_text(
+        catalog.read_text(encoding="utf-8")
+        + "\n  - path: docs/context/requested.md\n"
+        + "    status: current\n"
+        + "    freshness: maintained\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _collect_diagnostics(
+        [
+            ChangedFile(status="M", path=Path("docs/context/catalog.yaml")),
+            ChangedFile(status="M", path=Path("docs/context/requested.md")),
+        ],
+        repo_root=repo_root,
+    )
+
+    assert diagnostics == []
+
+
+def test_selected_context_catalog_ignores_unrelated_changed_paths(tmp_path: Path) -> None:
+    """Unrelated changed files must not disable catalog-row diagnostics."""
+    repo_root = tmp_path
+    _write_catalog_with_output_pointer(repo_root)
+
+    diagnostics = _collect_diagnostics(
+        [
+            ChangedFile(status="M", path=Path("docs/context/catalog.yaml")),
+            ChangedFile(status="M", path=Path("scripts/example.py")),
+        ],
+        repo_root=repo_root,
+    )
+
+    assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_scoped_context_catalog_reports_non_mapping_entries(tmp_path: Path) -> None:
+    """Scoped validation must still report malformed catalog entry structure."""
+    repo_root = tmp_path
+    catalog = repo_root / "docs/context/catalog.yaml"
+    catalog.parent.mkdir(parents=True)
+    catalog.write_text(
+        "version: 1\nentries:\n  - malformed\n",
+        encoding="utf-8",
+    )
+
+    diagnostics = _context_catalog_diagnostics(
+        Path("docs/context/catalog.yaml"),
+        repo_root=repo_root,
+        selected_entry_paths={Path("docs/context/requested.md")},
+    )
+
+    assert any("entries[0] must be a mapping" in diagnostic.message for diagnostic in diagnostics)
+
+
+def test_forced_context_catalog_audit_still_checks_all_rows(tmp_path: Path) -> None:
+    """The explicit full-catalog mode retains repository-wide row diagnostics."""
+    repo_root = tmp_path
+    _write_catalog_with_output_pointer(repo_root)
+
+    diagnostics = _collect_diagnostics(
+        [ChangedFile(status="M", path=Path("docs/context/requested.md"))],
+        repo_root=repo_root,
+        force_context_catalog=True,
+    )
+
+    assert any("ignored output/ artifacts" in diagnostic.message for diagnostic in diagnostics)
+
+
 def test_force_context_catalog_keeps_strict_catalog_diagnostics(tmp_path: Path) -> None:
     """Explicit full context-catalog mode checks catalog debt even for code diffs."""
     repo_root = tmp_path

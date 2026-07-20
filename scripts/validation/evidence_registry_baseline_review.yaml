@@ -60,15 +60,14 @@ reviewed_files:
       77 hash_without_artifact_path findings. Recovering the private dataset location is external
       maintainer action.
   - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/artifact_manifest.yaml
-    codes: [artifact_hash_mismatch, hash_without_artifact_path, uncommitted_artifact_missing_location]
+    codes: [hash_without_artifact_path, uncommitted_artifact_missing_location]
     disposition: baseline
     reason: >-
-      Package-a transfer manifest. The single artifact_hash_mismatch is the bare filename
-      README.md, which the linter resolves repo-root-relative; the manifest intends the
-      manifest-directory README (whose hash matches), so this is an ambiguous-path provenance gap,
-      not a corrupted artifact. The uncommitted_artifact_missing_location rows are external
-      campaign store / untracked table artifacts; hash_without_artifact_path is the external
-      episode-store checksum. All are provenance-backfill legacy debt.
+      Package-a transfer manifest. The prior bare README.md path was repaired to use the intended
+      repository-relative artifact path, so it no longer produces artifact_hash_mismatch. The
+      uncommitted_artifact_missing_location rows are external campaign store / untracked table
+      artifacts; hash_without_artifact_path is the external episode-store checksum. All are
+      provenance-backfill legacy debt.
   - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/registration.json
     codes: [hash_without_artifact_path]
     disposition: baseline
@@ -152,6 +151,46 @@ reviewed_files:
       binding is outside this baseline reconciliation, so the finding is explicitly dispositioned
       as baseline under the existing strict-CI policy.
 reviewed_baseline_increases:
+  - path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/nominal_campaign_summary.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is reachable from preserved pull-request history but not from main's
+      ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
+      this checkout-dependent historical provenance finding explicitly; do not rewrite the
+      artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/stress_campaign_summary.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is reachable from preserved pull-request history but not from main's
+      ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
+      this checkout-dependent historical provenance finding explicitly; do not rewrite the
+      artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/campaign_manifest.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is reachable from preserved pull-request history but not from main's
+      ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
+      this checkout-dependent historical provenance finding explicitly; do not rewrite the
+      artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_1454_stage_a_fixed_h100_2026-05-22/reports/campaign_analysis.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is reachable from preserved pull-request history but not from main's
+      ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
+      this checkout-dependent historical provenance finding explicitly; do not rewrite the
+      artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/campaign_manifest.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is reachable from preserved pull-request history but not from main's
+      ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
+      this checkout-dependent historical provenance finding explicitly; do not rewrite the
+      artifact or producer SHA in this baseline reconciliation.
   - path: docs/context/evidence/issue_4848_group_crossing_exemplars_2026-07/goal/classic_group_crossing_high_seed24_best/metadata.json
     codes: [dangling_commit]
     disposition: baseline

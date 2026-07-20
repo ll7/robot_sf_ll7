@@ -113,15 +113,7 @@ if [[ ! -x "$venv_path/bin/python" ]]; then
 fi
 
 check_shared_venv_freshness() {
-  # A checkout-local fast-pysf source package is authoritative because it is placed first on
-  # PYTHONPATH below. Do not compare it with the reused installed copy: that copy may belong to the
-  # owning checkout and can legitimately differ from this linked worktree.
-  local venv="$1"
   local src_pkg="$repo_root/fast-pysf/pysocialforce"
-
-  if [[ ! -d "$src_pkg" ]]; then
-    return 0
-  fi
 
   # PYTHONPATH makes the checkout source authoritative; an owning checkout's
   # installed copy is intentionally not a freshness boundary for this helper.

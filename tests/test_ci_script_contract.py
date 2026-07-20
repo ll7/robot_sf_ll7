@@ -958,13 +958,13 @@ def test_worktree_shared_venv_helper_reports_relative_missing_env() -> None:
 
 
 def test_worktree_shared_venv_helper_has_freshness_check_wiring() -> None:
-    """The shared-venv helper must guard the reused env against source drift (issue #5023)."""
+    """The shared-venv helper recognizes checkout-local source as authoritative (issue #6003)."""
     script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
 
     # The freshness gate recognizes the checkout-local source as authoritative.
     assert "check_shared_venv_freshness()" in script_text
     assert 'local src_pkg="$repo_root/fast-pysf/pysocialforce"' in script_text
-    assert "source package is authoritative" in script_text
+    assert "checkout source authoritative" in script_text
     # Standalone commands with a verified no-project-import boundary remain supported.
     assert "--standalone" in script_text
     assert 'if [[ -z "$standalone" ]]; then' in script_text
@@ -1051,7 +1051,7 @@ def _make_freshness_fixture_repo(
     return repo, venv, env
 
 
-def test_worktree_shared_venv_freshness_check_fails_early_on_stale_env(
+def test_worktree_shared_venv_ignores_stale_installed_copy(
     tmp_path: Path,
 ) -> None:
     """A checkout source package must win over a stale installed copy (issue #6003)."""

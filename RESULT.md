@@ -2,40 +2,38 @@
 
 ## Fixed comments
 
-- Fixed the mergeability blocker by merging `origin/main` and resolving the tracked `RESULT.md`
-  conflict in favor of this PR's current evidence handoff.
-- No fixable inline review comments were present. GitHub GraphQL returned zero unresolved review
-  threads before the fix.
-- The only submitted review is Gemini Code Assist `COMMENTED` with no requested changes; it is not
-  an authorized approval.
+- No fixable review comments were present. The pre-push GitHub GraphQL query returned zero
+  unresolved inline review threads.
+- The only submitted review is Gemini Code Assist `COMMENTED` and contains no requested change;
+  it is not an authorized human approval.
+- No code or evidence content required changing for the accepted blockers. This lease forbids
+  compute submission, so the hosted reproducibility blocker cannot be replaced by a hosted
+  diagnostic here.
 
 ## Validation
 
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/lint_evidence_registry.py --strict --strict-exclusion-policy docs/context/evidence/evidence_registry_strict_ci_policy.yaml` — passed; active findings 0.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/evidence_registry_ratchet.py --check` — passed; findings 414, baseline 414.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/dev/test_evidence_registry_ratchet.py -q` — passed; 24 tests.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/check_docs_evidence_integrity.py --base-ref origin/main` — passed; 74 changed files.
-- `git diff --check` — passed after conflict resolution.
+- PR head and branch were confirmed against GitHub before editing: `33809484cc61c0ded5620ceac77a54284423b19a`.
+- `git fetch origin main` — passed; `origin/main` is an ancestor of the PR head.
+- `git diff --check` — passed.
+- Targeted evidence validation was already green on this PR head: strict evidence lint, evidence
+  registry ratchet, 24 ratchet tests, and docs-evidence integrity. No runtime or benchmark code
+  changed in this remediation.
 
 ## Commit and push
 
-- PR head confirmed before this run: `7e28032c7e076bdb43fbd303f581547577086572`.
-- Merge commit: `da4bb50930aed3749a15d3f16dc983baadb4b7f3`.
-- Final handoff commit: this reporting commit; its SHA is returned with the task result.
+- Commit SHA: recorded in the final task response after push.
+- Push target: existing PR branch `cheap/cheap-issue-5986-e4ebaff0d9c5`.
+- No new PR, merge, worktree deletion, or Slurm submission was performed.
 
 ## Post-push review threads
 
-- Unresolved inline review threads before push: none; GraphQL `reviewThreads` returned an empty list.
-- Resolved thread IDs: none; no inline threads existed to resolve.
-- Post-push thread re-query at `da4bb50930aed3749a15d3f16dc983baadb4b7f3`: none; GraphQL
-  `reviewThreads` returned an empty list.
+- Pre-push unresolved inline review threads: none.
+- Resolved thread IDs: none; there were no threads to resolve.
+- Post-push unresolved inline review threads: recorded after the push in the final task response.
 
 ## Blockers
 
-- GitHub `reviewDecision` is empty and the only submitted review is `COMMENTED`; an approving review
-  must be supplied by an authorized human reviewer.
-- GitHub `reproducibility-check` is `SKIPPED`; this lease forbids compute submission, so local
-  diagnostic execution is not a replacement hosted gate.
-- After the merge fix, GitHub reports `MERGEABLE` with `UNSTABLE` while hosted checks are queued or
-  running; `reviewDecision` remains empty pending an authorized approval.
-- No merge, delete, Slurm submission, or new PR was performed.
+- `reviewDecision` is `null`: no authorized approving human review is present; the only submitted
+  review is `COMMENTED`.
+- Hosted `reproducibility-check` is `SKIPPED`. This lease forbids compute submission, so it cannot
+  be replaced by a hosted diagnostic here.

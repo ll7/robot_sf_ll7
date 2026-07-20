@@ -35,7 +35,7 @@ The PR body now includes the required `Domain-Aware Approval` section with expli
 
 ## Review state
 
-- PR head after the review fix: `f7a74e6039acedf678b377afbe5ff9ad9a686584`
+- Current PR head after the review fix and result refresh: `48f4dd6be`
 - Unresolved review threads: none. All three original threads are resolved.
 
 ## Remaining blockers

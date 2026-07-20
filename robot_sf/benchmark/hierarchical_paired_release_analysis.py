@@ -32,6 +32,7 @@ from robot_sf.benchmark.event_ledger import (
 )
 from robot_sf.benchmark.finite_checks import require_finite_scalar
 from robot_sf.benchmark.hierarchical_paired_release_inputs import (
+    INPUTS_READY_ANALYSIS_NOT_RUN,
     evaluate_hierarchical_paired_release_inputs,
     validate_hierarchical_paired_release_input_manifest,
 )
@@ -612,6 +613,7 @@ def practical_effect_classification(
 def run_hierarchical_paired_release_analysis(
     manifest: Mapping[str, Any],
     *,
+    repo_root: str | Path,
     successor_rows: Sequence[Mapping[str, Any]],
     planner_pairs: Sequence[tuple[str, str]],
     family_of: Mapping[str, str] | None = None,
@@ -627,6 +629,7 @@ def run_hierarchical_paired_release_analysis(
 
     Args:
         manifest: The validated #5351 input manifest.
+        repo_root: Repository root used to verify durable successor-release inputs.
         successor_rows: Typed-ledger successor rows to analyse.
         planner_pairs: Planner arms to compare; each pair contributes one
             family of comparisons to the multiplicity correction.
@@ -641,6 +644,7 @@ def run_hierarchical_paired_release_analysis(
     """
 
     normalized_manifest = validate_hierarchical_paired_release_input_manifest(manifest)
+    _require_ready_successor_release_inputs(normalized_manifest, repo_root=repo_root)
     resolved_policy = policy or AnalysisPolicy()
     if not successor_rows:
         raise HierarchicalPairedReleaseAnalysisError(
@@ -749,6 +753,19 @@ def run_hierarchical_paired_release_analysis(
             "claim_promotion": "none",
         },
     }
+
+
+def _require_ready_successor_release_inputs(
+    manifest: Mapping[str, Any], *, repo_root: str | Path
+) -> None:
+    """Reject execution until release provenance and durable rows pass the input gate."""
+
+    input_report = evaluate_hierarchical_paired_release_inputs(manifest, repo_root=repo_root)
+    if input_report["status"] != INPUTS_READY_ANALYSIS_NOT_RUN:
+        raise HierarchicalPairedReleaseAnalysisError(
+            "cannot run analysis until successor-release input readiness is satisfied: "
+            f"{input_report['blocking_prerequisites']}"
+        )
 
 
 def fail_closed_analysis_from_manifest(
@@ -1074,23 +1091,41 @@ def _count_outcome(row: Mapping[str, Any], field: str) -> int:
 
 
 def _completion_time(row: Mapping[str, Any]) -> float:
-    """Read a non-negative completion time from the row's provenance or metrics.
+    """Read a required finite non-negative completion time from a ledger row.
+
+    Raises:
+        HierarchicalPairedReleaseAnalysisError: If completion time is absent,
+            non-numeric, non-finite, or negative.
 
     Returns:
-        The completion time clamped to be non-negative, or ``0.0`` when absent.
+        The validated completion time.
     """
 
     provenance = row.get("provenance")
     if isinstance(provenance, Mapping):
         candidate = provenance.get("completion_time")
-        if isinstance(candidate, (int, float)) and math.isfinite(float(candidate)):
-            return max(float(candidate), 0.0)
+        if _valid_completion_time(candidate):
+            return float(candidate)
     metrics = row.get("metrics")
     if isinstance(metrics, Mapping) and isinstance(metrics.get("completion_time"), Mapping):
         candidate = metrics["completion_time"].get("value")
-        if isinstance(candidate, (int, float)) and math.isfinite(float(candidate)):
-            return max(float(candidate), 0.0)
-    return 0.0
+        if _valid_completion_time(candidate):
+            return float(candidate)
+    raise HierarchicalPairedReleaseAnalysisError(
+        "completion_time must be a finite non-negative provenance.completion_time "
+        "or metrics.completion_time.value"
+    )
+
+
+def _valid_completion_time(value: Any) -> bool:
+    """Return whether ``value`` is a finite non-negative numeric duration."""
+
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+        and float(value) >= 0.0
+    )
 
 
 def _exposure(row: Mapping[str, Any]) -> float:

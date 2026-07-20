@@ -11,6 +11,8 @@ analysis contract, not benchmark evidence: the real successor release rows
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -108,6 +110,27 @@ def _manifest() -> dict[str, Any]:
     """Load a fresh copy of the checked-in blocked manifest."""
 
     return load_hierarchical_paired_release_input_manifest(_MANIFEST_PATH)
+
+
+def _ready_manifest(tmp_path: Path, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Create a manifest whose durable synthetic successor rows pass the input gate."""
+
+    rows_path = tmp_path / "docs/context/evidence/release_successor/rows.jsonl"
+    rows_path.parent.mkdir(parents=True, exist_ok=True)
+    serialized_rows = "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n"
+    rows_path.write_text(serialized_rows, encoding="utf-8")
+    manifest = _manifest()
+    successor_release = manifest["successor_release"]
+    assert isinstance(successor_release, dict)
+    successor_release.update(
+        {
+            "release_tag": "v2.0.0",
+            "commit": "a" * 40,
+            "typed_ledger_rows": rows_path.relative_to(tmp_path).as_posix(),
+            "typed_ledger_rows_sha256": hashlib.sha256(rows_path.read_bytes()).hexdigest(),
+        }
+    )
+    return manifest
 
 
 def test_build_matched_cells_pairs_ledger_rows_and_preserves_outcomes() -> None:
@@ -373,13 +396,23 @@ def test_exposure_and_completion_time_fallbacks_fail_closed_or_read_metric_value
     ):
         build_matched_cells_from_ledger_rows(invalid_exposure, planner_pair=("alpha", "beta"))
 
+    for invalid_time in (None, False, -1.0, float("nan"), float("inf")):
+        invalid_completion_time = _two_arm_rows()
+        invalid_completion_time[0]["provenance"]["completion_time"] = invalid_time
+        with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="completion_time must be"):
+            build_matched_cells_from_ledger_rows(
+                invalid_completion_time, planner_pair=("alpha", "beta")
+            )
 
-def test_run_analysis_emits_machine_readable_report_with_blocked_claim_gate() -> None:
+
+def test_run_analysis_emits_machine_readable_report_with_blocked_claim_gate(tmp_path: Path) -> None:
     """Even on valid rows the claim gate stays blocked pending review."""
 
     rows = _two_arm_rows()
+    manifest = _ready_manifest(tmp_path, rows)
     report = run_hierarchical_paired_release_analysis(
-        _manifest(),
+        manifest,
+        repo_root=tmp_path,
         successor_rows=rows,
         planner_pairs=[("alpha", "beta")],
         horizon=20.0,
@@ -417,7 +450,8 @@ def test_run_analysis_emits_machine_readable_report_with_blocked_claim_gate() ->
     assert conformance["sensitivity_analyses"] == "delivered_analysis_pending_release_input"
     # Deterministic across runs given the seeded policy.
     again = run_hierarchical_paired_release_analysis(
-        _manifest(),
+        manifest,
+        repo_root=tmp_path,
         successor_rows=rows,
         planner_pairs=[("alpha", "beta")],
         horizon=20.0,
@@ -426,16 +460,23 @@ def test_run_analysis_emits_machine_readable_report_with_blocked_claim_gate() ->
     assert again["paired_effects"] == report["paired_effects"]
 
 
-def test_run_analysis_rejects_empty_rows_and_missing_pairs() -> None:
+def test_run_analysis_rejects_empty_rows_and_missing_pairs(tmp_path: Path) -> None:
     """The runner fail-closes on absent input rather than emitting a fake report."""
 
+    rows = _two_arm_rows()
+    with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="input readiness"):
+        run_hierarchical_paired_release_analysis(
+            _manifest(), repo_root=tmp_path, successor_rows=rows, planner_pairs=[("alpha", "beta")]
+        )
+    manifest = _ready_manifest(tmp_path, rows)
     with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="empty successor row set"):
         run_hierarchical_paired_release_analysis(
-            _manifest(), successor_rows=[], planner_pairs=[("alpha", "beta")]
+            manifest, repo_root=tmp_path, successor_rows=[], planner_pairs=[("alpha", "beta")]
         )
     with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="no matched cells"):
         run_hierarchical_paired_release_analysis(
-            _manifest(),
+            manifest,
+            repo_root=tmp_path,
             successor_rows=[_ledger_row(scenario_id="x", seed=1, planner="gamma")],
             planner_pairs=[("alpha", "beta")],
         )
@@ -443,25 +484,27 @@ def test_run_analysis_rejects_empty_rows_and_missing_pairs() -> None:
         HierarchicalPairedReleaseAnalysisError, match="planner_pairs must not be empty"
     ):
         run_hierarchical_paired_release_analysis(
-            _manifest(), successor_rows=_two_arm_rows(), planner_pairs=[]
+            manifest, repo_root=tmp_path, successor_rows=rows, planner_pairs=[]
         )
     with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="outcomes must not be empty"):
         run_hierarchical_paired_release_analysis(
-            _manifest(),
-            successor_rows=_two_arm_rows(),
+            manifest,
+            repo_root=tmp_path,
+            successor_rows=rows,
             planner_pairs=[("alpha", "beta")],
             outcomes=[],
         )
     with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="bootstrap_samples"):
         run_hierarchical_paired_release_analysis(
-            _manifest(),
-            successor_rows=_two_arm_rows(),
+            manifest,
+            repo_root=tmp_path,
+            successor_rows=rows,
             planner_pairs=[("alpha", "beta")],
             policy=AnalysisPolicy(bootstrap_samples=0),
         )
 
 
-def test_run_analysis_emits_summaries_for_every_planner_pair() -> None:
+def test_run_analysis_emits_summaries_for_every_planner_pair(tmp_path: Path) -> None:
     """Every declared pair receives its own completion and exposure summaries."""
 
     rows = _two_arm_rows()
@@ -470,7 +513,8 @@ def test_run_analysis_emits_summaries_for_every_planner_pair() -> None:
         copied["planner"] = "gamma" if row["planner"] == "alpha" else "delta"
         rows.append(copied)
     report = run_hierarchical_paired_release_analysis(
-        _manifest(),
+        _ready_manifest(tmp_path, rows),
+        repo_root=tmp_path,
         successor_rows=rows,
         planner_pairs=[("alpha", "beta"), ("gamma", "delta")],
         horizon=20.0,

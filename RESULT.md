@@ -1,27 +1,33 @@
-# PR #6053 review-fixer result
+# PR #6060 Review Fix Result
 
 ## Fixed comments
 
-- Fixed the accepted P1 blocker: `scripts/dev/check_docs_proof_consistency_diff.sh` no longer
-  adds synthetic `docs/context/README.md` and `docs/context/INDEX.md` paths when
-  `docs/context/catalog.yaml` is part of a docs/context-only diff. Catalog-only diffs now reach
-  the checker without a row subset, preserving the documented full-catalog audit.
-- The live PR had no unresolved review threads after the fix, so no thread was resolved.
+- Fixed unresolved review thread `PRRT_kwDOLRSZdc6SUaTZ` in `scripts/dev/pr_loop_policy.py`:
+  gate-verdict SHA parsing now requires a complete word-bounded token.
+- Added a regression test rejecting a 40-character SHA followed by a word-character suffix.
+- Posted the current exact-head `gate-verdict: accepted @ <SHA>` trailer after each final head
+  update; the live trailer is refreshed below for the final commit.
 
 ## Validation
 
-- `bash -n scripts/dev/check_docs_proof_consistency_diff.sh` — passed.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/validation/test_check_docs_proof_consistency.py -q` — 55 passed.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check scripts/validation/check_docs_proof_consistency.py tests/validation/test_check_docs_proof_consistency.py` — passed.
-- `scripts/dev/check_docs_proof_consistency_diff.sh` — passed.
-- `git diff --check` — passed.
-- Explicit catalog audit still reports the two pre-existing ignored-output rows in entries 3 and 4; this is expected full-audit behavior and remains outside this blocker fix.
+- `uv run ruff check scripts/dev/pr_loop_policy.py tests/dev/test_pr_loop_policy.py` — passed.
+- `uv run ruff format --check scripts/dev/pr_loop_policy.py tests/dev/test_pr_loop_policy.py` — passed.
+- `uv run pytest tests/dev/test_pr_loop_policy.py -q` — 105 passed.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked: preserved untracked
+  `.ll7_task_*` task-runner metadata prevents changed-file proof.
 
-## Commit and review state
+## Commit
 
-- Implementation commit pushed: `3b600b6dc2c52926ac66d06b4d561e5c1dbd1269`.
-- Result handoff commit pushed: `273de4082`.
-- Final PR head after the handoff push: `273de4082`.
-- Unresolved threads after push: none.
-- Remaining blockers: none for the accepted P1. Existing catalog entries 3 and 4 remain a separate
-  full-audit data-debt limitation.
+- Implementation commit SHA: `dd7f90f3fd827803a89183ce22273a5d2b548b88`.
+- The result-file commit SHA is reported in the final handoff.
+
+## Review state
+
+- Resolved: `PRRT_kwDOLRSZdc6SUaTZ`.
+- Other queried threads were already resolved; no other unresolved review threads were found.
+- Hosted checks are pending on the final pushed head, so merge-readiness is not claimed.
+
+## Blockers
+
+- Full canonical local readiness proof remains unavailable until the preserved untracked task-runner
+  metadata is handled by the task owner or readiness workflow.

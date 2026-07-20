@@ -45,6 +45,14 @@ def test_documented_issue_snapshot_is_not_selector_less() -> None:
         )
 
 
+def test_selector_less_issue_snapshot_is_rejected(capsys) -> None:  # type: ignore[no-untyped-def]
+    """The bare ``--json`` form must remain invalid without a selector."""
+    rc = main(["--json"])
+
+    assert rc == 1
+    assert "at least one issue number is required unless --claimable" in capsys.readouterr().err
+
+
 def test_documented_issue_snapshot_succeeds_against_cli(capsys) -> None:  # type: ignore[no-untyped-def]
     """The documented broad-discovery command drives the production parser offline."""
     invocations = _snapshot_invocations(DOC_PATH.read_text(encoding="utf-8"))

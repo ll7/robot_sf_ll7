@@ -16,13 +16,14 @@
 
 ## Commit and push
 
-- Fix/report commit SHA: pending until the count correction is committed and pushed.
+- Fix/report commit SHA: `5e1d3493ca07be4401ef373c60ac251dca716d87`.
 - PR head before this fix: `fc725f43495f664fc0543def193c1b6944cc2bf5`.
+- PR head after push: `5e1d3493ca07be4401ef373c60ac251dca716d87`.
 
 ## Post-push review threads
 
 - Unresolved inline review threads before push: none (GraphQL `reviewThreads` returned an empty list).
-- Post-push thread re-query: pending until the count correction is pushed.
+- Post-push thread re-query at `5e1d3493ca07be4401ef373c60ac251dca716d87`: none; GraphQL `reviewThreads` returned an empty list.
 - Resolved thread IDs: none; no inline threads existed to resolve.
 
 ## Blockers

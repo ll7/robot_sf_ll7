@@ -572,8 +572,7 @@ def _catalog_entries_diagnostics(
     for index, entry in enumerate(entries):
         entry_path = f"{catalog_path.as_posix()}:entries[{index}]"
         if not isinstance(entry, dict):
-            if selected_entry_paths is None:
-                diagnostics.append(Diagnostic(catalog_path, f"{entry_path} must be a mapping"))
+            diagnostics.append(Diagnostic(catalog_path, f"{entry_path} must be a mapping"))
             continue
         if not _catalog_entry_is_selected(entry, selected_entry_paths=selected_entry_paths):
             continue
@@ -952,7 +951,10 @@ def _collect_diagnostics(
         selected_entry_paths = None
         if not force_context_catalog:
             requested_paths = {
-                changed.path for changed in changed_list if changed.path != _CONTEXT_CATALOG
+                changed.path
+                for changed in changed_list
+                if changed.path != _CONTEXT_CATALOG
+                and _is_within_dir(changed.path, _TOP_LEVEL_CONTEXT_DIR)
             }
             if requested_paths:
                 selected_entry_paths = requested_paths

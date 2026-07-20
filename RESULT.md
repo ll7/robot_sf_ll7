@@ -21,11 +21,11 @@ the pre-fix query.
 - `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 32 passed.
 - `uv run python scripts/dev/check_pr_followups.py --body-file /dev/stdin --json` with the live PR body — domain approval `ok`; follow-ups `ok`.
 - `git diff --check` — passed.
-- `BASE_REF=origin/main PR_READY_MODE=final scripts/dev/pr_ready_check.sh` — pending; run after this record is committed and the preserved harness files are temporarily relocated.
+- `BASE_REF=origin/main PR_READY_MODE=final scripts/dev/pr_ready_check.sh` with the live PR body supplied via `PR_READY_PR_BODY_FILE` and the preserved harness files temporarily relocated — changed-file proof and core lane passed (`7,915 passed, 17 skipped`); optional lane stopped at two unrelated PPO artifact checksum failures.
 
 ## Commit
 
-- Fix commit SHA: to be recorded after commit and push.
+- Fix commit SHA: `1f34523d3` before this result update; final RESULT update commit is to be recorded after push.
 - PR head: re-query after push.
 
 ## Unresolved threads
@@ -35,5 +35,8 @@ the pre-fix query.
 
 ## Remaining blockers
 
-- None expected if the canonical final readiness command passes. If it fails, the exact failed gate
-  and preserved harness state will be recorded here.
+- Canonical optional-extra readiness is blocked by external model-artifact provenance: both
+  `tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_target_runs_deterministically_with_real_runner`
+  and `tests/benchmark/test_issue_5498_native_ppo_slice.py::test_ppo_only_manifest_slice_verifies_against_subset`
+  observed a downloaded PPO model checksum different from the expected repository checksum.
+  Focused actuator validation passed; no retry of the unchanged broad lane was made.

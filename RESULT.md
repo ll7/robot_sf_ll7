@@ -1,27 +1,27 @@
-# PR #6053 review-fixer result
+# PR #6062 review-blocker result
 
 ## Fixed comments
 
-- Fixed the accepted P1 blocker: `scripts/dev/check_docs_proof_consistency_diff.sh` no longer
-  adds synthetic `docs/context/README.md` and `docs/context/INDEX.md` paths when
-  `docs/context/catalog.yaml` is part of a docs/context-only diff. Catalog-only diffs now reach
-  the checker without a row subset, preserving the documented full-catalog audit.
-- The live PR had no unresolved review threads after the fix, so no thread was resolved.
+- `3616257960` / `PRRT_kwDOLRSZdc6SU6yn`: `_find_float_after_keywords` now uses one alternation regex, so the first physical keyword match wins.
+- `3616257968` / `PRRT_kwDOLRSZdc6SU6ys`: `_find_float_before_units` now uses one alternation regex, so the first physical unit match wins.
+- `3616257973` / `PRRT_kwDOLRSZdc6SU6yv`: clause splitting excludes `e.g.` and `i.e.` abbreviation boundaries.
+- `3616257978` / `PRRT_kwDOLRSZdc6SU6yz`: non-string `claim_boundary` values now fail input validation.
+- `3616257983` / `PRRT_kwDOLRSZdc6SU6y4`: null identifiers now fail input validation, and payload construction defensively normalizes null to `unknown`.
+
+All five threads were re-queried at head `44f9576ba26c7a22c4dd70169f626296fb830888` and resolved. The final post-resolution query reported zero unresolved review threads.
 
 ## Validation
 
-- `bash -n scripts/dev/check_docs_proof_consistency_diff.sh` — passed.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/validation/test_check_docs_proof_consistency.py -q` — 55 passed.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check scripts/validation/check_docs_proof_consistency.py tests/validation/test_check_docs_proof_consistency.py` — passed.
-- `scripts/dev/check_docs_proof_consistency_diff.sh` — passed.
+- `uv run pytest tests/scenarios/test_convert_regulation_to_scenario.py -q` — 58 passed.
+- `uv run ruff check scripts/tools/convert_regulation_to_scenario.py tests/scenarios/test_convert_regulation_to_scenario.py` — passed.
 - `git diff --check` — passed.
-- Explicit catalog audit still reports the two pre-existing ignored-output rows in entries 3 and 4; this is expected full-audit behavior and remains outside this blocker fix.
 
-## Commit and review state
+## Commits
 
-- Implementation commit pushed: `3b600b6dc2c52926ac66d06b4d561e5c1dbd1269`.
-- Result handoff commit pushed: `273de4082`.
-- Final PR head after the handoff push: `273de4082`.
-- Unresolved threads after push: none.
-- Remaining blockers: none for the accepted P1. Existing catalog entries 3 and 4 remain a separate
-  full-audit data-debt limitation.
+- Code and regression tests: `44f9576ba26c7a22c4dd70169f626296fb830888`.
+- This result record: `05cd6da3dca4f5aa239d4c013dc99ca989afdbf0`.
+
+## Remaining blockers
+
+- Full local PR readiness proof was not run. The lease harness creates untracked `.ll7_task_*` files, and local-edit authorization forbids staging or altering them. They remain untouched in the isolated worktree.
+- GitHub checks for the pushed code commit were still running when the post-push snapshot was taken; no local claim of full PR readiness is made.

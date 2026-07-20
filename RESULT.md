@@ -1,5 +1,7 @@
 # PR #6063 Review Blocker Result
 
+Reviewed at PR head `e7768248a2ca1e328dbbd87286c6af96f2a9d8a0`.
+
 ## Fixed comments
 
 - `PRRT_kwDOLRSZdc6SVXPi`: yaw/steering-rate calculation now inspects only adjacent
@@ -20,17 +22,20 @@ All three review threads are currently resolved; no unresolved threads remain.
 - `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 32 passed.
 - `git diff --check` — passed.
 - Live PR-body contract check — `pending_domain_approval` (exit 2).
-- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — exit 2 because preserved
-  untracked `.ll7_task_*` harness files prevent changed-file readiness proof.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — exit 2. The canonical
+  changed-file proof is unavailable because the five preserved untracked
+  `.ll7_task_*` harness files are present; they were intentionally neither deleted
+  nor staged.
 
 ## Commit
 
-- PR head verified before this update: `6985ca958fdcd3b5e346e9976bc9c51b01cbc2df`.
-- Report refresh commit: `797b73c07ae75ae468a9729cb2376adc93abb961`.
+- PR head verified before this update: `e7768248a2ca1e328dbbd87286c6af96f2a9d8a0`.
+- This report refresh is the next commit on the PR branch.
 
 ## Unresolved threads
 
-- None at the pre-push query. Post-push state is recorded below.
+- Three existing review threads are resolved; no unresolved threads were found in
+  the pre-push query. Post-push state is recorded below.
 
 ## Remaining blockers
 
@@ -39,11 +44,11 @@ All three review threads are currently resolved; no unresolved threads remain.
   this execution, so changing it to approved or waived would be unauthorized.
 - Full canonical `pr_ready_check` proof remains unavailable because the five preserved
   untracked `.ll7_task_*` files prevent changed-file readiness proof. They were not
-  deleted or staged.
+  deleted or staged, per lease authorization.
 
 ## Post-push state
 
-- Commit SHA: `797b73c07ae75ae468a9729cb2376adc93abb961`.
-- Post-push PR head: `97f07dd3ba3047f75acc0678c26bc280cdb86b53`.
-- Post-push review-thread re-query: zero unresolved threads; all three existing
-  threads remain resolved.
+- Commit SHA: to be recorded after push.
+- Post-push PR head: to be recorded after push.
+- Post-push review-thread re-query: to be recorded after push; only addressed
+  threads may be resolved.

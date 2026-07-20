@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import errno
+import os
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -61,6 +65,49 @@ def test_main_reports_unexpected_standard_exception_as_blocked(
     )
 
 
+def test_main_reports_watchdog_timeout_as_structured_blocked_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    """A watchdog failure preserves its planner and cleanup evidence in JSON output."""
+
+    def raise_watchdog_error(**_: object) -> dict[str, object]:
+        raise smoke_validator.SmokeWatchdogError(
+            "native smoke exceeded its end-to-end watchdog timeout",
+            details={
+                "failure_kind": "native_end_to_end_timeout",
+                "planner_id": "teb",
+                "child_process_terminated": True,
+            },
+        )
+
+    monkeypatch.setattr(smoke_validator, "validate_smoke", raise_watchdog_error)
+
+    result = smoke_validator.main(
+        [
+            "--scenario-id",
+            "classic_head_on_corridor_low",
+            "--seed",
+            "111",
+            "--horizon",
+            "500",
+            "--dt",
+            "0.1",
+            "--workers",
+            "1",
+            "--output-dir",
+            str(tmp_path),
+            "--json",
+        ]
+    )
+
+    assert result == 1
+    assert capsys.readouterr().out == (
+        '{"child_process_terminated": true, "error": "native smoke exceeded its end-to-end '
+        'watchdog timeout", "failure_kind": "native_end_to_end_timeout", "planner_id": "teb", '
+        '"status": "blocked"}\n'
+    )
+
+
 def test_five_planner_mode_omits_single_row_arguments(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
@@ -85,3 +132,81 @@ def test_standard_mode_still_requires_single_row_arguments(tmp_path: Path) -> No
 
     with pytest.raises(SystemExit, match="2"):
         smoke_validator.main(["--output-dir", str(tmp_path)])
+
+
+def test_native_watchdog_reports_end_to_end_timeout(tmp_path: Path) -> None:
+    """A row that never writes must become a structured end-to-end timeout."""
+    with pytest.raises(smoke_validator.SmokeWatchdogError) as raised:
+        smoke_validator._run_native_row_with_watchdog(
+            command=[sys.executable, "-c", "import time; time.sleep(30)"],
+            episodes_path=tmp_path / "episodes.jsonl",
+            timeout_seconds=0.05,
+            progress_timeout_seconds=0.05,
+            planner_id="teb",
+        )
+
+    assert raised.value.details == {
+        "failure_kind": "native_end_to_end_timeout",
+        "planner_id": "teb",
+        "timeout_seconds": 0.05,
+        "progress_timeout_seconds": 0.05,
+        "episode_path": str(tmp_path / "episodes.jsonl"),
+        "child_process_terminated": True,
+    }
+
+
+def test_native_watchdog_resets_progress_deadline_when_episode_output_changes(
+    tmp_path: Path,
+) -> None:
+    """Episode-file changes extend the progress deadline until output becomes stale again."""
+    episodes_path = tmp_path / "episodes.jsonl"
+    writer = (
+        "from pathlib import Path; import sys, time; "
+        "path = Path(sys.argv[1]); time.sleep(0.04); path.write_text('first\\n'); "
+        "time.sleep(0.04); path.write_text('first\\nsecond\\n'); time.sleep(30)"
+    )
+    with pytest.raises(smoke_validator.SmokeWatchdogError) as raised:
+        smoke_validator._run_native_row_with_watchdog(
+            command=[sys.executable, "-c", writer, str(episodes_path)],
+            episodes_path=episodes_path,
+            timeout_seconds=1.0,
+            progress_timeout_seconds=0.12,
+            planner_id="teb",
+        )
+
+    assert raised.value.details["failure_kind"] == "native_progress_timeout"
+    assert episodes_path.read_text(encoding="utf-8") == "first\nsecond\n"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group cleanup is POSIX-specific")
+def test_native_watchdog_terminates_descendant_processes(tmp_path: Path) -> None:
+    """The timeout kills a native child process and its inherited process group."""
+    pid_path = tmp_path / "descendant.pid"
+    descendant = (
+        "from pathlib import Path; import os, sys, time; "
+        "Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(30)"
+    )
+    parent = (
+        "import subprocess, sys, time; "
+        "subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[1]]); time.sleep(30)"
+    )
+    with pytest.raises(smoke_validator.SmokeWatchdogError, match="end-to-end"):
+        smoke_validator._run_native_row_with_watchdog(
+            command=[sys.executable, "-c", parent, str(pid_path), descendant],
+            episodes_path=tmp_path / "episodes.jsonl",
+            timeout_seconds=0.12,
+            progress_timeout_seconds=0.12,
+            planner_id="teb",
+        )
+
+    descendant_pid = int(pid_path.read_text(encoding="utf-8"))
+    deadline = time.monotonic() + 1.0
+    while True:
+        try:
+            os.kill(descendant_pid, 0)
+        except OSError as exc:
+            assert exc.errno == errno.ESRCH
+            break
+        if time.monotonic() >= deadline:
+            pytest.fail("watchdog left the native descendant process running")
+        time.sleep(0.02)

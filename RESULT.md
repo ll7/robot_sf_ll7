@@ -30,7 +30,7 @@ All three review threads are currently resolved; no unresolved threads remain.
 ## Commit
 
 - PR head verified before this update: `e7768248a2ca1e328dbbd87286c6af96f2a9d8a0`.
-- This report refresh is the next commit on the PR branch.
+- Report refresh commit: `0b96de53f381f38c9c27876aeab3b7f84850612f`.
 
 ## Unresolved threads
 
@@ -48,7 +48,9 @@ All three review threads are currently resolved; no unresolved threads remain.
 
 ## Post-push state
 
-- Commit SHA: to be recorded after push.
-- Post-push PR head: to be recorded after push.
-- Post-push review-thread re-query: to be recorded after push; only addressed
-  threads may be resolved.
+- Commit SHA: `0b96de53f381f38c9c27876aeab3b7f84850612f`.
+- Post-push PR head: `0b96de53f381f38c9c27876aeab3b7f84850612f`.
+- Post-push review-thread re-query: zero unresolved threads; all three existing
+  threads remain resolved. No thread mutation was needed.
+- PR blocker comment requesting maintainer/domain action:
+  https://github.com/ll7/robot_sf_ll7/pull/6063#issuecomment-5027890560

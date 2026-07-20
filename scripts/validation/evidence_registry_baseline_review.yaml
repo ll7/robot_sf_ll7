@@ -40,18 +40,18 @@ decision_summary: >-
   from the issue #4891 and remaining issue #4848 exemplar records to the canonical Issue #4848
   metadata path. It was recorded below as a reviewed baseline increase pending provenance repair.
   Repair addendum (issue #5986): the dangling producer provenance across the whole shared
-  campaign has been repaired by repointing every #4848 and #4891 exemplar `metadata.json`,
-  `trace_series.json`, and `README.md` producer pointer from the orphaned 62e08add commit to the
-  reachable origin/main integration commit 0b0214ced856eac77fa9a4c15b02921eabab1661 (squash-merge
-  of PR #4938, byte-identical exporter source, the same durable pointer PR #5383 applied to one
-  #4848 metadata.json). This completes the repair PR #5383 started (it fixed one metadata.json
-  and README but left trace_series.json and the other bundles on the orphaned commit, which kept
-  the campaign-level finding alive). The per-file SHA256SUMS were refreshed for every changed
-  file. The baseline was refreshed with --write-baseline, dropping the #4848 canonical-path
-  `dangling_commit` from 1 to 0 (total 415 -> 414); the corresponding reviewed baseline increase
-  entry is removed below. The orphaned 62e08add commit is not invented or recovered; it is
-  replaced by the published, reachable integration commit that reproduces these bundles
-  byte-for-byte. The three remaining findings on the canonical #4848 path
+  campaign has been repaired by recording the unavailable original-generation provenance in every
+  #4848 and #4891 exemplar `metadata.json`, `trace_series.json`, and `README.md`. The reachable
+  origin/main integration commit 0b0214ced856eac77fa9a4c15b02921eabab1661 (squash-merge of PR
+  #4938) is recorded separately as `published_integration_commit`, a pointer to the published
+  exporter source; it is not asserted to be the generation commit. This completes the repair PR
+  #5383 started (it fixed one metadata.json and README but left trace_series.json and the other
+  bundles on the orphaned commit, which kept the campaign-level finding alive). The per-file
+  SHA256SUMS were refreshed for every changed file. The baseline was refreshed with --write-baseline,
+  dropping the #4848 canonical-path `dangling_commit` from 1 to 0 (total 415 -> 414); the
+  corresponding reviewed baseline increase entry is removed below. The orphaned 62e08add commit
+  remains unavailable and was not recovered or substituted as generation provenance. The three
+  remaining findings on the canonical #4848 path
   (duplicate_campaign_id, missing_config_path, missing_config_sha256) are separate campaign
   provenance concerns outside issue #5986's dangling-commit scope and remain tracked here.
 disposition_legend:

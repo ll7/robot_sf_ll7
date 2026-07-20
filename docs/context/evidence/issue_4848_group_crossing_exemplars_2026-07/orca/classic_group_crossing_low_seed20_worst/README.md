@@ -24,8 +24,9 @@ statistical benchmark or dissertation claim.
 - Seed: `20`
 - Selection mode: `worst`
 - Selection metric: `path_efficiency = 1.0`
-- Git commit at generation: `0b0214ced856eac77fa9a4c15b02921eabab1661`
-  (reachable integration commit with byte-identical exporter source)
+- Git commit at generation: unavailable (original-generation commit not recoverable)
+- Published integration commit: `0b0214ced856eac77fa9a4c15b02921eabab1661`
+  (reachable pointer to byte-identical exporter source; not the generation commit)
 
 ## Claim Boundary
 

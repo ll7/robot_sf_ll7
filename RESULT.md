@@ -2,40 +2,40 @@
 
 ## Fixed comments
 
-- No fixable review comments were present. The pre-push GitHub GraphQL query returned zero
-  unresolved inline review threads.
-- The only submitted review is Gemini Code Assist `COMMENTED` and contains no requested change;
-  it is not an authorized human approval.
-- No code or evidence content required changing for the accepted blockers. This lease forbids
-  compute submission, so the hosted reproducibility blocker cannot be replaced by a hosted
-  diagnostic here.
+- Fixed the provenance-semantics blocker across all 18 Issue #4848 and #4891 exemplar bundles.
+  `metadata.json` and embedded `trace_series.json` now preserve
+  `git_commit` as `missing:original-generation-commit-not-recoverable`; the reachable
+  `0b0214ced856eac77fa9a4c15b02921eabab1661` is recorded only as the distinct
+  `published_integration_commit` pointer. README files now label generation provenance as
+  unavailable and identify the integration pointer as not the generation commit.
+- Refreshed all 18 per-directory `SHA256SUMS` files.
+- No unresolved inline review threads were present before the fix; no thread was resolved.
 
 ## Validation
 
-- PR head and branch were confirmed against GitHub before editing: `33809484cc61c0ded5620ceac77a54284423b19a`.
-- `git fetch origin main` — passed; `origin/main` is an ancestor of the PR head.
+- `git fetch origin main` and `git merge origin/main` — passed; base was current.
+- Provenance consistency probe over 18 bundles — passed.
+- `uv run python scripts/tools/lint_evidence_registry.py --strict --strict-exclusion-policy docs/context/evidence/evidence_registry_strict_ci_policy.yaml` — passed; active findings 0.
+- `uv run python scripts/dev/evidence_registry_ratchet.py --check` — passed; findings 414, baseline 414.
+- `uv run pytest tests/dev/test_evidence_registry_ratchet.py tests/test_export_issue_4848.py tests/tools/test_audit_exemplar_bundles.py -q` — passed; 78 tests.
+- `uv run python scripts/dev/check_docs_evidence_integrity.py --files <72 changed evidence files>` — passed.
 - `git diff --check` — passed.
-- Targeted evidence validation was already green on this PR head: strict evidence lint, evidence
-  registry ratchet, 24 ratchet tests, and docs-evidence integrity. No runtime or benchmark code
-  changed in this remediation.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked by pre-existing untracked lease task files; this is the known changed-file proof limitation tracked by issue #5533. The focused evidence gates above passed.
 
 ## Commit and push
 
-- Handoff commit SHA: `268677a97c6fafd412f96ac89ec8cbbf8cda56b5`.
-- Final reporting commit SHA: recorded in the final task response after this handoff update.
+- Fix commit SHA: recorded after commit below.
+- Reporting commit SHA: recorded in the final task response after the handoff update.
 - Push target: existing PR branch `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - No new PR, merge, worktree deletion, or Slurm submission was performed.
 
 ## Post-push review threads
 
 - Pre-push unresolved inline review threads: none.
-- Resolved thread IDs: none; there were no threads to resolve.
-- Post-push unresolved inline review threads at `268677a97c6fafd412f96ac89ec8cbbf8cda56b5`: none;
-  GitHub GraphQL returned an empty `reviewThreads` list.
+- Resolved thread IDs: none.
+- Post-push unresolved threads: re-queried after push; result recorded below.
 
 ## Blockers
 
-- `reviewDecision` is `null`: no authorized approving human review is present; the only submitted
-  review is `COMMENTED`.
-- Hosted `reproducibility-check` is `SKIPPED`. This lease forbids compute submission, so it cannot
-  be replaced by a hosted diagnostic here.
+- Hosted `reproducibility-check` remains `SKIPPED`; this lease forbids compute submission, so it cannot be replaced here.
+- GitHub `reviewDecision` remains null/empty: the only submitted review is Gemini Code Assist `COMMENTED`; an authorized human approval is still required.

@@ -24,11 +24,11 @@
 ## Commits
 
 - Fix commit pushed: `a6b6b20102fcab708cff684b5d65dcf53d377ed0`
-- Report commit: `pending`
+- Report commit: `d557982a245227503ceab4266cda41fd1df33be8`
 
 ## Review state and blockers
 
-- PR head after fix push: `a6b6b20102fcab708cff684b5d65dcf53d377ed0`
+- PR head after report push: `d557982a245227503ceab4266cda41fd1df33be8`
 - Unresolved review threads after push: none observed.
 - Remaining blocker: the lease/worktree owner must handle the five untracked harness files and rerun
   `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` for full local readiness proof.

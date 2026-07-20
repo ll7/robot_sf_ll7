@@ -26,7 +26,7 @@ All three review threads are currently resolved; no unresolved threads remain.
 ## Commit
 
 - PR head verified before this update: `6985ca958fdcd3b5e346e9976bc9c51b01cbc2df`.
-- Report refresh commit: recorded below after push.
+- Report refresh commit: `797b73c07ae75ae468a9729cb2376adc93abb961`.
 
 ## Unresolved threads
 
@@ -43,5 +43,7 @@ All three review threads are currently resolved; no unresolved threads remain.
 
 ## Post-push state
 
-- Commit SHA: pending push.
-- Review-thread re-query: pending push.
+- Commit SHA: `797b73c07ae75ae468a9729cb2376adc93abb961`.
+- Post-push PR head: `797b73c07ae75ae468a9729cb2376adc93abb961`.
+- Post-push review-thread re-query: zero unresolved threads; all three existing
+  threads remain resolved.

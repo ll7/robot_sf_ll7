@@ -33,8 +33,11 @@ from scripts.tools.convert_regulation_to_scenario import (
     REGULATION_RECORD_SCHEMA_VERSION,
     TEMPLATE_TO_MAP,
     _build_scenario_payload,
+    _find_float_after_keywords,
+    _find_float_before_units,
     _map_file_for_output,
     _resolve_generated_map_file,
+    _split_clauses,
     _validate_regulation_record,
     assess_validity,
     compile_regulation_excerpt,
@@ -134,6 +137,18 @@ class TestRegulationRecordValidation:
         errors = _validate_regulation_record(["not", "a", "mapping"])  # type: ignore[arg-type]
         assert any("mapping" in e for e in errors)
 
+    def test_claim_boundary_must_be_a_string(self) -> None:
+        record = copy.deepcopy(VALID_RECORD)
+        record["regulation"]["claim_boundary"] = True
+        errors = _validate_regulation_record(record)
+        assert any("claim_boundary must be a string" in e for e in errors)
+
+    def test_id_must_not_be_null(self) -> None:
+        record = copy.deepcopy(VALID_RECORD)
+        record["regulation"]["id"] = None
+        errors = _validate_regulation_record(record)
+        assert any("id must not be null" in e for e in errors)
+
 
 # ---------------------------------------------------------------------------
 # Compilation (deterministic parameter extraction)
@@ -147,6 +162,18 @@ class TestCompilation:
         params = compile_regulation_excerpt("The robot's maximum speed shall not exceed 1.5 m/s.")
         assert params.max_linear_speed == 1.5
         assert any(e["parameter"] == "max_linear_speed" for e in params.extracted)
+
+    def test_keyword_match_uses_physical_order(self) -> None:
+        text = "speed limit 1.0 m/s; maximum speed 2.0 m/s"
+        assert _find_float_after_keywords(text, ("maximum speed", "speed limit")) == 1.0
+
+    def test_unit_match_uses_physical_order(self) -> None:
+        text = "1.0 meters per second, then 2.0 m/s"
+        assert _find_float_before_units(text, ("m/s", "meters per second")) == 1.0
+
+    def test_clause_split_preserves_common_abbreviations(self) -> None:
+        clauses = _split_clauses("The robot may use e.g. a slow mode. Maximum speed is 1.0 m/s.")
+        assert clauses == ["The robot may use e.g. a slow mode", "Maximum speed is 1.0 m/s"]
 
     def test_extracts_clearance(self) -> None:
         params = compile_regulation_excerpt(
@@ -248,6 +275,15 @@ class TestScenarioPayload:
         payload = _build_scenario_payload(VALID_RECORD["regulation"], params)
         robot_cfg = payload["scenarios"][0]["robot_config"]
         assert "max_linear_speed" not in robot_cfg
+
+    def test_null_id_uses_unknown_payload_identifier(self) -> None:
+        regulation = copy.deepcopy(VALID_RECORD["regulation"])
+        regulation["id"] = None
+        params = compile_regulation_excerpt("Operate in a corridor.")
+        payload = _build_scenario_payload(regulation, params)
+        scenario = payload["scenarios"][0]
+        assert scenario["name"] == "regulation_unknown"
+        assert scenario["metadata"]["generated_from_regulation"] == "unknown"
 
     def test_clearance_recorded_as_metadata_only(self) -> None:
         params = compile_regulation_excerpt("Maintain a clearance of at least 1.0 m.")

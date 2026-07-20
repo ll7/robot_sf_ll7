@@ -186,7 +186,7 @@ def _split_clauses(text: str) -> list[str]:
         return []
     # Normalize whitespace/newlines into clause boundaries.
     normalized = re.sub(r"[\r\n]+", ". ", text)
-    parts = re.split(r"(?<=[.;])\s+", normalized)
+    parts = re.split(r"(?i)(?<!\be\.g\.)(?<!\bi\.e\.)(?<=[.;])\s+", normalized)
     clauses: list[str] = []
     for part in parts:
         cleaned = part.strip().strip(";.").strip()
@@ -201,18 +201,20 @@ def _find_float_after_keywords(text: str, keywords: tuple[str, ...]) -> float | 
     Matches forms like ``1.5 m/s``, ``1.5 m``, ``1,5 meter``, ``>= 1.0 m``.
     Returns None if no match is found.
     """
-    for kw in keywords:
-        pattern = re.compile(
-            rf"{re.escape(kw)}[^0-9]{{0,20}}(?P<value>\d+(?:[.,]\d+)?)",
-            re.IGNORECASE,
-        )
-        match = pattern.search(text)
-        if match:
-            raw = match.group("value").replace(",", ".")
-            try:
-                return float(raw)
-            except ValueError:
-                continue
+    if not keywords:
+        return None
+    escaped_keywords = "|".join(re.escape(kw) for kw in keywords)
+    pattern = re.compile(
+        rf"(?:{escaped_keywords})[^0-9]{{0,20}}(?P<value>\d+(?:[.,]\d+)?)",
+        re.IGNORECASE,
+    )
+    match = pattern.search(text)
+    if match:
+        raw = match.group("value").replace(",", ".")
+        try:
+            return float(raw)
+        except ValueError:
+            return None
     return None
 
 
@@ -255,17 +257,19 @@ def _extract_speed(text: str) -> tuple[float | None, list[dict[str, Any]]]:
 
 def _find_float_before_units(text: str, units: tuple[str, ...]) -> float | None:
     """Return the first number immediately preceding one of ``units``."""
-    for unit in units:
-        pattern = re.compile(
-            rf"(?P<value>\d+(?:[.,]\d+)?)\s*{re.escape(unit)}",
-            re.IGNORECASE,
-        )
-        match = pattern.search(text)
-        if match:
-            try:
-                return float(match.group("value").replace(",", "."))
-            except ValueError:
-                continue
+    if not units:
+        return None
+    escaped_units = "|".join(re.escape(unit) for unit in units)
+    pattern = re.compile(
+        rf"(?P<value>\d+(?:[.,]\d+)?)\s*(?:{escaped_units})",
+        re.IGNORECASE,
+    )
+    match = pattern.search(text)
+    if match:
+        try:
+            return float(match.group("value").replace(",", "."))
+        except ValueError:
+            return None
     return None
 
 
@@ -496,11 +500,16 @@ def _validate_regulation_fields(reg: dict[str, Any]) -> list[str]:
     elif isinstance(text, str) and not text.strip():
         errors.append("regulation.regulation_text must not be empty")
 
+    if "id" in reg and reg["id"] is None:
+        errors.append("regulation.id must not be null")
+
     if "required_manual_review" in reg and reg["required_manual_review"] is not True:
         errors.append("required_manual_review must be true")
 
     claim = reg.get("claim_boundary")
-    if isinstance(claim, str) and "not evidence" not in claim.lower():
+    if "claim_boundary" in reg and not isinstance(claim, str):
+        errors.append("regulation.claim_boundary must be a string")
+    elif isinstance(claim, str) and "not evidence" not in claim.lower():
         errors.append("claim_boundary must state 'not evidence'")
 
     return errors
@@ -514,7 +523,8 @@ def _build_scenario_payload(
 ) -> dict[str, Any]:
     """Build the ``robot_sf.scenario_matrix.v1`` payload from compiled params."""
     reg = copy.deepcopy(regulation)
-    reg_id = str(reg.get("id", "unknown"))
+    raw_id = reg.get("id")
+    reg_id = str(raw_id) if raw_id is not None else "unknown"
     map_file = _map_file_for_output(params.zone_template, output_path=output_path)
 
     robot_config: dict[str, Any] = {"type": "differential_drive", "radius": 0.3}

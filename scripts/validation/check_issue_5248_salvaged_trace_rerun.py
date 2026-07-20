@@ -5,6 +5,15 @@ This checker reads a completed camera-ready campaign in place and writes only a
 small receipt.  It never copies raw episode data, submits compute, or upgrades
 the campaign to benchmark or paper evidence.  A passing receipt says only that
 the campaign is structurally ready for the issue #4206 mechanism cross-cut.
+
+Issue #5779 structural denominator correction: the preregistered trace-verified
+labeled fraction floor is now measured over *failure episodes* (rows whose
+write-time ``success`` outcome is below 1.0) instead of all campaign rows.
+Success episodes structurally carry no failure-mechanism label, so the prior
+all-rows denominator made the floor unreachable by construction for any campaign
+with a healthy success rate. The threshold value is unchanged; the receipt
+reports both the all-rows and failure-episode ratios, but the gate uses the
+failure-episode fraction.
 """
 
 from __future__ import annotations
@@ -25,12 +34,38 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
     TRACE_VERIFIED_EVIDENCE_MODES,
 )
 
-SCHEMA_VERSION = "issue_5248_salvaged_trace_rerun_registration.v1"
+SCHEMA_VERSION = "issue_5248_salvaged_trace_rerun_registration.v2"
 READY_STATUS = "ready_for_issue_4206_reanalysis"
 BLOCKED_STATUS = "blocked_campaign_registration"
 SUMMARY_RELATIVE_PATH = Path("reports/campaign_summary.json")
 EPISODE_ROWS_RELATIVE_PATH = Path("reports/seed_episode_rows.csv")
 UNKNOWN_LABELS = {"", "unknown", "not_derivable"}
+
+# Issue #5779 structural denominator correction: the preregistered
+# trace-verified labeled fraction is measured over *failure episodes* (rows
+# whose write-time ``success`` outcome is below 1.0), not over all campaign
+# rows. Success episodes structurally carry no failure-mechanism label (they
+# did not fail), so including them in the denominator made the floor
+# unreachable by construction for any campaign with a healthy success rate.
+# The threshold value (``min_trace_verified_labeled_fraction``) is unchanged;
+# only the denominator changes. The receipt reports both ratios for
+# transparency, but the gate uses the failure-episode fraction.
+FAILURE_EPISODE_DENOMINATOR = "failure_episodes"
+SUPPORTED_FRACTION_DENOMINATORS = {FAILURE_EPISODE_DENOMINATOR}
+DENOMINATOR_CORRECTION_NOTE = (
+    "Issue #5779 structural correction: success episodes carry no "
+    "failure-mechanism label, so the preregistered minimum trace-verified "
+    "labeled fraction is measured over failure episodes (rows with "
+    "success < 1.0) rather than all campaign rows. The threshold is "
+    "unchanged; the receipt reports both ratios but gates on the "
+    "failure-episode fraction."
+)
+# ``success`` column write-time outcome. A row is a failure episode when its
+# success outcome did not reach 1.0. A missing/unparseable outcome is treated
+# conservatively as a failure episode so a malformed campaign degrades to the
+# stricter all-rows denominator rather than silently shrinking the floor.
+SUCCESS_COLUMN = "success"
+SUCCESS_THRESHOLD = 1.0
 
 
 def _sha256(path: Path) -> str:
@@ -90,8 +125,14 @@ def _public_path(path: Path) -> str:
         return path.name
 
 
-def _load_trace_contract(path: Path) -> tuple[set[str], float]:
-    """Load trace modes and minimum labeled fraction from the preregistration contract."""
+def _load_trace_contract(path: Path) -> tuple[set[str], float, str]:
+    """Load trace modes, minimum fraction, and denominator from the preregistration.
+
+    Returns ``(trace_modes, min_fraction, denominator)``. The denominator names
+    which row population the minimum fraction is measured over; issue #5779
+    ratifies ``failure_episodes`` as the structural denominator (see
+    ``FAILURE_EPISODE_DENOMINATOR``).
+    """
 
     try:
         payload = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -106,6 +147,7 @@ def _load_trace_contract(path: Path) -> tuple[set[str], float]:
         raise ValueError("preregistration config lacks failure-mechanism contract")
     modes = set(mechanism.get("trace_verified_evidence_modes") or ())
     fraction = mechanism.get("min_trace_verified_labeled_fraction")
+    denominator = mechanism.get("min_trace_verified_labeled_fraction_denominator")
     if modes != set(TRACE_VERIFIED_EVIDENCE_MODES):
         raise ValueError("preregistration trace-verified modes drift from the canonical schema")
     if (
@@ -114,7 +156,12 @@ def _load_trace_contract(path: Path) -> tuple[set[str], float]:
         or not 0 < float(fraction) <= 1
     ):
         raise ValueError("preregistration minimum trace-labeled fraction must be in (0, 1]")
-    return modes, float(fraction)
+    if denominator not in SUPPORTED_FRACTION_DENOMINATORS:
+        raise ValueError(
+            "preregistration min_trace_verified_labeled_fraction_denominator must be one of "
+            f"{sorted(SUPPORTED_FRACTION_DENOMINATORS)}; got {denominator!r}"
+        )
+    return modes, float(fraction), str(denominator)
 
 
 def _campaign_block(summary: dict[str, Any]) -> dict[str, Any]:
@@ -214,17 +261,37 @@ def _load_sidecar_overlay(
     return rows, sha256, sidecar_public, None
 
 
+def _is_failure_episode(row: dict[str, str]) -> bool:
+    """Return whether an episode row is a failure (write-time outcome did not succeed).
+
+    Uses the campaign's own ``success`` column (the write-time episode outcome
+    ``route_complete and not collision``). A row whose ``success`` value is
+    absent or unparseable is treated conservatively as a failure episode so a
+    malformed campaign degrades to the stricter all-rows denominator rather
+    than silently shrinking the failure-episode denominator.
+    """
+
+    raw = str(row.get(SUCCESS_COLUMN) or "").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return True
+    return value < SUCCESS_THRESHOLD
+
+
 def _compute_trace_coverage(
     rows: list[dict[str, str]],
     *,
     trace_modes: set[str],
     sidecar_by_episode: dict[str, dict[str, str]],
-) -> tuple[int, int, int, float, float]:
-    """Return trace-labeled counts with and without the sidecar overlay.
+) -> tuple[int, int, int, int]:
+    """Return trace-labeled counts plus the failure-episode denominator size.
 
-    The sidecar overlay counts a raw row as trace-labeled when either the raw
-    row itself qualifies or a derived sidecar label for its ``episode_id``
-    qualifies. Returns ``(with_sidecar, without_sidecar, matched, frac, frac_raw)``.
+    Counts trace-labeled rows (with and without the sidecar overlay) and the
+    number of failure episodes. Returns
+    ``(with_sidecar, without_sidecar, matched, failure_episode_count)``. The
+    caller computes both the all-rows and failure-episode fractions from these
+    counts so the receipt can report both while gating on one.
     """
 
     def _row_labeled(row: dict[str, str]) -> bool:
@@ -243,14 +310,8 @@ def _compute_trace_coverage(
         if rows and sidecar_by_episode
         else 0
     )
-    denom = len(rows) if rows else 0
-    return (
-        with_sidecar,
-        without,
-        matched,
-        with_sidecar / denom if denom else 0.0,
-        without / denom if denom else 0.0,
-    )
+    failure_episode_count = sum(_is_failure_episode(row) for row in rows) if rows else 0
+    return with_sidecar, without, matched, failure_episode_count
 
 
 def _validate_campaign_summary(
@@ -334,6 +395,12 @@ def build_registration_receipt(
     are derived after the run; the sidecar is the only place a trace-verified label
     can appear. The receipt records both the raw-row and sidecar-augmented coverage
     so a reviewer can see exactly what the sidecar contributed.
+
+    Issue #5779 structural denominator correction: the preregistered minimum
+    trace-verified labeled fraction is gated over failure episodes (rows whose
+    write-time ``success`` outcome is below 1.0) rather than all campaign rows.
+    The receipt reports both the all-rows and failure-episode ratios, but the
+    gate uses the failure-episode fraction.
     """
 
     blockers: list[str] = []
@@ -345,9 +412,10 @@ def build_registration_receipt(
     rows_loaded = False
     trace_modes: set[str] = set()
     min_fraction: float | None = None
+    denominator: str = FAILURE_EPISODE_DENOMINATOR
 
     try:
-        trace_modes, min_fraction = _load_trace_contract(preregistration_config)
+        trace_modes, min_fraction, denominator = _load_trace_contract(preregistration_config)
     except ValueError as exc:
         blockers.append(str(exc))
 
@@ -385,15 +453,27 @@ def build_registration_receipt(
         trace_labeled_rows,
         trace_labeled_rows_without_sidecar,
         sidecar_matched_rows,
-        trace_labeled_fraction,
-        trace_labeled_fraction_without_sidecar,
+        failure_episode_count,
     ) = _compute_trace_coverage(
         rows, trace_modes=trace_modes, sidecar_by_episode=sidecar_by_episode
     )
+    total_row_count = len(rows)
+    # Issue #5779 denominator correction: the gate measures coverage over
+    # failure episodes, but the receipt reports both ratios for transparency.
+    trace_labeled_fraction_all_rows = (
+        trace_labeled_rows / total_row_count if total_row_count else 0.0
+    )
+    trace_labeled_fraction = (
+        trace_labeled_rows / failure_episode_count if failure_episode_count else 0.0
+    )
+    trace_labeled_fraction_without_sidecar = (
+        trace_labeled_rows_without_sidecar / total_row_count if total_row_count else 0.0
+    )
     if rows_loaded and min_fraction is not None and trace_labeled_fraction < min_fraction:
         blockers.append(
-            "trace-verified labeled fraction must meet preregistration minimum "
-            f"{min_fraction:.3f}; got {trace_labeled_fraction:.3f}"
+            "trace-verified labeled fraction (failure-episode denominator) must meet "
+            f"preregistration minimum {min_fraction:.3f}; got {trace_labeled_fraction:.3f} "
+            f"({trace_labeled_rows} of {failure_episode_count} failure episodes)"
         )
 
     status = READY_STATUS if not blockers else BLOCKED_STATUS
@@ -425,8 +505,13 @@ def build_registration_receipt(
             "required_fields": list(REQUIRED_MECHANISM_FIELDS),
             "trace_verified_evidence_modes": sorted(trace_modes),
             "minimum_labeled_fraction": min_fraction,
+            "minimum_labeled_fraction_denominator": denominator,
+            "denominator_correction": DENOMINATOR_CORRECTION_NOTE,
+            "total_row_count": total_row_count,
+            "failure_episode_count": failure_episode_count,
             "trace_labeled_rows": trace_labeled_rows,
             "trace_labeled_fraction": trace_labeled_fraction,
+            "trace_labeled_fraction_all_rows": trace_labeled_fraction_all_rows,
             "trace_labeled_rows_without_sidecar": trace_labeled_rows_without_sidecar,
             "trace_labeled_fraction_without_sidecar": trace_labeled_fraction_without_sidecar,
         },
@@ -469,8 +554,17 @@ def _render_markdown(receipt: dict[str, Any]) -> str:
         f"| Total episodes | {campaign['total_episodes_observed']} / expected {campaign['total_episodes_expected']} |",
         f"| Execution status | `{campaign['campaign_execution_status']}` |",
         f"| Episode rows | {campaign['episode_row_count']} |",
-        f"| Trace-labeled rows | {trace_labels['trace_labeled_rows']} ({trace_labels['trace_labeled_fraction']:.3f}) |",
-        f"| Minimum trace-labeled fraction | {trace_labels['minimum_labeled_fraction']} |",
+        f"| Failure episodes (denominator) | {trace_labels['failure_episode_count']} |",
+        (
+            f"| Trace-labeled rows (failure episodes) | {trace_labels['trace_labeled_rows']} "
+            f"({trace_labels['trace_labeled_fraction']:.3f}) |"
+        ),
+        (
+            f"| Trace-labeled fraction (all rows) | "
+            f"{trace_labels['trace_labeled_fraction_all_rows']:.3f} |"
+        ),
+        f"| Minimum trace-labeled fraction | {trace_labels['minimum_labeled_fraction']} "
+        f"(denominator: `{trace_labels['minimum_labeled_fraction_denominator']}`) |",
         "",
     ]
     sidecar = receipt.get("mechanism_sidecar")

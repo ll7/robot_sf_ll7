@@ -81,6 +81,15 @@ required_outputs:
     # The re-run is only useful if it recovers real labels: an output where every
     # row is `unknown`/`not_derivable` again is rejected (see fail_closed).
     min_trace_verified_labeled_fraction: 0.5
+    # Issue #5779 structural denominator correction: the floor is measured over
+    # *failure episodes* (rows whose write-time `success` outcome is below 1.0),
+    # not all campaign rows. Success episodes structurally carry no
+    # failure-mechanism label (they did not fail), so an all-rows denominator
+    # made the floor unreachable by construction for any campaign with a healthy
+    # success rate. The threshold value above is unchanged; only the denominator
+    # changes. The registration receipt reports both ratios for transparency but
+    # gates on the failure-episode fraction.
+    min_trace_verified_labeled_fraction_denominator: failure_episodes
   interaction_exposure:
     schema_version: interaction_exposure.v1
     schema_owner: robot_sf/benchmark/interaction_exposure.py

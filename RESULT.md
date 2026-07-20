@@ -19,7 +19,7 @@ All five threads were re-queried at head `44f9576ba26c7a22c4dd70169f626296fb8308
 ## Commits
 
 - Code and regression tests: `44f9576ba26c7a22c4dd70169f626296fb830888`.
-- This result record: `d0a7c017b9e7b69432d7dacbbd5234f55ec35a83`.
+- This result record is included in the final documentation commit on the PR branch.
 
 ## Remaining blockers
 

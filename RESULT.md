@@ -21,7 +21,8 @@
 
 ## Commit and push
 
-- Commit SHA: recorded in the final task response after push.
+- Handoff commit SHA: `268677a97c6fafd412f96ac89ec8cbbf8cda56b5`.
+- Final reporting commit SHA: recorded in the final task response after this handoff update.
 - Push target: existing PR branch `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - No new PR, merge, worktree deletion, or Slurm submission was performed.
 
@@ -29,7 +30,8 @@
 
 - Pre-push unresolved inline review threads: none.
 - Resolved thread IDs: none; there were no threads to resolve.
-- Post-push unresolved inline review threads: recorded after the push in the final task response.
+- Post-push unresolved inline review threads at `268677a97c6fafd412f96ac89ec8cbbf8cda56b5`: none;
+  GitHub GraphQL returned an empty `reviewThreads` list.
 
 ## Blockers
 

@@ -143,11 +143,12 @@ class TestRegulationRecordValidation:
         errors = _validate_regulation_record(record)
         assert any("claim_boundary must be a string" in e for e in errors)
 
-    def test_id_must_not_be_null(self) -> None:
+    @pytest.mark.parametrize("invalid_id", [None, 42, "", "   "])
+    def test_id_must_be_a_non_empty_string(self, invalid_id: object) -> None:
         record = copy.deepcopy(VALID_RECORD)
-        record["regulation"]["id"] = None
+        record["regulation"]["id"] = invalid_id
         errors = _validate_regulation_record(record)
-        assert any("id must not be null" in e for e in errors)
+        assert any("id must be a non-empty string" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +175,15 @@ class TestCompilation:
     def test_clause_split_preserves_common_abbreviations(self) -> None:
         clauses = _split_clauses("The robot may use e.g. a slow mode. Maximum speed is 1.0 m/s.")
         assert clauses == ["The robot may use e.g. a slow mode", "Maximum speed is 1.0 m/s"]
+
+    def test_density_word_match_is_word_bounded_and_unmatched_clause_is_recorded(self) -> None:
+        params = compile_regulation_excerpt("The sign shall highlight the route.")
+        assert params.ped_density == DEFAULT_DENSITY_VALUE
+        assert not any(
+            entry["parameter"] == "ped_density" and entry["source"] != "default"
+            for entry in params.extracted
+        )
+        assert params.unmatched_clauses == ["The sign shall highlight the route"]
 
     def test_extracts_clearance(self) -> None:
         params = compile_regulation_excerpt(

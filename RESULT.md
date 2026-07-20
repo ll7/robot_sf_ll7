@@ -1,27 +1,33 @@
-# PR #6062 review-blocker result
+# PR #6060 Review Fix Result
 
 ## Fixed comments
 
-- `3616257960` / `PRRT_kwDOLRSZdc6SU6yn`: `_find_float_after_keywords` now uses one alternation regex, so the first physical keyword match wins.
-- `3616257968` / `PRRT_kwDOLRSZdc6SU6ys`: `_find_float_before_units` now uses one alternation regex, so the first physical unit match wins.
-- `3616257973` / `PRRT_kwDOLRSZdc6SU6yv`: clause splitting excludes `e.g.` and `i.e.` abbreviation boundaries.
-- `3616257978` / `PRRT_kwDOLRSZdc6SU6yz`: non-string `claim_boundary` values now fail input validation.
-- `3616257983` / `PRRT_kwDOLRSZdc6SU6y4`: null identifiers now fail input validation, and payload construction defensively normalizes null to `unknown`.
-
-All five threads were re-queried at head `44f9576ba26c7a22c4dd70169f626296fb830888` and resolved. The final post-resolution query reported zero unresolved review threads.
+- Fixed unresolved review thread `PRRT_kwDOLRSZdc6SUaTZ` in `scripts/dev/pr_loop_policy.py`:
+  gate-verdict SHA parsing now requires a complete word-bounded token.
+- Added a regression test rejecting a 40-character SHA followed by a word-character suffix.
+- Posted the current exact-head `gate-verdict: accepted @ <SHA>` trailer after each final head
+  update; the live trailer is refreshed below for the final commit.
 
 ## Validation
 
-- `uv run pytest tests/scenarios/test_convert_regulation_to_scenario.py -q` — 58 passed.
-- `uv run ruff check scripts/tools/convert_regulation_to_scenario.py tests/scenarios/test_convert_regulation_to_scenario.py` — passed.
-- `git diff --check` — passed.
+- `uv run ruff check scripts/dev/pr_loop_policy.py tests/dev/test_pr_loop_policy.py` — passed.
+- `uv run ruff format --check scripts/dev/pr_loop_policy.py tests/dev/test_pr_loop_policy.py` — passed.
+- `uv run pytest tests/dev/test_pr_loop_policy.py -q` — 105 passed.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked: preserved untracked
+  `.ll7_task_*` task-runner metadata prevents changed-file proof.
 
-## Commits
+## Commit
 
-- Code and regression tests: `44f9576ba26c7a22c4dd70169f626296fb830888`.
-- This result record is included in the final documentation commit on the PR branch.
+- Implementation commit SHA: `dd7f90f3fd827803a89183ce22273a5d2b548b88`.
+- The result-file commit SHA is reported in the final handoff.
 
-## Remaining blockers
+## Review state
 
-- Full local PR readiness proof was not run. The lease harness creates untracked `.ll7_task_*` files, and local-edit authorization forbids staging or altering them. They remain untouched in the isolated worktree.
-- GitHub checks for the pushed code commit were still running when the post-push snapshot was taken; no local claim of full PR readiness is made.
+- Resolved: `PRRT_kwDOLRSZdc6SUaTZ`.
+- Other queried threads were already resolved; no other unresolved review threads were found.
+- Hosted checks are pending on the final pushed head, so merge-readiness is not claimed.
+
+## Blockers
+
+- Full canonical local readiness proof remains unavailable until the preserved untracked task-runner
+  metadata is handled by the task owner or readiness workflow.

@@ -111,6 +111,11 @@ DENSITY_WORD_TO_VALUE: dict[str, float] = {
 DEFAULT_DENSITY_VALUE = 0.05
 
 
+def _contains_keyword(text: str, keyword: str) -> bool:
+    """Return whether ``keyword`` occurs as a complete word or phrase."""
+    return re.search(rf"(?<!\w){re.escape(keyword)}(?!\w)", text, re.IGNORECASE) is not None
+
+
 @dataclass
 class CompiledParameters:
     """Deterministically extracted parameters from a regulation excerpt.
@@ -331,9 +336,8 @@ def _extract_density(text: str) -> tuple[float, list[dict[str, Any]]]:
         extracted.append({"parameter": "ped_density", "value": explicit, "source": "explicit"})
         return explicit, extracted
 
-    lowered = text.lower()
     for word, value in DENSITY_WORD_TO_VALUE.items():
-        if word in lowered:
+        if _contains_keyword(text, word):
             extracted.append({"parameter": "ped_density", "value": value, "source": f"word:{word}"})
             return value, extracted
 
@@ -424,10 +428,9 @@ def compile_regulation_excerpt(
         ("density", "crowd", "sparse", "dense", "medium", "high", "low"),
     )
     for clause in _split_clauses(regulation_text):
-        lowered_clause = clause.lower()
         addressed = False
         for group in keyword_groups:
-            if any(kw in lowered_clause for kw in group):
+            if any(_contains_keyword(clause, kw) for kw in group):
                 addressed = True
                 break
         if not addressed:
@@ -500,8 +503,8 @@ def _validate_regulation_fields(reg: dict[str, Any]) -> list[str]:
     elif isinstance(text, str) and not text.strip():
         errors.append("regulation.regulation_text must not be empty")
 
-    if "id" in reg and reg["id"] is None:
-        errors.append("regulation.id must not be null")
+    if "id" in reg and (not isinstance(reg["id"], str) or not reg["id"].strip()):
+        errors.append("regulation.id must be a non-empty string")
 
     if "required_manual_review" in reg and reg["required_manual_review"] is not True:
         errors.append("required_manual_review must be true")

@@ -13,8 +13,7 @@
   while `published_integration_commit` identifies the reachable byte-identical integration
   source; stale repointing language and file-count text were removed.
 - No unresolved inline review threads were present before the fix; no thread was resolved.
-- Current PR head was verified as `29db02131ad7c74c2a293035d2c183dc0df06994`; the post-push
-  re-query below must be repeated after this report commit.
+- The pre-push PR head was verified as `29db02131ad7c74c2a293035d2c183dc0df06994`.
 
 ## Validation
 
@@ -44,15 +43,16 @@
 
 - Pre-push unresolved inline review threads: none.
 - Resolved thread IDs: none.
-- Post-push unresolved threads: re-queried after the description update; none were present.
+- Post-push unresolved threads: re-queried at head `3742bd1545af03c1eedab26535289ecfff05aefc`; none were present.
 
 ## Live PR state after push
 
-- PR head before this report commit: `29db02131ad7c74c2a293035d2c183dc0df06994` on
+- PR head after the report push: `3742bd1545af03c1eedab26535289ecfff05aefc` on
   `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - Hosted `reproducibility-check` is `SKIPPED` because the workflow is intentionally
   `workflow_dispatch`-only; this lease cannot submit compute or dispatch it.
 - GitHub `reviewDecision` is empty/null; no approving human review is recorded.
+- Other hosted checks were newly queued or in progress at capture time.
 
 ## Blockers
 

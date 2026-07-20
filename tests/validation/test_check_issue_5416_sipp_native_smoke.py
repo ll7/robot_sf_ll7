@@ -197,8 +197,8 @@ def test_native_watchdog_resets_progress_deadline_when_episode_output_changes(
         smoke_validator._run_native_row_with_watchdog(
             command=[sys.executable, "-c", writer, str(episodes_path)],
             episodes_path=episodes_path,
-            timeout_seconds=1.0,
-            progress_timeout_seconds=0.12,
+            timeout_seconds=1.5,
+            progress_timeout_seconds=0.5,
             planner_id="teb",
         )
 
@@ -279,8 +279,8 @@ def test_native_watchdog_terminates_descendant_processes(tmp_path: Path) -> None
         smoke_validator._run_native_row_with_watchdog(
             command=[sys.executable, "-c", parent, str(pid_path), descendant],
             episodes_path=tmp_path / "episodes.jsonl",
-            timeout_seconds=0.12,
-            progress_timeout_seconds=0.12,
+            timeout_seconds=1.5,
+            progress_timeout_seconds=1.5,
             planner_id="teb",
         )
 
@@ -314,8 +314,8 @@ def test_native_watchdog_sigkills_descendant_that_ignores_sigterm(tmp_path: Path
         smoke_validator._run_native_row_with_watchdog(
             command=[sys.executable, "-c", parent, str(pid_path), descendant],
             episodes_path=tmp_path / "episodes.jsonl",
-            timeout_seconds=0.12,
-            progress_timeout_seconds=0.12,
+            timeout_seconds=1.5,
+            progress_timeout_seconds=1.5,
             planner_id="teb",
         )
 

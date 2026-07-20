@@ -27,13 +27,17 @@ def test_documented_issue_snapshot_uses_claimable_selector() -> None:
     """The broad-discovery issue snapshot command must use ``--claimable``."""
     invocations = _snapshot_invocations(DOC_PATH.read_text(encoding="utf-8"))
 
-    assert any("--claimable" in args for args in invocations)
+    assert invocations, "No documented snapshot_issue_batch.py invocations found"
+    assert any(_parse_args(shlex.split(args)).claimable for args in invocations), (
+        "Expected at least one documented invocation to use the --claimable selector"
+    )
 
 
 def test_documented_issue_snapshot_is_not_selector_less() -> None:
     """The documented issue snapshot must not use the rejected bare ``--json`` form."""
     invocations = _snapshot_invocations(DOC_PATH.read_text(encoding="utf-8"))
 
+    assert invocations, "No documented snapshot_issue_batch.py invocations found"
     for invocation in invocations:
         parsed = _parse_args(shlex.split(invocation))
         assert parsed.claimable or parsed.issues, (
@@ -41,7 +45,7 @@ def test_documented_issue_snapshot_is_not_selector_less() -> None:
         )
 
 
-def test_documented_issue_snapshot_succeeds_against_cli() -> None:
+def test_documented_issue_snapshot_succeeds_against_cli(capsys) -> None:  # type: ignore[no-untyped-def]
     """The documented broad-discovery command drives the production parser offline."""
     invocations = _snapshot_invocations(DOC_PATH.read_text(encoding="utf-8"))
     claimable_invocations = [
@@ -69,4 +73,14 @@ def test_documented_issue_snapshot_succeeds_against_cli() -> None:
         }
         rc = main(shlex.split(claimable_invocations[0]))
 
-    assert rc == 0
+    assert rc == 0, f"Expected documented command to succeed, got exit code {rc}"
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema"] == "issue_batch_snapshot.v1", "CLI emitted an unexpected schema"
+    assert payload["mode"] == "claimable", "CLI did not run the documented claimable mode"
+    issues_by_number = {issue["number"]: issue for issue in payload["issues"]}
+    assert list(issues_by_number) == [6031], "CLI did not emit the mocked claimable issue"
+    assert issues_by_number[6031]["classification"] == "claimable", (
+        "Mocked unclaimed issue was not classified as claimable"
+    )
+    mock_gh.assert_called_once()
+    mock_claims.assert_called_once_with([6031], remote="origin")

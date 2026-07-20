@@ -14,14 +14,14 @@
 
 ## Commit and push
 
-- Fix/report commit SHA: pending commit creation.
+- Fix/report commit SHA: `230e2b805ee4786f1474f070c8380a37f66d1f67`.
 - PR head before and after body update: `cdfb10357ebb8ddc4625bf1ff7dac00d911b613c`.
 - PR body update was applied directly to PR #6059 through the authorized GitHub API; branch content remained unchanged apart from this report.
 
 ## Post-push review threads
 
 - Unresolved inline review threads before push: none.
-- Unresolved inline review threads after push: pending post-push query.
+- Unresolved inline review threads after push: none (GraphQL `reviewThreads` returned an empty list).
 - Resolved thread IDs: none; no inline threads existed to resolve.
 
 ## Blockers

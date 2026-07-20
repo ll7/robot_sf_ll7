@@ -16,56 +16,30 @@ from scripts.validation import check_issue_5416_sipp_native_smoke as smoke_valid
 from scripts.validation.check_issue_5416_sipp_native_smoke import SmokeError, validate_smoke
 
 
-def test_process_group_check_reads_portable_session_ids_from_ps(
+def test_watchdog_sentinel_identity_uses_its_live_group_leader(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The group check uses macOS-compatible ``ps`` session fields without `getsid`."""
-    observed_command: list[str] = []
-
-    def fake_run(command: list[str], **_: object) -> SimpleNamespace:
-        observed_command.extend(command)
-        return SimpleNamespace(returncode=0, stdout="123 456\n")
-
-    monkeypatch.setattr(smoke_validator.subprocess, "run", fake_run)
-    monkeypatch.setattr(os, "getsid", lambda _: pytest.fail("unexpected getsid call"))
-
-    assert smoke_validator._process_group_is_current(process_group_id=123, session_id=456)
-    assert observed_command == ["ps", "-axo", "pgid=,sess="]
-
-
-def test_process_session_field_reads_macos_compatible_ps_value(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Capture the session value in the spelling both macOS and Linux accept."""
-    observed_command: list[str] = []
-
-    def fake_run(command: list[str], **_: object) -> SimpleNamespace:
-        observed_command.extend(command)
-        return SimpleNamespace(returncode=0, stdout="0\n")
-
-    monkeypatch.setattr(smoke_validator.subprocess, "run", fake_run)
-
-    assert smoke_validator._process_session_field(123) == 0
-    assert observed_command == ["ps", "-o", "sess=", "-p", "123"]
-
-
-def test_process_session_field_rejects_missing_or_malformed_ps_output(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Cleanup fails closed when the platform cannot identify its child session."""
+    """A live sentinel, not a portable-but-ambiguous session number, owns cleanup."""
+    process = SimpleNamespace(pid=123, poll=lambda: None)
+    monkeypatch.setattr(os, "getpgid", lambda process_id: process_id)
     monkeypatch.setattr(
         smoke_validator.subprocess,
         "run",
-        lambda *_args, **_kwargs: SimpleNamespace(returncode=1, stdout=""),
+        lambda *_args, **_kwargs: pytest.fail("cleanup must not identify groups through ps"),
     )
-    assert smoke_validator._process_session_field(123) is None
+    monkeypatch.setattr(os, "getsid", lambda _: pytest.fail("cleanup must not use sess=0"))
 
-    monkeypatch.setattr(
-        smoke_validator.subprocess,
-        "run",
-        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout="not-a-session\n"),
-    )
-    assert smoke_validator._process_session_field(123) is None
+    assert smoke_validator._watchdog_sentinel_owns_process_group(process, process_group_id=123)
+
+
+def test_watchdog_sentinel_identity_rejects_a_reused_group_number(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A live process with a different group can never authorize `killpg`."""
+    process = SimpleNamespace(pid=123, poll=lambda: None)
+    monkeypatch.setattr(os, "getpgid", lambda _: 999)
+
+    assert not smoke_validator._watchdog_sentinel_owns_process_group(process, process_group_id=123)
 
 
 def test_smoke_arguments_are_pinned_before_expensive_execution(tmp_path: Path) -> None:
@@ -263,20 +237,30 @@ def test_native_watchdog_terminates_when_progress_probe_errors(
 
 
 @pytest.mark.skipif(os.name != "posix", reason="process-group cleanup is POSIX-specific")
-def test_group_lookup_failure_still_reaps_watchdog_child(
+def test_sentinel_identity_failure_never_kills_a_reused_unrelated_group(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Failed group validation falls through to direct-child cleanup."""
-    process = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
-    monkeypatch.setattr(smoke_validator, "_process_group_is_current", lambda **_: False)
+    """A stale numeric group id falls through without signalling the unrelated group."""
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+    )
+    signalled_groups: list[tuple[int, int]] = []
+    monkeypatch.setattr(os, "getpgid", lambda _: process.pid + 1)
+    monkeypatch.setattr(
+        os,
+        "killpg",
+        lambda process_group_id, signal_number: signalled_groups.append(
+            (process_group_id, signal_number)
+        ),
+    )
 
     smoke_validator._terminate_process_group(
         process,
         process_group_id=process.pid,
-        session_id=process.pid,
     )
 
     assert process.returncode is not None
+    assert signalled_groups == []
 
 
 @pytest.mark.skipif(os.name != "posix", reason="process-group cleanup is POSIX-specific")

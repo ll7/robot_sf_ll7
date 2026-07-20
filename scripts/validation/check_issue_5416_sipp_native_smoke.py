@@ -17,6 +17,7 @@ import signal
 import subprocess
 import sys
 import time
+import uuid
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,30 @@ _NATIVE_ROW_TIMEOUT_SECONDS = 60.0
 _NATIVE_ROW_PROGRESS_TIMEOUT_SECONDS = 15.0
 _WATCHDOG_POLL_SECONDS = 0.1
 _WATCHDOG_TERMINATE_GRACE_SECONDS = 0.2
+
+# The outer watchdog launches this small wrapper as the process-group leader.
+# It deliberately remains alive after the native command returns, giving the
+# watchdog a live, non-reusable identity for the whole group until cleanup.
+# Relying on ``ps`` session values is not safe here: macOS can report ``sess``
+# as 0, which makes a recycled numeric process-group id indistinguishable from
+# an unrelated process group.
+_WATCHDOG_SENTINEL_CODE = """
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+
+status_path = Path(sys.argv[1])
+child = subprocess.Popen(sys.argv[2:])
+returncode = child.wait()
+temporary_path = status_path.with_name(status_path.name + ".tmp")
+temporary_path.write_text(json.dumps({"returncode": returncode}), encoding="utf-8")
+os.replace(temporary_path, status_path)
+while True:
+    time.sleep(60)
+"""
 
 
 class SmokeError(ValueError):
@@ -145,67 +170,31 @@ def _episode_progress_token(episodes_path: Path) -> tuple[int, int] | None:
     return stat.st_size, stat.st_mtime_ns
 
 
-def _process_group_is_current(*, process_group_id: int, session_id: int) -> bool:
-    """Check that the original session still owns the target process group."""
-    try:
-        completed = subprocess.run(
-            # ``sess`` is the portable POSIX ``ps`` session field spelling.  In
-            # particular, macOS rejects Linux/procps' ``sid`` alias here, which
-            # otherwise makes the watchdog fall back to direct-child cleanup
-            # and leaves an exited parent's descendants behind.
-            ["ps", "-axo", "pgid=,sess="],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return False
-    if completed.returncode != 0:
-        return False
-    for line in completed.stdout.splitlines():
-        fields = line.split()
-        if len(fields) != 2:
-            continue
-        try:
-            observed_group_id, observed_session_id = (int(value) for value in fields)
-        except ValueError:
-            continue
-        if observed_group_id == process_group_id and observed_session_id == session_id:
-            return True
-    return False
+def _watchdog_sentinel_owns_process_group(
+    process: subprocess.Popen[bytes], *, process_group_id: int
+) -> bool:
+    """Return whether our still-live sentinel is the exact group leader.
 
-
-def _process_session_field(process_id: int) -> int | None:
-    """Read the platform's portable ``ps`` session field for one process."""
+    A live process object prevents PID reuse.  We therefore never identify a
+    group from ``ps``' numeric PGID/session fields: a macOS ``sess=0`` value can
+    otherwise match an unrelated group after the original leader exited.
+    """
+    if process.poll() is not None or process.pid != process_group_id:
+        return False
     try:
-        completed = subprocess.run(
-            ["ps", "-o", "sess=", "-p", str(process_id)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return None
-    if completed.returncode != 0:
-        return None
-    try:
-        return int(completed.stdout.strip())
-    except ValueError:
-        return None
+        return os.getpgid(process.pid) == process_group_id
+    except (OSError, ProcessLookupError):
+        return False
 
 
 def _terminate_process_group(
-    process: subprocess.Popen[bytes], *, process_group_id: int | None, session_id: int | None
+    process: subprocess.Popen[bytes], *, process_group_id: int | None
 ) -> None:
-    """Terminate the recorded native session, including children after its leader exits."""
+    """Terminate the sentinel-owned native group, including exited-parent children."""
     if os.name == "posix":
-        if (
-            process_group_id is not None
-            and session_id is not None
-            and _process_group_is_current(
-                process_group_id=process_group_id,
-                session_id=session_id,
-            )
+        if process_group_id is not None and _watchdog_sentinel_owns_process_group(
+            process,
+            process_group_id=process_group_id,
         ):
             try:
                 os.killpg(process_group_id, signal.SIGTERM)
@@ -213,9 +202,9 @@ def _terminate_process_group(
                 pass
             else:
                 time.sleep(_WATCHDOG_TERMINATE_GRACE_SECONDS)
-                if _process_group_is_current(
+                if _watchdog_sentinel_owns_process_group(
+                    process,
                     process_group_id=process_group_id,
-                    session_id=session_id,
                 ):
                     try:
                         os.killpg(process_group_id, signal.SIGKILL)
@@ -233,6 +222,53 @@ def _terminate_process_group(
             process.wait()
 
 
+def _watchdog_sentinel_command(*, command: list[str], status_path: Path) -> list[str]:
+    """Wrap one native command in a cleanup sentinel with an atomic exit receipt."""
+    return [sys.executable, "-c", _WATCHDOG_SENTINEL_CODE, str(status_path), *command]
+
+
+def _read_native_returncode(status_path: Path) -> int | None:
+    """Read the wrapped native command's atomic exit receipt when available."""
+    try:
+        payload = json.loads(status_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except (OSError, json.JSONDecodeError):
+        return None
+    returncode = payload.get("returncode") if isinstance(payload, dict) else None
+    return returncode if isinstance(returncode, int) and not isinstance(returncode, bool) else None
+
+
+def _raise_for_watchdog_deadline(
+    *,
+    now: float,
+    started_at: float,
+    last_progress_at: float,
+    timeout_seconds: float,
+    progress_timeout_seconds: float,
+    planner_id: str,
+    episodes_path: Path,
+) -> None:
+    """Raise the bounded, structured failure that reached first."""
+    details = {
+        "planner_id": planner_id,
+        "timeout_seconds": timeout_seconds,
+        "progress_timeout_seconds": progress_timeout_seconds,
+        "episode_path": str(episodes_path),
+        "child_process_terminated": True,
+    }
+    if now - started_at >= timeout_seconds:
+        raise SmokeWatchdogError(
+            "native smoke exceeded its end-to-end watchdog timeout",
+            details={"failure_kind": "native_end_to_end_timeout", **details},
+        )
+    if now - last_progress_at >= progress_timeout_seconds:
+        raise SmokeWatchdogError(
+            "native smoke made no episode-output progress before its watchdog deadline",
+            details={"failure_kind": "native_progress_timeout", **details},
+        )
+
+
 def _run_native_row_with_watchdog(
     *,
     command: list[str],
@@ -246,62 +282,52 @@ def _run_native_row_with_watchdog(
         raise SmokeError("native watchdog timeouts must be positive")
     if progress_timeout_seconds > timeout_seconds:
         raise SmokeError("native progress timeout must not exceed the end-to-end timeout")
+    status_path = episodes_path.with_name(f".{episodes_path.name}.watchdog-{uuid.uuid4().hex}.json")
     process = subprocess.Popen(
-        command,
+        _watchdog_sentinel_command(command=command, status_path=status_path),
         cwd=REPO_ROOT,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=os.name == "posix",
     )
     process_group_id = process.pid if os.name == "posix" else None
-    # macOS reports its session through ``sess`` (often ``0`` for detached
-    # processes), whereas Linux reports the session-leader PID.  Record the
-    # platform's own value rather than assuming the Linux form so descendant
-    # cleanup remains both safe and effective on either host.
-    session_id = _process_session_field(process.pid) if os.name == "posix" else None
     try:
         started_at = time.monotonic()
         last_progress_at = started_at
         progress_token = _episode_progress_token(episodes_path)
+        native_returncode: int | None = None
         while process.poll() is None:
+            native_returncode = _read_native_returncode(status_path)
+            if native_returncode is not None:
+                break
             now = time.monotonic()
             current_token = _episode_progress_token(episodes_path)
             if current_token != progress_token:
                 progress_token = current_token
                 last_progress_at = now
-            if now - started_at >= timeout_seconds:
-                raise SmokeWatchdogError(
-                    "native smoke exceeded its end-to-end watchdog timeout",
-                    details={
-                        "failure_kind": "native_end_to_end_timeout",
-                        "planner_id": planner_id,
-                        "timeout_seconds": timeout_seconds,
-                        "progress_timeout_seconds": progress_timeout_seconds,
-                        "episode_path": str(episodes_path),
-                        "child_process_terminated": True,
-                    },
-                )
-            if now - last_progress_at >= progress_timeout_seconds:
-                raise SmokeWatchdogError(
-                    "native smoke made no episode-output progress before its watchdog deadline",
-                    details={
-                        "failure_kind": "native_progress_timeout",
-                        "planner_id": planner_id,
-                        "timeout_seconds": timeout_seconds,
-                        "progress_timeout_seconds": progress_timeout_seconds,
-                        "episode_path": str(episodes_path),
-                        "child_process_terminated": True,
-                    },
-                )
+            _raise_for_watchdog_deadline(
+                now=now,
+                started_at=started_at,
+                last_progress_at=last_progress_at,
+                timeout_seconds=timeout_seconds,
+                progress_timeout_seconds=progress_timeout_seconds,
+                planner_id=planner_id,
+                episodes_path=episodes_path,
+            )
             time.sleep(_WATCHDOG_POLL_SECONDS)
-        if process.returncode != 0:
-            raise SmokeError(f"native smoke child exited with status {process.returncode}")
+        if native_returncode is None:
+            raise SmokeError("native smoke watchdog sentinel exited before its native exit receipt")
+        if native_returncode != 0:
+            raise SmokeError(f"native smoke child exited with status {native_returncode}")
     finally:
         _terminate_process_group(
             process,
             process_group_id=process_group_id,
-            session_id=session_id,
         )
+        try:
+            status_path.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def validate_smoke(  # noqa: PLR0913

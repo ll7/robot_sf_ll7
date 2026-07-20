@@ -67,7 +67,8 @@ The four required categories from the issue are all represented: **acceleration*
 (`max_accel_mps2`), **braking** (`max_decel_mps2`), **yaw/steering rate**
 (`max_yaw_rate_radps`, `max_steering_rate_radps`), and **latency** (`command_latency_s`,
 `brake_latency_s`). The loader fails closed: a malformed block or wrong schema version
-raises `ValueError` rather than silently weakening the limits.
+raises `ValueError` rather than silently weakening the limits. Unknown or misspelled keys
+also raise `ValueError`; omitted supported fields use the provisional defaults shown above.
 
 ## Checks
 

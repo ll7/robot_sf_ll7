@@ -40,6 +40,16 @@ if TYPE_CHECKING:
 
 ACTUATOR_FEASIBILITY_SCHEMA = "actuator_feasibility.v1"
 ACTUATOR_FEASIBILITY_CONFIG_KEY = "actuator_limits"
+_ACTUATOR_LIMIT_KEYS = frozenset(
+    {
+        "max_accel_mps2",
+        "max_decel_mps2",
+        "max_yaw_rate_radps",
+        "max_steering_rate_radps",
+        "command_latency_s",
+        "brake_latency_s",
+    }
+)
 ACTUATOR_FEASIBILITY_CLAIM_BOUNDARY = (
     "experimental actuator-feasibility diagnostic; not a formal safety case; not "
     "conformalized; not learned; default planner behavior unchanged; numeric limits are "
@@ -370,6 +380,10 @@ def load_actuator_limits(config: Mapping[str, Any]) -> ActuatorLimitsConfig:
             f"{ACTUATOR_FEASIBILITY_CONFIG_KEY}.schema_version must be "
             f"{ACTUATOR_FEASIBILITY_SCHEMA!r}; got {schema_version!r}"
         )
+    unknown_keys = set(block) - _ACTUATOR_LIMIT_KEYS - {"schema_version"}
+    if unknown_keys:
+        unknown = ", ".join(sorted(str(key) for key in unknown_keys))
+        raise ValueError(f"unknown actuator limit key(s): {unknown}")
     try:
         return ActuatorLimitsConfig(
             max_accel_mps2=_require_finite(block.get("max_accel_mps2", 1.0), key="max_accel_mps2"),

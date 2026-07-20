@@ -155,6 +155,13 @@ def test_load_actuator_limits_rejects_bad_limit() -> None:
         load_actuator_limits({"max_decel_mps2": -1.0})
 
 
+@pytest.mark.parametrize("key", ["max_decel_mps", "max_accel", "typo_limit"])
+def test_load_actuator_limits_rejects_unknown_keys(key: str) -> None:
+    """Misspelled or unknown keys fail closed instead of silently using defaults."""
+    with pytest.raises(ValueError, match="unknown actuator limit key"):
+        load_actuator_limits({key: 0.1})
+
+
 # ---------------------------------------------------------------------------
 # Acceptance criteria 2 & 3: actuator-feasible vs geometry-only verdicts and
 # which actuator limit was violated.

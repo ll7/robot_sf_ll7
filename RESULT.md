@@ -49,12 +49,13 @@
 
 - Pre-push unresolved inline review threads: none.
 - Resolved thread IDs: none.
-- Post-push unresolved threads: re-queried at head `cb537c6c661a1347baa4248870b38eb3810f2712`; none were present.
+- Post-push unresolved threads: re-queried at head `f760c7f4913e6bef12e15fbcf6b25c1206ae7675`; none were present.
 
 ## Live PR state after push
 
-- PR head at the final pre-refresh verification: `cb537c6c661a1347baa4248870b38eb3810f2712` on
+- PR head after the report refresh push: `f760c7f4913e6bef12e15fbcf6b25c1206ae7675` on
   `cheap/cheap-issue-5986-e4ebaff0d9c5`.
+- Report refresh commit SHA: `f760c7f4913e6bef12e15fbcf6b25c1206ae7675`.
 - Hosted `reproducibility-check` is `SKIPPED` because the workflow is intentionally
   `workflow_dispatch`-only; this lease cannot submit compute or dispatch it.
 - GitHub `reviewDecision` is empty/null; no approving human review is recorded.

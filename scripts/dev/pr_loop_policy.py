@@ -80,7 +80,7 @@ GATE_VERDICT_MIN_SHA_OVERLAP = 7
 # case-insensitively so a human- or bot-authored ``Accepted`` still satisfies
 # the contract; surrounding markdown/code fences are tolerated.
 _GATE_VERDICT_RE = re.compile(
-    r"gate-verdict\s*:\s*accepted\s*@\s*([0-9a-fA-F]{7,40})",
+    r"gate-verdict\s*:\s*accepted\s*@\s*([0-9a-fA-F]{7,40})(?![0-9a-fA-F])",
     re.IGNORECASE,
 )
 
@@ -248,10 +248,9 @@ def _sha_matches_head(trailer_sha: str, head_sha: str) -> bool:
         return False
     if trailer == head:
         return True
-    shorter, longer = sorted((trailer, head), key=len)
-    if len(shorter) < GATE_VERDICT_MIN_SHA_OVERLAP:
+    if len(trailer) < GATE_VERDICT_MIN_SHA_OVERLAP:
         return False
-    return longer.startswith(shorter)
+    return head.startswith(trailer)
 
 
 def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool:
@@ -262,7 +261,7 @@ def has_current_accepted_gate_verdict(pr: dict[str, Any], head_sha: str) -> bool
     gate described in issue #6019 — the dispatcher must reject any exact head
     unless every required check is green AND such a trailer is present.
     """
-    if not head_sha:
+    if not isinstance(pr, dict) or not head_sha:
         return False
     accepted = _accepted_gate_verdict_shas(pr)
     return any(_sha_matches_head(sha, head_sha) for sha in accepted)

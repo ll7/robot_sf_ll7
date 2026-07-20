@@ -427,10 +427,22 @@ def test_has_current_accepted_gate_verdict_no_trailer() -> None:
     assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
 
 
+def test_has_current_accepted_gate_verdict_rejects_overlong_hex_trailer() -> None:
+    """A trailer SHA longer than 40 hex characters must not be truncated."""
+    pr = _pr(3011, head_sha=FULL_SHA, gate_verdict=f"{FULL_SHA}a")
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False
+
+
 def test_has_current_accepted_gate_verdict_empty_head() -> None:
     """Empty head SHA should return False even with a trailer present."""
     pr = _pr(3012, head_sha=FULL_SHA, gate_verdict=FULL_SHA)
     assert has_current_accepted_gate_verdict(pr, "") is False
+
+
+@pytest.mark.parametrize("pr", [[], None, "not-a-pr"])
+def test_has_current_accepted_gate_verdict_rejects_non_dict_pr(pr: object) -> None:
+    """Malformed PR roots must fail closed instead of raising."""
+    assert has_current_accepted_gate_verdict(pr, FULL_SHA) is False  # type: ignore[arg-type]
 
 
 def test_has_current_accepted_gate_verdict_mismatch() -> None:
@@ -466,6 +478,11 @@ def test_sha_matches_head_exact() -> None:
 def test_sha_matches_head_abbreviated_prefix() -> None:
     """Abbreviated trailer (>= min overlap) that prefixes the head matches."""
     assert _sha_matches_head(SHORT_SHA, FULL_SHA) is True
+
+
+def test_sha_matches_head_rejects_longer_trailer_for_abbreviated_head() -> None:
+    """An abbreviated head must not authorize a longer trailer SHA."""
+    assert _sha_matches_head(f"{SHORT_SHA}deadbeef", SHORT_SHA) is False
 
 
 def test_sha_matches_head_too_short() -> None:

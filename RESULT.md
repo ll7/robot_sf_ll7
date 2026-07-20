@@ -54,6 +54,6 @@ domain-aware approver or maintainer waiver, so the approval blocker remains open
 ## Current update
 
 - Prior report update commit SHA: `cf71e251640d8d9b2fde72460afb08c2c462e9c4`.
-- This report refresh is the next commit pushed to the existing PR branch; its SHA is returned
-  with the handoff.
+- Report refresh commit SHA: `409ad34f5aad07158d2ed61d1657693fb32503a2`.
+- The follow-up metadata commit containing this SHA is returned with the handoff.
 - The five untracked `.ll7_task_*` files were preserved because deletion is not authorized.

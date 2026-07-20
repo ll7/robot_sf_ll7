@@ -16,13 +16,12 @@
 ## Commit and push
 
 - PR head confirmed before this run: `933d21c82a21d2c98980bb30109bbf5bbc2b0c77`.
-- Reporting updates committed and pushed by this run: `0018e40e1ad9275c0a3ee82575a9a0b58eef32d8`, followed by final handoff commit below.
+- Reporting updates committed and pushed by this run: `0018e40e1ad9275c0a3ee82575a9a0b58eef32d8`, `e45d31814`, and `2922ba567`.
 
 ## Post-push review threads
 
 - Unresolved inline review threads before push: none; GraphQL `reviewThreads` returned an empty list.
 - Post-push thread re-query at `0018e40e1ad9275c0a3ee82575a9a0b58eef32d8`: none; GraphQL `reviewThreads` returned an empty list.
-- Final handoff commit pushed: recorded below after commit.
 - Resolved thread IDs: none; no inline threads existed to resolve.
 
 ## Blockers

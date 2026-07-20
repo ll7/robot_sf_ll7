@@ -31,7 +31,7 @@
 ## Commit and push
 
 - Fix commit SHA: `42e2583913485ebc34509bd127017b175b8ad317`.
-- Reporting commit SHA: this follow-up commit, recorded after commit creation.
+- Reporting commit SHA: `87decf94d73421f71a1ba7720876f02ffc59918f`.
 - Push target: existing PR branch `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - No new PR, merge, worktree deletion, or Slurm submission was performed.
 
@@ -43,7 +43,8 @@
 
 ## Live PR state after push
 
-- PR head: updated after the reporting commit on `cheap/cheap-issue-5986-e4ebaff0d9c5`.
+- PR head at body remediation: `87decf94d73421f71a1ba7720876f02ffc59918f` on
+  `cheap/cheap-issue-5986-e4ebaff0d9c5`; the final report-only commit follows.
 - Hosted checks were queued/in progress after the push; `reproducibility-check` remained
   `SKIPPED`.
 - `reviewDecision` remained empty/null.

@@ -24,10 +24,8 @@ statistical benchmark or dissertation claim.
 - Seed: `24`
 - Selection mode: `best`
 - Selection metric: `path_efficiency = 1.0`
-- Original generation commit (retained in `trace_series.json`, no longer reachable):
-  `62e08add1c2a5a750a6fd68a823319280c2dccd6`
-- Published reproducible exporter provenance (reachable integration commit with byte-identical
-  exporter source): `0b0214ced856eac77fa9a4c15b02921eabab1661`
+- Git commit at generation: `0b0214ced856eac77fa9a4c15b02921eabab1661`
+  (reachable integration commit with byte-identical exporter source)
 
 ## Claim Boundary
 

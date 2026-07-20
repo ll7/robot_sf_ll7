@@ -31,7 +31,6 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
@@ -281,8 +280,9 @@ def _observed_actuator_rates(
 
     Longitudinal accel/decel are derived from the change in scalar speed between
     consecutive timesteps (tangential along the motion direction). Yaw rate is the
-    wrapped heading change between consecutive *moving* timesteps; steering rate is the
-    rate of change of yaw rate between consecutive moving timesteps (a proxy bound on
+    wrapped heading change between adjacent *moving* timesteps in the original
+    trajectory; steering rate is the rate of change of yaw rate between consecutive
+    valid transitions (a proxy bound on
     how fast the steering / yaw command can change). Any quantity that cannot be computed
     from too-short a trajectory is returned as ``None``.
 
@@ -303,19 +303,23 @@ def _observed_actuator_rates(
         max_accel = float(np.max(accel_values)) if accel_values.size else 0.0
         max_decel = float(np.max(decel_values)) if decel_values.size else 0.0
 
-    # Yaw rate from heading of moving timesteps; steering rate from its derivative.
+    # Rates are only defined for adjacent moving samples in the original trajectory.
+    # Filtering stopped samples first would use dt_s for a transition that actually
+    # spans multiple timesteps and inflate the rates.
     max_yaw_rate: float | None = None
     max_steering_rate: float | None = None
     moving = speeds > _MIN_HEADING_SPEED_MPS
     if int(np.sum(moving)) >= 2:
-        moving_vel = robot_velocities[moving]
-        headings = np.arctan2(moving_vel[:, 1], moving_vel[:, 0])
-        d_heading = np.array([_wrap_angle(h2 - h1) for h1, h2 in pairwise(headings)])
-        yaw_rates = d_heading / dt_s
-        max_yaw_rate = float(np.max(np.abs(yaw_rates)))
-        if yaw_rates.size >= 2:
-            d_yaw_rate = np.diff(yaw_rates)
-            steering_rates = np.abs(d_yaw_rate) / dt_s
+        headings = np.arctan2(robot_velocities[:, 1], robot_velocities[:, 0])
+        yaw_rates = np.full(robot_velocities.shape[0] - 1, np.nan)
+        for i in range(yaw_rates.size):
+            if moving[i] and moving[i + 1]:
+                yaw_rates[i] = _wrap_angle(headings[i + 1] - headings[i]) / dt_s
+        valid_yaw_rates = yaw_rates[~np.isnan(yaw_rates)]
+        if valid_yaw_rates.size:
+            max_yaw_rate = float(np.max(np.abs(valid_yaw_rates)))
+        if valid_yaw_rates.size >= 2:
+            steering_rates = np.abs(np.diff(valid_yaw_rates)) / dt_s
             max_steering_rate = float(np.max(steering_rates))
 
     return max_accel, max_decel, max_yaw_rate, max_steering_rate, max_speed

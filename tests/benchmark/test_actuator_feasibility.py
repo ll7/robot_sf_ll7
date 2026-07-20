@@ -472,3 +472,17 @@ def test_single_timestep_skips_rate_checks() -> None:
     assert report.observed_max_steering_rate_radps is None
     assert report.max_speed_mps == pytest.approx(0.3)
     assert report.stopping_distance_m is not None
+
+
+def test_non_consecutive_moving_timesteps_skip_rate_checks() -> None:
+    """Stopped samples must not create synthetic yaw or steering transitions."""
+    report = evaluate_actuator_feasibility(
+        robot_positions=np.array([[0.0, 0.0], [0.0, 0.0], [0.0, 0.05]]),
+        robot_velocities=np.array([[0.5, 0.0], [0.0, 0.0], [0.0, 0.5]]),
+        dt_s=0.1,
+        hazard_clearance_m=5.0,
+        config=ActuatorLimitsConfig(max_accel_mps2=10.0, max_decel_mps2=10.0),
+    )
+    assert report.verdict == VERDICT_ACTUATOR_FEASIBLE
+    assert report.observed_max_yaw_rate_radps is None
+    assert report.observed_max_steering_rate_radps is None

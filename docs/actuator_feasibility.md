@@ -1,4 +1,4 @@
-# Actuator-feasibility validation (issue #6056)
+# Actuator-Feasibility Validation (Issue #6056)
 
 > **Status: experimental diagnostic.** This layer is **not** a formal safety case, it is
 > not conformalized, it is not learned, and it does **not** change default planner

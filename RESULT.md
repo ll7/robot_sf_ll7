@@ -32,12 +32,12 @@ domain-aware approver or maintainer waiver, so the approval blocker remains open
 
 ## Commit
 
-- Fix/merge commit: `cdfb9546a783ab0887b63982413fd05ea40a4e27`
-- Review-fix commit: `f7a74e6039acedf678b377afbe5ff9ad9a686584`
+- Current PR head before this report update: `7d74667d789016f26044a6b8344b7e9f48174e78`.
+- This report update will be recorded in the commit returned with the handoff.
 
 ## Review state
 
-- Reviewed PR head before this report refresh: `cf71e251640d8d9b2fde72460afb08c2c462e9c4`.
+- Reviewed PR head before this report update: `7d74667d789016f26044a6b8344b7e9f48174e78`.
 - Unresolved review threads: none. All three original threads are resolved.
 
 ## Remaining blockers
@@ -53,7 +53,6 @@ domain-aware approver or maintainer waiver, so the approval blocker remains open
 
 ## Current update
 
-- Prior report update commit SHA: `cf71e251640d8d9b2fde72460afb08c2c462e9c4`.
-- Report refresh commit SHA: `409ad34f5aad07158d2ed61d1657693fb32503a2`.
-- The follow-up metadata commit containing this SHA is returned with the handoff.
+- The current PR head and zero-unresolved-thread state were re-queried before this update.
+- The follow-up commit containing this report refresh SHA is returned with the handoff.
 - The five untracked `.ll7_task_*` files were preserved because deletion is not authorized.

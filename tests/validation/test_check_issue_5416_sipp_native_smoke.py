@@ -298,6 +298,41 @@ def test_native_watchdog_terminates_descendant_processes(tmp_path: Path) -> None
 
 
 @pytest.mark.skipif(os.name != "posix", reason="process-group cleanup is POSIX-specific")
+def test_native_watchdog_sigkills_descendant_that_ignores_sigterm(tmp_path: Path) -> None:
+    """The live sentinel permits SIGKILL escalation after a graceful stop is ignored."""
+    pid_path = tmp_path / "sigterm_ignoring_descendant.pid"
+    descendant = (
+        "from pathlib import Path; import os, signal, sys, time; "
+        "signal.signal(signal.SIGTERM, lambda _signum, _frame: None); "
+        "Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(30)"
+    )
+    parent = (
+        "import subprocess, sys, time; "
+        "subprocess.Popen([sys.executable, '-c', sys.argv[2], sys.argv[1]]); time.sleep(30)"
+    )
+    with pytest.raises(smoke_validator.SmokeWatchdogError, match="end-to-end"):
+        smoke_validator._run_native_row_with_watchdog(
+            command=[sys.executable, "-c", parent, str(pid_path), descendant],
+            episodes_path=tmp_path / "episodes.jsonl",
+            timeout_seconds=0.12,
+            progress_timeout_seconds=0.12,
+            planner_id="teb",
+        )
+
+    descendant_pid = int(pid_path.read_text(encoding="utf-8"))
+    deadline = time.monotonic() + 1.0
+    while True:
+        try:
+            os.kill(descendant_pid, 0)
+        except OSError as exc:
+            assert exc.errno == errno.ESRCH
+            break
+        if time.monotonic() >= deadline:
+            pytest.fail("SIGTERM-ignoring native descendant survived watchdog escalation")
+        time.sleep(0.02)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group cleanup is POSIX-specific")
 def test_native_watchdog_cleans_descendant_after_parent_exits(tmp_path: Path) -> None:
     """A successful parent cannot leave its native descendant behind after returning."""
     pid_path = tmp_path / "descendant.pid"

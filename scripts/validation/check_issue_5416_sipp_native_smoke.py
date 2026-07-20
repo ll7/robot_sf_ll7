@@ -54,11 +54,16 @@ _WATCHDOG_SENTINEL_CODE = """
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import time
 
 status_path = Path(sys.argv[1])
+# The outer watchdog must be able to verify this sentinel after it has sent the
+# native group its graceful stop.  Keep the group leader alive for the SIGKILL
+# escalation; SIGKILL cannot be caught, so final cleanup remains authoritative.
+signal.signal(signal.SIGTERM, lambda _signum, _frame: None)
 child = subprocess.Popen(sys.argv[2:])
 returncode = child.wait()
 temporary_path = status_path.with_name(status_path.name + ".tmp")

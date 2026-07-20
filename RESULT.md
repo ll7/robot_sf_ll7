@@ -25,6 +25,7 @@
 
 - Fix commit: `752e0550e3de4dd064af0edb35b3073bbde532ac`
 - Result report commit: `bf61056b4a59ea2a66f4affc93355a7eeec478e1`
+- Final report-head commit: `5ea70a868`.
 - Pushed to PR branch `cheap/cheap-issue-6054-4b794d2029e9`.
 
 ## Review-thread state

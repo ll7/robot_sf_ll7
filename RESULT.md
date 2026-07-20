@@ -25,13 +25,12 @@ The PR body now includes the required `Domain-Aware Approval` section with expli
 
 ## Commit
 
-- Fix commit: `fb91669f68647a0e426011e09a838cb806f0bf97`
-- Report commit: `477cb63e39ceed411ec00e32c084548c26499070`
-- Final report-correction commit / PR head: `f4d23e1004173d556159778edd429897e988860d`
+- Fix/merge commit: `cdfb9546a783ab0887b63982413fd05ea40a4e27`
+- This report is updated in the follow-up commit recorded below.
 
 ## Review state
 
-- PR head after report push: `477cb63e39ceed411ec00e32c084548c26499070`
+- PR head before this report-only update: `cdfb9546a783ab0887b63982413fd05ea40a4e27`
 - Unresolved review threads: none. All three original threads are resolved.
 
 ## Remaining blockers

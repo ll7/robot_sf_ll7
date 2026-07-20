@@ -417,22 +417,17 @@ def compile_regulation_excerpt(
             {"parameter": "max_episode_steps", "value": steps, "source": "hint"}
         )
 
-    # Determine unmatched clauses: clauses that contributed no extracted
-    # parameter. A clause "contributes" if any extraction keyword fired inside
-    # it. This is conservative (a clause mentioning "speed" but with no number
-    # still counts as addressed only if a number was found within it).
-    keyword_groups = (
-        ("max speed", "maximum speed", "speed limit", "m/s", "mps"),
-        ("clearance", "distance", "separation", "buffer"),
-        ("density", "crowd", "sparse", "dense", "medium", "high", "low"),
-    )
+    # Determine unmatched clauses from concrete clause-local extractions. A
+    # recognized keyword alone is not enough: phrases such as "maximum speed
+    # is governed by local signage" still need to be surfaced for review.
     for clause in _split_clauses(regulation_text):
-        addressed = False
-        for group in keyword_groups:
-            if any(_contains_keyword(clause, kw) for kw in group):
-                addressed = True
-                break
-        if not addressed:
+        speed_value, _ = _extract_speed(clause)
+        clearance_value, _ = _extract_clearance(clause)
+        _, density_audit = _extract_density(clause)
+        has_concrete_density = any(
+            entry.get("source") != "default" for entry in density_audit
+        )
+        if speed_value is None and clearance_value is None and not has_concrete_density:
             params.unmatched_clauses.append(clause)
 
     if params.max_linear_speed is None:

@@ -233,6 +233,12 @@ class TestCompilation:
         )
         assert any("audible alert" in c for c in params.unmatched_clauses)
 
+    def test_keyword_without_concrete_extraction_is_unmatched(self) -> None:
+        clause = "Maximum speed is governed by local signage"
+        params = compile_regulation_excerpt(clause)
+        assert params.max_linear_speed is None
+        assert params.unmatched_clauses == [clause]
+
     def test_european_decimal(self) -> None:
         params = compile_regulation_excerpt("The maximum speed is 1,5 m/s.")
         assert params.max_linear_speed == 1.5

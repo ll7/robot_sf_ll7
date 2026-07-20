@@ -1,27 +1,37 @@
-# PR #6053 review-fixer result
+# PR #6063 Review Blocker Result
 
 ## Fixed comments
 
-- Fixed the accepted P1 blocker: `scripts/dev/check_docs_proof_consistency_diff.sh` no longer
-  adds synthetic `docs/context/README.md` and `docs/context/INDEX.md` paths when
-  `docs/context/catalog.yaml` is part of a docs/context-only diff. Catalog-only diffs now reach
-  the checker without a row subset, preserving the documented full-catalog audit.
-- The live PR had no unresolved review threads after the fix, so no thread was resolved.
+- `PRRT_kwDOLRSZdc6SVXPi`: fixed yaw/steering-rate calculation to inspect only adjacent
+  moving samples in the original trajectory.
+- `PRRT_kwDOLRSZdc6SVXP3`: added a regression test for a stopped sample between moving
+  samples, including a direction change that previously triggered a false yaw violation.
+- `PRRT_kwDOLRSZdc6SVXP8`: updated the documentation title to
+  `Actuator-Feasibility Validation (Issue #6056)`.
+
+The PR body now includes the required `Domain-Aware Approval` section with explicit
+`Status: pending` and a concrete validity checklist.
 
 ## Validation
 
-- `bash -n scripts/dev/check_docs_proof_consistency_diff.sh` — passed.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/validation/test_check_docs_proof_consistency.py -q` — 55 passed.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check scripts/validation/check_docs_proof_consistency.py tests/validation/test_check_docs_proof_consistency.py` — passed.
-- `scripts/dev/check_docs_proof_consistency_diff.sh` — passed.
+- `uv run ruff check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
+- `uv run ruff format --check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
+- `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 28 passed.
 - `git diff --check` — passed.
-- Explicit catalog audit still reports the two pre-existing ignored-output rows in entries 3 and 4; this is expected full-audit behavior and remains outside this blocker fix.
+- `scripts/dev/check_pr_followups.py` — detects the approval section, but reports
+  `pending_domain_approval` until a domain approver records approval or waiver.
 
-## Commit and review state
+## Commit
 
-- Implementation commit pushed: `3b600b6dc2c52926ac66d06b4d561e5c1dbd1269`.
-- Result handoff commit pushed: `273de4082`.
-- Final PR head after the handoff push: `273de4082`.
-- Unresolved threads after push: none.
-- Remaining blockers: none for the accepted P1. Existing catalog entries 3 and 4 remain a separate
-  full-audit data-debt limitation.
+- Fix commit: `fb91669f68647a0e426011e09a838cb806f0bf97`
+- Report commit: pending push
+
+## Review state
+
+- PR head after fix push: `fb91669f68647a0e426011e09a838cb806f0bf97`
+- Unresolved review threads: none. All three original threads are resolved.
+
+## Remaining blocker
+
+- Domain-aware approval is pending. No approver or waiver was available to record, so this
+  report does not claim merge readiness or experimental-validity approval.

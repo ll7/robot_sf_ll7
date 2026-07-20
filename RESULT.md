@@ -2,34 +2,39 @@
 
 ## Fixed comments
 
-- Density wording now uses word-bounded matching. `highlight` no longer matches
-  `high` or `light`, and the clause remains in `unmatched_clauses`.
-- `regulation.id` now must be a non-empty string; null, numeric, and blank IDs
-  are rejected before provenance generation.
-- The unrelated prior root `RESULT.md` handoff was removed while updating the
-  branch to the current `origin/main` base; this report is specific to PR #6062.
+- Fixed the actionable zone-extraction blocker in `scripts/tools/convert_regulation_to_scenario.py`.
+  `_extract_zone` now uses the existing case-insensitive, word-bounded `_contains_keyword` helper
+  instead of raw substring matching.
+- Added regression coverage for `stationary area` and `platforming area`; neither selects the
+  `station_platform` template.
+- Updated the existing positive fixture to use the documented whole keyword `shared space`.
 
 ## Validation
 
-- `uv run pytest tests/scenarios/test_convert_regulation_to_scenario.py -q` — 62 passed.
+- `uv run pytest tests/scenarios/test_convert_regulation_to_scenario.py` — passed, 64 tests.
 - `uv run ruff check scripts/tools/convert_regulation_to_scenario.py tests/scenarios/test_convert_regulation_to_scenario.py` — passed.
 - `uv run ruff format --check scripts/tools/convert_regulation_to_scenario.py tests/scenarios/test_convert_regulation_to_scenario.py` — passed.
 - `git diff --check` — passed.
-- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked by preserved untracked
-  `.ll7_task_*` harness files; those files were not modified.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked with exit 2 because the preserved
+  untracked lease harness files `.ll7_task_packet.json`, `.ll7_task_prompt.md`,
+  `.ll7_task_runner.sh`, `.ll7_task_status.json`, and `.ll7_task_worker.log` fail the changed-file
+  gate. They were not removed or committed.
+- Hosted checks for the new head were pending when recorded; no hosted failure was observed.
 
-## Commits
+## Commit and push
 
-- Implementation: `48629d596`.
-- Current pushed PR head before this report: `f5a2a4a29` (includes the current `origin/main` merge).
+- Fix commit: `752e0550e3de4dd064af0edb35b3073bbde532ac`
+- Pushed to PR branch `cheap/cheap-issue-6054-4b794d2029e9`.
 
-## Review state
+## Review-thread state
 
-- Post-push re-query at `f5a2a4a29` found zero unresolved review threads; no threads required
-  resolution.
-- GitHub reported the PR `MERGEABLE` with `UNSTABLE` status at that query.
+- Post-push head confirmed as `752e0550e3de4dd064af0edb35b3073bbde532ac`.
+- Review threads queried: 5.
+- Unresolved threads: 0.
+- Resolved thread IDs in this run: none; all queried threads were already resolved.
 
-## Blockers
+## Remaining blockers
 
-- Full local PR-readiness proof remains unavailable because the required gate fails closed on
-  preserved lease harness files. They were not modified.
+- Local clean `pr_ready_check` proof remains unavailable until the lease harness files are handled
+  by the lease/worktree owner. This run did not delete or alter them.
+- Hosted checks for the new commit need to finish before final CI status is known.

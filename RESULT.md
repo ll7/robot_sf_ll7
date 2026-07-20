@@ -32,12 +32,12 @@ domain-aware approver or maintainer waiver, so the approval blocker remains open
 
 ## Commit
 
-- Current PR head before this report update: `7d74667d789016f26044a6b8344b7e9f48174e78`.
-- Report refresh commit pushed: `2a94a5423e29bebccb7f8b457abe625e5032637e`.
+- Current PR head before this report update: `4d058d2ff38e2f0d08e53e0373b70f05d5bb8427`.
+- This report refresh will be recorded in the commit returned with the handoff.
 
 ## Review state
 
-- Reviewed PR head before this report update: `7d74667d789016f26044a6b8344b7e9f48174e78`.
+- Reviewed PR head before this report update: `4d058d2ff38e2f0d08e53e0373b70f05d5bb8427`.
 - Unresolved review threads: none. All three original threads are resolved.
 
 ## Remaining blockers

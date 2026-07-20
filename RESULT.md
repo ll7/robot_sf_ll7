@@ -33,7 +33,7 @@ domain-aware approver or maintainer waiver, so the approval blocker remains open
 ## Commit
 
 - Current PR head before this report update: `7d74667d789016f26044a6b8344b7e9f48174e78`.
-- This report update will be recorded in the commit returned with the handoff.
+- Report refresh commit pushed: `2a94a5423e29bebccb7f8b457abe625e5032637e`.
 
 ## Review state
 

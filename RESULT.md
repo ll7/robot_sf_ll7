@@ -37,7 +37,7 @@ domain-aware approver or maintainer waiver, so the approval blocker remains open
 
 ## Review state
 
-- Reviewed PR head before this report update: `b7232fca7c06632bffe1bd833b68f1514cd4419c`.
+- Reviewed PR head before this report refresh: `cf71e251640d8d9b2fde72460afb08c2c462e9c4`.
 - Unresolved review threads: none. All three original threads are resolved.
 
 ## Remaining blockers
@@ -53,6 +53,7 @@ domain-aware approver or maintainer waiver, so the approval blocker remains open
 
 ## Current update
 
-- Report update content commit SHA: `f508424f148061e747d85b397c803e601e0774d5`.
-- The final report-refresh commit is the PR head containing this file after push.
+- Prior report update commit SHA: `cf71e251640d8d9b2fde72460afb08c2c462e9c4`.
+- This report refresh is the next commit pushed to the existing PR branch; its SHA is returned
+  with the handoff.
 - The five untracked `.ll7_task_*` files were preserved because deletion is not authorized.

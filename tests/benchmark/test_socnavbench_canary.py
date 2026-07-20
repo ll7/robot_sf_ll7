@@ -179,6 +179,43 @@ def test_robot_sf_receipt_is_deterministic() -> None:
     assert first["denominator"] == second["denominator"]
 
 
+def test_robot_sf_receipt_records_executed_scenario_id_from_rollout() -> None:
+    """The Robot SF receipt surfaces PolicyRolloutResult.scenario_id as executed_scenario_id.
+
+    The additive field records the scenario that *actually ran*, independent of the canonical
+    cross-suite mapping label (scenario_mapping.robot_sf_scenario_id), so the receipt stays
+    honest if the two ever diverge. It must come from the rollout ground truth, not from the
+    mapping, and it must never silently reuse the SocNavBench (cross-suite) label.
+    """
+    from robot_sf.benchmark.canary_rollout import execute_pinned_policy
+
+    policy = resolve_pinned_policy()
+    mapping = resolve_scenario_mapping()
+    rollout = execute_pinned_policy(seed=mapping.seed, algo_config=PINNED_POLICY_ALGO_CONFIG)
+    receipt = run_robot_sf_receipt_from_rollout(policy=policy, mapping=mapping, rollout=rollout)
+    # The field is present and carries the actually-executed scenario id from the rollout.
+    assert "executed_scenario_id" in receipt
+    assert receipt["executed_scenario_id"] == rollout.scenario_id
+    # It is a concrete, non-placeholder string.
+    assert isinstance(receipt["executed_scenario_id"], str)
+    assert receipt["executed_scenario_id"].strip()
+    assert "tbd" not in receipt["executed_scenario_id"].lower()
+    # For this canary the executed id agrees with the declared Robot SF mapping label...
+    assert receipt["executed_scenario_id"] == mapping.robot_sf_scenario_id
+    # ...but it is recorded independently and must not reuse the cross-suite label.
+    assert receipt["executed_scenario_id"] != mapping.socnavbench_scenario_id
+    assert receipt["executed_scenario_id"] != receipt["scenario_mapping"]["socnavbench_scenario_id"]
+
+
+def test_run_canary_robot_sf_suite_records_executed_scenario_id(tmp_path: Path) -> None:
+    """The joint receipt's Robot SF suite must carry the executed_scenario_id field."""
+    receipt = run_canary(out_dir=tmp_path, allow_synthetic_traversible=True)
+    robot_sf_suite = next(s for s in receipt["suites"] if s["suite"] == "Robot SF")
+    assert "executed_scenario_id" in robot_sf_suite
+    assert robot_sf_suite["executed_scenario_id"] == receipt["scenario_mapping"]["robot_sf_scenario_id"]
+    assert robot_sf_suite["executed_scenario_id"] != receipt["scenario_mapping"]["socnavbench_scenario_id"]
+
+
 def test_socnavbench_receipt_runs_without_licensed_data_via_test_flag(tmp_path: Path) -> None:
     """The SocNavBench receipt runs the vendored metric when the test-only flag is set.
 

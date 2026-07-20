@@ -455,9 +455,15 @@ def run_robot_sf_receipt_from_rollout(
     This is the canonical path for ``run_canary``: the rollout is executed once and shared
     across both suite receipts to guarantee that the trajectory and denominator are identical.
 
+    The receipt records ``executed_scenario_id`` from ``PolicyRolloutResult.scenario_id`` so it
+    honestly reflects the scenario that *actually ran*, independent of the canonical cross-suite
+    mapping label (``scenario_mapping.robot_sf_scenario_id``). The two are expected to agree for
+    this canary, but carrying the executed value separately keeps the receipt honest if they
+    ever diverge and avoids re-deriving ground truth from the mapping.
+
     Returns:
         JSON-safe Robot SF receipt dict with policy identity (including runtime provenance),
-        mapping, metric value, and the suite-specific ratio definition.
+        mapping, metric value, the suite-specific ratio definition, and the executed scenario id.
     """
     if rollout.scenario_id != mapping.robot_sf_scenario_id:
         raise CanaryError(
@@ -490,6 +496,9 @@ def run_robot_sf_receipt_from_rollout(
         "denominator": denominator,
         "trajectory_length": len(rollout.robot_positions),
         "executed_policy": True,
+        # Actually-executed scenario name from PolicyRolloutResult.scenario_id, recorded
+        # additively so the receipt reports what ran independent of the mapping label.
+        "executed_scenario_id": rollout.scenario_id,
         "claim_boundary": CROSS_BENCHMARK_CLAIM_BOUNDARY,
     }
 

@@ -44,6 +44,6 @@ All three review threads are currently resolved; no unresolved threads remain.
 ## Post-push state
 
 - Commit SHA: `797b73c07ae75ae468a9729cb2376adc93abb961`.
-- Post-push PR head: `797b73c07ae75ae468a9729cb2376adc93abb961`.
+- Post-push PR head: `97f07dd3ba3047f75acc0678c26bc280cdb86b53`.
 - Post-push review-thread re-query: zero unresolved threads; all three existing
   threads remain resolved.

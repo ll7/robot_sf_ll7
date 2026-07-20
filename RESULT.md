@@ -9,6 +9,9 @@
   `published_integration_commit` pointer. README files now label generation provenance as
   unavailable and identify the integration pointer as not the generation commit.
 - Refreshed all 18 per-directory `SHA256SUMS` files.
+- Updated the PR description to match the remediation: `git_commit` remains unavailable,
+  while `published_integration_commit` identifies the reachable byte-identical integration
+  source; stale repointing language and file-count text were removed.
 - No unresolved inline review threads were present before the fix; no thread was resolved.
 
 ## Validation
@@ -20,12 +23,15 @@
 - `uv run pytest tests/dev/test_evidence_registry_ratchet.py tests/test_export_issue_4848.py tests/tools/test_audit_exemplar_bundles.py -q` — passed; 78 tests.
 - `uv run python scripts/dev/check_docs_evidence_integrity.py --files <72 changed evidence files>` — passed.
 - `git diff --check` — passed.
+- PR body verification — passed; the stale `Repointed the producer pointer` claim is absent,
+  and the description names `missing:original-generation-commit-not-recoverable` and
+  `published_integration_commit`.
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked by pre-existing untracked lease task files; this is the known changed-file proof limitation tracked by issue #5533. The focused evidence gates above passed.
 
 ## Commit and push
 
 - Fix commit SHA: `42e2583913485ebc34509bd127017b175b8ad317`.
-- Reporting commit SHA: recorded in the final task response after the handoff update.
+- Reporting commit SHA: this follow-up commit, recorded after commit creation.
 - Push target: existing PR branch `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - No new PR, merge, worktree deletion, or Slurm submission was performed.
 
@@ -33,13 +39,11 @@
 
 - Pre-push unresolved inline review threads: none.
 - Resolved thread IDs: none.
-- Post-push unresolved threads: none; GraphQL returned an empty unresolved-thread list at head
-  `42e2583913485ebc34509bd127017b175b8ad317`.
+- Post-push unresolved threads: re-queried after the description update; none were present.
 
 ## Live PR state after push
 
-- PR head: `42e2583913485ebc34509bd127017b175b8ad317` on
-  `cheap/cheap-issue-5986-e4ebaff0d9c5`.
+- PR head: updated after the reporting commit on `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - Hosted checks were queued/in progress after the push; `reproducibility-check` remained
   `SKIPPED`.
 - `reviewDecision` remained empty/null.

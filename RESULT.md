@@ -1,33 +1,35 @@
-# PR #6060 Review Fix Result
+# PR #6062 Review Blocker Result
 
 ## Fixed comments
 
-- Fixed unresolved review thread `PRRT_kwDOLRSZdc6SUaTZ` in `scripts/dev/pr_loop_policy.py`:
-  gate-verdict SHA parsing now requires a complete word-bounded token.
-- Added a regression test rejecting a 40-character SHA followed by a word-character suffix.
-- Posted the current exact-head `gate-verdict: accepted @ <SHA>` trailer after each final head
-  update; the live trailer is refreshed below for the final commit.
+- Density wording now uses word-bounded matching. `highlight` no longer matches
+  `high` or `light`, and the clause remains in `unmatched_clauses`.
+- `regulation.id` now must be a non-empty string; null, numeric, and blank IDs
+  are rejected before provenance generation.
+- The unrelated prior root `RESULT.md` handoff was removed while updating the
+  branch to the current `origin/main` base; this report is specific to PR #6062.
 
 ## Validation
 
-- `uv run ruff check scripts/dev/pr_loop_policy.py tests/dev/test_pr_loop_policy.py` — passed.
-- `uv run ruff format --check scripts/dev/pr_loop_policy.py tests/dev/test_pr_loop_policy.py` — passed.
-- `uv run pytest tests/dev/test_pr_loop_policy.py -q` — 105 passed.
-- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked: preserved untracked
-  `.ll7_task_*` task-runner metadata prevents changed-file proof.
+- `uv run pytest tests/scenarios/test_convert_regulation_to_scenario.py -q` — 62 passed.
+- `uv run ruff check scripts/tools/convert_regulation_to_scenario.py tests/scenarios/test_convert_regulation_to_scenario.py` — passed.
+- `uv run ruff format --check scripts/tools/convert_regulation_to_scenario.py tests/scenarios/test_convert_regulation_to_scenario.py` — passed.
+- `git diff --check` — passed.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked by preserved untracked
+  `.ll7_task_*` harness files; those files were not modified.
 
-## Commit
+## Commits
 
-- Implementation commit SHA: `dd7f90f3fd827803a89183ce22273a5d2b548b88`.
-- The result-file commit SHA is reported in the final handoff.
+- Implementation: `48629d596`.
+- Current pushed PR head before this report: `f5a2a4a29` (includes the current `origin/main` merge).
 
 ## Review state
 
-- Resolved: `PRRT_kwDOLRSZdc6SUaTZ`.
-- Other queried threads were already resolved; no other unresolved review threads were found.
-- Hosted checks are pending on the final pushed head, so merge-readiness is not claimed.
+- Post-push re-query at `f5a2a4a29` found zero unresolved review threads; no threads required
+  resolution.
+- GitHub reported the PR `MERGEABLE` with `UNSTABLE` status at that query.
 
 ## Blockers
 
-- Full canonical local readiness proof remains unavailable until the preserved untracked task-runner
-  metadata is handled by the task owner or readiness workflow.
+- Full local PR-readiness proof remains unavailable because the required gate fails closed on
+  preserved lease harness files. They were not modified.

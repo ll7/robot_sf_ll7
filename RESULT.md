@@ -22,12 +22,12 @@
 
 - Fix/report commit already on PR before this run: `acef2b0475c59308a41bddebdce85575c6639808`.
 - PR head before this reporting commit: `acef2b0475c59308a41bddebdce85575c6639808`.
-- PR head after this reporting commit: verified on GitHub after push.
+- Pushed reporting commit: `0ec340c41196b642429de28d3b5bf4ffebc65993`.
 
 ## Post-push review threads
 
 - Unresolved inline review threads before push: none (GraphQL `reviewThreads` returned an empty list).
-- Post-push thread re-query: none; GraphQL `reviewThreads` returned an empty list.
+- Post-push thread re-query at `0ec340c41196b642429de28d3b5bf4ffebc65993`: none; GraphQL `reviewThreads` returned an empty list.
 - Resolved thread IDs: none; no inline threads existed to resolve.
 
 ## Blockers

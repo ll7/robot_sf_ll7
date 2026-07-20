@@ -24,7 +24,7 @@
 
 ## Commit and push
 
-- Fix commit SHA: recorded after commit below.
+- Fix commit SHA: `42e2583913485ebc34509bd127017b175b8ad317`.
 - Reporting commit SHA: recorded in the final task response after the handoff update.
 - Push target: existing PR branch `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - No new PR, merge, worktree deletion, or Slurm submission was performed.
@@ -33,7 +33,16 @@
 
 - Pre-push unresolved inline review threads: none.
 - Resolved thread IDs: none.
-- Post-push unresolved threads: re-queried after push; result recorded below.
+- Post-push unresolved threads: none; GraphQL returned an empty unresolved-thread list at head
+  `42e2583913485ebc34509bd127017b175b8ad317`.
+
+## Live PR state after push
+
+- PR head: `42e2583913485ebc34509bd127017b175b8ad317` on
+  `cheap/cheap-issue-5986-e4ebaff0d9c5`.
+- Hosted checks were queued/in progress after the push; `reproducibility-check` remained
+  `SKIPPED`.
+- `reviewDecision` remained empty/null.
 
 ## Blockers
 

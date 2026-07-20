@@ -486,3 +486,26 @@ def test_non_consecutive_moving_timesteps_skip_rate_checks() -> None:
     assert report.verdict == VERDICT_ACTUATOR_FEASIBLE
     assert report.observed_max_yaw_rate_radps is None
     assert report.observed_max_steering_rate_radps is None
+
+
+def test_stopped_sample_does_not_create_steering_rate_delta() -> None:
+    """Steering deltas must not bridge a stopped sample between moving intervals."""
+    headings = np.array([0.0, 0.1, 0.0, math.pi / 2.0, math.pi / 2.1])
+    speeds = np.array([0.5, 0.5, 0.0, 0.5, 0.5])
+    velocities = np.stack([speeds * np.cos(headings), speeds * np.sin(headings)], axis=1)
+    positions = np.cumsum(velocities * 0.1, axis=0)
+    report = evaluate_actuator_feasibility(
+        robot_positions=positions,
+        robot_velocities=velocities,
+        dt_s=0.1,
+        hazard_clearance_m=5.0,
+        config=ActuatorLimitsConfig(
+            max_accel_mps2=10.0,
+            max_decel_mps2=10.0,
+            max_yaw_rate_radps=2.0,
+            max_steering_rate_radps=0.5,
+        ),
+    )
+    assert report.observed_max_yaw_rate_radps == pytest.approx(1.0)
+    assert report.observed_max_steering_rate_radps is None
+    assert PRED_STEERING_RATE_LIMIT not in report.violated_limits

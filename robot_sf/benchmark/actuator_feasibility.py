@@ -318,9 +318,15 @@ def _observed_actuator_rates(
         valid_yaw_rates = yaw_rates[~np.isnan(yaw_rates)]
         if valid_yaw_rates.size:
             max_yaw_rate = float(np.max(np.abs(valid_yaw_rates)))
-        if valid_yaw_rates.size >= 2:
-            steering_rates = np.abs(np.diff(valid_yaw_rates)) / dt_s
-            max_steering_rate = float(np.max(steering_rates))
+        # A steering-rate delta is defined only for adjacent valid yaw-rate
+        # intervals in the original trajectory. Do not diff the filtered values:
+        # that would bridge a stopped sample and invent a steering discontinuity.
+        steering_rates = []
+        for i in range(yaw_rates.size - 1):
+            if not np.isnan(yaw_rates[i]) and not np.isnan(yaw_rates[i + 1]):
+                steering_rates.append(abs(yaw_rates[i + 1] - yaw_rates[i]) / dt_s)
+        if steering_rates:
+            max_steering_rate = float(max(steering_rates))
 
     return max_accel, max_decel, max_yaw_rate, max_steering_rate, max_speed
 

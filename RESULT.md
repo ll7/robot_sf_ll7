@@ -41,7 +41,7 @@
 ## Commit and push
 
 - Fix commit SHA: `301f8ae2905d46c7c9530651295d789ee2d5de40`.
-- Reporting commit SHA: to be recorded after this report update.
+- Reporting commit SHA: `79b1021188e85263a1cad953fb2a9b7d8d1992b9`.
 - Push target: existing PR branch `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - No new PR, merge, worktree deletion, or Slurm submission was performed.
 

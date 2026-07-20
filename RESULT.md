@@ -2,8 +2,8 @@
 
 ## Fixed comments
 
-- Reconciled the proof count: 71 changed evidence files passed integrity checks; the diff also contains two baseline files and this `RESULT.md`, for 74 changed files total.
-- Updated the PR proof text to use the same 71-file evidence count.
+- No fixable inline review comments were present. GitHub GraphQL returned zero review threads.
+- Refreshed this report with the current PR head and post-push blocker state.
 
 ## Validation
 
@@ -13,17 +13,21 @@
 - `uv run pytest tests/dev/test_evidence_registry_ratchet.py -q` — 24 passed.
 - `uv run python scripts/benchmark_repro_check.py` — passed locally; same-seed aggregates reproduced.
 - Diff count — 71 evidence files + 2 baseline files + `RESULT.md` = 74 files.
+- `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/benchmark_repro_check.py` — passed locally; same-seed aggregates reproduced.
+- `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/lint_evidence_registry.py --strict --strict-exclusion-policy docs/context/evidence/evidence_registry_strict_ci_policy.yaml` — passed; active findings 0.
+- `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/evidence_registry_ratchet.py --check` — passed; findings 414, baseline 414.
+- `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/dev/test_evidence_registry_ratchet.py -q` — 24 passed.
 
 ## Commit and push
 
-- Fix/report commit SHA: `5e1d3493ca07be4401ef373c60ac251dca716d87`.
-- PR head before this fix: `fc725f43495f664fc0543def193c1b6944cc2bf5`.
-- PR head after push: `5e1d3493ca07be4401ef373c60ac251dca716d87`.
+- Fix/report commit already on PR before this run: `acef2b0475c59308a41bddebdce85575c6639808`.
+- PR head before this reporting commit: `acef2b0475c59308a41bddebdce85575c6639808`.
+- PR head after this reporting commit: verified on GitHub after push.
 
 ## Post-push review threads
 
 - Unresolved inline review threads before push: none (GraphQL `reviewThreads` returned an empty list).
-- Post-push thread re-query at `5e1d3493ca07be4401ef373c60ac251dca716d87`: none; GraphQL `reviewThreads` returned an empty list.
+- Post-push thread re-query: none; GraphQL `reviewThreads` returned an empty list.
 - Resolved thread IDs: none; no inline threads existed to resolve.
 
 ## Blockers

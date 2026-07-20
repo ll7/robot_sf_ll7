@@ -417,19 +417,17 @@ def test_committed_baseline_passes_live_check_on_clean_main(
 
 
 def test_review_companion_covers_every_post_5317_baseline_file() -> None:
-    """Every file added since the #5275/#5317 baseline has an explicit disposition (#5952 DoD).
+    """Every baseline delta has an explicit machine-checkable disposition (#5952 DoD).
 
-    The downward ratchet only stops drift if newly-baselined files are deliberate. This guard
-    fails if the committed baseline grew beyond the documented prior boundary without a matching
-    explicit per-file disposition in the review companion. It is self-contained: the prior
-    boundary file count and the refresh delta are both recorded in the review companion, so the
-    invariant is ``len(baseline_files) == prior_count + len(reviewed_files)`` together with
-    ``reviewed_files ⊆ baseline_files`` and a valid disposition on every reviewed entry. Future
-    net-new drift is additionally caught by the live check above.
+    Newly baselined files are listed under ``reviewed_files``. Per-code increases on files that
+    were already in the anchored baseline are listed under ``reviewed_baseline_increases`` so a
+    baseline refresh cannot silently grandfather a regression. Future net-new drift is additionally
+    caught by the live check above.
     """
     assert REVIEW.is_file(), "evidence_registry_baseline_review.yaml is missing."
     review = yaml.safe_load(REVIEW.read_text(encoding="utf-8"))
     reviewed_entries = review.get("reviewed_files", [])
+    increase_entries = review.get("reviewed_baseline_increases", [])
     reviewed = {entry["path"] for entry in reviewed_entries}
     baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
     baseline_files = set(baseline["findings_by_path"])
@@ -450,6 +448,8 @@ def test_review_companion_covers_every_post_5317_baseline_file() -> None:
     assert prior_proc.returncode == 0, prior_proc.stderr
     prior_baseline = json.loads(prior_proc.stdout)
     prior_files = set(prior_baseline["findings_by_path"])
+    prior_findings = prior_baseline["findings_by_path"]
+    current_findings = baseline["findings_by_path"]
 
     # (2) The committed baseline must decompose as actual prior files + reviewed delta.
     prior_count = int(review["prior_baseline_files_with_findings"])
@@ -458,6 +458,23 @@ def test_review_companion_covers_every_post_5317_baseline_file() -> None:
         "The committed baseline contains a file not present in the anchored prior baseline "
         "without an explicit disposition in evidence_registry_baseline_review.yaml. Add a "
         "reviewed_files entry naming the new path and its remediate-or-baseline disposition."
+    )
+
+    expected_increases = {
+        (path, code)
+        for path, current_codes in current_findings.items()
+        for code, current_count in current_codes.items()
+        if path in prior_findings and current_count > prior_findings[path].get(code, 0)
+    }
+    declared_increases = [
+        (entry.get("path"), code) for entry in increase_entries for code in entry.get("codes", [])
+    ]
+    assert len(declared_increases) == len(set(declared_increases)), (
+        "reviewed_baseline_increases contains duplicate path/code rows."
+    )
+    assert set(declared_increases) == expected_increases, (
+        "Every per-code baseline increase must have an explicit reviewed_baseline_increases "
+        "entry, and stale entries must be removed."
     )
 
     # (3) Every reviewed entry must still be in the baseline (review stays honest).
@@ -476,6 +493,27 @@ def test_review_companion_covers_every_post_5317_baseline_file() -> None:
         )
         assert isinstance(entry.get("codes"), list) and entry["codes"], (
             f"reviewed file {entry.get('path')} must list its finding codes"
+        )
+
+    # (5) Per-code increases must be existing files with a valid explicit disposition.
+    for entry in increase_entries:
+        path = entry.get("path")
+        assert path in prior_files and path in baseline_files, (
+            f"reviewed baseline increase {path!r} must refer to an existing baseline file"
+        )
+        assert entry.get("disposition") in valid_dispositions, (
+            f"reviewed baseline increase {path} lacks a valid disposition "
+            f"(got {entry.get('disposition')!r})"
+        )
+        assert isinstance(entry.get("codes"), list) and entry["codes"], (
+            f"reviewed baseline increase {path} must list its finding codes"
+        )
+        for code in entry["codes"]:
+            assert current_findings[path].get(code, 0) > prior_findings[path].get(code, 0), (
+                f"reviewed baseline increase {path}::{code} is not a current per-code increase"
+            )
+        assert isinstance(entry.get("reason"), str) and entry["reason"].strip(), (
+            f"reviewed baseline increase {path} must explain its disposition"
         )
 
 

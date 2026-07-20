@@ -1,5 +1,7 @@
 # Native TEB-inspired corridor-commitment planner.
 allow_testing_algorithms: true
+planner_variant: teb
+native_occupancy_resolution: 0.1
 max_linear_speed: 0.95
 max_angular_speed: 1.2
 angular_gain: 1.5
@@ -17,3 +19,16 @@ blocked_probe_steps: 5
 max_commit_gain: 1.4
 commit_gain_step: 0.45
 corridor_sample_offset: 0.3
+
+native_command:
+  command:
+    - python3
+    - scripts/benchmark/frozen_comparator_native_command.py
+    - --planner-id
+    - teb
+    - --config
+    - configs/algos/teb_commitment_camera_ready.yaml
+  entrypoint_path: scripts/benchmark/frozen_comparator_native_command.py
+  mode: persistent
+  step_timeout_sec: 10.0
+  require_static_geometry: true

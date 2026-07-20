@@ -320,6 +320,23 @@ only together with the source Parquet export metadata and the original JSONL pro
 
 The benchmark runner supports a first-class `native_command` execution arm (Issue #5887) to run external planner binaries as subprocesses. This arm bypasses python-level adapters, providing direct integration for compiled planner implementations (such as the SIPP four-geometry planner).
 
+For the frozen #5416 SIPP smoke, use the tracked CPU-only configuration
+`configs/algos/sipp_lattice_native_command.yaml`. It binds the live static map
+segments and boundaries into every command request, hashes the tracked
+`scripts/benchmark/sipp_native_command.py` entrypoint, and fails closed when
+that geometry is missing. Run the one-row transport/eligibility check with:
+
+```bash
+uv run python scripts/validation/check_issue_5416_sipp_native_smoke.py \
+  --packet configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml \
+  --native-config configs/algos/sipp_lattice_native_command.yaml \
+  --scenario-id classic_head_on_corridor_low --seed 111 --horizon 500 --dt 0.1 \
+  --workers 1 --output-dir output/issue_5416_native_sipp_smoke --json
+```
+
+This is smoke evidence that the native path is analyzer-eligible, not a full
+benchmark campaign or a safety/liveness result.
+
 ### Execution Modes
 
 The runner supports two execution modes configured in the algorithm configuration payload:

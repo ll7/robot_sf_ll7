@@ -7,6 +7,7 @@ not run benchmark episodes or promote any planner-ranking claim by themselves.
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 from pathlib import Path
@@ -55,7 +56,18 @@ def validate_fidelity_sensitivity_config(config: Mapping[str, Any]) -> dict[str,
         raise ValueError(f"schema_version must be {SCHEMA_VERSION!r}")
     _validate_axes(normalized.get("axes"))
     _validate_fixed_scope(normalized.get("fixed_scope"))
-    _validate_metrics(normalized.get("ranking"), normalized.get("metrics"))
+    ranking = copy.deepcopy(normalized.get("ranking") or {})
+    primary_metric = _validate_metrics(
+        ranking,
+        normalized.get("metrics"),
+        legacy_primary_metric=normalized.get("primary_metric"),
+    )
+    # ``ranking.primary_metric`` is authoritative. Keep ``ranking.metric``
+    # normalized for historical launch-packet consumers, but reject any
+    # disagreement before reaching this point.
+    ranking["primary_metric"] = primary_metric
+    ranking["metric"] = primary_metric
+    normalized["ranking"] = ranking
     return normalized
 
 
@@ -109,15 +121,31 @@ def _validate_fixed_scope(fixed_scope: Any) -> None:
         raise ValueError("fixed_scope.scenario_set must be set")
 
 
-def _validate_metrics(ranking: Any, metrics: Any) -> None:
-    """Validate ranking metric membership in the metric list."""
-    if not isinstance(ranking, dict) or not ranking.get("metric"):
-        raise ValueError("ranking.metric must be set")
+def _validate_metrics(
+    ranking: Any,
+    metrics: Any,
+    *,
+    legacy_primary_metric: Any = None,
+) -> str:
+    """Validate the authoritative ranking metric and deprecated aliases.
+
+    Returns:
+        The validated primary metric name.
+    """
+    if not isinstance(ranking, dict) or not ranking.get("primary_metric"):
+        raise ValueError("ranking.primary_metric must be set")
+    primary_metric = str(ranking["primary_metric"])
+    nested_alias = ranking.get("metric")
+    if nested_alias is not None and str(nested_alias) != primary_metric:
+        raise ValueError("ranking.metric must match ranking.primary_metric")
+    if legacy_primary_metric is not None and str(legacy_primary_metric) != primary_metric:
+        raise ValueError("primary_metric must match ranking.primary_metric")
     if not isinstance(metrics, list) or not metrics:
         raise ValueError("metrics must be a non-empty list")
     metric_names = {str(item.get("name")) for item in metrics if isinstance(item, dict)}
-    if str(ranking["metric"]) not in metric_names:
-        raise ValueError("ranking.metric must appear in metrics")
+    if primary_metric not in metric_names:
+        raise ValueError("ranking.primary_metric must appear in metrics")
+    return primary_metric
 
 
 def rank_order(scores: Mapping[str, float], *, higher_is_better: bool) -> list[str]:
@@ -296,7 +324,7 @@ def format_launch_packet_markdown(packet: Mapping[str, Any]) -> str:
         f"- Scenario set: `{packet['fixed_scope']['scenario_set']}`",
         f"- Seeds: `{', '.join(str(seed) for seed in packet['fixed_scope']['seeds'])}`",
         f"- Planner groups: `{', '.join(packet['fixed_scope']['planner_groups'])}`",
-        f"- Ranking metric: `{packet['ranking']['metric']}`",
+        f"- Ranking metric: `{packet['ranking']['primary_metric']}`",
         "",
         "## Fidelity Axes",
         "",

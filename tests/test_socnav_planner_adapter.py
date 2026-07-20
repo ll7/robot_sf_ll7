@@ -101,6 +101,81 @@ def _orca_fallback_adapter(
     return ORCAPlannerAdapter(config or SocNavPlannerConfig(), allow_fallback=True)
 
 
+class _Rvo2SimulatorSpy:
+    """Small rvo2 public-API spy for ORCA simulator lifecycle tests."""
+
+    instances: list["_Rvo2SimulatorSpy"] = []
+
+    def __init__(self, *args):
+        self.constructor_args = args
+        self.agents: list[dict[str, tuple[float, float]]] = []
+        self.obstacles: list[list[tuple[float, float]]] = []
+        self.process_obstacles_calls = 0
+        self._step_calls: list[tuple[str, int, tuple[float, float]]] = []
+        self.step_calls: list[list[tuple[str, int, tuple[float, float]]]] = []
+        type(self).instances.append(self)
+
+    @classmethod
+    def reset_instances(cls) -> None:
+        """Clear captured simulators between independent lifecycle checks."""
+        cls.instances = []
+
+    def addAgent(self, position, *args):
+        """Capture construction and return the rvo2-compatible agent id."""
+        velocity = tuple(args[-1])
+        self.agents.append(
+            {
+                "position": tuple(position),
+                "velocity": velocity,
+                "preferred_velocity": (0.0, 0.0),
+            }
+        )
+        return len(self.agents) - 1
+
+    def addObstacle(self, vertices):
+        """Capture one obstacle polygon."""
+        self.obstacles.append(list(vertices))
+
+    def processObstacles(self):
+        """Capture obstacle processing without changing the fake state."""
+        self.process_obstacles_calls += 1
+
+    def setAgentPosition(self, agent_id, position):
+        """Capture position reset through the public rvo2 API."""
+        value = tuple(position)
+        self.agents[agent_id]["position"] = value
+        self._step_calls.append(("position", agent_id, value))
+
+    def setAgentVelocity(self, agent_id, velocity):
+        """Capture current-velocity reset through the public rvo2 API."""
+        value = tuple(velocity)
+        self.agents[agent_id]["velocity"] = value
+        self._step_calls.append(("velocity", agent_id, value))
+
+    def setAgentPrefVelocity(self, agent_id, velocity):
+        """Capture preferred-velocity reset through the public rvo2 API."""
+        value = tuple(velocity)
+        self.agents[agent_id]["preferred_velocity"] = value
+        self._step_calls.append(("preferred_velocity", agent_id, value))
+
+    def doStep(self):
+        """Use preferred velocity as the fake solver result and close one captured step."""
+        for agent in self.agents:
+            agent["velocity"] = agent["preferred_velocity"]
+        self.step_calls.append(self._step_calls)
+        self._step_calls = []
+
+    def getAgentVelocity(self, agent_id):
+        """Return the fake solver velocity through the public rvo2 API."""
+        return self.agents[agent_id]["velocity"]
+
+
+class _Rvo2SpyModule:
+    """Module-shaped wrapper exposing the simulator constructor used by the adapter."""
+
+    PyRVOSimulator = _Rvo2SimulatorSpy
+
+
 def test_sampling_adapter_moves_toward_goal():
     """Adapter moves forward when aligned with goal."""
     adapter = SamplingPlannerAdapter(SocNavPlannerConfig(max_linear_speed=1.0, angular_gain=2.0))
@@ -466,6 +541,93 @@ def test_orca_adapter_uses_rvo2_when_available():
     v, w = adapter.plan(obs)
     assert 0.0 <= v <= adapter.config.max_linear_speed + 1e-6
     assert abs(w) <= adapter.config.max_angular_speed + 1e-6
+
+
+def test_orca_persistent_rvo2_reuses_and_resets_state(monkeypatch):
+    """Same-signature calls reuse one simulator and reset every mutable agent field."""
+    _Rvo2SimulatorSpy.reset_instances()
+    monkeypatch.setattr(_socnav_module, "rvo2", _Rvo2SpyModule)
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+    adapter.bind_static_obstacle_points(np.array([[2.0, 0.5], [2.2, 0.5]]), spacing=0.2)
+
+    for offset in (0.0, 0.2, 0.4):
+        observation = _make_obs_with_peds(
+            [(1.5 + offset, 0.2), (2.4, -0.4 + offset), (3.0, 0.6)], goal=(5.0, offset)
+        )
+        observation["robot"]["speed"] = np.array([0.3, 0.0], dtype=np.float32)
+        observation["pedestrians"]["velocities"] = np.array(
+            [[-0.2, 0.0], [0.0, 0.15], [0.1, -0.1]], dtype=np.float32
+        )
+        adapter.plan(observation)
+
+    assert len(_Rvo2SimulatorSpy.instances) == 1
+    simulator = _Rvo2SimulatorSpy.instances[0]
+    assert list(range(len(simulator.agents))) == [0, 1, 2, 3]
+    assert simulator.process_obstacles_calls == 1
+    assert len(simulator.step_calls) == 3
+    for calls in simulator.step_calls:
+        assert [(kind, agent_id) for kind, agent_id, _value in calls] == [
+            ("position", 0),
+            ("velocity", 0),
+            ("preferred_velocity", 0),
+            ("position", 1),
+            ("velocity", 1),
+            ("preferred_velocity", 1),
+            ("position", 2),
+            ("velocity", 2),
+            ("preferred_velocity", 2),
+            ("position", 3),
+            ("velocity", 3),
+            ("preferred_velocity", 3),
+        ]
+
+
+def test_orca_persistent_rvo2_rebuilds_on_signature_change_and_reset(monkeypatch):
+    """Population, obstacle, signature, and reset boundaries rebuild the simulator."""
+    _Rvo2SimulatorSpy.reset_instances()
+    monkeypatch.setattr(_socnav_module, "rvo2", _Rvo2SpyModule)
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+    adapter.bind_static_obstacle_points(np.array([[2.0, 0.5]]), spacing=0.2)
+
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0), (2.0, 0.3), (2.5, -0.2)]))
+    adapter.plan(_make_obs_with_peds([]))
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0)]))
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0), (2.0, 0.3), (2.5, -0.2)]))
+    assert len(_Rvo2SimulatorSpy.instances) == 4
+
+    adapter.bind_static_obstacle_points(np.array([[2.5, 0.5]]), spacing=0.2)
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0), (2.0, 0.3), (2.5, -0.2)]))
+    adapter.config.max_linear_speed = 1.5
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0), (2.0, 0.3), (2.5, -0.2)]))
+    adapter.reset()
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0), (2.0, 0.3), (2.5, -0.2)]))
+    assert len(_Rvo2SimulatorSpy.instances) == 7
+
+
+def test_orca_persistent_rvo2_matches_fresh_fixed_seed():
+    """Cached public plan commands match a fresh rvo2 adapter at fixed observations."""
+    if _socnav_module.rvo2 is None:
+        pytest.skip("rvo2 not installed; skipping native persistent-simulator parity check.")
+
+    np.random.seed(6025)
+    persistent = ORCAPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+    observations = [
+        _make_obs_with_peds([(2.0, 0.8), (2.5, -0.8), (3.2, 0.6)], goal=(5.0, 0.0)),
+        _make_obs_with_peds([], goal=(4.0, 0.5)),
+        _make_obs_with_peds([(2.0, -0.8)], goal=(4.5, -0.4)),
+        _make_obs_with_peds([(2.0, 0.8), (2.3, -0.8), (3.1, 0.6)], goal=(5.0, 0.2)),
+    ]
+    for observation in observations:
+        observation["robot"]["speed"] = np.array([0.25, 0.0], dtype=np.float32)
+        command = persistent.plan(observation)
+        fresh_command = ORCAPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False).plan(
+            observation
+        )
+        np.testing.assert_allclose(command, fresh_command, rtol=0.0, atol=1e-6)
+        assert np.asarray(command).shape == (2,)
+        assert np.all(np.isfinite(command))
+        assert 0.0 <= command[0] <= persistent.config.max_linear_speed
+        assert abs(command[1]) <= persistent.config.max_angular_speed
 
 
 def test_sacadrl_adapter(monkeypatch):

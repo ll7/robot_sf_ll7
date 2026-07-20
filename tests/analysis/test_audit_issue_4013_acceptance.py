@@ -124,10 +124,12 @@ def test_write_acceptance_audit_outputs_json_and_markdown(tmp_path: Path) -> Non
         output_markdown=output_markdown,
     )
 
-    assert json.loads(output_json.read_text(encoding="utf-8"))["schema_version"] == (
-        "issue_4013.acceptance_audit.v1"
-    )
+    payload = json.loads(output_json.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "issue_4013.acceptance_audit.v1"
+    assert payload["review_marker"] == "AI-GENERATED NEEDS-REVIEW"
+    assert {key: value for key, value in payload.items() if key != "review_marker"} == audit
     markdown = output_markdown.read_text(encoding="utf-8")
+    assert markdown.startswith("<!-- AI-GENERATED (robot_sf#4013) - NEEDS-REVIEW -->\n")
     assert "# Issue #4013 Acceptance Audit" in markdown
     assert "Real pedestrian trajectory dataset" in markdown
     assert audit["closure_status"] == "partial"

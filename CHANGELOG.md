@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **issue #3207 fixed-scope SNQI runtime/report contract.** The fidelity-sensitivity execute/report
+  path now emits canonical, provenance-bound SNQI from the runtime rows (via the repository-canonical
+  `robot_sf.benchmark.snqi.compute.compute_snqi`, normalized against the run's own nominal-baseline
+  variant rows) and ranks by the authoritative `ranking.primary_metric` instead of a hardcoded
+  `success_rate`. The report path fails closed when the configured ranking metric is not emitted by
+  the runtime, and the compact evidence records the SNQI score version, weights, baseline-stats hash,
+  runtime→SNQI metric mapping, and unmodeled penalty terms. This closes the runtime-ranking blocker
+  on the frozen full-fixed-scope launch packet; it produces no campaign result, planner-ranking, or
+  paper/dissertation claim by itself.
 * **Issue #5445 successor slice: multimodal-forecast Monte Carlo estimator row.** The matched
   collision-risk calibration comparison now scores a `multimodal_forecast_mc` estimator backed by
   the in-repo constant-velocity Gaussian-mixture **surrogate** forecast (symmetric heading-spread

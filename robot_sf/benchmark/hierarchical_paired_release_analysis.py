@@ -296,18 +296,39 @@ def estimate_paired_effects(
     """
 
     resolved = policy or AnalysisPolicy()
+    families = _ordered_families(cells)
+    return _estimate_paired_effects_with_clusters(
+        cells,
+        outcome=outcome,
+        policy=resolved,
+        clusters=families,
+    )
+
+
+def _estimate_paired_effects_with_clusters(
+    cells: Sequence[MatchedCell],
+    *,
+    outcome: str,
+    policy: AnalysisPolicy,
+    clusters: Sequence[Sequence[int]],
+) -> PairedEffect:
+    """Estimate one outcome using an explicitly selected bootstrap cluster unit.
+
+    Returns:
+        The paired effect with confidence intervals from the selected clusters.
+    """
+
     outcomes_a, outcomes_b = _select_outcome(cells, outcome)
     _require_paired_outcomes(outcomes_a, outcomes_b, outcome=outcome)
     comparison = f"{cells[0].planner_a}:{cells[0].planner_b}:{outcome}"
-    families = _ordered_families(cells)
     diff_samples, ratio_samples = _cluster_bootstrap_paired(
         outcomes_a=outcomes_a,
         outcomes_b=outcomes_b,
-        families=families,
-        policy=resolved,
+        families=clusters,
+        policy=policy,
     )
-    ci_low, ci_high = _percentile_interval(diff_samples, resolved.confidence)
-    ratio_low, ratio_high = _percentile_interval(ratio_samples, resolved.confidence)
+    ci_low, ci_high = _percentile_interval(diff_samples, policy.confidence)
+    ratio_low, ratio_high = _percentile_interval(ratio_samples, policy.confidence)
     risk_a = float(np.mean(outcomes_a))
     risk_b = float(np.mean(outcomes_b))
     odds_a = _empirical_odds(risk_a)
@@ -327,6 +348,58 @@ def estimate_paired_effects(
         odds_ratio_ci_low=ratio_low,
         odds_ratio_ci_high=ratio_high,
     )
+
+
+def _sensitivity_analysis(
+    cells: Sequence[MatchedCell],
+    *,
+    outcomes: Sequence[str],
+    policy: AnalysisPolicy,
+) -> list[dict[str, Any]]:
+    """Emit seed-level and family-level bootstrap sensitivity rows.
+
+    The primary interval is family-clustered.  This explicit companion table
+    makes the declared seed-vs-family sensitivity protocol auditable without
+    changing the primary estimand or treating the sensitivity result as
+    benchmark evidence.
+
+    Returns:
+        One row per outcome with separate seed-level and family-level summaries.
+    """
+
+    cluster_levels = {
+        "seed": _ordered_clusters(cells, key=lambda cell: str(cell.seed)),
+        "family": _ordered_families(cells),
+    }
+    rows: list[dict[str, Any]] = []
+    for outcome in outcomes:
+        level_results: dict[str, dict[str, Any]] = {}
+        for level, clusters in cluster_levels.items():
+            effect = _estimate_paired_effects_with_clusters(
+                cells,
+                outcome=outcome,
+                policy=policy,
+                clusters=clusters,
+            )
+            level_results[level] = {
+                "n_clusters": len(clusters),
+                "risk_difference": effect.risk_difference,
+                "risk_difference_ci": [
+                    effect.risk_difference_ci_low,
+                    effect.risk_difference_ci_high,
+                ],
+                "odds_ratio": effect.odds_ratio,
+                "odds_ratio_ci": [effect.odds_ratio_ci_low, effect.odds_ratio_ci_high],
+            }
+        rows.append(
+            {
+                "outcome": outcome,
+                "planner_pair": [cells[0].planner_a, cells[0].planner_b],
+                "seed_level": level_results["seed"],
+                "family_level": level_results["family"],
+            }
+        )
+    return rows
 
 
 def holm_multiplicity(
@@ -582,6 +655,7 @@ def run_hierarchical_paired_release_analysis(
     multiplicity_labels: list[str] = []
     completion_summaries: list[dict[str, Any]] | None = [] if horizon is not None else None
     near_miss_summaries: list[dict[str, Any]] = []
+    sensitivity_analyses: list[dict[str, Any]] = []
     for pair in planner_pairs:
         cells = build_matched_cells_from_ledger_rows(
             successor_rows, planner_pair=pair, family_of=family_of
@@ -620,6 +694,9 @@ def run_hierarchical_paired_release_analysis(
                 }
                 for summary in censored_completion_time(cells, horizon=horizon)
             )
+        sensitivity_analyses.extend(
+            _sensitivity_analysis(cells, outcomes=outcomes, policy=resolved_policy)
+        )
         near_miss_summaries.extend(
             {
                 "planner_pair": list(pair),
@@ -653,6 +730,7 @@ def run_hierarchical_paired_release_analysis(
         },
         "censored_completion_time": completion_summaries,
         "normalized_near_miss_exposure": near_miss_summaries,
+        "sensitivity_analyses": sensitivity_analyses,
         "protocol_conformance": _protocol_conformance(
             manifest=normalized_manifest,
             analysis_executed=True,
@@ -700,6 +778,7 @@ def fail_closed_analysis_from_manifest(
         "multiplicity": {"method": "holm_step_down", "family_size": 0, "decisions": []},
         "censored_completion_time": None,
         "normalized_near_miss_exposure": None,
+        "sensitivity_analyses": [],
         "protocol_conformance": _protocol_conformance(
             manifest=normalized_manifest, analysis_executed=False
         ),
@@ -786,9 +865,19 @@ def _ordered_families(cells: Sequence[MatchedCell]) -> list[list[int]]:
         Lists of cell indices, one per distinct scenario-family.
     """
 
+    return _ordered_clusters(cells, key=lambda cell: cell.scenario_family)
+
+
+def _ordered_clusters(cells: Sequence[MatchedCell], *, key: Any) -> list[list[int]]:
+    """Group cell indices by a stable cluster key for bootstrap resampling.
+
+    Returns:
+        Lists of cell indices, one per distinct cluster key.
+    """
+
     groups: dict[str, list[int]] = {}
     for index, cell in enumerate(cells):
-        groups.setdefault(cell.scenario_family, []).append(index)
+        groups.setdefault(str(key(cell)), []).append(index)
     return list(groups.values())
 
 
@@ -932,7 +1021,7 @@ def _protocol_conformance(
     delivered = {
         "paired_effects": True,
         "hierarchical_intervals": True,
-        "sensitivity_analyses": False,
+        "sensitivity_analyses": True,
         "multiplicity_control": True,
         "practical_effect_reporting": True,
         "censored_completion_time": completion_time_delivered,

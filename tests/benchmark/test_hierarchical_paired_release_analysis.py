@@ -406,10 +406,15 @@ def test_run_analysis_emits_machine_readable_report_with_blocked_claim_gate() ->
     assert report["multiplicity"]["family_size"] == 3
     assert report["censored_completion_time"] is not None
     assert report["normalized_near_miss_exposure"] is not None
+    assert len(report["sensitivity_analyses"]) == 3
+    sensitivity = report["sensitivity_analyses"][0]
+    assert sensitivity["planner_pair"] == ["alpha", "beta"]
+    assert sensitivity["seed_level"]["n_clusters"] == 4
+    assert sensitivity["family_level"]["n_clusters"] == 4
     conformance = {row["id"]: row["status"] for row in report["protocol_conformance"]}
     assert conformance["paired_effects"] == "delivered_analysis_pending_release_input"
     assert conformance["censored_completion_time"] == "delivered_analysis_pending_release_input"
-    assert conformance["sensitivity_analyses"] == "declared_pending_analysis"
+    assert conformance["sensitivity_analyses"] == "delivered_analysis_pending_release_input"
     # Deterministic across runs given the seeded policy.
     again = run_hierarchical_paired_release_analysis(
         _manifest(),
@@ -488,6 +493,7 @@ def test_fail_closed_analysis_from_manifest_reports_blocked_analysis_not_run() -
     assert report["evidence_status"] == EVIDENCE_STATUS_NOT_BENCHMARK_EVIDENCE
     assert report["claim_gate"]["status"] == CLAIM_GATE_BLOCKED_ANALYSIS_NOT_RUN
     assert report["paired_effects"] == []
+    assert report["sensitivity_analyses"] == []
     conformance = {row["id"]: row["status"] for row in report["protocol_conformance"]}
     assert set(conformance.values()) == {"declared_pending_analysis"}
     assert report["semantics"]["claim_promotion"] == "none"

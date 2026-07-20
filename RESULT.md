@@ -12,8 +12,12 @@
 - Updated the PR description to match the remediation: `git_commit` remains unavailable,
   while `published_integration_commit` identifies the reachable byte-identical integration
   source; stale repointing language and file-count text were removed.
+- Corrected the durable baseline-review addendum in
+  `scripts/validation/evidence_registry_baseline_review.yaml`: the orphaned generation commit
+  remains unavailable, and `0b0214ced856eac77fa9a4c15b02921eabab1661` is described only as the
+  separate published integration pointer, not as the generation commit.
 - No unresolved inline review threads were present before the fix; no thread was resolved.
-- The pre-push PR head was verified as `29db02131ad7c74c2a293035d2c183dc0df06994`.
+- The pre-push PR head was verified as `eb7d97712fe5cbe1e2b14c2061e16035948c5ef8`.
 
 ## Validation
 
@@ -22,6 +26,8 @@
 - `uv run python scripts/tools/lint_evidence_registry.py --strict --strict-exclusion-policy docs/context/evidence/evidence_registry_strict_ci_policy.yaml` — passed; active findings 0.
 - `uv run python scripts/dev/evidence_registry_ratchet.py --check` — passed; findings 414, baseline 414.
 - `uv run pytest tests/dev/test_evidence_registry_ratchet.py tests/test_export_issue_4848.py tests/tools/test_audit_exemplar_bundles.py -q` — passed; 78 tests.
+- `uv run pytest tests/dev/test_evidence_registry_ratchet.py -q` — passed; 24 tests after the
+  baseline-review wording fix.
 - `uv run python scripts/dev/check_docs_evidence_integrity.py --files <72 changed evidence files>` — passed.
 - `git diff --check` — passed.
 - PR body verification — passed; the stale `Repointed the producer pointer` claim is absent,
@@ -34,8 +40,8 @@
 
 ## Commit and push
 
-- Fix commit SHA: `42e2583913485ebc34509bd127017b175b8ad317`.
-- Reporting commit SHA: `8269e00af810774e967960a9dcfd2970dcf4ddc1` (this commit).
+- Fix commit SHA: `301f8ae2905d46c7c9530651295d789ee2d5de40`.
+- Reporting commit SHA: to be recorded after this report update.
 - Push target: existing PR branch `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - No new PR, merge, worktree deletion, or Slurm submission was performed.
 
@@ -43,11 +49,11 @@
 
 - Pre-push unresolved inline review threads: none.
 - Resolved thread IDs: none.
-- Post-push unresolved threads: re-queried at head `3742bd1545af03c1eedab26535289ecfff05aefc`; none were present.
+- Post-push unresolved threads: re-queried at head `301f8ae2905d46c7c9530651295d789ee2d5de40`; none were present.
 
 ## Live PR state after push
 
-- PR head after the report push: `3742bd1545af03c1eedab26535289ecfff05aefc` on
+- PR head after the fix push: `301f8ae2905d46c7c9530651295d789ee2d5de40` on
   `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - Hosted `reproducibility-check` is `SKIPPED` because the workflow is intentionally
   `workflow_dispatch`-only; this lease cannot submit compute or dispatch it.

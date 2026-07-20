@@ -3,7 +3,7 @@
 ## Fixed comments
 
 - No fixable inline review comments were present. GitHub GraphQL returned zero review threads.
-- Refreshed this report with the current PR head and post-push blocker state.
+- Refreshed this report for PR head `23024759433d35c53a8a218bac442a3d7ba0ce3e`.
 
 ## Validation
 
@@ -17,17 +17,19 @@
 - `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/tools/lint_evidence_registry.py --strict --strict-exclusion-policy docs/context/evidence/evidence_registry_strict_ci_policy.yaml` — passed; active findings 0.
 - `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/dev/evidence_registry_ratchet.py --check` — passed; findings 414, baseline 414.
 - `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/dev/test_evidence_registry_ratchet.py -q` — 24 passed.
+- `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/benchmark_repro_check.py` — passed locally; same-seed aggregates reproduced.
+- `scripts/dev/check_docs_evidence_integrity.py --base-ref origin/main` — pending until the report update is staged.
 
 ## Commit and push
 
-- Fix/report commit already on PR before this run: `acef2b0475c59308a41bddebdce85575c6639808`.
-- PR head before this reporting commit: `acef2b0475c59308a41bddebdce85575c6639808`.
-- Pushed reporting commit: `0ec340c41196b642429de28d3b5bf4ffebc65993`.
+- Fix/evidence commits already on PR before this run: `cdfb10357ebb8ddc4625bf1ff7dac00d911b613c` through `23024759433d35c53a8a218bac442a3d7ba0ce3e`.
+- PR head before this reporting commit: `23024759433d35c53a8a218bac442a3d7ba0ce3e`.
+- Pushed reporting commit: pending until this report is validated and committed.
 
 ## Post-push review threads
 
 - Unresolved inline review threads before push: none (GraphQL `reviewThreads` returned an empty list).
-- Post-push thread re-query at `0ec340c41196b642429de28d3b5bf4ffebc65993`: none; GraphQL `reviewThreads` returned an empty list.
+- Post-push thread re-query: pending until this report is pushed.
 - Resolved thread IDs: none; no inline threads existed to resolve.
 
 ## Blockers

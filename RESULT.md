@@ -20,14 +20,15 @@
 ## Commit and push
 
 - PR head confirmed before this run: `7e28032c7e076bdb43fbd303f581547577086572`.
-- Merge commit: recorded after the conflict-resolution commit.
-- Final handoff commit: recorded after this file is updated with the pushed SHA.
+- Merge commit: `da4bb50930aed3749a15d3f16dc983baadb4b7f3`.
+- Final handoff commit: this reporting commit; its SHA is returned with the task result.
 
 ## Post-push review threads
 
 - Unresolved inline review threads before push: none; GraphQL `reviewThreads` returned an empty list.
 - Resolved thread IDs: none; no inline threads existed to resolve.
-- Post-push thread re-query: recorded after push.
+- Post-push thread re-query at `da4bb50930aed3749a15d3f16dc983baadb4b7f3`: none; GraphQL
+  `reviewThreads` returned an empty list.
 
 ## Blockers
 
@@ -35,4 +36,6 @@
   must be supplied by an authorized human reviewer.
 - GitHub `reproducibility-check` is `SKIPPED`; this lease forbids compute submission, so local
   diagnostic execution is not a replacement hosted gate.
+- After the merge fix, GitHub reports `MERGEABLE` with `UNSTABLE` while hosted checks are queued or
+  running; `reviewDecision` remains empty pending an authorized approval.
 - No merge, delete, Slurm submission, or new PR was performed.

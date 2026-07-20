@@ -13,6 +13,8 @@
   while `published_integration_commit` identifies the reachable byte-identical integration
   source; stale repointing language and file-count text were removed.
 - No unresolved inline review threads were present before the fix; no thread was resolved.
+- Current PR head was verified as `29db02131ad7c74c2a293035d2c183dc0df06994`; the post-push
+  re-query below must be repeated after this report commit.
 
 ## Validation
 
@@ -26,12 +28,15 @@
 - PR body verification — passed; the stale `Repointed the producer pointer` claim is absent,
   and the description names `missing:original-generation-commit-not-recoverable` and
   `published_integration_commit`.
-- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked by pre-existing untracked lease task files; this is the known changed-file proof limitation tracked by issue #5533. The focused evidence gates above passed.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked before validation by the five
+  lease-injected untracked task files (`.ll7_task_*`); changed-file proof cannot be established
+  while they remain present. They were preserved because this lease does not authorize deletion.
+  The focused evidence gates above passed.
 
 ## Commit and push
 
 - Fix commit SHA: `42e2583913485ebc34509bd127017b175b8ad317`.
-- Reporting commit SHA: `21fe671917136a0f1e7d08534ceaeae5f7778936`.
+- Reporting commit SHA: `8269e00af810774e967960a9dcfd2970dcf4ddc1` (this commit).
 - Push target: existing PR branch `cheap/cheap-issue-5986-e4ebaff0d9c5`.
 - No new PR, merge, worktree deletion, or Slurm submission was performed.
 
@@ -43,13 +48,15 @@
 
 ## Live PR state after push
 
-- PR head at report capture: `21fe671917136a0f1e7d08534ceaeae5f7778936` on
-  `cheap/cheap-issue-5986-e4ebaff0d9c5`; this report refresh records that reviewed head.
-- Hosted checks were queued/in progress after the push; `reproducibility-check` remained
-  `SKIPPED`.
-- `reviewDecision` remained empty/null.
+- PR head before this report commit: `29db02131ad7c74c2a293035d2c183dc0df06994` on
+  `cheap/cheap-issue-5986-e4ebaff0d9c5`.
+- Hosted `reproducibility-check` is `SKIPPED` because the workflow is intentionally
+  `workflow_dispatch`-only; this lease cannot submit compute or dispatch it.
+- GitHub `reviewDecision` is empty/null; no approving human review is recorded.
 
 ## Blockers
 
 - Hosted `reproducibility-check` remains `SKIPPED`; this lease forbids compute submission, so it cannot be replaced here.
 - GitHub `reviewDecision` remains null/empty: the only submitted review is Gemini Code Assist `COMMENTED`; an authorized human approval is still required.
+- The five lease task files remain untracked and intentionally untouched; full local changed-file
+  proof therefore remains unavailable in this worktree.

@@ -16,16 +16,17 @@
 ## Commit and push
 
 - PR head confirmed before this run: `933d21c82a21d2c98980bb30109bbf5bbc2b0c77`.
-- Reporting update committed and pushed by this run: recorded below after commit.
+- Reporting update committed and pushed by this run: `0018e40e1ad9275c0a3ee82575a9a0b58eef32d8`.
 
 ## Post-push review threads
 
 - Unresolved inline review threads before push: none; GraphQL `reviewThreads` returned an empty list.
-- Post-push thread re-query: recorded below after push; only addressed threads may be resolved.
+- Post-push thread re-query at `0018e40e1ad9275c0a3ee82575a9a0b58eef32d8`: none; GraphQL `reviewThreads` returned an empty list.
 - Resolved thread IDs: none; no inline threads existed to resolve.
 
 ## Blockers
 
 - GitHub `reviewDecision` is empty and the only submitted review is `COMMENTED`; an approving review must be supplied by an authorized human reviewer.
 - GitHub `reproducibility-check` is `SKIPPED` because it is a manual diagnostic; this lease forbids compute submission, so no workflow run was dispatched. The local diagnostic passed.
+- After the reporting push, GitHub CI was still in progress and PR merge state was `UNSTABLE`; this run does not wait for or alter external CI.
 - No merge, delete, Slurm submission, or new PR was performed.

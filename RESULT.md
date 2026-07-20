@@ -1,6 +1,6 @@
 # PR #6063 Review Blocker Result
 
-Reviewed at PR head `a913cd570103c634c3ae4a1840ed16b11ffbbd47`.
+Reviewed at PR head `cac7fb4e75d4e750279033043f84107e707e1861`.
 
 ## Fixed comments
 
@@ -21,6 +21,9 @@ All three review threads are currently resolved; no unresolved threads remain.
 - `uv run ruff format --check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
 - `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 32 passed.
 - `git diff --check` — passed.
+- `uv run python scripts/dev/check_pr_followups.py --body-file <(gh pr view 6063
+  --repo ll7/robot_sf_ll7 --json body --jq .body) --json` — domain status
+  `pending_domain_approval`; follow-up status `ok`.
 - PR body evidence count reconciled from 27 to 32 tests.
 - Live PR-body contract check — `pending_domain_approval` (exit 2).
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — exit 2. The canonical
@@ -30,7 +33,7 @@ All three review threads are currently resolved; no unresolved threads remain.
 
 ## Commit
 
-- PR head verified before this update: `a913cd570103c634c3ae4a1840ed16b11ffbbd47`.
+- PR head verified before this update: `cac7fb4e75d4e750279033043f84107e707e1861`.
 - Review-fix commit: `0b96de53f381f38c9c27876aeab3b7f84850612f`.
 - Prior state-record commit: `0afafa286ff9a89cb4fc1ad980e4392d60089384`.
 
@@ -50,9 +53,9 @@ All three review threads are currently resolved; no unresolved threads remain.
 
 ## Post-push state
 
-- Commit SHA: `159dd3e2aab899059405a149d1420b58f6fffba7` (PR head verified
-  before this final RESULT-only record; prior review-fix commits are listed above).
-- PR head at the final pre-record review-thread query: `159dd3e2aab899059405a149d1420b58f6fffba7`.
+- Commit SHA: this RESULT-only state update is the commit pushed by this handoff;
+  the SHA is reported in the final response and the PR timeline.
+- PR head at the final pre-record review-thread query: `cac7fb4e75d4e750279033043f84107e707e1861`.
 - Post-push review-thread re-query: zero unresolved threads; all three existing
   threads remain resolved. No thread mutation was needed.
 - PR blocker comment requesting maintainer/domain action:

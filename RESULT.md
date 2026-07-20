@@ -23,10 +23,12 @@ domain-aware approver or maintainer waiver, so the approval blocker remains open
 - `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 32 passed after the
   unknown-key validation fix.
 - `git diff --check` — passed.
-- `uv run python scripts/dev/check_pr_followups.py` — not run against the live PR body because
-  no local PR-body source is configured; the live PR body still has `Status: pending`.
+- `gh pr view 6063 ... | uv run python scripts/dev/check_pr_followups.py --body-file /dev/stdin
+  --json` — contract check reports `pending_domain_approval` (exit 2); no follow-up issue
+  section is required.
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked by the five preserved untracked
-  `.ll7_task_*` harness files; this is an environment/readiness limitation, not a source failure.
+  `.ll7_task_*` harness files (exit 2); this is an environment/readiness limitation, not a source
+  failure.
 
 ## Commit
 
@@ -51,5 +53,6 @@ domain-aware approver or maintainer waiver, so the approval blocker remains open
 
 ## Current update
 
-- Report update commit SHA: recorded in the handoff after commit creation.
+- Report update content commit SHA: `f508424f148061e747d85b397c803e601e0774d5`.
+- The final report-refresh commit is the PR head containing this file after push.
 - The five untracked `.ll7_task_*` files were preserved because deletion is not authorized.

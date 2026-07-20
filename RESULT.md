@@ -9,8 +9,9 @@
 - `PRRT_kwDOLRSZdc6SVXP8`: updated the documentation title to
   `Actuator-Feasibility Validation (Issue #6056)`.
 
-The PR body now includes the required `Domain-Aware Approval` section with explicit
-`Status: pending` and a concrete validity checklist.
+The PR body includes the required `Domain-Aware Approval` section with an explicit
+`Status: pending` and a concrete validity checklist. This execution cannot supply a
+domain-aware approver or maintainer waiver, so the approval blocker remains open.
 
 - `load_actuator_limits`: now rejects unknown or misspelled keys (including
   `max_decel_mps`) while preserving documented defaults for omitted supported fields.
@@ -19,12 +20,11 @@ The PR body now includes the required `Domain-Aware Approval` section with expli
 
 - `uv run ruff check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
 - `uv run ruff format --check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
-- `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 29 passed.
 - `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 32 passed after the
   unknown-key validation fix.
 - `git diff --check` — passed.
-- `uv run python scripts/dev/check_pr_followups.py` — skipped because no PR body source is
-  configured locally; the live PR body still has `Status: pending` for domain-aware approval.
+- `uv run python scripts/dev/check_pr_followups.py` — not run against the live PR body because
+  no local PR-body source is configured; the live PR body still has `Status: pending`.
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked by the five preserved untracked
   `.ll7_task_*` harness files; this is an environment/readiness limitation, not a source failure.
 
@@ -35,7 +35,7 @@ The PR body now includes the required `Domain-Aware Approval` section with expli
 
 ## Review state
 
-- Current PR head after the review fix and result refresh: `48f4dd6be`
+- Reviewed PR head before this report update: `b7232fca7c06632bffe1bd833b68f1514cd4419c`.
 - Unresolved review threads: none. All three original threads are resolved.
 
 ## Remaining blockers
@@ -48,3 +48,8 @@ The PR body now includes the required `Domain-Aware Approval` section with expli
 - Full `pr_ready_check` proof is unavailable in this lease because the five preserved untracked
   `.ll7_task_*` harness files prevent changed-file readiness proof; this is an environment/readiness
   limitation, not evidence of a source failure.
+
+## Current update
+
+- Report update commit SHA: recorded in the handoff after commit creation.
+- The five untracked `.ll7_task_*` files were preserved because deletion is not authorized.

@@ -961,17 +961,12 @@ def test_worktree_shared_venv_helper_has_freshness_check_wiring() -> None:
     """The shared-venv helper must guard the reused env against source drift (issue #5023)."""
     script_text = RUN_WORKTREE_SHARED_VENV.read_text(encoding="utf-8")
 
-    # The freshness gate compares the vendored pysocialforce install against fast-pysf source.
+    # The freshness gate recognizes the checkout-local source as authoritative.
     assert "check_shared_venv_freshness()" in script_text
     assert 'local src_pkg="$repo_root/fast-pysf/pysocialforce"' in script_text
-    assert 'for candidate in "$venv"/lib/python*/site-packages/pysocialforce' in script_text
-    assert 'cmp -s "$src_file" "$installed_file"' in script_text
-    assert "Shared virtualenv is stale relative to this checkout" in script_text
-    assert "diverging module: pysocialforce/" in script_text
-    assert "uv sync --all-extras --reinstall-package robot-sf" in script_text
-    # Standalone commands with a verified no-project-import boundary can skip project drift safely.
+    assert "source package is authoritative" in script_text
+    # Standalone commands with a verified no-project-import boundary remain supported.
     assert "--standalone" in script_text
-    assert "use --standalone for a command verified not to import project packages" in script_text
     assert 'if [[ -z "$standalone" ]]; then' in script_text
     # The gate is skippable for advanced users with a confirmed-matching env.
     assert "--no-freshness-check" in script_text
@@ -1059,7 +1054,7 @@ def _make_freshness_fixture_repo(
 def test_worktree_shared_venv_freshness_check_fails_early_on_stale_env(
     tmp_path: Path,
 ) -> None:
-    """A stale shared env (missing the newer source API) must fail before uv runs (issue #5023)."""
+    """A checkout source package must win over a stale installed copy (issue #6003)."""
     repo, venv, env = _make_freshness_fixture_repo(
         tmp_path,
         installed_scene="# stale install without normalize_integration_scheme\n",
@@ -1083,12 +1078,9 @@ def test_worktree_shared_venv_freshness_check_fails_early_on_stale_env(
         check=False,
     )
 
-    assert result.returncode == 2
-    assert "Shared virtualenv is stale relative to this checkout" in result.stderr
-    assert "diverging module: pysocialforce/scene.py" in result.stderr
-    assert "uv sync --all-extras --reinstall-package robot-sf" in result.stderr
-    # The freshness gate must fire before the underlying command is executed.
-    assert "uv-reached" not in result.stderr
+    assert result.returncode == 7
+    assert "uv-reached" in result.stderr
+    assert "Shared virtualenv is stale" not in result.stderr
 
 
 def test_worktree_shared_venv_freshness_check_passes_on_fresh_env(

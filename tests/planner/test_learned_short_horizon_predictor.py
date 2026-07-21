@@ -140,3 +140,27 @@ def test_learned_prediction_mpc_adapter_exposes_predictor_diagnostics() -> None:
     assert futures.source == "diagnostic_untrained_smoke"
     assert diagnostics["predictor"]["backend"] == "learned_short_horizon"
     assert diagnostics["predictor"]["diagnostic_only"] is True
+
+
+def test_predict_numpy_caches_eval_device_and_is_stable_across_calls() -> None:
+    """Repeated inferences must be byte-identical after caching eval/device.
+
+    Issue #5411 (learned_short_horizon_predictor slice): ``predict_numpy`` re-ran
+    ``module.eval()`` and re-looked-up the device on every inference. Caching at
+    construction must not change numerical output across repeated calls.
+    """
+    pytest.importorskip("torch")
+    predictor = LearnedShortHorizonPedestrianPredictor(
+        LearnedShortHorizonPredictorConfig(
+            allow_untrained_smoke=True,
+            max_pedestrians=2,
+            horizon_steps=2,
+            hidden_dim=8,
+        )
+    )
+
+    first = predictor.predict(_obs(heading=np.pi / 2.0), horizon_steps=2, dt=0.5)
+    second = predictor.predict(_obs(heading=np.pi / 2.0), horizon_steps=2, dt=0.5)
+
+    np.testing.assert_array_equal(first.positions_world, second.positions_world)
+    assert predictor.diagnostics()["calls"] == 2

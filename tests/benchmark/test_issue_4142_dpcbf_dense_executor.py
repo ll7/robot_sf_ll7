@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 import yaml
 
+import robot_sf.benchmark.issue_4142_dpcbf_dense_runner as dense_runner
 from robot_sf.benchmark.issue_4142_dpcbf_dense_readiness import (
     PACKET_PATH,
     REQUIRED_ARMS,
@@ -30,6 +31,26 @@ from robot_sf.benchmark.issue_4142_dpcbf_dense_runner import (
 )
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+
+@pytest.fixture(autouse=True)
+def _clean_real_repository_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep executor contract tests independent of the implementation worktree's status.
+
+    Authorized-execution cases use real packet/config inputs from ``REPO_ROOT`` but replace
+    only its git-status probe with a deterministic clean identity. Temporary fixture roots keep
+    their real provenance behavior. The dedicated dirty-worktree test below preserves coverage
+    for the production fail-closed guard.
+    """
+    original_git_provenance = dense_runner._git_provenance
+
+    def git_provenance(repo_root: pathlib.Path) -> tuple[str, bool]:
+        if repo_root.resolve() == REPO_ROOT:
+            return "test-clean-repository", False
+        return original_git_provenance(repo_root)
+
+    monkeypatch.setattr(dense_runner, "_git_provenance", git_provenance)
+
 
 _RUNNABLE_PACKET = {
     "schema_version": "robot_sf.issue_4142_dpcbf_dense_comparison.v1",
@@ -153,6 +174,27 @@ def test_wrong_authorization_raises_before_creating_output(tmp_path: pathlib.Pat
         execute_run_plan(plan, authorization="not-the-id", repo_root=REPO_ROOT, run_batch_fn=fake)
     with pytest.raises(DenseComparisonExecutionGatedError):
         execute_run_plan(plan, authorization="true", repo_root=REPO_ROOT, run_batch_fn=fake)
+
+    assert not out_dir.exists()
+    assert fake.calls == []
+
+
+def test_dirty_git_worktree_is_rejected_before_dispatch(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Production provenance still rejects a dirty repository before an arm dispatches."""
+    out_dir = tmp_path / "out"
+    plan = build_run_plan(repo_root=REPO_ROOT, packet_path=PACKET_PATH, output_dir=out_dir)
+    fake = _RecordingRunBatch()
+    monkeypatch.setattr(dense_runner, "_git_provenance", lambda _root: ("test-dirty", True))
+
+    with pytest.raises(DenseComparisonProvenanceMismatchError, match="dirty git worktree"):
+        execute_run_plan(
+            plan,
+            authorization=REQUIRED_AUTHORIZATION_ID,
+            repo_root=REPO_ROOT,
+            run_batch_fn=fake,
+        )
 
     assert not out_dir.exists()
     assert fake.calls == []

@@ -1,0 +1,82 @@
+{
+  "acceptance_criteria": [
+    {
+      "criterion": "Runs seed-sufficiency analysis on retained campaign bundles.",
+      "evidence": [
+        "docs/context/evidence/issue_3078_package_a_2026-07-08/seed_sufficiency_analysis.json"
+      ],
+      "remaining": [],
+      "status": "satisfied"
+    },
+    {
+      "criterion": "Runs or validates held-out-family pilot rows, leakage audit, and transfer-delta outputs.",
+      "evidence": [
+        "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml",
+        "private-campaign://job-13521/result_store"
+      ],
+      "remaining": [],
+      "status": "satisfied"
+    },
+    {
+      "criterion": "Produces baseline table, seed-stability figure, transfer-delta figure, and preliminary claim card.",
+      "evidence": [
+        "private-campaign://job-13521/result_store",
+        "docs/context/evidence/issue_3078_package_a_2026-07-08/seed_sufficiency_analysis.json"
+      ],
+      "remaining": [],
+      "status": "satisfied"
+    },
+    {
+      "criterion": "Classifies result as benchmark, diagnostic, negative, null, invalid, or blocked durable evidence.",
+      "evidence": [
+        "issue_result_classification=diagnostic",
+        "all required evidence surfaces validate, but claim-card review is required before any benchmark / negative / null promotion"
+      ],
+      "remaining": [],
+      "status": "satisfied"
+    }
+  ],
+  "classification": "diagnostic_review_ready",
+  "forbidden_actions_confirmed": {
+    "benchmark_campaign_run": false,
+    "compute_submit": false,
+    "paper_claim_edits": false,
+    "ranking_claim_promotion": false
+  },
+  "heldout_partition_manifests": [
+    {
+      "errors": [],
+      "ok": true,
+      "path": "configs/benchmarks/issue_2128_heldout_family_transfer_partitions.yaml"
+    }
+  ],
+  "issue_result_classification": "diagnostic",
+  "issue_result_classification_reason": "all required evidence surfaces validate, but claim-card review is required before any benchmark / negative / null promotion",
+  "issue_result_classification_vocabulary": [
+    "benchmark",
+    "diagnostic",
+    "negative",
+    "null",
+    "invalid",
+    "blocked"
+  ],
+  "manifest_path": "configs/benchmarks/issue_3078_package_a_readiness.yaml",
+  "package_id": "issue_3078_package_a_readiness",
+  "readiness_status": "ready",
+  "reasons": [],
+  "result_stores": [
+    {
+      "errors": [],
+      "ok": true,
+      "path": "private-campaign://job-13521/result_store"
+    }
+  ],
+  "schema_version": "package_a_decision_packet.v1",
+  "seed_analysis_reports": [
+    {
+      "errors": [],
+      "ok": true,
+      "path": "docs/context/evidence/issue_3078_package_a_2026-07-08/seed_sufficiency_analysis.json"
+    }
+  ]
+}

@@ -178,8 +178,10 @@ checked.
 
 ### Targeted shared-venv worktree validation
 
-For quick, targeted checks in a sibling worktree, you can reuse the main checkout virtualenv while
-pinning imports to the current worktree:
+For quick, targeted checks in a sibling worktree, prefer
+`scripts/dev/run_worktree_shared_venv.sh -- <uv-run-command>`: it uses an initialized
+current-worktree `.venv` when available, otherwise the main checkout `.venv`, while pinning
+imports to the current worktree:
 
 ```bash
 scripts/dev/run_worktree_shared_venv.sh -- pytest tests/test_ci_script_contract.py -q
@@ -188,10 +190,10 @@ scripts/dev/run_worktree_shared_venv.sh --standalone -- \
   python scripts/dev/check_docs_evidence_integrity.py --files docs/dev_guide.md
 ```
 
-The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the shared
+The helper runs from `git rev-parse --show-toplevel`, sets `UV_PROJECT_ENVIRONMENT` to the selected
 `.venv`, and sets `UV_NO_SYNC=1`. By default it also prepends the worktree root to `PYTHONPATH`.
 This is intended for fast local feedback when dependencies are already current. It should fail if
-the shared virtualenv is missing instead of silently installing into the wrong checkout.
+the selected `.venv` is missing instead of silently installing into the wrong checkout.
 
 Use `--standalone` for a dependency-light command whose tests verify that it does not import
 `robot_sf` or other project packages. This mode still reuses third-party dependencies from the
@@ -365,7 +367,10 @@ prevents merging a PR whose CI ran against a stale main:
   checker falls back to the PR base-vs-main comparison. The author must update the branch and
   re-run CI before the PR becomes mergeable again. Because the installed `gh` version does not
   provide `gh pr update-branch`, use the guarded repository helper after recording the current
-  head SHA: `uv run python scripts/dev/update_pr_branch.py <number> --expected-head-sha <sha>`.
+  head SHA. The drop-in `scripts/dev/update_pr_branch_safely.sh <number> --expected-head-sha <sha>`
+  tries `gh`/`gh api` update-branch first and falls back to a lease-protected local rebase/push when
+  that path is unavailable (issue #5775). The older REST-only `scripts/dev/update_pr_branch.py` is
+  kept for environments where the REST `update-branch` endpoint works.
 
 **Why not GitHub merge queue?** The native merge queue is the ideal solution — it re-validates each
 PR against the up-to-date prospective main before merging automatically. We chose the gate-side rule
@@ -398,6 +403,7 @@ scripts/dev/local_signoff.sh --no-setup lint test
 scripts/dev/check_docs_proof_consistency_diff.sh
 scripts/dev/sbatch_use_max_time.sh --partition <partition> --qos <qos> --sbatch-arg --partition=<partition> --sbatch-arg --qos=<qos> SLURM/templates/gpu_training.sl
 uv run python scripts/dev/update_pr_branch.py <pr-number> --expected-head-sha <head-sha>
+scripts/dev/update_pr_branch_safely.sh <pr-number> --expected-head-sha <head-sha>
 BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 PR_READY_MODE=final BASE_REF=origin/main scripts/dev/pr_ready_check.sh
 uv run python scripts/dev/complexity_runtime_baseline.py --top 10 robot_sf scripts tests
@@ -558,8 +564,13 @@ not promoted into durable benchmark or paper-facing claims.
 #### Issue-reading with comments (REST-backed)
 
 `gh issue view <number> --comments` fails on GitHub CLI 2.45.x (Ubuntu noble) with a
-`repository.issue.projectCards` GraphQL deprecation error (issue #5729). Use the
-REST-backed helpers for all issue-with-comments reads:
+`repository.issue.projectCards` GraphQL deprecation error (issue #5729), and the
+native-first read also fails with a `GraphQL: API rate limit already exceeded`
+error when the GraphQL quota is exhausted (issue #5896). The `thread` command
+falls back to paginated REST reads for all GraphQL-path failures (deprecated
+field, quota exhaustion, secondary rate limit, generic GraphQL error) while
+keeping authentication, authorization, and repository-resolution failures
+fail-closed. Use the REST-backed helpers for all issue-with-comments reads:
 
 ```bash
 # Preferred: complete thread read with native-first fallback

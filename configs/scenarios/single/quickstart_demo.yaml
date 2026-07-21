@@ -1,0 +1,22 @@
+scenarios:
+- name: quickstart_demo_crossing_basic
+  map_file: ../../../maps/svg_maps/francis2023/francis2023_circular_crossing.svg
+  simulation_config:
+    max_episode_steps: 120
+    ped_density: 0.04
+  robot_config: {}
+  metadata:
+    figure: quickstart
+    archetype: circular_crossing
+    flow: circular
+    behavior: traffic
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: null
+      metrics: {}
+      metrics_updated_on: null
+  seeds:
+  - 270

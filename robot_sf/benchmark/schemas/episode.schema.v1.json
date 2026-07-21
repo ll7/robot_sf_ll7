@@ -250,6 +250,7 @@
                             "type": "string",
                             "enum": [
                                 "native",
+                                "native_command",
                                 "adapter",
                                 "mixed",
                                 "unknown"
@@ -400,6 +401,45 @@
                         }
                     },
                     "additionalProperties": true
+                },
+                "planner_diagnostics": {
+                    "type": "object",
+                    "description": "Per-episode planner runtime/diagnostic counters (issue #5887 native-command arm and SIPP search).",
+                    "properties": {
+                        "expansion_limit_hits": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "runtime_bound_exits": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "fallback_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "commitment_invalidations": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "planner_step_runtime_seconds": {
+                            "type": "array",
+                            "items": {
+                                "type": "number",
+                                "minimum": 0
+                            }
+                        },
+                        "exit_codes": {
+                            "type": "array",
+                            "items": {
+                                "type": ["integer", "null"]
+                            }
+                        },
+                        "last_exit_code": {
+                            "type": ["integer", "null"]
+                        }
+                    },
+                    "additionalProperties": true
                 }
             },
             "additionalProperties": true
@@ -452,6 +492,50 @@
                         "integer"
                     ],
                     "minimum": 0
+                },
+                "deadlock": {
+                    "type": "boolean",
+                    "description": "Per-episode deadlock/stall flag (no-progress-over-window). Issue #5887."
+                },
+                "deadlock_stall": {
+                    "type": "object",
+                    "description": "Schema-backed deadlock/stall diagnostic block (issue #5887).",
+                    "required": [
+                        "schema_version",
+                        "window_steps",
+                        "progress_eps_m",
+                        "stall_window_count",
+                        "max_no_progress_run",
+                        "status"
+                    ],
+                    "properties": {
+                        "schema_version": {
+                            "const": "deadlock-stall.v1"
+                        },
+                        "window_steps": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "progress_eps_m": {
+                            "type": "number",
+                            "minimum": 0
+                        },
+                        "stall_window_count": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "max_no_progress_run": {
+                            "type": "integer",
+                            "minimum": 0
+                        },
+                        "status": {
+                            "type": "string"
+                        },
+                        "interpretation": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": true
                 },
                 "collision_rate": {
                     "type": [

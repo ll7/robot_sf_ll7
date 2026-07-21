@@ -51,6 +51,7 @@ examples:
     ci_reason: null
     doc_reference: null
     tags: [coverage, tooling]
+    expected_runtime: "~1s"
   - path: plotting/data_analysis_example.py
     name: "Data Analysis Example"
     summary: "Perform a showcase on how to use the data analysis module."
@@ -159,6 +160,7 @@ examples:
     ci_reason: null
     doc_reference: docs/dev_guide.md#quickstart
     tags: [quickstart]
+    expected_runtime: "~10s"
   - path: quickstart/02_trained_model.py
     name: "02 Trained PPO Benchmark"
     summary: "Run the Robot SF benchmark with the pre-trained PPO baseline."

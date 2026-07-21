@@ -387,6 +387,7 @@ max-statements = 60
 "scripts/classic_benchmark_full.py" = ["BLE001"]
 "scripts/coverage/open_coverage_report.py" = ["BLE001"]
 "scripts/demo/run_robot_sf_smoke.py" = ["BLE001"]
+"scripts/demo/quickstart_demo.py" = ["BLE001"]
 "scripts/demo_jsonl_recording.py" = ["BLE001"]
 "scripts/dev/compact_ci_snapshot.py" = ["BLE001"]
 "scripts/dev/compact_worktree_snapshot.py" = ["BLE001"]
@@ -489,6 +490,8 @@ max-statements = 60
 "robot_sf/benchmark/camera_ready_campaign.py" = ["BLE001"]
 "robot_sf/benchmark/camera_ready/campaign.py" = ["BLE001"]
 "robot_sf/benchmark/cli.py" = ["T201"]
+"robot_sf/benchmark/issue_5578_speed_tier_synthesis.py" = ["T201"]
+"robot_sf/examples_cli.py" = ["T201"]
 "robot_sf/benchmark/doctor.py" = ["BLE001"]
 "robot_sf/benchmark/failure_extractor.py" = ["BLE001"]
 "robot_sf/benchmark/full_classic/render_sim_view.py" = ["C901"]
@@ -517,6 +520,10 @@ max-statements = 60
 # Issue #5616: campaign_atlas renderer — public build/rendering functions carry explicit
 # keyword-only controls (PLR0913) and reuse existing renderer docstring shape (DOC201).
 "robot_sf/benchmark/campaign_atlas.py" = ["PLR0913", "DOC201"]
+# Issue #5912: SNQI latency analyzer — promotion/validation/build helpers and the paired
+# cluster-bootstrap carry compact one-line docstrings; complexity concentrates in the
+# fail-closed coverage and verification routines.
+"robot_sf/benchmark/control_action_latency_snqi.py" = ["DOC201", "C901"]
 "robot_sf/adversarial/search.py" = ["BLE001"]
 "robot_sf/adversarial/certification.py" = ["BLE001", "PLC0415"]
 "tests/adversarial/**/*.py" = ["D100", "D103", "TC003"]
@@ -664,6 +671,7 @@ imitation = [
 ]
 
 [project.scripts]
+robot-sf = "robot_sf.cli:main"
 robot_sf_bench = "robot_sf.benchmark.cli:main"
 robot-sf-export-carla-t0 = "robot_sf_carla_bridge.cli:export_t0_scenarios_main"
 robot-sf-validate-carla-t0-manifest = "robot_sf_carla_bridge.cli:validate_t0_manifest_main"

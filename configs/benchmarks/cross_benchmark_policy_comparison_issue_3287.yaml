@@ -128,7 +128,13 @@ canary_slice:
     seed: 0
     external_asset_id: socnavbench-s3dis-eth
     mapping_quality: documented_canary_mapping
-  metric_id: socnavbench.path_length_ratio
+  # The canary emits two distinct, reciprocal path-length-ratio metric IDs -- one per suite,
+  # recorded in the receipt under per_suite_metric_specs. A single colliding ID would equate the
+  # reciprocal distance/displacement and displacement/distance definitions; both suite IDs must
+  # be pinned here and cross-checked against the code constants in socnavbench_canary.py.
+  per_suite_metric_ids:
+    robot_sf: robot_sf.path_length_ratio.distance_over_displacement
+    socnavbench: socnavbench.path_length_ratio.displacement_over_distance
   export_artifact: output/cross_benchmark_canary/ETH_canary-corridor-unilowopen.socnavbench.json
   receipt_artifact: output/cross_benchmark_canary/cross_suite_canary_receipt.json
   limitation_flags:

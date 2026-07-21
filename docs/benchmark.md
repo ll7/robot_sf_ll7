@@ -315,3 +315,60 @@ Initial recipes:
 
 Recipe outputs are derived analysis artifacts. Use them as inputs to table or figure generation
 only together with the source Parquet export metadata and the original JSONL provenance.
+
+## Native-Command Execution Contract
+
+The benchmark runner supports a first-class `native_command` execution arm (Issue #5887) to run external planner binaries as subprocesses. This arm bypasses python-level adapters, providing direct integration for compiled planner implementations (such as the SIPP four-geometry planner).
+
+For the frozen #5416 SIPP smoke, use the tracked CPU-only configuration
+`configs/algos/sipp_lattice_native_command.yaml`. It binds the live static map
+segments and boundaries into every command request, hashes the tracked
+`scripts/benchmark/sipp_native_command.py` entrypoint, and fails closed when
+that geometry is missing. Run the one-row transport/eligibility check with:
+
+```bash
+uv run python scripts/validation/check_issue_5416_sipp_native_smoke.py \
+  --packet configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml \
+  --native-config configs/algos/sipp_lattice_native_command.yaml \
+  --scenario-id classic_head_on_corridor_low --seed 111 --horizon 500 --dt 0.1 \
+  --workers 1 --output-dir output/issue_5416_native_sipp_smoke --json
+```
+
+This is smoke evidence that the native path is analyzer-eligible, not a full
+benchmark campaign or a safety/liveness result.
+
+### Execution Modes
+
+The runner supports two execution modes configured in the algorithm configuration payload:
+
+- **Per-Episode Process (`per_episode`)**: Spawns a fresh process for each simulated episode.
+- **Persistent Process (`persistent`)**: Spawns a single process at the start of the episode and keeps it alive, communicating via stdin/stdout request-response lines.
+
+### Subprocess Contract
+
+- **Arguments & Environment**: The canonical contract uses an `argv` list and an `env` dictionary. The map-runner compatibility arm also accepts `command` as an alias for `argv`.
+- **Template Substitution**: Template tokens in `argv` and `env` are dynamically replaced at runtime per episode:
+  - `{scenario_id}`: Resolved scenario name or ID.
+  - `{seed}`: Active simulation seed.
+  - `{horizon}`: Maximum timesteps for the episode.
+  - `{dt}`: Simulation timestep duration in seconds.
+- **I/O Protocol**: At each step, the runner writes a single-line JSON payload to stdin, terminated by a newline:
+  ```json
+  {"robot": {"position": [x, y], "heading": [h]}, "goal": {"current": [gx, gy]}, "pedestrians": [...] }
+  ```
+  The process must respond on stdout with a single-line JSON payload, terminated by a newline:
+  ```json
+  {"linear_velocity": v, "angular_velocity": w}
+  ```
+  The unicycle aliases `v`/`omega`, holonomic aliases `vx`/`vy`, and the
+  `linear`/`angular` pair are accepted for compatibility. All parsed values must be finite.
+- **Timeouts & Exit Codes**: Each request/response step is bounded by `timeout_s` (the map-runner compatibility alias is `step_timeout_sec`; the map arm defaults to 30.0s and the standard runner to 1.0s when omitted). Persistent mode uses a bounded line reader, so a child that does not answer cannot block the episode indefinitely. A timeout, non-zero exit, invalid JSON, or malformed response produces a zero-velocity fallback for that step and increments the diagnostic counters.
+
+### Diagnostics & Metrics
+
+Every native-command episode record includes additive fields:
+
+- `metrics.deadlock`: A boolean flag indicating whether the robot stalled (failed to make goal progress over a sliding step window).
+- `metrics.deadlock_stall`: A detailed diagnostic block detailing the parameters and statistics of the deadlock check.
+- `algorithm_metadata.planner_diagnostics`: High-resolution stats detailing subprocess runtimes (`planner_step_runtime_seconds`), exit codes (`exit_codes` / `last_exit_code`), timeouts (`runtime_bound_exits`), and fallbacks (`fallback_count`). This is the canonical location consumed by the issue #5416 analyzer.
+- `algorithm_metadata.native_command`: Subprocess launch configuration, invocation provenance, and the resolved binary path/content hash when readable. The map-runner compatibility arm records both the canonical names (`argv`, `timeout_s`, `persistent`) and its legacy aliases.

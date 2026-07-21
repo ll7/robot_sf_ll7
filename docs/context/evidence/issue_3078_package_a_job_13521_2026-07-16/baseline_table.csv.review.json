@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/baseline_table.csv",
+  "artifact_sha256": "7838bb2e893843f1bc65a272939cc108dfa6d6f33c9a5d56b3dcc3ae81be2d6c",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

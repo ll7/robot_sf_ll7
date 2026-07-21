@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from robot_sf.planner import policy_stack_v1
 from robot_sf.planner.policy_stack_v1 import (
     PolicyStackV1Adapter,
     PolicyStackV1Config,
@@ -98,6 +99,69 @@ def test_policy_stack_selects_goal_and_records_two_proposal_modes() -> None:
     assert set(last["risk_score_components"]) == {"goal", "risk_dwa"}
     assert last["candidate_ranking"][0]["proposal_key"] == "goal"
     json.dumps(diagnostics, allow_nan=False)
+
+
+def test_policy_stack_caches_shared_observation_values_per_plan(monkeypatch) -> None:
+    """Candidate count must not multiply policy-stack observation parsing."""
+    calls = {"robot_goal_heading": 0, "min_ped_clearance": 0}
+    original_robot_goal_heading = policy_stack_v1._robot_goal_heading
+    original_min_ped_clearance = policy_stack_v1._min_ped_clearance
+
+    def counted_robot_goal_heading(observation):
+        calls["robot_goal_heading"] += 1
+        return original_robot_goal_heading(observation)
+
+    def counted_min_ped_clearance(observation, *, robot_pos=None):
+        calls["min_ped_clearance"] += 1
+        return original_min_ped_clearance(observation, robot_pos=robot_pos)
+
+    monkeypatch.setattr(policy_stack_v1, "_robot_goal_heading", counted_robot_goal_heading)
+    monkeypatch.setattr(policy_stack_v1, "_min_ped_clearance", counted_min_ped_clearance)
+
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(proposal_sources=("goal", "risk_dwa")),
+        risk_dwa=_DummyRiskDWA(command=(0.0, 1.0)),
+    )
+
+    assert stack.plan(_obs()) == (1.0, 0.0)
+    assert calls == {"robot_goal_heading": 1, "min_ped_clearance": 1}
+
+
+def test_policy_stack_direct_score_reuses_extracted_robot_position(monkeypatch) -> None:
+    """The supported direct-score fallback must not parse robot position twice."""
+    calls = {"robot_goal_heading": 0, "min_ped_clearance": 0}
+    original_robot_goal_heading = policy_stack_v1._robot_goal_heading
+    original_min_ped_clearance = policy_stack_v1._min_ped_clearance
+
+    def counted_robot_goal_heading(observation):
+        calls["robot_goal_heading"] += 1
+        return original_robot_goal_heading(observation)
+
+    def counted_min_ped_clearance(observation, *, robot_pos=None):
+        calls["min_ped_clearance"] += 1
+        assert robot_pos is not None
+        return original_min_ped_clearance(observation, robot_pos=robot_pos)
+
+    monkeypatch.setattr(policy_stack_v1, "_robot_goal_heading", counted_robot_goal_heading)
+    monkeypatch.setattr(policy_stack_v1, "_min_ped_clearance", counted_min_ped_clearance)
+
+    stack = PolicyStackV1Adapter()
+    stack._score_command((0.2, 0.0), _obs())
+
+    assert calls == {"robot_goal_heading": 1, "min_ped_clearance": 1}
+
+
+def test_policy_stack_no_candidate_diagnostic_precedes_scoring_context() -> None:
+    """Unavailable-only sources retain the established diagnostic on sparse input."""
+    stack = PolicyStackV1Adapter(
+        config=PolicyStackV1Config(
+            proposal_sources=("missing_optional",),
+            optional_sources=("missing_optional",),
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="No available policy_stack_v1 proposals"):
+        stack.plan({})
 
 
 def test_policy_stack_records_failed_and_not_available_without_fallback_success() -> None:

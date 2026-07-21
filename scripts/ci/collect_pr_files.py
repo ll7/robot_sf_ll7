@@ -57,6 +57,11 @@ if TYPE_CHECKING:
 
 DEFAULT_REPO = "ll7/robot_sf_ll7"
 DEFAULT_PER_PAGE = 100
+# GitHub silently caps the pulls/.../files ``per_page`` at 100 regardless of the
+# requested size (https://docs.github.com/rest/pulls/pulls#list-pull-requests-files).
+# ``fetch_all_pr_files`` clamps to this so pagination termination compares
+# against the page size the server actually honors (issue #5924).
+GITHUB_MAX_PER_PAGE = 100
 DEFAULT_MAX_ATTEMPTS = 5
 DEFAULT_BASE_DELAY = 1.0
 DEFAULT_MAX_DELAY = 30.0
@@ -230,7 +235,9 @@ def fetch_all_pr_files(  # noqa: PLR0913
     repo, pr_number:
         GitHub ``owner/repo`` and PR number.
     per_page:
-        Page size (GitHub caps this at 100).
+        Requested page size. GitHub caps this at ``GITHUB_MAX_PER_PAGE`` (100);
+        any larger value is clamped down so the pagination-termination check
+        compares against the page size the server actually honors.
     max_attempts:
         Retry attempts *per page* before failing closed.
     base_delay, max_delay:
@@ -243,6 +250,11 @@ def fetch_all_pr_files(  # noqa: PLR0913
         raise ValueError("max_attempts must be at least 1")
     if per_page < 1:
         raise ValueError("per_page must be at least 1")
+    # GitHub silently caps ``per_page`` at 100. Clamp to the effective maximum so
+    # the ``len(files) < per_page`` termination check below reflects the page
+    # size the server actually honors; otherwise a requested size above the cap
+    # would terminate pagination after the first page and truncate the list.
+    per_page = min(per_page, GITHUB_MAX_PER_PAGE)
 
     # Resolve injectable seams lazily so tests (and callers) that patch the
     # module-level ``_run_gh_api_page`` / ``time.sleep`` references at runtime are

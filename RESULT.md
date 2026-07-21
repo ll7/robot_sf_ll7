@@ -23,11 +23,18 @@ Previously addressed review threads remain recorded in the bundle history:
 
 - `git fetch origin main && git merge origin/main` — passed after resolving only the receipt
   conflict; merge commit created.
-- Focused evidence checks and tests will be rerun after this receipt update.
+- `git diff --check` — passed.
+- `git merge-base --is-ancestor origin/main HEAD` — passed.
+- `uv run pytest tests/benchmark/test_issue_5785_package_b_conservation.py -q` — 7 passed.
+- `uv run ruff check tests/benchmark/test_issue_5785_package_b_conservation.py` — passed.
+- `uv run ruff format --check tests/benchmark/test_issue_5785_package_b_conservation.py` — passed.
+- `uv run python scripts/dev/check_docs_evidence_integrity.py --base-ref origin/main` — passed
+  (18 changed files).
 
 ## Commit
 
-- Final commit SHA and pushed PR head are recorded here after commit/push.
+- Base-refresh merge commit: `410f03ee5`.
+- Receipt update commit: recorded in the final handoff response after push.
 
 ## Review state
 

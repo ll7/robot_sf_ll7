@@ -8,6 +8,9 @@ path, the grandfathered legacy evidence packets, and that files outside the
 scanned roots are ignored.
 """
 
+# evidence-writer-exempt: this integration test writes temporary fixture files to exercise the
+# absolute-path scanner; it does not generate or commit evidence artifacts.
+
 import hashlib
 import subprocess
 from pathlib import Path

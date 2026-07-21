@@ -119,7 +119,11 @@ def _is_pinned_verbatim_evidence(path: Path) -> bool:
         if normalized != repo_path and not normalized.endswith(f"/{repo_path}"):
             continue
         try:
-            observed_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+            hasher = hashlib.sha256()
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1 << 16), b""):
+                    hasher.update(chunk)
+            observed_sha256 = hasher.hexdigest()
         except OSError:
             return False
         return observed_sha256 == expected_sha256

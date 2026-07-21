@@ -404,6 +404,14 @@ def test_exposure_and_completion_time_fallbacks_fail_closed_or_read_metric_value
                 invalid_completion_time, planner_pair=("alpha", "beta")
             )
 
+    invalid_provenance_with_metric = _two_arm_rows()
+    invalid_provenance_with_metric[0]["provenance"]["completion_time"] = float("nan")
+    invalid_provenance_with_metric[0]["metrics"] = {"completion_time": {"value": 7.5}}
+    with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="completion_time must be"):
+        build_matched_cells_from_ledger_rows(
+            invalid_provenance_with_metric, planner_pair=("alpha", "beta")
+        )
+
 
 def test_run_analysis_emits_machine_readable_report_with_blocked_claim_gate(tmp_path: Path) -> None:
     """Even on valid rows the claim gate stays blocked pending review."""
@@ -468,6 +476,16 @@ def test_run_analysis_rejects_empty_rows_and_missing_pairs(tmp_path: Path) -> No
         run_hierarchical_paired_release_analysis(
             _manifest(), repo_root=tmp_path, successor_rows=rows, planner_pairs=[("alpha", "beta")]
         )
+    for field in ("release_tag", "commit", "typed_ledger_rows", "typed_ledger_rows_sha256"):
+        blocked_manifest = _ready_manifest(tmp_path / field, rows)
+        blocked_manifest["successor_release"][field] = None
+        with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="input readiness"):
+            run_hierarchical_paired_release_analysis(
+                blocked_manifest,
+                repo_root=tmp_path / field,
+                successor_rows=rows,
+                planner_pairs=[("alpha", "beta")],
+            )
     manifest = _ready_manifest(tmp_path, rows)
     with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="empty successor row set"):
         run_hierarchical_paired_release_analysis(

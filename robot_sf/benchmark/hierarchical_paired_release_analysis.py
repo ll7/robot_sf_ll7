@@ -761,7 +761,10 @@ def _require_ready_successor_release_inputs(
     """Reject execution until release provenance and durable rows pass the input gate."""
 
     input_report = evaluate_hierarchical_paired_release_inputs(manifest, repo_root=repo_root)
-    if input_report["status"] != INPUTS_READY_ANALYSIS_NOT_RUN:
+    if (
+        input_report["status"] != INPUTS_READY_ANALYSIS_NOT_RUN
+        or input_report["blocking_prerequisites"]
+    ):
         raise HierarchicalPairedReleaseAnalysisError(
             "cannot run analysis until successor-release input readiness is satisfied: "
             f"{input_report['blocking_prerequisites']}"
@@ -1102,15 +1105,29 @@ def _completion_time(row: Mapping[str, Any]) -> float:
     """
 
     provenance = row.get("provenance")
-    if isinstance(provenance, Mapping):
-        candidate = provenance.get("completion_time")
-        if _valid_completion_time(candidate):
-            return float(candidate)
+    if isinstance(provenance, Mapping) and "completion_time" in provenance:
+        candidate = provenance["completion_time"]
+        if not _valid_completion_time(candidate):
+            raise HierarchicalPairedReleaseAnalysisError(
+                "completion_time must be a finite non-negative provenance.completion_time "
+                "or metrics.completion_time.value"
+            )
+        return float(candidate)
     metrics = row.get("metrics")
-    if isinstance(metrics, Mapping) and isinstance(metrics.get("completion_time"), Mapping):
-        candidate = metrics["completion_time"].get("value")
-        if _valid_completion_time(candidate):
-            return float(candidate)
+    if isinstance(metrics, Mapping) and "completion_time" in metrics:
+        metric = metrics["completion_time"]
+        if not isinstance(metric, Mapping) or "value" not in metric:
+            raise HierarchicalPairedReleaseAnalysisError(
+                "completion_time must be a finite non-negative provenance.completion_time "
+                "or metrics.completion_time.value"
+            )
+        candidate = metric["value"]
+        if not _valid_completion_time(candidate):
+            raise HierarchicalPairedReleaseAnalysisError(
+                "completion_time must be a finite non-negative provenance.completion_time "
+                "or metrics.completion_time.value"
+            )
+        return float(candidate)
     raise HierarchicalPairedReleaseAnalysisError(
         "completion_time must be a finite non-negative provenance.completion_time "
         "or metrics.completion_time.value"

@@ -1,6 +1,6 @@
 # PR #6063 Review Blocker Result
 
-Reviewed at current PR head `f8b704d5c3d9dfe7b0c4a1d6d9b4c028ac52b956`.
+Reviewed at current PR head `84804c55b3c4c99ba37ec4e3c3b8808a020fd6d5`.
 
 ## Fixed comments
 
@@ -25,7 +25,7 @@ Reviewed at current PR head `f8b704d5c3d9dfe7b0c4a1d6d9b4c028ac52b956`.
 
 ## Unresolved threads
 
-Post-push re-query must confirm the three thread IDs above remain resolved. No unresolved actionable review thread is currently present.
+Post-push re-query at head `84804c55b3c4c99ba37ec4e3c3b8808a020fd6d5` confirmed all three thread IDs above remain resolved. No unresolved actionable review thread is currently present.
 
 ## Blockers
 

@@ -22,7 +22,6 @@
 ## Commit and push
 
 - Merge commit pushed to the existing PR branch: `77c451bb6251c5ff17f22f91a5516acd7de964ad`.
-- Final pushed report head: `baf155228f7981ee07d561691b187f47d801aef4`.
 - No new PR was opened, no merge was performed, and no external jobs were submitted.
 
 ## Review threads

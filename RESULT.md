@@ -1,42 +1,43 @@
 # PR #6063 Review Blocker Result
 
-Reviewed at PR head `d681885e9be55768c18b86f8064dd2585e861241`.
+Reviewed at PR head `32ca2ab0b76eecc76fcf0a00eb75beb39e78b6eb`.
 
 ## Fixed blockers
 
-- Domain-Aware Approval: both duplicated PR-body sections record `Status: waived` and an
-  explicit maintainer waiver by `@ll7`; no pending approval blocker remains.
-  Waiver comment: https://github.com/ll7/robot_sf_ll7/pull/6063#issuecomment-5028326779.
-- Public documentation index: linked `docs/actuator_feasibility.md` from `docs/README.md`.
-- Canonical readiness proof: preserved the five untracked `.ll7_task_*` lease harness files
-  without deleting or staging them. The canonical readiness gate therefore remains blocked by
-  the preserved untracked lease files; staging/removal is not authorized in this lane.
-
-Previously addressed review threads remain resolved; no unresolved thread was actionable in
-the pre-fix query.
+- In-place rotation: `evaluate_actuator_feasibility` now accepts validated heading
+  trajectories or authoritative angular-velocity trajectories and evaluates yaw and
+  steering rates even when translational velocity is zero. Existing moving-velocity
+  fallback behavior remains gap-safe.
+- Regression coverage: added tests for commanded-angular-velocity and heading-derived
+  stationary rotation violations.
+- Stale review artifact: this file now records the current reviewed head and validation
+  state.
+- Clean review gate: ran the canonical readiness command in a clean temporary checkout
+  without lease harness files. It progressed past changed-file proof but the full suite
+  stopped on the unavailable optional `cma` dependency after 1,061 passed and 2 skipped;
+  this is not full readiness evidence.
 
 ## Validation
 
 - `uv run ruff check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
 - `uv run ruff format --check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
-- `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 32 passed.
-- `uv run python scripts/dev/check_pr_followups.py --body-file /dev/stdin --json` with the live PR body — domain approval `ok`; follow-ups `ok`.
+- `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 34 passed.
 - `git diff --check` — passed.
-- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked (exit 2) by the five preserved
-  untracked `.ll7_task_*` lease files; they were not staged or removed.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` in this lease worktree — blocked (exit 2) by the five preserved untracked `.ll7_task_*` files; they were not staged or removed.
+- The same canonical command in a clean temporary review checkout — exit 2 after 1,061 passed and 2 skipped, with `CmaEsCandidateSampler requires cma`.
 
 ## Commit
 
-- Fix commit SHA: `953b98a6fe02bbebe187c60d9928b4da20b1fd31`.
-- PR head after fix push: `953b98a6fe02bbebe187c60d9928b4da20b1fd31`.
+- Fix commit SHA: `32ca2ab0b76eecc76fcf0a00eb75beb39e78b6eb`.
+- Push target: existing PR branch `cheap/cheap-issue-6056-778a89d145c4`.
 
-## Unresolved threads
+## Review threads
 
-- Pre-fix GraphQL review-thread query: zero unresolved threads.
-- Post-push GraphQL review-thread query: zero unresolved threads; no thread mutation was needed.
+- Pre-fix and post-push GraphQL review-thread queries: all existing threads resolved; no
+  unresolved thread was actionable for this change.
 
 ## Remaining blockers
 
-- Canonical readiness remains blocked by the five preserved untracked `.ll7_task_*` lease files;
-  staging or removal is outside this execution's authorization. Focused actuator validation and
-  the documentation-index check are the applicable proof for this scoped handoff.
+- Full current-head readiness is not established: the lease worktree gate is blocked by
+  preserved harness files, and the clean gate is blocked by the missing optional `cma`
+  dependency. No lease files were deleted or staged.

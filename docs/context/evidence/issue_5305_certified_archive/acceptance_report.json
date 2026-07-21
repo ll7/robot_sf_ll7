@@ -1,0 +1,77 @@
+{
+  "archive_path": "docs/context/evidence/issue_5305_certified_archive/archive.json",
+  "archive_sha256": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
+  "campaign_id": "issue5305-certified-archive-13518",
+  "certification": {
+    "deterministic_replay_passed": true,
+    "fallback_or_degraded_entries": 0,
+    "independent_seed_confirmation_passed": true,
+    "per_entry_fields_present": true,
+    "scenario_certification_passed": true,
+    "stable_failure_mechanism_attribution": true
+  },
+  "commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+  "config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+  "entry_count": 17,
+  "reference_archives": [
+    "docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json",
+    "docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/archive.json"
+  ],
+  "reference_disjointness": {
+    "archive_id_overlap": [],
+    "passed": true,
+    "scenario_family_overlap": [],
+    "scenario_seed_overlap": []
+  },
+  "registration_status": "issue5305_archive_accepted",
+  "registration_transformation": "private path prefixes replaced with private-campaign://job-13518/ URIs; evidence semantics unchanged",
+  "repository_readiness": {
+    "archive_id_overlap_count": 0,
+    "archive_sha256": "1d8db3638e3539dca2e06849c0727150aff41ea85a71ee2d22cb1a343bc6d57e",
+    "blocking_reasons": [],
+    "disjoint_split_possible": true,
+    "distinct_family_count": 2,
+    "entries_missing_archive_id": 0,
+    "entries_missing_certification_status": 0,
+    "entries_missing_failure_attribution": 0,
+    "entries_missing_scenario_seed": 0,
+    "entries_not_certified": 0,
+    "entries_unknown_family": 0,
+    "entry_count": 17,
+    "null_test_prerequisites_ready": true,
+    "overlap_metadata_ready": true,
+    "ready": true,
+    "scenario_family_overlap_count": 0,
+    "schema_ok": true,
+    "seed_overlap_count": 0,
+    "status": "ready"
+  },
+  "scenario_families": [
+    "classic_cross_trap_medium",
+    "classic_group_crossing_medium"
+  ],
+  "scenario_seed_count": 17,
+  "schema_version": "issue5305_archive_acceptance.v1",
+  "source_archive_sha256": "1318e210bc4771fb0ab4b30d5bc6739f9ecd416e039f61e7da4cd7411f3baa6d",
+  "status": "passed",
+  "train_eval_disjointness": {
+    "archive_id_overlap": [],
+    "archive_id_overlap_count": 0,
+    "disjointness_checks_passed": true,
+    "disjointness_failure_reasons": [],
+    "eval_families": [
+      "{\"scenario_family\":\"classic_group_crossing_medium\"}"
+    ],
+    "eval_size": 12,
+    "fit_families": [
+      "{\"scenario_family\":\"classic_cross_trap_medium\"}"
+    ],
+    "fit_size": 5,
+    "scenario_family_overlap": [],
+    "scenario_family_overlap_count": 0,
+    "seed_overlap": [],
+    "seed_overlap_count": 0,
+    "seed_overlap_invalidates_held_out_evidence": false,
+    "split_policy": "disjoint_scenario_family"
+  }
+}

@@ -166,12 +166,18 @@ stop_rules:
 # #5353 (matched-capability fairness contract) is RESOLVED as of issue #5483:
 # the capability-matrix gating logic is merged and the dependency status is
 # reconciled with the closed tracker state. #5351 (hierarchical paired analysis)
-# remains OPEN and is the single remaining dependency blocker for the campaign.
+# splits into two stages: its *input contract* (tracked manifest + fail-closed
+# checker) was delivered by #5776 and is verified by the readiness gate's
+# hierarchical_input_gate_reconciled criterion; the actual analysis still depends
+# on the #4364 successor-release typed-ledger rows, which remain absent, so #5351
+# stays a blocking dependency (see also issue #4364).
 dependencies:
   - issue: 5351
     description: "Hierarchical paired analysis with multiplicity"
     status: open
-    blocking: "analysis machinery for preregistered contrasts"
+    input_gate_delivered_by: 5776
+    analysis_blocked_on: 4364
+    blocking: "successor-release typed-ledger rows for preregistered contrasts (input contract delivered by #5776)"
   - issue: 5353
     description: "Matched-capability fairness contract"
     status: resolved

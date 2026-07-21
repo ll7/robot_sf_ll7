@@ -17,11 +17,14 @@ pedestrian-filled environments.
 
 | I want to... | Go to |
 | --- | --- |
+| **Install and use Robot SF (newcomer path)** | [`docs/user-guide.md`](docs/user-guide.md) — task-oriented: install, run a demo, load a map, choose a planner, run a benchmark, visualize results, troubleshoot |
 | Understand the project quickly | [Why Robot SF?](#why-robot-sf) |
 | Decode an acronym or project term | [`docs/glossary.md`](docs/glossary.md) |
 | Install dependencies and run the first demos | [Quickstart](#quickstart) |
 | Browse runnable examples | [`examples/README.md`](examples/README.md) |
-| Find architecture, benchmark, and workflow docs | [`docs/README.md`](docs/README.md) |
+| Use benchmarks with evidence discipline | [`docs/research-guide.md`](docs/research-guide.md) |
+| Find architecture, contribution, and CI docs | [`docs/developer-guide.md`](docs/developer-guide.md) |
+| Browse all docs by audience | [`docs/README.md`](docs/README.md) |
 | Follow the contributor workflow | [`docs/dev_guide.md`](docs/dev_guide.md) |
 | Contribute docs, planners, scenarios, or fixes | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Review repository conventions for agents and contributors | [`AGENTS.md`](AGENTS.md) |
@@ -51,10 +54,31 @@ cd robot_sf_ll7
 scripts/dev/check_runtime_requirements.sh
 uv sync --all-extras
 
+# One-command visual demo: run a tiny deterministic episode and open a viewer.
+uv run robot-sf demo
+
 uv run python examples/quickstart/01_basic_robot.py
 uv run python examples/quickstart/02_trained_model.py
 uv run python examples/quickstart/03_custom_map.py
 ```
+
+`uv run robot-sf demo` runs a short deterministic scenario, writes a recorded episode
+(`episode.jsonl`), a static browser viewer (`viewer/index.html`), a map thumbnail
+(`thumbnail.png`), and a plain-English summary under `output/demo/latest/`. It is the
+fastest install → run → *see something* path and is CPU-only. Open
+`output/demo/latest/viewer/index.html` in a browser to replay the episode.
+
+### Beginner notebooks
+
+For an interactive, plotted walkthrough (run → compare → visualize), open the
+CPU-only notebooks under [`notebooks/`](notebooks/README.md):
+
+```bash
+uv run jupyter notebook notebooks/01_run_first_episode.ipynb
+```
+
+Each notebook is deterministic and writes its small artifact under `output/notebooks/`.
+Run all three headless with `uv run python scripts/validation/run_notebooks_smoke.py`.
 
 ### Packaging smoke (wheel install smoke)
 

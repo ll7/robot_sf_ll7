@@ -103,8 +103,8 @@ def test_fixture_report_labels_available_approximate_and_unavailable_rows() -> N
     rows = compute_cross_benchmark_metric_rows(_fixture_episode(), horizon=5)
     counts = summarize_status_counts(rows)
 
-    assert counts["available"] >= 3
-    assert counts["approximate"] >= 2
+    assert counts["available"] >= 2
+    assert counts["approximate"] >= 3
     assert counts["unavailable"] >= 2
 
     report = build_cross_benchmark_metric_report(_fixture_episode(), horizon=5)
@@ -123,9 +123,10 @@ def test_fixture_computes_trace_derivable_external_style_metrics() -> None:
     rows = _rows_by_id()
 
     path_ratio = rows["socnavbench.path_length_ratio"]
-    assert path_ratio.status == "available"
+    assert path_ratio.status == "approximate"
     assert path_ratio.value == pytest.approx(1.000005)
     assert path_ratio.units == "ratio"
+    assert "reciprocal" in path_ratio.semantic_notes or "approximate" in path_ratio.semantic_notes
 
     traversal_time = rows["common.traversal_time_s"]
     assert traversal_time.status == "approximate"

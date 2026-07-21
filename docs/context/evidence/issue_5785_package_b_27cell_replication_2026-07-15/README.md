@@ -5,7 +5,9 @@ Plain-language summary: this bundle conserves the executed Package B 27-cell dia
 result (Issue #3079 / PR #5710) which had lost its durable artifact anchor. The original
 `output/adversarial/issue_3079_package_b/` artifacts were not recoverable from any recorded
 surface, so the result was reproduced exactly on CPU at the recorded execution commit with
-the recorded manifest identity, then durably registered with full provenance. It reports
+the recorded manifest identity. The committed summary artifacts are durably registered with
+full provenance; the candidate/replay tree and captured execution logs still lack a retrievable
+durable pointer. It reports
 27 executed cells (3 samplers x 3 budgets x 3 seeds) producing 42 certified/replayable valid
 failures (random=24, optuna=18, coordinate=0). It is not paper-facing evidence.
 

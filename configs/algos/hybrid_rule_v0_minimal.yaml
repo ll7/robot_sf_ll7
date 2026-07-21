@@ -8,6 +8,7 @@
 # - horizons and dt: s
 allow_testing_algorithms: true
 planner_variant: hybrid_rule_v0_minimal
+native_occupancy_resolution: 0.1
 
 # Differential-drive-friendly open-space cap. The 2.0 m/s value keeps the
 # minimal planner from failing the open sanity route solely because the smoke
@@ -68,3 +69,16 @@ freezing_speed_threshold: 0.05
 goal_far_distance: 0.8
 oscillation_window: 6
 top_k_diagnostics: 5
+
+native_command:
+  command:
+    - python3
+    - scripts/benchmark/frozen_comparator_native_command.py
+    - --planner-id
+    - hybrid_rule_v0_minimal
+    - --config
+    - configs/algos/hybrid_rule_v0_minimal.yaml
+  entrypoint_path: scripts/benchmark/frozen_comparator_native_command.py
+  mode: persistent
+  step_timeout_sec: 10.0
+  require_static_geometry: true

@@ -1,0 +1,7 @@
+surface,planner,scenario_family,episode_count,eligible_episode_count,row_status_counts,mean_snqi
+heldout_family,goal,classic_station_platform,3,3,"{""native"": 3}",-0.112760
+heldout_family,goal,francis2023_intersection_wait,3,3,"{""native"": 3}",-0.094911
+heldout_family,orca,classic_station_platform,3,3,"{""adapter"": 3}",-0.558971
+heldout_family,orca,francis2023_intersection_wait,3,3,"{""adapter"": 3}",-0.094911
+heldout_family,social_force,classic_station_platform,3,3,"{""adapter"": 3}",-0.662059
+heldout_family,social_force,francis2023_intersection_wait,3,3,"{""adapter"": 3}",-0.918436

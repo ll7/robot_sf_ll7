@@ -12,6 +12,7 @@ Phases:
   typecheck        Ty type check (advisory; reports findings but exits zero)
   test             Main pytest suite, excluding example smoke tests
   examples-smoke   Example script smoke tests
+  notebooks-smoke  Quickstart notebook smoke tests (nbconvert)
   smoke            Validation and benchmark smoke checks
   artifact-policy  Canonical artifact root policy guard
 
@@ -35,7 +36,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./common_setup.sh
 source "$SCRIPT_DIR/common_setup.sh"
 
-readonly PHASES=("lint" "typecheck" "test" "examples-smoke" "smoke" "artifact-policy")
+readonly PHASES=("lint" "typecheck" "test" "examples-smoke" "notebooks-smoke" "smoke" "artifact-policy")
 
 list_phases() {
   printf "%s\n" "${PHASES[@]}"
@@ -91,6 +92,42 @@ is_strict_smoke_mode() {
   local event_name="$1"
   local github_ref="$2"
   [[ "$github_ref" == "refs/heads/main" || "$event_name" == "workflow_dispatch" ]]
+}
+
+_run_lint_check() {
+  local step_failed=0
+  echo "==> lint step: $*"
+  if "$@"; then
+    echo "    lint step passed"
+  else
+    step_failed=$?
+    echo "    lint step FAILED (status $step_failed); continuing to surface remaining checks" >&2
+    lint_status=1
+  fi
+}
+
+run_lint_phase() {
+  # The lint phase ENUMERATES problems; it must NOT short-circuit on the first
+  # failure (set -e in the outer script would otherwise kill the phase after the
+  # first finding, hiding subsequent independent errors — see issue #5960). We
+  # collect every check's status and exit non-zero once, reporting all findings.
+  local lint_status=0
+
+  _run_lint_check uv run ruff check .
+  _run_lint_check uv run ruff format --check .
+  # Ratchet: fail if broad (Exception/BaseException/bare) catches increase on
+  # benchmark/script surfaces beyond the approved baseline (issue #3478).
+  _run_lint_check uv run python scripts/validation/check_broad_exceptions.py
+  # Advisory (non-gating) version-drift guard: the git tag/release line is the
+  # single source of truth for the package and CITATION.cff versions. Surfaced
+  # here on every CI run; enforced (gating) on tag pushes by
+  # .github/workflows/release-functional-badge.yml.
+  _run_lint_check uv run python scripts/dev/check_version_alignment.py --advisory
+
+  if [[ "$lint_status" -ne 0 ]]; then
+    echo "lint phase FAILED: one or more checks reported errors (see above)." >&2
+    return 1
+  fi
 }
 
 run_smoke_phase() {
@@ -213,6 +250,10 @@ run_examples_smoke_phase() {
   uv run python scripts/validation/run_examples_smoke.py --skip-perf-tests
 }
 
+run_notebooks_smoke_phase() {
+  uv run python scripts/validation/run_notebooks_smoke.py
+}
+
 run_fast_feedback_benchmark_reconciliation_guard() {
   local shard_count="${PYTEST_SHARD_COUNT:-1}"
   local shard_index="${PYTEST_SHARD_INDEX:-1}"
@@ -235,16 +276,7 @@ run_phase() {
 
   case "$phase" in
     lint)
-      uv run ruff check .
-      uv run ruff format --check .
-      # Ratchet: fail if broad (Exception/BaseException/bare) catches increase on
-      # benchmark/script surfaces beyond the approved baseline (issue #3478).
-      uv run python scripts/validation/check_broad_exceptions.py
-      # Advisory (non-gating) version-drift guard: the git tag/release line is the
-      # single source of truth for the package and CITATION.cff versions. Surfaced
-      # here on every CI run; enforced (gating) on tag pushes by
-      # .github/workflows/release-functional-badge.yml.
-      uv run python scripts/dev/check_version_alignment.py --advisory
+      run_lint_phase
       ;;
     typecheck)
       echo "Running ty in advisory mode (--exit-zero); findings are reported but do not fail this phase."
@@ -265,6 +297,9 @@ run_phase() {
       ;;
     examples-smoke)
       run_examples_smoke_phase
+      ;;
+    notebooks-smoke)
+      run_notebooks_smoke_phase
       ;;
     smoke)
       run_smoke_phase "$event_name" "$github_ref"

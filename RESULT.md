@@ -36,5 +36,4 @@ authorization disallows compute submission; the checksum manifest is retained bu
 retrievable artifact pointer. The preservation boundary is documented in the bundle's
 `provenance.md`.
 
-No Slurm job was submitted, no worktree was deleted, no merge was performed, and no new PR was
-opened.
+No Slurm job or merge was performed, no worktree was deleted, and no new PR was opened.

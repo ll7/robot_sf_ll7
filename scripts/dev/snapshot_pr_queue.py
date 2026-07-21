@@ -14,6 +14,7 @@ from scripts.dev._gh_pagination import is_likely_truncated
 from scripts.dev.check_pr_ci_status import (
     FAILURE_CONCLUSIONS,
     PENDING_STATUSES,
+    _latest_check_runs,
     _rollup_conclusion,
     _rollup_name,
     _rollup_status,
@@ -249,8 +250,17 @@ query($owner:String!,$repo:String!,$number:Int!,$threads:Int!,$comments:Int!){
 
 
 def _checks(pr: dict[str, Any]) -> dict[str, Any]:
-    """Return a compact CI check summary from statusCheckRollup."""
-    rollup = pr.get("statusCheckRollup", []) or []
+    """Return a compact CI check summary from statusCheckRollup.
+
+    Superseded GitHub Actions runs (an older run replaced by a newer one on the
+    same workflow/job identity) are dropped first, matching the canonical
+    `_latest_check_runs` semantics used by `check_pr_ci_status`.  A current,
+    non-superseded cancellation remains fail-closed.
+    """
+    raw_rollup = [
+        check for check in (pr.get("statusCheckRollup", []) or []) if isinstance(check, dict)
+    ]
+    rollup, superseded_count = _latest_check_runs(raw_rollup)
     conclusions: dict[str, int] = {}
     statuses: dict[str, int] = {}
     names: set[str] = set()
@@ -290,6 +300,7 @@ def _checks(pr: dict[str, Any]) -> dict[str, Any]:
     return {
         "overall": overall,
         "total": len(rollup),
+        "superseded": superseded_count,
         "by_conclusion": conclusions,
         "by_status": statuses,
         "names": sorted(names),
@@ -634,6 +645,27 @@ def write_raw_review_comments_artifact(
     return payload
 
 
+def write_snapshot_artifact(payload: dict[str, Any], path: Path | None) -> None:
+    """Write a compact queue snapshot to *path* with stable JSON formatting."""
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def emit_snapshot(
+    payload: dict[str, Any], path: Path | None, *, as_json: bool, exit_code: int
+) -> int:
+    """Write an optional snapshot artifact, emit stdout, and return the CLI status."""
+    try:
+        write_snapshot_artifact(payload, path)
+    except OSError as exc:
+        print(f"snapshot output write failed: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(payload, indent=2, sort_keys=True) if as_json else json.dumps(payload))
+    return exit_code
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("prs", nargs="*", type=int, help="PR numbers to snapshot.")
@@ -667,6 +699,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
             "Opt-in path for raw review-comment payloads, including diff_hunk/full bodies; "
             "artifact is written to disk and never printed to stdout."
         ),
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Write the compact queue snapshot JSON to this path.",
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     return parser.parse_args(argv)
@@ -725,10 +762,14 @@ def main(argv: list[str] | None = None) -> int:
     except subprocess.TimeoutExpired as exc:
         print(f"snapshot command timed out: {exc}", file=sys.stderr)
         return 1
-    print(json.dumps(payload, indent=2, sort_keys=True) if args.json else json.dumps(payload))
     has_pr_errors = any(pr.get("status") == "error" for pr in payload["prs"])
     has_artifact_errors = payload.get("raw_review_comments_artifact_status") == "error"
-    return 1 if has_pr_errors or has_artifact_errors else 0
+    return emit_snapshot(
+        payload,
+        args.output,
+        as_json=args.json,
+        exit_code=1 if has_pr_errors or has_artifact_errors else 0,
+    )
 
 
 if __name__ == "__main__":

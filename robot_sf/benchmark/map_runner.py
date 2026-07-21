@@ -107,6 +107,7 @@ from robot_sf.benchmark.map_runner_metrics import (
     normalize_pedestrian_impact_controls as _normalize_pedestrian_impact_controls,
 )
 from robot_sf.benchmark.map_runner_metrics import summarize_collision_metrics
+from robot_sf.benchmark.map_runner_native_command import build_native_command_policy
 from robot_sf.benchmark.map_runner_observations import (
     extract_ppo_dt as _extract_ppo_dt,  # noqa: F401 - compatibility re-export for tests.
 )
@@ -2191,6 +2192,7 @@ def _build_policy(  # noqa: C901
     robot_kinematics: str | None = None,
     robot_command_mode: str | None = None,
     adapter_impact_eval: bool = False,
+    **kwargs: Any,
 ) -> tuple[Callable[[dict[str, Any]], Any], dict[str, Any]]:
     """Build an action policy and algorithm metadata for map-based benchmarking.
 
@@ -2200,6 +2202,7 @@ def _build_policy(  # noqa: C901
         robot_kinematics: Runtime robot kinematics label for metadata enrichment.
         robot_command_mode: Runtime robot command mode (for holonomic metadata labels).
         adapter_impact_eval: Whether to collect native-vs-adapter step counters.
+        **kwargs: Additional scenario and episode parameters passed down to the policy builder.
 
     Returns:
         tuple[Callable[[dict[str, Any]], Any], dict[str, Any]]:
@@ -2210,6 +2213,19 @@ def _build_policy(  # noqa: C901
         during episode rollout.
     """
     algo_key = algo.lower().strip()
+    if algo_key == "native_command":
+        return build_native_command_policy(
+            algo_key,
+            algo_config,
+            scenario_id=kwargs.get("scenario_id", "unknown"),
+            seed=kwargs.get("seed", 0),
+            horizon=kwargs.get("horizon", 120),
+            dt=kwargs.get("dt", 0.1),
+            robot_kinematics=robot_kinematics,
+            observation_mode=kwargs.get("observation_mode"),
+            observation_level=kwargs.get("observation_level"),
+        )
+
     meta: dict[str, Any] = {"algorithm": algo_key}
     registered_policy = _policy_builder_registry.build_registered_policy(
         algo_key,
@@ -2373,6 +2389,7 @@ def build_map_policy(
     robot_kinematics: str | None = None,
     robot_command_mode: str | None = None,
     adapter_impact_eval: bool = False,
+    **kwargs: Any,
 ) -> tuple[Callable[[dict[str, Any]], tuple[float, float]], dict[str, Any]]:
     """Build a benchmark map-runner policy for scripts and other public callers.
 
@@ -2385,6 +2402,7 @@ def build_map_policy(
         robot_kinematics=robot_kinematics,
         robot_command_mode=robot_command_mode,
         adapter_impact_eval=adapter_impact_eval,
+        **kwargs,
     )
 
 

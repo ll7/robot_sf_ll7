@@ -88,3 +88,9 @@ third_party/python-rvo2/.*
 
 # hatch-vcs build-time generated version file (single-source version from git tag)
 robot_sf/_version.py
+
+# Orchestrator lease-harness control files: injected untracked into every
+# worker/review worktree; committing them (or letting pr_ready_check trip on
+# them) has repeatedly stalled the delivery loop (2026-07-20/21).
+.ll7_task_*
+RESULT.md

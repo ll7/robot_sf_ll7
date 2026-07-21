@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Fetch base ref
         env:
@@ -44,19 +44,17 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # Fetch the full status table once, then derive both the changed-file list
-          # and the authoritative ADDED-file list (status == "added"). The added list
-          # is the source of truth for evidence-hygiene "is new" decisions and does
-          # not depend on origin/main being present (issue #5464).
-          gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files?per_page=100" \
-            --jq '.[] | [.status, .filename] | @tsv' > "$RUNNER_TEMP/pr_files_status.tsv"
-          cut -f2 "$RUNNER_TEMP/pr_files_status.tsv" > "$RUNNER_TEMP/pr_changed_files.txt"
-          awk -F'\t' '$1 == "added" { print $2 }' "$RUNNER_TEMP/pr_files_status.tsv" \
-            > "$RUNNER_TEMP/pr_added_files.txt"
-          echo "Changed files for PR #$PR_NUMBER:"
-          sed -n '1,120p' "$RUNNER_TEMP/pr_changed_files.txt"
-          echo "Added files for PR #$PR_NUMBER:"
-          sed -n '1,120p' "$RUNNER_TEMP/pr_added_files.txt"
+          # Routed through a shared retrying collector (issue #5918): a transient
+          # GitHub API 502/503/504/429 (which arrives as an HTML body that gh can't
+          # JSON-parse) is retried with backoff instead of red-ing this job before
+          # contract validation runs. A persistent failure still fails closed.
+          # The helper emits the authoritative ADDED list (status == "added") used
+          # for evidence-hygiene "is new" decisions (issue #5464).
+          uv run python scripts/ci/collect_pr_files.py \
+            --repo "$REPO" --pr-number "$PR_NUMBER" \
+            --out-changed-files "$RUNNER_TEMP/pr_changed_files.txt" \
+            --out-files-status "$RUNNER_TEMP/pr_files_status.tsv" \
+            --out-added-files "$RUNNER_TEMP/pr_added_files.txt"
 
       - name: Run PR Contract Check
         env:

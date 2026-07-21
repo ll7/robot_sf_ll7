@@ -220,3 +220,101 @@ def test_pr_ready_freshness_rejects_stale_stamp(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["fresh"] is False
     assert payload["reason"] == "expired"
+
+
+def test_pr_ready_freshness_write_records_base_sha(tmp_path: Path) -> None:
+    """The readiness stamp should capture the validated base SHA (issue #5782)."""
+    stamp_path = tmp_path / "ready.json"
+    result = _run(
+        "write",
+        "--branch",
+        "codex/712-pr-open-skill",
+        "--head-sha",
+        "abc123",
+        "--base-ref",
+        "origin/main",
+        "--base-sha",
+        "deadbeefcafe",
+        "--stamp-path",
+        str(stamp_path),
+    )
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["stamp"]["base_sha"] == "deadbeefcafe"
+
+
+def test_pr_ready_freshness_status_reports_base_drift_as_advisory(tmp_path: Path) -> None:
+    """Base drift is reported as a reviewable advisory, not a freshness failure.
+
+    Issue #5782: a readiness stamp recorded against one origin/main commit remains
+    fresh after origin/main advances, because the readiness gate already ran a
+    base-drift recheck before recording the stamp and records it only when the drift
+    is current or unrelated to the PR's changed paths. Failing status on any base
+    movement would recreate the re-run friction the gate-level check exists to break,
+    so status reports the drift as a visible advisory instead.
+    """
+    stamp_path = tmp_path / "ready.json"
+    payload = {
+        "branch": "codex/712-pr-open-skill",
+        "base_ref": "origin/main",
+        "base_sha": "oldsha0000000000000000000000000000000000",
+        "head_sha": "abc123",
+        "recorded_at_utc": datetime.now(UTC).isoformat(),
+        "status": "passed",
+    }
+    stamp_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = _run(
+        "status",
+        "--branch",
+        "codex/712-pr-open-skill",
+        "--head-sha",
+        "abc123",
+        "--base-ref",
+        "origin/main",
+        "--base-sha",
+        "newsha1111111111111111111111111111111111",
+        "--stamp-path",
+        str(stamp_path),
+    )
+
+    assert result.returncode == 0
+    result_payload = json.loads(result.stdout)
+    assert result_payload["fresh"] is True
+    assert result_payload["reason"] == "fresh"
+    # The drift must be surfaced for review even though the stamp stays fresh.
+    drift = result_payload["base_drift"]
+    assert drift["stamped_base_sha"].startswith("oldsha")
+    assert drift["current_base_sha"].startswith("newsha")
+    assert drift["base_ref"] == "origin/main"
+
+
+def test_pr_ready_freshness_status_ignores_drift_when_sha_unknown(tmp_path: Path) -> None:
+    """When neither the stamp nor the caller can resolve a base SHA, fall back to
+    the base_ref string comparison (issue #5782 graceful degradation)."""
+    stamp_path = tmp_path / "ready.json"
+    payload = {
+        "branch": "codex/712-pr-open-skill",
+        "base_ref": "origin/main",
+        "head_sha": "abc123",
+        "recorded_at_utc": datetime.now(UTC).isoformat(),
+        "status": "passed",
+    }
+    stamp_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    # Caller passes no --base-sha (ref unresolvable locally); stamp has none either.
+    result = _run(
+        "status",
+        "--branch",
+        "codex/712-pr-open-skill",
+        "--head-sha",
+        "abc123",
+        "--base-ref",
+        "origin/main",
+        "--stamp-path",
+        str(stamp_path),
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["fresh"] is True

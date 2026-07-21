@@ -1,6 +1,6 @@
 # PR #6063 Review Blocker Result
 
-Reviewed at PR head `32ca2ab0b76eecc76fcf0a00eb75beb39e78b6eb`.
+Reviewed at PR head `9849aa98a79f2bd0c6f6ed07f66d6697ebc2bbfc` (verified against the live PR).
 
 ## Fixed blockers
 
@@ -10,12 +10,8 @@ Reviewed at PR head `32ca2ab0b76eecc76fcf0a00eb75beb39e78b6eb`.
   fallback behavior remains gap-safe.
 - Regression coverage: added tests for commanded-angular-velocity and heading-derived
   stationary rotation violations.
-- Stale review artifact: this file now records the current reviewed head and validation
-  state.
-- Clean review gate: ran the canonical readiness command in a clean temporary checkout
-  without lease harness files. It progressed past changed-file proof but the full suite
-  stopped on the unavailable optional `cma` dependency after 1,061 passed and 2 skipped;
-  this is not full readiness evidence.
+- Stale review artifact: refreshed this tracked result record for the current reviewed head
+  and validation state.
 
 ## Validation
 
@@ -23,8 +19,7 @@ Reviewed at PR head `32ca2ab0b76eecc76fcf0a00eb75beb39e78b6eb`.
 - `uv run ruff format --check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
 - `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 34 passed.
 - `git diff --check` — passed.
-- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` in this lease worktree — blocked (exit 2) by the five preserved untracked `.ll7_task_*` files; they were not staged or removed.
-- The same canonical command in a clean temporary review checkout — exit 2 after 1,061 passed and 2 skipped, with `CmaEsCandidateSampler requires cma`.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` in this lease worktree — blocked (exit 2) by the five preserved untracked `.ll7_task_*` files; they were not staged or removed. This means full current-head readiness cannot be established in this lease.
 
 ## Commit
 
@@ -33,11 +28,12 @@ Reviewed at PR head `32ca2ab0b76eecc76fcf0a00eb75beb39e78b6eb`.
 
 ## Review threads
 
-- Pre-fix and post-push GraphQL review-thread queries: all existing threads resolved; no
-  unresolved thread was actionable for this change.
+- Current GraphQL review-thread query at head `9849aa98a79f2bd0c6f6ed07f66d6697ebc2bbfc`:
+  all three existing threads are resolved; no unresolved thread is actionable for this
+  change.
 
 ## Remaining blockers
 
-- Full current-head readiness is not established: the lease worktree gate is blocked by
-  preserved harness files, and the clean gate is blocked by the missing optional `cma`
-  dependency. No lease files were deleted or staged.
+- Full current-head readiness is not established because the canonical lease-worktree gate is
+  blocked by the preserved untracked `.ll7_task_*` harness files. No lease files were deleted
+  or staged, per authorization.

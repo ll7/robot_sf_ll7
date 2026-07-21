@@ -23,8 +23,7 @@ Both threads were re-queried after pushing and resolved. No other threads were c
 ## Commit and PR state
 
 - Implementation commit pushed: `e2b83142ae319e04a67bc0ef566173340a8ab50c`.
-- PR head confirmed after push: `e2b83142ae319e04a67bc0ef566173340a8ab50c`.
+- PR head confirmed after final push: `73863efce9b5f5066a645181c83023b9140679d6`.
 - Unresolved review threads after resolution: **none**.
 - Remaining blocker: optional-dependency validation for the broader warm-start suite; install
   `optuna` and `cma` in the validation environment before treating those five tests as run.
-

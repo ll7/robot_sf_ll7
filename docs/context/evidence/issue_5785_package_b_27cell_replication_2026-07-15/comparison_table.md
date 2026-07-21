@@ -1,4 +1,4 @@
-## Issue #5326 durable objective-comparison table (diagnostic tier)
+## Issue #5785: Durable Objective-Comparison Table (Diagnostic Tier)
 
 > Claim scope: not paper-facing benchmark evidence. The `--synthetic` CPU path is reproducible by construction; the `--empirical` CPU path runs the real `pysocialforce` evaluator and produces certified/replayable failures without Slurm/GPU. Matched-budget confirmation at paper tier still requires artifact-level review of certification/replay/independent-seed evidence.
 

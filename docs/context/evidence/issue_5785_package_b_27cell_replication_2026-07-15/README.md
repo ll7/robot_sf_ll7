@@ -1,5 +1,5 @@
 <!-- AI-GENERATED (robot_sf#5785, 2026-07-15) - NEEDS-REVIEW -->
-# Issue #5785 Package B 27-cell replication evidence 2026-07-15
+# Issue #5785: Package B 27-Cell Replication Evidence 2026-07-15
 
 Plain-language summary: this bundle conserves the executed Package B 27-cell diagnostic
 result (Issue #3079 / PR #5710) which had lost its durable artifact anchor. The original
@@ -87,6 +87,8 @@ metrics above. No fallback or degraded candidate execution occurred in this repl
 - `replication_summary.json`: pipeline summary payload.
 - `SHA256SUMS`: checksums for the four durable summary artifacts.
 - `candidate_replay_SHA256SUMS.txt`: SHA-256 of all 4761 candidate/replay artifacts in the
-  frozen replay tree (full replayable set every reported count regenerates from).
+  frozen replay tree (full replayable set every reported count regenerates from). The tree and
+  execution stdout/stderr still require a durable URI or registry entry; the checksum manifest
+  alone is not a retrievable-artifact pointer.
 - `provenance.md`: execution commit, environment/lock identity, and conservation decision.
 - `README.md`: this human-readable summary.

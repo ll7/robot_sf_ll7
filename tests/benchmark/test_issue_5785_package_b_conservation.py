@@ -137,4 +137,4 @@ def test_replay_tree_checksums_are_parseable_and_complete() -> None:
     for line in lines:
         digest, _, name = line.partition("  ")
         assert len(digest) == 64, "malformed digest in candidate_replay_SHA256SUMS.txt"
-        assert name.strip().startswith("worst_case_snqi/")
+        assert Path(name.strip()).parts[0] == "worst_case_snqi"

@@ -1,4 +1,4 @@
-# Reproduction provenance — Issue #5785 (Package B 27-cell conservation)
+# Reproduction Provenance — Issue #5785 (Package B 27-Cell Conservation)
 
 Replication of the executed Package B 27-cell diagnostic result originally reported by
 PR #5710 (Issue #3079), recovered by exact CPU re-execution after the original
@@ -45,6 +45,16 @@ worktree-local artifacts were found unrecoverable from the recorded surfaces.
   independent-seed confirmation, deterministic replay, and stable mechanism attribution).
   No failure is silently counted as a confirmed discovery.
 
+## Preservation boundary
+
+- The committed bundle contains the summary artifacts and the
+  `candidate_replay_SHA256SUMS.txt` checksum manifest.
+- The 4,761-file candidate/replay tree and execution stdout/stderr are not present in this
+  checkout, and this bundle has no durable URI or registry entry for them.
+- The checksum manifest is a durable integrity record, not proof that the separately preserved
+  tree is retrievable. Issue #5785 remains blocked on publishing or registering that tree and the
+  captured execution logs.
+
 ## Disagreement handling
 
 The replication AGREES with the historical `42 failures (random 24, optuna 18, coordinate 0)`.
@@ -68,8 +78,7 @@ yield review (issue #5785 step 5) remain deferred to a separate interpretive ste
 - `SHA256SUMS`: checksums for the four durable summary artifacts above.
 - `candidate_replay_SHA256SUMS.txt`: SHA-256 of all 4761 candidate/replay artifacts in the
   frozen `output/adversarial/issue_3079_package_b/worst_case_snqi` tree (the full replayable
-  set that every reported count regenerates from). The tree itself is gitignored `output/`
-  and is preserved separately as the frozen artifact set; this checksum file is the
-  durable anchor that lets a second reviewer verify the frozen set.
+  set that every reported count regenerates from). The tree is not included in this checkout;
+  see the preservation boundary above.
 - `provenance.md`: this file.
 - `README.md`: human-readable conservation summary.

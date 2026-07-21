@@ -131,6 +131,12 @@ report = evaluate_actuator_feasibility(
 # report.stopping_distance_m -> ~0.68 m > 0.5 m clearance
 ```
 
+For trajectories that can rotate in place, pass `robot_headings` (radians, shape `(T,)`) or
+authoritative `robot_angular_velocities` (rad/s, shape `(T - 1,)` or `(T,)`). These signals
+are required to check yaw and steering feasibility while translational velocity is zero;
+without them, the evaluator falls back to yaw inferred from adjacent moving velocity
+headings.
+
 A companion entry point `evaluate_encounter_actuator_feasibility` evaluates a single
 encounter from just the current speed and clearance (no trajectory needed); it applies the
 brake-deadline check only.

@@ -31,6 +31,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from itertools import pairwise
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
@@ -281,17 +282,51 @@ def _wrap_angle(angle: float) -> float:
     return (angle + math.pi) % (2.0 * math.pi) - math.pi
 
 
+def _yaw_rates_from_inputs(
+    robot_velocities: NDArray[np.floating],
+    dt_s: float,
+    robot_headings: NDArray[np.floating] | None,
+    robot_angular_velocities: NDArray[np.floating] | None,
+) -> NDArray[np.floating]:
+    """Select an authoritative yaw signal, preserving gaps in velocity fallback.
+
+    Returns:
+        Yaw rates for each valid trajectory interval; invalid velocity-heading intervals
+        are represented by ``NaN``.
+    """
+    if robot_angular_velocities is not None:
+        return (
+            robot_angular_velocities[:-1]
+            if robot_angular_velocities.size == robot_velocities.shape[0]
+            else robot_angular_velocities
+        )
+    if robot_headings is not None:
+        return np.array([_wrap_angle(h2 - h1) / dt_s for h1, h2 in pairwise(robot_headings)])
+
+    speeds = np.linalg.norm(robot_velocities, axis=-1)
+    moving = speeds > _MIN_HEADING_SPEED_MPS
+    headings = np.arctan2(robot_velocities[:, 1], robot_velocities[:, 0])
+    yaw_rates = np.full(robot_velocities.shape[0] - 1, np.nan)
+    for i in range(yaw_rates.size):
+        if moving[i] and moving[i + 1]:
+            yaw_rates[i] = _wrap_angle(headings[i + 1] - headings[i]) / dt_s
+    return yaw_rates
+
+
 def _observed_actuator_rates(
     robot_positions: NDArray[np.floating],
     robot_velocities: NDArray[np.floating],
     dt_s: float,
+    robot_headings: NDArray[np.floating] | None = None,
+    robot_angular_velocities: NDArray[np.floating] | None = None,
 ) -> tuple[float | None, float | None, float | None, float | None, float | None]:
     """Return observed max accel / decel / yaw-rate / steering-rate / max-speed.
 
     Longitudinal accel/decel are derived from the change in scalar speed between
-    consecutive timesteps (tangential along the motion direction). Yaw rate is the
-    wrapped heading change between adjacent *moving* timesteps in the original
-    trajectory; steering rate is the rate of change of yaw rate between consecutive
+    consecutive timesteps (tangential along the motion direction). Yaw rate is taken
+    from supplied angular velocities, derived from supplied headings, or otherwise
+    inferred from adjacent *moving* velocity headings. Steering rate is the rate of
+    change of yaw rate between consecutive
     valid transitions (a proxy bound on
     how fast the steering / yaw command can change). Any quantity that cannot be computed
     from too-short a trajectory is returned as ``None``.
@@ -313,18 +348,13 @@ def _observed_actuator_rates(
         max_accel = float(np.max(accel_values)) if accel_values.size else 0.0
         max_decel = float(np.max(decel_values)) if decel_values.size else 0.0
 
-    # Rates are only defined for adjacent moving samples in the original trajectory.
-    # Filtering stopped samples first would use dt_s for a transition that actually
-    # spans multiple timesteps and inflate the rates.
     max_yaw_rate: float | None = None
     max_steering_rate: float | None = None
-    moving = speeds > _MIN_HEADING_SPEED_MPS
-    if int(np.sum(moving)) >= 2:
-        headings = np.arctan2(robot_velocities[:, 1], robot_velocities[:, 0])
-        yaw_rates = np.full(robot_velocities.shape[0] - 1, np.nan)
-        for i in range(yaw_rates.size):
-            if moving[i] and moving[i + 1]:
-                yaw_rates[i] = _wrap_angle(headings[i + 1] - headings[i]) / dt_s
+    yaw_rates = _yaw_rates_from_inputs(
+        robot_velocities, dt_s, robot_headings, robot_angular_velocities
+    )
+
+    if yaw_rates.size:
         valid_yaw_rates = yaw_rates[~np.isnan(yaw_rates)]
         if valid_yaw_rates.size:
             max_yaw_rate = float(np.max(np.abs(valid_yaw_rates)))
@@ -478,6 +508,8 @@ def evaluate_actuator_feasibility(
     dt_s: float,
     hazard_clearance_m: float,
     config: ActuatorLimitsConfig | None = None,
+    robot_headings: NDArray[np.floating] | object | None = None,
+    robot_angular_velocities: NDArray[np.floating] | object | None = None,
 ) -> ActuatorFeasibilityReport:
     """Evaluate actuator feasibility of a planned/executed robot trajectory.
 
@@ -497,6 +529,11 @@ def evaluate_actuator_feasibility(
             value means the robot is already in contact and the verdict is ``infeasible``
             regardless of actuator limits.
         config: Actuator limits. Defaults to :class:`ActuatorLimitsConfig` (provisional).
+        robot_headings: Optional heading trajectory in radians, shape ``(T,)``. Heading
+            changes are evaluated even when translational velocity is zero.
+        robot_angular_velocities: Optional authoritative yaw-rate trajectory in rad/s,
+            shape ``(T - 1,)`` or ``(T,)``. It covers in-place rotation; a ``(T,)``
+            signal omits its final sample for steering-rate calculation.
 
     Returns:
         An :class:`ActuatorFeasibilityReport` with the verdict, the violated actuator
@@ -519,10 +556,35 @@ def evaluate_actuator_feasibility(
             f"shape {robot_pos.shape}"
         )
 
+    headings: NDArray[np.floating] | None = None
+    if robot_headings is not None:
+        headings = np.asarray(robot_headings, dtype=float)
+        if headings.ndim != 1 or headings.shape[0] != robot_pos.shape[0]:
+            raise ValueError(
+                f"robot_headings must have shape ({robot_pos.shape[0]},); got {headings.shape}"
+            )
+        if not np.isfinite(headings).all():
+            raise ValueError("robot_headings must contain only finite values (no NaN or inf)")
+
+    angular_velocities: NDArray[np.floating] | None = None
+    if robot_angular_velocities is not None:
+        angular_velocities = np.asarray(robot_angular_velocities, dtype=float)
+        valid_shapes = {(robot_pos.shape[0] - 1,), (robot_pos.shape[0],)}
+        if angular_velocities.shape not in valid_shapes:
+            raise ValueError(
+                "robot_angular_velocities must have shape "
+                f"({robot_pos.shape[0] - 1},) or ({robot_pos.shape[0]},); "
+                f"got {angular_velocities.shape}"
+            )
+        if not np.isfinite(angular_velocities).all():
+            raise ValueError(
+                "robot_angular_velocities must contain only finite values (no NaN or inf)"
+            )
+
     cfg = config if config is not None else ActuatorLimitsConfig()
 
     observed_accel, observed_decel, observed_yaw, observed_steer, max_speed = (
-        _observed_actuator_rates(robot_pos, robot_vel, dt_s)
+        _observed_actuator_rates(robot_pos, robot_vel, dt_s, headings, angular_velocities)
     )
 
     geometrically_clear = clearance >= 0.0

@@ -282,6 +282,34 @@ def test_yaw_rate_limit_violation_is_reported() -> None:
     assert report.observed_max_yaw_rate_radps > 1.0
 
 
+def test_in_place_rotation_uses_commanded_angular_velocity() -> None:
+    """Stationary translation must not hide a commanded yaw-rate violation."""
+    report = evaluate_actuator_feasibility(
+        robot_positions=np.zeros((3, 2)),
+        robot_velocities=np.zeros((3, 2)),
+        robot_angular_velocities=np.array([0.0, 2.0, 2.0]),
+        dt_s=0.1,
+        hazard_clearance_m=10.0,
+        config=ActuatorLimitsConfig(max_yaw_rate_radps=1.0),
+    )
+    assert report.observed_max_yaw_rate_radps == pytest.approx(2.0)
+    assert PRED_YAW_RATE_LIMIT in report.violated_limits
+
+
+def test_in_place_rotation_can_be_derived_from_headings() -> None:
+    """A supplied heading trajectory detects rotation without translational motion."""
+    report = evaluate_actuator_feasibility(
+        robot_positions=np.zeros((3, 2)),
+        robot_velocities=np.zeros((3, 2)),
+        robot_headings=np.array([0.0, 0.2, 0.4]),
+        dt_s=0.1,
+        hazard_clearance_m=10.0,
+        config=ActuatorLimitsConfig(max_yaw_rate_radps=1.0),
+    )
+    assert report.observed_max_yaw_rate_radps == pytest.approx(2.0)
+    assert PRED_YAW_RATE_LIMIT in report.violated_limits
+
+
 def test_steering_rate_discontinuity_is_reported() -> None:
     """A sudden reversal of yaw rate (steering discontinuity) fires the steering-rate limit.
 

@@ -21,17 +21,19 @@
 
 ## Commit and push
 
-- Merge commit pushed to the existing PR branch; exact SHA is recorded below.
+- Merge commit pushed to the existing PR branch: `77c451bb6251c5ff17f22f91a5516acd7de964ad`.
 - No new PR was opened, no merge was performed, and no external jobs were submitted.
 
 ## Review threads
 
 - Pre-push GraphQL query: zero unresolved review threads.
-- Post-push unresolved-thread re-query and addressed thread IDs are recorded in
-  the final handoff response; no thread was resolved because none was open.
+- Post-push GraphQL re-query: zero unresolved review threads; no thread was
+  resolved because none was open.
 
 ## Remaining blockers
 
-- The PR's full CI surface was not available in the pre-push snapshot; the
-  successful CodeRabbit routing check is not treated as full CI proof. GitHub
-  must complete checks for the new exact head.
+- Exact-head GitHub checks are pending (`pr-contract-check` queued;
+  `docs-evidence-integrity`, `promoted-planner-smoke`, `pr-body-contracts`, and
+  `route-coderabbit` in progress). The successful CodeRabbit routing check is
+  not treated as full CI proof; GitHub must complete checks for the new exact
+  head.

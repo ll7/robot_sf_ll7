@@ -35,7 +35,7 @@ Both threads were re-queried after pushing and resolved. No other threads were c
 ## Commit and PR state
 
 - Implementation commit already present: `e2b83142ae319e04a67bc0ef566173340a8ab50c`.
-- This review-blocker metadata update is pending push; its commit SHA will be recorded below.
+- Review-blocker metadata update commit: `991ff9286c0be283e41948553de51fb8697eeaf1`.
 - Unresolved review threads after resolution: **none**.
 - Remaining blocker: full repository readiness and optimizer-backed validation require the
   unavailable optional dependencies. Do not treat the degraded local run as full readiness.

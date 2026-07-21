@@ -1,33 +1,33 @@
-# PR #6063 Review Blocker Result
-
-Reviewed against the live PR head after the final push; the head was verified with `gh pr view`.
+# PR #6060 Review Fix Result
 
 ## Fixed comments
 
-- Refreshed this tracked review artifact from stale head `9a73121683616a9a622f8643dcbba54d91262ad1` to the live PR head.
-- No unresolved review comments required code changes. The three existing review threads remain resolved:
-  - `PRRT_kwDOLRSZdc6SVXPi`
-  - `PRRT_kwDOLRSZdc6SVXP3`
-  - `PRRT_kwDOLRSZdc6SVXP8`
+- Fixed unresolved review thread `PRRT_kwDOLRSZdc6SUaTZ` in `scripts/dev/pr_loop_policy.py`:
+  gate-verdict SHA parsing now requires a complete word-bounded token.
+- Added a regression test rejecting a 40-character SHA followed by a word-character suffix.
+- Posted the current exact-head `gate-verdict: accepted @ <SHA>` trailer after each final head
+  update; the live trailer is refreshed below for the final commit.
 
 ## Validation
 
-- `uv run ruff check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
-- `uv run ruff format --check robot_sf/benchmark/actuator_feasibility.py tests/benchmark/test_actuator_feasibility.py` — passed.
-- `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 34 passed.
-- `git diff --check` — passed.
-- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked (exit 2) because the five preserved untracked `.ll7_task_*` harness files are not staged; staging or removal is outside this review-only authorization.
+- `uv run ruff check scripts/dev/pr_loop_policy.py tests/dev/test_pr_loop_policy.py` — passed.
+- `uv run ruff format --check scripts/dev/pr_loop_policy.py tests/dev/test_pr_loop_policy.py` — passed.
+- `uv run pytest tests/dev/test_pr_loop_policy.py -q` — 105 passed.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked: preserved untracked
+  `.ll7_task_*` task-runner metadata prevents changed-file proof.
 
 ## Commit
 
-- Refresh commit SHA: `cdf4e65a826fe848d6a6ab115724a377c9376099`.
-- Push target: existing PR branch `cheap/cheap-issue-6056-778a89d145c4`.
+- Implementation commit SHA: `dd7f90f3fd827803a89183ce22273a5d2b548b88`.
+- The result-file commit SHA is reported in the final handoff.
 
-## Unresolved threads
+## Review state
 
-Post-push re-query confirmed all three thread IDs above remain resolved. No unresolved actionable review thread is currently present.
+- Resolved: `PRRT_kwDOLRSZdc6SUaTZ`.
+- Other queried threads were already resolved; no other unresolved review threads were found.
+- Hosted checks are pending on the final pushed head, so merge-readiness is not claimed.
 
 ## Blockers
 
-- The canonical current-head `pr_ready_check` cannot establish full readiness in this lease worktree because five preserved untracked `.ll7_task_*` harness files are not staged. They were not staged or removed.
-- No other actionable review blocker was found in the live PR review threads.
+- Full canonical local readiness proof remains unavailable until the preserved untracked task-runner
+  metadata is handled by the task owner or readiness workflow.

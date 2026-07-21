@@ -1,6 +1,6 @@
 # PR #6063 Review Blocker Result
 
-Reviewed at PR head `9849aa98a79f2bd0c6f6ed07f66d6697ebc2bbfc` (verified against the live PR).
+Reviewed at PR head `d15503725da822518e835db1ff4c8a5266eacb63` (verified against the live PR).
 
 ## Fixed blockers
 
@@ -10,7 +10,7 @@ Reviewed at PR head `9849aa98a79f2bd0c6f6ed07f66d6697ebc2bbfc` (verified against
   fallback behavior remains gap-safe.
 - Regression coverage: added tests for commanded-angular-velocity and heading-derived
   stationary rotation violations.
-- Stale review artifact: refreshed this tracked result record for the current reviewed head
+- Stale review artifact: this tracked result record is refreshed for the current reviewed head
   and validation state.
 
 ## Validation
@@ -23,12 +23,12 @@ Reviewed at PR head `9849aa98a79f2bd0c6f6ed07f66d6697ebc2bbfc` (verified against
 
 ## Commit
 
-- Fix commit SHA: `32ca2ab0b76eecc76fcf0a00eb75beb39e78b6eb`.
+- Reviewed PR head commit SHA: `d15503725da822518e835db1ff4c8a5266eacb63`.
 - Push target: existing PR branch `cheap/cheap-issue-6056-778a89d145c4`.
 
 ## Review threads
 
-- Current GraphQL review-thread query at head `9849aa98a79f2bd0c6f6ed07f66d6697ebc2bbfc`:
+- Current GraphQL review-thread query at head `d15503725da822518e835db1ff4c8a5266eacb63`:
   all three existing threads are resolved; no unresolved thread is actionable for this
   change.
 

@@ -20,7 +20,7 @@ Reviewed at current PR head `f8b704d5c3d9dfe7b0c4a1d6d9b4c028ac52b956`.
 
 ## Commit
 
-- Refresh commit SHA: recorded in the follow-up handoff commit below.
+- Refresh commit SHA: `cdf4e65a826fe848d6a6ab115724a377c9376099`.
 - Push target: existing PR branch `cheap/cheap-issue-6056-778a89d145c4`.
 
 ## Unresolved threads

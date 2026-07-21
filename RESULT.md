@@ -19,14 +19,14 @@
 
 ## Commit
 
-- Fix commit pushed to PR branch: `e984b330e06ea8ad6ea2f861796c6e37ca98443c`.
-- Result handoff commit: recorded by the final commit containing this file.
+- Base-refresh and blocker-claim fix commit pushed to PR branch: `1632d5331015460a0da2ee4a07ccbbc40f5e5f69`.
+- PR head verified after push: `1632d5331015460a0da2ee4a07ccbbc40f5e5f69`.
 
 ## Review state
 
 - Post-push head before this result handoff: `e984b330e06ea8ad6ea2f861796c6e37ca98443c`.
-- The four addressed threads above were re-queried after push and explicitly resolved.
-- No fresh unresolved review thread was observed before resolution.
+- The four previously addressed threads above were re-queried after the push and remain resolved.
+- No fresh unresolved review thread was observed; no thread was changed in this pass.
 
 ## Remaining blocker
 
@@ -36,4 +36,4 @@ authorization disallows compute submission; the checksum manifest is retained bu
 retrievable artifact pointer. The preservation boundary is documented in the bundle's
 `provenance.md`.
 
-No Slurm job or merge was performed, no worktree was deleted, and no new PR was opened.
+No Slurm job or GitHub merge was performed, no worktree was deleted, and no new PR was opened.

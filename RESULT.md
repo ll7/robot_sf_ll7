@@ -16,7 +16,8 @@
 
 ## Commit and push
 
-- No commit created; no push performed. The PR head remains `a358595524a21dae770c65999b2fa76dcfc524f3`.
+- Documentation-only commit `033abce8c3bbc968c470ddbf678cd76db5d37991` was pushed normally to `proto-case-browser`; no code or test change was pushed.
+- The resulting PR head is `033abce8c3bbc968c470ddbf678cd76db5d37991`.
 
 ## Unresolved threads
 

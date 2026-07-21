@@ -1852,7 +1852,15 @@ def render_hinge_figure(  # noqa: PLR0913 - top-level figure assembly; each argu
     # otherwise stamps the wall-clock time into the PDF, the only source of nondeterminism
     # observed in this script -- geometry/text content is already deterministic).
     fig.savefig(out_pdf, metadata={"CreationDate": None})
-    fig.savefig(out_png, dpi=200)
+    # Pin the print PNG to the figure's STANDARD bbox (not a tight crop of the drawn
+    # artists). Without this, savefig honors rcParams["savefig.bbox"], which is None
+    # locally but can resolve to "tight" under other font/layout environments (e.g.
+    # the CI runner), cropping the PNG to the drawn content and shrinking its width
+    # below PRINT_FIG_WIDTH_IN. Pinning the standard bbox makes the rendered width
+    # deterministically round(PRINT_FIG_WIDTH_IN * dpi) == 1181 at 200 dpi regardless
+    # of font/layout env (issue #6088 root cause: the print-design width contract was
+    # previously satisfied only by environmental accident, not by construction).
+    fig.savefig(out_png, dpi=200, bbox_inches=fig.bbox_inches)
 
     # QA gate: reuse the repo's own text/marker-collision linter (item 4 -- report the
     # exact before/after defect count, not just "pass/fail").

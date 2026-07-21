@@ -17,9 +17,10 @@
 - `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/benchmark/test_hierarchical_paired_release_analysis.py tests/benchmark/test_hierarchical_paired_release_inputs.py -q` — 24 passed.
 - `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — fail-closed before checks because untracked leased-task control files are outside the diff proof: `.ll7_task_packet.json`, `.ll7_task_prompt.md`, `.ll7_task_runner.sh`, `.ll7_task_status.json`, `.ll7_task_worker.log`.
 
-## Commit and push
+## Commits and push
 
-- Commit: `5b1cbc17f3aaa3240411185b6e712c7fb36e805a`
+- Fix commit: `5b1cbc17f3aaa3240411185b6e712c7fb36e805a`
+- Result record commit / final pushed head: `35b892200b9609c9e6782db59a0d28edcb0b7ce3`
 - Pushed to PR #6005 head `cheap/issue-5351-20260718T193652Z`.
 
 ## Review-thread state

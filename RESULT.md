@@ -21,12 +21,14 @@
 ## Commit
 
 - Fix commit pushed to `dependabot/github_actions/actions/setup-python-7.0.0`:
-  pending final result-record commit SHA.
+  `0b747302f7ed5ff9b2f2d40ac8fa3b1491cbfb4c`.
 
 ## Unresolved threads
 
-- None returned before the fix push; post-push re-query pending.
+- Post-push re-query at head `0b747302f7ed5ff9b2f2d40ac8fa3b1491cbfb4c` returned no review
+  threads; there were no thread IDs to resolve.
 
 ## Blockers
 
-- Remote CI and mergeability remain pending until GitHub processes the pushed head.
+- GitHub reports the pushed head as `MERGEABLE`; `route-coderabbit`, `fast-pysf-compat`, and
+  `docs-evidence-integrity` passed. The remaining CI checks were still in progress at handoff.

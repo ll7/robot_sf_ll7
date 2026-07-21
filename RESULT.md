@@ -34,13 +34,13 @@ Previously addressed review threads remain recorded in the bundle history:
 ## Commit
 
 - Base-refresh merge commit: `410f03ee5`.
-- Receipt update commit pushed before this post-push verification: `6e44cf89fae825e01347822d6836f31dafe4bd33`.
+- Final receipt commit: this handoff commit; its SHA is reported in the final response.
 
 ## Review state
 
 - Live review-thread query before this fix: four thread nodes, all resolved and outdated; no
   unresolved inline review threads.
-- Post-push head before this receipt-only update: `6e44cf89fae825e01347822d6836f31dafe4bd33`.
+- The final PR head is the commit containing this receipt.
 - GitHub post-push state: `MERGEABLE`, `UNSTABLE`; the prior `CONFLICTING`/`DIRTY` blocker is
   cleared.
 - All four existing threads remain resolved and outdated; no thread was changed.

@@ -248,10 +248,9 @@ jobs:
         run: bash scripts/dev/ci_step_timer.sh "Enforce artifact root policy" scripts/dev/ci_driver.sh artifact-policy
 
   reproducibility-check:
-    # This diagnostic runs only when manually requested. It is deliberately not
-    # included in the required `ci` aggregate job, so it cannot act as a PR gate.
-    if: github.event_name == 'workflow_dispatch'
-    continue-on-error: true
+    # Run on pull requests so hosted reproducibility evidence is green rather
+    # than skipped; retain manual dispatch for standalone diagnostics.
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

@@ -34,13 +34,17 @@ Previously addressed review threads remain recorded in the bundle history:
 ## Commit
 
 - Base-refresh merge commit: `410f03ee5`.
-- Receipt update commit: recorded in the final handoff response after push.
+- Receipt update commit pushed before this post-push verification: `6e44cf89fae825e01347822d6836f31dafe4bd33`.
 
 ## Review state
 
 - Live review-thread query before this fix: four thread nodes, all resolved and outdated; no
   unresolved inline review threads.
-- Post-push review-thread query and final PR mergeability state are recorded here after push.
+- Post-push head before this receipt-only update: `6e44cf89fae825e01347822d6836f31dafe4bd33`.
+- GitHub post-push state: `MERGEABLE`, `UNSTABLE`; the prior `CONFLICTING`/`DIRTY` blocker is
+  cleared.
+- All four existing threads remain resolved and outdated; no thread was changed.
+- PR blocker update comment: https://github.com/ll7/robot_sf_ll7/pull/5789#issuecomment-5038281479
 
 ## Remaining blockers
 

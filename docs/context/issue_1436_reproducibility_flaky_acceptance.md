@@ -60,6 +60,31 @@ matrix YAML.
   and [Issue #832 Paper-Matrix Extended Seed Schedule](issue_832_paper_matrix_extended_seed_schedule.md)
   for the current frozen camera-ready artifact contract.
 
+### Manual Reproducibility Diagnostic (Issue #5990, 2026-07-19)
+
+`reproducibility-check` is a `workflow_dispatch`-only job with
+`continue-on-error: true`. It is excluded from the required `ci` aggregate job,
+so its result cannot become a pull-request gate. The diagnostic still fails
+closed: `scripts/benchmark_repro_check.py` exits non-zero when the canonical
+`simple_policy` aggregate group or required metric/statistic shape is absent,
+writes `output/benchmarks/reproducibility_check.json` before failure exit, and
+then uploads that report with `if: always()`. Failure reports use
+`benchmark_repro_check.report.v1` and include `status`, `stage`, and `error`
+details, so an optional-lane failure remains visible without becoming a gate.
+
+The exact current local command is:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/benchmark_repro_check.py
+```
+
+On 2026-07-19 it passed in two fresh work directories using seed `123` for
+both runs. The fixture validated the canonical episode schema and the
+`collisions`, `path_efficiency`, and `success` aggregate metrics with `mean`,
+`median`, and `p95` statistics. Same-seed aggregate statistics must match
+exactly; no seed-drift tolerance is applied. This is **diagnostic-only**
+reproducibility evidence, not benchmark evidence or a required PR-gate signal.
+
 ## Deterministic vs Stochastic/Statistical Failures
 
 | Category | Examples | Acceptance Rule |

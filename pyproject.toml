@@ -520,6 +520,10 @@ max-statements = 60
 # Issue #5616: campaign_atlas renderer — public build/rendering functions carry explicit
 # keyword-only controls (PLR0913) and reuse existing renderer docstring shape (DOC201).
 "robot_sf/benchmark/campaign_atlas.py" = ["PLR0913", "DOC201"]
+# Issue #5912: SNQI latency analyzer — promotion/validation/build helpers and the paired
+# cluster-bootstrap carry compact one-line docstrings; complexity concentrates in the
+# fail-closed coverage and verification routines.
+"robot_sf/benchmark/control_action_latency_snqi.py" = ["DOC201", "C901"]
 "robot_sf/adversarial/search.py" = ["BLE001"]
 "robot_sf/adversarial/certification.py" = ["BLE001", "PLC0415"]
 "tests/adversarial/**/*.py" = ["D100", "D103", "TC003"]
@@ -649,7 +653,7 @@ dev = [
     "pytest-xdist>=3.6.1",
     "pytest-split>=0.9.0",
     "jupyter>=1.0.0",
-    "mypy>=1.0.0",
+    "mypy>=2.3.0",
     "mutmut",
 ]
 docs = [

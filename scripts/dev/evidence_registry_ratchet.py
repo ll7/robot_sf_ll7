@@ -133,8 +133,28 @@ def run_linter(repo_root: Path) -> dict[str, Any]:
 
 
 def load_report(path: Path) -> dict[str, Any]:
-    """Load a pre-rendered linter JSON report from ``path``."""
-    return json.loads(path.read_text(encoding="utf-8"))
+    """Load a pre-rendered linter JSON report from ``path``.
+
+    Raises ``RuntimeError`` on a missing or malformed file so the CLI maps a bad
+    ``--report`` to the infra-error exit code (2) instead of an uncaught traceback.
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(f"Could not read report file '{path}': {exc}") from exc
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Could not parse report JSON '{path}': {exc}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"Report JSON '{path}' must be a dictionary, got {type(data).__name__}")
+    issues = data.get("issues", [])
+    if not isinstance(issues, list) or any(not isinstance(issue, dict) for issue in issues):
+        raise RuntimeError(f"Report JSON '{path}' has an invalid 'issues' list")
+    summary = data.get("summary", {})
+    if not isinstance(summary, dict):
+        raise RuntimeError(f"Report JSON '{path}' has an invalid 'summary' mapping")
+    return data
 
 
 def aggregate(report: dict[str, Any]) -> dict[str, dict[str, int]]:
@@ -171,14 +191,13 @@ def build_baseline_payload(report: dict[str, Any]) -> dict[str, Any]:
             "ratchet gates on per-file, per-code finding counts: a clean file "
             "(absent here) that gains a finding fails, and a tracked file whose "
             "per-code count increases fails. The committed baseline is the "
-            "explicitly-approved grandfathered exclusion policy for the 359 "
-            "legacy findings classified by docs/context/evidence/"
-            "evidence_registry_dispositions.yaml; remediate a category and "
+            "explicitly-approved grandfathered exclusion policy for legacy "
+            "findings classified by docs/context/evidence/"
+            "evidence_registry_dispositions.yaml. Remediate a category and "
             "refresh this baseline with "
             "`scripts/dev/evidence_registry_ratchet.py --write-baseline` to "
-            "lock in the reduction. Promote the gate from advisory to blocking "
-            "by removing continue-on-error in the ratchet CI workflow once the "
-            "policy has settled."
+            "lock in the reduction; the blocking evidence-registry workflow "
+            "enforces the ratchet on its configured paths."
         ),
         "summary": {
             "total_findings": int(summary.get("findings", 0)),

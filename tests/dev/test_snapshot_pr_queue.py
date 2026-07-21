@@ -518,6 +518,69 @@ def test_raw_review_comments_artifact_rejects_invalid_repo(tmp_path) -> None:  #
     mock_gh.assert_not_called()
 
 
+def test_main_output_writes_snapshot_without_changing_stdout(
+    tmp_path,
+    capsys,
+) -> None:  # type: ignore[no-untyped-def]
+    """The --output path should receive the same compact payload printed by the CLI."""
+    artifact = tmp_path / "nested" / "snapshot.json"
+    pr_payload = {
+        "number": 2698,
+        "title": "output PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/2698",
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc998",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [],
+        "reviews": [],
+        "comments": [],
+    }
+    with patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh:
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        rc = main(["--prs", "2698", "--output", str(artifact), "--json"])
+
+    stdout_payload = json.loads(capsys.readouterr().out)
+    artifact_payload = json.loads(artifact.read_text(encoding="utf-8"))
+    assert rc == 0
+    assert artifact_payload == stdout_payload
+    assert artifact.read_text(encoding="utf-8").endswith("\n")
+
+
+def test_main_output_write_failure_returns_controlled_error(capsys) -> None:  # type: ignore[no-untyped-def]
+    """An unwritable output path should fail without printing a traceback or payload."""
+    pr_payload = {
+        "number": 2699,
+        "title": "output error PR",
+        "state": "OPEN",
+        "isDraft": False,
+        "url": "https://github.test/pull/2699",
+        "labels": [],
+        "headRefName": "feature",
+        "headRefOid": "abc999",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [],
+        "reviews": [],
+        "comments": [],
+    }
+    with (
+        patch("scripts.dev.snapshot_pr_queue._gh") as mock_gh,
+        patch(
+            "scripts.dev.snapshot_pr_queue.write_snapshot_artifact",
+            side_effect=OSError("disk full"),
+        ),
+    ):
+        mock_gh.return_value = MagicMock(returncode=0, stdout=json.dumps(pr_payload), stderr="")
+        rc = main(["--prs", "2699", "--output", "snapshot.json", "--json"])
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+    assert captured.err == "snapshot output write failed: disk full\n"
+
+
 def test_main_raw_review_artifact_keeps_hunks_out_of_stdout(
     tmp_path,
     capsys,

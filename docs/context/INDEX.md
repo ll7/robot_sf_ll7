@@ -1,5 +1,12 @@
 # Context Retrieval Index
 
+Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch
+contract that blocks duplicate retries when their patch is missing, ambiguous,
+or already merged: [issue_6008_state.yaml](issue_6008_state.yaml).
+
+Issue #5936 result-job durability gate — producer-side probe (`result_job_durability.v1`) that a completed result job must pass (checksum + versioned schema + canonical rerun command + durable public-safe pointer) before any `analysis:` successor issue may be created or admitted; clean-checkout reproducible, fails closed on local-only pointers:
+[issue_5936_result_job_durability_gate.md](issue_5936_result_job_durability_gate.md).
+
 Issue #5792 one-command demo reproducibility and CPU UX smoke record:
 [issue_5792_demo_validation_2026-07-15.md](evidence/issue_5792_demo_validation_2026-07-15.md).
 

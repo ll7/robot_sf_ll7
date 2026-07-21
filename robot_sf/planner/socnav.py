@@ -66,6 +66,7 @@ except ImportError:  # pragma: no cover - optional dependency
     PredictiveTrajectoryModel = Any  # type: ignore[misc,assignment]
     load_predictive_checkpoint = None  # type: ignore[assignment]
 from robot_sf.planner.socnav_occupancy import OccupancyAwarePlannerMixin
+from robot_sf.sim.pedestrian_model_variants import _pairwise_social_force_kernel
 
 if TYPE_CHECKING:
     from robot_sf.planner.socnav_sacadrl import SACADRLPlannerAdapter, make_sacadrl_policy
@@ -1037,22 +1038,26 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         ped_velocities = ped_velocities[:ped_count]
         ped_vel_world = self._rotate_velocities_to_world(ped_velocities, robot_heading)
 
-        total = np.zeros(2, dtype=float)
-        for ped_pos, ped_vel in zip(ped_positions, ped_vel_world, strict=False):
-            pos_diff = (robot_pos - ped_pos).astype(float)
-            vel_diff = (robot_vel - ped_vel).astype(float)
-            try:
-                fx, fy = sf_forces.social_force_ped_ped(
-                    pos_diff,
-                    vel_diff,
-                    int(self.config.social_force_n),
-                    int(self.config.social_force_n_prime),
-                    float(self.config.social_force_lambda_importance),
-                    float(self.config.social_force_gamma),
-                )
-                total += np.array([fx, fy], dtype=float)
-            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
-                continue
+        # Vectorized social-force broadcast (issue #5412). Each pedestrian
+        # contributed via the scalar ``sf_forces.social_force_ped_ped`` kernel in
+        # a Python loop; this evaluates the identical closed-form force law across
+        # all pedestrians at once through the shared NumPy port
+        # (``_pairwise_social_force_kernel``). The degenerate zero-difference
+        # handling matches the scalar kernel, so non-finite inputs (which the
+        # scalar loop swallowed via try/except -> continue) are masked out here:
+        # such pairs map to a zero force and are excluded from the reduction.
+        pos_diff = (robot_pos[np.newaxis, :] - ped_positions).astype(float)  # (M, 2)
+        vel_diff = (robot_vel[np.newaxis, :] - ped_vel_world).astype(float)  # (M, 2)
+        forces = _pairwise_social_force_kernel(
+            pos_diff,
+            vel_diff,
+            n=int(self.config.social_force_n),
+            n_prime=int(self.config.social_force_n_prime),
+            lambda_importance=float(self.config.social_force_lambda_importance),
+            gamma=float(self.config.social_force_gamma),
+        )
+        finite_mask = np.isfinite(forces).all(axis=1)
+        total = np.sum(forces[finite_mask], axis=0) if np.any(finite_mask) else np.zeros(2)
         return total * float(self.config.social_force_factor)
 
     def _compute_obstacle_force(
@@ -1072,20 +1077,32 @@ class SocialForcePlannerAdapter(SamplingPlannerAdapter):
         if centers.size == 0:
             return np.zeros(2, dtype=float)
 
-        if np.linalg.norm(robot_vel) > self._EPS:
-            ortho = np.array([-robot_vel[1], robot_vel[0]], dtype=float)
-        else:
-            ortho = np.array([-np.sin(robot_heading), np.cos(robot_heading)], dtype=float)
-
         robot_radius = float(self._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
-        total = np.zeros(2, dtype=float)
-        for center, radius in zip(centers, radii, strict=False):
-            line = (float(center[0]), float(center[1]), float(center[0]), float(center[1]))
-            try:
-                fx, fy = sf_forces.obstacle_force(line, ortho, robot_pos, robot_radius + radius)
-                total += np.array([fx, fy], dtype=float)
-            except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
-                continue
+        # Vectorized point-obstacle force broadcast (issue #5412). The scalar loop
+        # built a degenerate single-point line ``(cx, cy, cx, cy)`` per obstacle
+        # and called ``sf_forces.obstacle_force``. That degenerate line exercises
+        # only the point-obstacle branch of the reference kernel, whose closed
+        # form is ``der_potential * grad(dist)`` with ``der_potential =
+        # 1/obst_dist**3`` and ``obst_dist = max(raw_dist - ped_radius, 1e-5)``.
+        # Evaluating it across every obstacle at once changes the float reduction
+        # order (vectorized sum vs scalar accumulation) and ``pow`` vs ``**``; the
+        # residual stays at machine-epsilon relative error (see the #5412 parity
+        # gate). The scalar kernel remains the numeric-parity reference. ``ortho``
+        # was only consumed by the segment-intersection branches of the reference
+        # kernel, which the degenerate point line never reaches, so it is dropped.
+        ped_radius = robot_radius + np.asarray(radii, dtype=float)  # (M,)
+        diff = (robot_pos[np.newaxis, :] - centers).astype(float)  # (M, 2)
+        raw_dist = np.sqrt(diff[:, 0] ** 2 + diff[:, 1] ** 2)
+        obst_dist = np.maximum(raw_dist - ped_radius, 1e-5)
+        finite = np.isfinite(obst_dist)
+        if not np.any(finite):
+            return np.zeros(2, dtype=float)
+        diff_f = diff[finite]
+        obst_dist_f = obst_dist[finite]
+        der_potential = 1.0 / obst_dist_f**3
+        grad = diff_f / obst_dist_f[:, np.newaxis]
+        force = der_potential[:, np.newaxis] * grad
+        total = np.sum(force, axis=0)
         return total * float(self.config.social_force_obstacle_factor)
 
     @staticmethod
@@ -1301,6 +1318,25 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         point: np.ndarray
         direction: np.ndarray
 
+    @dataclass
+    class _Rvo2Scene:
+        """Immutable simulator parameters plus mutable agent state for one ORCA step."""
+
+        time_step: float
+        neighbor_dist: float
+        max_neighbors: int
+        time_horizon: float
+        time_horizon_obst: float
+        robot_radius: float
+        max_speed: float
+        robot_pos: np.ndarray
+        robot_velocity_world: np.ndarray
+        ped_positions: np.ndarray
+        ped_vel_world: np.ndarray
+        ped_radius: float
+        ped_max_speeds: tuple[float, ...]
+        obstacle_vertices: tuple[tuple[tuple[float, float], ...], ...]
+
     _EPS = 1e-6
 
     def __init__(self, config: SocNavPlannerConfig | None = None, *, allow_fallback: bool = False):
@@ -1310,6 +1346,10 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self._fallback_warned = False
         self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
         self._bound_static_obstacle_spacing = 0.0
+        self._rvo2_sim: Any | None = None
+        self._rvo2_signature: tuple[Any, ...] | None = None
+        self._rvo2_robot_id: int | None = None
+        self._rvo2_ped_ids: list[int] = []
         self.reset()
 
     def reset(self) -> None:
@@ -1318,13 +1358,25 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         self._last_goal_distance: float | None = None
         self._commit_side = 0
         self._commit_side_ttl = 0
+        self._clear_rvo2_simulator()
+
+    def _clear_rvo2_simulator(self) -> None:
+        """Discard cached rvo2 state at an explicit lifecycle boundary."""
+        self._rvo2_sim = None
+        self._rvo2_signature = None
+        self._rvo2_robot_id = None
+        self._rvo2_ped_ids = []
 
     def bind_static_obstacle_points(self, points: Any, *, spacing: float) -> None:
         """Bind sampled exact static obstacle points for use during planning."""
+        previous_points = self._bound_static_obstacle_points
+        previous_spacing = self._bound_static_obstacle_spacing
         arr = np.asarray(points, dtype=float)
         if arr.size == 0:
             self._bound_static_obstacle_points = np.zeros((0, 2), dtype=float)
             self._bound_static_obstacle_spacing = 0.0
+            if previous_points.size or previous_spacing != 0.0:
+                self._clear_rvo2_simulator()
             return
         if arr.ndim == 1:
             if arr.size % 2 != 0:
@@ -1334,6 +1386,11 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             raise ValueError("Static obstacle points must be convertible to an (N, 2) array.")
         self._bound_static_obstacle_points = np.asarray(arr[:, :2], dtype=float)
         self._bound_static_obstacle_spacing = float(max(spacing, self._EPS))
+        if (
+            not np.array_equal(previous_points, self._bound_static_obstacle_points)
+            or previous_spacing != self._bound_static_obstacle_spacing
+        ):
+            self._clear_rvo2_simulator()
 
     def _extract_bound_static_obstacle_points(
         self,
@@ -2261,6 +2318,69 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
             observation=observation,
         )
 
+    def _rvo2_simulator_for(self, scene: _Rvo2Scene) -> tuple[Any, int, list[int]]:
+        """Return a simulator reused only for an identical immutable scene signature."""
+        signature = (
+            scene.time_step,
+            scene.neighbor_dist,
+            scene.max_neighbors,
+            scene.time_horizon,
+            scene.time_horizon_obst,
+            scene.robot_radius,
+            scene.max_speed,
+            len(scene.ped_max_speeds),
+            scene.ped_radius,
+            scene.ped_max_speeds,
+            scene.obstacle_vertices,
+        )
+        if self._rvo2_sim is not None and self._rvo2_signature == signature:
+            assert self._rvo2_robot_id is not None
+            return self._rvo2_sim, self._rvo2_robot_id, self._rvo2_ped_ids
+
+        sim = rvo2.PyRVOSimulator(
+            scene.time_step,
+            scene.neighbor_dist,
+            scene.max_neighbors,
+            scene.time_horizon,
+            scene.time_horizon_obst,
+            scene.robot_radius,
+            scene.max_speed,
+        )
+        robot_id = sim.addAgent(
+            tuple(scene.robot_pos),
+            scene.neighbor_dist,
+            scene.max_neighbors,
+            scene.time_horizon,
+            scene.time_horizon_obst,
+            scene.robot_radius,
+            scene.max_speed,
+            tuple(scene.robot_velocity_world),
+        )
+        ped_ids = []
+        for idx, ped_max_speed in enumerate(scene.ped_max_speeds):
+            ped_ids.append(
+                sim.addAgent(
+                    tuple(scene.ped_positions[idx]),
+                    scene.neighbor_dist,
+                    scene.max_neighbors,
+                    scene.time_horizon,
+                    scene.time_horizon_obst,
+                    scene.ped_radius,
+                    ped_max_speed,
+                    tuple(scene.ped_vel_world[idx]),
+                )
+            )
+        for vertices in scene.obstacle_vertices:
+            sim.addObstacle(list(vertices))
+        if scene.obstacle_vertices:
+            sim.processObstacles()
+
+        self._rvo2_sim = sim
+        self._rvo2_signature = signature
+        self._rvo2_robot_id = robot_id
+        self._rvo2_ped_ids = ped_ids
+        return sim, robot_id, ped_ids
+
     def _rvo2_velocity_world(self, observation: dict) -> np.ndarray:
         """Compute a world-frame velocity using the rvo2 ORCA solver.
 
@@ -2324,61 +2444,47 @@ class ORCAPlannerAdapter(SamplingPlannerAdapter):
         time_horizon = float(self.config.orca_time_horizon)
         time_horizon_obst = float(self.config.orca_time_horizon_obst)
         max_speed = float(self.config.max_linear_speed)
-
-        sim = rvo2.PyRVOSimulator(
-            time_step,
-            neighbor_dist,
-            max_neighbors,
-            time_horizon,
-            time_horizon_obst,
-            robot_radius,
-            max_speed,
-        )
-        robot_id = sim.addAgent(
-            tuple(robot_pos),
-            neighbor_dist,
-            max_neighbors,
-            time_horizon,
-            time_horizon_obst,
-            robot_radius,
-            max_speed,
-            tuple(robot_velocity_world),
-        )
-
-        ped_ids: list[int] = []
-        for idx in range(ped_count):
-            ped_speed = float(np.linalg.norm(ped_vel_world[idx]))
-            ped_max_speed = max(ped_speed, max_speed)
-            ped_id = sim.addAgent(
-                tuple(ped_positions[idx]),
-                neighbor_dist,
-                max_neighbors,
-                time_horizon,
-                time_horizon_obst,
-                ped_radius,
-                ped_max_speed,
-                tuple(ped_vel_world[idx]),
-            )
-            ped_ids.append(ped_id)
-
         obstacle_positions, obstacle_radii = self._extract_obstacles_from_grid(
             observation, robot_pos, robot_heading
         )
-        if obstacle_positions.size:
-            for center, radius in zip(obstacle_positions, obstacle_radii, strict=False):
-                half = float(radius)
-                vertices = [
-                    (float(center[0] - half), float(center[1] - half)),
-                    (float(center[0] + half), float(center[1] - half)),
-                    (float(center[0] + half), float(center[1] + half)),
-                    (float(center[0] - half), float(center[1] + half)),
-                ]
-                sim.addObstacle(vertices)
-            sim.processObstacles()
+        obstacle_vertices: tuple[tuple[tuple[float, float], ...], ...] = tuple(
+            (
+                (float(center[0] - radius), float(center[1] - radius)),
+                (float(center[0] + radius), float(center[1] - radius)),
+                (float(center[0] + radius), float(center[1] + radius)),
+                (float(center[0] - radius), float(center[1] + radius)),
+            )
+            for center, radius in zip(obstacle_positions, obstacle_radii, strict=True)
+        )
+        ped_max_speeds = tuple(
+            max(float(np.linalg.norm(ped_vel_world[idx])), max_speed) for idx in range(ped_count)
+        )
+        scene = self._Rvo2Scene(
+            time_step=time_step,
+            neighbor_dist=neighbor_dist,
+            max_neighbors=max_neighbors,
+            time_horizon=time_horizon,
+            time_horizon_obst=time_horizon_obst,
+            robot_radius=robot_radius,
+            max_speed=max_speed,
+            robot_pos=robot_pos,
+            robot_velocity_world=robot_velocity_world,
+            ped_positions=ped_positions,
+            ped_vel_world=ped_vel_world,
+            ped_radius=ped_radius,
+            ped_max_speeds=ped_max_speeds,
+            obstacle_vertices=obstacle_vertices,
+        )
+        sim, robot_id, ped_ids = self._rvo2_simulator_for(scene)
 
+        # The cached simulator carries state across doStep(), so reset every mutable agent field.
+        sim.setAgentPosition(robot_id, tuple(robot_pos))
+        sim.setAgentVelocity(robot_id, tuple(robot_velocity_world))
         sim.setAgentPrefVelocity(robot_id, tuple(preferred_velocity_world))
-        for ped_id, vel in zip(ped_ids, ped_vel_world, strict=False):
-            sim.setAgentPrefVelocity(ped_id, tuple(vel))
+        for ped_id, position, velocity in zip(ped_ids, ped_positions, ped_vel_world, strict=True):
+            sim.setAgentPosition(ped_id, tuple(position))
+            sim.setAgentVelocity(ped_id, tuple(velocity))
+            sim.setAgentPrefVelocity(ped_id, tuple(velocity))
 
         sim.doStep()
         new_velocity_world = np.asarray(sim.getAgentVelocity(robot_id), dtype=float)
@@ -3753,28 +3859,33 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         near_dist = max(
             float(self.config.predictive_near_distance) + radius_margin + speed_margin, safe_dist
         )
-        collisions = 0.0
-        near_misses = 0.0
 
         if valid_dists is not None:
             limit = min(steps_val, future_peds.shape[1], valid_dists.shape[1])
-            for t in range(limit):
-                valid_dist = valid_dists[:, t]
-                if valid_dist.size == 0:
-                    continue
-                collisions += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
-                near_misses += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
-        else:
-            dt = max(float(self.config.predictive_rollout_dt), 1e-3)
-            robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
-            for t in range(min(steps_val, future_peds.shape[1])):
-                delta = future_peds[:, t, :] - robot_traj[t].reshape(1, 2)
-                dist = np.linalg.norm(delta, axis=1)
-                valid_dist = dist[mask > 0.5]
-                if valid_dist.size == 0:
-                    continue
-                collisions += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
-                near_misses += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
+            if limit <= 0 or valid_dists[:, :limit].size == 0:
+                return 0.0, 0.0
+            collisions = float(np.sum(np.maximum(0.0, safe_dist - valid_dists[:, :limit])))
+            near_misses = float(np.sum(np.maximum(0.0, near_dist - valid_dists[:, :limit])))
+            return collisions, near_misses
+
+        dt = max(float(self.config.predictive_rollout_dt), 1e-3)
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
+        horizon = min(steps_val, future_peds.shape[1])
+        if horizon <= 0:
+            return 0.0, 0.0
+
+        valid_idx = np.where(mask > 0.5)[0]
+        if valid_idx.size == 0:
+            return 0.0, 0.0
+
+        ped = future_peds[valid_idx, :horizon, :]
+        if ped.size == 0:
+            return 0.0, 0.0
+
+        delta = ped - robot_traj[:horizon].reshape(1, horizon, 2)
+        dist = np.linalg.norm(delta, axis=2)
+        collisions = float(np.sum(np.maximum(0.0, safe_dist - dist)))
+        near_misses = float(np.sum(np.maximum(0.0, near_dist - dist)))
         return collisions, near_misses
 
     def _min_clearance(
@@ -3833,28 +3944,37 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         steps_val = max(
             1, int(steps if steps is not None else self.config.predictive_horizon_steps)
         )
-        penalty = 0.0
 
         if valid_dists is not None:
             limit = min(steps_val, future_peds.shape[1], valid_dists.shape[1])
-            for t in range(limit):
-                valid_dist = valid_dists[:, t]
-                if valid_dist.size == 0:
-                    continue
-                shortfall = np.maximum(0.0, threshold - valid_dist)
-                time_weight = 1.0 / (float(t + 1) * dt + self._EPS)
-                penalty += float(np.sum(shortfall * time_weight))
-        else:
-            robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
-            for t in range(min(steps_val, future_peds.shape[1])):
-                delta = future_peds[:, t, :] - robot_traj[t].reshape(1, 2)
-                dist = np.linalg.norm(delta, axis=1)
-                valid_dist = dist[mask > 0.5]
-                if valid_dist.size == 0:
-                    continue
-                shortfall = np.maximum(0.0, threshold - valid_dist)
-                time_weight = 1.0 / (float(t + 1) * dt + self._EPS)
-                penalty += float(np.sum(shortfall * time_weight))
+            if limit <= 0 or valid_dists[:, :limit].size == 0:
+                return 0.0
+            valid_slice = valid_dists[:, :limit]
+            shortfall = np.maximum(0.0, threshold - valid_slice)
+            time_indices = np.arange(1, limit + 1, dtype=float).reshape(1, limit)
+            time_weights = 1.0 / (time_indices * dt + self._EPS)
+            penalty = float(np.sum(shortfall * time_weights))
+            return penalty
+
+        horizon = min(steps_val, future_peds.shape[1])
+        if horizon <= 0:
+            return 0.0
+
+        valid_idx = np.where(mask > 0.5)[0]
+        if valid_idx.size == 0:
+            return 0.0
+
+        robot_traj = self._rollout_robot(v=v, w=w, dt=dt, steps=steps_val)
+        ped = future_peds[valid_idx, :horizon, :]
+        if ped.size == 0:
+            return 0.0
+
+        delta = ped - robot_traj[:horizon].reshape(1, horizon, 2)
+        dist = np.linalg.norm(delta, axis=2)
+        shortfall = np.maximum(0.0, threshold - dist)
+        time_indices = np.arange(1, horizon + 1, dtype=float).reshape(1, horizon)
+        time_weights = 1.0 / (time_indices * dt + self._EPS)
+        penalty = float(np.sum(shortfall * time_weights))
         return penalty
 
     def _score_action(
@@ -4017,17 +4137,19 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         near_dist = max(float(self.config.predictive_near_distance) + radius_margin, safe_dist)
         ttc_threshold = float(self.config.predictive_ttc_distance) + radius_margin
 
-        for t in range(horizon):
-            delta = future_peds[:, t, :] - local_traj[t].reshape(1, 2)
-            dist = np.linalg.norm(delta, axis=1)
-            valid_dist = dist[mask > 0.5]
-            if valid_dist.size == 0:
-                continue
-            min_clearance = min(min_clearance, float(np.min(valid_dist)))
-            collision_pen += float(np.sum(np.maximum(0.0, safe_dist - valid_dist)))
-            near_pen += float(np.sum(np.maximum(0.0, near_dist - valid_dist)))
-            shortfall = np.maximum(0.0, ttc_threshold - valid_dist)
-            ttc_pen += float(np.sum(shortfall / (float(t + 1) * dt + self._EPS)))
+        valid_idx = np.where(mask > 0.5)[0]
+        if valid_idx.size > 0:
+            ped = future_peds[valid_idx, :horizon, :]
+            if ped.size > 0:
+                delta = ped - local_traj.reshape(1, horizon, 2)
+                dist = np.linalg.norm(delta, axis=2)
+                min_clearance = float(np.min(dist)) if dist.size > 0 else float("inf")
+                collision_pen = float(np.sum(np.maximum(0.0, safe_dist - dist)))
+                near_pen = float(np.sum(np.maximum(0.0, near_dist - dist)))
+                time_indices = np.arange(1, horizon + 1, dtype=float).reshape(1, horizon)
+                time_weights = 1.0 / (time_indices * dt + self._EPS)
+                shortfall = np.maximum(0.0, ttc_threshold - dist)
+                ttc_pen = float(np.sum(shortfall * time_weights))
 
         cos_h = float(np.cos(robot_heading))
         sin_h = float(np.sin(robot_heading))
@@ -4064,22 +4186,17 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             0.0, float(self.config.predictive_hard_clearance_distance) - float(min_clearance)
         )
 
-        phase_cost = 0.0
-        if bool(self.config.predictive_phase_logic_enabled):
-            first_v, _first_w = sequence[0]
-            first_seg_end = min(max(1, segment_steps), max(horizon, 1)) - 1
-            first_heading = robot_heading + (local_headings[first_seg_end] if horizon > 0 else 0.0)
-            goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
-            heading_err = abs(wrap_angle_pi(goal_heading - first_heading))
-            phase_cost += float(self.config.predictive_phase_align_weight) * heading_err
-            if min_clearance >= float(self.config.predictive_phase_commit_clearance):
-                phase_cost -= float(self.config.predictive_phase_commit_weight) * max(0.0, first_v)
-            if min_clearance < float(self.config.predictive_phase_yield_clearance):
-                phase_cost += float(self.config.predictive_phase_yield_weight) * max(0.0, first_v)
-            if min_clearance >= float(
-                self.config.predictive_phase_recover_clearance
-            ) and goal_progress < float(self.config.predictive_phase_recover_progress):
-                phase_cost += float(self.config.predictive_phase_recover_weight)
+        goal_heading = float(np.arctan2(goal[1] - robot_pos[1], goal[0] - robot_pos[0]))
+        phase_cost = self._sequence_phase_cost(
+            sequence=sequence,
+            segment_steps=segment_steps,
+            horizon=horizon,
+            local_headings=local_headings,
+            robot_heading=robot_heading,
+            goal_heading=goal_heading,
+            min_clearance=min_clearance,
+            goal_progress=goal_progress,
+        )
 
         return (
             -float(self.config.predictive_goal_weight) * goal_progress
@@ -4093,6 +4210,41 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             + float(self.config.occupancy_weight) * occ_penalty
             + phase_cost
         )
+
+    def _sequence_phase_cost(
+        self,
+        *,
+        sequence: list[tuple[float, float]],
+        segment_steps: int,
+        horizon: int,
+        local_headings: np.ndarray,
+        robot_heading: float,
+        goal_heading: float,
+        min_clearance: float,
+        goal_progress: float,
+    ) -> float:
+        """Phase-logic cost contribution for a scored action sequence.
+
+        Returns:
+            float: Additional phase cost (may be negative); zero when phase logic is disabled.
+        """
+        if not bool(self.config.predictive_phase_logic_enabled):
+            return 0.0
+        phase_cost = 0.0
+        first_v, _first_w = sequence[0]
+        first_seg_end = min(max(1, segment_steps), max(horizon, 1)) - 1
+        first_heading = robot_heading + (local_headings[first_seg_end] if horizon > 0 else 0.0)
+        heading_err = abs(wrap_angle_pi(goal_heading - first_heading))
+        phase_cost += float(self.config.predictive_phase_align_weight) * heading_err
+        if min_clearance >= float(self.config.predictive_phase_commit_clearance):
+            phase_cost -= float(self.config.predictive_phase_commit_weight) * max(0.0, first_v)
+        if min_clearance < float(self.config.predictive_phase_yield_clearance):
+            phase_cost += float(self.config.predictive_phase_yield_weight) * max(0.0, first_v)
+        if min_clearance >= float(
+            self.config.predictive_phase_recover_clearance
+        ) and goal_progress < float(self.config.predictive_phase_recover_progress):
+            phase_cost += float(self.config.predictive_phase_recover_weight)
+        return phase_cost
 
     def _plan_sequence_search(
         self,

@@ -1,0 +1,204 @@
+# Reviewed Baseline Disposition Companion (Issue #5952 / Issue #5972)
+schema_version: evidence_registry_baseline_review.v1
+claim_boundary: >-
+  Per-file review record for the evidence-registry ratchet baseline refresh (Issues #5952 and
+  #5972). This is NOT an exclusion policy: the strict-CI code-level exclusion policy lives at
+  docs/context/evidence/evidence_registry_strict_ci_policy.yaml. This file records, for each
+  evidence file that gained findings after the #5275/#5317 baseline was first committed, the
+  explicit remediate-or-baseline disposition required by the issue Definition of Done. It exists
+  separately from scripts/validation/evidence_registry_baseline.json so that
+  evidence_registry_ratchet.py --write-baseline can regenerate the machine-counted baseline
+  without clobbering the human review.
+evidence_status: diagnostic-only
+approved_by: ll7
+approved_date: 2026-07-17
+source_issue: 5972
+source_issue_addendum: 5981
+prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
+prior_baseline_total_findings: 359
+prior_baseline_files_with_findings: 73
+refreshed_baseline_total_findings: 414
+refreshed_baseline_files_with_findings: 87
+decision_summary: >-
+  Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
+  eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
+  strict-linter finding was introduced (strict mode remains at zero active findings). Each file
+  was reviewed against its source to decide remediate-vs-baseline. All fourteen use the same
+  legacy-debt pattern as the original 359 findings: artifact provenance gaps
+  (external/private/untracked artifacts, ambiguous bare filenames) and campaign provenance gaps
+  (dangling historical commits, missing producing config). None is trivially remediable without
+  recovering external or historical provenance (durable remote commits, committed large
+  artifacts, or external private locations), which is out of scope for this refresh and explicitly
+  out of scope for Issue #5972 (deleting artifacts and suppressing new findings globally are
+  excluded; this is a targeted, reviewed baseline inclusion, not a global suppression).
+  Accordingly each file is dispositioned baseline below. A future maintainer who backfills
+  provenance for any of these files should refresh the baseline with --write-baseline to lock in
+  the reduction.
+  Review addendum (issue #5983): campaign-level aggregation for
+  `issue4206_trace_capable_h600_rerun_20260704` had attributed the unresolved producer commit
+  62e08add1c2a5a750a6fd68a823319280c2dccd6 (an orphaned squash fragment, no longer reachable)
+  from the issue #4891 and remaining issue #4848 exemplar records to the canonical Issue #4848
+  metadata path. It was recorded below as a reviewed baseline increase pending provenance repair.
+  Repair addendum (issue #5986): the dangling producer provenance across the whole shared
+  campaign has been repaired by recording the unavailable original-generation provenance in every
+  #4848 and #4891 exemplar `metadata.json`, `trace_series.json`, and `README.md`. The reachable
+  origin/main integration commit 0b0214ced856eac77fa9a4c15b02921eabab1661 (squash-merge of PR
+  #4938) is recorded separately as `published_integration_commit`, a pointer to the published
+  exporter source; it is not asserted to be the generation commit. This completes the repair PR
+  #5383 started (it fixed one metadata.json and README but left trace_series.json and the other
+  bundles on the orphaned commit, which kept the campaign-level finding alive). The per-file
+  SHA256SUMS were refreshed for every changed file. The baseline was refreshed with --write-baseline,
+  dropping the #4848 canonical-path `dangling_commit` from 1 to 0 (total 415 -> 414); the
+  corresponding reviewed baseline increase entry is removed below. The orphaned 62e08add commit
+  remains unavailable and was not recovered or substituted as generation provenance. The three
+  remaining findings on the canonical #4848 path
+  (duplicate_campaign_id, missing_config_path, missing_config_sha256) are separate campaign
+  provenance concerns outside issue #5986's dangling-commit scope and remain tracked here.
+disposition_legend:
+  baseline: >-
+    Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
+    downward ratchet gates on net-new findings only.
+  remediate: >-
+    Finding to be fixed in the evidence file itself; not applicable to this refresh because no
+    file admitted a trivial, in-repo repair.
+reviewed_files:
+  - path: docs/context/evidence/issue_1496_oracle_trace_collection_job_13520/registration.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Dataset registered under private-artifact:// URI with a sha256 that cannot bind to a
+      committed artifact path; same artifact-provenance-backfill-required pattern as the legacy
+      77 hash_without_artifact_path findings. Recovering the private dataset location is external
+      maintainer action.
+  - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/artifact_manifest.yaml
+    codes: [hash_without_artifact_path, uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      Package-a transfer manifest. The prior bare README.md path was repaired to use the intended
+      repository-relative artifact path, so it no longer produces artifact_hash_mismatch. The
+      uncommitted_artifact_missing_location rows are external campaign store / untracked table
+      artifacts; hash_without_artifact_path is the external episode-store checksum. All are
+      provenance-backfill legacy debt.
+  - path: docs/context/evidence/issue_3078_package_a_job_13521_2026-07-16/registration.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Source episode store referenced by private-campaign:// URI with a sha256 that cannot bind to
+      a committed repo path; artifact-provenance-backfill-required legacy debt.
+  - path: docs/context/evidence/issue_4364_release_0_0_3_post1/artifact_pointer.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Release bundle and source bundle referenced by GitHub release download URLs with sha256
+      checksums that cannot bind to a committed repo path; external-release artifact provenance
+      backfill.
+  - path: docs/context/evidence/issue_4365_job_13378_closeout/summary.json
+    codes: [dangling_commit, missing_config_path, missing_config_sha256]
+    disposition: baseline
+    reason: >-
+      Job 13378 closeout diagnostic. The dangling_commit is the historical private-ops commit
+      4e4f22af (not reachable in this checkout); missing_config_* are campaign provenance
+      backfill. Requires durable remote/archive recovery, never the current commit.
+  - path: docs/context/evidence/issue_5034_control_action_latency_sweep/snqi_uncertainty_reissued.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Re-issued uncertainty block references durable input / weights / baseline blobs by sha256
+      without a single bindable committed artifact path; artifact-provenance-backfill-required
+      legacy debt.
+  - path: docs/context/evidence/issue_5248_salvaged_h600_registration_2026-07/registration.json
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      Registration receipt references reports/ artifacts (campaign_summary.json,
+      seed_episode_rows.csv) that are untracked and lack a durable location marker;
+      artifact-provenance-backfill-required legacy debt.
+  - path: docs/context/evidence/issue_5305_certified_archive/acceptance_report.json
+    codes: [config_missing_at_commit]
+    disposition: baseline
+    reason: >-
+      Certified-archive acceptance report declares config_sha256 but the producing
+      campaign_config.json is absent at the declared commit; provenance-backfill-required legacy
+      debt (recover the producing config or commit with source evidence).
+  - path: docs/context/evidence/issue_5355_prediction_mpc_factorial_preregistration/preregistration_config_registry.json
+    codes: [config_missing_at_commit, dangling_commit]
+    disposition: baseline
+    reason: >-
+      The preregistration registry records the planned factorial campaign's producing config and
+      commit, but the declared config is absent at that historical commit and the commit is not
+      reachable in this checkout. This is diagnostic provenance debt for an unrun campaign, not
+      evidence of a benchmark result; recovering the historical config/commit is a provenance
+      backfill task rather than a safe in-place rewrite of the preregistration record.
+  - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_catalog.yaml
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      Campaign atlas catalog references untracked atlas caption/provenance/summary/svg artifacts
+      and a /tmp inventory path; artifact-provenance-backfill-required legacy debt.
+  - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/campaign_atlas_summary.json
+    codes: [missing_commit, missing_config_path, missing_config_sha256]
+    disposition: baseline
+    reason: >-
+      Campaign atlas summary record lacks the producing commit and producing config provenance;
+      provenance-backfill-required legacy debt.
+  - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/campaign_atlas/ensemble_boundary_demo/campaign_atlas_catalog.yaml
+    codes: [uncommitted_artifact_missing_location]
+    disposition: baseline
+    reason: >-
+      Ensemble boundary-demo atlas catalog references untracked atlas artifacts; same
+      artifact-provenance-backfill-required legacy debt as the parent atlas catalog.
+  - path: docs/context/evidence/issue_5446_release_0_0_3_candidates/candidate_trace_resolution.v1.with_store.json
+    codes: [missing_commit, missing_config_path, missing_config_sha256]
+    disposition: baseline
+    reason: >-
+      Candidate trace resolution record lacks the producing commit and producing config
+      provenance; provenance-backfill-required legacy debt.
+  - path: docs/context/evidence/issue_5948_doorway_provenance_2026-07-17/run_summary_reconstruction.yaml
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Issue #5948 run-summary reconstruction carries a checksum without an adjacent artifact path.
+      This is the legacy provenance gap identified by Issue #5972; repairing the external artifact
+      binding is outside this baseline reconciliation, so the finding is explicitly dispositioned
+      as baseline under the existing strict-CI policy.
+reviewed_baseline_increases:
+  - path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/nominal_campaign_summary.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is reachable from preserved pull-request history but not from main's
+      ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
+      this checkout-dependent historical provenance finding explicitly; do not rewrite the
+      artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/stress_campaign_summary.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is reachable from preserved pull-request history but not from main's
+      ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
+      this checkout-dependent historical provenance finding explicitly; do not rewrite the
+      artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_1454_s10_h500_candidates_2026-05-23/campaign_manifest.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is reachable from preserved pull-request history but not from main's
+      ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
+      this checkout-dependent historical provenance finding explicitly; do not rewrite the
+      artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_1454_stage_a_fixed_h100_2026-05-22/reports/campaign_analysis.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is reachable from preserved pull-request history but not from main's
+      ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
+      this checkout-dependent historical provenance finding explicitly; do not rewrite the
+      artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_1484_broader_cross_kinematics_2026-05-28/campaign_manifest.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is reachable from preserved pull-request history but not from main's
+      ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
+      this checkout-dependent historical provenance finding explicitly; do not rewrite the
+      artifact or producer SHA in this baseline reconciliation.

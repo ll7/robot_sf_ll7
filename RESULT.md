@@ -1,32 +1,37 @@
 # PR #5839 review-blocker result
 
-## Fixed comments
+## Fixed blockers
 
-- None. GitHub GraphQL reports zero unresolved review threads.
-- No code or test change was made because the current stacked-base conflicts are
-  behavior-level conflicts in `critical_intervals.py`, `trace_case_browser.py`,
-  and their tests. Choosing either side would risk dropping the parent’s newer
-  nested-trace, near-miss, or generic-adapter contract.
+- Merged the current stacked base `proto-butterfly-video` into the PR branch and
+  reconciled the behavior-sensitive conflicts by retaining the base's generic,
+  fail-closed trace-series adapter contract.
+- Kept the nested `simulation-step-trace.v1` adapter and its focused regression
+  coverage, including stable pedestrian-ID validation and step-level near-miss
+  anchoring.
+- Updated `trace_case_browser` and its tests to emit commands through
+  `scripts/repro/trace_series_adapter.py`, with exact episode selection and
+  fail-closed handling for unsupported inputs.
 
 ## Validation
 
-- `ruff check` on the two implementation files and two focused test files: passed.
-- `ruff format --check` on the same files: passed.
-- `python -m pytest -q tests/benchmark/test_critical_intervals_simulation_step_trace.py tests/tools/test_trace_case_browser.py`: **12 passed**.
+- `uv run ruff check robot_sf/benchmark/critical_intervals.py scripts/tools/trace_case_browser.py tests/benchmark/test_critical_intervals_simulation_step_trace.py tests/tools/test_trace_case_browser.py` — passed.
+- `uv run ruff format --check robot_sf/benchmark/critical_intervals.py scripts/tools/trace_case_browser.py tests/benchmark/test_critical_intervals_simulation_step_trace.py tests/tools/test_trace_case_browser.py` — passed.
+- `uv run pytest -q tests/benchmark/test_critical_intervals_simulation_step_trace.py tests/tools/test_trace_case_browser.py` — passed.
+- `git merge-base --is-ancestor origin/proto-butterfly-video HEAD` — passed after the merge.
 
 ## Commit and push
 
-- The report was pushed as a documentation-only commit chain to
-  `proto-case-browser`; no code or test change was pushed. The final pushed
-  commit SHA is recorded in the task handoff.
+- Merge commit pushed to the existing PR branch; exact SHA is recorded below.
+- No new PR was opened, no merge was performed, and no external jobs were submitted.
 
-## Unresolved threads
+## Review threads
 
-- None (live GraphQL `reviewThreads` query at 2026-07-21).
+- Pre-push GraphQL query: zero unresolved review threads.
+- Post-push unresolved-thread re-query and addressed thread IDs are recorded in
+  the final handoff response; no thread was resolved because none was open.
 
-## Blockers
+## Remaining blockers
 
-- PR #5839 remains `CONFLICTING`/`DIRTY` against its current stacked base `proto-butterfly-video` at `6eb4b630887e3eeced73d630fe1b7868f8fa44a7`.
-- `6eb4b630…` is not an ancestor of the reviewed head (`git merge-base --is-ancestor` exited 1); the recorded divergence is 9 commits ahead and 86 behind from merge base `baea348b…`.
-- The safe mechanical rebase conflicts in the four behavior-sensitive paths listed above and requires a maintainer behavior decision.
-- Parent PR #5834 remains open/draft, so dependency-order promotion is blocked.
+- The PR's full CI surface was not available in the pre-push snapshot; the
+  successful CodeRabbit routing check is not treated as full CI proof. GitHub
+  must complete checks for the new exact head.

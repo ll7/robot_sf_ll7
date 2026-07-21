@@ -12,6 +12,21 @@ Welcome to the Robot SF documentation! This directory contains comprehensive gui
 [`configs/benchmarks/route_clearance_certifications_v1.yaml`](../configs/benchmarks/route_clearance_certifications_v1.yaml);
 see [issue_1105_route_clearance_certification.md](./context/issue_1105_route_clearance_certification.md).
 
+## Documentation layers (start here by audience)
+
+Robot SF docs are split into three audience layers. Pick the one that matches your goal; each has its
+own index so you never fall straight into issue-specific context notes.
+
+- 👤 **[User Guide](./user-guide.md)** — task-oriented: install, run a demo, load a map, choose a
+  planner, run a benchmark, visualize results, troubleshoot. *New here? Start here.*
+- 🔬 **[Research & Benchmark Guide](./research-guide.md)** — benchmark semantics, evidence grading,
+  scenario certification, release protocol, provenance discipline.
+- 🛠️ **[Developer Guide](./developer-guide.md)** — architecture, contribution workflow, validation
+  gates, CI, and internals.
+
+> Internal context notes and issue-specific working files live under `docs/context/` and are linked
+> from the Research/Developer layers only — they are kept out of the user path.
+
 ## Static Docs Site
 
 This repository includes a lightweight Sphinx site over the existing Markdown docs. Build it from
@@ -474,6 +489,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * [**Full SNQI Flow (episodes → baseline → figures)**](../examples/benchmarks/snqi_full_flow.py) - End-to-end reproducible pipeline script
 
 * [**Benchmark Schema & Aggregation Diagnostics**](./benchmark.md) - Episode metadata mirrors, algorithm grouping keys,  `_meta` warnings, and validation hooks
+* [**Actuator-Feasibility Validation (Issue #6056)**](./actuator_feasibility.md) - Experimental diagnostic for distinguishing geometric clearance from actuator-feasible maneuvers, with provisional-limit and claim-boundary documentation
 * [Regression Notes – Algorithm Aggregation](./dev/issues/142-aggregation-mixes-algorithms/design.md) - Test matrix, warnings, and smoke workflow for Feature 142
 * [**Social Navigation Benchmark**](./dev/issues/social-navigation-benchmark/README.md) - Benchmark design, metrics, schema, and how to run episodes/batches
 * **Full Classic Interaction Benchmark** – Implementation complete (episodes, aggregation, effect sizes, adaptive precision, plots, videos, scaling metrics). See detailed guide: [ `benchmark_full_classic.md` ](./benchmark_full_classic.md) (quickstart & tasks in `specs/122-full-classic-interaction/` ).

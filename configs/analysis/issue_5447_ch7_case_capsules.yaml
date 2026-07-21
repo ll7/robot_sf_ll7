@@ -16,6 +16,19 @@ depends_on:
   candidate_manifest: "#5446 seed_flip_inversion_candidates.v1 (validated, pinned SHA)"
   causal_reports: "#5441-#5445 validated causal / online-risk reports where available"
 
+# --- Pinned frozen input (issue #5447 data dependency now RESOLVED) --------
+# The validated #5446 candidate manifest is materialized under
+# docs/context/evidence/issue_5446_release_0_0_3_candidates/. The capsule set is
+# built deterministically from it; both checksums below are recorded so the
+# selection is reproducible in a clean worktree.
+pinned_inputs:
+  candidate_manifest_rel: "docs/context/evidence/issue_5446_release_0_0_3_candidates/seed_flip_inversion_candidates.v1.json.gz"
+  candidate_manifest_gz_sha256: "1021e2fa6efbd2bd4a0d6426a4f7314d83474ef5402a9d5dcf0d042aca83dd64"
+  # Canonical (order-independent) dict hash recorded by the builder in the emitted manifest.
+  candidate_manifest_canonical_dict_sha256: "cf9caa96b88c47908ac2b3c63cc8dae21f0b20d39c44f5c48cd9b77225984f45"
+  validated_causal_reports: "unavailable (issues #5441-#5445 still open)"
+  validated_risk_reports: "unavailable (issues #5441-#5445 still open)"
+
 # --- Honest set size (issue #5447 stop rule) ---------------------------------
 selection:
   # Stop at a smaller honest set if fewer than this many archetypes pass gates.
@@ -63,15 +76,12 @@ archetypes:
     optional: true
 
 # --- Reproducible build command ----------------------------------------------
-# Fill CANDIDATES/CAUSAL/RISK with the pinned frozen-SHA manifest paths once the
-# #5446 candidate manifest exists. Figure rendering is a separate downstream step.
+# The frozen-SHA capsule artifact set is produced by the materialize driver,
+# which reads the pinned candidate manifest and writes the manifest + ledger +
+# SHA256SUMS sidecar under docs/context/evidence/issue_5447_ch7_case_capsules/.
+# Figure rendering is a separate downstream step (reuses robot_sf.benchmark.figures).
 build_command: >-
-  uv run python scripts/analysis/build_ch7_case_capsules_issue_5447.py
-  --candidates ${CANDIDATE_MANIFEST}
-  --causal ${CAUSAL_REPORTS}
-  --risk ${RISK_REPORTS}
-  --json ${OUTPUT_MANIFEST}
-  --validate
+  uv run python scripts/analysis/materialize_issue_5447_capsules.py
 
 # --- Claim boundary -----------------------------------------------------------
 claim_boundary: >-

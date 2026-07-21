@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from robot_sf.planner import socnav as _socnav_module
 from robot_sf.planner.socnav import (
     HRVOPlannerAdapter,
     ORCAPlannerAdapter,
@@ -98,6 +99,81 @@ def _orca_fallback_adapter(
 
     monkeypatch.setattr(socnav, "rvo2", None)
     return ORCAPlannerAdapter(config or SocNavPlannerConfig(), allow_fallback=True)
+
+
+class _Rvo2SimulatorSpy:
+    """Small rvo2 public-API spy for ORCA simulator lifecycle tests."""
+
+    instances: list["_Rvo2SimulatorSpy"] = []
+
+    def __init__(self, *args):
+        self.constructor_args = args
+        self.agents: list[dict[str, tuple[float, float]]] = []
+        self.obstacles: list[list[tuple[float, float]]] = []
+        self.process_obstacles_calls = 0
+        self._step_calls: list[tuple[str, int, tuple[float, float]]] = []
+        self.step_calls: list[list[tuple[str, int, tuple[float, float]]]] = []
+        type(self).instances.append(self)
+
+    @classmethod
+    def reset_instances(cls) -> None:
+        """Clear captured simulators between independent lifecycle checks."""
+        cls.instances = []
+
+    def addAgent(self, position, *args):
+        """Capture construction and return the rvo2-compatible agent id."""
+        velocity = tuple(args[-1])
+        self.agents.append(
+            {
+                "position": tuple(position),
+                "velocity": velocity,
+                "preferred_velocity": (0.0, 0.0),
+            }
+        )
+        return len(self.agents) - 1
+
+    def addObstacle(self, vertices):
+        """Capture one obstacle polygon."""
+        self.obstacles.append(list(vertices))
+
+    def processObstacles(self):
+        """Capture obstacle processing without changing the fake state."""
+        self.process_obstacles_calls += 1
+
+    def setAgentPosition(self, agent_id, position):
+        """Capture position reset through the public rvo2 API."""
+        value = tuple(position)
+        self.agents[agent_id]["position"] = value
+        self._step_calls.append(("position", agent_id, value))
+
+    def setAgentVelocity(self, agent_id, velocity):
+        """Capture current-velocity reset through the public rvo2 API."""
+        value = tuple(velocity)
+        self.agents[agent_id]["velocity"] = value
+        self._step_calls.append(("velocity", agent_id, value))
+
+    def setAgentPrefVelocity(self, agent_id, velocity):
+        """Capture preferred-velocity reset through the public rvo2 API."""
+        value = tuple(velocity)
+        self.agents[agent_id]["preferred_velocity"] = value
+        self._step_calls.append(("preferred_velocity", agent_id, value))
+
+    def doStep(self):
+        """Use preferred velocity as the fake solver result and close one captured step."""
+        for agent in self.agents:
+            agent["velocity"] = agent["preferred_velocity"]
+        self.step_calls.append(self._step_calls)
+        self._step_calls = []
+
+    def getAgentVelocity(self, agent_id):
+        """Return the fake solver velocity through the public rvo2 API."""
+        return self.agents[agent_id]["velocity"]
+
+
+class _Rvo2SpyModule:
+    """Module-shaped wrapper exposing the simulator constructor used by the adapter."""
+
+    PyRVOSimulator = _Rvo2SimulatorSpy
 
 
 def test_sampling_adapter_moves_toward_goal():
@@ -465,6 +541,93 @@ def test_orca_adapter_uses_rvo2_when_available():
     v, w = adapter.plan(obs)
     assert 0.0 <= v <= adapter.config.max_linear_speed + 1e-6
     assert abs(w) <= adapter.config.max_angular_speed + 1e-6
+
+
+def test_orca_persistent_rvo2_reuses_and_resets_state(monkeypatch):
+    """Same-signature calls reuse one simulator and reset every mutable agent field."""
+    _Rvo2SimulatorSpy.reset_instances()
+    monkeypatch.setattr(_socnav_module, "rvo2", _Rvo2SpyModule)
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+    adapter.bind_static_obstacle_points(np.array([[2.0, 0.5], [2.2, 0.5]]), spacing=0.2)
+
+    for offset in (0.0, 0.2, 0.4):
+        observation = _make_obs_with_peds(
+            [(1.5 + offset, 0.2), (2.4, -0.4 + offset), (3.0, 0.6)], goal=(5.0, offset)
+        )
+        observation["robot"]["speed"] = np.array([0.3, 0.0], dtype=np.float32)
+        observation["pedestrians"]["velocities"] = np.array(
+            [[-0.2, 0.0], [0.0, 0.15], [0.1, -0.1]], dtype=np.float32
+        )
+        adapter.plan(observation)
+
+    assert len(_Rvo2SimulatorSpy.instances) == 1
+    simulator = _Rvo2SimulatorSpy.instances[0]
+    assert list(range(len(simulator.agents))) == [0, 1, 2, 3]
+    assert simulator.process_obstacles_calls == 1
+    assert len(simulator.step_calls) == 3
+    for calls in simulator.step_calls:
+        assert [(kind, agent_id) for kind, agent_id, _value in calls] == [
+            ("position", 0),
+            ("velocity", 0),
+            ("preferred_velocity", 0),
+            ("position", 1),
+            ("velocity", 1),
+            ("preferred_velocity", 1),
+            ("position", 2),
+            ("velocity", 2),
+            ("preferred_velocity", 2),
+            ("position", 3),
+            ("velocity", 3),
+            ("preferred_velocity", 3),
+        ]
+
+
+def test_orca_persistent_rvo2_rebuilds_on_signature_change_and_reset(monkeypatch):
+    """Population, obstacle, signature, and reset boundaries rebuild the simulator."""
+    _Rvo2SimulatorSpy.reset_instances()
+    monkeypatch.setattr(_socnav_module, "rvo2", _Rvo2SpyModule)
+    adapter = ORCAPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+    adapter.bind_static_obstacle_points(np.array([[2.0, 0.5]]), spacing=0.2)
+
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0), (2.0, 0.3), (2.5, -0.2)]))
+    adapter.plan(_make_obs_with_peds([]))
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0)]))
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0), (2.0, 0.3), (2.5, -0.2)]))
+    assert len(_Rvo2SimulatorSpy.instances) == 4
+
+    adapter.bind_static_obstacle_points(np.array([[2.5, 0.5]]), spacing=0.2)
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0), (2.0, 0.3), (2.5, -0.2)]))
+    adapter.config.max_linear_speed = 1.5
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0), (2.0, 0.3), (2.5, -0.2)]))
+    adapter.reset()
+    adapter.plan(_make_obs_with_peds([(1.5, 0.0), (2.0, 0.3), (2.5, -0.2)]))
+    assert len(_Rvo2SimulatorSpy.instances) == 7
+
+
+def test_orca_persistent_rvo2_matches_fresh_fixed_seed():
+    """Cached public plan commands match a fresh rvo2 adapter at fixed observations."""
+    if _socnav_module.rvo2 is None:
+        pytest.skip("rvo2 not installed; skipping native persistent-simulator parity check.")
+
+    np.random.seed(6025)
+    persistent = ORCAPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False)
+    observations = [
+        _make_obs_with_peds([(2.0, 0.8), (2.5, -0.8), (3.2, 0.6)], goal=(5.0, 0.0)),
+        _make_obs_with_peds([], goal=(4.0, 0.5)),
+        _make_obs_with_peds([(2.0, -0.8)], goal=(4.5, -0.4)),
+        _make_obs_with_peds([(2.0, 0.8), (2.3, -0.8), (3.1, 0.6)], goal=(5.0, 0.2)),
+    ]
+    for observation in observations:
+        observation["robot"]["speed"] = np.array([0.25, 0.0], dtype=np.float32)
+        command = persistent.plan(observation)
+        fresh_command = ORCAPlannerAdapter(SocNavPlannerConfig(), allow_fallback=False).plan(
+            observation
+        )
+        np.testing.assert_allclose(command, fresh_command, rtol=0.0, atol=1e-6)
+        assert np.asarray(command).shape == (2,)
+        assert np.all(np.isfinite(command))
+        assert 0.0 <= command[0] <= persistent.config.max_linear_speed
+        assert abs(command[1]) <= persistent.config.max_angular_speed
 
 
 def test_sacadrl_adapter(monkeypatch):
@@ -1111,3 +1274,160 @@ def test_prediction_rollout_robot_boundary_steps_match_scalar_reference():
     assert np.array_equal(got, _scalar_rollout_robot(0.5, 0.2, 0.1, 0))
     with pytest.raises(ValueError, match="negative dimensions"):
         adapter._rollout_robot(v=0.5, w=0.2, dt=0.1, steps=-1)
+
+
+# --- SocialForce force-broadcast parity (issue #5412) ---------------------
+# The scalar reference loops below reproduce the pre-vectorization
+# ``_compute_social_force`` / ``_compute_obstacle_force`` kernels exactly: the
+# per-pedestrian ``sf_forces.social_force_ped_ped`` call and the per-obstacle
+# ``sf_forces.obstacle_force`` call on a degenerate single-point line. They are
+# the numeric-parity reference for the vectorized broadcast; the determinism
+# policy in #5412 requires this gate before a behavior-changing vectorization
+# is accepted.
+
+
+def _scalar_compute_social_force(adapter, robot_pos, robot_vel, ped_state, robot_heading):
+    """Reference scalar ped-ped social-force loop (pre-#5412-vectorization)."""
+    sf_forces = _socnav_module.sf_forces
+    ped_positions = np.asarray(ped_state.get("positions", []), dtype=float)
+    if ped_positions.ndim == 1:
+        ped_positions = ped_positions.reshape(-1, 2)
+    ped_count = int(adapter._as_1d_float(ped_state.get("count", [0]), pad=1)[0])
+    ped_positions = ped_positions[:ped_count]
+    if ped_positions.size == 0:
+        return np.zeros(2, dtype=float)
+    ped_velocities = np.asarray(ped_state.get("velocities", []), dtype=float)
+    if ped_velocities.size == 0:
+        ped_velocities = np.zeros_like(ped_positions, dtype=float)
+    elif ped_velocities.ndim == 1:
+        ped_velocities = ped_velocities.reshape(-1, 2)
+    ped_velocities = ped_velocities[:ped_count]
+    ped_vel_world = adapter._rotate_velocities_to_world(ped_velocities, robot_heading)
+
+    total = np.zeros(2, dtype=float)
+    for ped_pos, ped_vel in zip(ped_positions, ped_vel_world, strict=False):
+        pos_diff = (robot_pos - ped_pos).astype(float)
+        vel_diff = (robot_vel - ped_vel).astype(float)
+        try:
+            fx, fy = sf_forces.social_force_ped_ped(
+                pos_diff,
+                vel_diff,
+                int(adapter.config.social_force_n),
+                int(adapter.config.social_force_n_prime),
+                float(adapter.config.social_force_lambda_importance),
+                float(adapter.config.social_force_gamma),
+            )
+            total += np.array([fx, fy], dtype=float)
+        except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+            continue
+    return total * float(adapter.config.social_force_factor)
+
+
+def _scalar_compute_obstacle_force(adapter, observation, robot_pos, robot_heading, robot_vel):
+    """Reference scalar point-obstacle force loop (pre-#5412-vectorization)."""
+    sf_forces = _socnav_module.sf_forces
+    centers, radii = adapter._extract_obstacles_from_grid(observation, robot_pos, robot_heading)
+    if centers.size == 0:
+        return np.zeros(2, dtype=float)
+    if np.linalg.norm(robot_vel) > adapter._EPS:
+        ortho = np.array([-robot_vel[1], robot_vel[0]], dtype=float)
+    else:
+        ortho = np.array([-np.sin(robot_heading), np.cos(robot_heading)], dtype=float)
+    robot_state = observation["robot"]
+    robot_radius = float(adapter._as_1d_float(robot_state.get("radius", [0.0]), pad=1)[0])
+    total = np.zeros(2, dtype=float)
+    for center, radius in zip(centers, radii, strict=False):
+        line = (float(center[0]), float(center[1]), float(center[0]), float(center[1]))
+        try:
+            fx, fy = sf_forces.obstacle_force(line, ortho, robot_pos, robot_radius + radius)
+            total += np.array([fx, fy], dtype=float)
+        except (ValueError, TypeError, FloatingPointError, np.linalg.LinAlgError):
+            continue
+    return total * float(adapter.config.social_force_obstacle_factor)
+
+
+_sf_available = pytest.mark.skipif(
+    _socnav_module.sf_forces is None,
+    reason="pysocialforce (fast-pysf) is required for the SocialForce parity gate",
+)
+
+
+@_sf_available
+def test_social_force_compute_vectorized_parity():
+    """Vectorized ped-ped social force must match the scalar loop within the parity gate."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    rng = np.random.default_rng(20260717)
+    for _ in range(50):
+        m = int(rng.integers(0, 30))
+        robot_pos = rng.uniform(-6.0, 6.0, 2)
+        robot_vel = rng.uniform(-2.0, 2.0, 2)
+        heading = float(rng.uniform(-np.pi, np.pi))
+        positions = rng.uniform(-6.0, 6.0, (max(m, 1), 2))
+        velocities = rng.uniform(-1.5, 1.5, (max(m, 1), 2))
+        ped_state = {
+            "positions": positions,
+            "velocities": velocities,
+            "count": np.array([float(m)]),
+        }
+        got = adapter._compute_social_force(robot_pos, robot_vel, ped_state, heading)
+        ref = _scalar_compute_social_force(adapter, robot_pos, robot_vel, ped_state, heading)
+        assert got.shape == (2,)
+        # The vectorized broadcast reorders the float reduction versus the
+        # sequential scalar accumulation. The residual is last-ULP drift; the
+        # force magnitude here is bounded (no near-singular inputs in this
+        # draw), so atol=1e-12 plus a tight rtol=1e-9 is benchmark-irrelevant and
+        # accepts the vectorization (no version bump) per issue #5412.
+        assert np.allclose(got, ref, atol=1e-12, rtol=1e-9)
+
+
+@_sf_available
+def test_social_force_compute_empty_peds_returns_zero():
+    """An empty / zero-count ped population must yield a zero social force."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    robot_pos = np.array([0.0, 0.0])
+    robot_vel = np.array([1.0, 0.0])
+    ped_state = {"positions": np.zeros((0, 2)), "velocities": np.zeros((0, 2)), "count": [0.0]}
+    got = adapter._compute_social_force(robot_pos, robot_vel, ped_state, 0.0)
+    assert np.array_equal(got, np.zeros(2))
+
+
+@_sf_available
+def test_social_force_obstacle_vectorized_parity():
+    """Vectorized point-obstacle force must match the scalar loop within the parity gate."""
+    cfg = SocNavPlannerConfig(social_force_obstacle_range=12.0)
+    adapter = SocialForcePlannerAdapter(cfg)
+    rng = np.random.default_rng(20260717)
+    for trial in range(40):
+        robot_pos = rng.uniform(-3.0, 3.0, 2)
+        robot_vel = rng.uniform(-1.0, 1.0, 2)
+        heading = float(rng.uniform(-np.pi, np.pi))
+        cells = [(int(r), int(c)) for r, c in rng.integers(0, 6, size=(int(rng.integers(0, 8)), 2))]
+        obs = _with_occupancy_grid(
+            _make_obs(goal=(8.0, 0.0), heading=heading),
+            obstacle_cells=cells or None,
+            resolution=1.0,
+            origin=(-3.0, -3.0),
+        )
+        obs["robot"]["position"] = robot_pos.astype(np.float32)
+        got = adapter._compute_obstacle_force(obs, robot_pos, heading, robot_vel, obs["robot"])
+        ref = _scalar_compute_obstacle_force(adapter, obs, robot_pos, heading, robot_vel)
+        assert got.shape == (2,)
+        # The point-obstacle potential ``1/obst_dist**3`` is near-singular when an
+        # obstacle sits inside the combined robot+obstacle radius (both paths then
+        # clamp obst_dist to 1e-5 and agree to machine-epsilon *relative* error,
+        # while the *absolute* force is ~1e19). The parity gate is therefore on
+        # relative error: rtol=1e-6 (six significant digits, far above the
+        # observed ~1e-13 residual) is benchmark-irrelevant and accepts the
+        # vectorization (no version bump) per issue #5412.
+        scale = np.maximum(np.abs(ref), 1e-30)
+        assert np.all(np.abs(got - ref) <= 1e-6 * scale + 1e-12)
+
+
+@_sf_available
+def test_social_force_obstacle_no_grid_returns_zero():
+    """With no occupancy grid the vectorized obstacle force must be zero."""
+    adapter = SocialForcePlannerAdapter(SocNavPlannerConfig())
+    obs = _make_obs(goal=(5.0, 0.0))
+    robot_pos = np.array([0.0, 0.0])
+    got = adapter._compute_obstacle_force(obs, robot_pos, 0.0, np.array([1.0, 0.0]), obs["robot"])
+    assert np.array_equal(got, np.zeros(2))

@@ -14,11 +14,16 @@ multi-processing are future work.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import math
 import multiprocessing as mp
 import os
 import platform
+import selectors
 import shlex
+import shutil
+import subprocess
 import sys
 import time
 import uuid
@@ -291,6 +296,20 @@ PPO_FIRST_STEP_TIMEOUT_SECS: float = 30.0
 ORCA_TRANSIENT_STEP_RETRIES: int = 1
 FINAL_SPEED_CLAMP: float = 2.0  # m/s cap to prevent unrealistic velocities
 
+# --- Native-command runner arm (issue #5887) ---------------------------------
+# A declared native planner command (e.g. a SIPP binary invocation) is accepted as
+# a first-class runner arm. The policy serializes the per-step robot/goal/pedestrian
+# state to JSON on stdin and parses a JSON velocity command ({"v","omega"} or
+# {"vx","vy"}) from stdout. The child runs either per-episode (spawned once and
+# torn down at episode end) or in persistent-process mode (kept alive across steps,
+# mirroring _PlannerStepProcess). Hard timeout, exit-code semantics, and command
+# provenance are captured per episode.
+NATIVE_COMMAND_DEFAULT_TIMEOUT_S: float = 1.0
+NATIVE_COMMAND_PROTOCOL_VERSION: str = "native-command.v1"
+NATIVE_COMMAND_ARM: str = "native_command"
+NATIVE_COMMAND_DIAGNOSTICS_KEY: str = "planner_diagnostics"
+NATIVE_COMMAND_RUNTIME_FIELD: str = "planner_step_runtime_seconds"
+
 
 _episode_identity_hash = episode_identity_hash
 
@@ -467,6 +486,318 @@ class _PlannerStepProcess:
         if process.is_alive():
             process.kill()
             process.join(timeout=0.1)
+
+
+# ---------------------------------------------------------------------------
+# Native-command runner arm (issue #5887)
+# ---------------------------------------------------------------------------
+
+
+def _native_command_spec(scenario_params: dict[str, Any]) -> dict[str, Any]:
+    """Return the native-command block declared in scenario params.
+
+    Returns:
+        Native-command contract dict with argv/env/timeout/process defaults.
+    """
+    raw_spec = scenario_params.get(NATIVE_COMMAND_ARM, {})
+    spec = dict(raw_spec) if isinstance(raw_spec, Mapping) else {}
+    if "argv" not in spec and "command" in spec:
+        spec["argv"] = spec["command"]
+    if "timeout_s" not in spec and "step_timeout_sec" in spec:
+        spec["timeout_s"] = spec["step_timeout_sec"]
+    if "persistent" not in spec and "mode" in spec:
+        spec["persistent"] = str(spec["mode"]).strip().lower() == "persistent"
+    spec.setdefault("argv", [])
+    spec.setdefault("env", {})
+    spec.setdefault("timeout_s", NATIVE_COMMAND_DEFAULT_TIMEOUT_S)
+    spec.setdefault("persistent", False)
+    spec.setdefault("protocol", NATIVE_COMMAND_PROTOCOL_VERSION)
+    return spec
+
+
+def _native_command_provenance(argv: list[str], env: Mapping[str, str]) -> dict[str, Any]:
+    """Capture provenance for a declared native command (command + version/hash).
+
+    Returns:
+        Provenance dict with the resolved argv, effective env keys, an invocation
+        hash, and the resolved binary path/content hash when the executable is readable.
+    """
+    argv_list = [str(item) for item in argv]
+    env_items = {str(k): str(v) for k, v in (env or {}).items()}
+    canonical = json.dumps(
+        {"argv": argv_list, "env": dict(sorted(env_items.items()))},
+        sort_keys=True,
+    ).encode("utf-8")
+    command_hash = hashlib.sha256(canonical).hexdigest()
+    binary_path: str | None = None
+    binary_hash: str | None = None
+    if argv_list:
+        candidate = Path(argv_list[0])
+        if not candidate.is_file():
+            resolved = shutil.which(argv_list[0])
+            if resolved:
+                candidate = Path(resolved)
+        if candidate.is_file():
+            binary_path = str(candidate)
+            try:
+                binary_hash = hashlib.sha256(candidate.read_bytes()).hexdigest()
+            except OSError:
+                binary_hash = None
+    return {
+        "protocol": NATIVE_COMMAND_PROTOCOL_VERSION,
+        "argv": argv_list,
+        "env_keys": sorted(env_items.keys()),
+        "command_hash_sha256": command_hash,
+        "binary_path": binary_path,
+        "binary_hash_sha256": binary_hash,
+    }
+
+
+class _NativeCommandPolicy:
+    """First-class native-command runner arm with timeout/exit-code semantics.
+
+    Spawns a declared external command and exchanges per-step JSON state/command
+    frames over stdin/stdout. Supports both per-episode (spawn per episode) and
+    persistent-process (kept alive across steps) modes. Accumulates the planner
+    diagnostics the issue #5416 analyzer probe requires: per-step runtime,
+    runtime-bound exits, fallback count, and expansion/commitment counters
+    (zero for the thin native-command wrapper; a real SIPP binary owns those).
+    Also records ``process_spawns`` (the count of subprocess launches), which makes
+    the persistent-mode respawn regression (#5957) directly observable: a healthy
+    persistent run reports exactly one spawn regardless of horizon.
+    """
+
+    def __init__(
+        self,
+        *,
+        argv: list[str],
+        env: Mapping[str, str],
+        timeout_s: float,
+        persistent: bool,
+    ) -> None:
+        if not argv:
+            raise ValueError("native_command requires a non-empty argv")
+        self._argv = [str(item) for item in argv]
+        self._env = dict(env or {})
+        self._timeout_s = float(timeout_s)
+        if not math.isfinite(self._timeout_s) or self._timeout_s <= 0.0:
+            raise ValueError("native_command timeout_s must be positive and finite")
+        self._persistent = bool(persistent)
+        self._process: subprocess.Popen[bytes] | None = None
+        self._stdout_buffer = bytearray()
+        self._diagnostics: dict[str, Any] = {
+            "expansion_limit_hits": 0,
+            "runtime_bound_exits": 0,
+            "fallback_count": 0,
+            "commitment_invalidations": 0,
+            NATIVE_COMMAND_RUNTIME_FIELD: [],
+            "exit_codes": [],
+            "last_exit_code": None,
+            # How many times a subprocess was actually launched. Makes the
+            # persistent-mode respawn bug (issue #5957) directly observable in
+            # episode diagnostics: a healthy persistent run records exactly one
+            # spawn regardless of horizon, while per-episode mode records one per step.
+            "process_spawns": 0,
+        }
+
+    def _spawn(self) -> subprocess.Popen[bytes]:
+        """Spawn the native command child process with pipes and merged env.
+
+        Returns:
+            The spawned subprocess.Popen object.
+        """
+        child_env = dict(os.environ)
+        child_env.update({str(k): str(v) for k, v in self._env.items()})
+        process = subprocess.Popen(
+            self._argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            env=child_env,
+            bufsize=0,
+        )
+        self._diagnostics["process_spawns"] += 1
+        return process
+
+    def _ensure_process(self) -> subprocess.Popen[bytes]:
+        """Start the persistent child process if needed.
+
+        Returns:
+            The active subprocess.Popen object.
+        """
+        if self._process is not None and self._process.poll() is None:
+            return self._process
+        self._process = self._spawn()
+        self._stdout_buffer.clear()
+        return self._process
+
+    def _parse_response(self, raw: str) -> np.ndarray:
+        """Parse a JSON velocity command into a (2,) velocity array.
+
+        Accepts ``{"v","omega"}`` (unicycle) or ``{"vx","vy"}`` (holonomic world).
+
+        Returns:
+            The velocity command array.
+        """
+        payload = json.loads(raw)
+        if isinstance(payload, dict):
+            linear = payload.get(
+                "linear_velocity",
+                payload.get("linear", payload.get("v", payload.get("vx"))),
+            )
+            angular = payload.get(
+                "angular_velocity",
+                payload.get("angular", payload.get("omega", payload.get("vy"))),
+            )
+            if linear is not None and angular is not None:
+                command = np.array([float(linear), float(angular)], dtype=float)
+                if not np.all(np.isfinite(command)):
+                    raise ValueError("native_command response must contain finite velocities")
+                return command
+        if isinstance(payload, list | tuple) and len(payload) == 2:
+            command = np.array([float(payload[0]), float(payload[1])], dtype=float)
+            if not np.all(np.isfinite(command)):
+                raise ValueError("native_command response must contain finite velocities")
+            return command
+        raise ValueError(f"native_command returned unrecognized command: {raw!r}")
+
+    def _readline_with_timeout(self, process: subprocess.Popen[bytes]) -> str:
+        """Read one persistent response line with a hard wall-clock bound.
+
+        Returns:
+            Decoded response text without the line terminator.
+        """
+        assert process.stdout is not None
+        deadline = time.monotonic() + self._timeout_s
+        with selectors.DefaultSelector() as selector:
+            selector.register(process.stdout, selectors.EVENT_READ)
+            while b"\n" not in self._stdout_buffer:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    raise subprocess.TimeoutExpired(self._argv, self._timeout_s)
+                if not selector.select(remaining):
+                    raise subprocess.TimeoutExpired(self._argv, self._timeout_s)
+                chunk = os.read(process.stdout.fileno(), 4096)
+                if not chunk:
+                    break
+                self._stdout_buffer.extend(chunk)
+        if b"\n" not in self._stdout_buffer:
+            raw = bytes(self._stdout_buffer)
+            self._stdout_buffer.clear()
+            return raw.decode("utf-8", errors="replace")
+        line, remainder = bytes(self._stdout_buffer).split(b"\n", 1)
+        self._stdout_buffer = bytearray(remainder)
+        return line.decode("utf-8", errors="replace")
+
+    def _kill_persistent_process(self) -> None:
+        """Kill and reap a failed persistent child, clearing buffered output."""
+        process = self._process
+        self._process = None
+        self._stdout_buffer.clear()
+        if process is not None:
+            if process.poll() is None:
+                process.kill()
+            try:
+                process.wait(timeout=0.1)
+            except subprocess.TimeoutExpired:
+                pass
+
+    def step(
+        self,
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        robot_goal: np.ndarray,
+        ped_positions: np.ndarray,
+        dt: float,
+    ) -> np.ndarray:
+        """Run one native-command step and return the velocity command.
+
+        Returns:
+            Velocity command array; ``(0, 0)`` on timeout/error/nonzero exit
+            (recorded as a fallback).
+        """
+        request = {
+            "protocol": NATIVE_COMMAND_PROTOCOL_VERSION,
+            "robot_pos": np.asarray(robot_pos, dtype=float).tolist(),
+            "robot_vel": np.asarray(robot_vel, dtype=float).tolist(),
+            "robot_goal": np.asarray(robot_goal, dtype=float).tolist(),
+            "pedestrians": np.asarray(ped_positions, dtype=float).tolist(),
+            "dt": float(dt),
+        }
+        started = time.perf_counter()
+        try:
+            if self._persistent:
+                process = self._ensure_process()
+                assert process.stdin is not None
+                process.stdin.write((json.dumps(request) + "\n").encode("utf-8"))
+                process.stdin.flush()
+                stdout = self._readline_with_timeout(process)
+                exit_code = process.poll()
+            else:
+                process = self._spawn()
+                stdout_bytes, _ = process.communicate(
+                    json.dumps(request).encode("utf-8") + b"\n", timeout=self._timeout_s
+                )
+                stdout = stdout_bytes.decode("utf-8", errors="replace")
+                exit_code = process.returncode
+
+            runtime = float(max(0.0, time.perf_counter() - started))
+            self._diagnostics[NATIVE_COMMAND_RUNTIME_FIELD].append(runtime)
+            self._diagnostics["exit_codes"].append(exit_code)
+            self._diagnostics["last_exit_code"] = exit_code
+
+            if exit_code not in (0, None):
+                # Non-zero exit is a hard contract violation: fall back.
+                self._diagnostics["fallback_count"] += 1
+                return np.zeros(2, dtype=float)
+
+            response = self._parse_response(stdout)
+            return response
+        except subprocess.TimeoutExpired:
+            runtime = float(max(0.0, time.perf_counter() - started))
+            self._diagnostics[NATIVE_COMMAND_RUNTIME_FIELD].append(runtime)
+            self._diagnostics["runtime_bound_exits"] += 1
+            self._diagnostics["fallback_count"] += 1
+            self._diagnostics["last_exit_code"] = None
+            self._diagnostics["exit_codes"].append(None)
+            if self._persistent:
+                self._kill_persistent_process()
+            elif "process" in locals() and process.poll() is None:
+                process.kill()
+                process.wait(timeout=0.1)
+            return np.zeros(2, dtype=float)
+        except (ValueError, json.JSONDecodeError, OSError) as exc:
+            runtime = float(max(0.0, time.perf_counter() - started))
+            self._diagnostics[NATIVE_COMMAND_RUNTIME_FIELD].append(runtime)
+            self._diagnostics["fallback_count"] += 1
+            logger.opt(exception=exc).warning("native_command step failed: {}", exc)
+            if self._persistent:
+                self._kill_persistent_process()
+            elif "process" in locals() and process.poll() is None:
+                process.kill()
+                process.wait(timeout=0.1)
+            return np.zeros(2, dtype=float)
+
+    def diagnostics(self) -> dict[str, Any]:
+        """Return the accumulated planner diagnostics (JSON-safe copy)."""
+        copy = dict(self._diagnostics)
+        copy[NATIVE_COMMAND_RUNTIME_FIELD] = list(copy[NATIVE_COMMAND_RUNTIME_FIELD])
+        return copy
+
+    def close(self) -> None:
+        """Tear down the persistent child process if still alive."""
+        process = self._process
+        self._process = None
+        self._stdout_buffer.clear()
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+                process.wait(timeout=0.1)
+            except ProcessLookupError:
+                pass
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=0.1)
 
 
 def load_scenario_matrix(path: str | Path) -> list[dict[str, Any]]:
@@ -670,11 +1001,102 @@ def _build_episode_data(  # noqa: PLR0913
     )
 
 
+def _create_native_command_policy(
+    *,
+    scenario_params: dict[str, Any],
+    seed: int,
+    scenario_id: str = "unknown",
+    horizon: int = 100,
+    dt: float = 0.1,
+    robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
+    ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
+):
+    """Create a native-command policy from a declared external command arm.
+
+    The declared ``native_command`` block in ``scenario_params`` supplies the
+    argv/env contract, per-episode vs persistent-process mode, and the step
+    timeout. The policy serializes per-step state to the child over stdin and
+    parses a JSON velocity command from stdout, with hard timeout and exit-code
+    semantics. Diagnostic counters (per-step runtime, runtime-bound exits,
+    fallback count) are accumulated and surfaced as ``planner_diagnostics``.
+
+    Returns:
+        Tuple of (policy function, metadata dict with native arm + diagnostics).
+    """
+    spec = _native_command_spec(scenario_params)
+    mapping = {
+        "{scenario_id}": str(scenario_id),
+        "{seed}": str(seed),
+        "{horizon}": str(horizon),
+        "{dt}": str(dt),
+    }
+
+    def render(value: Any) -> str:
+        rendered = str(value)
+        for token, replacement in mapping.items():
+            rendered = rendered.replace(token, replacement)
+        return rendered
+
+    argv = [render(item) for item in spec["argv"]]
+    env = {str(key): render(value) for key, value in (spec.get("env") or {}).items()}
+    timeout_s = float(spec["timeout_s"])
+    persistent = bool(spec["persistent"])
+
+    provenance = _native_command_provenance(argv, env)
+    command = _NativeCommandPolicy(
+        argv=argv,
+        env=env,
+        timeout_s=timeout_s,
+        persistent=persistent,
+    )
+
+    def policy_fn(
+        robot_pos: np.ndarray,
+        robot_vel: np.ndarray,
+        robot_goal: np.ndarray,
+        ped_positions: np.ndarray,
+        dt: float,
+    ) -> np.ndarray:
+        """Invoke the declared native command for one planner step.
+
+        Returns:
+            Velocity command array from the native binary (``(0, 0)`` on fallback).
+        """
+        return command.step(robot_pos, robot_vel, robot_goal, ped_positions, dt)
+
+    policy_fn.close = command.close  # type: ignore[attr-defined]
+    policy_fn.diagnostics = command.diagnostics  # type: ignore[attr-defined]
+
+    metadata = {
+        "algorithm": NATIVE_COMMAND_ARM,
+        "config": {"native_command": spec},
+        "config_hash": _config_hash({"native_command": spec}),
+        "status": "ok",
+        "seed": seed,
+        "robot_radius": float(robot_radius),
+        "ped_radius": float(ped_radius),
+        "command_contract": provenance,
+        "command_mode": "persistent_process" if persistent else "per_episode_process",
+        "step_timeout_s": timeout_s,
+        NATIVE_COMMAND_DIAGNOSTICS_KEY: command.diagnostics(),
+    }
+    enriched = enrich_algorithm_metadata(
+        algo=NATIVE_COMMAND_ARM,
+        metadata=metadata,
+        execution_mode="native",
+    )
+    enriched[NATIVE_COMMAND_DIAGNOSTICS_KEY] = command.diagnostics()
+    return policy_fn, enriched
+
+
 def _create_robot_policy(  # noqa: C901, PLR0915
     algo: str,
     algo_config_path: str | None,
     seed: int,
     *,
+    scenario_params: dict[str, Any] | None = None,
+    horizon: int = 100,
+    dt: float = 0.1,
     robot_radius: float = DEFAULT_BENCHMARK_ROBOT_RADIUS_M,
     ped_radius: float = DEFAULT_BENCHMARK_PED_RADIUS_M,
 ):
@@ -683,6 +1105,24 @@ def _create_robot_policy(  # noqa: C901, PLR0915
     Returns:
         Tuple of (policy function, metadata dict).
     """
+
+    if algo == NATIVE_COMMAND_ARM:
+        return _create_native_command_policy(
+            scenario_params=scenario_params or {},
+            seed=seed,
+            scenario_id=str(
+                (scenario_params or {}).get(
+                    "scenario_id",
+                    (scenario_params or {}).get(
+                        "id", (scenario_params or {}).get("name", "unknown")
+                    ),
+                )
+            ),
+            horizon=horizon,
+            dt=dt,
+            robot_radius=robot_radius,
+            ped_radius=ped_radius,
+        )
 
     def _simple_policy_adapter():
         """Create simple policy that navigates directly toward goal.
@@ -1479,6 +1919,9 @@ def run_episode(  # noqa: PLR0913
         algo,
         algo_config_path,
         seed,
+        scenario_params=scenario_params,
+        horizon=horizon,
+        dt=dt,
         robot_radius=robot_radius,
         ped_radius=ped_radius,
     )
@@ -1535,6 +1978,15 @@ def run_episode(  # noqa: PLR0913
         ped_impact_radius_m=ped_impact_radius_m,
         ped_impact_window_steps=ped_impact_window_steps,
     )
+
+    # Refresh live native-command diagnostics into the episode metadata so the
+    # per-step runtime/exit counters captured during the episode are recorded.
+    policy_diag = getattr(robot_policy, "diagnostics", None)
+    if callable(policy_diag):
+        live_diag = policy_diag()
+        if isinstance(live_diag, dict):
+            algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = live_diag
+
     collision = bool(metric_scalar(metrics, "collisions", "collision_rate") > 0.0)
     route_complete = bool(metric_scalar(metrics, "success", "success_rate") > 0.0)
     ended = route_complete or collision

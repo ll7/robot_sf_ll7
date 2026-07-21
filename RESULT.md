@@ -16,11 +16,9 @@
 
 ## Commit and push
 
-- Documentation-only commits `033abce8c3bbc968c470ddbf678cd76db5d37991`,
-  `5327489169f04f9e1ee144db81db3629d5d79e2f`, and
-  `57c736e3a13527b7a715e14080d9ad94115f0ed4` were pushed normally to
-  `proto-case-browser`; no code or test change was pushed.
-- The resulting PR head is `57c736e3a13527b7a715e14080d9ad94115f0ed4`.
+- The report was pushed as a documentation-only commit chain to
+  `proto-case-browser`; no code or test change was pushed. The final pushed
+  commit SHA is recorded in the task handoff.
 
 ## Unresolved threads
 

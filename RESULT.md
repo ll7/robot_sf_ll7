@@ -27,8 +27,8 @@ the pre-fix query.
 
 ## Commit
 
-- Fix commit SHA: pending until this handoff commit is created.
-- PR head before this handoff: `d681885e9be55768c18b86f8064dd2585e861241`.
+- Fix commit SHA: `953b98a6fe02bbebe187c60d9928b4da20b1fd31`.
+- PR head after fix push: `953b98a6fe02bbebe187c60d9928b4da20b1fd31`.
 
 ## Unresolved threads
 

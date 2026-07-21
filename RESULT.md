@@ -18,9 +18,9 @@
 
 ## Commit and push
 
-- Merge commit will be pushed to the existing PR branch after focused
-  validation; no new PR will be opened, no merge will be performed, and no
-  external jobs will be submitted.
+- Merge commit `b340dfd61d3e0207dda0846e4649e35bd73b0d06` will be pushed to the
+  existing PR branch; no new PR will be opened, no merge will be performed,
+  and no external jobs will be submitted.
 
 ## Review threads
 

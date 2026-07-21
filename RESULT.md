@@ -1,15 +1,16 @@
 # PR #6063 Review Blocker Result
 
-Reviewed at PR head `c6a920012c5c398cd913b1ac4839028c819a047a`.
+Reviewed at PR head `d681885e9be55768c18b86f8064dd2585e861241`.
 
 ## Fixed blockers
 
-- Domain-Aware Approval: updated both duplicated PR-body sections from `Status: pending`
-  to `Status: waived` and recorded an explicit maintainer waiver by `@ll7`.
+- Domain-Aware Approval: both duplicated PR-body sections record `Status: waived` and an
+  explicit maintainer waiver by `@ll7`; no pending approval blocker remains.
   Waiver comment: https://github.com/ll7/robot_sf_ll7/pull/6063#issuecomment-5028326779.
+- Public documentation index: linked `docs/actuator_feasibility.md` from `docs/README.md`.
 - Canonical readiness proof: preserved the five untracked `.ll7_task_*` lease harness files
-  without deleting or staging them, temporarily moved them to a private temporary directory
-  during the final readiness run, then restored them byte-for-byte.
+  without deleting or staging them. The canonical readiness gate therefore remains blocked by
+  the preserved untracked lease files; staging/removal is not authorized in this lane.
 
 Previously addressed review threads remain resolved; no unresolved thread was actionable in
 the pre-fix query.
@@ -21,12 +22,13 @@ the pre-fix query.
 - `uv run pytest tests/benchmark/test_actuator_feasibility.py -q` — 32 passed.
 - `uv run python scripts/dev/check_pr_followups.py --body-file /dev/stdin --json` with the live PR body — domain approval `ok`; follow-ups `ok`.
 - `git diff --check` — passed.
-- `BASE_REF=origin/main PR_READY_MODE=final scripts/dev/pr_ready_check.sh` with the live PR body supplied via `PR_READY_PR_BODY_FILE` and the preserved harness files temporarily relocated — changed-file proof and core lane passed (`7,915 passed, 17 skipped`); optional lane stopped at two unrelated PPO artifact checksum failures.
+- `BASE_REF=origin/main scripts/dev/pr_ready_check.sh` — blocked (exit 2) by the five preserved
+  untracked `.ll7_task_*` lease files; they were not staged or removed.
 
 ## Commit
 
-- Fix commit SHA: `211b40932159982449eba58d8fc4cb43957b94a4`.
-- PR head after push: `211b40932159982449eba58d8fc4cb43957b94a4`.
+- Fix commit SHA: pending until this handoff commit is created.
+- PR head before this handoff: `d681885e9be55768c18b86f8064dd2585e861241`.
 
 ## Unresolved threads
 
@@ -35,8 +37,6 @@ the pre-fix query.
 
 ## Remaining blockers
 
-- Canonical optional-extra readiness is blocked by external model-artifact provenance: both
-  `tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_target_runs_deterministically_with_real_runner`
-  and `tests/benchmark/test_issue_5498_native_ppo_slice.py::test_ppo_only_manifest_slice_verifies_against_subset`
-  observed a downloaded PPO model checksum different from the expected repository checksum.
-  Focused actuator validation passed; no retry of the unchanged broad lane was made.
+- Canonical readiness remains blocked by the five preserved untracked `.ll7_task_*` lease files;
+  staging or removal is outside this execution's authorization. Focused actuator validation and
+  the documentation-index check are the applicable proof for this scoped handoff.

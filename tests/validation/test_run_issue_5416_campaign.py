@@ -218,6 +218,47 @@ def test_resume_re_runs_a_row_that_is_not_checker_valid(
     assert summary["skipped_rows"] == 0
 
 
+def test_row_is_complete_returns_valid_episode(
+    tmp_path: Path,
+) -> None:
+    """A valid resume row returns the parsed episode for callers to reuse."""
+    row = enumerate_rows(load_packet(CONFIG_PATH))[0]
+    path = plan_output_path(tmp_path, row)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    episode = _eligible_episode(row)
+    path.write_text(json.dumps(episode) + "\n", encoding="utf-8")
+
+    valid, parsed, reasons = campaign.row_is_complete(row, tmp_path, planners=PLANNERS)
+
+    assert valid is True
+    assert parsed == episode
+    assert reasons == []
+
+
+def test_main_returns_nonzero_when_a_selected_row_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The CLI must fail when execution or post-execution validation fails."""
+    monkeypatch.setattr(
+        campaign,
+        "run_campaign",
+        lambda **_: {
+            "planned_rows": 100,
+            "selected_rows": 1,
+            "executed_rows": 0,
+            "skipped_rows": 0,
+            "failed_rows": 1,
+            "rows": [],
+        },
+    )
+
+    exit_code = campaign.main(["--config", str(CONFIG_PATH), "--rows", "1"])
+
+    assert exit_code == 1
+    assert "failed: issue #5416 campaign" in capsys.readouterr().out
+
+
 def test_output_layout_keys_each_row_uniquely(tmp_path: Path) -> None:
     """Each campaign cell maps to a distinct planner/scenario/seed JSONL path."""
     rows = enumerate_rows(load_packet(CONFIG_PATH))

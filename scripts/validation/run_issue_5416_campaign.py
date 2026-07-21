@@ -43,7 +43,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -185,12 +184,13 @@ def episode_is_checker_valid(
 
 def row_is_complete(
     row: CampaignRow, output_root: Path, *, planners: Sequence[str]
-) -> tuple[bool, list[str]]:
-    """Return whether a campaign cell already has a checker-valid episode."""
+) -> tuple[bool, dict[str, Any] | None, list[str]]:
+    """Return whether a campaign cell has a checker-valid episode and its data."""
     episode = read_completed_episode(plan_output_path(output_root, row))
     if episode is None:
-        return False, ["episode output is missing or not exactly one record"]
-    return episode_is_checker_valid(episode, row, planners=planners)
+        return False, None, ["episode output is missing or not exactly one record"]
+    valid, reasons = episode_is_checker_valid(episode, row, planners=planners)
+    return valid, episode if valid else None, reasons
 
 
 def execute_row(
@@ -213,7 +213,7 @@ def execute_row(
     # ``resume=False`` so a single-cell rerun overwrites a stale/partial file;
     # campaign-level resume (skip already-valid rows) is handled by the caller.
     run_map_batch(
-        [deepcopy(scenario)],
+        [scenario],
         episodes_path,
         SCHEMA_PATH,
         scenario_path=REPO_ROOT / packet["scenario_contract"]["scenario_matrix"],
@@ -331,12 +331,11 @@ def run_campaign(  # noqa: C901
     output_root = Path(output_root)
 
     for row, entry in zip(selected, summary["rows"], strict=True):
-        complete, reasons = row_is_complete(row, output_root, planners=planners)
+        complete, episode, reasons = row_is_complete(row, output_root, planners=planners)
         if complete:
             entry["status"] = "skipped"
             entry["reason"] = "already checker-valid"
             summary["skipped_rows"] += 1
-            episode = read_completed_episode(plan_output_path(output_root, row))
             metrics = episode.get("metrics") if isinstance(episode, dict) else None
             if isinstance(metrics, dict) and isinstance(metrics.get("deadlock"), bool):
                 entry["deadlock"] = metrics["deadlock"]
@@ -362,7 +361,7 @@ def run_campaign(  # noqa: C901
             continue
         # Re-validate the freshly written episode so the summary reflects the
         # same checker-valid contract used for resume-skip.
-        complete, reasons = row_is_complete(row, output_root, planners=planners)
+        complete, episode, reasons = row_is_complete(row, output_root, planners=planners)
         if not complete:
             entry["status"] = "failed"
             entry["reason"] = "post-execute row not checker-valid: " + "; ".join(reasons)
@@ -370,7 +369,6 @@ def run_campaign(  # noqa: C901
             continue
         entry["status"] = "executed"
         entry["episodes_path"] = str(plan_output_path(output_root, row))
-        episode = read_completed_episode(plan_output_path(output_root, row))
         metrics = episode.get("metrics") if isinstance(episode, dict) else None
         if isinstance(metrics, dict) and isinstance(metrics.get("deadlock"), bool):
             # The per-row deadlock/stall metric delivered by the native-command
@@ -418,7 +416,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.as_json:
         print(json.dumps(summary, indent=2, sort_keys=True))
     else:
-        status = "executed" if summary["executed_rows"] else "planned"
+        status = (
+            "failed"
+            if summary["failed_rows"]
+            else ("executed" if summary["executed_rows"] else "planned")
+        )
         print(
             f"{status}: issue #{ISSUE} campaign "
             f"({summary['planned_rows']} planned, {summary['selected_rows']} selected)"
@@ -428,7 +430,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"  row {entry['index']:>3}: {entry['planner_id']}"
                 f" / {entry['scenario_id']} / seed {entry['seed']}"
             )
-    return 0
+    return 1 if summary["failed_rows"] else 0
 
 
 if __name__ == "__main__":

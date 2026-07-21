@@ -159,11 +159,21 @@ def test_build_sampler_rejects_unknown_name() -> None:
         build_sampler("bayesian", _fixed_space(), seed=1)
 
 
-def test_build_sampler_propagates_warm_starts() -> None:
+@pytest.mark.parametrize(
+    "family, dependency",
+    [
+        ("random", None),
+        ("coordinate", None),
+        ("optuna", "optuna"),
+        ("cmaes", "cma"),
+    ],
+)
+def test_build_sampler_propagates_warm_starts(family: str, dependency: str | None) -> None:
     """build_sampler should seed each family with the provided warm starts."""
+    if dependency:
+        pytest.importorskip(dependency)
     warm = _warm(seed=8)
-    sampler = build_sampler("random", _fixed_space(), seed=1, warm_start=(warm,))
-    assert isinstance(sampler, RandomCandidateSampler)
+    sampler = build_sampler(family, _fixed_space(), seed=1, warm_start=(warm,))
     assert sampler.sample() == warm.candidate
 
 
@@ -339,9 +349,14 @@ def test_cmaes_sampler_runs_without_optimizer_on_degenerate_space() -> None:
     sampler = CmaEsCandidateSampler(space, seed=7)
     assert sampler._active_dims == []
     first = sampler.sample()
+    second = sampler.sample()
     assert space.validate_candidate(first) == []
+    assert space.validate_candidate(second) == []
+    assert len(sampler._pending) == 2
+    assert sampler._in_flight == []
     # A full sample/observe cycle should drain the degenerate buffer without error.
     sampler.observe(_evaluation(first, objective_value=0.3))
+    sampler.observe(_evaluation(second, objective_value=0.3))
     assert sampler._pending == []
 
 

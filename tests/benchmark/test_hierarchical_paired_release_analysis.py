@@ -71,7 +71,10 @@ def _ledger_row(
             "invalid_run": False,
         },
         "surrogate_events": {"near_miss": near_miss},
-        "provenance": {"completion_time": completion_time, "exposure": exposure},
+        "provenance": {
+            "completion_time": completion_time,
+            "exposure": {"time": exposure, "distance": exposure, "opportunity": exposure},
+        },
     }
 
 
@@ -143,8 +146,8 @@ def test_build_matched_cells_pairs_ledger_rows_and_preserves_outcomes() -> None:
     assert all(cell.planner_a == "alpha" and cell.planner_b == "beta" for cell in cells)
     assert [cell.collision_a for cell in cells] == [1, 1, 1, 1]
     assert [cell.collision_b for cell in cells] == [0, 0, 0, 0]
-    assert [cell.exposure_a for cell in cells] == [2.0, 2.0, 2.0, 2.0]
-    assert [cell.exposure_b for cell in cells] == [1.0, 1.0, 1.0, 1.0]
+    assert [cell.exposure_a["time"] for cell in cells] == [2.0, 2.0, 2.0, 2.0]
+    assert [cell.exposure_b["opportunity"] for cell in cells] == [1.0, 1.0, 1.0, 1.0]
 
 
 def test_build_matched_cells_rejects_unmatched_or_duplicate_rows() -> None:
@@ -384,16 +387,14 @@ def test_exposure_and_completion_time_fallbacks_fail_closed_or_read_metric_value
     """Exposure is required while row-level metric values remain a valid time source."""
 
     rows = _two_arm_rows()
-    rows[0]["provenance"] = {"exposure": 2.0}
+    rows[0]["provenance"] = {"exposure": {"time": 2.0, "distance": 2.0, "opportunity": 2.0}}
     rows[0]["metrics"] = {"completion_time": {"value": 7.5}}
     cells = build_matched_cells_from_ledger_rows(rows, planner_pair=("alpha", "beta"))
     assert cells[0].completion_time_a == pytest.approx(7.5)
 
     invalid_exposure = _two_arm_rows()
     invalid_exposure[0]["provenance"]["exposure"] = 0.0
-    with pytest.raises(
-        HierarchicalPairedReleaseAnalysisError, match="exposure must be a finite positive"
-    ):
+    with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="exposure must be a mapping"):
         build_matched_cells_from_ledger_rows(invalid_exposure, planner_pair=("alpha", "beta"))
 
     for invalid_time in (None, False, -1.0, float("nan"), float("inf")):
@@ -455,6 +456,9 @@ def test_run_analysis_emits_machine_readable_report_with_blocked_claim_gate(tmp_
     conformance = {row["id"]: row["status"] for row in report["protocol_conformance"]}
     assert conformance["paired_effects"] == "delivered_analysis_pending_release_input"
     assert conformance["censored_completion_time"] == "delivered_analysis_pending_release_input"
+    assert conformance["normalized_near_miss_exposure"] == (
+        "delivered_analysis_pending_release_input"
+    )
     assert conformance["sensitivity_analyses"] == "delivered_analysis_pending_release_input"
     # Deterministic across runs given the seeded policy.
     again = run_hierarchical_paired_release_analysis(
@@ -540,7 +544,12 @@ def test_run_analysis_emits_summaries_for_every_planner_pair(tmp_path: Path) -> 
     )
 
     assert len(report["censored_completion_time"]) == 4
-    assert len(report["normalized_near_miss_exposure"]) == 4
+    assert len(report["normalized_near_miss_exposure"]) == 12
+    assert {summary["dimension"] for summary in report["normalized_near_miss_exposure"]} == {
+        "time",
+        "distance",
+        "opportunity",
+    }
     pairs = {tuple(summary["planner_pair"]) for summary in report["censored_completion_time"]}
     assert pairs == {("alpha", "beta"), ("gamma", "delta")}
 

@@ -18,15 +18,20 @@
 
 ## Commit and push
 
-- Merge commit `b340dfd61d3e0207dda0846e4649e35bd73b0d06` will be pushed to the
-  existing PR branch; no new PR will be opened, no merge will be performed,
-  and no external jobs will be submitted.
+- Merge commit `b340dfd61d3e0207dda0846e4649e35bd73b0d06` and report commit
+  `bbf3e244a3d9bb09dbb9a52fc37b4b6488624638` were pushed to the existing PR
+  branch; no new PR was opened, no merge was performed, and no external jobs
+  were submitted.
 
 ## Review threads
 
 - Pre-push GraphQL query: zero unresolved review threads.
-- Post-push GraphQL re-query: recorded below; no thread is resolved unless its
-  finding is addressed by this push.
+- Post-push GraphQL re-query at `bbf3e244a3d9bb09dbb9a52fc37b4b6488624638`:
+  three review threads were present and all were resolved; zero unresolved
+  threads remained. Resolved thread IDs: `PRRT_kwDOLRSZdc6RWpA_`,
+  `PRRT_kwDOLRSZdc6RWpBG`, and `PRRT_kwDOLRSZdc6RWpBJ`.
+- GitHub reported `MERGEABLE` / `UNSTABLE`; five exact-head checks were in
+  progress and CodeRabbit routing had succeeded.
 
 ## Remaining blockers
 

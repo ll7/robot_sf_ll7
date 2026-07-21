@@ -20,7 +20,8 @@
 ## Commit
 
 - Base-refresh and blocker-claim fix commit pushed to PR branch: `1632d5331015460a0da2ee4a07ccbbc40f5e5f69`.
-- PR head verified after push: `1632d5331015460a0da2ee4a07ccbbc40f5e5f69`.
+- Result handoff commit pushed to PR branch: `f57e7d38466ac0f8b638639b4b6a49ebebccb857`.
+- Final PR head was verified after that push: `f57e7d38466ac0f8b638639b4b6a49ebebccb857`.
 
 ## Review state
 

@@ -17,7 +17,7 @@ source_issue_addendum: 5981
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 414
+refreshed_baseline_total_findings: 418
 refreshed_baseline_files_with_findings: 87
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
@@ -54,6 +54,12 @@ decision_summary: >-
   remaining findings on the canonical #4848 path
   (duplicate_campaign_id, missing_config_path, missing_config_sha256) are separate campaign
   provenance concerns outside issue #5986's dangling-commit scope and remain tracked here.
+  Factory-v2 addendum (issue #6108): commit 5d13acf8c replaced the prior
+  h600_source_reports_manifest.json (6 uncommitted_artifact_missing_location) with
+  h600_source_reports_recovery.json (8 hash_without_artifact_path). Two issue_3425 checklist
+  files also gained dangling_commit findings (checkout-dependent git history shift). Total
+  findings increased from 414 to 418; all three deltas follow the same legacy-provenance-debt
+  pattern as the existing 414 findings and are dispositioned as baseline below.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -161,6 +167,15 @@ reviewed_files:
       This is the legacy provenance gap identified by Issue #5972; repairing the external artifact
       binding is outside this baseline reconciliation, so the finding is explicitly dispositioned
       as baseline under the existing strict-CI policy.
+  - path: docs/context/evidence/issue_3810_h600_interpretation_2026-07/h600_source_reports_recovery.json
+    codes: [hash_without_artifact_path]
+    disposition: baseline
+    reason: >-
+      Source-reports recovery file (replaces prior h600_source_reports_manifest.json with the
+      recovered h600 source artifacts). Carries 8 sha256 checksums without a bindable committed
+      artifact path; same artifact-provenance-backfill-required pattern as the legacy 85
+      hash_without_artifact_path findings. Recovering the external/private artifact locations is
+      a provenance backfill task outside this baseline reconciliation.
 reviewed_baseline_increases:
   - path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/nominal_campaign_summary.json
     codes: [dangling_commit]
@@ -202,3 +217,19 @@ reviewed_baseline_increases:
       ordinary branch/tag reachability in a pristine full-history single-branch checkout. Record
       this checkout-dependent historical provenance finding explicitly; do not rewrite the
       artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is not reachable from main's ordinary branch/tag reachability in a
+      pristine full-history single-branch checkout (checklist artifact generated from a private
+      Slurm job context). Record this checkout-dependent historical provenance finding explicitly;
+      do not rewrite the artifact or producer SHA in this baseline reconciliation.
+  - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13273.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      The producer commit is not reachable from main's ordinary branch/tag reachability in a
+      pristine full-history single-branch checkout (checklist artifact generated from a private
+      Slurm job context). Record this checkout-dependent historical provenance finding explicitly;
+      do not rewrite the artifact or producer SHA in this baseline reconciliation.

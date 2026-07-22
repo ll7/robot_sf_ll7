@@ -2,21 +2,26 @@
 
 ## Fixed comments
 
+- `RESULT.md`: resolved the merge conflict against `origin/main` and retained only PR #6087 metadata; stale PR #5834 content was removed.
 - `tests/baselines/test_sicnav_planner.py:141-143`: mocked `Path.expanduser` directly and compared platform-aware `Path` values, removing the Windows-dependent `HOME` string assertion.
 - `tests/baselines/test_sicnav_planner.py:87-88`: added an autouse fixture that saves and restores the process-global `random` and NumPy RNG states around every test.
+- `tests/baselines/test_sicnav_planner.py:151-158`: applied Ruff formatting to the `expanduser` lambda.
+- PR validation claim: refreshed the PR body with the validation reproduced after the fixes.
 
 ## Validation
 
 - `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/baselines/test_sicnav_planner.py -q` — 68 passed.
 - `scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check tests/baselines/test_sicnav_planner.py` — passed.
+- `scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check tests/baselines/test_sicnav_planner.py` — 1 file already formatted.
 - `git diff --check` — passed.
+- `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q -k sicnav` — 77 passed, 2 skipped.
 
 ## Delivery
 
 - Implementation commit: `17fa7b46a5a96557f478fd90cd11cc73efc3225d`.
-- Result report commit: `4975176b0ef6f6712b22a4d380d628d5a185cea7`.
+- Prior result report commit: `4975176b0ef6f6712b22a4d380d628d5a185cea7` (stale head metadata corrected here).
 - Pushed to PR branch `cheap/cheap-issue-6077-b5a9ba703747`.
-- Current PR head: `4975176b0ef6f6712b22a4d380d628d5a185cea7`.
+- Current PR head: pending this fix commit.
 
 ## Review state
 

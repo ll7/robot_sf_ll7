@@ -153,9 +153,9 @@ def test_build_sicnav_config_expands_user_in_repo_root(monkeypatch: pytest.Monke
     monkeypatch.setattr(
         Path,
         "expanduser",
-        lambda self: Path("/home/test_user/repos/sicnav")
-        if str(self) == "~/repos/sicnav"
-        else self,
+        lambda self: (
+            Path("/home/test_user/repos/sicnav") if str(self) == "~/repos/sicnav" else self
+        ),
     )
     cfg = build_sicnav_config({"repo_root": "~/repos/sicnav"})
     assert Path(cfg.repo_root) == Path("/home/test_user/repos/sicnav")

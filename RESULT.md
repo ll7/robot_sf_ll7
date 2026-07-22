@@ -17,13 +17,11 @@
 
 - `b74daa0fe4639693a6155d6908c8b8b43376a677`
   (`test(benchmark): cover CampaignConfig immutability`)
-- `3b1608b8ec3dec3c7bf49c552fd31dc9adebc0fe`
-  (`docs: record PR 6091 review fix result`)
 - Pushed to `cheap/cheap-issue-6078-8927f68f18b3`, the head branch of PR #6091.
 
 ## Review state
 
-- The PR head was re-queried after push and is `3b1608b8ec3dec3c7bf49c552fd31dc9adebc0fe`.
+- The code-fix push was re-queried and the PR head was `b74daa0fe4639693a6155d6908c8b8b43376a677`.
 - GitHub reported no unresolved GraphQL review threads and no REST inline review comments before
   or after the push; therefore there was no thread to resolve.
 - No additional unresolved review blockers were observed.

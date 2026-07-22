@@ -19,40 +19,62 @@ requires-python = ">=3.11"
 classifiers = [
     "Typing :: Typed",
 ]
+# Dependency layout (Issue #5799): a slim core install plus PEP 621 extras.
+# Core is the minimum needed to ``import robot_sf`` and run the gym-env factory,
+# the simulator, route/global planning, and the random/social-force smoke.
+# Optional capability stacks live behind extras so the first install is small;
+# modules that use them guard their imports and raise a clear
+# "install robot_sf[<extra>]" error when the extra is missing (see
+# robot_sf/common/_optional.py).
 dependencies = [
-    # Core dependencies
+    # Core simulation / gym stack
     "numpy>=2.4.6",
     "gymnasium>=0.29,<1.2",
     "numba>=0.66.0",
-    "pygame>=2.6.1",
-    # Data processing
-    "pandas>=3.0.3",
     "scipy>=1.17.1",
-    "matplotlib>=3.11.0",
-    "pillow>=10.4.0",
-    "svgelements>=1.9.6",
-    # Utilities
-    "loguru>=0.7.2",
-    "rich>=15.0.0",
-    "psutil>=6.1.0",
-    "moviepy>=2.0.0",
-    "jsonschema>=4.23.0",
+    # Social-force pedestrian engine (vendored under fast-pysf). Declared as a
+    # core dependency so editable installs resolve the local source in
+    # [tool.uv.sources]; the wheel also force-includes it (see [tool.hatch...]).
+    "pysocialforce>=2.0.0",
+    # Spatial / planning primitives used by the simulator and route planning
     "shapely>=2.1.2",
     "networkx>=3.6.1,<4.0",
     "pyvisgraph>=0.2.1",
     "python-motion-planning>=2.0.1,<3",
-    # OSM map extraction (Issue #392)
-    "osmnx>=2.1.0",
-    "geopandas>=1.1.4",
-    "pyproj>=3.6",
+    # Image + plotting used by core map types and the global planner's grid
+    # visualizer. Moving these fully behind [viz] needs import-guard work in
+    # nav/map_config.py and planner/classic_global_planner.py (see follow-up).
+    "pillow>=10.4.0",
+    "matplotlib>=3.11.0",
+    # Config / logging / utilities
+    "loguru>=0.7.2",
+    "psutil>=6.1.0",
+    "jsonschema>=4.23.0",
     "pyyaml>=6.0",
     "orjson>=3.11.5",
+    # ``tqdm`` is a runtime import dependency of the core ``pyvisgraph`` planner
+    # backend (pyvisgraph.vis_graph imports tqdm at module load).
+    "tqdm>=4.68.4",
 ]
 
 [project.optional-dependencies]
-gpu = [
-    "torch[cuda]>=2.13.0,<2.14.0",
+# Visualization / rendering extras: pygame viewer, movie generation, statistical
+# plotting. ``pygame`` is needed by robot_sf/render/* (sim_view) and ``moviepy``
+# by render and benchmark video export; ``seaborn`` for statistical figures.
+viz = [
+    "pygame>=2.6.1",
+    "moviepy>=2.0.0",
+    "seaborn>=0.13.2",
 ]
+# Map authoring / OSM geospatial extraction (Issue #392): osmnx/geopandas/pyproj
+# for OSM downloads, and svgelements retained for legacy SVG map tooling.
+maps = [
+    "osmnx>=2.1.0",
+    "geopandas>=1.1.4",
+    "pyproj>=3.6",
+    "svgelements>=1.9.6",
+]
+# Reinforcement-learning training stack.
 training = [
     "stable-baselines3>=2.9.0",
     "torch>=2.13.0,<2.14.0",
@@ -61,25 +83,23 @@ training = [
     "tensorboard>=2.21.0",
     "wandb>=0.28.0",
     "optuna-dashboard>=0.20.0",
-]
-recurrent = [
     "sb3-contrib>=2.9.0,<2.10.0",
-]
-rllib = [
-    "ray[rllib]>=2.53.0",
-]
-progress = [
     "tqdm>=4.68.4",
 ]
-analysis = [
-    "seaborn>=0.13.2",
-]
-analytics = [
+# Benchmark / reporting tooling: tabular aggregation and columnar analytics.
+benchmark = [
+    "pandas>=3.0.3",
     "duckdb>=1.5.4",
     "pyarrow>=25.0.0",
-]
-viz = [
     "seaborn>=0.13.2",
+]
+# CUDA build of torch for GPU training. Superset of the training torch pin.
+gpu = [
+    "torch[cuda]>=2.13.0,<2.14.0",
+]
+# Specialized research / planner backends (kept as narrow extras).
+rllib = [
+    "ray[rllib]>=2.53.0",
 ]
 browser = [
     "playwright>=1.61.0",
@@ -103,6 +123,18 @@ socnav = [
 ]
 criticality = [
     "cma>=3.3.0",
+]
+# Convenience aggregator: every primary capability extra (Issue #5799). The
+# specialized planner/runtime backends (rllib, browser, sacadrl, orca, socnav,
+# criticality) stay standalone so ``[all]`` stays resolvable alongside the
+# ``imitation`` dev group (see [tool.uv] conflicts); install them individually or
+# via ``uv sync --all-extras``. GPU torch is excluded so the default CPU-friendly
+# resolver is used; install [gpu] explicitly for CUDA.
+all = [
+    "robot_sf[viz]",
+    "robot_sf[maps]",
+    "robot_sf[training]",
+    "robot_sf[benchmark]",
 ]
 
 [build-system]

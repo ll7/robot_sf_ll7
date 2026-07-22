@@ -5,8 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-import torch
-from torch import nn
+# ``torch`` is a [training] extra dependency (Issue #5799). Resolve it through the
+# canonical optional-import helper so a missing extra raises a clear install
+# hint instead of a bare ModuleNotFoundError.
+from robot_sf.common.optional_import import require_extra
+
+torch = require_extra("torch", "training")
+nn = torch.nn
 
 if TYPE_CHECKING:
     from pathlib import Path

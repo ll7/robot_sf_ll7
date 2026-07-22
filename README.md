@@ -62,6 +62,15 @@ uv run python examples/quickstart/02_trained_model.py
 uv run python examples/quickstart/03_custom_map.py
 ```
 
+> **Slim core install (Issue #5799):** for a smaller first install, the default
+> dependencies are just the simulator + gym-env + social-force core. Optional
+> capability stacks live behind extras: `[viz]` (pygame/moviepy/seaborn),
+> `[maps]` (osmnx/geopandas/pyproj), `[training]` (SB3/torch/wandb), and
+> `[benchmark]` (pandas/duckdb). Use `uv pip install -e ".[all]"` for the four
+> primary extras, or see [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) for the
+> full matrix. Using a feature without its extra raises a clear
+> `install robot_sf[<extra>]` error.
+
 `uv run robot-sf demo` runs a short deterministic scenario, writes a recorded episode
 (`episode.jsonl`), a static browser viewer (`viewer/index.html`), a map thumbnail
 (`thumbnail.png`), and a plain-English summary under `output/demo/latest/`. It is the

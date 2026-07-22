@@ -24,15 +24,22 @@ Design decisions:
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import geopandas
-import pandas as pd
 from loguru import logger
 from shapely.affinity import translate
 from shapely.errors import TopologicalError
 from shapely.geometry import LineString, MultiPolygon, Polygon, box
 from shapely.ops import triangulate, unary_union
 
+from robot_sf.common.optional_import import require_extra
 from robot_sf.nav.map_config import MapDefinition, Obstacle
+
+# OSM PBF ingestion depends on the geospatial ([maps]) and tabular ([benchmark])
+# extras (Issue #5799). Resolve them through the canonical optional-import
+# helper so a missing extra raises a clear install hint instead of a bare
+# ModuleNotFoundError. ``pandas`` is provided transitively by ``geopandas``
+# under [maps] but is declared under [benchmark] for standalone report tooling.
+geopandas = require_extra("geopandas", "maps")
+pd = require_extra("pandas", "benchmark")
 
 
 @dataclass

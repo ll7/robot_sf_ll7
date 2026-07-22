@@ -12,9 +12,9 @@ from math import ceil, cos, floor, pi, sin
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "hide"
 
 import numpy as np
-import pygame
 from loguru import logger
 
+from robot_sf.common.optional_import import require_extra
 from robot_sf.common.types import PedPose, RgbColor, RobotPose, Vec2D
 from robot_sf.nav.map_config import MapDefinition, Obstacle
 from robot_sf.nav.occupancy_grid import (
@@ -39,6 +39,12 @@ except ImportError:
 from robot_sf.render.sim_view_text_overlay import SimViewTextOverlay
 
 ## Note: PYGAME_HIDE_SUPPORT_PROMPT is set before importing pygame above
+
+# ``pygame`` is an optional [viz] extra dependency (Issue #5799). Resolve it
+# through the canonical optional-import helper so a missing extra raises a clear
+# install hint instead of a bare ModuleNotFoundError. ``moviepy`` (above) uses the
+# same helper family but degrades gracefully (video recording disabled).
+pygame = require_extra("pygame", "viz")
 
 
 BACKGROUND_COLOR = (255, 255, 255)

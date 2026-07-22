@@ -22,6 +22,53 @@ Optional (GPU):
 This creates/uses a `.venv` in the repo by default. Activate if desired:
 - macOS/Linux: `source .venv/bin/activate`
 
+### Slim core and optional extras (Issue #5799)
+
+Robot SF ships a **slim core** install plus PEP 621 extras so the first install
+is small. The core (`uv pip install -e .` with no extras) is enough to
+`import robot_sf`, build environments through the gym-env factory, run the
+social-force simulator and route planning, and run the random/social-force
+smoke. Optional capability stacks are pulled by extras:
+
+| Extra | Provides | Typical modules |
+| --- | --- | --- |
+| `[viz]` | `pygame`, `moviepy`, `seaborn` — viewer and video/plot extras | `robot_sf.render.sim_view` |
+| `[maps]` | `osmnx`, `geopandas`, `pyproj`, `svgelements` — OSM/geospatial map authoring | `robot_sf.nav.osm_map_builder`, `robot_sf.nav.geojson_map_builder` |
+| `[training]` | `stable-baselines3`, `torch`, `scikit-learn`, `optuna`, `tensorboard`, `wandb`, `sb3-contrib`, `tqdm` | `robot_sf.training.distributional_rl` |
+| `[benchmark]` | `pandas`, `duckdb`, `pyarrow`, `seaborn` — tabular aggregation/reporting | `robot_sf.research.aggregation` |
+| `[all]` | the four primary extras above (`viz`, `maps`, `training`, `benchmark`) | — |
+
+Specialized planner/runtime backends (`[rllib]`, `[sacadrl]`, `[orca]`,
+`[socnav]`, `[browser]`, `[criticality]`, `[gpu]`) remain standalone extras;
+install them individually or via `uv sync --all-extras`. `[all]` intentionally
+omits them so the default resolver stays compatible with the `imitation` dev
+group (see `[tool.uv] conflicts` in `pyproject.toml`).
+
+```bash
+# Slim core only (simulator + gym env + social-force smoke)
+uv pip install -e .
+
+# Add one capability stack
+uv pip install -e ".[viz]"
+uv pip install -e ".[maps]"
+uv pip install -e ".[training]"
+uv pip install -e ".[benchmark]"
+
+# All four primary extras
+uv pip install -e ".[all]"
+```
+
+Modules that need an optional dependency resolve it through
+`robot_sf.common.optional_import.require_extra`, so using a feature without its
+extra raises a clear error such as:
+
+```
+ModuleNotFoundError: The optional dependency 'geopandas' is required for this
+feature but is not installed. Install it with the 'maps' extra, e.g.:
+    uv pip install -e ".[maps]"   # editable worktree
+    pip install "robot_sf[maps]"      # from a built wheel
+```
+
 ## Headless settings (CI and servers)
 Some tests and examples import pygame/matplotlib. For headless runs, set:
 - `SDL_VIDEODRIVER=dummy`

@@ -79,3 +79,97 @@ def try_import(name: str) -> ModuleType | None:
         return importlib.import_module(name)
     except ImportError:
         return None
+
+
+# Map of optional dependency import names to the PEP 621 extra that provides
+# them (Issue #5799). Keep this aligned with ``[project.optional-dependencies]``
+# in pyproject.toml.
+_EXTRA_FOR_DEPENDENCY: dict[str, str] = {
+    # [viz]
+    "pygame": "viz",
+    "moviepy": "viz",
+    "seaborn": "viz",
+    # [maps]
+    "osmnx": "maps",
+    "geopandas": "maps",
+    "pyproj": "maps",
+    "svgelements": "maps",
+    # [training]
+    "stable_baselines3": "training",
+    "torch": "training",
+    "sklearn": "training",
+    "optuna": "training",
+    "tensorboard": "training",
+    "wandb": "training",
+    # [benchmark]
+    "pandas": "benchmark",
+    "duckdb": "benchmark",
+    "pyarrow": "benchmark",
+}
+
+
+def missing_extra_error(name: str, extra: str | None = None) -> ModuleNotFoundError:
+    """Build a clear ``ModuleNotFoundError`` pointing at the missing extra.
+
+    Use this together with :func:`try_import` when a feature *requires* an
+    optional dependency (i.e. it cannot degrade gracefully). The returned error
+    carries an actionable ``install robot_sf[<extra>]`` hint so users see exactly
+    what to install instead of a bare import failure.
+
+    Parameters
+    ----------
+    name:
+        The optional dependency import name (e.g. ``"pygame"``).
+    extra:
+        The extra that provides it. If ``None``, the known mapping in
+        ``_EXTRA_FOR_DEPENDENCY`` is used, falling back to ``[all]``.
+
+    Returns
+    -------
+    ModuleNotFoundError
+        An error whose message tells the user which extra to install.
+
+    Examples
+    --------
+    >>> pygame = try_import("pygame")
+    >>> if pygame is None:
+    ...     raise missing_extra_error("pygame", "viz")
+    """
+    resolved_extra = extra or _EXTRA_FOR_DEPENDENCY.get(name, "all")
+    return ModuleNotFoundError(
+        f"The optional dependency '{name}' is required for this feature but is "
+        f"not installed. Install it with the '{resolved_extra}' extra, e.g.:\n"
+        f'    uv pip install -e ".[{resolved_extra}]"   # editable worktree\n'
+        f'    pip install "robot_sf[{resolved_extra}]"      # from a built wheel'
+    )
+
+
+def require_extra(name: str, extra: str | None = None) -> ModuleType:
+    """Import and return an optional dependency, or raise a clear error.
+
+    Combines :func:`try_import` with :func:`missing_extra_error`: it returns the
+    module when installed, otherwise raises a ``ModuleNotFoundError`` with an
+    actionable ``install robot_sf[<extra>]`` hint. Use this (rather than
+    ``try_import``) for modules that genuinely need the extra and cannot degrade.
+
+    This helper introduces no new ``except ImportError`` spelling at call sites,
+    so it stays within the optional-import guard inventory ratchet
+    (``tests/test_optional_import_guard_inventory.py``).
+
+    Parameters
+    ----------
+    name:
+        The optional dependency import name (e.g. ``"torch"``).
+    extra:
+        The extra that provides it. If ``None``, the known mapping in
+        ``_EXTRA_FOR_DEPENDENCY`` is used, falling back to ``[all]``.
+
+    Returns
+    -------
+    ModuleType
+        The imported module.
+    """
+    module = try_import(name)
+    if module is None:
+        raise missing_extra_error(name, extra)
+    return module

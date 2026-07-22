@@ -24,9 +24,14 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import pandas as pd
 
 from robot_sf.common.logging import get_logger
+from robot_sf.common.optional_import import require_extra
+
+# ``pandas`` is a [benchmark] extra dependency (Issue #5799). Resolve it through
+# the canonical optional-import helper so a missing extra raises a clear install
+# hint instead of a bare ModuleNotFoundError.
+pd = require_extra("pandas", "benchmark")
 
 logger = get_logger(__name__)
 

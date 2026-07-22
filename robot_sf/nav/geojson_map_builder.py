@@ -18,8 +18,6 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import geopandas
-import pandas
 import yaml
 from loguru import logger
 from shapely.affinity import translate
@@ -27,8 +25,16 @@ from shapely.errors import TopologicalError
 from shapely.geometry import GeometryCollection, LineString, MultiLineString, MultiPolygon, Polygon
 from shapely.ops import unary_union
 
+from robot_sf.common.optional_import import require_extra
 from robot_sf.nav.map_config import MapDefinition, serialize_map
 from robot_sf.nav.osm_map_builder import OSMTagFilters, cleanup_polygons, compute_obstacles
+
+# GeoJSON/OSM map building depends on the geospatial ([maps]) extra (Issue #5799).
+# ``pandas`` is provided transitively by ``geopandas``. Resolve both through the
+# canonical optional-import helper so a missing extra raises a clear install
+# hint instead of a bare ModuleNotFoundError.
+geopandas = require_extra("geopandas", "maps")
+pandas = require_extra("pandas", "maps")
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

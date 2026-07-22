@@ -1,0 +1,10 @@
+# Optional set manifest for issue #6054.
+#
+# Includes the compiled regulation-to-scenario hypothesis so that a runner can
+# load it alongside other sets. The included file is a HYPOTHESIS
+# (required_manual_review: true, benchmark_evidence: false); loading it here does
+# not promote it to evidence. See
+# docs/context/issue_6054_regulation_to_scenario.md.
+schema_version: robot_sf.scenario_matrix.v1
+includes:
+  - ../single/issue_6054_regulation_to_scenario.yaml

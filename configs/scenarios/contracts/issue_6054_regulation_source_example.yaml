@@ -1,0 +1,28 @@
+# Example regulation-source record for issue #6054.
+#
+# This is INPUT to scripts/tools/convert_regulation_to_scenario.py, not a
+# scenario config. It wraps a textual regulation/requirement excerpt plus
+# minimal structured hints. The converter compiles the excerpt deterministically
+# (no LLM) into a scenario HYPOTHESIS; the excerpt is not, by itself, evidence.
+#
+# schema_version regulation-record.v1 is an input-envelope schema owned by the
+# converter; it is intentionally separate from robot_sf.scenario_matrix.v1.
+
+schema_version: regulation-record.v1
+regulation:
+  id: shared-space-speed-clearance-001
+  source: "Illustrative composite of shared-space AMV operating requirements"
+  issuing_body: "example / illustrative"
+  date: "2026-07-20"
+  context: shared space
+  setting: shared_space
+  # Textual regulation/requirement excerpt. This is the authoritative input the
+  # compiler reads. Clauses it cannot interpret are recorded, not silently kept.
+  regulation_text: >
+    In shared spaces the robot's maximum speed shall not exceed 1.5 m/s.
+    The robot must maintain a clearance of at least 1.0 m from pedestrians.
+    Pedestrian density in the operating zone is expected to be high.
+    Where the route crosses a marked crossing, the robot shall yield.
+    The robot shall provide an audible alert before moving.
+  required_manual_review: true
+  claim_boundary: "compiled scenario hypothesis only; not evidence"

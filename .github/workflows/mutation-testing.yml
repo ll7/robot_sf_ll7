@@ -1,0 +1,65 @@
+name: Mutation testing
+
+# Bounded mutation-testing lane for benchmark-critical semantics (issue #5508).
+# Runs mutmut on robot_sf/research/aggregation.py using the tests in
+# tests/research/test_aggregation.py, compares surviving mutants against the
+# committed baseline at scripts/validation/mutation_baseline.json, and fails
+# if any *new* un-baselined mutant survives.
+#
+# The baseline is an explicit list of grandfathered survivors; it shrinks over
+# time as test coverage improves. A survivor NOT in the baseline causes a
+# workflow failure. To refresh the baseline after a legitimate reduction, run:
+#
+#   scripts/dev/mutation_ratchet.py --write-baseline
+#
+# and commit the updated scripts/validation/mutation_baseline.json.
+
+on:
+  schedule:
+    - cron: "7 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation-ratchet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run mutation ratchet
+        id: ratchet
+        run: |
+          mkdir -p output/mutation
+          uv run python scripts/dev/mutation_ratchet.py --check 2>&1 | tee output/mutation/ratchet.log
+
+      - name: Summarize ratchet outcome
+        if: always()
+        run: |
+          printf 'mutation ratchet exit: %s\n' '${{ steps.ratchet.outcome }}'
+          if [ -f output/mutation/ratchet.log ]; then
+            tail -5 output/mutation/ratchet.log
+          fi
+
+      - name: Upload mutation report (mutmut cache)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-report
+          path: |
+            output/mutation/ratchet.log
+            mutants/mutmut-cicd-stats.json
+          if-no-files-found: warn

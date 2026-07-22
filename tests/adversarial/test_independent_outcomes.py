@@ -126,3 +126,98 @@ def test_load_independent_outcomes_reads_json_payload(tmp_path: Path) -> None:
     assert "loaded successfully" in reason
     assert payload is not None
     assert payload["outcome_source"] == "planner_execution"
+
+
+def _v2_row(arm: str, rank: int, outcome: float, status: str = "native") -> dict:
+    """Build a valid v2 row with complete lineage metadata."""
+    return {
+        "candidate_id": f"cand_{rank}",
+        "manifest_sha256": "abc123sha",
+        "selection_arm": arm,
+        "rank": rank,
+        "candidate_pool_seed": 42,
+        "target_planner_id": "social_force",
+        "planner_config_sha256": "cfg123sha",
+        "scenario_family": "classic_group_crossing_medium",
+        "scenario_seed": 100 + rank,
+        "execution_commit": "ecf997d",
+        "command_lineage": "robot_sf_bench ...",
+        "execution_status": status,
+        "termination_reason": "collision" if outcome >= 8.0 else "goal_reached",
+        "independent_failure_outcome": outcome,
+        "scenario_certification_status": "passed",
+        "candidate_certification_status": "passed",
+        "replay_lineage": "replay.jsonl",
+        "record_hash": "rechash123",
+        "exclusion_reason": None,
+    }
+
+
+def test_build_independent_outcome_evaluation_with_valid_v2_rows() -> None:
+    """A valid v2 payload with complete row lineage is admitted and computes metrics."""
+    rows = [
+        _v2_row("proposal", 0, 10.0),
+        _v2_row("proposal", 1, 10.0),
+        _v2_row("proposal", 2, 10.0),
+        _v2_row("proposal", 3, 10.0),
+        _v2_row("random", 0, 0.0),
+        _v2_row("random", 1, 0.0),
+        _v2_row("random", 2, 0.0),
+        _v2_row("random", 3, 0.0),
+    ]
+    payload = {
+        "schema_version": "adversarial_independent_outcomes.v2",
+        "source": "unit-test-fixture",
+        "outcome_source": "planner_execution",
+        "objective": "certified_failure_outcome",
+        "rows": rows,
+    }
+
+    result = build_independent_outcome_evaluation(payload, budget=4, n_permutations=200, seed=0)
+    assert result["status"] == "complete"
+    assert result["independent_outcomes_available"] is True
+    assert result["certification_available"] is True
+    assert result["proposal_metrics"]["mean_objective"] == 10.0
+    assert result["random_metrics"]["mean_objective"] == 0.0
+
+
+def test_build_independent_outcome_evaluation_rejects_incomplete_v2_row_lineage() -> None:
+    """Rows missing required lineage fields fail closed."""
+    rows = [
+        _v2_row("proposal", 0, 10.0),
+        _v2_row("random", 0, 0.0),
+    ]
+    # Delete lineage field from row 0
+    del rows[0]["manifest_sha256"]
+
+    payload = {
+        "schema_version": "adversarial_independent_outcomes.v2",
+        "source": "unit-test-fixture",
+        "outcome_source": "planner_execution",
+        "objective": "certified_failure_outcome",
+        "rows": rows,
+    }
+
+    result = build_independent_outcome_evaluation(payload, budget=2, n_permutations=100, seed=0)
+    assert result["status"] == "blocked_invalid_independent_outcomes"
+    assert "missing lineage fields" in result["reason"]
+
+
+def test_build_independent_outcome_evaluation_rejects_degraded_v2_row() -> None:
+    """Rows with fallback or degraded execution status fail closed."""
+    rows = [
+        _v2_row("proposal", 0, 10.0, status="degraded"),
+        _v2_row("random", 0, 0.0),
+    ]
+
+    payload = {
+        "schema_version": "adversarial_independent_outcomes.v2",
+        "source": "unit-test-fixture",
+        "outcome_source": "planner_execution",
+        "objective": "certified_failure_outcome",
+        "rows": rows,
+    }
+
+    result = build_independent_outcome_evaluation(payload, budget=2, n_permutations=100, seed=0)
+    assert result["status"] == "blocked_invalid_independent_outcomes"
+    assert "invalid execution_status" in result["reason"]

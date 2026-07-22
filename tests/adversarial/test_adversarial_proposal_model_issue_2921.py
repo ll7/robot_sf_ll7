@@ -641,3 +641,229 @@ def test_real_archive_with_circular_outcomes_stays_fail_closed(tmp_path: Path, m
     assert report["issue_2921_stop_rule"]["reason"] == (
         "not_available_requires_independent_planner_outcomes"
     )
+
+
+def test_contract_verification_cli(tmp_path: Path, monkeypatch) -> None:
+    """Test that side-effect-free contract verification CLI command passes."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    contract_path = Path("configs/adversarial/issue_3275_same_planner_contract.json")
+    output_json = tmp_path / "verif.json"
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--check-contract",
+            contract_path.as_posix(),
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 0
+    assert output_json.exists()
+    verif = json.loads(output_json.read_text(encoding="utf-8"))
+    assert verif["checks_passed"] is True
+    assert verif["status"] == "passed"
+    assert verif["fit_entry_count"] == 12
+    assert verif["excluded_entry_count"] == 5
+    assert verif["feature_semantics_audit"]["passed"] is True
+
+
+def test_train_only_ranking_isolation() -> None:
+    """Excluded goal/cross-trap entries cannot alter fit model entries or candidate scores."""
+    from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel, isolate_fit_entries
+
+    raw_archive = {
+        "schema_version": "adversarial_failure_archive.v1",
+        "entries": [
+            {
+                "archive_id": "sf_0",
+                "target_planner": "social_force",
+                "scenario_family": "classic_group_crossing_medium",
+                "candidate": {
+                    "start": {"x": 2.0, "y": 2.0},
+                    "goal": {"x": 8.0, "y": 8.0},
+                    "spawn_time_s": 1.0,
+                    "pedestrian_speed_mps": 1.0,
+                    "pedestrian_delay_s": 0.0,
+                    "scenario_seed": 1,
+                },
+                "failure_attribution": {"primary_failure": "collision"},
+            },
+            {
+                "archive_id": "goal_0",
+                "target_planner": "goal",
+                "scenario_family": "classic_cross_trap_medium",
+                "candidate": {
+                    "start": {"x": 9.0, "y": 9.0},
+                    "goal": {"x": 1.0, "y": 1.0},
+                    "spawn_time_s": 0.0,
+                    "pedestrian_speed_mps": 2.0,
+                    "pedestrian_delay_s": 1.0,
+                    "scenario_seed": 2,
+                },
+                "failure_attribution": {"primary_failure": "timeout"},
+            },
+        ],
+    }
+
+    search_space = create_synthetic_search_space()
+    fit_data = isolate_fit_entries(
+        raw_archive, allowed_fit_ids={"sf_0"}, target_planner="social_force"
+    )
+    model = FailureArchiveProposalModel(fit_data, search_space)
+
+    assert len(model.entries) == 1
+    assert model.entries[0]["archive_id"] == "sf_0"
+
+    cand = _candidate(2.0, 2.0)
+    score_before = model.score_candidate(cand)
+
+    # Mutate excluded entry in raw archive
+    raw_archive["entries"][1]["candidate"]["start"] = {"x": 0.0, "y": 0.0}
+    fit_data_mutated = isolate_fit_entries(
+        raw_archive, allowed_fit_ids={"sf_0"}, target_planner="social_force"
+    )
+    model_mutated = FailureArchiveProposalModel(fit_data_mutated, search_space)
+
+    assert model_mutated.score_candidate(cand) == score_before
+
+
+def test_opposite_sign_execution_favors_random_stops(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When archive-nearness favors proposal but independent execution favors random, final rule STOPS."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    archive_path = tmp_path / "archive.json"
+    search_space_path = tmp_path / "search_space.yaml"
+    outcomes_path = tmp_path / "outcomes.json"
+    output_json = tmp_path / "report.json"
+
+    archive = _two_family_archive()
+    archive_path.write_text(json.dumps(archive), encoding="utf-8")
+    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+
+    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
+
+    split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
+
+    # Independent planner execution outcome favors RANDOM (random=10.0, proposal=0.0)
+    outcomes_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "adversarial_independent_outcomes.v1",
+                "source": "unit-test-fixture",
+                "artifact": "docs/context/evidence/unit-test.json",
+                "eval_archive_sha256": archive_sha256(split.eval_entries),
+                "outcome_source": "planner_execution",
+                "objective": "certified_failure_outcome",
+                "proposal_outcomes": [0.0, 0.0, 0.0, 0.0],
+                "random_outcomes": [10.0, 10.0, 10.0, 10.0],
+                "ranked_outcomes": [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
+                "certification_statuses": ["passed"] * 8,
+                "row_statuses": ["success"] * 8,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--archive",
+            archive_path.as_posix(),
+            "--search-space",
+            search_space_path.as_posix(),
+            "--evaluation-outcomes",
+            outcomes_path.as_posix(),
+            "--budget",
+            "4",
+            "--seed",
+            "7",
+            "--null-test-permutations",
+            "200",
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 0
+    report = json.loads(output_json.read_text(encoding="utf-8"))
+    assert report["held_out_evidence"] is True
+    assert report["comparison"]["interpretation"] == "independent_planner_execution_outcomes"
+    # Independent execution shows proposal mean = 0.0, random mean = 10.0 -> improvement = -10.0
+    assert report["comparison"]["mean_objective_improvement"] == -10.0
+    assert report["issue_2921_stop_rule"]["status"] == "stop"
+
+
+def test_opposite_sign_execution_favors_proposal_continues(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When archive-nearness favors random but independent execution favors proposal, final rule CONTINUES."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    archive_path = tmp_path / "archive.json"
+    search_space_path = tmp_path / "search_space.yaml"
+    outcomes_path = tmp_path / "outcomes.json"
+    output_json = tmp_path / "report.json"
+
+    archive = _two_family_archive()
+    archive_path.write_text(json.dumps(archive), encoding="utf-8")
+    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+
+    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
+
+    split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
+
+    # Independent planner execution outcome favors PROPOSAL (proposal=10.0, random=0.0)
+    outcomes_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "adversarial_independent_outcomes.v1",
+                "source": "unit-test-fixture",
+                "artifact": "docs/context/evidence/unit-test.json",
+                "eval_archive_sha256": archive_sha256(split.eval_entries),
+                "outcome_source": "planner_execution",
+                "objective": "certified_failure_outcome",
+                "proposal_outcomes": [10.0, 10.0, 10.0, 10.0],
+                "random_outcomes": [0.0, 0.0, 0.0, 0.0],
+                "ranked_outcomes": [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
+                "certification_statuses": ["passed"] * 8,
+                "row_statuses": ["success"] * 8,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--archive",
+            archive_path.as_posix(),
+            "--search-space",
+            search_space_path.as_posix(),
+            "--evaluation-outcomes",
+            outcomes_path.as_posix(),
+            "--budget",
+            "4",
+            "--seed",
+            "7",
+            "--null-test-permutations",
+            "200",
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 0
+    report = json.loads(output_json.read_text(encoding="utf-8"))
+    assert report["held_out_evidence"] is True
+    assert report["comparison"]["interpretation"] == "independent_planner_execution_outcomes"
+    # Independent execution shows proposal mean = 10.0, random mean = 0.0 -> improvement = +10.0
+    assert report["comparison"]["mean_objective_improvement"] == 10.0
+    assert report["issue_2921_stop_rule"]["status"] == "continue"

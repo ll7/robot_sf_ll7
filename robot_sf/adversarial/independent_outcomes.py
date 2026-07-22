@@ -69,6 +69,111 @@ def _certification_available(payload: dict[str, Any], expected_count: int) -> bo
     return all(status == "passed" for status in statuses)
 
 
+def _validate_single_row_lineage(
+    idx: int,
+    row: dict[str, Any],
+    required_keys: set[str],
+    lineage_keys: set[str],
+    bad_statuses: set[str],
+) -> tuple[bool, str, tuple[str, float, int] | None]:
+    """Validate a single row for lineage, status, and certification."""
+    if not isinstance(row, dict):
+        return False, f"row {idx} is not an object", None
+    missing = [k for k in required_keys if k not in row]
+    if missing:
+        return False, f"row {idx} missing required keys: {missing}", None
+
+    missing_lineage = [k for k in lineage_keys if k not in row]
+    if missing_lineage:
+        return False, f"row {idx} missing lineage fields: {missing_lineage}", None
+
+    status = str(row.get("execution_status", "")).lower()
+    if status in bad_statuses or status not in {"native", "success"}:
+        return False, f"row {idx} has invalid execution_status: {status}", None
+
+    cert_scen = str(row.get("scenario_certification_status", "")).lower()
+    cert_cand = str(row.get("candidate_certification_status", "")).lower()
+    if cert_scen != "passed" or cert_cand != "passed":
+        return (
+            False,
+            f"row {idx} certification failed: scenario={cert_scen}, candidate={cert_cand}",
+            None,
+        )
+
+    try:
+        outcome = float(row["independent_failure_outcome"])
+    except (TypeError, ValueError):
+        return False, f"row {idx} invalid independent_failure_outcome", None
+
+    arm = str(row["selection_arm"]).lower()
+    if arm not in {"proposal", "random"}:
+        return False, f"row {idx} unknown selection_arm: {arm}", None
+
+    try:
+        rank = int(row.get("rank", idx))
+    except (TypeError, ValueError):
+        rank = idx
+
+    return True, "ok", (arm, outcome, rank)
+
+
+def validate_row_lineage(
+    rows: list[dict[str, Any]],
+) -> tuple[bool, str, list[float], list[float], list[float]]:
+    """Validate row-level outcome lineage for adversarial_independent_outcomes.v2.
+
+    Returns:
+        (ok, reason, proposal_outcomes, random_outcomes, ranked_outcomes)
+    """
+    if not isinstance(rows, list) or not rows:
+        return False, "rows must be a non-empty list", [], [], []
+
+    required_keys = {
+        "selection_arm",
+        "independent_failure_outcome",
+        "execution_status",
+    }
+    lineage_keys = {
+        "candidate_id",
+        "manifest_sha256",
+        "target_planner_id",
+        "planner_config_sha256",
+        "scenario_family",
+        "scenario_seed",
+        "execution_commit",
+        "command_lineage",
+        "termination_reason",
+        "scenario_certification_status",
+        "candidate_certification_status",
+        "replay_lineage",
+        "record_hash",
+    }
+    bad_statuses = {"fallback", "degraded", "not_available", "failed", "blocked"}
+
+    proposal_outcomes: list[float] = []
+    random_outcomes: list[float] = []
+    all_rows_with_rank = []
+
+    for idx, row in enumerate(rows):
+        ok, reason, item = _validate_single_row_lineage(
+            idx, row, required_keys, lineage_keys, bad_statuses
+        )
+        if not ok or item is None:
+            return False, reason, [], [], []
+
+        arm, outcome, rank = item
+        if arm == "proposal":
+            proposal_outcomes.append(outcome)
+        else:
+            random_outcomes.append(outcome)
+        all_rows_with_rank.append((rank, outcome))
+
+    all_rows_with_rank.sort(key=lambda item: item[0])
+    ranked_outcomes = [item[1] for item in all_rows_with_rank]
+
+    return True, "ok", proposal_outcomes, random_outcomes, ranked_outcomes
+
+
 def _metadata_allows_independent_outcomes(payload: dict[str, Any]) -> tuple[bool, str]:
     """Reject known circular, fallback, degraded, or unavailable packet metadata."""
     if payload.get("outcome_source") != "planner_execution":
@@ -136,22 +241,37 @@ def build_independent_outcome_evaluation(
                 "payload_sha256": payload_sha256(payload),
             }
 
-    try:
-        proposal_outcomes = _float_list(payload, "proposal_outcomes")
-        random_outcomes = _float_list(payload, "random_outcomes")
-        ranked_outcomes = _float_list(payload, "ranked_outcomes")
-    except (TypeError, ValueError) as exc:
-        return {
-            "status": "blocked_malformed_outcomes",
-            "independent_outcomes_available": False,
-            "certification_available": False,
-            "null_tests_reject_null": False,
-            "reason": str(exc),
-            "payload_sha256": payload_sha256(payload),
-        }
-
-    expected_count = len(proposal_outcomes) + len(random_outcomes)
-    certification_available = _certification_available(payload, expected_count)
+    rows = payload.get("rows")
+    if isinstance(rows, list):
+        rows_ok, rows_reason, proposal_outcomes, random_outcomes, ranked_outcomes = (
+            validate_row_lineage(rows)
+        )
+        if not rows_ok:
+            return {
+                "status": "blocked_invalid_independent_outcomes",
+                "independent_outcomes_available": False,
+                "certification_available": False,
+                "null_tests_reject_null": False,
+                "reason": f"invalid row lineage: {rows_reason}",
+                "payload_sha256": payload_sha256(payload),
+            }
+        certification_available = True
+    else:
+        try:
+            proposal_outcomes = _float_list(payload, "proposal_outcomes")
+            random_outcomes = _float_list(payload, "random_outcomes")
+            ranked_outcomes = _float_list(payload, "ranked_outcomes")
+        except (TypeError, ValueError) as exc:
+            return {
+                "status": "blocked_malformed_outcomes",
+                "independent_outcomes_available": False,
+                "certification_available": False,
+                "null_tests_reject_null": False,
+                "reason": str(exc),
+                "payload_sha256": payload_sha256(payload),
+            }
+        expected_count = len(proposal_outcomes) + len(random_outcomes)
+        certification_available = _certification_available(payload, expected_count)
     independent_available = bool(proposal_outcomes and random_outcomes and ranked_outcomes)
     if not independent_available:
         return {

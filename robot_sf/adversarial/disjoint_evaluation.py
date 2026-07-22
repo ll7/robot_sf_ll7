@@ -779,3 +779,118 @@ def assess_archive_file_readiness(path: Path | None) -> ArchiveReadinessReport:
     except (ValueError, OSError) as exc:
         return _not_ready("not_ready", f"archive_unreadable:{exc}")
     return assess_archive_readiness(archive_data)
+
+
+def _verify_contract_hashes(
+    contract_data: dict[str, Any],
+    archive_data: dict[str, Any],
+    archive_raw_content: bytes | None,
+) -> list[str]:
+    """Check raw file and archive payload hashes against contract."""
+    reasons: list[str] = []
+    if archive_raw_content is not None and "archive_raw_sha256" in contract_data:
+        raw_hash = hashlib.sha256(archive_raw_content).hexdigest()
+        if raw_hash != contract_data["archive_raw_sha256"]:
+            reasons.append(
+                f"raw_archive_hash_mismatch:expected={contract_data['archive_raw_sha256']}:actual={raw_hash}"
+            )
+    if "archive_payload_sha256" in contract_data:
+        payload_hash = archive_sha256(archive_data)
+        if payload_hash != contract_data["archive_payload_sha256"]:
+            reasons.append(
+                f"archive_payload_hash_mismatch:expected={contract_data['archive_payload_sha256']}:actual={payload_hash}"
+            )
+    return reasons
+
+
+def _verify_contract_entries(
+    contract_data: dict[str, Any],
+    entries: list[dict[str, Any]],
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """Check fit/excluded entry IDs, planners, and scenario families against contract."""
+    reasons: list[str] = []
+    expected_target_planner = contract_data.get("target_planner")
+    expected_fit_family = contract_data.get("fit_scenario_family")
+    expected_fit_ids = set(contract_data.get("fit_entry_ids", []))
+    expected_excluded_ids = set(contract_data.get("excluded_entry_ids", []))
+    expected_fit_count = contract_data.get("fit_entry_count", 12)
+
+    actual_entry_ids = {e.get("archive_id") for e in entries if isinstance(e, dict)}
+    missing_fit = sorted(expected_fit_ids - actual_entry_ids)
+    if missing_fit:
+        reasons.append(f"missing_fit_entries:{missing_fit}")
+
+    missing_excluded = sorted(expected_excluded_ids - actual_entry_ids)
+    if missing_excluded:
+        reasons.append(f"missing_excluded_entries:{missing_excluded}")
+
+    observed_fit_entries = [
+        e for e in entries if isinstance(e, dict) and e.get("archive_id") in expected_fit_ids
+    ]
+    if len(observed_fit_entries) != expected_fit_count:
+        reasons.append(
+            f"fit_entry_count_mismatch:expected={expected_fit_count}:actual={len(observed_fit_entries)}"
+        )
+
+    for entry in observed_fit_entries:
+        planner = (
+            entry.get("target_planner")
+            or (entry.get("provenance") or {}).get("target_planner")
+            or (entry.get("mechanism_cluster_key") or {}).get("policy")
+        )
+        if planner != expected_target_planner:
+            reasons.append(
+                f"fit_entry_planner_mismatch:{entry.get('archive_id')}:expected={expected_target_planner}:actual={planner}"
+            )
+        fam = entry.get("scenario_family") or entry.get("cluster_key")
+        if isinstance(fam, dict):
+            fam = fam.get("scenario_family")
+        if fam != expected_fit_family:
+            reasons.append(
+                f"fit_entry_family_mismatch:{entry.get('archive_id')}:expected={expected_fit_family}:actual={fam}"
+            )
+
+    return reasons, observed_fit_entries
+
+
+def verify_same_planner_contract(
+    contract_data: dict[str, Any],
+    archive_data: dict[str, Any],
+    archive_raw_content: bytes | None = None,
+) -> dict[str, Any]:
+    """Verify that a loaded archive complies with the frozen same-planner contract."""
+    blocking_reasons: list[str] = []
+    blocking_reasons.extend(
+        _verify_contract_hashes(contract_data, archive_data, archive_raw_content)
+    )
+
+    entries = archive_data.get("entries", []) if isinstance(archive_data, dict) else []
+    if not isinstance(entries, list):
+        blocking_reasons.append("archive_entries_not_list")
+        entries = []
+
+    entry_reasons, observed_fit_entries = _verify_contract_entries(contract_data, entries)
+    blocking_reasons.extend(entry_reasons)
+
+    fit_payload_hash = archive_sha256(observed_fit_entries)
+    if (
+        "fit_entries_payload_sha256" in contract_data
+        and fit_payload_hash != contract_data["fit_entries_payload_sha256"]
+    ):
+        blocking_reasons.append(
+            f"fit_entries_payload_hash_mismatch:expected={contract_data['fit_entries_payload_sha256']}:actual={fit_payload_hash}"
+        )
+
+    passed = not blocking_reasons
+    return {
+        "schema_version": "issue_3275_contract_verification.v1",
+        "status": "passed" if passed else "failed",
+        "contract_id": contract_data.get("study_id", "issue_3275_same_planner_contract"),
+        "target_planner": contract_data.get("target_planner"),
+        "fit_scenario_family": contract_data.get("fit_scenario_family"),
+        "fit_entry_count": len(observed_fit_entries),
+        "excluded_entry_count": contract_data.get("excluded_entry_count", 5),
+        "fit_entries_payload_sha256": fit_payload_hash,
+        "checks_passed": passed,
+        "blocking_reasons": blocking_reasons,
+    }

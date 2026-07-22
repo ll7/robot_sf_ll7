@@ -8,7 +8,10 @@ import hashlib
 import json
 import random
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
 
 CLAIM_BOUNDARY = (
     "plumbing_validation_only: proposal-vs-random deltas in this report exercise ranking and "
@@ -303,6 +306,19 @@ def parse_args() -> argparse.Namespace:
         help="Path to search space config YAML file.",
     )
     parser.add_argument(
+        "--contract",
+        type=Path,
+        default=None,
+        help="Path to frozen study contract JSON file.",
+    )
+    parser.add_argument(
+        "--check-contract",
+        nargs="?",
+        const=True,
+        default=False,
+        help="Side-effect-free check-only command to verify frozen study contract.",
+    )
+    parser.add_argument(
         "--budget",
         type=int,
         default=10,
@@ -343,9 +359,145 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def handle_check_contract(args: argparse.Namespace, contract_path: Path | None) -> int:
+    """Handle side-effect-free contract verification command."""
+    from robot_sf.adversarial.disjoint_evaluation import verify_same_planner_contract
+    from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
+
+    if contract_path is None:
+        default_contract = Path("configs/adversarial/issue_3275_same_planner_contract.json")
+        contract_path = default_contract if default_contract.exists() else None
+
+    if contract_path is None or not contract_path.exists():
+        msg = {"status": "failed", "reason": f"Contract file {contract_path} not found."}
+        print(json.dumps(msg, indent=2))
+        return 1
+
+    contract_data = json.loads(contract_path.read_text(encoding="utf-8"))
+    archive_path = (
+        args.archive
+        if args.archive is not None
+        else Path(contract_data.get("tracked_archive_path", ""))
+    )
+
+    if not archive_path.exists():
+        msg = {"status": "failed", "reason": f"Archive file {archive_path} not found."}
+        print(json.dumps(msg, indent=2))
+        return 1
+
+    raw_bytes = archive_path.read_bytes()
+    archive_data = json.loads(raw_bytes.decode("utf-8"))
+    verif = verify_same_planner_contract(contract_data, archive_data, raw_bytes)
+
+    fit_model = FailureArchiveProposalModel(
+        archive_data,
+        allowed_fit_ids=contract_data.get("fit_entry_ids"),
+        target_planner=contract_data.get("target_planner"),
+    )
+    feature_audit = fit_model.audit_feature_semantics(
+        target_family=contract_data.get("fit_scenario_family")
+    )
+    verif["feature_semantics_audit"] = feature_audit
+    if not feature_audit.get("passed", False):
+        verif["checks_passed"] = False
+        verif.setdefault("blocking_reasons", []).append("feature_semantics_audit_failed")
+
+    verif_str = json.dumps(verif, indent=2, sort_keys=True)
+    print(verif_str)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(verif_str + "\n", encoding="utf-8")
+    return 0 if verif["checks_passed"] else 1
+
+
+def _select_and_score_candidates(
+    model: FailureArchiveProposalModel,
+    search_space: Any,
+    budget: int,
+    seed: int,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Generate candidates and compute diagnostic archive-nearness metrics."""
+    rng = random.Random(seed)
+    pool_size = max(budget * 5, 50)
+    pool = [search_space.sample_candidate(rng) for _ in range(pool_size)]
+
+    random_selection = rng.sample(pool, min(budget, len(pool)))
+    ranked_pool = model.rank_candidates(pool, strategy="nearest_neighbor")
+    proposal_selection = [cand for cand, score in ranked_pool[:budget]]
+
+    def evaluate_objective(candidate: Any) -> float:
+        if not model.entries:
+            return 0.0
+        distances = [
+            model._distance(candidate, entry.get("candidate", {})) for entry in model.entries
+        ]
+        min_dist = min(distances) if distances else 999.0
+        return max(0.0, 10.0 - min_dist)
+
+    diag_random_metrics = compute_metrics(random_selection, evaluate_objective)
+    diag_proposal_metrics = compute_metrics(proposal_selection, evaluate_objective)
+
+    dummy_yaml = Path("dummy_scenario.yaml")
+    diag_proposal_metrics["certification_statuses_advisory"] = [
+        model.certify_candidate(c, dummy_yaml, require_certification=False).status
+        for c in proposal_selection
+    ]
+    diag_proposal_metrics["certification_statuses_strict"] = [
+        model.certify_candidate(c, dummy_yaml, require_certification=True).status
+        for c in proposal_selection
+    ]
+
+    return diag_random_metrics, diag_proposal_metrics
+
+
+def _assemble_comparison_report(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Assemble the comparison report dict from context dictionary."""
+    held_out_evidence = ctx["held_out_evidence"]
+    independent_evaluation = ctx["independent_evaluation"]
+    return {
+        "schema_version": "adversarial_proposal_comparison.v1",
+        "state": ctx["state"],
+        "reason": ctx["reason"],
+        "claim_boundary": HELD_OUT_DIAGNOSTIC_BOUNDARY if held_out_evidence else CLAIM_BOUNDARY,
+        "result_classification": (
+            "held_out_diagnostic_only" if held_out_evidence else "plumbing_validation_only"
+        ),
+        "held_out_evidence": held_out_evidence,
+        "benchmark_evidence": False,
+        "planner_performance_claim": False,
+        "synthetic_archive": ctx["synthetic_archive"],
+        "synthetic_search_space": ctx["synthetic_search_space"],
+        "search_space_state": ctx["search_space_state"],
+        "budget": ctx["budget"],
+        "seed": ctx["seed"],
+        "random_metrics": ctx["random_metrics"],
+        "proposal_metrics": ctx["proposal_metrics"],
+        "diagnostic_archive_nearness_metrics": ctx["diagnostic_archive_nearness_metrics"],
+        "comparison": ctx["comparison"],
+        "issue_2921_stop_rule": ctx["issue_2921_stop_rule"],
+        "archive_evaluation_provenance": ctx["provenance"],
+        "independent_outcome_evaluation": independent_evaluation,
+        "null_tests": independent_evaluation.get(
+            "null_tests",
+            {
+                "shuffled_archive_outcomes": "not_run_requires_real_certified_archive",
+                "proposal_ranking_permutation": "not_run_requires_real_certified_archive",
+                "required_for_held_out_claim": True,
+            },
+        ),
+    }
+
+
 def main() -> int:
     """Main execution function."""
     args = parse_args()
+
+    contract_path = args.contract
+    if isinstance(args.check_contract, (str, Path)):
+        contract_path = Path(args.check_contract)
+
+    if args.check_contract:
+        return handle_check_contract(args, contract_path)
 
     search_space_state, search_space_reason, search_space, synthetic_search_space = (
         load_search_space(args.search_space)
@@ -370,50 +522,29 @@ def main() -> int:
         state = "blocked"
     reason = " ".join(reason_parts)
 
-    from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
+    contract_fit_ids = None
+    if contract_path and contract_path.exists():
+        contract_data = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract_fit_ids = contract_data.get("fit_entry_ids")
 
-    # Initialize proposal model
-    model = FailureArchiveProposalModel(archive_data, search_space)
+    from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel, isolate_fit_entries
 
-    # Generate a candidate pool deterministically using the seed
-    rng = random.Random(args.seed)
-    pool_size = max(args.budget * 5, 50)
-    pool = [search_space.sample_candidate(rng) for _ in range(pool_size)]
+    fit_archive_data = (
+        isolate_fit_entries(
+            archive_data, allowed_fit_ids=contract_fit_ids, target_planner="social_force"
+        )
+        if not synthetic_archive and isinstance(archive_data, dict)
+        else archive_data
+    )
 
-    # Random Sampler Selection
-    random_selection = rng.sample(pool, min(args.budget, len(pool)))
+    model = FailureArchiveProposalModel(
+        fit_archive_data, search_space, target_planner="social_force"
+    )
 
-    # Proposal Model Selection
-    ranked_pool = model.rank_candidates(pool, strategy="nearest_neighbor")
-    proposal_selection = [cand for cand, score in ranked_pool[: args.budget]]
+    diag_random_metrics, diag_proposal_metrics = _select_and_score_candidates(
+        model, search_space, args.budget, args.seed
+    )
 
-    # Define a synthetic objective function for evaluation
-    def evaluate_objective(candidate: Any) -> float:
-        if not model.entries:
-            return 0.0
-        distances = [
-            model._distance(candidate, entry.get("candidate", {})) for entry in model.entries
-        ]
-        min_dist = min(distances) if distances else 999.0
-        return max(0.0, 10.0 - min_dist)
-
-    # Compute metrics
-    random_metrics = compute_metrics(random_selection, evaluate_objective)
-    proposal_metrics = compute_metrics(proposal_selection, evaluate_objective)
-
-    # Certification check
-    dummy_yaml = Path("dummy_scenario.yaml")
-    cert_statuses_advisory = [
-        model.certify_candidate(c, dummy_yaml, require_certification=False).status
-        for c in proposal_selection
-    ]
-    cert_statuses_strict = [
-        model.certify_candidate(c, dummy_yaml, require_certification=True).status
-        for c in proposal_selection
-    ]
-
-    proposal_metrics["certification_statuses_advisory"] = cert_statuses_advisory
-    proposal_metrics["certification_statuses_strict"] = cert_statuses_strict
     provenance = build_archive_evaluation_provenance(
         archive_data,
         state=state,
@@ -436,12 +567,19 @@ def main() -> int:
     )
     held_out_status = provenance.get("held_out_evidence_status")
     held_out_evidence = held_out_status == "eligible_held_out_diagnostic"
+
     if held_out_evidence:
         comparison_interpretation = "independent_planner_execution_outcomes"
+        proposal_metrics = independent_evaluation["proposal_metrics"]
+        random_metrics = independent_evaluation["random_metrics"]
     elif independent_evaluation.get("independent_outcomes_available"):
         comparison_interpretation = "independent_outcomes_rejected_by_held_out_gate"
+        proposal_metrics = diag_proposal_metrics
+        random_metrics = diag_random_metrics
     else:
         comparison_interpretation = "plumbing_only_circular_archive_nearness_objective"
+        proposal_metrics = diag_proposal_metrics
+        random_metrics = diag_random_metrics
 
     comparison = {
         "interpretation": comparison_interpretation,
@@ -461,37 +599,27 @@ def main() -> int:
         comparison=comparison,
     )
 
-    report = {
-        "schema_version": "adversarial_proposal_comparison.v1",
+    ctx = {
         "state": state,
         "reason": reason,
-        "claim_boundary": HELD_OUT_DIAGNOSTIC_BOUNDARY if held_out_evidence else CLAIM_BOUNDARY,
-        "result_classification": (
-            "held_out_diagnostic_only" if held_out_evidence else "plumbing_validation_only"
-        ),
         "held_out_evidence": held_out_evidence,
-        "benchmark_evidence": False,
-        "planner_performance_claim": False,
         "synthetic_archive": synthetic_archive,
         "synthetic_search_space": synthetic_search_space,
         "search_space_state": search_space_state,
         "budget": args.budget,
         "seed": args.seed,
-        "random_metrics": random_metrics,
         "proposal_metrics": proposal_metrics,
+        "random_metrics": random_metrics,
+        "diagnostic_archive_nearness_metrics": {
+            "proposal_metrics": diag_proposal_metrics,
+            "random_metrics": diag_random_metrics,
+        },
         "comparison": comparison,
         "issue_2921_stop_rule": issue_2921_stop_rule,
-        "archive_evaluation_provenance": provenance,
-        "independent_outcome_evaluation": independent_evaluation,
-        "null_tests": independent_evaluation.get(
-            "null_tests",
-            {
-                "shuffled_archive_outcomes": "not_run_requires_real_certified_archive",
-                "proposal_ranking_permutation": "not_run_requires_real_certified_archive",
-                "required_for_held_out_claim": True,
-            },
-        ),
+        "provenance": provenance,
+        "independent_evaluation": independent_evaluation,
     }
+    report = _assemble_comparison_report(ctx)
 
     report_str = json.dumps(report, indent=2, sort_keys=True)
     print(report_str)

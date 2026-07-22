@@ -258,3 +258,28 @@ def test_classify_held_out_evidence_fail_closed() -> None:
         )
         == "eligible_held_out_diagnostic"
     )
+
+
+def test_verify_same_planner_contract() -> None:
+    """Verify that contract verification helper validates archive hashes and fit/excluded entry isolation."""
+    import json
+    from pathlib import Path
+
+    from robot_sf.adversarial.disjoint_evaluation import verify_same_planner_contract
+
+    contract_path = Path("configs/adversarial/issue_3275_same_planner_contract.json")
+    archive_path = Path("docs/context/evidence/issue_5305_certified_archive/archive.json")
+
+    assert contract_path.exists()
+    assert archive_path.exists()
+
+    contract_data = json.loads(contract_path.read_text(encoding="utf-8"))
+    raw_bytes = archive_path.read_bytes()
+    archive_data = json.loads(raw_bytes.decode("utf-8"))
+
+    result = verify_same_planner_contract(contract_data, archive_data, raw_bytes)
+    assert result["checks_passed"] is True
+    assert result["status"] == "passed"
+    assert result["fit_entry_count"] == 12
+    assert result["excluded_entry_count"] == 5
+    assert result["blocking_reasons"] == []

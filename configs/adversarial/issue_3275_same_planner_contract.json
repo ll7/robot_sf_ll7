@@ -1,0 +1,70 @@
+{
+  "schema_version": "issue_3275_same_planner_contract.v1",
+  "study_id": "issue_3275_same_planner_contract",
+  "title": "Frozen Same-Planner Contract and Held-Out Result Integrity Repair for Issue #3275",
+  "tracked_archive_path": "docs/context/evidence/issue_5305_certified_archive/archive.json",
+  "archive_raw_sha256": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
+  "archive_payload_sha256": "1d8db3638e3539dca2e06849c0727150aff41ea85a71ee2d22cb1a343bc6d57e",
+  "target_planner": "social_force",
+  "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+  "fit_scenario_family": "classic_group_crossing_medium",
+  "fit_entry_count": 12,
+  "fit_entry_ids": [
+    "issue5305_classic_group_crossing_medium_0405a12b9e1b",
+    "issue5305_classic_group_crossing_medium_16c4a20e71aa",
+    "issue5305_classic_group_crossing_medium_24f49e195565",
+    "issue5305_classic_group_crossing_medium_3537f5d4f870",
+    "issue5305_classic_group_crossing_medium_47bd4c497818",
+    "issue5305_classic_group_crossing_medium_4de6bcf99283",
+    "issue5305_classic_group_crossing_medium_58a4877312cc",
+    "issue5305_classic_group_crossing_medium_5b9f237a8aee",
+    "issue5305_classic_group_crossing_medium_d8b09e0e988a",
+    "issue5305_classic_group_crossing_medium_e3856ba0906d",
+    "issue5305_classic_group_crossing_medium_f32fc5117cfa",
+    "issue5305_classic_group_crossing_medium_fc6bf8300e51"
+  ],
+  "fit_entries_payload_sha256": "2d5482648f18c2d779256abbad447b53ce3e43d1814d7f6a28e590cb81061b60",
+  "excluded_entry_count": 5,
+  "excluded_entry_ids": [
+    "issue5305_classic_cross_trap_medium_34f8c43d3260",
+    "issue5305_classic_cross_trap_medium_7910406dad49",
+    "issue5305_classic_cross_trap_medium_e7cebb2b0b06",
+    "issue5305_classic_cross_trap_medium_fbbd96687d61",
+    "issue5305_classic_cross_trap_medium_fe24f0ff86a1"
+  ],
+  "eval_scenario_family": "classic_group_crossing_medium",
+  "search_space_path": "configs/adversarial/crossing_ttc_space.yaml",
+  "estimand": {
+    "primary_metric": "candidate_level_certified_failure_yield_difference",
+    "definition": "proposal_yield minus random_yield under identical candidate budget",
+    "failure_criteria": [
+      "predeclared_deterministic_replay",
+      "independent_seed_confirmation",
+      "stable_failure_attribution"
+    ]
+  },
+  "study_parameters": {
+    "candidate_budget_per_arm": 10,
+    "candidate_pool_size": 50,
+    "confirmation_seeds_per_candidate": 5,
+    "minimally_important_effect_margin": 0.10,
+    "overlapping_candidate_policy": "deduplicate_or_disjoint_arms",
+    "clustering_across_execution_seeds": "candidate_level_mean",
+    "null_test_alpha": 0.05,
+    "null_tests_required": [
+      "shuffled_outcome_label_permutation",
+      "ranking_permutation"
+    ]
+  },
+  "decision_rule": {
+    "positive_outcome": "continue",
+    "negative_outcome": "stop",
+    "neutral_outcome": "revise",
+    "invalid_or_fallback_outcome": "blocked"
+  },
+  "feature_semantics": {
+    "representation": "same_family_normalized_scalar_features",
+    "cross_family_transfer_audited": true,
+    "cross_family_transfer_status": "same_family_frozen"
+  }
+}

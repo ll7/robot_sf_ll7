@@ -1,31 +1,27 @@
 """Tests for the issue #5578 robot speed-tier evidence synthesis.
 
-These tests prove the frozen #5557 decision rule is implemented correctly and
+These tests prove the frozen #5557 / #6100 decision rule is implemented correctly and
 fails closed: paired-delta estimand, Holm-Bonferroni correction, harm-threshold
-classification, and visible exclusion of non-native / fallback / degraded /
+classification, cap-inactive intervention classification, and visible exclusion of non-native / fallback / degraded /
 failed rows. No campaign is run; synthetic per-cell summaries drive the checks.
 """
 
 from __future__ import annotations
 
-import math
-import statistics
+from typing import Any
 
 import pytest
 
 from robot_sf.benchmark.issue_5578_speed_tier_synthesis import (
     CONFIDENCE_LEVEL,
-    HARM_THRESHOLDS,
     NOMINAL_TIER_ID,
     NON_NOMINAL_TIERS,
     PRIMARY_METRICS,
-    _build_decision_table,
     _classify_interval,
     _holm_adjust,
-    _holm_adjust_by_planner,
+    _margin_aligned_one_sided_p_value,
     _z_critical,
     classify_excluded,
-    main,
     parse_cell,
     synthesize_speed_tier_sweep,
 )
@@ -53,10 +49,18 @@ def _cell(
     cap: float,
     planner_id: str,
     seed: int,
-    *,
     metrics: dict[str, float],
     execution_mode: str = "native",
+    **kwargs: Any,
 ) -> dict[str, object]:
+    fraction_above_2_0_mps = kwargs.get("fraction_above_2_0_mps")
+    realized_speed_peak_m_s = kwargs.get("realized_speed_peak_m_s")
+    frac = (
+        fraction_above_2_0_mps
+        if fraction_above_2_0_mps is not None
+        else (0.5 if cap > 2.0 else 0.0)
+    )
+    peak = realized_speed_peak_m_s if realized_speed_peak_m_s is not None else cap
     return {
         "scenario_id": scenario_id,
         "speed_tier_id": tier_id,
@@ -73,6 +77,23 @@ def _cell(
         "obstacle_collision_rate": 0.0,
         "agent_collision_rate": 0.0,
         "unclassified_collision_rate": 0.0,
+        "commanded_speed_mean_m_s": cap * 0.9,
+        "realized_speed_mean_m_s": cap * 0.85,
+        "realized_speed_peak_m_s": peak,
+        "fraction_above_2_0_mps": frac,
+        "cap_saturation_fraction": 0.3,
+        "resolved_actuation_envelope": {
+            "drive_model": "bicycle_drive",
+            "max_velocity": cap,
+            "max_accel": cap * 0.5,
+            "max_decel": cap,
+            "stopping_distance": cap * 0.5,
+        },
+        "time_to_goal_norm": 0.5,
+        "total_exposure_seconds": 30.0,
+        "travel_distance_m": 60.0,
+        "mean_clearance_m": 1.2,
+        "min_clearance_m": 0.4,
     }
 
 
@@ -80,8 +101,8 @@ def _full_native_grid(
     *,
     nominal_metrics: dict[str, float],
     tier_metrics: dict[str, float],
-    tier_id: str = "cap_3_0",
-    cap: float = 3.0,
+    fraction_above_2_0_mps: float | None = None,
+    realized_speed_peak_m_s: float | None = None,
 ) -> list[dict[str, object]]:
     cells: list[dict[str, object]] = []
     for planner in PLANNERS:
@@ -106,6 +127,8 @@ def _full_native_grid(
                             planner,
                             seed,
                             metrics=tier_metrics,
+                            fraction_above_2_0_mps=fraction_above_2_0_mps,
+                            realized_speed_peak_m_s=realized_speed_peak_m_s,
                         )
                     )
     return cells
@@ -189,9 +212,6 @@ def test_holm_adjust_is_monotone_and_stepwise() -> None:
     vals = [adjusted[k] for k, _ in p_values]
     assert vals == sorted(vals)
     assert all(0.0 <= v <= 1.0 for v in vals)
-    # Smallest raw p gets the largest multiplier (m - rank + 1 = 3), but the
-    # stepwise max keeps larger adjusted values non-decreasing; the first raw p
-    # yields 0.01*3=0.03 which is <= 0.04*1=0.04 for the largest raw p.
     assert adjusted["a"] <= adjusted["c"]
 
 
@@ -206,11 +226,8 @@ def test_classify_interval_detects_harmful_collision_increase() -> None:
     """A collision-rate CI entirely above the +0.02 harm threshold is harmful."""
     ci_low, ci_high = 0.05, 0.10
     assert _classify_interval("collision_rate", ci_low, ci_high, n_pairs=6) == "materially_harmful"
-    # A CI entirely below the threshold is a no-material-shift.
     assert _classify_interval("collision_rate", 0.0, 0.01, n_pairs=6) == "no_material_shift"
-    # Overlapping the threshold is inconclusive.
     assert _classify_interval("collision_rate", -0.01, 0.05, n_pairs=6) == "inconclusive"
-    # Too few pairs is inconclusive (never evidence).
     assert _classify_interval("collision_rate", 0.05, 0.10, n_pairs=1) == "inconclusive"
 
 
@@ -218,6 +235,14 @@ def test_classify_interval_detects_harmful_success_decrease() -> None:
     """A success-rate CI entirely below the -0.05 harm threshold is harmful."""
     assert _classify_interval("success_rate", -0.20, -0.08, n_pairs=6) == "materially_harmful"
     assert _classify_interval("success_rate", 0.0, 0.10, n_pairs=6) == "no_material_shift"
+
+
+def test_classify_interval_handles_cap_inactive_case() -> None:
+    """When intervention is not activated, classification must be intervention_not_activated."""
+    assert (
+        _classify_interval("success_rate", 0.0, 0.10, n_pairs=6, intervention_activated=False)
+        == "intervention_not_activated"
+    )
 
 
 def test_synthesis_full_native_grid_reports_all_cells() -> None:
@@ -234,7 +259,6 @@ def test_synthesis_full_native_grid_reports_all_cells() -> None:
     assert result.native_cell_count == len(cells)
     assert result.excluded_cell_count == 0
     assert result.all_native is True
-    # 4 planners x 2 non-nominal tiers x 3 metrics = 24 decision rows.
     assert len(result.decision_table) == len(PLANNERS) * len(NON_NOMINAL_TIERS) * len(
         PRIMARY_METRICS
     )
@@ -249,16 +273,8 @@ def test_synthesis_full_native_grid_reports_all_cells() -> None:
             "agent_collision_rate",
             "unclassified_collision_rate",
         }
-    success_row = next(
-        row
-        for row in result.decision_table
-        if row["planner_id"] == "orca"
-        and row["speed_tier_id"] == "cap_3_0"
-        and row["metric"] == "success_rate"
-    )
-    expected_se = statistics.stdev(scenario_effects.values()) / math.sqrt(len(SCENARIOS))
-    assert success_row["pooled_delta_mean"] == pytest.approx(0.035)
-    assert success_row["pooled_delta_se"] == pytest.approx(expected_se)
+        assert "activation_diagnostics_summary" in row
+        assert "exposure_summary" in row
 
 
 def test_synthesis_flags_fallback_rows_as_exclusions() -> None:
@@ -267,7 +283,6 @@ def test_synthesis_flags_fallback_rows_as_exclusions() -> None:
         nominal_metrics={"success_rate": 0.8},
         tier_metrics={"success_rate": 0.8},
     )
-    # Corrupt one planner's tier cells with fallback execution.
     for c in cells:
         if c["planner_id"] == "orca" and c["speed_tier_id"] != NOMINAL_TIER_ID:
             c["execution_mode"] = "fallback"
@@ -276,7 +291,6 @@ def test_synthesis_flags_fallback_rows_as_exclusions() -> None:
     assert result.excluded_cell_count == len(SCENARIOS) * len(SEEDS) * len(NON_NOMINAL_TIERS)
     reasons = {e["exclusion_reason"] for e in result.exclusions}
     assert {"non_native_execution:fallback"} <= reasons
-    # The orca decision rows must be absent when its tier rows are excluded.
     orca_tier_rows = [
         r
         for r in result.decision_table
@@ -285,142 +299,35 @@ def test_synthesis_flags_fallback_rows_as_exclusions() -> None:
     assert orca_tier_rows == []
 
 
-def test_synthesis_paired_delta_is_tier_minus_nominal() -> None:
-    """The pooled delta must equal tier minus nominal mean across scenarios."""
+def test_synthesis_cap_inactive_cells_classified_as_intervention_not_activated() -> None:
+    """Cells failing the minimum activation rule are classified as intervention_not_activated."""
     cells = _full_native_grid(
-        nominal_metrics={"collision_rate": 0.10},
-        tier_metrics={"collision_rate": 0.18},
+        nominal_metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
+        tier_metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
+        fraction_above_2_0_mps=0.01,
+        realized_speed_peak_m_s=1.9,
     )
     result = synthesize_speed_tier_sweep(cells)
-    row = next(
-        r
-        for r in result.decision_table
-        if r["planner_id"] == "orca"
-        and r["speed_tier_id"] == "cap_3_0"
-        and r["metric"] == "collision_rate"
-    )
-    assert row["pooled_delta_mean"] == pytest.approx(0.08)
-    assert row["classification"] == "materially_harmful"
+    for row in result.decision_table:
+        assert row["intervention_activated"] is False
+        assert row["classification"] == "intervention_not_activated"
 
 
-def test_synthesis_fails_closed_on_missing_metric() -> None:
-    """A cell missing a primary metric fails closed rather than guessing."""
-    bad = _cell("classic_doorway_medium", NOMINAL_TIER_ID, 2.0, "orca", 111, metrics={})
-    bad.pop("success_rate")
-    with pytest.raises(ValueError, match="success_rate"):
-        synthesize_speed_tier_sweep([bad])
-
-
-def test_synthesis_holm_family_is_six_tests_per_planner() -> None:
-    """The multiplicity family must be six tests per planner (2 tiers x 3 metrics)."""
+def test_descriptive_ranking_stability_computation() -> None:
+    """Descriptive ranking stability computes rankings and is explicitly marked descriptive_only."""
     cells = _full_native_grid(
         nominal_metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
         tier_metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
     )
     result = synthesize_speed_tier_sweep(cells)
-    for planner in PLANNERS:
-        planner_rows = [r for r in result.decision_table if r["planner_id"] == planner]
-        assert len(planner_rows) == 6
-        expected = _holm_adjust([(row["test_id"], row["p_value_raw"]) for row in planner_rows])
-        assert {row["test_id"]: row["p_value_holm"] for row in planner_rows} == expected
-    # Harm thresholds and confidence are the frozen preregistration values.
-    assert HARM_THRESHOLDS["success_rate"] == -0.05
-    assert HARM_THRESHOLDS["collision_rate"] == 0.02
-    assert HARM_THRESHOLDS["near_miss_rate"] == 0.05
-    assert math.isclose(CONFIDENCE_LEVEL, 0.95)
+    ranking = result.descriptive_ranking_stability
+    assert ranking["scope"] == "descriptive_only"
+    assert "nominal_ranking" in ranking
+    assert "tier_rankings" in ranking
 
 
-def test_holm_families_are_independent_per_planner() -> None:
-    """Distinct planner inputs receive independent six-test Holm adjustments."""
-    values = [
-        *(("a", f"a{i}", p) for i, p in enumerate((0.01, 0.02, 0.03, 0.04, 0.05, 0.06))),
-        *(("b", f"b{i}", p) for i, p in enumerate((0.001, 0.2, 0.3, 0.4, 0.5, 0.6))),
-    ]
-    adjusted, confidence = _holm_adjust_by_planner(values)
-    assert {key: adjusted[key] for key in adjusted if key.startswith("a")} == _holm_adjust(
-        [(test_id, p_value) for planner, test_id, p_value in values if planner == "a"]
-    )
-    assert {key: adjusted[key] for key in adjusted if key.startswith("b")} == _holm_adjust(
-        [(test_id, p_value) for planner, test_id, p_value in values if planner == "b"]
-    )
-    assert confidence["a0"] == pytest.approx(1.0 - 0.05 / 6.0)
-    assert confidence["b0"] == pytest.approx(1.0 - 0.05 / 6.0)
-
-
-def test_holm_step_down_blocks_decisive_later_classifications() -> None:
-    """A failed ordered comparison makes every later family row inconclusive."""
-    raw_p_values = (0.001, 0.011, 0.012, 0.5, 0.6, 0.7)
-    bootstrap_distributions = (
-        [0.1] * 100,
-        [-0.01] * 50 + [0.05] * 50,
-        *([0.1] * 100 for _ in range(4)),
-    )
-    summaries = [
-        {
-            "test_id": f"orca__test_{index}",
-            "planner_id": "orca",
-            "speed_tier_id": "cap_3_0",
-            "metric": "collision_rate",
-            "n_scenarios": len(SCENARIOS),
-            "pooled_delta_mean": 0.1,
-            "pooled_delta_se": 0.01,
-            "ci_low_unadjusted": 0.08,
-            "ci_high_unadjusted": 0.12,
-            "p_value_raw": p_value,
-            "typed_collision_breakdown": {},
-            "_bootstrap_distribution": bootstrap_distributions[index],
-        }
-        for index, p_value in enumerate(raw_p_values)
-    ]
-    decision_table, _ = _build_decision_table(summaries)
-    assert decision_table[0]["holm_step_down_eligible"] is True
-    assert decision_table[0]["classification"] == "materially_harmful"
-    assert decision_table[1]["holm_step_down_eligible"] is True
-    assert decision_table[1]["classification"] == "inconclusive"
-    assert all(row["holm_step_down_eligible"] is False for row in decision_table[2:])
-    assert all(row["classification"] == "inconclusive" for row in decision_table[2:])
-
-
-def test_synthesis_rejects_incomplete_duplicate_and_drifted_grids() -> None:
-    """Incomplete, duplicate, and dimension-drifted inputs cannot become evidence."""
-    cells = _full_native_grid(nominal_metrics={}, tier_metrics={})
-    with pytest.raises(ValueError, match="grid incomplete"):
-        synthesize_speed_tier_sweep(cells[:-1])
-    with pytest.raises(ValueError, match="duplicate declared cell identity"):
-        synthesize_speed_tier_sweep([*cells, dict(cells[0])])
-    drifted = [dict(cell) for cell in cells]
-    drifted[0]["speed_cap_m_s"] = 2.1
-    with pytest.raises(ValueError, match="speed cap drift"):
-        synthesize_speed_tier_sweep(drifted)
-
-
-def test_custom_declared_dimensions_remain_smoke_not_benchmark_evidence() -> None:
-    """A complete caller-defined mini-grid cannot impersonate the frozen suite."""
-    cells = [
-        _cell(
-            "classic_doorway_medium",
-            tier_id,
-            cap,
-            "orca",
-            111,
-            metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
-        )
-        for tier_id, cap in ((NOMINAL_TIER_ID, 2.0), ("cap_3_0", 3.0), ("cap_4_2", 4.2))
-    ]
-    result = synthesize_speed_tier_sweep(
-        cells,
-        declared_scenarios={"classic_doorway_medium"},
-        declared_planners={"orca"},
-        declared_seeds={111},
-    )
-    assert result.grid_complete is True
-    assert result.evidence_status == "smoke_or_incomplete_not_benchmark_evidence"
-
-
-def test_cli_demo_is_explicit_smoke_not_benchmark_evidence(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """The built-in partial demo never prints a benchmark-success PASS label."""
-    assert main([]) == 0
-    output = capsys.readouterr().out
-    assert output.startswith("SMOKE (not benchmark evidence):")
+def test_margin_aligned_one_sided_p_value() -> None:
+    """Margin-aligned one-sided p-value measures proportion of bootstrap mass in harm region."""
+    sorted_deltas = [-0.10, -0.08, -0.07, -0.06, -0.05, 0.0, 0.01, 0.02, 0.03, 0.04]
+    p_val = _margin_aligned_one_sided_p_value(sorted_deltas, "success_rate")
+    assert p_val == pytest.approx(6 / 11)

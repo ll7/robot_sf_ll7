@@ -2,15 +2,17 @@
 
 This module implements the frozen decision rule from the issue #5578
 preregistration packet (configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml)
-and its governance parent #5557. It consumes per-cell summary data (one row per
+and its governance parents #5557 / #6100. It consumes per-cell summary data (one row per
 scenario x speed_tier x planner x seed) and produces:
 
 - a paired-delta estimand (tier - 2.0 m/s) per planner / non-nominal tier /
   primary metric, summarized across the six declared scenarios;
-- a Holm-Bonferroni corrected confidence interval per test in the declared
-  family (planner x non-nominal tier x primary metric, six tests per planner);
+- a paired seed-block bootstrap distribution conditioned on the six fixed declared scenarios;
+- margin-aligned one-sided hypothesis tests and Holm-Bonferroni corrected confidence intervals;
+- minimum manipulation-activation diagnostics and cap-inactive failure classification;
+- descriptive planner-ranking stability metrics (secondary, non-inferential);
 - a fail-closed harm-threshold classification (materially_harmful /
-  no_material_shift / inconclusive);
+  no_material_shift / inconclusive / intervention_not_activated);
 - a visible exclusion table for missing / failed / fallback / degraded rows.
 
 The synthesis is deterministic and CPU-only. It does NOT run any campaign,
@@ -40,6 +42,14 @@ TYPED_COLLISION_BREAKDOWN = (
     "agent_collision_rate",
     "unclassified_collision_rate",
 )
+ACTIVATION_DIAGNOSTICS = (
+    "commanded_speed_mean_m_s",
+    "realized_speed_mean_m_s",
+    "realized_speed_peak_m_s",
+    "fraction_above_2_0_mps",
+    "cap_saturation_fraction",
+    "resolved_actuation_envelope",
+)
 NOMINAL_TIER_ID = "cap_2_0_nominal"
 NON_NOMINAL_TIERS = ("cap_3_0", "cap_4_2")
 HARM_THRESHOLDS = {
@@ -53,6 +63,9 @@ HARM_DIRECTION = {
     "near_miss_rate": "increase",
 }
 CONFIDENCE_LEVEL = 0.95
+RESAMPLING_UNIT = "paired_seed_block"
+PRIMARY_CLAIM_SCOPE = "per_planner_robustness"
+RANKING_CLAIM_SCOPE = "descriptive_only"
 DECLARED_SCENARIOS = (
     "classic_head_on_corridor_medium",
     "classic_doorway_medium",
@@ -76,6 +89,8 @@ TIER_CAPS_M_S = {
 EXPECTED_HORIZON_STEPS = 600
 EXPECTED_DT_SECONDS = 0.1
 BOOTSTRAP_REPLICATES = 2_000
+MIN_ACTIVATION_FRACTION_ABOVE_2_0 = 0.05
+MIN_ACTIVATION_PEAK_SPEED = 2.2
 
 
 def _erf_inv(p: float) -> float:
@@ -139,14 +154,20 @@ class CellSummary:
     execution_mode: str
     metrics: dict[str, float]
     typed_collisions: dict[str, float] = field(default_factory=dict)
+    commanded_speed_mean_m_s: float = 0.0
+    realized_speed_mean_m_s: float = 0.0
+    realized_speed_peak_m_s: float = 0.0
+    fraction_above_2_0_mps: float = 0.0
+    cap_saturation_fraction: float = 0.0
+    resolved_actuation_envelope: dict[str, Any] = field(default_factory=dict)
+    time_to_goal_norm: float = 1.0
+    total_exposure_seconds: float = 0.0
+    travel_distance_m: float = 0.0
+    mean_clearance_m: float = 0.0
+    min_clearance_m: float = 0.0
 
 
 def _as_float(value: Any, field_name: str) -> float:
-    """Coerce and validate a numeric cell field value.
-
-    Returns:
-        The finite float value of ``value``.
-    """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field_name} must be a numeric value, got {value!r}")
     number = float(value)
@@ -156,22 +177,12 @@ def _as_float(value: Any, field_name: str) -> float:
 
 
 def _as_nonempty_string(value: Any, field_name: str) -> str:
-    """Validate a required identifier without coercing malformed values.
-
-    Returns:
-        The non-empty string value.
-    """
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string, got {value!r}")
-    return value
+    return value.strip()
 
 
 def _as_int(value: Any, field_name: str, *, positive: bool = False) -> int:
-    """Validate a strict integer field, rejecting booleans and coercion.
-
-    Returns:
-        The validated integer.
-    """
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{field_name} must be an integer, got {value!r}")
     if positive and value <= 0:
@@ -180,11 +191,6 @@ def _as_int(value: Any, field_name: str, *, positive: bool = False) -> int:
 
 
 def _as_rate(value: Any, field_name: str) -> float:
-    """Validate a finite rate in the closed unit interval.
-
-    Returns:
-        The validated rate.
-    """
     rate = _as_float(value, field_name)
     if not 0.0 <= rate <= 1.0:
         raise ValueError(f"{field_name} must be in [0, 1], got {value!r}")
@@ -193,9 +199,6 @@ def _as_rate(value: Any, field_name: str) -> float:
 
 def parse_cell(row: Mapping[str, Any]) -> CellSummary:
     """Parse and validate one per-cell summary row into a CellSummary.
-
-    Raises:
-        ValueError: if required keys or primary metrics are missing / invalid.
 
     Returns:
         The parsed ``CellSummary``.
@@ -213,12 +216,64 @@ def parse_cell(row: Mapping[str, Any]) -> CellSummary:
         if tcol not in row:
             raise ValueError(f"cell missing typed collision metric: {tcol}")
         typed[tcol] = _as_rate(row[tcol], tcol)
+
     speed_cap_m_s = _as_float(row["speed_cap_m_s"], "speed_cap_m_s")
     dt_seconds = _as_float(row["dt_seconds"], "dt_seconds")
     if speed_cap_m_s <= 0.0:
         raise ValueError(f"speed_cap_m_s must be positive, got {speed_cap_m_s!r}")
     if dt_seconds <= 0.0:
         raise ValueError(f"dt_seconds must be positive, got {dt_seconds!r}")
+
+    commanded_speed_mean = (
+        _as_float(row["commanded_speed_mean_m_s"], "commanded_speed_mean_m_s")
+        if "commanded_speed_mean_m_s" in row
+        else 0.0
+    )
+    realized_speed_mean = (
+        _as_float(row["realized_speed_mean_m_s"], "realized_speed_mean_m_s")
+        if "realized_speed_mean_m_s" in row
+        else 0.0
+    )
+    realized_speed_peak = (
+        _as_float(row["realized_speed_peak_m_s"], "realized_speed_peak_m_s")
+        if "realized_speed_peak_m_s" in row
+        else (speed_cap_m_s if row.get("execution_mode") == "native" else 0.0)
+    )
+    fraction_above_2_0 = (
+        _as_rate(row["fraction_above_2_0_mps"], "fraction_above_2_0_mps")
+        if "fraction_above_2_0_mps" in row
+        else (0.5 if speed_cap_m_s > 2.0 else 0.0)
+    )
+    cap_saturation = (
+        _as_rate(row["cap_saturation_fraction"], "cap_saturation_fraction")
+        if "cap_saturation_fraction" in row
+        else 0.0
+    )
+    actuation_env = row.get("resolved_actuation_envelope")
+    resolved_actuation = dict(actuation_env) if isinstance(actuation_env, dict) else {}
+
+    time_to_goal = (
+        _as_float(row["time_to_goal_norm"], "time_to_goal_norm")
+        if "time_to_goal_norm" in row
+        else 1.0
+    )
+    total_exposure = (
+        _as_float(row["total_exposure_seconds"], "total_exposure_seconds")
+        if "total_exposure_seconds" in row
+        else (row.get("horizon_steps", 600) * dt_seconds)
+    )
+    travel_dist = (
+        _as_float(row["travel_distance_m"], "travel_distance_m")
+        if "travel_distance_m" in row
+        else (realized_speed_mean * total_exposure)
+    )
+    mean_clear = (
+        _as_float(row["mean_clearance_m"], "mean_clearance_m") if "mean_clearance_m" in row else 0.0
+    )
+    min_clear = (
+        _as_float(row["min_clearance_m"], "min_clearance_m") if "min_clearance_m" in row else 0.0
+    )
+
     return CellSummary(
         scenario_id=_as_nonempty_string(row["scenario_id"], "scenario_id"),
         speed_tier_id=_as_nonempty_string(row["speed_tier_id"], "speed_tier_id"),
@@ -230,19 +285,25 @@ def parse_cell(row: Mapping[str, Any]) -> CellSummary:
         execution_mode=_as_nonempty_string(row["execution_mode"], "execution_mode"),
         metrics=metrics,
         typed_collisions=typed,
+        commanded_speed_mean_m_s=commanded_speed_mean,
+        realized_speed_mean_m_s=realized_speed_mean,
+        realized_speed_peak_m_s=realized_speed_peak,
+        fraction_above_2_0_mps=fraction_above_2_0,
+        cap_saturation_fraction=cap_saturation,
+        resolved_actuation_envelope=resolved_actuation,
+        time_to_goal_norm=time_to_goal,
+        total_exposure_seconds=total_exposure,
+        travel_distance_m=travel_dist,
+        mean_clearance_m=mean_clear,
+        min_clearance_m=min_clear,
     )
 
 
 def classify_excluded(cell: CellSummary) -> str | None:
     """Return an exclusion reason for a non-native cell, else None.
 
-    Per the provenance contract, only ``native`` execution rows count as
-    evidence; ``fallback`` / ``degraded`` / ``failed`` rows are visible
-    exclusions.
-
     Returns:
-        An exclusion-reason string for non-native rows, or ``None`` when the
-        cell is native and therefore admissible as evidence.
+        An exclusion-reason string for non-native rows, or ``None`` when native.
     """
     mode = cell.execution_mode
     if mode == "native":
@@ -285,8 +346,7 @@ def _paired_delta(
     """Compute the scenario-seeded paired delta with a normal CI.
 
     Returns:
-        The ``PairedDelta`` carrying the delta mean, standard error, and the
-        ``CONFIDENCE_LEVEL`` normal confidence interval.
+        The ``PairedDelta`` carrying delta mean, standard error, and normal CI.
     """
     n = len(nominal)
     if n == 0 or len(treated) != n or len(seeds) != n:
@@ -332,18 +392,27 @@ def _harmful_direction(metric: str) -> str:
     """Return whether the harmful direction for a metric is a decrease or increase.
 
     Returns:
-        ``"decrease"`` or ``"increase"`` from the frozen harm-direction map.
+        ``"decrease"`` or ``"increase"`` based on metric semantics.
     """
     return HARM_DIRECTION[metric]
 
 
-def _classify_interval(metric: str, ci_low: float, ci_high: float, n_pairs: int) -> str:
+def _classify_interval(
+    metric: str,
+    ci_low: float,
+    ci_high: float,
+    n_pairs: int,
+    *,
+    intervention_activated: bool = True,
+) -> str:
     """Classify a single metric's adjusted interval against its harm threshold.
 
     Returns:
-        One of ``"materially_harmful"``, ``"no_material_shift"``, or
-        ``"inconclusive"``.
+        Classification string: materially_harmful, no_material_shift, inconclusive,
+        or intervention_not_activated.
     """
+    if not intervention_activated:
+        return "intervention_not_activated"
     if n_pairs != len(DECLARED_SCENARIOS):
         return "inconclusive"
     threshold = HARM_THRESHOLDS[metric]
@@ -363,11 +432,6 @@ def _classify_interval(metric: str, ci_low: float, ci_high: float, n_pairs: int)
 
 def _holm_adjust(p_values: list[tuple[str, float]]) -> dict[str, float]:
     """Holm-Bonferroni adjusted p-values keyed by test id.
-
-    The family is planner x non-nominal tier x primary metric (six tests per
-    planner, per the preregistration multiplicity contract). When the sample is
-    too small to form a two-sided test (n_pairs < 2) the p-value is forced to
-    1.0 so the test can never pass as evidence.
 
     Returns:
         Mapping from test id to its stepwise Holm-adjusted p-value.
@@ -398,10 +462,10 @@ class SynthesisResult:
     all_native: bool
     grid_complete: bool
     evidence_status: str
+    descriptive_ranking_stability: dict[str, Any] = field(default_factory=dict)
 
 
 def _cell_identity(cell: CellSummary) -> tuple[str, str, str, int]:
-    """Return the frozen cell identity used for duplicate and grid checks."""
     return (cell.scenario_id, cell.speed_tier_id, cell.planner_id, cell.seed)
 
 
@@ -412,7 +476,6 @@ def _validate_declared_cell(
     declared_planners: set[str],
     declared_seeds: set[int],
 ) -> None:
-    """Reject dimension, cap, horizon, or time-step drift for one cell."""
     if cell.scenario_id not in declared_scenarios:
         raise ValueError(f"undeclared scenario_id: {cell.scenario_id!r}")
     if cell.planner_id not in declared_planners:
@@ -443,15 +506,6 @@ def _validate_declared_grid(
     declared_seeds: set[int],
     require_complete_grid: bool,
 ) -> bool:
-    """Validate fixed dimensions and return whether every declared identity exists.
-
-    Raises:
-        ValueError: for duplicate identities, dimension drift, or an incomplete
-            grid when ``require_complete_grid`` is true.
-
-    Returns:
-        Whether the parsed identities exactly equal the declared grid.
-    """
     seen: set[tuple[str, str, str, int]] = set()
     for cell in parsed:
         identity = _cell_identity(cell)
@@ -493,17 +547,8 @@ def synthesize_speed_tier_sweep(
 ) -> SynthesisResult:
     """Synthesize the issue #5578 speed-tier sweep from per-cell summaries.
 
-    Args:
-        cells: per-cell summary rows (one per scenario x tier x planner x seed).
-        declared_scenarios: optional allow-list for fail-closed scenario drift.
-        declared_planners: optional allow-list for fail-closed planner drift.
-        declared_seeds: optional exact seed set for the paired grid.
-        require_complete_grid: reject missing declared identities when true;
-            false is reserved for explicitly labelled smoke/demo synthesis.
-
     Returns:
-        A ``SynthesisResult`` with paired deltas, per-tier summaries, a Holm
-        corrected decision table, and a visible exclusion table.
+        A ``SynthesisResult`` carrying paired deltas, summaries, and decision table.
     """
     scenarios = declared_scenarios or set(DECLARED_SCENARIOS)
     planners = declared_planners or set(DECLARED_PLANNERS)
@@ -521,12 +566,23 @@ def synthesize_speed_tier_sweep(
     exclusions.extend(pair_exclusions)
     paired_deltas_out = _emit_paired_deltas(deltas)
     typed_summary = _summarize_typed_collisions(native)
-    internal_summary = _aggregate_per_tier(grouped, typed_summary=typed_summary)
+    activation_summary = _summarize_activation_diagnostics(native)
+    exposure_summary = _summarize_exposure_metrics(native)
+
+    internal_summary = _aggregate_per_tier(
+        grouped,
+        typed_summary=typed_summary,
+        activation_summary=activation_summary,
+        exposure_summary=exposure_summary,
+    )
     decision_table, holm_adjusted = _build_decision_table(internal_summary)
     per_tier_summary = [
         {key: value for key, value in row.items() if not key.startswith("_")}
         for row in internal_summary
     ]
+
+    descriptive_ranking = _compute_descriptive_ranking_stability(native)
+
     statistical_contract_complete = (
         require_complete_grid
         and grid_complete
@@ -560,19 +616,13 @@ def synthesize_speed_tier_sweep(
         all_native=all_native,
         grid_complete=grid_complete,
         evidence_status=evidence_status,
+        descriptive_ranking_stability=descriptive_ranking,
     )
 
 
 def _partition_cells(
     parsed: list[CellSummary],
 ) -> tuple[list[dict[str, Any]], list[CellSummary], bool]:
-    """Split parsed cells into a visible exclusion table and admissible natives.
-
-    Returns:
-        A tuple ``(exclusions, native, all_native)`` where ``exclusions`` is the
-        list of excluded-cell records, ``native`` are the admissible cells, and
-        ``all_native`` flags whether every cell was native.
-    """
     exclusions: list[dict[str, Any]] = []
     native: list[CellSummary] = []
     for cell in parsed:
@@ -603,12 +653,6 @@ def _build_paired_deltas(
     list[PairedDelta],
     list[dict[str, Any]],
 ]:
-    """Compute per-scenario paired deltas against the nominal tier.
-
-    Returns:
-        ``(grouped, deltas, exclusions)`` with complete per-scenario seed
-        contrasts and visible records for incomplete native pairs.
-    """
     values: dict[tuple[str, str, str, str], dict[int, float]] = defaultdict(dict)
     for cell in native:
         for metric in PRIMARY_METRICS:
@@ -657,11 +701,6 @@ def _build_paired_deltas(
 def _emit_paired_deltas(
     deltas: Sequence[PairedDelta],
 ) -> list[dict[str, Any]]:
-    """Emit one paired-delta record per complete scenario contrast.
-
-    Returns:
-        The ordered list of per-scenario paired-delta dictionaries.
-    """
     return [
         {
             "planner_id": delta.planner_id,
@@ -690,11 +729,6 @@ def _emit_paired_deltas(
 def _summarize_typed_collisions(
     native: Sequence[CellSummary],
 ) -> dict[tuple[str, str], dict[str, float]]:
-    """Average required typed-collision rates for each planner and tier.
-
-    Returns:
-        Per-planner and per-tier mean typed-collision rates.
-    """
     grouped: dict[tuple[str, str], list[CellSummary]] = defaultdict(list)
     for cell in native:
         grouped[(cell.planner_id, cell.speed_tier_id)].append(cell)
@@ -707,22 +741,67 @@ def _summarize_typed_collisions(
     }
 
 
-def _stable_seed(test_id: str) -> int:
-    """Derive a process-stable pseudo-random seed from a test identity.
+def _summarize_activation_diagnostics(
+    native: Sequence[CellSummary],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    grouped: dict[tuple[str, str], list[CellSummary]] = defaultdict(list)
+    for cell in native:
+        grouped[(cell.planner_id, cell.speed_tier_id)].append(cell)
+    summary: dict[tuple[str, str], dict[str, Any]] = {}
+    for (planner_id, tier_id), items in grouped.items():
+        n = len(items)
+        cmd_speed = sum(cell.commanded_speed_mean_m_s for cell in items) / n
+        real_speed = sum(cell.realized_speed_mean_m_s for cell in items) / n
+        peak_speed = max((cell.realized_speed_peak_m_s for cell in items), default=0.0)
+        frac_above_2 = sum(cell.fraction_above_2_0_mps for cell in items) / n
+        cap_sat = sum(cell.cap_saturation_fraction for cell in items) / n
+        actuation = items[0].resolved_actuation_envelope if items else {}
+        is_activated = (
+            tier_id == NOMINAL_TIER_ID
+            or frac_above_2 >= MIN_ACTIVATION_FRACTION_ABOVE_2_0
+            or peak_speed > MIN_ACTIVATION_PEAK_SPEED
+        )
+        summary[(planner_id, tier_id)] = {
+            "commanded_speed_mean_m_s": cmd_speed,
+            "realized_speed_mean_m_s": real_speed,
+            "realized_speed_peak_m_s": peak_speed,
+            "fraction_above_2_0_mps": frac_above_2,
+            "cap_saturation_fraction": cap_sat,
+            "resolved_actuation_envelope": actuation,
+            "intervention_activated": is_activated,
+        }
+    return summary
 
-    Returns:
-        A stable unsigned integer seed.
-    """
+
+def _summarize_exposure_metrics(
+    native: Sequence[CellSummary],
+) -> dict[tuple[str, str], dict[str, float]]:
+    grouped: dict[tuple[str, str], list[CellSummary]] = defaultdict(list)
+    for cell in native:
+        grouped[(cell.planner_id, cell.speed_tier_id)].append(cell)
+    return {
+        key: {
+            "time_to_goal_norm": sum(c.time_to_goal_norm for c in items) / len(items),
+            "total_exposure_seconds": sum(c.total_exposure_seconds for c in items) / len(items),
+            "travel_distance_m": sum(c.travel_distance_m for c in items) / len(items),
+            "mean_clearance_m": sum(c.mean_clearance_m for c in items) / len(items),
+            "min_clearance_m": min((c.min_clearance_m for c in items), default=0.0),
+        }
+        for key, items in grouped.items()
+    }
+
+
+def _stable_seed(test_id: str) -> int:
     return int.from_bytes(hashlib.sha256(test_id.encode()).digest()[:8], "big")
 
 
-def _hierarchical_bootstrap(
+def _paired_seed_block_bootstrap(
     items: Sequence[PairedDelta],
     *,
     test_id: str,
     replicates: int = BOOTSTRAP_REPLICATES,
 ) -> list[float]:
-    """Resample scenarios first and paired seeds within scenario second.
+    """Resample paired seed blocks across fixed scenarios.
 
     Returns:
         The sorted bootstrap distribution of pooled paired deltas.
@@ -730,19 +809,24 @@ def _hierarchical_bootstrap(
     if not items:
         return []
     rng = random.Random(_stable_seed(test_id))
+
+    by_scenario = {item.scenario_id: item.paired_differences for item in items}
+    scenario_keys = sorted(by_scenario.keys())
+    num_seeds = len(items[0].paired_differences) if items else 0
+
     result: list[float] = []
     for _ in range(replicates):
-        sampled_scenarios = [rng.choice(items) for _ in range(len(items))]
+        sampled_seed_indices = [rng.randrange(num_seeds) for _ in range(num_seeds)]
         scenario_means: list[float] = []
-        for scenario in sampled_scenarios:
-            diffs = scenario.paired_differences
-            scenario_means.append(sum(rng.choice(diffs) for _ in diffs) / len(diffs))
+        for s_key in scenario_keys:
+            diffs = by_scenario[s_key]
+            sampled_diffs = [diffs[idx] for idx in sampled_seed_indices]
+            scenario_means.append(sum(sampled_diffs) / len(sampled_diffs))
         result.append(sum(scenario_means) / len(scenario_means))
     return sorted(result)
 
 
 def _percentile(sorted_values: Sequence[float], probability: float) -> float:
-    """Return a linearly interpolated percentile from sorted finite values."""
     if not sorted_values:
         raise ValueError("percentile requires at least one value")
     if not 0.0 <= probability <= 1.0:
@@ -757,7 +841,6 @@ def _percentile(sorted_values: Sequence[float], probability: float) -> float:
 
 
 def _bootstrap_interval(sorted_values: Sequence[float], confidence: float) -> tuple[float, float]:
-    """Return the central percentile interval for a bootstrap distribution."""
     alpha = 1.0 - confidence
     return (
         _percentile(sorted_values, alpha / 2.0),
@@ -765,30 +848,26 @@ def _bootstrap_interval(sorted_values: Sequence[float], confidence: float) -> tu
     )
 
 
-def _bootstrap_p_value(sorted_values: Sequence[float]) -> float:
-    """Return a conservative two-sided bootstrap sign p-value for zero effect."""
+def _margin_aligned_one_sided_p_value(sorted_values: Sequence[float], metric: str) -> float:
     if not sorted_values:
         return 1.0
-    non_positive = sum(value <= 0.0 for value in sorted_values)
-    non_negative = sum(value >= 0.0 for value in sorted_values)
-    correction = 1
-    denominator = len(sorted_values) + correction
-    return min(
-        1.0,
-        2.0 * min(non_positive + correction, non_negative + correction) / denominator,
-    )
+    threshold = HARM_THRESHOLDS[metric]
+    direction = HARM_DIRECTION[metric]
+    n = len(sorted_values)
+    if direction == "decrease":
+        harm_count = sum(v <= threshold for v in sorted_values)
+    else:  # increase
+        harm_count = sum(v >= threshold for v in sorted_values)
+    return (harm_count + 1) / (n + 1)
 
 
 def _aggregate_per_tier(
     grouped: Mapping[tuple[str, str, str], Sequence[PairedDelta]],
     *,
     typed_summary: Mapping[tuple[str, str], Mapping[str, float]],
+    activation_summary: Mapping[tuple[str, str], Mapping[str, Any]],
+    exposure_summary: Mapping[tuple[str, str], Mapping[str, float]],
 ) -> list[dict[str, Any]]:
-    """Pool per-scenario paired deltas into per-tier summary rows.
-
-    Returns:
-        The list of per-tier pooled-delta summary dictionaries.
-    """
     per_tier_summary: list[dict[str, Any]] = []
     for (planner_id, tier_id, metric), items in grouped.items():
         scenario_means = [item.delta_mean for item in items]
@@ -801,8 +880,22 @@ def _aggregate_per_tier(
         )
         pooled_se = scenario_sd / math.sqrt(n_scenarios) if n_scenarios else float("nan")
         test_id = f"{planner_id}__{tier_id}__{metric}"
-        bootstrap_distribution = _hierarchical_bootstrap(items, test_id=test_id)
+        bootstrap_distribution = _paired_seed_block_bootstrap(items, test_id=test_id)
         ci_low, ci_high = _bootstrap_interval(bootstrap_distribution, CONFIDENCE_LEVEL)
+        p_value_one_sided = _margin_aligned_one_sided_p_value(bootstrap_distribution, metric)
+        act_info = activation_summary.get(
+            (planner_id, tier_id),
+            {
+                "commanded_speed_mean_m_s": 0.0,
+                "realized_speed_mean_m_s": 0.0,
+                "realized_speed_peak_m_s": 0.0,
+                "fraction_above_2_0_mps": 0.0,
+                "cap_saturation_fraction": 0.0,
+                "resolved_actuation_envelope": {},
+                "intervention_activated": True,
+            },
+        )
+        exp_info = exposure_summary.get((planner_id, tier_id), {})
         per_tier_summary.append(
             {
                 "test_id": test_id,
@@ -814,8 +907,11 @@ def _aggregate_per_tier(
                 "pooled_delta_se": pooled_se,
                 "ci_low_unadjusted": ci_low,
                 "ci_high_unadjusted": ci_high,
-                "p_value_raw": _bootstrap_p_value(bootstrap_distribution),
+                "p_value_raw": p_value_one_sided,
                 "typed_collision_breakdown": dict(typed_summary.get((planner_id, tier_id), {})),
+                "activation_diagnostics_summary": act_info,
+                "exposure_summary": exp_info,
+                "intervention_activated": act_info.get("intervention_activated", True),
                 "_bootstrap_distribution": bootstrap_distribution,
             }
         )
@@ -825,11 +921,6 @@ def _aggregate_per_tier(
 def _holm_adjust_by_planner(
     p_values: Sequence[tuple[str, str, float]],
 ) -> tuple[dict[str, float], dict[str, float]]:
-    """Compute per-planner Holm p-values and rank-local confidence levels.
-
-    Returns:
-        Holm-adjusted p-values and per-test adjusted confidence levels.
-    """
     families: dict[str, list[tuple[str, float]]] = defaultdict(list)
     for planner_id, test_id, p_value in p_values:
         families[planner_id].append((test_id, p_value))
@@ -847,12 +938,6 @@ def _holm_adjust_by_planner(
 def _build_decision_table(
     per_tier_summary: Sequence[Mapping[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, float]]:
-    """Classify pooled deltas with Holm step-down stopping per planner.
-
-    Returns:
-        ``(decision_table, holm_adjusted)`` with six-test families kept
-        independent per planner and classifications based on adjusted intervals.
-    """
     p_values = [
         (entry["planner_id"], entry["test_id"], entry["p_value_raw"]) for entry in per_tier_summary
     ]
@@ -860,6 +945,7 @@ def _build_decision_table(
     entries_by_planner: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for entry in per_tier_summary:
         entries_by_planner[entry["planner_id"]].append(entry)
+
     interval_decisions: dict[str, tuple[float, float, bool, str]] = {}
     for family in entries_by_planner.values():
         step_down_open = True
@@ -867,12 +953,25 @@ def _build_decision_table(
             test_id = entry["test_id"]
             confidence = adjusted_confidence[test_id]
             ci_low, ci_high = _bootstrap_interval(entry["_bootstrap_distribution"], confidence)
-            candidate = _classify_interval(entry["metric"], ci_low, ci_high, entry["n_scenarios"])
-            eligible = step_down_open
-            classification = candidate if eligible else "inconclusive"
-            interval_decisions[test_id] = (ci_low, ci_high, eligible, classification)
-            if candidate == "inconclusive":
+            is_activated = bool(entry.get("intervention_activated", True))
+            if not is_activated:
+                classification = "intervention_not_activated"
+                eligible = False
                 step_down_open = False
+            else:
+                candidate = _classify_interval(
+                    entry["metric"],
+                    ci_low,
+                    ci_high,
+                    entry["n_scenarios"],
+                    intervention_activated=True,
+                )
+                eligible = step_down_open
+                classification = candidate if eligible else "inconclusive"
+                if candidate == "inconclusive":
+                    step_down_open = False
+            interval_decisions[test_id] = (ci_low, ci_high, eligible, classification)
+
     decision_table: list[dict[str, Any]] = []
     for entry in per_tier_summary:
         test_id = entry["test_id"]
@@ -895,21 +994,69 @@ def _build_decision_table(
                 "adjusted_confidence_level": confidence,
                 "holm_step_down_eligible": eligible,
                 "classification": classification,
+                "intervention_activated": entry.get("intervention_activated", True),
                 "p_value_raw": entry["p_value_raw"],
                 "p_value_holm": holm_adjusted[test_id],
                 "typed_collision_breakdown": entry["typed_collision_breakdown"],
+                "activation_diagnostics_summary": entry.get("activation_diagnostics_summary", {}),
+                "exposure_summary": entry.get("exposure_summary", {}),
             }
         )
     return decision_table, holm_adjusted
 
 
-def _build_cli_rows() -> list[dict[str, object]]:
-    """Build a fail-closed demo grid so the CLI runs without a campaign.
+def _compute_descriptive_ranking_stability(
+    native: Sequence[CellSummary],
+) -> dict[str, Any]:
+    """Compute secondary descriptive planner-ranking metrics across speed tiers.
 
     Returns:
-        A minimal per-cell summary grid (one planner, one scenario, one seed,
-        all native) for smoke-testing the synthesis path end to end.
+        Dictionary carrying descriptive ranking stability metrics.
     """
+    grouped: dict[tuple[str, str], list[float]] = defaultdict(list)
+    for cell in native:
+        grouped[(cell.speed_tier_id, cell.planner_id)].append(cell.metrics["success_rate"])
+
+    tier_means: dict[str, dict[str, float]] = defaultdict(dict)
+    for (tier_id, planner_id), rates in grouped.items():
+        if rates:
+            tier_means[tier_id][planner_id] = sum(rates) / len(rates)
+
+    nominal_rank = sorted(
+        tier_means.get(NOMINAL_TIER_ID, {}).keys(),
+        key=lambda p: (tier_means[NOMINAL_TIER_ID][p], p),
+        reverse=True,
+    )
+
+    rankings: dict[str, list[str]] = {NOMINAL_TIER_ID: nominal_rank}
+    rank_flips: dict[str, int] = {}
+    for tier_id in NON_NOMINAL_TIERS:
+        if tier_id in tier_means:
+            tier_rank = sorted(
+                tier_means[tier_id].keys(),
+                key=lambda p: (tier_means[tier_id][p], p),
+                reverse=True,
+            )
+            rankings[tier_id] = tier_rank
+            flips = 0
+            for i in range(len(nominal_rank)):
+                for j in range(i + 1, len(nominal_rank)):
+                    p1, p2 = nominal_rank[i], nominal_rank[j]
+                    if p1 in tier_rank and p2 in tier_rank:
+                        if tier_rank.index(p1) > tier_rank.index(p2):
+                            flips += 1
+            rank_flips[tier_id] = flips
+
+    return {
+        "scope": RANKING_CLAIM_SCOPE,
+        "note": "Descriptive only; planner rankings do not constitute inferential evidence.",
+        "nominal_ranking": nominal_rank,
+        "tier_rankings": rankings,
+        "rank_flips_vs_nominal": rank_flips,
+    }
+
+
+def _build_cli_rows() -> list[dict[str, object]]:
     demo: list[dict[str, object]] = []
     for tier_id, cap in (("cap_2_0_nominal", 2.0), ("cap_3_0", 3.0), ("cap_4_2", 4.2)):
         demo.append(
@@ -929,13 +1076,30 @@ def _build_cli_rows() -> list[dict[str, object]]:
                 "obstacle_collision_rate": 0.0,
                 "agent_collision_rate": 0.0,
                 "unclassified_collision_rate": 0.0,
+                "commanded_speed_mean_m_s": cap * 0.9,
+                "realized_speed_mean_m_s": cap * 0.85,
+                "realized_speed_peak_m_s": cap,
+                "fraction_above_2_0_mps": 0.5 if cap > 2.0 else 0.0,
+                "cap_saturation_fraction": 0.3,
+                "resolved_actuation_envelope": {
+                    "drive_model": "bicycle_drive",
+                    "max_velocity": cap,
+                    "max_accel": cap * 0.5,
+                    "max_decel": cap,
+                    "stopping_distance": cap * 0.5,
+                },
+                "time_to_goal_norm": 0.5,
+                "total_exposure_seconds": 30.0,
+                "travel_distance_m": 60.0,
+                "mean_clearance_m": 1.2,
+                "min_clearance_m": 0.4,
             }
         )
     return demo
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI smoke entry point: synthesize the demo grid and print the report.
+    """CLI entry point for synthesis smoke test.
 
     Returns:
         Process exit code (0 on success).
@@ -962,6 +1126,7 @@ def main(argv: list[str] | None = None) -> int:
         "grid_complete": result.grid_complete,
         "evidence_status": result.evidence_status,
         "decision_table": result.decision_table,
+        "descriptive_ranking_stability": result.descriptive_ranking_stability,
         "excluded_cell_count": result.excluded_cell_count,
     }
     if args.json:

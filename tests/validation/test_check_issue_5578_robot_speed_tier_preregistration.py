@@ -30,6 +30,9 @@ def test_checked_in_preregistration_passes() -> None:
     assert payload["seed_policy"]["seeds"] == EXPECTED_SEEDS
     assert payload["robot_speed_axis"]["baseline_cap_m_s"] == 2.0
     assert payload["result_contract"]["expected_cell_count"] == 2160
+    assert payload["primary_claim_scope"] == "per_planner_robustness"
+    assert payload["ranking_claim_scope"] == "descriptive_only"
+    assert payload["inference_contract"]["resampling_unit"] == "paired_seed_block"
 
 
 def test_checker_fails_closed_when_inference_population_is_removed() -> None:
@@ -37,7 +40,7 @@ def test_checker_fails_closed_when_inference_population_is_removed() -> None:
     payload = _payload()
     del payload["inference_contract"]["inference_population"]
 
-    with pytest.raises(ValueError, match="inference population is not frozen"):
+    with pytest.raises(ValueError, match="inference population must be fixed_declared_suite"):
         validate_preregistration(payload)
 
 
@@ -100,4 +103,52 @@ def test_checker_requires_list_typed_per_tier_summary() -> None:
     payload["result_contract"]["required_per_tier_summary"] = "collision_rate"
 
     with pytest.raises(ValueError, match="required_per_tier_summary must be a list"):
+        validate_preregistration(payload)
+
+
+def test_checker_fails_closed_when_activation_diagnostics_missing() -> None:
+    """Missing required activation diagnostics fails the preregistration check."""
+    payload = _payload()
+    payload["robot_speed_axis"]["activation_contract"]["required_diagnostics"].remove(
+        "fraction_above_2_0_mps"
+    )
+
+    with pytest.raises(ValueError, match="required_diagnostics drifted"):
+        validate_preregistration(payload)
+
+
+def test_checker_fails_closed_when_actuation_envelope_inconsistent() -> None:
+    """Mathematical inconsistency in stopping_distance_envelope_m fails closed."""
+    payload = _payload()
+    payload["robot_speed_axis"]["tiers"][2]["stopping_distance_envelope_m"] = 5.0
+
+    with pytest.raises(ValueError, match="stopping_distance_envelope_m inconsistent"):
+        validate_preregistration(payload)
+
+
+def test_checker_fails_closed_when_ppo_estimand_drifts() -> None:
+    """PPO arm must explicitly state zero-shot OOD robustness estimand."""
+    payload = _payload()
+    ppo_arm = next(a for a in payload["planner_roster"]["arms"] if a["planner_id"] == "ppo")
+    ppo_arm["estimand_type"] = "fine_tuned"
+
+    with pytest.raises(ValueError, match="PPO estimand_type must be zero_shot_ood_robustness"):
+        validate_preregistration(payload)
+
+
+def test_checker_fails_closed_when_resampling_unit_drifts() -> None:
+    """Resampling unit must be paired_seed_block."""
+    payload = _payload()
+    payload["inference_contract"]["resampling_unit"] = "unpaired"
+
+    with pytest.raises(ValueError, match="resampling unit must be paired_seed_block"):
+        validate_preregistration(payload)
+
+
+def test_checker_fails_closed_when_safety_notes_missing() -> None:
+    """Missing safety interpretation contract notes fails closed."""
+    payload = _payload()
+    del payload["inference_contract"]["safety_interpretation_contract"]
+
+    with pytest.raises(ValueError, match="safety_interpretation_contract must be a mapping"):
         validate_preregistration(payload)

@@ -196,6 +196,14 @@ class TestCompilation:
         params = compile_regulation_excerpt("Pedestrian density is expected to be high.")
         assert params.ped_density == 0.08
 
+    def test_density_word_prefers_longer_phrase(self) -> None:
+        params = compile_regulation_excerpt("Pedestrian density is expected to be very high.")
+        density_entry = next(
+            entry for entry in params.extracted if entry["parameter"] == "ped_density"
+        )
+        assert params.ped_density == 0.12
+        assert density_entry["source"] == "word:very high"
+
     def test_extracts_explicit_density(self) -> None:
         params = compile_regulation_excerpt("Pedestrian density is 0.06 per square meter.")
         assert params.ped_density == 0.06

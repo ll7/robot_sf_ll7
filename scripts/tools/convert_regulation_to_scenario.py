@@ -336,8 +336,11 @@ def _extract_density(text: str) -> tuple[float, list[dict[str, Any]]]:
         extracted.append({"parameter": "ped_density", "value": explicit, "source": "explicit"})
         return explicit, extracted
 
-    for word, value in DENSITY_WORD_TO_VALUE.items():
+    # Prefer specific multi-word phrases over their shorter substrings so
+    # ``very high`` is not consumed by the earlier ``high`` rule.
+    for word in sorted(DENSITY_WORD_TO_VALUE, key=len, reverse=True):
         if _contains_keyword(text, word):
+            value = DENSITY_WORD_TO_VALUE[word]
             extracted.append({"parameter": "ped_density", "value": value, "source": f"word:{word}"})
             return value, extracted
 

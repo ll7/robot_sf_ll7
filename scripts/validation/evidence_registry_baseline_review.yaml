@@ -14,11 +14,13 @@ approved_by: ll7
 approved_date: 2026-07-17
 source_issue: 5972
 source_issue_addendum: 5981
+latest_reconciliation_issue: 6109
+latest_reviewed_date: 2026-07-22
 prior_baseline_commit: 9fa96c01bf1c8152459f5fa8c481e938fb1e6725
 prior_baseline_total_findings: 359
 prior_baseline_files_with_findings: 73
-refreshed_baseline_total_findings: 414
-refreshed_baseline_files_with_findings: 87
+refreshed_baseline_total_findings: 410
+refreshed_baseline_files_with_findings: 86
 decision_summary: >-
   Fourteen evidence files merged after the 2026-07-11 baseline introduced 52 findings across
   eight codes. Every introduced code is already in the strict-CI exclusion policy, so no active
@@ -54,6 +56,16 @@ decision_summary: >-
   remaining findings on the canonical #4848 path
   (duplicate_campaign_id, missing_config_path, missing_config_sha256) are separate campaign
   provenance concerns outside issue #5986's dangling-commit scope and remain tracked here.
+  Reconciliation addendum (issue #6109): the #5164 recovery merged exact historical campaign
+  summaries for jobs 13268 and 13273. Their declared producer commit
+  56b245132ea104ee8a621ddf65b8a3dd85028ed2 is absent from the full local history and from the
+  GitHub commit API. Replacing it in the byte-preserved source reports would falsify provenance,
+  so the two campaign-level dangling_commit increases are explicitly baselined below. In the
+  same repair, all eight source-report hashes in h600_source_reports_recovery.json were bound to
+  their tracked, byte-matching artifact paths instead of baselining the fixable
+  hash_without_artifact_path findings. Regenerating the baseline also locks in six resolved
+  uncommitted-artifact findings from h600_source_reports_manifest.json, reducing the baseline
+  from 414 findings across 87 files to 410 findings across 86 files.
 disposition_legend:
   baseline: >-
     Finding kept as reviewed legacy debt; the file is now tracked in the committed baseline so the
@@ -162,6 +174,24 @@ reviewed_files:
       binding is outside this baseline reconciliation, so the finding is explicitly dispositioned
       as baseline under the existing strict-CI policy.
 reviewed_baseline_increases:
+  - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      Campaign-level aggregation attributes the unavailable producer commit
+      56b245132ea104ee8a621ddf65b8a3dd85028ed2 from the verbatim recovered job-13268 campaign
+      summary to this canonical checklist. The SHA resolves in neither the full repository history
+      nor GitHub's commit API. Preserve the recovered source bytes and record this historical
+      provenance debt rather than substituting a different commit.
+  - path: docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13273.json
+    codes: [dangling_commit]
+    disposition: baseline
+    reason: >-
+      Campaign-level aggregation attributes the unavailable producer commit
+      56b245132ea104ee8a621ddf65b8a3dd85028ed2 from the verbatim recovered job-13273 campaign
+      summary to this canonical checklist. The SHA resolves in neither the full repository history
+      nor GitHub's commit API. Preserve the recovered source bytes and record this historical
+      provenance debt rather than substituting a different commit.
   - path: docs/context/evidence/issue_1344_paired_amv_primary_2026-05-20/nominal_campaign_summary.json
     codes: [dangling_commit]
     disposition: baseline

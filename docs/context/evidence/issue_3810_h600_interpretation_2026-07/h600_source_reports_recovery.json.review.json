@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/h600_source_reports_recovery.json",
-  "artifact_sha256": "5f2070d6c4f04417b2194935e80d37bec8d2256b1c08b85dea6f0af7545e9f84",
+  "artifact_sha256": "e556ba76ee044a5ffa0349d0fddfc3316544ca9aaf065d34c8ade28a2ef220a0",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "preserved_exact_bytes": true
 }

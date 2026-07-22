@@ -22,7 +22,7 @@
 - Prior result report commit: `4975176b0ef6f6712b22a4d380d628d5a185cea7` (stale head metadata corrected here).
 - Fix/merge refresh commit pushed: `202d9d3bcbd7ccea47fb595d565656741c855c86`.
 - Pushed to PR branch `cheap/cheap-issue-6077-b5a9ba703747`.
-- Current PR head: `202d9d3bcbd7ccea47fb595d565656741c855c86`.
+- Final report follow-up pushed as `781838bf7c6815f92796f92ce09659847f4f7b14`; the report intentionally omits volatile head metadata.
 
 ## Review state
 

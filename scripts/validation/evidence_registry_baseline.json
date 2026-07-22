@@ -192,11 +192,13 @@
       "uncommitted_artifact_missing_location": 1
     },
     "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13268.json": {
+      "dangling_commit": 1,
       "duplicate_campaign_id": 1,
       "missing_config_path": 1,
       "missing_config_sha256": 1
     },
     "docs/context/evidence/issue_3425_slurm_to_claim_h600_trace_2026-07/checklist_13273.json": {
+      "dangling_commit": 1,
       "duplicate_campaign_id": 1,
       "missing_config_path": 1,
       "missing_config_sha256": 1
@@ -228,9 +230,6 @@
     },
     "docs/context/evidence/issue_3798_post_13175_s20_s30_evidence_gap_packet.json": {
       "uncommitted_artifact_missing_location": 7
-    },
-    "docs/context/evidence/issue_3810_h600_interpretation_2026-07/h600_source_reports_manifest.json": {
-      "uncommitted_artifact_missing_location": 6
     },
     "docs/context/evidence/issue_3810_h600_interpretation_2026-07/snqi_weight_set_h600_preflight.json": {
       "artifact_hash_mismatch": 1,
@@ -331,23 +330,23 @@
       "hash_without_artifact_path": 1
     }
   },
-  "generated_at": "2026-07-20T16:06:58Z",
+  "generated_at": "2026-07-22T15:13:59Z",
   "linter": "scripts/tools/lint_evidence_registry.py",
   "schema_version": 1,
   "summary": {
     "by_code": {
       "artifact_hash_mismatch": 14,
       "config_missing_at_commit": 4,
-      "dangling_commit": 16,
+      "dangling_commit": 18,
       "duplicate_campaign_id": 6,
       "hash_without_artifact_path": 85,
       "invalid_sha256": 1,
       "missing_commit": 28,
       "missing_config_path": 49,
       "missing_config_sha256": 53,
-      "uncommitted_artifact_missing_location": 158
+      "uncommitted_artifact_missing_location": 152
     },
-    "files_with_findings": 87,
-    "total_findings": 414
+    "files_with_findings": 86,
+    "total_findings": 410
   }
 }

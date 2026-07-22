@@ -1,0 +1,23 @@
+schema_version: robot_sf.geojson_import_provenance.v1
+classification: exploratory_only
+source:
+  url: https://overpass-api.de/api/interpreter
+  accessed_on: "2026-07-10"
+  license: Open Data Commons Open Database License (ODbL) v1.0
+  citation: >-
+    © OpenStreetMap contributors. Acquired with OSMnx 2.0.7 from bbox
+    (11.6438, 52.1388, 11.6451, 52.1400) using highway=footway/path/pedestrian
+    and building=*; retained relation 6384505 and ways 31529872, 345185352,
+    and 664099357.
+raw_input:
+  sha256: aee415388f2c9ce4f646093d237af47fb094895ed24156a457c763b68c437fbd
+annotation:
+  description: >-
+    Robot SF added one short, clearance-certified route and named start/goal zones
+    to the retained public geometry; features with element=robot_sf_annotation are
+    project-authored.
+  reviewed_source_features:
+    - https://www.openstreetmap.org/relation/6384505
+    - https://www.openstreetmap.org/way/31529872
+    - https://www.openstreetmap.org/way/345185352
+    - https://www.openstreetmap.org/way/664099357

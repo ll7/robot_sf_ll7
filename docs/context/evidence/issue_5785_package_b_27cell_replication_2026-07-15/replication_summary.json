@@ -1,0 +1,96 @@
+{
+  "artifact_availability": "summary_only_raw_tree_and_logs_unavailable",
+  "confirmation_gate": {
+    "blockers": {
+      "intentional": [
+        "not_confirmed candidates are excluded from confirmed-failure counts",
+        "held-out-family yield remains subject to the narrow certified-archive caveat",
+        "learned failure proposal #2921 remains out of scope",
+        "paper-facing and dissertation claims remain forbidden"
+      ],
+      "new": [],
+      "remaining": [
+        "Raw candidate/replay bytes and execution logs are unavailable; Issue #6131 owns retrieval and second-reader verification."
+      ]
+    },
+    "claim_boundary": "diagnostic-only confirmation-chain validation; this gate does not promote benchmark, paper, or dissertation evidence",
+    "confirmation_path": "confirmation.json",
+    "errors": [],
+    "issue": 3079,
+    "matrix": {
+      "censored_row_count": 27,
+      "confirmed_failure_count": 0,
+      "expected_budgets": [
+        16,
+        32,
+        64
+      ],
+      "expected_row_count": 27,
+      "expected_samplers": [
+        "random",
+        "coordinate",
+        "optuna"
+      ],
+      "expected_seeds": [
+        1101,
+        2202,
+        3303
+      ],
+      "observed_row_count": 27,
+      "unconfirmed_certified_failure_count": 42
+    },
+    "next_empirical_action": "Complete Issue #6131 raw-artifact retrieval and second-reader verification before interpreting any sampler difference.",
+    "ready": true,
+    "report_path": "report.json",
+    "schema_version": "adversarial-package-b-confirmation.v1",
+    "source_report_sha256": "0d066ed70cfd0a55f163bfe190468cbe37d02bdd7f3b0d8dbdfb0edd1b8c40b6",
+    "status": "ready_for_confirmed_failure_review"
+  },
+  "confirmation_json": "confirmation.json",
+  "durable_table_md": "comparison_table.md",
+  "preflight_ready": true,
+  "report_gate": {
+    "blockers": {
+      "intentional": [
+        "held-out-family yield remains unevaluated against the narrow certified archive",
+        "learned failure proposal #2921 remains out of scope until the base comparison succeeds",
+        "paper-facing and dissertation claims remain forbidden"
+      ],
+      "new": [],
+      "remaining": [
+        "certification, deterministic replay, independent-seed confirmation, and mechanism attribution still require artifact-level review"
+      ]
+    },
+    "claim_boundary": "diagnostic-only report validation; this gate does not promote benchmark or paper-facing evidence",
+    "errors": [],
+    "issue": 3079,
+    "matrix": {
+      "degraded_candidate_count": 0,
+      "expected_budgets": [
+        16,
+        32,
+        64
+      ],
+      "expected_row_count": 27,
+      "expected_samplers": [
+        "random",
+        "coordinate",
+        "optuna"
+      ],
+      "expected_seeds": [
+        1101,
+        2202,
+        3303
+      ],
+      "fallback_candidate_count": 0,
+      "observed_row_count": 27
+    },
+    "next_empirical_action": "Complete Issue #6131 raw-artifact retrieval and independent replay verification before interpreting any sampler difference.",
+    "ready": true,
+    "report_path": "report.json",
+    "schema_version": "adversarial-package-b-report-gate.v1",
+    "status": "ready_for_empirical_review"
+  },
+  "report_json": "report.json",
+  "stage": "diagnostic_summary_only"
+}

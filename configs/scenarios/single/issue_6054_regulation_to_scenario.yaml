@@ -1,0 +1,62 @@
+schema_version: robot_sf.scenario_matrix.v1
+scenarios:
+- name: regulation_shared-space-speed-clearance-001
+  map_file: ../../../maps/svg_maps/classic_merging.svg
+  simulation_config:
+    max_episode_steps: 400
+    ped_density: 0.08
+  robot_config:
+    type: differential_drive
+    radius: 0.3
+    max_linear_speed: 1.5
+    max_angular_speed: 3.0
+  metadata:
+    generated_from_regulation: shared-space-speed-clearance-001
+    generation_method: deterministic_regulation_compile_v1
+    hypothesis: true
+    required_manual_review: true
+    claim_boundary: scenario hypothesis compiled from a regulation excerpt; not executed evidence
+    compiled_parameters:
+    - parameter: zone_template
+      value: shared_space
+      matched_keyword: shared space
+    - parameter: max_linear_speed
+      value_m_s: 1.5
+    - parameter: clearance_m
+      value_m: 1.0
+    - parameter: ped_density
+      value: 0.08
+      source: word:high
+    unmatched_clauses:
+    - Where the route crosses a marked crossing, the robot shall yield
+    - The robot shall provide an audible alert before moving
+    compilation_warnings: []
+    archetype: shared_space
+    flow: bi
+    behavior: regulation_compiled
+    authoring:
+      status: draft
+      source_issue: '#6054'
+      generated_by: scripts/tools/convert_regulation_to_scenario.py
+      benchmark_evidence: false
+      promotion_note: Not benchmark evidence until separately reviewed, certified, and executed through
+        the benchmark workflow.
+    plausibility:
+      status: unverified
+      verified_on: null
+      verified_by: null
+      method: null
+      notes: Compiled hypothesis; scenario validity (does it run and behave as intended) is not assessed
+        by the converter.
+    clearance_requirement_m: 1.0
+    clearance_enforcement: metadata_only_not_runtime_enforced
+    regulation_provenance:
+      source: Illustrative composite of shared-space AMV operating requirements
+      issuing_body: example / illustrative
+      context: shared space
+      setting: shared_space
+      date: '2026-07-20'
+  seeds:
+  - 6054
+  - 6055
+  - 6056

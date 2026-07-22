@@ -1,0 +1,441 @@
+{
+  "type": "FeatureCollection",
+  "name": "ovgu_campus_walk",
+  "crs": {
+    "type": "name",
+    "properties": {
+      "name": "urn:ogc:def:crs:OGC:1.3:CRS84"
+    }
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "element": "relation",
+        "osm_id": "6384505",
+        "osm_url": "https://www.openstreetmap.org/relation/6384505",
+        "name": null,
+        "highway": "pedestrian",
+        "footway": null,
+        "surface": "paving_stones",
+        "building": null,
+        "robot_sf_role": null,
+        "robot_sf_id": null,
+        "robot_sf_spawn": null,
+        "robot_sf_goal": null
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              11.6445802,
+              52.139862
+            ],
+            [
+              11.644585,
+              52.1398949
+            ],
+            [
+              11.6446148,
+              52.139893
+            ],
+            [
+              11.6446978,
+              52.1398865
+            ],
+            [
+              11.6447166,
+              52.1398847
+            ],
+            [
+              11.6447228,
+              52.1398842
+            ],
+            [
+              11.6448922,
+              52.1398714
+            ],
+            [
+              11.644897,
+              52.139871
+            ],
+            [
+              11.6449071,
+              52.1398703
+            ],
+            [
+              11.6450895,
+              52.1398584
+            ],
+            [
+              11.6451538,
+              52.1398963
+            ],
+            [
+              11.6451899,
+              52.1398926
+            ],
+            [
+              11.6452368,
+              52.1398914
+            ],
+            [
+              11.6452267,
+              52.1398795
+            ],
+            [
+              11.64522,
+              52.1398655
+            ],
+            [
+              11.6452202,
+              52.1398571
+            ],
+            [
+              11.6452245,
+              52.1398487
+            ],
+            [
+              11.6452949,
+              52.13981
+            ],
+            [
+              11.6452744,
+              52.1397847
+            ],
+            [
+              11.6451933,
+              52.139718
+            ],
+            [
+              11.6451646,
+              52.1396944
+            ],
+            [
+              11.6450197,
+              52.1397471
+            ],
+            [
+              11.6449809,
+              52.139715
+            ],
+            [
+              11.644956,
+              52.1397178
+            ],
+            [
+              11.6448052,
+              52.1397301
+            ],
+            [
+              11.6448119,
+              52.1397746
+            ],
+            [
+              11.6447501,
+              52.1397791
+            ],
+            [
+              11.6447217,
+              52.1397814
+            ],
+            [
+              11.6446956,
+              52.1397875
+            ],
+            [
+              11.6446264,
+              52.1397991
+            ],
+            [
+              11.6445659,
+              52.1398031
+            ],
+            [
+              11.6445802,
+              52.139862
+            ]
+          ],
+          [
+            [
+              11.645185,
+              52.1397465
+            ],
+            [
+              11.6452248,
+              52.139777
+            ],
+            [
+              11.6451873,
+              52.1397954
+            ],
+            [
+              11.6451476,
+              52.1397649
+            ],
+            [
+              11.645185,
+              52.1397465
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "element": "way",
+        "osm_id": "31529872",
+        "osm_url": "https://www.openstreetmap.org/way/31529872",
+        "name": null,
+        "highway": "footway",
+        "footway": null,
+        "surface": "paving_stones",
+        "building": null,
+        "robot_sf_role": null,
+        "robot_sf_id": null,
+        "robot_sf_spawn": null,
+        "robot_sf_goal": null
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            11.6451339,
+            52.1395748
+          ],
+          [
+            11.6450745,
+            52.1395796
+          ],
+          [
+            11.6447978,
+            52.1396022
+          ],
+          [
+            11.644661,
+            52.1395994
+          ],
+          [
+            11.6444765,
+            52.139612
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "element": "way",
+        "osm_id": "345185352",
+        "osm_url": "https://www.openstreetmap.org/way/345185352",
+        "name": null,
+        "highway": "footway",
+        "footway": null,
+        "surface": "paving_stones",
+        "building": null,
+        "robot_sf_role": null,
+        "robot_sf_id": null,
+        "robot_sf_spawn": null,
+        "robot_sf_goal": null
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            11.6441107,
+            52.1390492
+          ],
+          [
+            11.6445168,
+            52.1390198
+          ],
+          [
+            11.6445507,
+            52.1390178
+          ],
+          [
+            11.6446026,
+            52.1392915
+          ],
+          [
+            11.6446086,
+            52.1393231
+          ],
+          [
+            11.644661,
+            52.1395994
+          ],
+          [
+            11.6446956,
+            52.1397875
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "element": "way",
+        "osm_id": "664099357",
+        "osm_url": "https://www.openstreetmap.org/way/664099357",
+        "name": null,
+        "highway": "path",
+        "footway": null,
+        "surface": "paving_stones",
+        "building": null,
+        "robot_sf_role": null,
+        "robot_sf_id": null,
+        "robot_sf_spawn": null,
+        "robot_sf_goal": null
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            11.6445802,
+            52.139862
+          ],
+          [
+            11.6447077,
+            52.1398482
+          ],
+          [
+            11.6448891,
+            52.1398287
+          ],
+          [
+            11.6450397,
+            52.1398125
+          ],
+          [
+            11.6451933,
+            52.139718
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "element": "robot_sf_annotation",
+        "osm_id": null,
+        "osm_url": null,
+        "name": null,
+        "highway": null,
+        "footway": null,
+        "surface": null,
+        "building": null,
+        "robot_sf_role": "robot_route",
+        "robot_sf_id": null,
+        "robot_sf_spawn": "west",
+        "robot_sf_goal": "east",
+        "annotation_source": "Robot SF scenario authoring"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            11.644885020286573,
+            52.1397837050195
+          ],
+          [
+            11.64494340629293,
+            52.13978239478618
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "element": "robot_sf_annotation",
+        "osm_id": null,
+        "osm_url": null,
+        "name": null,
+        "highway": null,
+        "footway": null,
+        "surface": null,
+        "building": null,
+        "robot_sf_role": "robot_spawn",
+        "robot_sf_id": "west",
+        "robot_sf_spawn": null,
+        "robot_sf_goal": null,
+        "annotation_source": "Robot SF scenario authoring"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              11.644878968744665,
+              52.13978024357831
+            ],
+            [
+              11.644879394626761,
+              52.139787428504185
+            ],
+            [
+              11.644891071829417,
+              52.13978716646037
+            ],
+            [
+              11.644890645945445,
+              52.13977998153456
+            ],
+            [
+              11.644878968744665,
+              52.13978024357831
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "element": "robot_sf_annotation",
+        "osm_id": null,
+        "osm_url": null,
+        "name": null,
+        "highway": null,
+        "footway": null,
+        "surface": null,
+        "building": null,
+        "robot_sf_role": "robot_goal",
+        "robot_sf_id": "east",
+        "robot_sf_spawn": null,
+        "robot_sf_goal": null,
+        "annotation_source": "Robot SF scenario authoring"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              11.64493735474678,
+              52.13977893334804
+            ],
+            [
+              11.644937780638255,
+              52.139786118273584
+            ],
+            [
+              11.644949457840017,
+              52.139785856224
+            ],
+            [
+              11.644949031946672,
+              52.13977867129853
+            ],
+            [
+              11.64493735474678,
+              52.13977893334804
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

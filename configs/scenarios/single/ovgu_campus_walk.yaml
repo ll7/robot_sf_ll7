@@ -1,0 +1,19 @@
+scenarios:
+  - name: ovgu_campus_walk_exploratory
+    map_file: ../../../maps/imported/ovgu_campus_walk.yaml
+    simulation_config:
+      max_episode_steps: 80
+      ped_density: 0.0
+    single_pedestrians: []
+    robot_config: {}
+    metadata:
+      archetype: real_world_campus_path
+      flow: none
+      behavior: none
+      purpose: >-
+        End-to-end import smoke for a licence-backed OpenStreetMap extract from
+        the Otto von Guericke University campus.
+      evidence_status: exploratory_only
+      map_provenance: ../../../maps/imported/ovgu_campus_walk.provenance.yaml
+    seeds:
+      - 4980

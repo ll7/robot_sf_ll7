@@ -1,33 +1,40 @@
-# PR #6087 Review Blockers
+# PR #5834 Review Fix Result
 
 ## Fixed comments
 
-- `RESULT.md`: resolved the merge conflict against `origin/main` and retained only PR #6087 metadata; stale PR #5834 content was removed.
-- `tests/baselines/test_sicnav_planner.py:141-143`: mocked `Path.expanduser` directly and compared platform-aware `Path` values, removing the Windows-dependent `HOME` string assertion.
-- `tests/baselines/test_sicnav_planner.py:87-88`: added an autouse fixture that saves and restores the process-global `random` and NumPy RNG states around every test.
-- `tests/baselines/test_sicnav_planner.py:151-158`: applied Ruff formatting to the `expanduser` lambda.
-- PR validation claim: refreshed the PR body with the validation reproduced after the fixes.
+- Synchronized `proto-butterfly-video` with current `origin/main`
+  (`f7645fdffea168f279f4c838798780ee55a14c5b`) using a normal merge commit; the current main
+  commit is an ancestor of the pushed PR head.
+- Reconciled scope in a PR comment: successor PR #5933 already supplies the six-file prototype;
+  the only production delta remaining in #5834 is the one-file renderer-style change from stacked
+  #5953.
+- Added direct renderer-focused proof for the remaining delta. The test renders `layout="print"`,
+  checks the final 5.906-inch output width, and verifies shared `INK`/`ORANGE` role colors plus
+  redundant A/B marker/linestyle encoding.
 
 ## Validation
 
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/baselines/test_sicnav_planner.py -q` — 68 passed.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check tests/baselines/test_sicnav_planner.py` — passed.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run ruff format --check tests/baselines/test_sicnav_planner.py` — 1 file already formatted.
-- `git diff --check` — passed.
-- `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest -q -k sicnav` — 77 passed, 2 skipped.
+- `uv run ruff check tests/tools/test_butterfly_trace_tooling.py scripts/repro/butterfly_hinge_figure_proto.py` — passed.
+- `uv run ruff format --check tests/tools/test_butterfly_trace_tooling.py scripts/repro/butterfly_hinge_figure_proto.py` — passed.
+- `scripts/dev/run_focused_tests.sh tests/tools/test_butterfly_trace_tooling.py -q` — passed.
+- `git merge-base --is-ancestor origin/main HEAD` — passed.
+- `git diff --stat origin/main...HEAD` — two files: the one-file renderer delta and its focused test.
+- Existing `output/` files were only counted (5 files); no generated output artifact was added to git.
 
-## Delivery
+## Commit
 
-- Implementation commit: `17fa7b46a5a96557f478fd90cd11cc73efc3225d`.
-- Prior result report commit: `4975176b0ef6f6712b22a4d380d628d5a185cea7` (stale head metadata corrected here).
-- Fix/merge refresh commit pushed: `202d9d3bcbd7ccea47fb595d565656741c855c86`.
-- Pushed to PR branch `cheap/cheap-issue-6077-b5a9ba703747`.
-- Final report follow-up pushed as `781838bf7c6815f92796f92ce09659847f4f7b14`; the report intentionally omits volatile head metadata.
+- Pushed commit: `e13541f0adc44246efa9b61409206808a39f6a91`
+- PR head verified at the same SHA.
+- Exact-head GitHub checks were running when this result was recorded.
 
 ## Review state
 
-- `PRRT_kwDOLRSZdc6SqrJp` — resolved; now outdated after the path-test edit.
-- `PRRT_kwDOLRSZdc6SqrJy` — resolved; current-head RNG fixture comment addressed.
-- Unresolved review threads: none.
-- Post-push PR state: `MERGEABLE`; merge state `UNSTABLE` while checks remain pending/unstable.
-- Blockers: none within the authorized scope.
+- Post-push GraphQL review-thread query: zero thread nodes; zero unresolved threads.
+- Resolved thread IDs: none; there were no unresolved review-thread nodes to resolve.
+- Scope-reconciliation comment: https://github.com/ll7/robot_sf_ll7/pull/5834#issuecomment-5037858742
+
+## Blockers
+
+- No local or inline-review blocker remains within the authorized scope.
+- External blocker: exact-head GitHub CI had not completed when this result was recorded; no CI
+  result is claimed here.

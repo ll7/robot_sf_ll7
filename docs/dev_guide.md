@@ -1625,9 +1625,14 @@ All figures must be **reproducible from code** and directly **integratable into 
   format check can be stale when the shared baseline moved.
 
 CI mapping to local tasks and CLI:
-- `fast-feedback` job → `scripts/dev/ci_driver.sh lint typecheck test`
+- `fast-feedback` matrix → four `scripts/dev/ci_driver.sh test` shards on every event; shard 1
+  also runs lint and advisory type checking. Pull requests exclude slow tests, while non-PR events
+  run the complete suite and upload one coverage database per shard.
+- `coverage-gate` job → combines all four non-PR coverage databases, enforces the absolute coverage
+  floor, and updates the advisory main baseline.
 - `smoke-artifacts` job → `scripts/dev/ci_driver.sh smoke artifact-policy`
-- aggregate `ci` job → waits for both split jobs so existing required-check naming remains stable
+- aggregate `ci` job → requires the coverage gate on non-PR events and all other split jobs while
+  keeping the existing required-check name stable
 - local full equivalent → `scripts/dev/run_ci_local.sh`
 
 Workflow location: `.github/workflows/ci.yml`.
@@ -1673,7 +1678,10 @@ exit-code contract is unchanged.
 ## CI Performance Monitoring
 The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 
-- `fast-feedback` runs lint, advisory type checking, and the main pytest suite.
+- `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker,
+  while main, manual, and merge-queue events run the complete suite with per-shard coverage data.
+- `coverage-gate` combines the complete non-PR coverage data before enforcing the absolute floor
+  and advisory baseline comparison.
 - `smoke-artifacts` runs validation smoke checks, uploads benchmark/recording artifacts, and enforces
   the artifact-root policy.
 - Both jobs call the canonical `scripts/dev/ci_driver.sh` phases instead of duplicating validation

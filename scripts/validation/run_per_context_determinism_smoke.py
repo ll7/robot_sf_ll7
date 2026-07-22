@@ -235,17 +235,21 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.negative_test:
-        res = run_negative_test_smoke(
-            scenario_path=args.scenario_path,
-            scenario_id=args.scenario_id,
-            schema_path=args.schema_path,
-            planner=args.planner,
-            seed=args.seed,
-            horizon=args.horizon,
-        )
-        print("Negative test passed successfully:")
-        print(json.dumps(res, indent=2))
-        return 0
+        try:
+            res = run_negative_test_smoke(
+                scenario_path=args.scenario_path,
+                scenario_id=args.scenario_id,
+                schema_path=args.schema_path,
+                planner=args.planner,
+                seed=args.seed,
+                horizon=args.horizon,
+            )
+            print("Negative test passed successfully:")
+            print(json.dumps(res, indent=2))
+            return 0
+        except RuntimeError as exc:
+            print(f"Negative test FAILED: {exc}", file=sys.stderr)
+            return 1
 
     try:
         res = run_determinism_smoke(

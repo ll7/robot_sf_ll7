@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +106,13 @@ def test_step_trace_comparator_unit() -> None:
     assert diff_msg is not None
     assert "Value mismatch at 'steps[1].robot.position[0]'" in diff_msg
 
+    # Matching non-finite values are invalid trace evidence, not deterministic success.
+    non_finite_trace = {"steps": [{"value": float("nan")}]}
+    equal_non_finite, diff_non_finite = compare_step_traces(non_finite_trace, non_finite_trace)
+    assert equal_non_finite is False
+    assert diff_non_finite is not None
+    assert "Non-finite value at 'steps[0].value'" in diff_non_finite
+
     # Key mismatch
     t4 = {
         "steps": [
@@ -199,6 +207,43 @@ def test_single_episode_trace_schedules_exact_requested_contract(
     assert captured["kwargs"]["algo"] == "goal"
     assert captured["kwargs"]["workers"] == 1
     assert captured["kwargs"]["resume"] is False
+
+
+@pytest.mark.parametrize("matching_count", [0, 2])
+def test_single_episode_trace_rejects_ambiguous_scenario_selection(
+    monkeypatch: pytest.MonkeyPatch,
+    matching_count: int,
+) -> None:
+    """Fail closed unless the manifest identifies exactly one requested scenario."""
+    monkeypatch.setattr(
+        smoke_module,
+        "load_scenario_matrix",
+        lambda _path: [
+            {"name": DEFAULT_SCENARIO_ID, "map_file": "map.svg", "seeds": [101]}
+            for _ in range(matching_count)
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match=rf"found {matching_count}\."):
+        run_single_episode_trace(horizon=20)
+
+
+def test_negative_cli_reports_clean_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Negative-mode validation failures return one clean CI error without a traceback."""
+
+    def _fail_negative_smoke(**_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("synthetic comparator failure")
+
+    monkeypatch.setattr(smoke_module, "run_negative_test_smoke", _fail_negative_smoke)
+    monkeypatch.setattr(sys, "argv", ["run_per_context_determinism_smoke.py", "--negative-test"])
+
+    assert smoke_module.main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "Negative test FAILED: synthetic comparator failure\n"
 
 
 def test_single_episode_trace_rejects_multirow_output(

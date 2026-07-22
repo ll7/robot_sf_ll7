@@ -95,10 +95,8 @@ def _compare_floats(val1: float, val2: float, path: str) -> str | None:
     Returns:
         First difference string if numbers differ, else None.
     """
-    if math.isnan(val1) and math.isnan(val2):
-        return None
-    if math.isnan(val1) or math.isnan(val2):
-        return f"NaN mismatch at '{path}': {val1!r} vs {val2!r}"
+    if not math.isfinite(val1) or not math.isfinite(val2):
+        return f"Non-finite value at '{path}': {val1!r} vs {val2!r}"
     if val1 != val2:
         delta = abs(val1 - val2)
         return f"Value mismatch at '{path}': {val1!r} != {val2!r} (abs delta = {delta:.6e})"

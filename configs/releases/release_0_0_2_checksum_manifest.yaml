@@ -80,3 +80,85 @@ reference_documentation:
   - docs/benchmark_release_0_0_2_reproduction.md
   - docs/benchmark_release_reproducibility.md
   - docs/experiments/publication/20260414_benchmark_release_0_0_2/release_metadata.json
+
+subset_replay_contract:
+  smoke_manifest: configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml
+  scenario_id: francis2023_blind_corner
+  seed: 111
+  planners:
+    - goal
+    - orca
+    - ppo
+    - prediction_planner
+    - sacadrl
+    - social_force
+    - socnav_sampling
+  expected_rows:
+    goal:
+      status: failure
+      execution_mode: native
+      metrics:
+        success: false
+        collisions: 0
+        near_misses: 0
+        time_to_goal_norm: 1.0
+        snqi: -0.1435894976415092
+    orca:
+      status: failure
+      execution_mode: adapter
+      metrics:
+        success: false
+        collisions: 0
+        near_misses: 0
+        time_to_goal_norm: 1.0
+        snqi: -0.10617475085026187
+    ppo:
+      status: failure
+      execution_mode: native
+      metrics:
+        success: false
+        collisions: 0
+        near_misses: 0
+        time_to_goal_norm: 1.0
+        snqi: -0.3675928536783869
+    prediction_planner:
+      status: collision
+      execution_mode: adapter
+      metrics:
+        success: false
+        collisions: 0
+        near_misses: 0
+        time_to_goal_norm: 1.0
+        snqi: -0.09491099136070058
+    sacadrl:
+      status: failure
+      execution_mode: adapter
+      metrics:
+        success: false
+        collisions: 0
+        near_misses: 0
+        time_to_goal_norm: 1.0
+        snqi: -0.12470672746904087
+    social_force:
+      status: failure
+      execution_mode: adapter
+      metrics:
+        success: false
+        collisions: 0
+        near_misses: 0
+        time_to_goal_norm: 1.0
+        snqi: -0.9577609899848933
+    socnav_sampling:
+      status: failure
+      execution_mode: adapter
+      metrics:
+        success: false
+        collisions: 0
+        near_misses: 0
+        time_to_goal_norm: 1.0
+        snqi: -0.09491099136070058
+  tolerances:
+    default_abs_snqi: 0.35
+    near_misses: 0.31
+    time_to_goal_norm: 0.05
+    collisions: 1

@@ -1,7 +1,7 @@
 {
   "created_at_utc": "2026-07-12T09:00:25.344244Z",
   "config_path": "configs/releases/release_0_0_2_checksum_manifest.yaml",
-  "config_sha256": "b894143d35ae357f8fbc9d23eb2d79f8a22dc21b786cc68dedb7565dc788f8d6",
+  "config_sha256": "9a68cd78531f290b5d5701bf66f9fbfd7a9ec541a9cc3edbfc6122ceaaa51f15",
   "config_commit": "7a31102acd6dbc481868a23eec08a3b72755e01b",
   "deviations": [
     "Independent reproduction is incomplete: the clean release-tag clone was skipped because --local-repo was used."

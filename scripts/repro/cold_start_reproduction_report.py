@@ -32,6 +32,7 @@ import hashlib
 import json
 import os
 import platform
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -41,6 +42,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from scripts.repro.release_0_0_2_subset_comparison import (
+    compare_subset_results,
+    extract_subset_run_metrics,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -269,8 +275,10 @@ def _step_verify_checksums(
     return result
 
 
-def _step_run_subset(clone_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
-    """Run the pre-registered benchmark subset."""
+def _step_run_subset(
+    clone_dir: Path, manifest: dict[str, Any], output_dir: Path
+) -> dict[str, Any]:
+    """Run the pre-registered benchmark subset in run mode."""
     result: dict[str, Any] = {"step": "run_subset"}
     campaign = manifest.get("campaign", {})
     planners = manifest.get("planners", [])
@@ -280,51 +288,107 @@ def _step_run_subset(clone_dir: Path, manifest: dict[str, Any]) -> dict[str, Any
     result["seed_policy"] = seed_policy
     result["campaign_id"] = campaign.get("campaign_id")
 
-    release_tag = manifest["release_tag"]
-    tag_slug = release_tag.replace(".", "_")
-    release_config = Path(
-        "configs/benchmarks/releases/"
-        f"paper_experiment_matrix_7planners_v1_release_v{tag_slug}_scoped.yaml"
+    smoke_config = Path(
+        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
     )
-    if not (clone_dir / release_config).exists():
-        result["status"] = "skip"
-        result["reason"] = f"Release config not found: {release_config}"
+    if not (clone_dir / smoke_config).exists():
+        result["status"] = "fail"
+        result["error"] = f"Smoke manifest not found: {smoke_config}"
         return result
 
+    subset_run_dir = output_dir / "subset_run"
+    subset_run_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "uv",
+        "run",
+        "python",
+        "scripts/tools/run_benchmark_release.py",
+        "--manifest",
+        str(smoke_config),
+        "--mode",
+        "run",
+        "--output-root",
+        str(subset_run_dir),
+    ]
+    result["command"] = shlex.join(cmd)
     start = time.monotonic()
     try:
-        smoke_config = Path(
-            "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
+        proc_out = subprocess.check_output(
+            cmd,
+            cwd=clone_dir,
+            text=True,
+            timeout=600,
         )
-        if (clone_dir / smoke_config).exists():
-            subprocess.check_call(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "scripts/tools/run_benchmark_release.py",
-                    "--manifest",
-                    str(smoke_config),
-                    "--mode",
-                    "preflight",
-                ],
-                cwd=clone_dir,
-                timeout=300,
-            )
-            result["preflight_status"] = "pass"
-        else:
-            result["preflight_status"] = "skip"
-            result["preflight_reason"] = "Smoke manifest not found"
-
         elapsed = time.monotonic() - start
         result["wall_time_sec"] = round(elapsed, 2)
+        try:
+            run_payload = json.loads(proc_out)
+            result["run_payload"] = run_payload
+            result["campaign_root"] = run_payload.get("campaign_root")
+            if run_payload.get("mode") != "run":
+                result["status"] = "fail"
+                result["error"] = (
+                    f"Subset replay executed in preflight mode instead of run mode "
+                    f"(mode={run_payload.get('mode')})"
+                )
+                return result
+            if run_payload.get("campaign_execution_status") == "failed":
+                result["status"] = "fail"
+                result["error"] = (
+                    f"Subset replay execution failed: {run_payload.get('status_reason')}"
+                )
+                return result
+        except json.JSONDecodeError:
+            pass
+
         result["status"] = "pass"
     except subprocess.CalledProcessError as exc:
         result["status"] = "fail"
-        result["error"] = str(exc)
+        result["error"] = f"Subset run command failed: {exc}"
     except subprocess.TimeoutExpired:
         result["status"] = "fail"
-        result["error"] = "Subset run timed out"
+        result["error"] = "Subset run timed out after 600s"
+    return result
+
+
+def _step_compare_subset(
+    clone_dir: Path,
+    manifest: dict[str, Any],
+    output_dir: Path,
+    run_subset_result: dict[str, Any],
+) -> dict[str, Any]:
+    """Compare numeric replay outcome against frozen release contract."""
+    result: dict[str, Any] = {"step": "compare_subset"}
+    if run_subset_result.get("status") != "pass":
+        result["status"] = "fail"
+        result["error"] = (
+            f"Cannot compare subset: run_subset step status is {run_subset_result.get('status')}"
+        )
+        return result
+
+    campaign_root_str = run_subset_result.get("campaign_root")
+    if campaign_root_str and Path(campaign_root_str).is_dir():
+        campaign_root = Path(campaign_root_str)
+    else:
+        subset_run_dir = output_dir / "subset_run"
+        candidates = [d for d in subset_run_dir.glob("*") if d.is_dir()]
+        if candidates:
+            campaign_root = candidates[0]
+        else:
+            campaign_root = subset_run_dir
+
+    extracted = extract_subset_run_metrics(campaign_root)
+    if extracted.get("status") != "pass":
+        result["status"] = "fail"
+        result["error"] = extracted.get("error", "Failed to extract replay metrics")
+        return result
+
+    comp_res = compare_subset_results(extracted, manifest)
+    result["status"] = comp_res["status"]
+    result["overall_match"] = comp_res["overall_match"]
+    result["comparison_rows"] = comp_res["comparison_rows"]
+    result["global_deviations"] = comp_res["global_deviations"]
     return result
 
 
@@ -362,9 +426,15 @@ def generate_reproduction_report(
         "release_tag": tag,
         "release_id": manifest.get("release_id"),
         "target_commit": manifest.get("target_commit"),
+        "tooling_commit": _git_commit_for_path(REPO_ROOT),
         "config_path": str(manifest_path),
         "config_sha256": _sha256_file(manifest_path),
         "config_commit": _git_commit_for_path(manifest_path),
+        "lockfile_sha256": (
+            _sha256_file(REPO_ROOT / "uv.lock")
+            if (REPO_ROOT / "uv.lock").is_file()
+            else "unknown"
+        ),
         "environment": env,
         "steps": {},
         "instruction_gaps": [],
@@ -410,7 +480,11 @@ def generate_reproduction_report(
 
     if not checksums_only:
         report["steps"]["build"] = _step_build(clone_dir)
-        report["steps"]["run_subset"] = _step_run_subset(clone_dir, manifest)
+        run_step = _step_run_subset(clone_dir, manifest, output_dir)
+        report["steps"]["run_subset"] = run_step
+        report["steps"]["compare_subset"] = _step_compare_subset(
+            clone_dir, manifest, output_dir, run_step
+        )
 
     statuses = [s.get("status", "skip") for s in report["steps"].values()]
     if any(s == "fail" for s in statuses):

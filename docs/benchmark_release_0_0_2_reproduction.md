@@ -61,12 +61,17 @@ sha256sum output/benchmark_release_0_0_2/paper_experiment_matrix_7planners_v1_re
 
 # Verify the bundle and its embedded checksums against the tracked manifest
 uv run python scripts/repro/verify_release_checksums.py --tag 0.0.2
+
+# Execute the full cold-start reproduction report (clone + checksums + build + numeric subset replay + numeric comparison)
+uv run python scripts/repro/cold_start_reproduction_report.py --tag 0.0.2
 ```
 
 The checksum command establishes that the published archive and its embedded artifacts match the
-tracked release manifest. It does not establish an independent numeric replay of the benchmark
-subset. That replay remains a separate required step and must use the release's pre-registered
-subset contract; do not promote checksum-only output to a numeric reproduction claim.
+tracked release manifest. The full cold-start reproduction report (`cold_start_reproduction_report.py`)
+additionally executes the frozen benchmark subset (`francis2023_blind_corner`, seed 111, all 7 planners)
+in `run` mode and compares the resulting numeric outcomes against the published release contract using
+tracked tolerances. Preflight mode alone is insufficient and cannot produce a `run_subset=pass` verdict.
+Missing manifests, rows, planners, fallback/degraded execution, or tolerance breaches fail closed.
 
 ## Optional parity check
 

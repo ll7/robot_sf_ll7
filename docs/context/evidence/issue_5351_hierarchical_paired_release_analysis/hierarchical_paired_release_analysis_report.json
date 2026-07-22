@@ -1,0 +1,4137 @@
+{
+  "analysis_executed": true,
+  "censored_completion_time": [
+    {
+      "censoring_rate": 0.0,
+      "mean_observed": 19.260555555555555,
+      "median_observed": 17.5,
+      "n_censored": 0,
+      "n_observed": 1440,
+      "n_total": 1440,
+      "planner": "goal",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.30486111111111114,
+      "mean_observed": 16.564235764235764,
+      "median_observed": 14.4,
+      "n_censored": 439,
+      "n_observed": 1001,
+      "n_total": 1440,
+      "planner": "guarded_ppo",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.034722222222222224,
+      "mean_observed": 15.722589928057555,
+      "median_observed": 16.0,
+      "n_censored": 50,
+      "n_observed": 1390,
+      "n_total": 1440,
+      "planner": "hybrid_rule_v3_fast_progress_static_escape",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.08055555555555556,
+      "mean_observed": 16.77628398791541,
+      "median_observed": 16.7,
+      "n_censored": 116,
+      "n_observed": 1324,
+      "n_total": 1440,
+      "planner": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.014583333333333334,
+      "mean_observed": 13.60831571529246,
+      "median_observed": 12.600000000000001,
+      "n_censored": 21,
+      "n_observed": 1419,
+      "n_total": 1440,
+      "planner": "ppo",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.002777777777777778,
+      "mean_observed": 15.073119777158775,
+      "median_observed": 14.3,
+      "n_censored": 4,
+      "n_observed": 1436,
+      "n_total": 1440,
+      "planner": "prediction_planner",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.15,
+      "mean_observed": 14.474101307189542,
+      "median_observed": 12.8,
+      "n_censored": 216,
+      "n_observed": 1224,
+      "n_total": 1440,
+      "planner": "predictive_mppi",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.13402777777777777,
+      "mean_observed": 15.668724939855656,
+      "median_observed": 14.0,
+      "n_censored": 193,
+      "n_observed": 1247,
+      "n_total": 1440,
+      "planner": "risk_dwa",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.0006944444444444445,
+      "mean_observed": 16.35330090340514,
+      "median_observed": 14.200000000000001,
+      "n_censored": 1,
+      "n_observed": 1439,
+      "n_total": 1440,
+      "planner": "sacadrl",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03125,
+      "mean_observed": 15.794623655913979,
+      "median_observed": 16.0,
+      "n_censored": 45,
+      "n_observed": 1395,
+      "n_total": 1440,
+      "planner": "scenario_adaptive_hybrid_orca_v1",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.035416666666666666,
+      "mean_observed": 15.729589632829375,
+      "median_observed": 15.9,
+      "n_censored": 51,
+      "n_observed": 1389,
+      "n_total": 1440,
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.49236111111111114,
+      "mean_observed": 13.194664842681258,
+      "median_observed": 5.6000000000000005,
+      "n_censored": 709,
+      "n_observed": 731,
+      "n_total": 1440,
+      "planner": "social_force",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.0,
+      "mean_observed": 8.947430555555554,
+      "median_observed": 8.5,
+      "n_censored": 0,
+      "n_observed": 1440,
+      "n_total": 1440,
+      "planner": "socnav_sampling",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ]
+    },
+    {
+      "censoring_rate": 0.03611111111111111,
+      "mean_observed": 16.588184438040347,
+      "median_observed": 15.850000000000001,
+      "n_censored": 52,
+      "n_observed": 1388,
+      "n_total": 1440,
+      "planner": "orca",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ]
+    }
+  ],
+  "claim_boundary": "Input-contract and claim-gate declaration only. It does not compute the hierarchical paired analysis, alter frozen metrics, or support a benchmark, release, paper, or dissertation claim.",
+  "claim_gate": {
+    "reason": "analysis executed over successor rows; claim promotion requires human review of the deterministic report",
+    "status": "blocked_review_pending"
+  },
+  "evidence_status": "not_benchmark_evidence",
+  "issue": 5351,
+  "multiplicity": {
+    "decisions": [
+      {
+        "adjusted_p_value": 7.05009270686561e-87,
+        "comparison": "comparison_0",
+        "raw_p_value": 2.0735566784898854e-88,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 0.7990165131315684,
+        "comparison": "comparison_1",
+        "raw_p_value": 0.08877961257017426,
+        "rejected": false
+      },
+      {
+        "adjusted_p_value": 1.0658141036401503e-14,
+        "comparison": "comparison_2",
+        "raw_p_value": 4.440892098500626e-16,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 5.416539023915809e-25,
+        "comparison": "comparison_3",
+        "raw_p_value": 1.867772077212348e-26,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 2.9675446930032725e-10,
+        "comparison": "comparison_4",
+        "raw_p_value": 1.5618656278964593e-11,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.8194508758035288e-78,
+        "comparison": "comparison_5",
+        "raw_p_value": 5.513487502434936e-80,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 2.719287337956574e-07,
+        "comparison": "comparison_6",
+        "raw_p_value": 1.812858225304383e-08,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.0,
+        "comparison": "comparison_7",
+        "raw_p_value": 0.19610344945712285,
+        "rejected": false
+      },
+      {
+        "adjusted_p_value": 1.0,
+        "comparison": "comparison_8",
+        "raw_p_value": 0.9196068309220417,
+        "rejected": false
+      },
+      {
+        "adjusted_p_value": 1.910565600438609e-22,
+        "comparison": "comparison_9",
+        "raw_p_value": 7.076168890513367e-24,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.4303367700678283e-07,
+        "comparison": "comparison_10",
+        "raw_p_value": 8.939604812923927e-09,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.6422611922629467e-06,
+        "comparison": "comparison_11",
+        "raw_p_value": 1.1730437087592476e-07,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.0,
+        "comparison": "comparison_12",
+        "raw_p_value": 0.3672332920247905,
+        "rejected": false
+      },
+      {
+        "adjusted_p_value": 8.058833994775587e-10,
+        "comparison": "comparison_13",
+        "raw_p_value": 4.74049058516211e-11,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 0.0019429778641481448,
+        "comparison": "comparison_14",
+        "raw_p_value": 0.00019429778641481447,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 5.891818053358648e-42,
+        "comparison": "comparison_15",
+        "raw_p_value": 1.8411931416745775e-43,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.0,
+        "comparison": "comparison_16",
+        "raw_p_value": 0.44148306534155635,
+        "rejected": false
+      },
+      {
+        "adjusted_p_value": 1.2860379428047963e-11,
+        "comparison": "comparison_17",
+        "raw_p_value": 6.123990203832363e-13,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 6.92541922766602e-122,
+        "comparison": "comparison_18",
+        "raw_p_value": 1.9786912079045772e-123,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 3.8286054548757717e-10,
+        "comparison": "comparison_19",
+        "raw_p_value": 2.1270030304865398e-11,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 2.5379478752491822e-24,
+        "comparison": "comparison_20",
+        "raw_p_value": 9.064099554461365e-26,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 2.3069475251661147e-170,
+        "comparison": "comparison_21",
+        "raw_p_value": 6.070914539910828e-172,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 0.0008169224884009903,
+        "comparison": "comparison_22",
+        "raw_p_value": 7.426568076372639e-05,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 5.018164157894212e-19,
+        "comparison": "comparison_23",
+        "raw_p_value": 2.0072656631576846e-20,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 4.94550748508017e-125,
+        "comparison": "comparison_24",
+        "raw_p_value": 1.373752079188936e-126,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.4355153318915333e-25,
+        "comparison": "comparison_25",
+        "raw_p_value": 4.7850511063051114e-27,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.9539925233402755e-14,
+        "comparison": "comparison_26",
+        "raw_p_value": 8.881784197001252e-16,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 7.277372943349675e-06,
+        "comparison": "comparison_27",
+        "raw_p_value": 6.064477452791396e-07,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.0,
+        "comparison": "comparison_28",
+        "raw_p_value": 0.17643949314765553,
+        "rejected": false
+      },
+      {
+        "adjusted_p_value": 1.0,
+        "comparison": "comparison_29",
+        "raw_p_value": 0.5340598617346067,
+        "rejected": false
+      },
+      {
+        "adjusted_p_value": 1.8788516485904146e-06,
+        "comparison": "comparison_30",
+        "raw_p_value": 1.4452704989157036e-07,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.0,
+        "comparison": "comparison_31",
+        "raw_p_value": 0.17643949314765553,
+        "rejected": false
+      },
+      {
+        "adjusted_p_value": 1.0,
+        "comparison": "comparison_32",
+        "raw_p_value": 1.0,
+        "rejected": false
+      },
+      {
+        "adjusted_p_value": 1.0515341805338986e-33,
+        "comparison": "comparison_33",
+        "raw_p_value": 3.392045743657737e-35,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 6.424377957841495e-11,
+        "comparison": "comparison_34",
+        "raw_p_value": 3.2121889789207477e-12,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 2.1521443421736257e-194,
+        "comparison": "comparison_35",
+        "raw_p_value": 5.51831882608622e-196,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.4163592537800331e-126,
+        "comparison": "comparison_36",
+        "raw_p_value": 3.8279979831892784e-128,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 6.860252442910223e-22,
+        "comparison": "comparison_37",
+        "raw_p_value": 2.6385586318885474e-23,
+        "rejected": true
+      },
+      {
+        "adjusted_p_value": 1.0658141036401503e-14,
+        "comparison": "comparison_38",
+        "raw_p_value": 4.440892098500626e-16,
+        "rejected": true
+      }
+    ],
+    "family_size": 39,
+    "method": "holm_step_down"
+  },
+  "normalized_near_miss_exposure": [
+    {
+      "dimension": "time",
+      "normalized_rate": 0.02642850961954484,
+      "planner": "goal",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "total_exposure": 27735.2,
+      "total_near_miss": 733
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.028511766744451498,
+      "planner": "goal",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "total_exposure": 25708.683946870628,
+      "total_near_miss": 733
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5090277777777777,
+      "planner": "goal",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 733
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.016597828587705553,
+      "planner": "guarded_ppo",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "total_exposure": 36510.8,
+      "total_near_miss": 606
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.026599509856619127,
+      "planner": "guarded_ppo",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "total_exposure": 22782.374685344083,
+      "total_near_miss": 606
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.42083333333333334,
+      "planner": "guarded_ppo",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 606
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030235674827574933,
+      "planner": "hybrid_rule_v3_fast_progress_static_escape",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "total_exposure": 24474.4,
+      "total_near_miss": 740
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02130640544694829,
+      "planner": "hybrid_rule_v3_fast_progress_static_escape",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "total_exposure": 34731.33944824982,
+      "total_near_miss": 740
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5138888888888888,
+      "planner": "hybrid_rule_v3_fast_progress_static_escape",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 740
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.023704296046666046,
+      "planner": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "total_exposure": 28011.800000000003,
+      "total_near_miss": 664
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.018826668180040983,
+      "planner": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "total_exposure": 35269.118977936676,
+      "total_near_miss": 664
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.46111111111111114,
+      "planner": "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 664
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.03136935327095463,
+      "planner": "ppo",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "total_exposure": 20370.2,
+      "total_near_miss": 639
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.018396735033955666,
+      "planner": "ppo",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "total_exposure": 34734.42427803463,
+      "total_near_miss": 639
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.44375,
+      "planner": "ppo",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 639
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.03422435458076308,
+      "planner": "prediction_planner",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "total_exposure": 21885.0,
+      "total_near_miss": 749
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.026247580290375605,
+      "planner": "prediction_planner",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "total_exposure": 28535.963761758314,
+      "total_near_miss": 749
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5201388888888889,
+      "planner": "prediction_planner",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 749
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.022895520109898496,
+      "planner": "predictive_mppi",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "total_exposure": 27516.3,
+      "total_near_miss": 630
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.022632315653051356,
+      "planner": "predictive_mppi",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "total_exposure": 27836.30317187899,
+      "total_near_miss": 630
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.4375,
+      "planner": "predictive_mppi",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 630
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.024074355163807983,
+      "planner": "risk_dwa",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "total_exposure": 28328.9,
+      "total_near_miss": 682
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.023980516258935693,
+      "planner": "risk_dwa",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "total_exposure": 28439.754700688358,
+      "total_near_miss": 682
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.4736111111111111,
+      "planner": "risk_dwa",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 682
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.022719180753123885,
+      "planner": "sacadrl",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "total_exposure": 23592.4,
+      "total_near_miss": 536
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.024117350677756506,
+      "planner": "sacadrl",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "total_exposure": 22224.663362147574,
+      "total_near_miss": 536
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.37222222222222223,
+      "planner": "sacadrl",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 536
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030270137423966247,
+      "planner": "scenario_adaptive_hybrid_orca_v1",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "total_exposure": 24413.5,
+      "total_near_miss": 739
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.021321192650273723,
+      "planner": "scenario_adaptive_hybrid_orca_v1",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "total_exposure": 34660.35001520014,
+      "total_near_miss": 739
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5131944444444444,
+      "planner": "scenario_adaptive_hybrid_orca_v1",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 739
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.03005482259927445,
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "total_exposure": 24588.4,
+      "total_near_miss": 739
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.021351360941842725,
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "total_exposure": 34611.37685850112,
+      "total_near_miss": 739
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5131944444444444,
+      "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 739
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.013837233633252559,
+      "planner": "social_force",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "total_exposure": 44445.3,
+      "total_near_miss": 615
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.014561507898636934,
+      "planner": "social_force",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "total_exposure": 42234.63698135058,
+      "total_near_miss": 615
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.4270833333333333,
+      "planner": "social_force",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 615
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.04354136429608128,
+      "planner": "socnav_sampling",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "total_exposure": 12884.300000000001,
+      "total_near_miss": 561
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02528625267866455,
+      "planner": "socnav_sampling",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "total_exposure": 22185.968285974915,
+      "total_near_miss": 561
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.38958333333333334,
+      "planner": "socnav_sampling",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 561
+    },
+    {
+      "dimension": "time",
+      "normalized_rate": 0.030018436520067443,
+      "planner": "orca",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "total_exposure": 25384.4,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "distance",
+      "normalized_rate": 0.02161302526432895,
+      "planner": "orca",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "total_exposure": 35256.517339922655,
+      "total_near_miss": 762
+    },
+    {
+      "dimension": "opportunity",
+      "normalized_rate": 0.5291666666666667,
+      "planner": "orca",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "total_exposure": 1440.0,
+      "total_near_miss": 762
+    }
+  ],
+  "paired_effects": [
+    {
+      "holm_adjusted_p_value": 7.05009270686561e-87,
+      "n_cells": 1440,
+      "odds_ratio": 3.838338132455779,
+      "odds_ratio_ci": [
+        2.3477505880684943,
+        6.691770451486339
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "goal:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": 0.3194444444444444,
+        "risk_difference_ci": [
+          0.2015305673009162,
+          0.4379376197318008
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 2.0735566784898854e-88,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.3194444444444444,
+      "risk_difference_ci": [
+        0.2015305673009162,
+        0.4379376197318008
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 0.7990165131315684,
+      "n_cells": 1440,
+      "odds_ratio": 0.922484936907639,
+      "odds_ratio_ci": [
+        0.7022578590049008,
+        1.2867794962812709
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "goal:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.02013888888888893,
+        "risk_difference_ci": [
+          -0.08768211289092297,
+          0.061915113871635556
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 0.08877961257017426,
+      "rejected_at_family_wise_alpha": false,
+      "risk_difference": -0.02013888888888893,
+      "risk_difference_ci": [
+        -0.08768211289092297,
+        0.061915113871635556
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0658141036401503e-14,
+      "n_cells": 1440,
+      "odds_ratio": 0.0,
+      "odds_ratio_ci": [
+        0.0,
+        0.0
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "goal:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.03611111111111111,
+        "risk_difference_ci": [
+          -0.08820046768707482,
+          -0.0028955314009662
+        ],
+        "statistically_separable": true,
+        "verdict": "statistically_separable_practically_null"
+      },
+      "raw_p_value": 4.440892098500626e-16,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.03611111111111111,
+      "risk_difference_ci": [
+        -0.08820046768707482,
+        -0.0028955314009662
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 5.416539023915809e-25,
+      "n_cells": 1440,
+      "odds_ratio": 2.1522758203538483,
+      "odds_ratio_ci": [
+        1.1741823456961662,
+        3.5552241375375777
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "guarded_ppo:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": 0.17638888888888887,
+        "risk_difference_ci": [
+          0.03553072390572402,
+          0.2972969387755101
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 1.867772077212348e-26,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.17638888888888887,
+      "risk_difference_ci": [
+        0.03553072390572402,
+        0.2972969387755101
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 2.9675446930032725e-10,
+      "n_cells": 1440,
+      "odds_ratio": 0.6465190052682264,
+      "odds_ratio_ci": [
+        0.3501529465261084,
+        1.1909414458235366
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "guarded_ppo:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.10833333333333334,
+        "risk_difference_ci": [
+          -0.25410587002096424,
+          0.04307291666666653
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 1.5618656278964593e-11,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.10833333333333334,
+      "risk_difference_ci": [
+        -0.25410587002096424,
+        0.04307291666666653
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.8194508758035288e-78,
+      "n_cells": 1440,
+      "odds_ratio": 11.706216860063016,
+      "odds_ratio_ci": [
+        3.4417110191348432,
+        188.71812504431003
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "guarded_ppo:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": 0.26875000000000004,
+        "risk_difference_ci": [
+          0.14392836879432636,
+          0.39829629629629626
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 5.513487502434936e-80,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.26875000000000004,
+      "risk_difference_ci": [
+        0.14392836879432636,
+        0.39829629629629626
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 2.719287337956574e-07,
+      "n_cells": 1440,
+      "odds_ratio": 0.6544631838749485,
+      "odds_ratio_ci": [
+        0.3227476241886725,
+        1.171432873676559
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "hybrid_rule_v3_fast_progress_static_escape:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.07777777777777778,
+        "risk_difference_ci": [
+          -0.18055717054263562,
+          0.03213608305274963
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 1.812858225304383e-08,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.07777777777777778,
+      "risk_difference_ci": [
+        -0.18055717054263562,
+        0.03213608305274963
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0,
+      "n_cells": 1440,
+      "odds_ratio": 0.9406074240719908,
+      "odds_ratio_ci": [
+        0.7112802791951228,
+        1.2614857827662482
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "hybrid_rule_v3_fast_progress_static_escape:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.015277777777777835,
+        "risk_difference_ci": [
+          -0.08409389952153111,
+          0.05752843137254886
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 0.19610344945712285,
+      "rejected_at_family_wise_alpha": false,
+      "risk_difference": -0.015277777777777835,
+      "risk_difference_ci": [
+        -0.08409389952153111,
+        0.05752843137254886
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0,
+      "n_cells": 1440,
+      "odds_ratio": 0.9601549529607084,
+      "odds_ratio_ci": [
+        0.2602710266659942,
+        10.870253279911825
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "hybrid_rule_v3_fast_progress_static_escape:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.001388888888888884,
+        "risk_difference_ci": [
+          -0.05752083333333329,
+          0.042038866930171226
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 0.9196068309220417,
+      "rejected_at_family_wise_alpha": false,
+      "risk_difference": -0.001388888888888884,
+      "risk_difference_ci": [
+        -0.05752083333333329,
+        0.042038866930171226
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.910565600438609e-22,
+      "n_cells": 1440,
+      "odds_ratio": 0.44151233087035796,
+      "odds_ratio_ci": [
+        0.23193644882521586,
+        0.731932068022737
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "hybrid_rule_v3_fast_progress_static_escape_continuous:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": -0.13472222222222222,
+        "risk_difference_ci": [
+          -0.2190559246954596,
+          -0.052721147646679574
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 7.076168890513367e-24,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.13472222222222222,
+      "risk_difference_ci": [
+        -0.2190559246954596,
+        -0.052721147646679574
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.4303367700678283e-07,
+      "n_cells": 1440,
+      "odds_ratio": 0.7613442649565713,
+      "odds_ratio_ci": [
+        0.5672361886358646,
+        1.0198513539861096
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "hybrid_rule_v3_fast_progress_static_escape_continuous:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.06805555555555554,
+        "risk_difference_ci": [
+          -0.13910984848484842,
+          0.004891756475704222
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 8.939604812923927e-09,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.06805555555555554,
+      "risk_difference_ci": [
+        -0.13910984848484842,
+        0.004891756475704222
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.6422611922629467e-06,
+      "n_cells": 1440,
+      "odds_ratio": 2.338600976063212,
+      "odds_ratio_ci": [
+        0.9141346210885837,
+        24.48237132483316
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "hybrid_rule_v3_fast_progress_static_escape_continuous:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": 0.04444444444444445,
+        "risk_difference_ci": [
+          -0.006383660665575567,
+          0.08962962962962963
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 1.1730437087592476e-07,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.04444444444444445,
+      "risk_difference_ci": [
+        -0.006383660665575567,
+        0.08962962962962963
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0,
+      "n_cells": 1440,
+      "odds_ratio": 0.9329009170208006,
+      "odds_ratio_ci": [
+        0.423674075590409,
+        1.6294905993959377
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "ppo:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.013888888888888895,
+        "risk_difference_ci": [
+          -0.14552845528455283,
+          0.10408761652809272
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 0.3672332920247905,
+      "rejected_at_family_wise_alpha": false,
+      "risk_difference": -0.013888888888888895,
+      "risk_difference_ci": [
+        -0.14552845528455283,
+        0.10408761652809272
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 8.058833994775587e-10,
+      "n_cells": 1440,
+      "odds_ratio": 0.7098115544545696,
+      "odds_ratio_ci": [
+        0.4863658791801861,
+        1.002639725485431
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "ppo:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.0854166666666667,
+        "risk_difference_ci": [
+          -0.1754751495628164,
+          0.0006566347469220067
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 4.74049058516211e-11,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.0854166666666667,
+      "risk_difference_ci": [
+        -0.1754751495628164,
+        0.0006566347469220067
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 0.0019429778641481448,
+      "n_cells": 1440,
+      "odds_ratio": 0.3950235810700927,
+      "odds_ratio_ci": [
+        0.04429821192395742,
+        4.453928775135872
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "ppo:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.021527777777777774,
+        "risk_difference_ci": [
+          -0.0748507830805278,
+          0.015833333333333335
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 0.00019429778641481447,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.021527777777777774,
+      "risk_difference_ci": [
+        -0.0748507830805278,
+        0.015833333333333335
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 5.891818053358648e-42,
+      "n_cells": 1440,
+      "odds_ratio": 2.508420795704174,
+      "odds_ratio_ci": [
+        1.7385927229677227,
+        3.703920249363287
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "prediction_planner:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": 0.21458333333333335,
+        "risk_difference_ci": [
+          0.12713057170542633,
+          0.30073738593666116
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 1.8411931416745775e-43,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.21458333333333335,
+      "risk_difference_ci": [
+        0.12713057170542633,
+        0.30073738593666116
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0,
+      "n_cells": 1440,
+      "odds_ratio": 0.964447280558816,
+      "odds_ratio_ci": [
+        0.7496787716003814,
+        1.2346003525744353
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "prediction_planner:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.009027777777777746,
+        "risk_difference_ci": [
+          -0.07151546717171718,
+          0.052386243386243335
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 0.44148306534155635,
+      "rejected_at_family_wise_alpha": false,
+      "risk_difference": -0.009027777777777746,
+      "risk_difference_ci": [
+        -0.07151546717171718,
+        0.052386243386243335
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.2860379428047963e-11,
+      "n_cells": 1440,
+      "odds_ratio": 0.07435183201199914,
+      "odds_ratio_ci": [
+        0.0,
+        0.7255718138925115
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "prediction_planner:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.03333333333333333,
+        "risk_difference_ci": [
+          -0.08652482269503546,
+          -0.0014177009456264815
+        ],
+        "statistically_separable": true,
+        "verdict": "statistically_separable_practically_null"
+      },
+      "raw_p_value": 6.123990203832363e-13,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.03333333333333333,
+      "risk_difference_ci": [
+        -0.08652482269503546,
+        -0.0014177009456264815
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 6.92541922766602e-122,
+      "n_cells": 1440,
+      "odds_ratio": 5.767519764169904,
+      "odds_ratio_ci": [
+        3.2097025153499485,
+        10.188982630220087
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "predictive_mppi:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": 0.41180555555555554,
+        "risk_difference_ci": [
+          0.28059652108148986,
+          0.5176327742837176
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 1.9786912079045772e-123,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.41180555555555554,
+      "risk_difference_ci": [
+        0.28059652108148986,
+        0.5176327742837176
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 3.8286054548757717e-10,
+      "n_cells": 1440,
+      "odds_ratio": 0.6920384951881016,
+      "odds_ratio_ci": [
+        0.4022592710784847,
+        1.184578469110873
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "predictive_mppi:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.09166666666666667,
+        "risk_difference_ci": [
+          -0.2212478559176672,
+          0.041500850340136064
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 2.1270030304865398e-11,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.09166666666666667,
+      "risk_difference_ci": [
+        -0.2212478559176672,
+        0.041500850340136064
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 2.5379478752491822e-24,
+      "n_cells": 1440,
+      "odds_ratio": 4.710407239819005,
+      "odds_ratio_ci": [
+        1.2800044904518817,
+        64.20682757870294
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "predictive_mppi:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": 0.11388888888888889,
+        "risk_difference_ci": [
+          0.018832528180354278,
+          0.21250231481481482
+        ],
+        "statistically_separable": true,
+        "verdict": "statistically_separable_practically_null"
+      },
+      "raw_p_value": 9.064099554461365e-26,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.11388888888888889,
+      "risk_difference_ci": [
+        0.018832528180354278,
+        0.21250231481481482
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 2.3069475251661147e-170,
+      "n_cells": 1440,
+      "odds_ratio": 9.61176470588235,
+      "odds_ratio_ci": [
+        5.44798508167613,
+        17.7832943621411
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "risk_dwa:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": 0.5083333333333333,
+        "risk_difference_ci": [
+          0.3969291754756872,
+          0.6023269656699889
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 6.070914539910828e-172,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.5083333333333333,
+      "risk_difference_ci": [
+        0.3969291754756872,
+        0.6023269656699889
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 0.0008169224884009903,
+      "n_cells": 1440,
+      "odds_ratio": 0.8005526354060624,
+      "odds_ratio_ci": [
+        0.4618384794458589,
+        1.3900477996833573
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "risk_dwa:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.05555555555555558,
+        "risk_difference_ci": [
+          -0.1888945578231292,
+          0.0809722222222221
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 7.426568076372639e-05,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.05555555555555558,
+      "risk_difference_ci": [
+        -0.1888945578231292,
+        0.0809722222222221
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 5.018164157894212e-19,
+      "n_cells": 1440,
+      "odds_ratio": 4.131207204984269,
+      "odds_ratio_ci": [
+        1.1017875259441616,
+        61.87325141483388
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "risk_dwa:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": 0.09791666666666667,
+        "risk_difference_ci": [
+          0.006788903061224515,
+          0.1933369565217391
+        ],
+        "statistically_separable": true,
+        "verdict": "statistically_separable_practically_null"
+      },
+      "raw_p_value": 2.0072656631576846e-20,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.09791666666666667,
+      "risk_difference_ci": [
+        0.006788903061224515,
+        0.1933369565217391
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 4.94550748508017e-125,
+      "n_cells": 1440,
+      "odds_ratio": 5.423323914718726,
+      "odds_ratio_ci": [
+        3.152530893284388,
+        10.022272518976026
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "sacadrl:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": 0.39861111111111114,
+        "risk_difference_ci": [
+          0.2725862884160757,
+          0.5149691952252599
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 1.373752079188936e-126,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.39861111111111114,
+      "risk_difference_ci": [
+        0.2725862884160757,
+        0.5149691952252599
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.4355153318915333e-25,
+      "n_cells": 1440,
+      "odds_ratio": 0.5275590551181103,
+      "odds_ratio_ci": [
+        0.334716161543986,
+        0.8190873879661994
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "sacadrl:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": -0.15694444444444444,
+        "risk_difference_ci": [
+          -0.26122661564625854,
+          -0.04926299045599161
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 4.7850511063051114e-27,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.15694444444444444,
+      "risk_difference_ci": [
+        -0.26122661564625854,
+        -0.04926299045599161
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.9539925233402755e-14,
+      "n_cells": 1440,
+      "odds_ratio": 0.018549206179505,
+      "odds_ratio_ci": [
+        0.0,
+        0.1805484361089857
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "sacadrl:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.035416666666666666,
+        "risk_difference_ci": [
+          -0.08742334905660376,
+          -0.002666666666666667
+        ],
+        "statistically_separable": true,
+        "verdict": "statistically_separable_practically_null"
+      },
+      "raw_p_value": 8.881784197001252e-16,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.035416666666666666,
+      "risk_difference_ci": [
+        -0.08742334905660376,
+        -0.002666666666666667
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 7.277372943349675e-06,
+      "n_cells": 1440,
+      "odds_ratio": 0.6939094221759502,
+      "odds_ratio_ci": [
+        0.3529322046443141,
+        1.2029030476599456
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "scenario_adaptive_hybrid_orca_v1:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.06805555555555554,
+        "risk_difference_ci": [
+          -0.16327282075620947,
+          0.0390122624550589
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 6.064477452791396e-07,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.06805555555555554,
+      "risk_difference_ci": [
+        -0.16327282075620947,
+        0.0390122624550589
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0,
+      "n_cells": 1440,
+      "odds_ratio": 0.9379963381895378,
+      "odds_ratio_ci": [
+        0.7087780451296986,
+        1.2581390659553615
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "scenario_adaptive_hybrid_orca_v1:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.015972222222222276,
+        "risk_difference_ci": [
+          -0.08487266279819466,
+          0.05687450980392142
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 0.17643949314765553,
+      "rejected_at_family_wise_alpha": false,
+      "risk_difference": -0.015972222222222276,
+      "risk_difference_ci": [
+        -0.08487266279819466,
+        0.05687450980392142
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0,
+      "n_cells": 1440,
+      "odds_ratio": 0.8610421836228288,
+      "odds_ratio_ci": [
+        0.2171248763703076,
+        10.006751494605664
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "scenario_adaptive_hybrid_orca_v1:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.004861111111111108,
+        "risk_difference_ci": [
+          -0.0601491901108269,
+          0.03876291989664081
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 0.5340598617346067,
+      "rejected_at_family_wise_alpha": false,
+      "risk_difference": -0.004861111111111108,
+      "risk_difference_ci": [
+        -0.0601491901108269,
+        0.03876291989664081
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.8788516485904146e-06,
+      "n_cells": 1440,
+      "odds_ratio": 0.6768848384424193,
+      "odds_ratio_ci": [
+        0.34644090174470693,
+        1.1855821507376523
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "scenario_adaptive_hybrid_orca_v2_collision_guard:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.07222222222222222,
+        "risk_difference_ci": [
+          -0.16821797711332598,
+          0.03561079723791583
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 1.4452704989157036e-07,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.07222222222222222,
+      "risk_difference_ci": [
+        -0.16821797711332598,
+        0.03561079723791583
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0,
+      "n_cells": 1440,
+      "odds_ratio": 0.9379963381895378,
+      "odds_ratio_ci": [
+        0.7087780451296986,
+        1.2581390659553615
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "scenario_adaptive_hybrid_orca_v2_collision_guard:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.015972222222222276,
+        "risk_difference_ci": [
+          -0.08487266279819466,
+          0.05687450980392142
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 0.17643949314765553,
+      "rejected_at_family_wise_alpha": false,
+      "risk_difference": -0.015972222222222276,
+      "risk_difference_ci": [
+        -0.08487266279819466,
+        0.05687450980392142
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0,
+      "n_cells": 1440,
+      "odds_ratio": 0.9800631334108657,
+      "odds_ratio_ci": [
+        0.2544817002642001,
+        10.914683064529672
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "scenario_adaptive_hybrid_orca_v2_collision_guard:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.000694444444444442,
+        "risk_difference_ci": [
+          -0.05779166666666664,
+          0.043212962962962946
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 1.0,
+      "rejected_at_family_wise_alpha": false,
+      "risk_difference": -0.000694444444444442,
+      "risk_difference_ci": [
+        -0.05779166666666664,
+        0.043212962962962946
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0515341805338986e-33,
+      "n_cells": 1440,
+      "odds_ratio": 2.4669571532316636,
+      "odds_ratio_ci": [
+        1.2724094606366292,
+        5.342385030318407
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "social_force:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": 0.2104166666666667,
+        "risk_difference_ci": [
+          0.053993537414965986,
+          0.38371695680206297
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 3.392045743657737e-35,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.2104166666666667,
+      "risk_difference_ci": [
+        0.053993537414965986,
+        0.38371695680206297
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 6.424377957841495e-11,
+      "n_cells": 1440,
+      "odds_ratio": 0.6632784538296349,
+      "odds_ratio_ci": [
+        0.3459587920142854,
+        1.1181832225436101
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "social_force:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.10208333333333336,
+        "risk_difference_ci": [
+          -0.24325810185185176,
+          0.026860258596191865
+        ],
+        "statistically_separable": false,
+        "verdict": "not_separable"
+      },
+      "raw_p_value": 3.2121889789207477e-12,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.10208333333333336,
+      "risk_difference_ci": [
+        -0.24325810185185176,
+        0.026860258596191865
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 2.1521443421736257e-194,
+      "n_cells": 1440,
+      "odds_ratio": 25.88898242660213,
+      "odds_ratio_ci": [
+        9.516759041580821,
+        276.2946965390573
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "social_force:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": 0.45625000000000004,
+        "risk_difference_ci": [
+          0.30457442067736185,
+          0.5954709096753453
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 5.51831882608622e-196,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.45625000000000004,
+      "risk_difference_ci": [
+        0.30457442067736185,
+        0.5954709096753453
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.4163592537800331e-126,
+      "n_cells": 1440,
+      "odds_ratio": 6.163554682016006,
+      "odds_ratio_ci": [
+        3.496086144232749,
+        11.450667992771837
+      ],
+      "outcome": "collision",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "socnav_sampling:orca:collision",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": 0.4256944444444445,
+        "risk_difference_ci": [
+          0.3014791666666667,
+          0.5421814767573696
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 3.8279979831892784e-128,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": 0.4256944444444445,
+      "risk_difference_ci": [
+        0.3014791666666667,
+        0.5421814767573696
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 6.860252442910223e-22,
+      "n_cells": 1440,
+      "odds_ratio": 0.5678697159442101,
+      "odds_ratio_ci": [
+        0.3504575915773785,
+        0.8910845264908679
+      ],
+      "outcome": "near_miss",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "socnav_sampling:orca:near_miss",
+        "min_risk_difference": 0.02,
+        "practically_separable": true,
+        "risk_difference": -0.13958333333333334,
+        "risk_difference_ci": [
+          -0.2490880503144653,
+          -0.027637494021999075
+        ],
+        "statistically_separable": true,
+        "verdict": "practically_separable"
+      },
+      "raw_p_value": 2.6385586318885474e-23,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.13958333333333334,
+      "risk_difference_ci": [
+        -0.2490880503144653,
+        -0.027637494021999075
+      ]
+    },
+    {
+      "holm_adjusted_p_value": 1.0658141036401503e-14,
+      "n_cells": 1440,
+      "odds_ratio": 0.0,
+      "odds_ratio_ci": [
+        0.0,
+        0.0
+      ],
+      "outcome": "timeout",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "practical_effect": {
+        "comparison": "socnav_sampling:orca:timeout",
+        "min_risk_difference": 0.02,
+        "practically_separable": false,
+        "risk_difference": -0.03611111111111111,
+        "risk_difference_ci": [
+          -0.08820046768707482,
+          -0.0028955314009662
+        ],
+        "statistically_separable": true,
+        "verdict": "statistically_separable_practically_null"
+      },
+      "raw_p_value": 4.440892098500626e-16,
+      "rejected_at_family_wise_alpha": true,
+      "risk_difference": -0.03611111111111111,
+      "risk_difference_ci": [
+        -0.08820046768707482,
+        -0.0028955314009662
+      ]
+    }
+  ],
+  "planner_pairs": [
+    [
+      "goal",
+      "orca"
+    ],
+    [
+      "guarded_ppo",
+      "orca"
+    ],
+    [
+      "hybrid_rule_v3_fast_progress_static_escape",
+      "orca"
+    ],
+    [
+      "hybrid_rule_v3_fast_progress_static_escape_continuous",
+      "orca"
+    ],
+    [
+      "ppo",
+      "orca"
+    ],
+    [
+      "prediction_planner",
+      "orca"
+    ],
+    [
+      "predictive_mppi",
+      "orca"
+    ],
+    [
+      "risk_dwa",
+      "orca"
+    ],
+    [
+      "sacadrl",
+      "orca"
+    ],
+    [
+      "scenario_adaptive_hybrid_orca_v1",
+      "orca"
+    ],
+    [
+      "scenario_adaptive_hybrid_orca_v2_collision_guard",
+      "orca"
+    ],
+    [
+      "social_force",
+      "orca"
+    ],
+    [
+      "socnav_sampling",
+      "orca"
+    ]
+  ],
+  "policy": {
+    "bootstrap_samples": 2000,
+    "bootstrap_seed": 20260718,
+    "confidence": 0.95,
+    "exposure_opportunity": 1.0,
+    "min_risk_difference": 0.02
+  },
+  "protocol_conformance": [
+    {
+      "declared_delivery": "paired risk-difference and odds-risk-ratio table on matched cells",
+      "id": "paired_effects",
+      "status": "delivered_analysis_pending_release_input"
+    },
+    {
+      "declared_delivery": "scenario-family cluster hierarchical-bootstrap interval table",
+      "id": "hierarchical_intervals",
+      "status": "delivered_analysis_pending_release_input"
+    },
+    {
+      "declared_delivery": "seed-level and family-level sensitivity table",
+      "id": "sensitivity_analyses",
+      "status": "delivered_analysis_pending_release_input"
+    },
+    {
+      "declared_delivery": "predeclared planner-pair and family-comparison multiplicity table",
+      "id": "multiplicity_control",
+      "status": "delivered_analysis_pending_release_input"
+    },
+    {
+      "declared_delivery": "practical-effect threshold comparison table",
+      "id": "practical_effect_reporting",
+      "status": "delivered_analysis_pending_release_input"
+    },
+    {
+      "declared_delivery": "censored timeout-aware completion-time summary",
+      "id": "censored_completion_time",
+      "status": "delivered_analysis_pending_release_input"
+    },
+    {
+      "declared_delivery": "near-miss exposure normalization summary by time, distance, and opportunity",
+      "id": "normalized_near_miss_exposure",
+      "status": "delivered_analysis_pending_release_input"
+    },
+    {
+      "declared_delivery": "machine-readable claim gate and protocol conformance table",
+      "id": "claim_gate_and_conformance",
+      "status": "delivered_analysis_pending_release_input"
+    }
+  ],
+  "schema_version": "hierarchical_paired_release_analysis_report.v1",
+  "semantics": {
+    "analysis_executed": true,
+    "benchmark_metrics_changed": false,
+    "claim_promotion": "none"
+  },
+  "sensitivity_analyses": [
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 3.838338132455779,
+        "odds_ratio_ci": [
+          2.3477505880684943,
+          6.691770451486339
+        ],
+        "risk_difference": 0.3194444444444444,
+        "risk_difference_ci": [
+          0.2015305673009162,
+          0.4379376197318008
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 3.838338132455779,
+        "odds_ratio_ci": [
+          3.4434688356025234,
+          4.298498597279925
+        ],
+        "risk_difference": 0.3194444444444444,
+        "risk_difference_ci": [
+          0.2958333333333333,
+          0.3430555555555555
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.922484936907639,
+        "odds_ratio_ci": [
+          0.7022578590049008,
+          1.2867794962812709
+        ],
+        "risk_difference": -0.02013888888888893,
+        "risk_difference_ci": [
+          -0.08768211289092297,
+          0.061915113871635556
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.922484936907639,
+        "odds_ratio_ci": [
+          0.839283720311946,
+          1.0055940765173916
+        ],
+        "risk_difference": -0.02013888888888893,
+        "risk_difference_ci": [
+          -0.043749999999999956,
+          0.001388888888888884
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.0,
+        "odds_ratio_ci": [
+          0.0,
+          0.0
+        ],
+        "risk_difference": -0.03611111111111111,
+        "risk_difference_ci": [
+          -0.08820046768707482,
+          -0.0028955314009662
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "goal",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.0,
+        "odds_ratio_ci": [
+          0.0,
+          0.0
+        ],
+        "risk_difference": -0.03611111111111111,
+        "risk_difference_ci": [
+          -0.04236111111111111,
+          -0.030555555555555555
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 2.1522758203538483,
+        "odds_ratio_ci": [
+          1.1741823456961662,
+          3.5552241375375777
+        ],
+        "risk_difference": 0.17638888888888887,
+        "risk_difference_ci": [
+          0.03553072390572402,
+          0.2972969387755101
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 2.1522758203538483,
+        "odds_ratio_ci": [
+          1.913892851853968,
+          2.4477771005528566
+        ],
+        "risk_difference": 0.17638888888888887,
+        "risk_difference_ci": [
+          0.14999999999999997,
+          0.2048611111111111
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.6465190052682264,
+        "odds_ratio_ci": [
+          0.3501529465261084,
+          1.1909414458235366
+        ],
+        "risk_difference": -0.10833333333333334,
+        "risk_difference_ci": [
+          -0.25410587002096424,
+          0.04307291666666653
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.6465190052682264,
+        "odds_ratio_ci": [
+          0.5748776760006623,
+          0.7213283104127257
+        ],
+        "risk_difference": -0.10833333333333334,
+        "risk_difference_ci": [
+          -0.13749999999999996,
+          -0.08124999999999999
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 11.706216860063016,
+        "odds_ratio_ci": [
+          3.4417110191348432,
+          188.71812504431003
+        ],
+        "risk_difference": 0.26875000000000004,
+        "risk_difference_ci": [
+          0.14392836879432636,
+          0.39829629629629626
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "guarded_ppo",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 11.706216860063016,
+        "odds_ratio_ci": [
+          9.824578790882061,
+          13.869804703818447
+        ],
+        "risk_difference": 0.26875000000000004,
+        "risk_difference_ci": [
+          0.25277777777777777,
+          0.2847222222222222
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.6544631838749485,
+        "odds_ratio_ci": [
+          0.3227476241886725,
+          1.171432873676559
+        ],
+        "risk_difference": -0.07777777777777778,
+        "risk_difference_ci": [
+          -0.18055717054263562,
+          0.03213608305274963
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.6544631838749485,
+        "odds_ratio_ci": [
+          0.5788760559903786,
+          0.7438388245371036
+        ],
+        "risk_difference": -0.07777777777777778,
+        "risk_difference_ci": [
+          -0.10069444444444445,
+          -0.054843750000000066
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.9406074240719908,
+        "odds_ratio_ci": [
+          0.7112802791951228,
+          1.2614857827662482
+        ],
+        "risk_difference": -0.015277777777777835,
+        "risk_difference_ci": [
+          -0.08409389952153111,
+          0.05752843137254886
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.9406074240719908,
+        "odds_ratio_ci": [
+          0.8653931322172563,
+          1.0226677014134962
+        ],
+        "risk_difference": -0.015277777777777835,
+        "risk_difference_ci": [
+          -0.036111111111111094,
+          0.00557291666666666
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.9601549529607084,
+        "odds_ratio_ci": [
+          0.2602710266659942,
+          10.870253279911825
+        ],
+        "risk_difference": -0.001388888888888884,
+        "risk_difference_ci": [
+          -0.05752083333333329,
+          0.042038866930171226
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.9601549529607084,
+        "odds_ratio_ci": [
+          0.575001902231171,
+          1.434623508267587
+        ],
+        "risk_difference": -0.001388888888888884,
+        "risk_difference_ci": [
+          -0.015277777777777776,
+          0.015277777777777779
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.44151233087035796,
+        "odds_ratio_ci": [
+          0.23193644882521586,
+          0.731932068022737
+        ],
+        "risk_difference": -0.13472222222222222,
+        "risk_difference_ci": [
+          -0.2190559246954596,
+          -0.052721147646679574
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.44151233087035796,
+        "odds_ratio_ci": [
+          0.3800589080676886,
+          0.5127166127533354
+        ],
+        "risk_difference": -0.13472222222222222,
+        "risk_difference_ci": [
+          -0.15763888888888888,
+          -0.1111111111111111
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.7613442649565713,
+        "odds_ratio_ci": [
+          0.5672361886358646,
+          1.0198513539861096
+        ],
+        "risk_difference": -0.06805555555555554,
+        "risk_difference_ci": [
+          -0.13910984848484842,
+          0.004891756475704222
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.7613442649565713,
+        "odds_ratio_ci": [
+          0.7059983800359361,
+          0.8194180963319446
+        ],
+        "risk_difference": -0.06805555555555554,
+        "risk_difference_ci": [
+          -0.08680555555555558,
+          -0.0493055555555556
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 2.338600976063212,
+        "odds_ratio_ci": [
+          0.9141346210885837,
+          24.48237132483316
+        ],
+        "risk_difference": 0.04444444444444445,
+        "risk_difference_ci": [
+          -0.006383660665575567,
+          0.08962962962962963
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "hybrid_rule_v3_fast_progress_static_escape_continuous",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 2.338600976063212,
+        "odds_ratio_ci": [
+          1.7301453727045135,
+          3.0813498609605507
+        ],
+        "risk_difference": 0.04444444444444445,
+        "risk_difference_ci": [
+          0.02500000000000001,
+          0.06736111111111111
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.9329009170208006,
+        "odds_ratio_ci": [
+          0.423674075590409,
+          1.6294905993959377
+        ],
+        "risk_difference": -0.013888888888888895,
+        "risk_difference_ci": [
+          -0.14552845528455283,
+          0.10408761652809272
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.9329009170208006,
+        "odds_ratio_ci": [
+          0.825824380653718,
+          1.0572305058338598
+        ],
+        "risk_difference": -0.013888888888888895,
+        "risk_difference_ci": [
+          -0.038211805555555554,
+          0.011111111111111073
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.7098115544545696,
+        "odds_ratio_ci": [
+          0.4863658791801861,
+          1.002639725485431
+        ],
+        "risk_difference": -0.0854166666666667,
+        "risk_difference_ci": [
+          -0.1754751495628164,
+          0.0006566347469220067
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.7098115544545696,
+        "odds_ratio_ci": [
+          0.656394043214941,
+          0.7628674692470097
+        ],
+        "risk_difference": -0.0854166666666667,
+        "risk_difference_ci": [
+          -0.10486111111111107,
+          -0.06736111111111115
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.3950235810700927,
+        "odds_ratio_ci": [
+          0.04429821192395742,
+          4.453928775135872
+        ],
+        "risk_difference": -0.021527777777777774,
+        "risk_difference_ci": [
+          -0.0748507830805278,
+          0.015833333333333335
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "ppo",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.3950235810700927,
+        "odds_ratio_ci": [
+          0.2507984154789439,
+          0.559761537499479
+        ],
+        "risk_difference": -0.021527777777777774,
+        "risk_difference_ci": [
+          -0.028472222222222225,
+          -0.014583333333333334
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 2.508420795704174,
+        "odds_ratio_ci": [
+          1.7385927229677227,
+          3.703920249363287
+        ],
+        "risk_difference": 0.21458333333333335,
+        "risk_difference_ci": [
+          0.12713057170542633,
+          0.30073738593666116
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 2.508420795704174,
+        "odds_ratio_ci": [
+          2.1767978505305554,
+          2.8785894318257412
+        ],
+        "risk_difference": 0.21458333333333335,
+        "risk_difference_ci": [
+          0.18331597222222226,
+          0.24513888888888885
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.964447280558816,
+        "odds_ratio_ci": [
+          0.7496787716003814,
+          1.2346003525744353
+        ],
+        "risk_difference": -0.009027777777777746,
+        "risk_difference_ci": [
+          -0.07151546717171718,
+          0.052386243386243335
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.964447280558816,
+        "odds_ratio_ci": [
+          0.8772631743634232,
+          1.0491049990391568
+        ],
+        "risk_difference": -0.009027777777777746,
+        "risk_difference_ci": [
+          -0.03265625000000002,
+          0.011822916666666638
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.07435183201199914,
+        "odds_ratio_ci": [
+          0.0,
+          0.7255718138925115
+        ],
+        "risk_difference": -0.03333333333333333,
+        "risk_difference_ci": [
+          -0.08652482269503546,
+          -0.0014177009456264815
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "prediction_planner",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.07435183201199914,
+        "odds_ratio_ci": [
+          0.01782803714700867,
+          0.1521524811041735
+        ],
+        "risk_difference": -0.03333333333333333,
+        "risk_difference_ci": [
+          -0.03958333333333333,
+          -0.027777777777777776
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 5.767519764169904,
+        "odds_ratio_ci": [
+          3.2097025153499485,
+          10.188982630220087
+        ],
+        "risk_difference": 0.41180555555555554,
+        "risk_difference_ci": [
+          0.28059652108148986,
+          0.5176327742837176
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 5.767519764169904,
+        "odds_ratio_ci": [
+          4.999678065966107,
+          6.641444393886215
+        ],
+        "risk_difference": 0.41180555555555554,
+        "risk_difference_ci": [
+          0.38192708333333336,
+          0.4402951388888888
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.6920384951881016,
+        "odds_ratio_ci": [
+          0.4022592710784847,
+          1.184578469110873
+        ],
+        "risk_difference": -0.09166666666666667,
+        "risk_difference_ci": [
+          -0.2212478559176672,
+          0.041500850340136064
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.6920384951881016,
+        "odds_ratio_ci": [
+          0.6220671996727437,
+          0.7591714521011703
+        ],
+        "risk_difference": -0.09166666666666667,
+        "risk_difference_ci": [
+          -0.11805555555555552,
+          -0.06873263888888896
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 4.710407239819005,
+        "odds_ratio_ci": [
+          1.2800044904518817,
+          64.20682757870294
+        ],
+        "risk_difference": 0.11388888888888889,
+        "risk_difference_ci": [
+          0.018832528180354278,
+          0.21250231481481482
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "predictive_mppi",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 4.710407239819005,
+        "odds_ratio_ci": [
+          3.689275175149019,
+          5.906182682285548
+        ],
+        "risk_difference": 0.11388888888888889,
+        "risk_difference_ci": [
+          0.09375,
+          0.1340451388888888
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 9.61176470588235,
+        "odds_ratio_ci": [
+          5.44798508167613,
+          17.7832943621411
+        ],
+        "risk_difference": 0.5083333333333333,
+        "risk_difference_ci": [
+          0.3969291754756872,
+          0.6023269656699889
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 9.61176470588235,
+        "odds_ratio_ci": [
+          8.059482760583062,
+          11.383076764545969
+        ],
+        "risk_difference": 0.5083333333333333,
+        "risk_difference_ci": [
+          0.4756944444444444,
+          0.5388888888888889
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.8005526354060624,
+        "odds_ratio_ci": [
+          0.4618384794458589,
+          1.3900477996833573
+        ],
+        "risk_difference": -0.05555555555555558,
+        "risk_difference_ci": [
+          -0.1888945578231292,
+          0.0809722222222221
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.8005526354060624,
+        "odds_ratio_ci": [
+          0.7218211349064084,
+          0.8800052660724645
+        ],
+        "risk_difference": -0.05555555555555558,
+        "risk_difference_ci": [
+          -0.08126736111111112,
+          -0.031944444444444386
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 4.131207204984269,
+        "odds_ratio_ci": [
+          1.1017875259441616,
+          61.87325141483388
+        ],
+        "risk_difference": 0.09791666666666667,
+        "risk_difference_ci": [
+          0.006788903061224515,
+          0.1933369565217391
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "risk_dwa",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 4.131207204984269,
+        "odds_ratio_ci": [
+          3.3578556509631006,
+          5.087591775581799
+        ],
+        "risk_difference": 0.09791666666666667,
+        "risk_difference_ci": [
+          0.08263888888888889,
+          0.11319444444444444
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 5.423323914718726,
+        "odds_ratio_ci": [
+          3.152530893284388,
+          10.022272518976026
+        ],
+        "risk_difference": 0.39861111111111114,
+        "risk_difference_ci": [
+          0.2725862884160757,
+          0.5149691952252599
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 5.423323914718726,
+        "odds_ratio_ci": [
+          4.871881828030707,
+          6.038938505590401
+        ],
+        "risk_difference": 0.39861111111111114,
+        "risk_difference_ci": [
+          0.3763888888888889,
+          0.42015624999999995
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.5275590551181103,
+        "odds_ratio_ci": [
+          0.334716161543986,
+          0.8190873879661994
+        ],
+        "risk_difference": -0.15694444444444444,
+        "risk_difference_ci": [
+          -0.26122661564625854,
+          -0.04926299045599161
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.5275590551181103,
+        "odds_ratio_ci": [
+          0.46663219755125346,
+          0.5921530364282465
+        ],
+        "risk_difference": -0.15694444444444444,
+        "risk_difference_ci": [
+          -0.18612847222222226,
+          -0.12916666666666665
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.018549206179505,
+        "odds_ratio_ci": [
+          0.0,
+          0.1805484361089857
+        ],
+        "risk_difference": -0.035416666666666666,
+        "risk_difference_ci": [
+          -0.08742334905660376,
+          -0.002666666666666667
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "sacadrl",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.018549206179505,
+        "odds_ratio_ci": [
+          0.0,
+          0.0580375782881002
+        ],
+        "risk_difference": -0.035416666666666666,
+        "risk_difference_ci": [
+          -0.041666666666666664,
+          -0.029861111111111113
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.6939094221759502,
+        "odds_ratio_ci": [
+          0.3529322046443141,
+          1.2029030476599456
+        ],
+        "risk_difference": -0.06805555555555554,
+        "risk_difference_ci": [
+          -0.16327282075620947,
+          0.0390122624550589
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.6939094221759502,
+        "odds_ratio_ci": [
+          0.6099243135017508,
+          0.7855173871545024
+        ],
+        "risk_difference": -0.06805555555555554,
+        "risk_difference_ci": [
+          -0.09305555555555553,
+          -0.04444444444444448
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.9379963381895378,
+        "odds_ratio_ci": [
+          0.7087780451296986,
+          1.2581390659553615
+        ],
+        "risk_difference": -0.015972222222222276,
+        "risk_difference_ci": [
+          -0.08487266279819466,
+          0.05687450980392142
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.9379963381895378,
+        "odds_ratio_ci": [
+          0.8650933484644072,
+          1.0196562152131237
+        ],
+        "risk_difference": -0.015972222222222276,
+        "risk_difference_ci": [
+          -0.036111111111111094,
+          0.004861111111111094
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.8610421836228288,
+        "odds_ratio_ci": [
+          0.2171248763703076,
+          10.006751494605664
+        ],
+        "risk_difference": -0.004861111111111108,
+        "risk_difference_ci": [
+          -0.0601491901108269,
+          0.03876291989664081
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v1",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.8610421836228288,
+        "odds_ratio_ci": [
+          0.49005784344672154,
+          1.325358851674641
+        ],
+        "risk_difference": -0.004861111111111108,
+        "risk_difference_ci": [
+          -0.018055555555555557,
+          0.011111111111111113
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.6768848384424193,
+        "odds_ratio_ci": [
+          0.34644090174470693,
+          1.1855821507376523
+        ],
+        "risk_difference": -0.07222222222222222,
+        "risk_difference_ci": [
+          -0.16821797711332598,
+          0.03561079723791583
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.6768848384424193,
+        "odds_ratio_ci": [
+          0.5922396637374107,
+          0.7669388968560403
+        ],
+        "risk_difference": -0.07222222222222222,
+        "risk_difference_ci": [
+          -0.09723958333333332,
+          -0.04861111111111113
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.9379963381895378,
+        "odds_ratio_ci": [
+          0.7087780451296986,
+          1.2581390659553615
+        ],
+        "risk_difference": -0.015972222222222276,
+        "risk_difference_ci": [
+          -0.08487266279819466,
+          0.05687450980392142
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.9379963381895378,
+        "odds_ratio_ci": [
+          0.8650933484644072,
+          1.0196562152131237
+        ],
+        "risk_difference": -0.015972222222222276,
+        "risk_difference_ci": [
+          -0.036111111111111094,
+          0.004861111111111094
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.9800631334108657,
+        "odds_ratio_ci": [
+          0.2544817002642001,
+          10.914683064529672
+        ],
+        "risk_difference": -0.000694444444444442,
+        "risk_difference_ci": [
+          -0.05779166666666664,
+          0.043212962962962946
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "scenario_adaptive_hybrid_orca_v2_collision_guard",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.9800631334108657,
+        "odds_ratio_ci": [
+          0.6156116760109822,
+          1.4418672174050722
+        ],
+        "risk_difference": -0.000694444444444442,
+        "risk_difference_ci": [
+          -0.013888888888888888,
+          0.015277777777777772
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 2.4669571532316636,
+        "odds_ratio_ci": [
+          1.2724094606366292,
+          5.342385030318407
+        ],
+        "risk_difference": 0.2104166666666667,
+        "risk_difference_ci": [
+          0.053993537414965986,
+          0.38371695680206297
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 2.4669571532316636,
+        "odds_ratio_ci": [
+          2.2229772102114946,
+          2.7258226878800667
+        ],
+        "risk_difference": 0.2104166666666667,
+        "risk_difference_ci": [
+          0.1875,
+          0.23194444444444445
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.6632784538296349,
+        "odds_ratio_ci": [
+          0.3459587920142854,
+          1.1181832225436101
+        ],
+        "risk_difference": -0.10208333333333336,
+        "risk_difference_ci": [
+          -0.24325810185185176,
+          0.026860258596191865
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.6632784538296349,
+        "odds_ratio_ci": [
+          0.6079863152506647,
+          0.7290720115315584
+        ],
+        "risk_difference": -0.10208333333333336,
+        "risk_difference_ci": [
+          -0.12361111111111112,
+          -0.07847222222222222
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 25.88898242660213,
+        "odds_ratio_ci": [
+          9.516759041580821,
+          276.2946965390573
+        ],
+        "risk_difference": 0.45625000000000004,
+        "risk_difference_ci": [
+          0.30457442067736185,
+          0.5954709096753453
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "social_force",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 25.88898242660213,
+        "odds_ratio_ci": [
+          21.856610657003106,
+          30.914755195661343
+        ],
+        "risk_difference": 0.45625000000000004,
+        "risk_difference_ci": [
+          0.44097222222222227,
+          0.4701562499999999
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 6.163554682016006,
+        "odds_ratio_ci": [
+          3.496086144232749,
+          11.450667992771837
+        ],
+        "risk_difference": 0.4256944444444445,
+        "risk_difference_ci": [
+          0.3014791666666667,
+          0.5421814767573696
+        ]
+      },
+      "outcome": "collision",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 6.163554682016006,
+        "odds_ratio_ci": [
+          5.535050804925285,
+          6.950565007780015
+        ],
+        "risk_difference": 0.4256944444444445,
+        "risk_difference_ci": [
+          0.4027777777777778,
+          0.44999999999999996
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.5678697159442101,
+        "odds_ratio_ci": [
+          0.3504575915773785,
+          0.8910845264908679
+        ],
+        "risk_difference": -0.13958333333333334,
+        "risk_difference_ci": [
+          -0.2490880503144653,
+          -0.027637494021999075
+        ]
+      },
+      "outcome": "near_miss",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.5678697159442101,
+        "odds_ratio_ci": [
+          0.5246537570393826,
+          0.6117390362967939
+        ],
+        "risk_difference": -0.13958333333333334,
+        "risk_difference_ci": [
+          -0.15833333333333333,
+          -0.12152777777777773
+        ]
+      }
+    },
+    {
+      "family_level": {
+        "n_clusters": 35,
+        "odds_ratio": 0.0,
+        "odds_ratio_ci": [
+          0.0,
+          0.0
+        ],
+        "risk_difference": -0.03611111111111111,
+        "risk_difference_ci": [
+          -0.08820046768707482,
+          -0.0028955314009662
+        ]
+      },
+      "outcome": "timeout",
+      "planner_pair": [
+        "socnav_sampling",
+        "orca"
+      ],
+      "seed_level": {
+        "n_clusters": 30,
+        "odds_ratio": 0.0,
+        "odds_ratio_ci": [
+          0.0,
+          0.0
+        ],
+        "risk_difference": -0.03611111111111111,
+        "risk_difference_ci": [
+          -0.04236111111111111,
+          -0.030555555555555555
+        ]
+      }
+    }
+  ]
+}

@@ -275,7 +275,9 @@ def _step_verify_checksums(
     return result
 
 
-def _step_run_subset(clone_dir: Path, manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]:
+def _step_run_subset(  # noqa: C901, PLR0912, PLR0915
+    clone_dir: Path, manifest: dict[str, Any], output_dir: Path
+) -> dict[str, Any]:
     """Run the pre-registered benchmark subset in run mode."""
     result: dict[str, Any] = {"step": "run_subset"}
     campaign = manifest.get("campaign", {})
@@ -286,9 +288,13 @@ def _step_run_subset(clone_dir: Path, manifest: dict[str, Any], output_dir: Path
     result["seed_policy"] = seed_policy
     result["campaign_id"] = campaign.get("campaign_id")
 
-    smoke_config = Path(
-        "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
-    )
+    contract = manifest.get("subset_replay_contract")
+    smoke_manifest = contract.get("smoke_manifest") if isinstance(contract, dict) else None
+    if not isinstance(smoke_manifest, str) or not smoke_manifest:
+        result["status"] = "fail"
+        result["error"] = "Subset replay contract has no smoke_manifest"
+        return result
+    smoke_config = Path(smoke_manifest)
     if not (clone_dir / smoke_config).exists():
         result["status"] = "fail"
         result["error"] = f"Smoke manifest not found: {smoke_config}"
@@ -296,6 +302,7 @@ def _step_run_subset(clone_dir: Path, manifest: dict[str, Any], output_dir: Path
 
     subset_run_dir = output_dir / "subset_run"
     subset_run_dir.mkdir(parents=True, exist_ok=True)
+    existing_campaign_roots = {path.resolve() for path in subset_run_dir.iterdir() if path.is_dir()}
 
     cmd = [
         "uv",
@@ -316,38 +323,111 @@ def _step_run_subset(clone_dir: Path, manifest: dict[str, Any], output_dir: Path
             cmd,
             cwd=clone_dir,
             text=True,
+            stderr=subprocess.PIPE,
             timeout=600,
+            env={**os.environ, "PYGAME_HIDE_SUPPORT_PROMPT": "1"},
         )
         elapsed = time.monotonic() - start
         result["wall_time_sec"] = round(elapsed, 2)
         try:
-            run_payload = json.loads(proc_out)
-            result["run_payload"] = run_payload
-            result["campaign_root"] = run_payload.get("campaign_root")
-            if run_payload.get("mode") != "run":
-                result["status"] = "fail"
-                result["error"] = (
-                    f"Subset replay executed in preflight mode instead of run mode "
-                    f"(mode={run_payload.get('mode')})"
-                )
-                return result
-            if run_payload.get("campaign_execution_status") == "failed":
-                result["status"] = "fail"
-                result["error"] = (
-                    f"Subset replay execution failed: {run_payload.get('status_reason')}"
-                )
-                return result
-        except json.JSONDecodeError:
-            pass
+            run_payload = _parse_child_json_stdout(proc_out)
+        except ValueError as exc:
+            result["status"] = "fail"
+            result["error"] = f"Could not parse subset run stdout: {exc}"
+            return result
+
+        result["run_payload"] = run_payload
+        if run_payload.get("mode") != "run":
+            result["status"] = "fail"
+            result["error"] = (
+                f"Subset replay executed in preflight mode instead of run mode "
+                f"(mode={run_payload.get('mode')})"
+            )
+            return result
+        campaign_execution_status = run_payload.get("campaign_execution_status")
+        if campaign_execution_status not in (None, "completed"):
+            result["status"] = "fail"
+            result["error"] = (
+                "Subset replay did not report completed campaign execution: "
+                f"{campaign_execution_status} "
+                f"({run_payload.get('status_reason')})"
+            )
+            return result
+        if run_payload.get("status") != "ok":
+            result["status"] = "fail"
+            result["error"] = f"Subset replay did not report status=ok: {run_payload.get('status')}"
+            return result
+        if run_payload.get("benchmark_success") is not True:
+            result["status"] = "fail"
+            result["error"] = "Subset replay did not report benchmark_success=true"
+            return result
+        release_success = run_payload.get("release_benchmark_success")
+        if release_success not in (None, True):
+            result["status"] = "fail"
+            result["error"] = "Subset replay did not report release_benchmark_success=true"
+            return result
+
+        campaign_root_value = run_payload.get("campaign_root")
+        if not isinstance(campaign_root_value, str) or not campaign_root_value:
+            result["status"] = "fail"
+            result["error"] = "Subset replay payload has no campaign_root"
+            return result
+        campaign_root = Path(campaign_root_value)
+        if not campaign_root.is_absolute():
+            campaign_root = clone_dir / campaign_root
+        campaign_root = campaign_root.resolve()
+        subset_run_root = subset_run_dir.resolve()
+        if not campaign_root.is_relative_to(subset_run_root):
+            result["status"] = "fail"
+            result["error"] = f"Subset replay campaign_root escapes output root: {campaign_root}"
+            return result
+        if not campaign_root.is_dir():
+            result["status"] = "fail"
+            result["error"] = f"Subset replay campaign_root does not exist: {campaign_root}"
+            return result
+        if campaign_root in existing_campaign_roots:
+            result["status"] = "fail"
+            result["error"] = f"Subset replay reused a pre-existing campaign_root: {campaign_root}"
+            return result
+        result["campaign_root"] = str(campaign_root)
 
         result["status"] = "pass"
     except subprocess.CalledProcessError as exc:
         result["status"] = "fail"
         result["error"] = f"Subset run command failed: {exc}"
+        if exc.stderr:
+            result["stderr_tail"] = exc.stderr[-4000:]
     except subprocess.TimeoutExpired:
         result["status"] = "fail"
         result["error"] = "Subset run timed out after 600s"
     return result
+
+
+def _parse_child_json_stdout(stdout: str) -> dict[str, Any]:
+    """Parse one JSON object, allowing only non-JSON launcher noise before it."""
+    stripped = stdout.strip()
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        candidates: list[dict[str, Any]] = []
+        for index, character in enumerate(stdout):
+            if character != "{":
+                continue
+            try:
+                candidate, end = decoder.raw_decode(stdout, index)
+            except json.JSONDecodeError:
+                continue
+            if not stdout[end:].strip() and isinstance(candidate, dict):
+                candidates.append(candidate)
+        if len(candidates) != 1:
+            raise ValueError(
+                f"expected one terminal JSON object, found {len(candidates)}"
+            ) from None
+        payload = candidates[0]
+    if not isinstance(payload, dict):
+        raise ValueError("expected a JSON object")
+    return payload
 
 
 def _step_compare_subset(
@@ -366,17 +446,24 @@ def _step_compare_subset(
         return result
 
     campaign_root_str = run_subset_result.get("campaign_root")
-    if campaign_root_str and Path(campaign_root_str).is_dir():
-        campaign_root = Path(campaign_root_str)
-    else:
-        subset_run_dir = output_dir / "subset_run"
-        candidates = [d for d in subset_run_dir.glob("*") if d.is_dir()]
-        if candidates:
-            campaign_root = candidates[0]
-        else:
-            campaign_root = subset_run_dir
+    if not isinstance(campaign_root_str, str) or not campaign_root_str:
+        result["status"] = "fail"
+        result["error"] = "Cannot compare subset: run_subset has no explicit campaign_root"
+        return result
+    campaign_root = Path(campaign_root_str)
+    if not campaign_root.is_absolute():
+        campaign_root = clone_dir / campaign_root
+    campaign_root = campaign_root.resolve()
+    subset_run_root = (output_dir / "subset_run").resolve()
+    if not campaign_root.is_relative_to(subset_run_root) or not campaign_root.is_dir():
+        result["status"] = "fail"
+        result["error"] = (
+            f"Cannot compare subset: campaign_root is missing or outside output root: "
+            f"{campaign_root}"
+        )
+        return result
 
-    extracted = extract_subset_run_metrics(campaign_root)
+    extracted = extract_subset_run_metrics(campaign_root, manifest)
     if extracted.get("status") != "pass":
         result["status"] = "fail"
         result["error"] = extracted.get("error", "Failed to extract replay metrics")

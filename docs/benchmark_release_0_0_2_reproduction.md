@@ -70,8 +70,19 @@ The checksum command establishes that the published archive and its embedded art
 tracked release manifest. The full cold-start reproduction report (`cold_start_reproduction_report.py`)
 additionally executes the frozen benchmark subset (`francis2023_blind_corner`, seed 111, all 7 planners)
 in `run` mode and compares the resulting numeric outcomes against the published release contract using
-tracked tolerances. Preflight mode alone is insufficient and cannot produce a `run_subset=pass` verdict.
-Missing manifests, rows, planners, fallback/degraded execution, or tolerance breaches fail closed.
+the already-published reproducibility bounds: near misses use the documented absolute `0.31` bound,
+and SNQI uses the documented maximum near-miss propagation weight `0.3082583`. Scenario, seed,
+outcome status, execution mode, algorithm-metadata status, source/config hashes, success,
+collisions, and normalized time-to-goal must match exactly. Preflight mode alone is insufficient
+and cannot produce a `run_subset=pass` verdict.
+
+The runner binds comparison to the explicit, newly created `campaign_root` returned by a parseable
+`run` payload. It never selects an arbitrary directory from the output tree. Missing or duplicate
+rows, missing metrics, wrong identity/provenance, fallback/degraded execution, malformed runner
+output, or tolerance breaches fail closed. The older report under
+`docs/context/evidence/issue_5366_cold_start_reproduction_2026-07-12/` remains immutable historical
+preflight evidence; changing the current manifest does not rewrite its timestamp, steps, commit, or
+recorded manifest hash.
 
 ## Optional parity check
 

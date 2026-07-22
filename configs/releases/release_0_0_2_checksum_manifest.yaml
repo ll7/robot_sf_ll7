@@ -85,6 +85,9 @@ subset_replay_contract:
   smoke_manifest: configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml
   scenario_id: francis2023_blind_corner
   seed: 111
+  # Full commit resolved by cloning the immutable 0.0.2 tag. Replay rows must
+  # carry this commit rather than merely a non-empty provenance value.
+  replay_source_commit: cbeaca6109654b4053c19542a0a17ed656a387a6
   planners:
     - goal
     - orca
@@ -97,6 +100,8 @@ subset_replay_contract:
     goal:
       status: failure
       execution_mode: native
+      algorithm_metadata_status: ok
+      config_hash: 9661b55549b7604a
       metrics:
         success: false
         collisions: 0
@@ -106,6 +111,8 @@ subset_replay_contract:
     orca:
       status: failure
       execution_mode: adapter
+      algorithm_metadata_status: ok
+      config_hash: 84414b23f348b7c8
       metrics:
         success: false
         collisions: 0
@@ -115,6 +122,8 @@ subset_replay_contract:
     ppo:
       status: failure
       execution_mode: native
+      algorithm_metadata_status: ok
+      config_hash: 6f100a743555ba70
       metrics:
         success: false
         collisions: 0
@@ -124,6 +133,8 @@ subset_replay_contract:
     prediction_planner:
       status: collision
       execution_mode: adapter
+      algorithm_metadata_status: ok
+      config_hash: 0b833337bbbdbeb8
       metrics:
         success: false
         collisions: 0
@@ -133,6 +144,8 @@ subset_replay_contract:
     sacadrl:
       status: failure
       execution_mode: adapter
+      algorithm_metadata_status: ok
+      config_hash: 85a3c441bf37b77f
       metrics:
         success: false
         collisions: 0
@@ -142,6 +155,8 @@ subset_replay_contract:
     social_force:
       status: failure
       execution_mode: adapter
+      algorithm_metadata_status: ok
+      config_hash: 4a6c3c78b71c0fcf
       metrics:
         success: false
         collisions: 0
@@ -151,6 +166,8 @@ subset_replay_contract:
     socnav_sampling:
       status: failure
       execution_mode: adapter
+      algorithm_metadata_status: ok
+      config_hash: c1df7dee828189d6
       metrics:
         success: false
         collisions: 0
@@ -158,7 +175,8 @@ subset_replay_contract:
         time_to_goal_norm: 1.0
         snqi: -0.09491099136070058
   tolerances:
-    default_abs_snqi: 0.35
-    near_misses: 0.31
-    time_to_goal_norm: 0.05
-    collisions: 1
+    # Reuse the already-published reproducibility bounds. Success, collision,
+    # status, execution mode, and time-to-goal remain exact for this row.
+    source: docs/benchmark_release_reproducibility.md
+    near_misses_abs: 0.31
+    snqi_abs: 0.3082583

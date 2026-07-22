@@ -300,9 +300,11 @@ def _step_run_subset(  # noqa: C901, PLR0912, PLR0915
         result["error"] = f"Smoke manifest not found: {smoke_config}"
         return result
 
-    subset_run_dir = output_dir / "subset_run"
+    # The benchmark child changes cwd to the release clone. Resolve here so a
+    # relative CLI default still names the tooling process' output tree.
+    subset_run_dir = (output_dir / "subset_run").resolve()
     subset_run_dir.mkdir(parents=True, exist_ok=True)
-    existing_campaign_roots = {path.resolve() for path in subset_run_dir.iterdir() if path.is_dir()}
+    existing_campaign_roots = {path.resolve() for path in subset_run_dir.iterdir()}
 
     cmd = [
         "uv",
@@ -377,9 +379,12 @@ def _step_run_subset(  # noqa: C901, PLR0912, PLR0915
             campaign_root = clone_dir / campaign_root
         campaign_root = campaign_root.resolve()
         subset_run_root = subset_run_dir.resolve()
-        if not campaign_root.is_relative_to(subset_run_root):
+        if campaign_root.parent != subset_run_root:
             result["status"] = "fail"
-            result["error"] = f"Subset replay campaign_root escapes output root: {campaign_root}"
+            result["error"] = (
+                "Subset replay campaign_root must be a new direct child of "
+                f"{subset_run_root}: {campaign_root}"
+            )
             return result
         if not campaign_root.is_dir():
             result["status"] = "fail"
@@ -455,10 +460,10 @@ def _step_compare_subset(
         campaign_root = clone_dir / campaign_root
     campaign_root = campaign_root.resolve()
     subset_run_root = (output_dir / "subset_run").resolve()
-    if not campaign_root.is_relative_to(subset_run_root) or not campaign_root.is_dir():
+    if campaign_root.parent != subset_run_root or not campaign_root.is_dir():
         result["status"] = "fail"
         result["error"] = (
-            f"Cannot compare subset: campaign_root is missing or outside output root: "
+            f"Cannot compare subset: campaign_root is missing or not a direct output child: "
             f"{campaign_root}"
         )
         return result
@@ -492,6 +497,7 @@ def generate_reproduction_report(
             makes the flow resilient to a previously downloaded artifact in the
             output directory and removes a redundant network call.
     """
+    output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     start_time = time.monotonic()
 
@@ -515,7 +521,8 @@ def generate_reproduction_report(
         "config_path": str(manifest_path),
         "config_sha256": _sha256_file(manifest_path),
         "config_commit": _git_commit_for_path(manifest_path),
-        "lockfile_sha256": (
+        "lockfile_sha256": "unknown",
+        "tooling_lockfile_sha256": (
             _sha256_file(REPO_ROOT / "uv.lock") if (REPO_ROOT / "uv.lock").is_file() else "unknown"
         ),
         "environment": env,
@@ -531,7 +538,7 @@ def generate_reproduction_report(
     }
 
     if local_repo:
-        clone_dir = local_repo
+        clone_dir = local_repo.resolve()
         report["steps"]["clone"] = {
             "step": "clone",
             "status": "skip",
@@ -552,7 +559,12 @@ def generate_reproduction_report(
             report["overall_verdict"] = "fail"
             report["total_wall_time_sec"] = round(time.monotonic() - start_time, 2)
             return report
-        clone_dir = Path(clone_step["clone_dir"])
+        clone_dir = Path(clone_step["clone_dir"]).resolve()
+
+    release_lockfile = clone_dir / "uv.lock"
+    report["lockfile_sha256"] = (
+        _sha256_file(release_lockfile) if release_lockfile.is_file() else "unknown"
+    )
 
     report["steps"]["verify_checksums"] = _step_verify_checksums(
         clone_dir,

@@ -76,10 +76,15 @@ outcome status, execution mode, algorithm-metadata status, source/config hashes,
 collisions, and normalized time-to-goal must match exactly. Preflight mode alone is insufficient
 and cannot produce a `run_subset=pass` verdict.
 
-The runner binds comparison to the explicit, newly created `campaign_root` returned by a parseable
-`run` payload. It never selects an arbitrary directory from the output tree. Missing or duplicate
-rows, missing metrics, wrong identity/provenance, fallback/degraded execution, malformed runner
-output, or tolerance breaches fail closed. The older report under
+The runner resolves its output root to an absolute path before launching the release-tag child and
+binds comparison to the explicit `campaign_root` returned by a parseable `run` payload. That root
+must be a newly created direct child of `<output-root>/subset_run`; the output root itself, nested
+descendants, and paths that existed before launch are rejected. It never selects an arbitrary or
+stale directory from the output tree. The report's `lockfile_sha256` identifies the `uv.lock` in
+the executed release clone; `tooling_lockfile_sha256` separately identifies the checkout that
+provided this report runner. Missing or duplicate rows, missing metrics, wrong identity/provenance,
+fallback/degraded execution, malformed runner output, or tolerance breaches fail closed. The older
+report under
 `docs/context/evidence/issue_5366_cold_start_reproduction_2026-07-12/` remains immutable historical
 preflight evidence; changing the current manifest does not rewrite its timestamp, steps, commit, or
 recorded manifest hash.

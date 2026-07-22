@@ -1,0 +1,69 @@
+schema_version: adversarial_qd_campaign.v1
+issue: 5308
+status: infrastructure_ready
+claim_scope: not_paper_facing_benchmark_evidence
+description: >
+  Bounded doorway-family MAP-Elites QD campaign using CMA-ME emitter and
+  warm-start seeds from the knife-edge extractor. Populates a 2D behavior grid
+  over (min_pedestrian_distance, time_to_collision) and writes the archive
+  artifact and equal-budget comparison report. This is capability plumbing, not
+  camera-ready campaign evidence.
+scenario_template: configs/scenarios/archetypes/classic_doorway.yaml
+scenario_name: classic_doorway_medium
+search_space:
+  variables:
+    start_x:
+      min: 0.0
+      max: 6.0
+    start_y:
+      min: -1.0
+      max: 1.0
+    goal_x:
+      min: 0.0
+      max: 6.0
+    goal_y:
+      min: -1.0
+      max: 1.0
+    spawn_time_s:
+      min: 0.0
+      max: 0.0
+    pedestrian_speed_mps:
+      min: 0.8
+      max: 1.4
+    pedestrian_delay_s:
+      min: 0.0
+      max: 0.0
+    scenario_seed:
+      min: 100
+      max: 9999
+  constraints:
+    min_start_goal_distance_m: 1.0
+behavior_grid:
+  x_min: 0.0
+  x_max: 3.0
+  y_min: 0.0
+  y_max: 5.0
+  bins: 8
+objective: worst_case_snqi
+policy: social_force
+budget: 64
+seed: 1101
+require_certification: false
+emitters:
+  - random
+  - coordinate
+  - cma_me
+comparison:
+  single_objective_sampler: random
+warm_start:
+  extractor: knife_edge
+  margin_threshold: 0.5
+  source: ""
+output_artifacts:
+  root: output/adversarial/issue_5308_qd_campaign
+  archive_json: output/adversarial/issue_5308_qd_campaign/archive.json
+  comparison_json: output/adversarial/issue_5308_qd_campaign/comparison.json
+example_command: >
+  uv run python scripts/adversarial/run_qd_campaign.py
+  --config configs/adversarial/issue_5308_qd_campaign.yaml
+  --output-dir output/adversarial/issue_5308_qd_campaign

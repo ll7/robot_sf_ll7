@@ -3853,6 +3853,66 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/report.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/confirmation.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/comparison_table.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/replication_summary.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/SHA256SUMS
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/candidate_replay_SHA256SUMS.txt
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/provenance.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/report.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/confirmation.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/comparison_table.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/replication_summary.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/SHA256SUMS.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/candidate_replay_SHA256SUMS.txt.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/provenance.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5034_parent_4977_classification_2026-07-15
   status: evidence
   freshness: evidence

@@ -1,0 +1,192 @@
+# Frozen 0.0.5 Release Candidate Manifest
+# Issue: #6153
+# Parent Issue: #6149
+# Release Target: 0.0.5
+# Date: 2026-07-23
+
+schema_version: release_0_0_5_candidate_manifest.v1
+issue: 6153
+parent_issue: 6149
+target_release: "0.0.5"
+date: "2026-07-23"
+
+summary:
+  total_candidates: 6
+  included_candidates: 4
+  excluded_candidates: 2
+  disposition_status: candidate_manifest_frozen
+
+stop_rules:
+  - Stop rather than infer missing provenance, waive a checker, or substitute a local artifact.
+  - If no candidate survives the acceptance-checker gate, record a no-release disposition instead of publishing an empty or misleading evidence release.
+  - Do not change any candidate result or metric during manifest freezing; route corrections back to their owning issue.
+  - Stop assembly if evidence hashes, provenance, or claim boundaries disagree.
+
+candidates:
+  - candidate_id: candidate_5034
+    owning_issue: 5034
+    artifact_identifier: issue_5034_control_action_latency_sweep
+    title: "control-action latency metric-evidence promotion"
+    source_commit: "484d3fd05a0e29da9e267fa18f817a1fe101de70"
+    config_identifier: "configs/research/fidelity_sensitivity_v1.yaml"
+    campaign_identifier: "issue_5034_control_action_latency_sweep"
+    durable_artifact_uri: "docs/context/evidence/issue_5034_control_action_latency_sweep"
+    sha256_coverage:
+      manifest_file: "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256"
+      summary_json_sha256: "caa5355200b19ec78adb87b261806d3e4a4f13bc56fd30423b6c1b3d66eb27ba"
+      checksum_verification: passed
+    acceptance_checker:
+      command: "verify fixed_scope_coverage.status in docs/context/evidence/issue_5034_control_action_latency_sweep/summary.json"
+      version: "control_action_latency_fixed_scope_coverage.v1"
+      result: "fixed_scope_coverage.status=verified (1296 result rows across 48 scenarios, 3 latency variants, 3 planners)"
+      gate_status: passed
+    evidence_classification: metric_evidence_promotion
+    allowed_claim: "control-action-latency metric-evidence promotion only: action latency metadata plus success / collision / minimum-clearance metrics per eligible native/adapter latency cell"
+    fallback_degraded_synthetic_status:
+      fallback_degraded: excluded
+      synthetic: "no"
+      execution_mode: native_or_adapter
+    disposition: include
+    rationale: "Passed acceptance checker (fixed_scope_coverage.status=verified), manifest.sha256 checksums verified, explicit claim boundary documented"
+    dependencies:
+      parent_issue: 4977
+      depends_on_pr: "#5026"
+
+  - candidate_id: candidate_5305
+    owning_issue: 5305
+    artifact_identifier: issue_5305_certified_archive
+    title: "certified adversarial archive"
+    source_commit: "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f"
+    config_identifier: "config_sha256:dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735"
+    campaign_identifier: "issue5305-certified-archive-13518"
+    durable_artifact_uri: "docs/context/evidence/issue_5305_certified_archive"
+    sha256_coverage:
+      checksum_sums: "docs/context/evidence/issue_5305_certified_archive/SHA256SUMS"
+      archive_json_sha256: "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445"
+      checksum_verification: passed
+    acceptance_checker:
+      command: "verify acceptance_report.json in docs/context/evidence/issue_5305_certified_archive"
+      version: "issue5305_archive_acceptance.v1"
+      result: "status=passed, repository_readiness.ready=true (17 certified entries across 2 scenario families)"
+      gate_status: passed
+    evidence_classification: certified_adversarial_archive
+    allowed_claim: "certified adversarial archive of 17 certified episode entries with stable failure mechanism attributions and disjoint scenario splits"
+    fallback_degraded_synthetic_status:
+      fallback_degraded: none
+      synthetic: "no"
+      execution_mode: certified_archive
+    disposition: include
+    rationale: "Passed acceptance checker (status=passed, repository_readiness.ready=true), SHA256SUMS verified, non-fallback certified archive"
+    dependencies:
+      reference_archives:
+        - "docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json"
+        - "docs/context/evidence/issue_1502_adversarial_two_family_2026-05-31/archive.json"
+
+  - candidate_id: candidate_5416
+    owning_issue: 5416
+    artifact_identifier: issue_5416_sipp_four_geometry_preregistration
+    title: "SIPP four-geometry preregistration packet"
+    source_commit: "current_main"
+    config_identifier: "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
+    campaign_identifier: "RSF-PLANNER-SIPP-SLICE3-20260712"
+    durable_artifact_uri: "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
+    sha256_coverage:
+      config_file: "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
+      checksum_verification: verified
+    acceptance_checker:
+      command: "uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --json"
+      version: "issue_5416_sipp_four_geometry_preregistration.v1"
+      result: "status=ready, geometry_certified=true (4 scenarios, 5 planners)"
+      metadata_only_command: "uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --metadata-only --json"
+      metadata_only_result: "status=metadata_only"
+      gate_status: passed
+    evidence_classification: preregistration_packet
+    allowed_claim: "Preregistration and CPU contract evidence only. Does not run full benchmark campaign or edit paper claims."
+    fallback_degraded_synthetic_status:
+      fallback_degraded: excluded
+      synthetic: exploratory_synthetic
+      execution_mode: preregistration
+    disposition: include
+    rationale: "Passed acceptance checker (status=ready, geometry_certified=true), valid preregistration packet with explicit claim boundary"
+    dependencies:
+      parent_issue: 5306
+      predecessor_issue: 5413
+
+  - candidate_id: candidate_5592
+    owning_issue: 5592
+    artifact_identifier: issue_5592_cross_matrix_preregistration
+    title: "cross-matrix preregistration packet"
+    source_commit: "current_main"
+    config_identifier: "configs/benchmarks/issue_5592_cross_matrix_preregistration.yaml"
+    campaign_identifier: "issue_5592_atomic_topology_second_matrix"
+    durable_artifact_uri: "configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml"
+    sha256_coverage:
+      config_file: "configs/benchmarks/issue_5592_cross_matrix_preregistration.yaml"
+      checksum_verification: verified
+    acceptance_checker:
+      command: "uv run python scripts/validation/check_issue_5592_cross_matrix_preregistration.py --json"
+      version: "issue_5592_cross_matrix_preregistration.v1"
+      result: "status=ready (reference_scenario_count=23, candidate_scenario_count=3, planner_count=12, seed_count=5)"
+      gate_status: passed
+    evidence_classification: preregistration_packet
+    allowed_claim: "Generalization check contract across two scenario matrices only. Does not establish paper/dissertation ranking."
+    fallback_degraded_synthetic_status:
+      fallback_degraded: excluded
+      synthetic: "no"
+      execution_mode: preregistration
+    disposition: include
+    rationale: "Passed acceptance checker (status=ready), valid preregistration packet across 12 planners and 3 topology scenarios"
+    dependencies:
+      predecessor_issue: 596
+
+  - candidate_id: candidate_5756
+    owning_issue: 5756
+    artifact_identifier: issue_5756_double_bottleneck_upset_traces
+    title: "double-bottleneck upset traces worked-example figures"
+    source_commit: "a307ef276d701f8d14dead1aa0513f44ee97c0b0"
+    config_identifier: "issue_5446_trace_reexport_list.v1.json"
+    campaign_identifier: "issue_5756_worked_example_traces"
+    durable_artifact_uri: none
+    sha256_coverage:
+      checksum_verification: failed_missing_artifact
+    acceptance_checker:
+      command: "check docs/context/evidence directory for completed issue #5756 evidence"
+      version: none
+      result: "gate missing: candidate issue #5756 carries state:running label and campaign is in progress with no completed evidence directory under docs/context/evidence/"
+      gate_status: failed
+    evidence_classification: campaign_in_progress
+    allowed_claim: none
+    fallback_degraded_synthetic_status:
+      fallback_degraded: unexecuted
+      synthetic: unexecuted
+      execution_mode: unexecuted
+    disposition: exclude
+    rationale: "Excluded with missing gate: campaign in progress; issue #5756 is labeled state:running and has no completed evidence directory under docs/context/evidence/"
+    dependencies:
+      blocked_by_issue: 5755
+
+  - candidate_id: candidate_4977
+    owning_issue: 4977
+    artifact_identifier: issue_4977_control_action_latency_env_loop
+    title: "configurable control/action latency in env loop + campaign axis"
+    source_commit: none
+    config_identifier: none
+    campaign_identifier: none
+    durable_artifact_uri: none
+    sha256_coverage:
+      checksum_verification: failed_missing_artifact
+    acceptance_checker:
+      command: "check docs/context/evidence directory for issue #4977 campaign evidence"
+      version: none
+      result: "gate missing: issue #4977 is CLOSED with label blocked:needs-campaign and campaign was not executed"
+      gate_status: failed
+    evidence_classification: campaign_not_executed
+    allowed_claim: none
+    fallback_degraded_synthetic_status:
+      fallback_degraded: unexecuted
+      synthetic: unexecuted
+      execution_mode: unexecuted
+    disposition: exclude
+    rationale: "Excluded with missing gate: campaign not executed; issue #4977 is CLOSED with blocked:needs-campaign label and no campaign evidence (metric evidence promoted under child issue #5034)"
+    dependencies:
+      child_issue: 5034

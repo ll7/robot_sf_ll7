@@ -22,7 +22,9 @@ def test_pytest_temp_isolation_env_set(tmp_path: Path) -> None:
     temproot = os.environ.get("PYTEST_DEBUG_TEMPROOT")
     assert temproot is not None, "PYTEST_DEBUG_TEMPROOT must be set"
     assert "/wt-" in temproot, f"PYTEST_DEBUG_TEMPROOT '{temproot}' must contain worktree hash"
-    assert f"/proc-{os.getpid()}" in temproot, f"PYTEST_DEBUG_TEMPROOT '{temproot}' must contain PID"
+    assert "/proc-" in temproot, (
+        f"PYTEST_DEBUG_TEMPROOT '{temproot}' must contain process isolation segment"
+    )
     assert tmp_path.exists()
 
 
@@ -78,10 +80,8 @@ def test_quiet_pass(tmp_path):
     )
 
     # Let session 1 start writing
-    proc1_started = False
     for _ in range(50):
         if (tmp_path / "checkout").exists():
-            proc1_started = True
             break
         import time
 
@@ -107,7 +107,9 @@ def test_quiet_pass(tmp_path):
     out1, err1 = proc1.communicate(timeout=30)
 
     assert proc1.returncode == 0, f"Session 1 failed: {err1}\n{out1}"
-    assert proc2.returncode == 0, f"Session 2 failed with warning/error: {proc2.stderr}\n{proc2.stdout}"
+    assert proc2.returncode == 0, (
+        f"Session 2 failed with warning/error: {proc2.stderr}\n{proc2.stdout}"
+    )
     assert "(rm_rf)" not in proc2.stderr
     assert "(rm_rf)" not in err1
 

@@ -134,7 +134,6 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             shutil.rmtree(temproot_path, ignore_errors=True)
 
 
-
 def _import_torch_optional():
     """TODO docstring. Document this function."""
     try:

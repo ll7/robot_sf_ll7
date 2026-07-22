@@ -29,9 +29,11 @@ from __future__ import annotations
 
 import configparser
 import math
+import random
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from robot_sf.baselines.sicnav import (
@@ -86,6 +88,16 @@ def _clean_sicnav_modules():
             sys.modules.pop(name, None)
 
 
+@pytest.fixture(autouse=True)
+def _restore_random_states():
+    """Restore global random states after each test to prevent side effects."""
+    random_state = random.getstate()
+    numpy_state = np.random.get_state()
+    yield
+    random.setstate(random_state)
+    np.random.set_state(numpy_state)
+
+
 # ---------------------------------------------------------------------------
 # SICNavPlannerConfig defaults and build_sicnav_config provenance handling
 # ---------------------------------------------------------------------------
@@ -138,9 +150,15 @@ def test_build_sicnav_config_drops_unknown_keys_and_keeps_known() -> None:
 
 def test_build_sicnav_config_expands_user_in_repo_root(monkeypatch: pytest.MonkeyPatch) -> None:
     """``repo_root`` should be ``~``-expanded while keeping a relative string form."""
-    monkeypatch.setenv("HOME", "/home/test_user")
+    monkeypatch.setattr(
+        Path,
+        "expanduser",
+        lambda self: Path("/home/test_user/repos/sicnav")
+        if str(self) == "~/repos/sicnav"
+        else self,
+    )
     cfg = build_sicnav_config({"repo_root": "~/repos/sicnav"})
-    assert cfg.repo_root == "/home/test_user/repos/sicnav"
+    assert Path(cfg.repo_root) == Path("/home/test_user/repos/sicnav")
 
 
 # ---------------------------------------------------------------------------

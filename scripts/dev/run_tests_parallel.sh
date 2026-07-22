@@ -21,7 +21,11 @@ Wrapper options:
 
 Environment overrides:
   ROBOT_SF_PYTEST_COVERAGE=1
-    Explicit opt-in for coverage output when running this wrapper.
+    Explicit opt-in for coverage output when running this wrapper. Sharded
+    coverage also requires a unique COVERAGE_FILE per shard for later combine.
+  ROBOT_SF_SHARD_INCLUDE_SLOW=1
+    Include slow tests in a pytest-split shard. The default sharded lane keeps
+    excluding slow tests for pull-request and local fast feedback.
   ROBOT_SF_TEST_LANE=core|optional|all
   COVERAGE_FILE=<path>
   PYTEST_FAST_FAIL=1|0
@@ -30,8 +34,8 @@ Environment overrides:
   PYTEST_NUM_WORKERS=<int>|auto
   PYTEST_SHARD_COUNT=<int>
     pytest-split shard count (default 1). When >1, runs a disjoint subset via
-    `--splits N --group G` and disables coverage (partial shard data cannot be
-    combined in the single-job CI topology).
+    `--splits N --group G`. Coverage remains off unless explicitly enabled;
+    enabled shards require unique COVERAGE_FILE paths for downstream combine.
   PYTEST_SHARD_INDEX=<int>
     pytest-split shard index in 1..PYTEST_SHARD_COUNT (default 1).
   PR_READY_SERIAL_FALLBACK=1|0
@@ -229,10 +233,9 @@ esac
 cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")
 
 # pytest-split sharding: when CI provisions multiple shards, run a disjoint
-# subset per shard so the suite parallelizes across runners. Coverage is skipped
-# while sharding because partial per-shard data cannot be combined in this
-# single-job topology; the full coverage pass runs unsharded on
-# main/workflow_dispatch (PYTEST_SHARD_COUNT=1).
+# subset per shard so the suite parallelizes across runners. Main CI may opt in
+# to complete cross-shard coverage by assigning one unique COVERAGE_FILE to
+# every shard and combining the data in a downstream job.
 shard_count="${PYTEST_SHARD_COUNT:-1}"
 shard_index="${PYTEST_SHARD_INDEX:-1}"
 sharding_active="0"
@@ -246,9 +249,17 @@ if [[ "$shard_count" =~ ^[0-9]+$ ]] && [[ "$shard_count" -gt 1 ]]; then
   echo "Resolved pytest-split shard: group $shard_index of $shard_count" >&2
 fi
 
-# Fast PR lane: when sharding is active (typically on PRs), run only fast tests
-# using the -m "not slow" marker unless the caller supplied an explicit marker.
-# Full suite runs unsharded on main/nightly.
+# Fast PR/local lane: sharding excludes slow tests unless the caller explicitly
+# opts into the complete suite. Main CI uses that opt-in for its four shards.
+include_slow="${ROBOT_SF_SHARD_INCLUDE_SLOW:-0}"
+case "$include_slow" in
+  1|true|yes|on) include_slow=1 ;;
+  0|false|no|off) include_slow=0 ;;
+  *)
+    echo "Invalid ROBOT_SF_SHARD_INCLUDE_SLOW value '$include_slow' (expected 1|0|true|false|yes|no|on|off)." >&2
+    exit 2
+    ;;
+esac
 has_marker="0"
 for pytest_arg in "${pytest_args[@]}"; do
   if [[ "$pytest_arg" == "-m" || "$pytest_arg" == --markexpr=* ]]; then
@@ -256,16 +267,34 @@ for pytest_arg in "${pytest_args[@]}"; do
     break
   fi
 done
-if [[ "$sharding_active" == "1" && "$has_marker" == "0" ]]; then
+if [[ "$sharding_active" == "1" && "$has_marker" == "0" && "$include_slow" != "1" ]]; then
   cmd+=("-m" "not slow")
 fi
 
 coverage_requested="${ROBOT_SF_PYTEST_COVERAGE:-}"
-if [[ "$sharding_active" != "1" ]] && { [[ "${CI:-}" == "true" ]] || [[ "$coverage_requested" == "1" ]] || \
-  [[ "$coverage_requested" == [Tt][Rr][Uu][Ee] ]] || \
-  [[ "$coverage_requested" == [Yy][Ee][Ss] ]] || \
-  [[ "$coverage_requested" == [Oo][Nn] ]]; }; then
-  cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")
+coverage_enabled="0"
+case "$coverage_requested" in
+  1|true|TRUE|yes|YES|on|ON) coverage_enabled=1 ;;
+  ""|0|false|FALSE|no|NO|off|OFF) ;;
+  *)
+    echo "Invalid ROBOT_SF_PYTEST_COVERAGE value '$coverage_requested' (expected 1|0|true|false|yes|no|on|off)." >&2
+    exit 2
+    ;;
+esac
+if [[ "$sharding_active" != "1" && "${CI:-}" == "true" ]]; then
+  coverage_enabled=1
+fi
+if [[ "$coverage_enabled" == "1" ]]; then
+  if [[ "$sharding_active" == "1" ]]; then
+    if [[ -z "${COVERAGE_FILE:-}" ]]; then
+      echo "Sharded coverage requires a unique COVERAGE_FILE per shard." >&2
+      exit 2
+    fi
+    mkdir -p "$(dirname "$COVERAGE_FILE")"
+    cmd+=("--cov=robot_sf" "--cov-report=")
+  else
+    cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")
+  fi
 fi
 
 if [[ "$lane_mode" != "all" ]]; then

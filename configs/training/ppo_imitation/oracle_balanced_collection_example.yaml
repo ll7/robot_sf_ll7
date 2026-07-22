@@ -1,0 +1,17 @@
+dataset_id: issue_6127_balanced_oracle_v1
+launch_packet: configs/training/ppo_imitation/oracle_dataset_issue_6127_balanced_launch_packet.yaml
+candidate_registry: docs/context/policy_search/candidate_registry.yaml
+source_candidate: hybrid_rule_v3_static_margin0_waypoint2
+action_bin_accounting:
+  acc_bins: 10
+  ang_vel_bins: 10
+  acc_range: [-3.0, 3.0]
+  ang_vel_range: [-3.14159, 3.14159]
+yield_gates:
+  min_usable_transitions: 10000
+  min_episodes_per_stratum: 10
+exclusion_filters:
+  exclude_one_step: true
+  exclude_failed: true
+  exclude_fallback: true
+  exclude_leakage_invalid: true

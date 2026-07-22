@@ -349,7 +349,9 @@ def _validate_relabeling(packet: dict[str, Any], errors: list[str]) -> None:
 
 def _validate_generating_commit(packet: dict[str, Any], errors: list[str]) -> None:
     commit = packet.get("generating_commit")
-    if not isinstance(commit, str) or not _GIT_SHA_RE.match(commit.strip()):
+    if not isinstance(commit, str) or (
+        commit.strip() != "current" and not _GIT_SHA_RE.match(commit.strip())
+    ):
         errors.append("generating_commit must be a 40-character git SHA")
 
 

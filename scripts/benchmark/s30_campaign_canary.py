@@ -22,7 +22,7 @@ from robot_sf.benchmark.heterogeneous_population_ablation import (
     build_runtime_population_control_trace_labels,
 )
 from robot_sf.benchmark.heterogeneous_population_ablation_runner import build_episode_scenario
-from robot_sf.benchmark.map_runner import _build_policy
+from robot_sf.benchmark.map_runner import build_map_policy
 from robot_sf.benchmark.map_runner_episode import run_map_episode
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -141,7 +141,7 @@ def run_manifest_cell(
         record_planner_decision_trace=False,
         record_simulation_step_trace=True,
         pedestrian_control_trace_label_builder=capture_runtime_labels,
-        policy_builder=_build_policy,
+        policy_builder=build_map_policy,
     )
     if instantiated is None or emitted_labels is None:
         raise ValueError("runtime did not emit the instantiated population and trace labels")

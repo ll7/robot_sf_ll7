@@ -24,10 +24,13 @@ CLOSING_ISSUES_QUERY = """
 query($owner: String!, $repo: String!, $prNumber: Int!) {
   repository(owner: $owner, name: $repo) {
     pullRequest(number: $prNumber) {
-      closingIssuesReferences(first: 10) {
+      closingIssuesReferences(first: 100) {
         nodes {
           number
           url
+        }
+        pageInfo {
+          hasNextPage
         }
       }
     }
@@ -82,10 +85,41 @@ def _resolve_repo(explicit: str) -> str | None:
 
 def _split_owner_repo(repo: str) -> tuple[str, str]:
     """Split owner/repo into (owner, repo)."""
-    parts = repo.split("/", 1)
+    parts = repo.split("/")
     if len(parts) != 2 or not parts[0] or not parts[1]:
         raise ValueError(f"Invalid repository format: {repo!r}; expected owner/repo")
     return parts[0], parts[1]
+
+
+def _extract_graphql_error(payload: dict[str, Any]) -> str | None:
+    """Return a normalized top-level GraphQL error, if present."""
+    errors = payload.get("errors")
+    if errors is None:
+        return None
+    if not isinstance(errors, list):
+        return "GraphQL errors field is malformed"
+    if not errors:
+        return None
+    messages = [e.get("message", str(e)) for e in errors if isinstance(e, dict)]
+    return "; ".join(messages) if messages else "GraphQL returned errors"
+
+
+def _extract_closing_nodes(closing_refs: dict[str, Any]) -> tuple[list[int] | None, str | None]:
+    """Validate and extract one complete closing-reference connection."""
+    nodes = closing_refs.get("nodes")
+    if not isinstance(nodes, list):
+        return None, "closingIssuesReferences.nodes is not a list"
+    issues: list[int] = []
+    for index, node in enumerate(nodes):
+        if not isinstance(node, dict) or type(node.get("number")) is not int:
+            return None, f"closingIssuesReferences.nodes[{index}] is malformed"
+        issues.append(node["number"])
+    page_info = closing_refs.get("pageInfo")
+    if not isinstance(page_info, dict) or not isinstance(page_info.get("hasNextPage"), bool):
+        return None, "closingIssuesReferences.pageInfo is malformed"
+    if page_info["hasNextPage"]:
+        return None, "More than 100 closing references exist; refusing an incomplete result"
+    return issues, None
 
 
 def _extract_issues_from_graphql(
@@ -93,12 +127,11 @@ def _extract_issues_from_graphql(
     pr_number: str,
 ) -> tuple[list[int] | None, str | None]:
     """Extract closing issue numbers from a parsed GraphQL response."""
+    graphql_error = _extract_graphql_error(payload)
+    if graphql_error is not None:
+        return None, graphql_error
     data = payload.get("data")
     if not isinstance(data, dict):
-        errors = payload.get("errors", [])
-        if errors:
-            messages = [e.get("message", str(e)) for e in errors if isinstance(e, dict)]
-            return None, "; ".join(messages) if messages else "GraphQL returned errors"
         return None, "GraphQL response is missing data field"
     repo_data = data.get("repository")
     if not isinstance(repo_data, dict):
@@ -109,14 +142,7 @@ def _extract_issues_from_graphql(
     closing_refs = pr_data.get("closingIssuesReferences")
     if not isinstance(closing_refs, dict):
         return None, "closingIssuesReferences is not available"
-    nodes = closing_refs.get("nodes")
-    if not isinstance(nodes, list):
-        return [], None
-    return [
-        node["number"]
-        for node in nodes
-        if isinstance(node, dict) and isinstance(node.get("number"), int)
-    ], None
+    return _extract_closing_nodes(closing_refs)
 
 
 def _fetch_closing_issues(
@@ -129,7 +155,12 @@ def _fetch_closing_issues(
         owner, repo_name = _split_owner_repo(repo)
     except ValueError as exc:
         return None, str(exc)
-    pr_int = int(pr_number)
+    try:
+        pr_int = int(pr_number)
+    except ValueError:
+        return None, f"Invalid PR number: {pr_number!r}; expected a positive integer"
+    if pr_int < 1:
+        return None, f"Invalid PR number: {pr_number!r}; expected a positive integer"
     result = _gh(
         [
             "api",
@@ -158,6 +189,14 @@ def check_closing_reference(
     pr_number: str, expected_issue: int, *, repo: str
 ) -> ClosingReferenceResult:
     """Check whether a PR's closing references include the expected issue."""
+    if expected_issue < 1:
+        return ClosingReferenceResult(
+            status="error",
+            pr_number=pr_number,
+            expected_issue=expected_issue,
+            actual_closing_issues=(),
+            message=f"Invalid expected issue: {expected_issue!r}; expected a positive integer",
+        )
     issues, error = _fetch_closing_issues(pr_number, repo=repo)
     if error is not None or issues is None:
         return ClosingReferenceResult(
@@ -228,16 +267,13 @@ def _emit_json(
 def main(argv: list[str] | None = None) -> int:
     """Entry point: check PR closing reference and print results."""
     args = _build_parser().parse_args(argv)
-    repo = _resolve_repo(args.repo)
-    if repo is None:
-        msg = "Failed to detect repository.  Pass --repo owner/repo."
-        if args.json:
-            _emit_json("error", args.pr_number, args.expected_issue, [], msg)
-        else:
-            print(msg, file=sys.stderr)
-        return 2
     try:
-        result = check_closing_reference(args.pr_number, args.expected_issue, repo=repo)
+        repo = _resolve_repo(args.repo)
+        result = (
+            check_closing_reference(args.pr_number, args.expected_issue, repo=repo)
+            if repo is not None
+            else None
+        )
     except subprocess.TimeoutExpired:
         msg = "gh CLI command timed out."
         if args.json:
@@ -245,6 +281,21 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(msg, file=sys.stderr)
         return 2
+    except OSError as exc:
+        msg = f"Failed to execute gh CLI: {exc}"
+        if args.json:
+            _emit_json("error", args.pr_number, args.expected_issue, [], msg)
+        else:
+            print(msg, file=sys.stderr)
+        return 2
+    if repo is None:
+        msg = "Failed to detect repository.  Pass --repo owner/repo."
+        if args.json:
+            _emit_json("error", args.pr_number, args.expected_issue, [], msg)
+        else:
+            print(msg, file=sys.stderr)
+        return 2
+    assert result is not None
     if args.json:
         _emit_json(
             result.status,

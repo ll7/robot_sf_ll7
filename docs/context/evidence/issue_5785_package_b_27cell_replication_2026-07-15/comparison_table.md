@@ -43,4 +43,4 @@
 - paper-facing success claims: forbidden at this tier
 - confirmation tier: artifact-level review of certification/replay/independent-seed
 - report_status: diagnostic_local_nominal; schema adversarial-sampler-comparison.v3; budgets=[16, 32, 64]; seeds=[1101, 2202, 3303]
-- source report: /home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/report.json
+- source report: unavailable://raw-artifact-tree/report.json

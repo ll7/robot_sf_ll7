@@ -13,7 +13,7 @@
       ]
     },
     "claim_boundary": "diagnostic-only confirmation-chain validation; this gate does not promote benchmark, paper, or dissertation evidence",
-    "confirmation_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/confirmation.json",
+    "confirmation_path": "unavailable://raw-artifact-tree/confirmation.json",
     "errors": [],
     "issue": 3079,
     "matrix": {
@@ -40,13 +40,13 @@
     },
     "next_empirical_action": "Run the exact manifest command on an approved compute-capable path, emit one confirmation row per report cell, then review the referenced artifacts before interpreting any sampler difference.",
     "ready": true,
-    "report_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/report.json",
+    "report_path": "unavailable://raw-artifact-tree/report.json",
     "schema_version": "adversarial-package-b-confirmation.v1",
-    "source_report_sha256": "2ff65b8cd8da7307b47ca069758f98db67173cb248fcd3ab16fcc4ab189662da",
+    "source_report_sha256": "b00bf285c43d13e43e90bbfc3152b5bb2feb163f6c6432d26734cc71c6261ffb",
     "status": "ready_for_confirmed_failure_review"
   },
-  "confirmation_json": "output/adversarial/issue_3079_package_b/confirmation.json",
-  "durable_table_md": "output/adversarial/issue_3079_package_b/comparison_table.md",
+  "confirmation_json": "unavailable://raw-artifact-tree/confirmation.json",
+  "durable_table_md": "unavailable://raw-artifact-tree/comparison_table.md",
   "preflight_ready": true,
   "report_gate": {
     "blockers": {
@@ -86,10 +86,10 @@
     },
     "next_empirical_action": "Run the exact manifest command on an approved compute-capable path, then review this gate together with certification and independent replay artifacts before interpreting any sampler difference.",
     "ready": true,
-    "report_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/report.json",
+    "report_path": "unavailable://raw-artifact-tree/report.json",
     "schema_version": "adversarial-package-b-report-gate.v1",
     "status": "ready_for_empirical_review"
   },
-  "report_json": "output/adversarial/issue_3079_package_b/report.json",
+  "report_json": "unavailable://raw-artifact-tree/report.json",
   "stage": "complete"
 }

@@ -8,8 +8,8 @@ worktree-local artifacts were found unrecoverable from the recorded surfaces.
 
 - Bounded recovery search of the recorded surfaces (Mac, imech156-u, imech036, imech039,
   orphan/worktree archives, private artifact storage, output receipts) found NO recoverable
-  copy of `output/adversarial/issue_3079_package_b/`. The compact claim therefore lacked a
-  durable artifact anchor.
+  copy of the raw Package B candidate/replay tree. The compact claim therefore lacked a durable
+  artifact anchor.
 - Exact replication was performed at the recorded execution commit and manifest identity.
 
 ## Reproduction identity
@@ -76,9 +76,8 @@ yield review (issue #5785 step 5) remain deferred to a separate interpretive ste
 - `comparison_table.md`: durable Package-B comparison table.
 - `replication_summary.json`: pipeline summary payload.
 - `SHA256SUMS`: checksums for the four durable summary artifacts above.
-- `candidate_replay_SHA256SUMS.txt`: SHA-256 of all 4761 candidate/replay artifacts in the
-  frozen `output/adversarial/issue_3079_package_b/worst_case_snqi` tree (the full replayable
-  set that every reported count regenerates from). The tree is not included in this checkout;
-  see the preservation boundary above.
+- `candidate_replay_SHA256SUMS.txt`: SHA-256 of all 4,761 candidate/replay artifacts in the
+  frozen raw replay tree (the full replayable set that every reported count regenerates from).
+  The tree is not included in this checkout; see the preservation boundary above.
 - `provenance.md`: this file.
 - `README.md`: human-readable conservation summary.

@@ -2,9 +2,9 @@
 # Issue #5785: Package B 27-Cell Replication Evidence 2026-07-15
 
 Plain-language summary: this bundle conserves the executed Package B 27-cell diagnostic
-result (Issue #3079 / PR #5710) which had lost its durable artifact anchor. The original
-`output/adversarial/issue_3079_package_b/` artifacts were not recoverable from any recorded
-surface, so the result was reproduced exactly on CPU at the recorded execution commit with
+result (Issue #3079 / PR #5710) which had lost its durable artifact anchor. The original raw
+candidate/replay artifacts were not recoverable from any recorded surface, so the result was
+reproduced exactly on CPU at the recorded execution commit with
 the recorded manifest identity. The committed summary artifacts are durably registered with
 full provenance; the candidate/replay tree and captured execution logs still lack a retrievable
 durable pointer. It reports

@@ -25,6 +25,7 @@ RECORDED_MANIFEST_SHA256 = "9f174f067d23efd374c019702168213a27085dfffa1b0b5bc10a
 EXPECTED_TOTALS = {"random": 24, "optuna": 18, "coordinate": 0}
 EXPECTED_CELLS = 27
 EXPECTED_TOTAL_FAILURES = 42
+EXPECTED_REPLAY_TREE_ENTRIES = 4_761
 
 
 def _load_report(bundle: Path) -> dict[str, object]:
@@ -131,10 +132,14 @@ def test_durable_summary_sha256sums_match() -> None:
 
 
 def test_replay_tree_checksums_are_parseable_and_complete() -> None:
-    """The frozen replay-tree anchor is a well-formed SHA256SUMS over all replay artifacts."""
+    """The frozen replay-tree anchor has every expected, uniquely named artifact digest."""
     lines = (BUNDLE / "candidate_replay_SHA256SUMS.txt").read_text(encoding="utf-8").splitlines()
-    assert lines, "frozen replay-tree checksum file must not be empty"
+    assert len(lines) == EXPECTED_REPLAY_TREE_ENTRIES
+    names: set[str] = set()
     for line in lines:
         digest, _, name = line.partition("  ")
         assert len(digest) == 64, "malformed digest in candidate_replay_SHA256SUMS.txt"
-        assert Path(name.strip()).parts[0] == "worst_case_snqi"
+        relative_name = name.strip()
+        assert Path(relative_name).parts[0] == "worst_case_snqi"
+        assert relative_name not in names, "duplicate replay-tree artifact path"
+        names.add(relative_name)

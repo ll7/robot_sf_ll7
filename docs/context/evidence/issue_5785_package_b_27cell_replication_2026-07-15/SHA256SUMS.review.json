@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/SHA256SUMS",
-  "artifact_sha256": "ece0bf05e6229391f150cbad7d73afce5f0090f9162042c1975bd0632d819080",
+  "artifact_sha256": "56d71332001d3f6991f746239f917412bcad8b2aa33e0680a211e0677d244eb4",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW"
 }

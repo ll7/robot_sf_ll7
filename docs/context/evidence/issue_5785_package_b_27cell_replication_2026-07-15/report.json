@@ -15,7 +15,7 @@
   "report_status": "diagnostic_local_nominal",
   "rows": [
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_1101/random/candidate_0011",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_1101/random/candidate_0011",
       "best_objective_value": 10.0,
       "best_valid_objective": 10.0,
       "budget": 16,
@@ -31,7 +31,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.5,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_1101/random/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_1101/random/manifest.json",
       "num_candidates": 16,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 8,
@@ -43,7 +43,7 @@
       "seed": 1101
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_1101/coordinate/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_1101/coordinate/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 16,
@@ -59,7 +59,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.0625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_1101/coordinate/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_1101/coordinate/manifest.json",
       "num_candidates": 16,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 1,
@@ -71,7 +71,7 @@
       "seed": 1101
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_1101/optuna/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_1101/optuna/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 16,
@@ -87,7 +87,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.5625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_1101/optuna/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_1101/optuna/manifest.json",
       "num_candidates": 16,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 9,
@@ -99,7 +99,7 @@
       "seed": 1101
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_2202/random/candidate_0002",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_2202/random/candidate_0002",
       "best_objective_value": 10.0,
       "best_valid_objective": 10.0,
       "budget": 16,
@@ -115,7 +115,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.3125,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_2202/random/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_2202/random/manifest.json",
       "num_candidates": 16,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 5,
@@ -127,7 +127,7 @@
       "seed": 2202
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_2202/coordinate/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_2202/coordinate/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 16,
@@ -143,7 +143,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.0625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_2202/coordinate/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_2202/coordinate/manifest.json",
       "num_candidates": 16,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 1,
@@ -155,7 +155,7 @@
       "seed": 2202
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_2202/optuna/candidate_0014",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_2202/optuna/candidate_0014",
       "best_objective_value": 23.0,
       "best_valid_objective": 23.0,
       "budget": 16,
@@ -171,7 +171,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.5,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_2202/optuna/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_2202/optuna/manifest.json",
       "num_candidates": 16,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 8,
@@ -183,7 +183,7 @@
       "seed": 2202
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_3303/random/candidate_0001",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_3303/random/candidate_0001",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 16,
@@ -199,7 +199,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.6875,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_3303/random/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_3303/random/manifest.json",
       "num_candidates": 16,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 11,
@@ -211,7 +211,7 @@
       "seed": 3303
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_3303/coordinate/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_3303/coordinate/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 16,
@@ -227,7 +227,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.0625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_3303/coordinate/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_3303/coordinate/manifest.json",
       "num_candidates": 16,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 1,
@@ -239,7 +239,7 @@
       "seed": 3303
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_3303/optuna/candidate_0001",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_3303/optuna/candidate_0001",
       "best_objective_value": 10.0,
       "best_valid_objective": 10.0,
       "budget": 16,
@@ -255,7 +255,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.375,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0016/seed_3303/optuna/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0016/seed_3303/optuna/manifest.json",
       "num_candidates": 16,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 6,
@@ -267,7 +267,7 @@
       "seed": 3303
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_1101/random/candidate_0023",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_1101/random/candidate_0023",
       "best_objective_value": 12.0,
       "best_valid_objective": 12.0,
       "budget": 32,
@@ -283,7 +283,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.5,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_1101/random/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_1101/random/manifest.json",
       "num_candidates": 32,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 16,
@@ -295,7 +295,7 @@
       "seed": 1101
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_1101/coordinate/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_1101/coordinate/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 32,
@@ -311,7 +311,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.0625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_1101/coordinate/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_1101/coordinate/manifest.json",
       "num_candidates": 32,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 2,
@@ -323,7 +323,7 @@
       "seed": 1101
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_1101/optuna/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_1101/optuna/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 32,
@@ -339,7 +339,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.6875,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_1101/optuna/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_1101/optuna/manifest.json",
       "num_candidates": 32,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 22,
@@ -351,7 +351,7 @@
       "seed": 1101
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_2202/random/candidate_0021",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_2202/random/candidate_0021",
       "best_objective_value": 30.0,
       "best_valid_objective": 30.0,
       "budget": 32,
@@ -367,7 +367,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.375,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_2202/random/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_2202/random/manifest.json",
       "num_candidates": 32,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 12,
@@ -379,7 +379,7 @@
       "seed": 2202
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_2202/coordinate/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_2202/coordinate/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 32,
@@ -395,7 +395,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.0625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_2202/coordinate/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_2202/coordinate/manifest.json",
       "num_candidates": 32,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 2,
@@ -407,7 +407,7 @@
       "seed": 2202
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_2202/optuna/candidate_0014",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_2202/optuna/candidate_0014",
       "best_objective_value": 23.0,
       "best_valid_objective": 23.0,
       "budget": 32,
@@ -423,7 +423,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.6875,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_2202/optuna/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_2202/optuna/manifest.json",
       "num_candidates": 32,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 22,
@@ -435,7 +435,7 @@
       "seed": 2202
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_3303/random/candidate_0024",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_3303/random/candidate_0024",
       "best_objective_value": 10.0,
       "best_valid_objective": 10.0,
       "budget": 32,
@@ -451,7 +451,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.65625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_3303/random/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_3303/random/manifest.json",
       "num_candidates": 32,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 21,
@@ -463,7 +463,7 @@
       "seed": 3303
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_3303/coordinate/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_3303/coordinate/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 32,
@@ -479,7 +479,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.0625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_3303/coordinate/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_3303/coordinate/manifest.json",
       "num_candidates": 32,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 2,
@@ -491,7 +491,7 @@
       "seed": 3303
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_3303/optuna/candidate_0001",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_3303/optuna/candidate_0001",
       "best_objective_value": 10.0,
       "best_valid_objective": 10.0,
       "budget": 32,
@@ -507,7 +507,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.6875,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0032/seed_3303/optuna/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0032/seed_3303/optuna/manifest.json",
       "num_candidates": 32,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 22,
@@ -519,7 +519,7 @@
       "seed": 3303
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_1101/random/candidate_0023",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_1101/random/candidate_0023",
       "best_objective_value": 12.0,
       "best_valid_objective": 12.0,
       "budget": 64,
@@ -535,7 +535,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.453125,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_1101/random/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_1101/random/manifest.json",
       "num_candidates": 64,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 29,
@@ -547,7 +547,7 @@
       "seed": 1101
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_1101/coordinate/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_1101/coordinate/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 64,
@@ -563,7 +563,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.0625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_1101/coordinate/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_1101/coordinate/manifest.json",
       "num_candidates": 64,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 4,
@@ -575,7 +575,7 @@
       "seed": 1101
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_1101/optuna/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_1101/optuna/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 64,
@@ -591,7 +591,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.84375,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_1101/optuna/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_1101/optuna/manifest.json",
       "num_candidates": 64,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 54,
@@ -603,7 +603,7 @@
       "seed": 1101
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_2202/random/candidate_0021",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_2202/random/candidate_0021",
       "best_objective_value": 30.0,
       "best_valid_objective": 30.0,
       "budget": 64,
@@ -619,7 +619,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.40625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_2202/random/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_2202/random/manifest.json",
       "num_candidates": 64,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 26,
@@ -631,7 +631,7 @@
       "seed": 2202
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_2202/coordinate/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_2202/coordinate/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 64,
@@ -647,7 +647,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.0625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_2202/coordinate/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_2202/coordinate/manifest.json",
       "num_candidates": 64,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 4,
@@ -659,7 +659,7 @@
       "seed": 2202
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_2202/optuna/candidate_0014",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_2202/optuna/candidate_0014",
       "best_objective_value": 23.0,
       "best_valid_objective": 23.0,
       "budget": 64,
@@ -675,7 +675,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.84375,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_2202/optuna/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_2202/optuna/manifest.json",
       "num_candidates": 64,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 54,
@@ -687,7 +687,7 @@
       "seed": 2202
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_3303/random/candidate_0054",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_3303/random/candidate_0054",
       "best_objective_value": 25.0,
       "best_valid_objective": 25.0,
       "budget": 64,
@@ -703,7 +703,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.59375,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_3303/random/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_3303/random/manifest.json",
       "num_candidates": 64,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 38,
@@ -715,7 +715,7 @@
       "seed": 3303
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_3303/coordinate/candidate_0000",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_3303/coordinate/candidate_0000",
       "best_objective_value": -1.0,
       "best_valid_objective": -1.0,
       "budget": 64,
@@ -731,7 +731,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.0625,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_3303/coordinate/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_3303/coordinate/manifest.json",
       "num_candidates": 64,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 4,
@@ -743,7 +743,7 @@
       "seed": 3303
     },
     {
-      "best_bundle_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_3303/optuna/candidate_0001",
+      "best_bundle_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_3303/optuna/candidate_0001",
       "best_objective_value": 10.0,
       "best_valid_objective": 10.0,
       "budget": 64,
@@ -759,7 +759,7 @@
       "held_out_family_status": "not_evaluated_narrow_archive",
       "held_out_family_yield": null,
       "invalid_candidate_rate": 0.84375,
-      "manifest_path": "/home/luttkule/git/robot_sf_ll7/cheap-issue-5785-repro-7ec582b8/output/adversarial/issue_3079_package_b/worst_case_snqi/budget_0064/seed_3303/optuna/manifest.json",
+      "manifest_path": "unavailable://raw-artifact-tree/worst_case_snqi/budget_0064/seed_3303/optuna/manifest.json",
       "num_candidates": 64,
       "num_failed_evaluations": 0,
       "num_invalid_candidates": 54,

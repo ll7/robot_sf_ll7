@@ -52,9 +52,7 @@ def extract_subset_run_metrics(campaign_root: Path) -> dict[str, Any]:
                     algo_meta = data.get("algorithm_metadata", {})
                     planner_kin = algo_meta.get("planner_kinematics", {})
                     exec_mode = (
-                        planner_kin.get("execution_mode")
-                        or data.get("execution_mode")
-                        or "unknown"
+                        planner_kin.get("execution_mode") or data.get("execution_mode") or "unknown"
                     )
 
                     metrics = data.get("metrics", {})

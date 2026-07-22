@@ -275,9 +275,7 @@ def _step_verify_checksums(
     return result
 
 
-def _step_run_subset(
-    clone_dir: Path, manifest: dict[str, Any], output_dir: Path
-) -> dict[str, Any]:
+def _step_run_subset(clone_dir: Path, manifest: dict[str, Any], output_dir: Path) -> dict[str, Any]:
     """Run the pre-registered benchmark subset in run mode."""
     result: dict[str, Any] = {"step": "run_subset"}
     campaign = manifest.get("campaign", {})
@@ -431,9 +429,7 @@ def generate_reproduction_report(
         "config_sha256": _sha256_file(manifest_path),
         "config_commit": _git_commit_for_path(manifest_path),
         "lockfile_sha256": (
-            _sha256_file(REPO_ROOT / "uv.lock")
-            if (REPO_ROOT / "uv.lock").is_file()
-            else "unknown"
+            _sha256_file(REPO_ROOT / "uv.lock") if (REPO_ROOT / "uv.lock").is_file() else "unknown"
         ),
         "environment": env,
         "steps": {},

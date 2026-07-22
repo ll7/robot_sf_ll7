@@ -555,11 +555,13 @@ class TestSubsetReplayComparison:
         manifest = {"release_tag": "0.0.2", "planners": ["goal"], "seed_policy": {}}
         out_dir = tmp_path / "output"
 
-        fake_output = json.dumps({
-            "mode": "run",
-            "campaign_execution_status": "completed",
-            "campaign_root": str(out_dir / "subset_run" / "run_123"),
-        })
+        fake_output = json.dumps(
+            {
+                "mode": "run",
+                "campaign_execution_status": "completed",
+                "campaign_root": str(out_dir / "subset_run" / "run_123"),
+            }
+        )
 
         with patch("subprocess.check_output", return_value=fake_output) as mock_exec:
             res = _step_run_subset(tmp_path, manifest, out_dir)
@@ -582,10 +584,12 @@ class TestSubsetReplayComparison:
         manifest = {"release_tag": "0.0.2", "planners": ["goal"], "seed_policy": {}}
         out_dir = tmp_path / "output"
 
-        fake_output = json.dumps({
-            "mode": "preflight",
-            "campaign_execution_status": "preflight_completed",
-        })
+        fake_output = json.dumps(
+            {
+                "mode": "preflight",
+                "campaign_execution_status": "preflight_completed",
+            }
+        )
 
         with patch("subprocess.check_output", return_value=fake_output):
             res = _step_run_subset(tmp_path, manifest, out_dir)
@@ -662,9 +666,7 @@ class TestSubsetReplayComparison:
                     "scenario_id": "francis2023_blind_corner",
                     "seed": 111,
                     "status": info["status"],
-                    "execution_mode": (
-                        "fallback" if planner == "orca" else info["execution_mode"]
-                    ),
+                    "execution_mode": ("fallback" if planner == "orca" else info["execution_mode"]),
                     "git_hash": "f7ebdcae",
                     "config_hash": "c1df7dee",
                     "metrics": dict(info["metrics"]),

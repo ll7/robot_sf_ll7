@@ -39,7 +39,8 @@ if [[ "$#" -eq 0 ]]; then
 fi
 
 if [[ -z "${PYTEST_DEBUG_TEMPROOT:-}" ]]; then
-  repo_hash="$(printf '%s' "$SCRIPT_DIR" | sha256sum | cut -c1-10)"
+  repo_root="$(cd "$SCRIPT_DIR/../.." && pwd)"
+  repo_hash="$(printf '%s' "$repo_root" | sha256sum | cut -c1-10)"
   export PYTEST_DEBUG_TEMPROOT="${TMPDIR:-/tmp}/pytest-of-${USER:-unknown}/wt-${repo_hash}/proc-$$"
   mkdir -p "$PYTEST_DEBUG_TEMPROOT"
 fi

@@ -7,7 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from tests.conftest import _is_pid_running, _setup_isolated_pytest_temproot
+from tests.conftest import _clean_stale_proc_dirs, _is_pid_running
 
 
 def test_is_pid_running_returns_expected_status() -> None:
@@ -38,8 +38,8 @@ def test_stale_process_temproot_cleaned_up(tmp_path: Path) -> None:
     stale_proc_dir.mkdir(parents=True, exist_ok=True)
     (stale_proc_dir / "stale_file.txt").write_text("abandoned", encoding="utf-8")
 
-    # Running temproot setup should prune stale_proc_dir
-    _setup_isolated_pytest_temproot()
+    # Cleaning stale proc dirs under wt_dir should prune stale_proc_dir
+    _clean_stale_proc_dirs(wt_dir)
 
     assert not stale_proc_dir.exists(), "Stale process directory should have been cleaned up"
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from robot_sf.gym_env.environment_factory import make_robot_env
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -75,3 +76,26 @@ def test_socnavbench_eth_map_has_four_bounds() -> None:
     config = build_robot_config_from_scenario(scenarios[0], scenario_path=SCENARIO_PATH)
     map_def = next(iter(config.map_pool.map_defs.values()))
     assert len(map_def.bounds) == 4
+
+
+def test_socnavbench_eth_map_runs_headless_environment_smoke() -> None:
+    """The committed ETH map survives reset and steps through the robot environment."""
+    scenarios = load_scenarios(SCENARIO_PATH)
+    config = build_robot_config_from_scenario(scenarios[0], scenario_path=SCENARIO_PATH)
+    env = make_robot_env(config=config, seed=1134, debug=False)
+    try:
+        observation, _info = env.reset(seed=1134)
+        assert env.observation_space.contains(observation)
+
+        steps_taken = 0
+        for _ in range(3):
+            observation, _reward, terminated, truncated, info = env.step(env.action_space.sample())
+            assert env.observation_space.contains(observation)
+            steps_taken += 1
+            if terminated or truncated:
+                break
+
+        assert steps_taken >= 1
+        assert isinstance(info, dict)
+    finally:
+        env.close()

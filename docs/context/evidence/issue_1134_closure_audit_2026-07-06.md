@@ -15,6 +15,21 @@ remaining original acceptance criteria still require the real licensed/user-supp
 assets on the execution host, then a real conversion, checksum/provenance record, and parser/smoke
 validation for the generated SVG.
 
+## Closure Evidence Update (2026-07-22)
+
+This historical audit recorded the state before the real ETH SVG was committed. PR #4693 subsequently
+committed `maps/svg_maps/socnavbench/socnavbench_eth.svg` with the documented source and output
+SHA-256 values. PR #6118 adds the scenario-specific environment proof that was absent from the
+original audit: `tests/scenarios/test_socnavbench_eth_smoke_scenario.py` loads
+`configs/scenarios/single/socnavbench_eth_smoke.yaml`, creates the environment with
+`make_robot_env`, resets it, and executes up to three headless steps against that committed real-map
+artifact.
+
+Evidence status: **smoke evidence**, not a benchmark or paper claim. This supersedes the row below
+that described the real ETH map environment smoke as unmet; the historical host preflight result is
+retained as evidence about that host's raw-asset availability, not as a claim that the committed SVG
+cannot run.
+
 ## Live Audit Inputs
 
 Live issue thread read on 2026-07-06 recorded the latest maintainer gate comment at

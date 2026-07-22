@@ -24,7 +24,8 @@ The follow-up issue #1134 remaining criteria are now complete:
 - Add a smoke scenario YAML: committed as `configs/scenarios/single/socnavbench_eth_smoke.yaml`.
 - Add a focused CPU-only test: committed as `tests/scenarios/test_socnavbench_eth_smoke_scenario.py`
   — proves the real committed ETH map (377 obstacles, 1 robot route, 1 pedestrian route, all
-  spawn/goal zones) parses through the scenario pipeline with no external data root required.
+  spawn/goal zones) parses through the scenario pipeline and runs through `make_robot_env`, reset,
+  and up to three headless steps with no external data root required.
 
 The batch validator (`validate_socnav_map_batch.py --batch-id eth_first`) remains fail-closed
 on hosts without the raw source assets, which is the correct behavior — the conversion evidence
@@ -34,7 +35,7 @@ and SHA-256 provenance are tracked through PR #4693 and the issue state surfaces
 
 - `maps/svg_maps/socnavbench/socnavbench_eth.svg` — committed by PR #4693
 - `configs/scenarios/single/socnavbench_eth_smoke.yaml` — committed by the #1134 closure PR
-- parser, route/zone validation evidence — covered by the focused test
+- parser, route/zone, and headless environment-smoke evidence — covered by the focused test
 - `docs/context/issue_1134_state.yaml` — updated with ready_for_closure entry
 
 The raw source checksums are preserved in PR #4693 metadata and the issue state surface.

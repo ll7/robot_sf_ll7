@@ -23,6 +23,7 @@ PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
     "fast-feedback": 45,
+    "coverage-gate": 10,
     "compat-matrix": 30,
     "fast-pysf-compat": 10,
     "smoke-artifacts": 30,
@@ -258,19 +259,41 @@ def test_ci_workflow_splits_fast_feedback_from_smoke_artifacts() -> None:
     assert "needs" not in workflow["jobs"]["fast-feedback"]
 
 
-def test_ci_workflow_enforces_absolute_coverage_floor_without_resharding() -> None:
-    """Block low full-suite coverage without changing pull-request fast feedback."""
+def test_ci_workflow_combines_sharded_main_coverage_before_enforcing_floor() -> None:
+    """Keep main fast by combining complete coverage from four full-suite shards."""
     workflow = yaml.safe_load(_workflow_text())
     fast_feedback = workflow["jobs"]["fast-feedback"]
-    steps = fast_feedback["steps"]
+    coverage_gate = workflow["jobs"]["coverage-gate"]
+    fast_feedback_steps = fast_feedback["steps"]
+    coverage_steps = coverage_gate["steps"]
+    upload_step = next(
+        step for step in fast_feedback_steps if step.get("name") == "Upload coverage shard"
+    )
     floor_step = next(
-        step for step in steps if step.get("name") == "Enforce absolute coverage floor"
+        step for step in coverage_steps if step.get("name") == "Enforce absolute coverage floor"
     )
     baseline_step = next(
-        step for step in steps if step.get("name") == "Compare coverage with baseline"
+        step for step in coverage_steps if step.get("name") == "Compare coverage with baseline"
+    )
+    combine_step = next(
+        step for step in coverage_steps if step.get("name") == "Combine coverage shards"
     )
 
-    assert floor_step["if"] == "${{ github.event_name != 'pull_request' }}"
+    assert fast_feedback["strategy"]["matrix"]["shard"] == [1, 2, 3, 4]
+    assert fast_feedback["env"]["PYTEST_SHARD_COUNT"] == 4
+    assert (
+        "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_SHARD_INCLUDE_SLOW"]
+    )
+    assert "github.event_name != 'pull_request'" in fast_feedback["env"]["ROBOT_SF_PYTEST_COVERAGE"]
+    assert "matrix.shard" in fast_feedback["env"]["COVERAGE_FILE"]
+    assert upload_step["if"] == "${{ github.event_name != 'pull_request' }}"
+    assert upload_step["with"]["include-hidden-files"] is True
+    assert coverage_gate["needs"] == "fast-feedback"
+    assert "github.event_name != 'pull_request'" in coverage_gate["if"]
+    assert "coverage combine output/coverage" in combine_step["run"]
+    assert "coverage json" in combine_step["run"]
+    assert "coverage html" in combine_step["run"]
+    assert "if" not in floor_step
     assert "continue-on-error" not in floor_step
     assert "--minimum-total 85.0" in floor_step["run"]
     assert "--absolute-only" in floor_step["run"]
@@ -278,9 +301,18 @@ def test_ci_workflow_enforces_absolute_coverage_floor_without_resharding() -> No
     assert baseline_step["continue-on-error"] is True
     assert "--threshold 1.0" in baseline_step["run"]
     assert "--fail-on-decrease" not in baseline_step["run"]
-    assert fast_feedback["strategy"]["matrix"]["shard"] == (
-        "${{ github.event_name == 'pull_request' && fromJSON('[1, 2, 3, 4]') || fromJSON('[1]') }}"
-    )
+    assert "coverage-gate" in workflow["jobs"]["ci"]["needs"]
+
+
+def test_parallel_test_driver_supports_full_sharded_coverage() -> None:
+    """Require explicit slow-test and coverage controls for main's sharded pass."""
+    script_text = (ROOT / "scripts" / "dev" / "run_tests_parallel.sh").read_text(encoding="utf-8")
+
+    assert "ROBOT_SF_SHARD_INCLUDE_SLOW" in script_text
+    assert '"$include_slow" != "1"' in script_text
+    assert '[[ "$coverage_enabled" == "1" ]]' in script_text
+    assert '[[ -z "${COVERAGE_FILE:-}" ]]' in script_text
+    assert 'cmd+=("--cov=robot_sf" "--cov-report=")' in script_text
 
 
 def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:

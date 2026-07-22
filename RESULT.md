@@ -1,31 +1,25 @@
-# PR #6067 Review Fix Result
+# PR #6087 Review Blockers
 
 ## Fixed comments
 
-- Fixed the accepted blocker about the incomplete grouped `setup-uv` update.
-- Updated `.github/actions/setup-ci-python/action.yml:26` from
-  `astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b` (v8.1.0) to
-  `astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990` (v8.3.2), matching the
-  direct workflow use in `.github/workflows/ci.yml`.
+- `tests/baselines/test_sicnav_planner.py:141-143`: mocked `Path.expanduser` directly and compared platform-aware `Path` values, removing the Windows-dependent `HOME` string assertion.
+- `tests/baselines/test_sicnav_planner.py:87-88`: added an autouse fixture that saves and restores the process-global `random` and NumPy RNG states around every test.
 
 ## Validation
 
-- Pin assertion: passed; both setup-uv uses resolve to the v8.3.2 commit.
-- Stale-pin assertion: passed; the v8.1.0 commit is absent from `.github`.
-- YAML parse: passed with `uv run --quiet python -c 'import yaml; yaml.safe_load(...)'`.
-- Whitespace validation: passed with `git diff --check`.
-- `actionlint`: not run because it is not installed on the validation host.
+- `scripts/dev/run_worktree_shared_venv.sh -- uv run pytest tests/baselines/test_sicnav_planner.py -q` — 68 passed.
+- `scripts/dev/run_worktree_shared_venv.sh -- uv run ruff check tests/baselines/test_sicnav_planner.py` — passed.
+- `git diff --check` — passed.
 
-## Commit
+## Delivery
 
-- Pushed commit: `bc66d782abbf08559b5266d0c1da61f521e28dc1`
-- PR head verified on `dependabot/github_actions/actions-fb1e5bb1b7`.
+- Commit: `17fa7b46a5a96557f478fd90cd11cc73efc3225d`
+- Pushed to PR branch `cheap/cheap-issue-6077-b5a9ba703747`.
+- Post-push head: `17fa7b46a5a96557f478fd90cd11cc73efc3225d`.
 
 ## Review state
 
-- Post-push unresolved review threads: none reported by GitHub.
-- Resolved thread IDs: none; no review-thread nodes were present to resolve.
-
-## Blockers
-
-- None for the requested fix. `actionlint` availability is a validation limitation only.
+- `PRRT_kwDOLRSZdc6SqrJp` — resolved; now outdated after the path-test edit.
+- `PRRT_kwDOLRSZdc6SqrJy` — resolved; current-head RNG fixture comment addressed.
+- Unresolved review threads: none.
+- Blockers: none within the authorized scope.

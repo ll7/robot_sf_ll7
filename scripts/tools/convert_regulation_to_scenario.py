@@ -424,9 +424,7 @@ def compile_regulation_excerpt(
         speed_value, _ = _extract_speed(clause)
         clearance_value, _ = _extract_clearance(clause)
         _, density_audit = _extract_density(clause)
-        has_concrete_density = any(
-            entry.get("source") != "default" for entry in density_audit
-        )
+        has_concrete_density = any(entry.get("source") != "default" for entry in density_audit)
         if speed_value is None and clearance_value is None and not has_concrete_density:
             params.unmatched_clauses.append(clause)
 

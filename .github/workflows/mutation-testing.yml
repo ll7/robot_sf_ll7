@@ -1,0 +1,128 @@
+name: Mutation testing
+
+# Bounded mutation-testing downward ratchet for benchmark-critical semantics
+# (issue #5508). Runs the `mutmut` tool on ONE benchmark-critical module
+# (robot_sf/research/aggregation.py, exercised by tests/research/
+# test_aggregation.py), then compares the surviving mutants against the
+# committed baseline at scripts/validation/mutation_baseline.json using
+# scripts/dev/mutation_ratchet.py.
+#
+# Scope boundary (issue #5508): this is a SCHEDULED DIAGNOSTIC, explicitly NOT
+# a required PR gate. Line coverage (the 85% CI floor) does not establish that
+# assertions detect incorrect metric, provenance, or publication-gate behavior;
+# mutation testing does, but at a cost that is not justified on every PR. The
+# lane therefore runs weekly and on manual dispatch only, and never on
+# pull_request.
+#
+# Ratchet contract: the job fails only when a NEW, un-baselined surviving mutant
+# appears (a regression in test strength). Survivors already enumerated in the
+# baseline are tolerated grandfathered exclusions; survivors that disappear are
+# reported as ratchet opportunities to lock in via
+# `scripts/dev/mutation_ratchet.py --write-baseline`. See mutation_testing_
+# triage.md for the triage workflow.
+
+on:
+  schedule:
+    # 06:13 UTC every Monday (off-peak, non-round-minute to spread GitHub load).
+    - cron: "13 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mutation-testing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      # The ratchet sets a step output (ratchet_result=failed) when it finds new,
+      # un-baselined surviving mutants. `set -o pipefail` + `|| code=$?` captures
+      # the ratchet exit code into a variable so a mutation-strength regression
+      # (exit 1) is recorded without skipping the report/upload steps below
+      # (they run via `if: always()`). Infra errors (exit 2) re-exit directly so
+      # they fail the job as a setup/tooling problem, not a mutation regression.
+      - name: Run mutation ratchet
+        id: mutation
+        run: |
+          mkdir -p output/mutation
+          set -o pipefail
+          uv run python scripts/dev/mutation_ratchet.py --check 2>&1 \
+            | tee output/mutation/ratchet.log \
+            || code=$?
+          code=${code:-0}
+          echo "ratchet_exit=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" -eq 1 ]; then
+            echo "ratchet_result=failed" >> "$GITHUB_OUTPUT"
+          else
+            exit "$code"
+          fi
+
+      - name: Render text mutation report
+        if: always()
+        run: |
+          mkdir -p output/mutation
+          {
+            echo "# Mutation-testing report (issue #5508)"
+            echo
+            echo "Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Source: robot_sf/research/aggregation.py"
+            echo "Tests: tests/research/test_aggregation.py"
+            echo
+            echo "## Ratchet outcome"
+            echo '```'
+            cat output/mutation/ratchet.log
+            echo '```'
+            echo
+            echo "## Committed baseline summary"
+            uv run python -c "import json;print(json.dumps(json.load(open('scripts/validation/mutation_baseline.json'))['summary'], indent=2))"
+            echo
+            echo "## Surviving mutants (current run)"
+            echo '```'
+            uv run mutmut results || true
+            echo '```'
+          } > output/mutation/mutation_report.md
+          echo "--- report head ---"
+          head -40 output/mutation/mutation_report.md
+
+      - name: Summarize ratchet outcome
+        if: always()
+        run: |
+          printf 'mutation ratchet exit: %s\n' "${{ steps.mutation.outcome }}"
+          printf 'Committed baseline survivors: '
+          uv run python -c "import json;print(len(json.load(open('scripts/validation/mutation_baseline.json'))['survivors']))" || true
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-testing-report
+          path: |
+            output/mutation/ratchet.log
+            output/mutation/mutation_report.md
+            mutants/mutmut-cicd-stats.json
+          if-no-files-found: warn
+
+      # A ratchet regression (exit 1, ratchet_result=failed) must fail the job so
+      # it is visible as a scheduled-diagnostic alert. The report/upload steps
+      # above run unconditionally via `if: always()`, so the artifact is always
+      # produced even on a regression. Other outcomes (hold=0, infra=2) pass
+      # through here without an extra failure (infra errors already failed the
+      # mutation step directly).
+      - name: Fail on new surviving mutants
+        if: steps.mutation.outputs.ratchet_result == 'failed'
+        run: |
+          echo "mutation ratchet reported new, un-baselined surviving mutants (exit ${{ steps.mutation.outputs.ratchet_exit }})." >&2
+          echo "See output/mutation/mutation_report.md and mutation_testing_triage.md." >&2
+          exit 1

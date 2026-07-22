@@ -24,13 +24,15 @@ from robot_sf._numerical_thread_env import pin_thread_env_for_determinism
 # Force thread pinning before any heavy benchmark / scientific imports
 THREAD_ENV = pin_thread_env_for_determinism()
 
-from robot_sf.benchmark.runner import run_batch  # noqa: E402
+from robot_sf.benchmark.map_runner import run_map_batch  # noqa: E402
+from robot_sf.benchmark.runner import load_scenario_matrix  # noqa: E402
 from robot_sf.benchmark.step_trace_comparator import (  # noqa: E402
     canonical_step_trace_digest,
     compare_step_traces,
 )
 
 DEFAULT_SCENARIO_PATH = "configs/scenarios/archetypes/classic_crossing.yaml"
+DEFAULT_SCENARIO_ID = "classic_crossing_low"
 DEFAULT_SCHEMA_PATH = "robot_sf/benchmark/schemas/episode.schema.v1.json"
 DEFAULT_PLANNER = "goal"
 DEFAULT_SEED = 42
@@ -39,33 +41,77 @@ DEFAULT_HORIZON = 30
 
 def run_single_episode_trace(
     scenario_path: str = DEFAULT_SCENARIO_PATH,
+    scenario_id: str = DEFAULT_SCENARIO_ID,
     schema_path: str = DEFAULT_SCHEMA_PATH,
     planner: str = DEFAULT_PLANNER,
     seed: int = DEFAULT_SEED,
     horizon: int = DEFAULT_HORIZON,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Execute one fixed episode in-process and return (episode_row, step_trace)."""
+    scenarios = load_scenario_matrix(scenario_path)
+    matching_scenarios = [
+        scenario
+        for scenario in scenarios
+        if str(scenario.get("scenario_id", scenario.get("name", ""))) == scenario_id
+    ]
+    if len(matching_scenarios) != 1:
+        raise RuntimeError(
+            f"Expected exactly one scenario_id={scenario_id!r} in {scenario_path!r}; "
+            f"found {len(matching_scenarios)}."
+        )
+
+    selected_scenario = copy.deepcopy(matching_scenarios[0])
+    selected_scenario["seeds"] = [seed]
+
     with tempfile.TemporaryDirectory() as tmpdir:
         out_file = Path(tmpdir) / "results.jsonl"
-        run_batch(
-            scenario_path,
+        summary = run_map_batch(
+            [selected_scenario],
             out_path=str(out_file),
             schema_path=schema_path,
-            base_seed=seed,
-            repeats_override=1,
+            scenario_path=scenario_path,
             horizon=horizon,
             algo=planner,
             record_simulation_step_trace=True,
+            workers=1,
+            resume=False,
         )
         with open(out_file, encoding="utf-8") as f:
-            line = f.readline()
-            if not line:
-                raise RuntimeError("No output episode row was written by run_batch.")
-            row = json.loads(line)
+            rows = [json.loads(line) for line in f if line.strip()]
+
+    written = summary.get("written")
+    if len(rows) != 1 or written != 1:
+        raise RuntimeError(
+            "Per-context determinism smoke must execute exactly one episode; "
+            f"runner reported written={written!r} and emitted {len(rows)} row(s)."
+        )
+    row = rows[0]
 
     algo_metadata = row.get("algorithm_metadata", {})
+    actual_identity = {
+        "scenario_id": row.get("scenario_id"),
+        "planner": algo_metadata.get("algorithm") if isinstance(algo_metadata, dict) else None,
+        "seed": row.get("seed"),
+        "horizon": row.get("horizon"),
+    }
+    expected_identity = {
+        "scenario_id": scenario_id,
+        "planner": planner,
+        "seed": seed,
+        "horizon": horizon,
+    }
+    if actual_identity != expected_identity:
+        raise RuntimeError(
+            "Executed episode identity does not match the requested fixed contract: "
+            f"expected={expected_identity!r}, actual={actual_identity!r}."
+        )
+
     trace = algo_metadata.get("simulation_step_trace")
-    if not isinstance(trace, dict) or "steps" not in trace:
+    if (
+        not isinstance(trace, dict)
+        or not isinstance(trace.get("steps"), list)
+        or not trace["steps"]
+    ):
         raise RuntimeError(
             "Episode row algorithm_metadata did not contain a valid simulation_step_trace."
         )
@@ -74,6 +120,7 @@ def run_single_episode_trace(
 
 def run_determinism_smoke(
     scenario_path: str = DEFAULT_SCENARIO_PATH,
+    scenario_id: str = DEFAULT_SCENARIO_ID,
     schema_path: str = DEFAULT_SCHEMA_PATH,
     planner: str = DEFAULT_PLANNER,
     seed: int = DEFAULT_SEED,
@@ -83,6 +130,7 @@ def run_determinism_smoke(
     t0 = time.perf_counter()
     row1, trace1 = run_single_episode_trace(
         scenario_path=scenario_path,
+        scenario_id=scenario_id,
         schema_path=schema_path,
         planner=planner,
         seed=seed,
@@ -90,6 +138,7 @@ def run_determinism_smoke(
     )
     _row2, trace2 = run_single_episode_trace(
         scenario_path=scenario_path,
+        scenario_id=scenario_id,
         schema_path=schema_path,
         planner=planner,
         seed=seed,
@@ -101,7 +150,8 @@ def run_determinism_smoke(
     if not equal:
         raise RuntimeError(
             f"Per-context determinism check failed for scenario='{scenario_path}' "
-            f"planner='{planner}' seed={seed} horizon={horizon}:\n{diff_msg}"
+            f"scenario_id='{scenario_id}' planner='{planner}' seed={seed} horizon={horizon}:\n"
+            f"{diff_msg}"
         )
 
     digest = canonical_step_trace_digest(trace1)
@@ -109,10 +159,10 @@ def run_determinism_smoke(
     return {
         "status": "pass",
         "scenario_path": scenario_path,
-        "scenario_id": row1.get("scenario_id"),
-        "planner": planner,
-        "seed": seed,
-        "horizon": horizon,
+        "scenario_id": row1["scenario_id"],
+        "planner": row1["algorithm_metadata"]["algorithm"],
+        "seed": row1["seed"],
+        "horizon": row1["horizon"],
         "step_count": step_count,
         "trace_sha256": digest,
         "thread_env": THREAD_ENV,
@@ -122,6 +172,7 @@ def run_determinism_smoke(
 
 def run_negative_test_smoke(
     scenario_path: str = DEFAULT_SCENARIO_PATH,
+    scenario_id: str = DEFAULT_SCENARIO_ID,
     schema_path: str = DEFAULT_SCHEMA_PATH,
     planner: str = DEFAULT_PLANNER,
     seed: int = DEFAULT_SEED,
@@ -130,6 +181,7 @@ def run_negative_test_smoke(
     """Verify that a modified step trace produces an actionable first-difference report."""
     _row, trace1 = run_single_episode_trace(
         scenario_path=scenario_path,
+        scenario_id=scenario_id,
         schema_path=schema_path,
         planner=planner,
         seed=seed,
@@ -169,6 +221,7 @@ def main() -> int:
         description="Run fixed-episode per-context determinism smoke check (issue #6126)."
     )
     parser.add_argument("--scenario-path", default=DEFAULT_SCENARIO_PATH)
+    parser.add_argument("--scenario-id", default=DEFAULT_SCENARIO_ID)
     parser.add_argument("--schema-path", default=DEFAULT_SCHEMA_PATH)
     parser.add_argument("--planner", default=DEFAULT_PLANNER)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
@@ -184,6 +237,7 @@ def main() -> int:
     if args.negative_test:
         res = run_negative_test_smoke(
             scenario_path=args.scenario_path,
+            scenario_id=args.scenario_id,
             schema_path=args.schema_path,
             planner=args.planner,
             seed=args.seed,
@@ -196,6 +250,7 @@ def main() -> int:
     try:
         res = run_determinism_smoke(
             scenario_path=args.scenario_path,
+            scenario_id=args.scenario_id,
             schema_path=args.schema_path,
             planner=args.planner,
             seed=args.seed,

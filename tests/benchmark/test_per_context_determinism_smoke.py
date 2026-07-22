@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any
+
 import pytest
 
 from robot_sf.benchmark.step_trace_comparator import (
@@ -9,9 +13,12 @@ from robot_sf.benchmark.step_trace_comparator import (
     compare_step_traces,
     find_first_trace_difference,
 )
+from scripts.validation import run_per_context_determinism_smoke as smoke_module
 from scripts.validation.run_per_context_determinism_smoke import (
+    DEFAULT_SCENARIO_ID,
     run_determinism_smoke,
     run_negative_test_smoke,
+    run_single_episode_trace,
 )
 
 
@@ -19,6 +26,10 @@ def test_per_context_determinism_smoke() -> None:
     """Run two in-process episodes and verify that canonical step traces match."""
     res = run_determinism_smoke(horizon=20)
     assert res["status"] == "pass"
+    assert res["scenario_id"] == DEFAULT_SCENARIO_ID
+    assert res["planner"] == "goal"
+    assert res["seed"] == 42
+    assert res["horizon"] == 20
     assert res["step_count"] == 20
     assert isinstance(res["trace_sha256"], str)
     assert len(res["trace_sha256"]) == 64
@@ -133,3 +144,95 @@ def test_step_trace_comparator_unit() -> None:
     # Invalid input format
     with pytest.raises(ValueError, match="Input trace dictionary must contain a 'steps' list"):
         compare_step_traces({"invalid": 123}, t1)
+
+
+def _episode_row(
+    *, scenario_id: str = DEFAULT_SCENARIO_ID, seed: int = 42, horizon: int = 20
+) -> dict[str, Any]:
+    return {
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "horizon": horizon,
+        "algorithm_metadata": {
+            "algorithm": "goal",
+            "simulation_step_trace": {"steps": [{"step": 0}]},
+        },
+    }
+
+
+def _patch_scenario_loader(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        smoke_module,
+        "load_scenario_matrix",
+        lambda _path: [
+            {"name": DEFAULT_SCENARIO_ID, "map_file": "map.svg", "seeds": [101, 102, 103]},
+            {"name": "other_scenario", "map_file": "map.svg", "seeds": [101]},
+        ],
+    )
+
+
+def test_single_episode_trace_schedules_exact_requested_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The smoke narrows a manifest to one scenario and one requested seed."""
+    _patch_scenario_loader(monkeypatch)
+    captured: dict[str, Any] = {}
+
+    def _fake_run_map_batch(
+        scenarios: list[dict[str, Any]], out_path: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        captured["scenarios"] = scenarios
+        captured["kwargs"] = kwargs
+        Path(out_path).write_text(json.dumps(_episode_row()) + "\n", encoding="utf-8")
+        return {"written": 1}
+
+    monkeypatch.setattr(smoke_module, "run_map_batch", _fake_run_map_batch)
+
+    row, _trace = run_single_episode_trace(horizon=20)
+
+    assert row["scenario_id"] == DEFAULT_SCENARIO_ID
+    assert captured["scenarios"] == [
+        {"name": DEFAULT_SCENARIO_ID, "map_file": "map.svg", "seeds": [42]}
+    ]
+    assert captured["kwargs"]["scenario_path"] == smoke_module.DEFAULT_SCENARIO_PATH
+    assert captured["kwargs"]["horizon"] == 20
+    assert captured["kwargs"]["algo"] == "goal"
+    assert captured["kwargs"]["workers"] == 1
+    assert captured["kwargs"]["resume"] is False
+
+
+def test_single_episode_trace_rejects_multirow_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: the old path emitted nine rows and silently consumed the first."""
+    _patch_scenario_loader(monkeypatch)
+
+    def _fake_run_map_batch(
+        _scenarios: list[dict[str, Any]], out_path: str, **_kwargs: Any
+    ) -> dict[str, Any]:
+        rows = [_episode_row(seed=101) for _ in range(9)]
+        Path(out_path).write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+        return {"written": 9}
+
+    monkeypatch.setattr(smoke_module, "run_map_batch", _fake_run_map_batch)
+
+    with pytest.raises(RuntimeError, match="must execute exactly one episode"):
+        run_single_episode_trace(horizon=20)
+
+
+def test_single_episode_trace_rejects_false_seed_provenance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: requested seed 42 must not conceal an actual seed-101 episode."""
+    _patch_scenario_loader(monkeypatch)
+
+    def _fake_run_map_batch(
+        _scenarios: list[dict[str, Any]], out_path: str, **_kwargs: Any
+    ) -> dict[str, Any]:
+        Path(out_path).write_text(json.dumps(_episode_row(seed=101)) + "\n", encoding="utf-8")
+        return {"written": 1}
+
+    monkeypatch.setattr(smoke_module, "run_map_batch", _fake_run_map_batch)
+
+    with pytest.raises(RuntimeError, match="Executed episode identity does not match"):
+        run_single_episode_trace(horizon=20)

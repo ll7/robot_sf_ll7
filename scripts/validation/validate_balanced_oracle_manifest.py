@@ -21,6 +21,83 @@ def _file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _load_manifest(manifest_path: Path) -> dict[str, Any]:
+    """Load a manifest and require a JSON object payload."""
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Failed to parse manifest JSON: {exc}") from exc
+
+    if not isinstance(manifest, dict):
+        raise ValueError("Manifest payload must be a JSON object")
+    return manifest
+
+
+def _validate_balance_summary(manifest: dict[str, Any], errors: list[str]) -> None:
+    """Append validation errors for the manifest's balance summary."""
+    balance_summary = manifest.get("balance_summary")
+    if not isinstance(balance_summary, dict):
+        errors.append("balance_summary must be a mapping")
+        return
+
+    for required_key in ("action_bin_accounting", "stratum_counts"):
+        if required_key not in balance_summary:
+            errors.append(f"balance_summary is missing {required_key}")
+
+
+def _validate_manifest_fields(manifest: dict[str, Any]) -> list[str]:
+    """Return errors for required manifest metadata."""
+    errors: list[str] = []
+
+    schema_version = manifest.get("schema_version")
+    if schema_version != EXPECTED_SCHEMA:
+        errors.append(f"schema_version must be {EXPECTED_SCHEMA!r}, got {schema_version!r}")
+
+    for field_name in ("dataset_id", "exact_public_sha", "bc_loader_smoke_command"):
+        value = manifest.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"{field_name} must be a non-empty string")
+
+    sha256_inventory = manifest.get("sha256_inventory")
+    if not isinstance(sha256_inventory, dict) or not sha256_inventory:
+        errors.append("sha256_inventory must be a non-empty mapping")
+
+    if not isinstance(manifest.get("exclusions"), list):
+        errors.append("exclusions must be a list")
+
+    if not isinstance(manifest.get("private_artifact_registry_candidate"), dict):
+        errors.append("private_artifact_registry_candidate must be a mapping")
+
+    _validate_balance_summary(manifest, errors)
+    return errors
+
+
+def _resolve_npz_path(manifest_path: Path, manifest: dict[str, Any]) -> Path:
+    """Resolve the artifact path relative to its manifest when necessary."""
+    npz_path_raw = manifest.get("npz_path")
+    if npz_path_raw:
+        try:
+            npz_path = Path(npz_path_raw)
+        except TypeError as exc:
+            raise ValueError("npz_path must be a string") from exc
+    else:
+        npz_path = manifest_path.parent / "expert_traj_v1.npz"
+    if npz_path_raw and not npz_path.is_absolute():
+        npz_path = manifest_path.parent / npz_path
+    return npz_path.resolve()
+
+
+def _validate_npz_artifact(npz_path: Path, expected_sha: Any, errors: list[str]) -> None:
+    """Append validation errors for artifact presence and digest integrity."""
+    if not npz_path.is_file():
+        errors.append(f"NPZ artifact is missing: {npz_path}")
+        return
+
+    actual_sha = _file_sha256(npz_path)
+    if expected_sha and actual_sha != expected_sha:
+        errors.append(f"NPZ SHA-256 mismatch: expected {expected_sha}, got {actual_sha}")
+
+
 def validate_balanced_manifest(manifest_path: Path) -> dict[str, Any]:
     """Validate a balanced oracle dataset manifest and associated NPZ artifact.
 
@@ -37,65 +114,13 @@ def validate_balanced_manifest(manifest_path: Path) -> dict[str, Any]:
     if not manifest_path.is_file():
         raise ValueError(f"Manifest path is not a file: {manifest_path}")
 
-    try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise ValueError(f"Failed to parse manifest JSON: {exc}") from exc
-
-    if not isinstance(manifest, dict):
-        raise ValueError("Manifest payload must be a JSON object")
-
-    errors: list[str] = []
-
-    schema_version = manifest.get("schema_version")
-    if schema_version != EXPECTED_SCHEMA:
-        errors.append(f"schema_version must be {EXPECTED_SCHEMA!r}, got {schema_version!r}")
-
+    manifest = _load_manifest(manifest_path)
+    errors = _validate_manifest_fields(manifest)
     dataset_id = manifest.get("dataset_id")
-    if not isinstance(dataset_id, str) or not dataset_id.strip():
-        errors.append("dataset_id must be a non-empty string")
-
     exact_public_sha = manifest.get("exact_public_sha")
-    if not isinstance(exact_public_sha, str) or not exact_public_sha.strip():
-        errors.append("exact_public_sha must be a non-empty string")
-
-    sha256_inv = manifest.get("sha256_inventory")
-    if not isinstance(sha256_inv, dict) or not sha256_inv:
-        errors.append("sha256_inventory must be a non-empty mapping")
-
     exclusions = manifest.get("exclusions")
-    if not isinstance(exclusions, list):
-        errors.append("exclusions must be a list")
-
-    balance_summary = manifest.get("balance_summary")
-    if not isinstance(balance_summary, dict):
-        errors.append("balance_summary must be a mapping")
-    else:
-        if "action_bin_accounting" not in balance_summary:
-            errors.append("balance_summary is missing action_bin_accounting")
-        if "stratum_counts" not in balance_summary:
-            errors.append("balance_summary is missing stratum_counts")
-
-    registry_candidate = manifest.get("private_artifact_registry_candidate")
-    if not isinstance(registry_candidate, dict):
-        errors.append("private_artifact_registry_candidate must be a mapping")
-
-    bc_smoke_cmd = manifest.get("bc_loader_smoke_command")
-    if not isinstance(bc_smoke_cmd, str) or not bc_smoke_cmd.strip():
-        errors.append("bc_loader_smoke_command must be a non-empty string")
-
-    # Check NPZ file presence and SHA-256 match
-    npz_path_raw = manifest.get("npz_path")
-    npz_path = Path(npz_path_raw) if npz_path_raw else manifest_path.parent / "expert_traj_v1.npz"
-    if not npz_path.is_absolute():
-        npz_path = (manifest_path.parent / npz_path).resolve()
-
-    if not npz_path.is_file():
-        errors.append(f"NPZ artifact is missing: {npz_path}")
-    else:
-        actual_sha = _file_sha256(npz_path)
-        if exact_public_sha and actual_sha != exact_public_sha:
-            errors.append(f"NPZ SHA-256 mismatch: expected {exact_public_sha}, got {actual_sha}")
+    npz_path = _resolve_npz_path(manifest_path, manifest)
+    _validate_npz_artifact(npz_path, exact_public_sha, errors)
 
     if errors:
         raise ValueError("Balanced manifest validation failed:\n- " + "\n- ".join(errors))
@@ -125,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         report = validate_balanced_manifest(args.manifest_path)
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         if args.json:
             print(json.dumps({"status": "invalid", "error": str(exc)}, indent=2))
         else:

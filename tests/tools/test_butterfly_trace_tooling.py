@@ -40,20 +40,24 @@ def _frame(step: int, robot_x: float, pedestrian_x: float) -> dict[str, Any]:
     }
 
 
-def _episode_row() -> dict[str, Any]:
+def _episode_row(
+    arm: adapter.ReexportArmSpec = adapter.DOORWAY_ARM, *, seed: int = 113
+) -> dict[str, Any]:
     """Return a minimal row matching the adapter's pinned campaign contract."""
     return {
-        "seed": 113,
-        "episode_id": "classic_doorway_medium--113--fixture",
-        "scenario_id": adapter.EXPECTED_SCENARIO_ID,
-        "algo": adapter.EXPECTED_ALGO,
-        "git_hash": adapter.EXEC_COMMIT,
+        "seed": seed,
+        "episode_id": f"{arm.scenario_id}--{seed}--fixture",
+        "scenario_id": arm.scenario_id,
+        "algo": arm.planner,
+        "git_hash": arm.execution_commit,
+        "config_hash": f"fixture-{arm.key}-config",
         "status": "success",
         "termination_reason": "success",
         "result_provenance": {
-            "repo_commit": adapter.EXEC_COMMIT,
-            "scenario_id": adapter.EXPECTED_SCENARIO_ID,
-            "seed": 113,
+            "repo_commit": arm.execution_commit,
+            "scenario_id": arm.scenario_id,
+            "seed": seed,
+            "config_hash": f"fixture-{arm.key}-config",
         },
         "algorithm_metadata": {
             "simulation_step_trace": {
@@ -100,6 +104,63 @@ def test_build_bundle_rejects_mislabeled_source_provenance(tmp_path: Path) -> No
 
     with pytest.raises(ValueError, match="does not match pinned doorway re-export provenance"):
         adapter.build_bundle(episodes, 113, tmp_path / "bundle")
+
+
+@pytest.mark.parametrize(
+    "arm",
+    [adapter.BOTTLENECK_GOAL_ARM, adapter.BOTTLENECK_PPO_ARM],
+    ids=lambda arm: arm.key,
+)
+def test_bottleneck_arms_propagate_source_provenance(
+    tmp_path: Path, arm: adapter.ReexportArmSpec
+) -> None:
+    """Bottleneck bundles carry source provenance, not arm-invented job labels."""
+    row = _episode_row(arm, seed=118)
+    row["result_provenance"].update({"campaign_id": f"source-{arm.key}", "slurm_job_id": 9001})
+    episodes = tmp_path / f"{arm.key}.jsonl"
+    _write_episode(episodes, row)
+
+    adapter.build_bundle(episodes, 118, tmp_path / "bundle", arm=arm)
+    metadata = json.loads((tmp_path / "bundle" / "metadata.json").read_text())
+
+    assert metadata["source_arm"] == arm.key
+    assert metadata["result_provenance"] == row["result_provenance"]
+    assert metadata["campaign_id"] == f"source-{arm.key}"
+    assert metadata["campaign_job"] == "9001"
+
+
+@pytest.mark.parametrize(
+    "arm",
+    [adapter.BOTTLENECK_GOAL_ARM, adapter.BOTTLENECK_PPO_ARM],
+    ids=lambda arm: arm.key,
+)
+def test_bottleneck_arms_reject_mismatched_result_provenance(
+    tmp_path: Path, arm: adapter.ReexportArmSpec
+) -> None:
+    """A matching top-level row cannot inherit a different arm's provenance."""
+    row = _episode_row(arm, seed=118)
+    row["result_provenance"]["scenario_id"] = "unrelated-scenario"
+    episodes = tmp_path / f"{arm.key}.jsonl"
+    _write_episode(episodes, row)
+
+    with pytest.raises(ValueError, match=r"result_provenance\.scenario_id"):
+        adapter.build_bundle(episodes, 118, tmp_path / "bundle", arm=arm)
+
+
+def test_build_bundle_requires_result_provenance(tmp_path: Path) -> None:
+    """No arm may label an unproven matching row as a pinned re-export."""
+    row = _episode_row(adapter.BOTTLENECK_GOAL_ARM, seed=118)
+    del row["result_provenance"]
+    episodes = tmp_path / "episodes.jsonl"
+    _write_episode(episodes, row)
+
+    with pytest.raises(ValueError, match="result_provenance is missing"):
+        adapter.build_bundle(
+            episodes,
+            118,
+            tmp_path / "bundle",
+            arm=adapter.BOTTLENECK_GOAL_ARM,
+        )
 
 
 def test_build_bundle_rejects_empty_trace(tmp_path: Path) -> None:

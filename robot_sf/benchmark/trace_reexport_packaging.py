@@ -1039,6 +1039,31 @@ def _index_outcome_rows(
     return outcome_by_key
 
 
+def default_resolver_mapping_path(package_dir: Path) -> Path:
+    """Return a resolver-receipt path beside, never inside, a complete package.
+
+    The completion marker covers every package file. Writing a derived receipt below
+    ``package_dir`` would therefore invalidate the package immediately after a
+    successful conversion.
+
+    Returns:
+        A sibling path named ``<package>.resolver_mapping_receipt.json``.
+    """
+    package_dir = package_dir.resolve()
+    return package_dir.with_name(f"{package_dir.name}.resolver_mapping_receipt.json")
+
+
+def _validate_resolver_output_path(package_dir: Path, output_path: Path | None) -> Path | None:
+    if output_path is None:
+        return None
+    resolved_output = output_path.resolve()
+    if resolved_output == package_dir or package_dir in resolved_output.parents:
+        raise TraceReexportPackagingError(
+            "resolver mapping receipt must be written outside the immutable complete package"
+        )
+    return resolved_output
+
+
 def build_resolver_mapping_receipt(
     package_dir: Path, *, output_path: Path | None = None
 ) -> dict[str, Any]:
@@ -1056,7 +1081,9 @@ def build_resolver_mapping_receipt(
 
     Args:
         package_dir: A directory previously produced by :func:`package_trace_reexport`.
-        output_path: When given, write the JSON receipt here (canonical form).
+        output_path: When given, write the JSON receipt here (canonical form). The
+            destination must be outside ``package_dir`` so the package completion
+            marker remains valid.
 
     Returns:
         The ``issue_5756_trace_mapping_receipt.v1`` payload.
@@ -1064,6 +1091,7 @@ def build_resolver_mapping_receipt(
     package_dir = package_dir.resolve()
     if _verify_complete_output(package_dir) is None:
         raise TraceReexportPackagingError(f"package is not a complete trace package: {package_dir}")
+    output_path = _validate_resolver_output_path(package_dir, output_path)
     receipt = _read_json_object(package_dir / "mapping_receipt.json")
     if receipt.get("schema_version") != MAPPING_RECEIPT_SCHEMA:
         raise TraceReexportPackagingError("package mapping receipt has an unexpected schema")
@@ -1149,6 +1177,7 @@ __all__ = [
     "build_resolver_mapping_receipt",
     "campaign_expectations",
     "canonical_sha256",
+    "default_resolver_mapping_path",
     "expected_outcomes_payload_for_rows",
     "package_trace_reexport",
 ]

@@ -173,18 +173,16 @@ class ReexportArmSpec:
     """Pinned provenance for one worked-example re-export arm.
 
     Carries the fail-closed expectations ``build_bundle`` checks each episode row
-    against, plus the campaign/job/config labels written into the bundle metadata so
-    every emitted artifact stays self-describing. Keeping the per-arm pins here lets
-    the one adapter serve both #5756 worked-example pairs from the same renderer.
+    against. Campaign/job labels are deliberately not stored here: those identifiers
+    must come from the source row's ``result_provenance`` rather than being invented by
+    the selected arm. Keeping the fail-closed identity pins here lets one adapter serve
+    both #5756 worked-example pairs from the same renderer.
     """
 
     key: str
     planner: str
     scenario_id: str
     execution_commit: str
-    campaign_id: str
-    slurm_job: str
-    config_path: str
 
 
 #: The pinned doorway PPO butterfly arm (job 13483). Outcomes reproduce the release
@@ -194,9 +192,6 @@ DOORWAY_ARM = ReexportArmSpec(
     planner="ppo",
     scenario_id="classic_doorway_medium",
     execution_commit=EXEC_COMMIT,
-    campaign_id="doorway_butterfly_ppo_a307",
-    slurm_job="13483",
-    config_path="configs/benchmarks/doorway_butterfly_trace_reexport.yaml",
 )
 
 #: The pinned double-bottleneck goal arm (job 13487). 30/30 outcome-faithful vs release.
@@ -205,9 +200,6 @@ BOTTLENECK_GOAL_ARM = ReexportArmSpec(
     planner="goal",
     scenario_id="classic_realworld_double_bottleneck_high",
     execution_commit=EXEC_COMMIT,
-    campaign_id="double_bottleneck_upset_goal_a307",
-    slurm_job="13487",
-    config_path="configs/benchmarks/issue_5756_trace90_goal.yaml",
 )
 
 #: The pinned double-bottleneck PPO arm (job 13488). 30/30 outcome-faithful vs release.
@@ -216,9 +208,6 @@ BOTTLENECK_PPO_ARM = ReexportArmSpec(
     planner="ppo",
     scenario_id="classic_realworld_double_bottleneck_high",
     execution_commit=EXEC_COMMIT,
-    campaign_id="double_bottleneck_upset_ppo_a307",
-    slurm_job="13488",
-    config_path="configs/benchmarks/issue_5756_trace90_ppo.yaml",
 )
 
 ARMS: dict[str, ReexportArmSpec] = {
@@ -226,6 +215,12 @@ ARMS: dict[str, ReexportArmSpec] = {
     BOTTLENECK_GOAL_ARM.key: BOTTLENECK_GOAL_ARM,
     BOTTLENECK_PPO_ARM.key: BOTTLENECK_PPO_ARM,
 }
+
+# Backward-compatible doorway aliases retained for existing callers and tests. New
+# multi-arm code should use ``DOORWAY_ARM`` directly.
+CAMPAIGN_ID: str = "doorway_butterfly_ppo_a307"
+EXPECTED_ALGO: str = DOORWAY_ARM.planner
+EXPECTED_SCENARIO_ID: str = DOORWAY_ARM.scenario_id
 
 
 # ---------------------------------------------------------------------------
@@ -256,11 +251,16 @@ def _load_row(episodes_jsonl: Path, seed: int) -> dict[str, Any]:
     return matches[0]
 
 
-def _validate_source_row(row: dict[str, Any], arm: ReexportArmSpec) -> None:
+def _validate_source_row(row: dict[str, Any], arm: ReexportArmSpec) -> dict[str, Any]:
     """Fail closed when an episode does not match its pinned re-export arm.
 
-    The doorway arm additionally carries a legacy ``result_provenance`` object; the
-    newer bottleneck jobs do not emit it, so it is only checked when present.
+    Every arm must carry row-level provenance. This prevents a file containing an
+    arbitrary matching planner/scenario/seed row from inheriting a trusted-looking arm
+    identity. The validated source object is returned so the emitted bundle can carry
+    the actual provenance rather than hard-coded campaign or job labels.
+
+    Returns:
+        A copy of the validated ``result_provenance`` object.
     """
     expected = {
         "git_hash": arm.execution_commit,
@@ -273,26 +273,28 @@ def _validate_source_row(row: dict[str, Any], arm: ReexportArmSpec) -> None:
         if row.get(key) != value
     ]
     result_provenance = row.get("result_provenance")
-    if result_provenance is None:
-        pass
-    elif not isinstance(result_provenance, dict):
-        mismatches.append("result_provenance is not an object")
+    if not isinstance(result_provenance, dict):
+        mismatches.append("result_provenance is missing or not an object")
     else:
         provenance_expectations = {
             "repo_commit": arm.execution_commit,
             "scenario_id": arm.scenario_id,
             "seed": row.get("seed"),
         }
+        if row.get("config_hash") is not None:
+            provenance_expectations["config_hash"] = row.get("config_hash")
         mismatches.extend(
             f"result_provenance.{key}={result_provenance.get(key)!r} (expected {value!r})"
             for key, value in provenance_expectations.items()
             if result_provenance.get(key) != value
         )
     if mismatches:
+        arm_label = "doorway" if arm == DOORWAY_ARM else arm.key
         raise ValueError(
-            f"episode row does not match pinned {arm.key} re-export provenance: "
+            f"episode row does not match pinned {arm_label} re-export provenance: "
             + "; ".join(mismatches)
         )
+    return dict(result_provenance)
 
 
 def _nearest_pedestrian(frame: dict[str, Any]) -> tuple[float, int | None]:
@@ -373,7 +375,10 @@ def _build_derived_rows(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _build_metadata(
-    row: dict[str, Any], derived_rows: list[dict[str, Any]], arm: ReexportArmSpec
+    row: dict[str, Any],
+    derived_rows: list[dict[str, Any]],
+    arm: ReexportArmSpec,
+    result_provenance: dict[str, Any],
 ) -> dict[str, Any]:
     """Build the ``metadata`` dict shared by ``trace_series.json["metadata"]`` and
     ``metadata.json`` (minus the ``review_marker`` key ``metadata.json`` adds on top --
@@ -385,9 +390,7 @@ def _build_metadata(
     """
     dists = [r["min_robot_ped_distance_m"] for r in derived_rows]
     global_min_idx = min(range(len(dists)), key=lambda i: dists[i])
-    return {
-        "campaign_id": arm.campaign_id,
-        "campaign_job": arm.slurm_job,
+    metadata = {
         "episode_id": row["episode_id"],
         # episode_status: row["status"] verbatim -- already one of
         # "success"/"collision"/"failure", the exact strings
@@ -396,9 +399,11 @@ def _build_metadata(
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "git_commit": row["git_hash"],
         "planner": row["algo"],
+        "result_provenance": result_provenance,
         "scenario_id": row["scenario_id"],
         "schema_version": "butterfly-reexport-exemplar-trace.v1",
         "seed": row["seed"],
+        "source_arm": arm.key,
         "summary": {
             "episode_status": row["status"],
             "global_min_distance_step": derived_rows[global_min_idx]["step"],
@@ -410,6 +415,16 @@ def _build_metadata(
             "termination_reason": row["termination_reason"],
         },
     }
+    # Preserve source-provided campaign/job locators when present, but never invent
+    # them from the selected arm. Older benchmark rows omit these fields, in which
+    # case the bundle remains honest and simply carries no unverified locator.
+    campaign_id = result_provenance.get("campaign_id")
+    if isinstance(campaign_id, str) and campaign_id.strip():
+        metadata["campaign_id"] = campaign_id
+    campaign_job = result_provenance.get("slurm_job_id", result_provenance.get("campaign_job"))
+    if isinstance(campaign_job, (str, int)) and not isinstance(campaign_job, bool):
+        metadata["campaign_job"] = str(campaign_job)
+    return metadata
 
 
 def build_bundle(
@@ -427,7 +442,7 @@ def build_bundle(
         Small summary dict (paths written, step count, outcome) for CLI reporting.
     """
     row = _load_row(episodes_jsonl, seed)
-    _validate_source_row(row, arm)
+    result_provenance = _validate_source_row(row, arm)
     sst = row["algorithm_metadata"]["simulation_step_trace"]
     if sst.get("schema_version") != "simulation-step-trace.v1":
         raise ValueError(
@@ -437,7 +452,7 @@ def build_bundle(
     if not isinstance(frames, list) or not frames:
         raise ValueError("simulation_step_trace.steps must be a non-empty array")
     derived_rows = _build_derived_rows(frames)
-    metadata = _build_metadata(row, derived_rows, arm)
+    metadata = _build_metadata(row, derived_rows, arm, result_provenance)
 
     trace_series = {
         "schema_version": "butterfly-reexport-trace-series.v1",

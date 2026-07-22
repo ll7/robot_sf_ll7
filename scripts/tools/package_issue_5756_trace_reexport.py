@@ -18,6 +18,7 @@ from pathlib import Path
 from robot_sf.benchmark.trace_reexport_packaging import (
     TraceReexportPackagingError,
     build_resolver_mapping_receipt,
+    default_resolver_mapping_path,
     package_trace_reexport,
 )
 
@@ -36,7 +37,7 @@ def _add_package_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]
     parser.add_argument(
         "--emit-resolver-receipt",
         action="store_true",
-        help="Also write a resolver-ready mapping receipt into the package directory.",
+        help="Also write a resolver-ready mapping receipt beside the package directory.",
     )
 
 
@@ -50,7 +51,7 @@ def _add_resolver_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser
         "--output",
         type=Path,
         default=None,
-        help="Destination path (default: <package-dir>/resolver_mapping_receipt.json).",
+        help="Destination path (default: <package-dir>.resolver_mapping_receipt.json).",
     )
 
 
@@ -73,7 +74,7 @@ def _run_package(args: argparse.Namespace) -> int:
             output_dir=args.output_dir,
         )
         if args.emit_resolver_receipt:
-            receipt_path = output / "resolver_mapping_receipt.json"
+            receipt_path = default_resolver_mapping_path(output)
             build_resolver_mapping_receipt(output, output_path=receipt_path)
             print(f"wrote resolver mapping receipt to {receipt_path}")
     except (OSError, TraceReexportPackagingError, ValueError) as exc:
@@ -84,7 +85,7 @@ def _run_package(args: argparse.Namespace) -> int:
 
 
 def _run_resolver_mapping(args: argparse.Namespace) -> int:
-    output_path = args.output or (args.package_dir / "resolver_mapping_receipt.json")
+    output_path = args.output or default_resolver_mapping_path(args.package_dir)
     try:
         build_resolver_mapping_receipt(args.package_dir, output_path=output_path)
     except (OSError, TraceReexportPackagingError, ValueError) as exc:

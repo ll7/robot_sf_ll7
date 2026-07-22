@@ -104,8 +104,8 @@ def test_socnavbench_eth_map_has_four_bounds() -> None:
 
 def test_socnavbench_eth_map_runs_headless_environment_smoke() -> None:
     """Committed ETH map survives headless reset and steps, protecting runtime compatibility."""
-    scenarios = load_scenarios(SCENARIO_PATH)
-    config = build_robot_config_from_scenario(scenarios[0], scenario_path=SCENARIO_PATH)
+    scenario, _map_def = _load_eth_scenario_and_map()
+    config = build_robot_config_from_scenario(scenario, scenario_path=SCENARIO_PATH)
     env = make_robot_env(config=config, seed=1134, debug=False)
     try:
         observation, _info = env.reset(seed=1134)

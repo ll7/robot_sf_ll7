@@ -230,6 +230,12 @@ case "$serial_fallback" in
     ;;
 esac
 
+if [[ -z "${PYTEST_DEBUG_TEMPROOT:-}" ]]; then
+  repo_hash="$(printf '%s' "$SCRIPT_DIR" | sha256sum | cut -c1-10)"
+  export PYTEST_DEBUG_TEMPROOT="${TMPDIR:-/tmp}/pytest-of-${USER:-unknown}/wt-${repo_hash}/proc-$$"
+  mkdir -p "$PYTEST_DEBUG_TEMPROOT"
+fi
+
 cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")
 
 # pytest-split sharding: when CI provisions multiple shards, run a disjoint

@@ -38,6 +38,12 @@ if [[ "$#" -eq 0 ]]; then
   exit 2
 fi
 
+if [[ -z "${PYTEST_DEBUG_TEMPROOT:-}" ]]; then
+  repo_hash="$(printf '%s' "$SCRIPT_DIR" | sha256sum | cut -c1-10)"
+  export PYTEST_DEBUG_TEMPROOT="${TMPDIR:-/tmp}/pytest-of-${USER:-unknown}/wt-${repo_hash}/proc-$$"
+  mkdir -p "$PYTEST_DEBUG_TEMPROOT"
+fi
+
 if [[ "${FOCUSED_TEST_FULL_OUTPUT:-0}" == "1" ]]; then
   uv run pytest "$@"
 else

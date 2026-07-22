@@ -57,8 +57,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--allow-insufficient-yield",
         action="store_true",
-        help="Bypass fail-closed yield threshold checks for testing.",
+        help=(
+            "Write a diagnostic, non-promotable manifest when yield gates fail. "
+            "The validator will reject this artifact."
+        ),
     )
+    parser.add_argument("--horizon", type=int, default=500)
+    parser.add_argument("--dt", type=float, default=0.1)
     parser.add_argument(
         "--json",
         action="store_true",
@@ -93,6 +98,8 @@ def main(argv: list[str] | None = None) -> int:
     manifest = collector.collect_dataset(
         allow_insufficient_yield=args.allow_insufficient_yield,
         cli_command=" ".join(sys.argv),
+        horizon=args.horizon,
+        dt=args.dt,
     )
 
     if args.json:

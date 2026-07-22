@@ -17,6 +17,8 @@ pre-registered hybrid-roster leg (job 13282) was integrated:
 Any violation exits non-zero with an explicit message. Missing or malformed
 inputs fail closed; nothing is inferred or repaired by assumption.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

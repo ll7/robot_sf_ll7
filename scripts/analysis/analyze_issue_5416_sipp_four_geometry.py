@@ -6,6 +6,7 @@ provenance manifests. It does not execute episodes, submit compute, or change
 metric definitions. Invalid, non-native, incomplete, duplicated, and unproven
 rows remain visible and block interpretation.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

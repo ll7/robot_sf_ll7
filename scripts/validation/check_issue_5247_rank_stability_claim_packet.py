@@ -7,6 +7,8 @@ without regenerating the campaign or changing metric semantics.  It is
 intentionally specific to the completed #5247 evidence bundle because its
 purpose is to catch claim-card drift before the result is reused.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

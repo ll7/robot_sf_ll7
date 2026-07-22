@@ -5,6 +5,8 @@ The script is intentionally CPU-only. It validates the tracked launch-packet
 YAML and emits a compact JSON/Markdown packet that reviewers can inspect before
 any paired-seed campaign or Slurm/GPU work exists.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

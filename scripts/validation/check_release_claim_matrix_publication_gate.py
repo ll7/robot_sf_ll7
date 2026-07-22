@@ -5,6 +5,8 @@ The gate is intentionally narrow: it checks the existing Issue #3294 release
 claim matrix against Issue #2910 publication prerequisites. It does not run a
 benchmark campaign, create certification records, or promote any claim.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

@@ -12,6 +12,8 @@ This is fixture/report-table evidence only.  It does **not** run simulator
 or runtime traces, therefore it does **not** establish compliance claims
 beyond the report-row contract.  No claim-matrix updates are produced.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

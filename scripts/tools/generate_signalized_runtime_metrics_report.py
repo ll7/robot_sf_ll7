@@ -202,6 +202,8 @@ Rows with `planner_observable=true`, `benchmark_evidence=true`, and
 `signal_metrics_denominator > 0` are runtime benchmark-evidence candidates for denominator
 semantics. Excluded rows remain non-claim rows.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 
 def _readme(source_command: str) -> str:

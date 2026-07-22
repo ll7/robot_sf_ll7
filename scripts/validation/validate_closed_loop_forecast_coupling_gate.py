@@ -5,6 +5,8 @@ Synthesizes forecast comparison evidence (issue #2781) with closed-loop gate
 metrics (issue #1897) into a deterministic revise/continue/stop recommendation.
 Diagnostic-only: no learned training, no expensive campaign run.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

@@ -274,6 +274,8 @@ Caveat: Diagnostic only; no sim-to-real, perception, or paper-facing robustness 
 - Fallback behavior is not acceptable as a successful benchmark outcome.
 - No invented values; missing tracked sources produce unavailable rows.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 
 def build_summary(*, generated_at: str, sources: SourceInputs) -> dict[str, Any]:

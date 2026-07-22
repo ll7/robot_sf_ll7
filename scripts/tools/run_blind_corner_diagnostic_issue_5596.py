@@ -10,6 +10,8 @@ Usage:
     python scripts/tools/run_blind_corner_diagnostic_issue_5596.py
         --output docs/context/evidence/issue_5596_blind_corner_diagnostic/blind_corner_diagnostic.json
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

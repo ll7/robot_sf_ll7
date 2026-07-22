@@ -6,6 +6,8 @@ three supported uncertainty representations. It writes a small diagnostic report
 artifact only: controlled #3471 episode evidence, not a full benchmark campaign
 and not paper-grade claim promotion.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

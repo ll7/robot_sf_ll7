@@ -11,6 +11,8 @@ forecast performance. It only inspects repository inputs and supplied #2916
 artifacts, then reports fail-closed per-arm ``ready`` / ``blocked`` /
 ``missing`` status.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

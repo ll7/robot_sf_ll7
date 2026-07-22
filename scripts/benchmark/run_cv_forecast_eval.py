@@ -12,6 +12,8 @@ Usage::
 
 This is diagnostic-only evidence, not paper-facing benchmark proof.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

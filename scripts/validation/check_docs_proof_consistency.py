@@ -30,6 +30,8 @@ Default (no flags):
 
       uv run python scripts/validation/check_docs_proof_consistency.py --check-evidence-catalog
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

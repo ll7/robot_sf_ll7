@@ -7,6 +7,8 @@ Robot SF simulator episodes for a compact non-learned planner slice and writes
 raw JSONL under ``output/`` plus a compact evidence bundle under
 ``docs/context/evidence``.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

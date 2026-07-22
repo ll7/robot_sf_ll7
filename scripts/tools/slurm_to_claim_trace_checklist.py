@@ -6,6 +6,8 @@ retrieval/source manifest, tracked evidence directory, optional finalizer output
 optional reconciler output, and a spine-citable pointer. Missing ordinary inputs
 become explicit fail-closed blockers instead of simulated success.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

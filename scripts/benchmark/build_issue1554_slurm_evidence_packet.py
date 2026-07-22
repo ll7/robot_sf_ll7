@@ -5,6 +5,8 @@ The input is a small public fixture distilled from completed Slurm job metadata 
 retrieved benchmark summaries. It intentionally does not read private queue state,
 submit jobs, or promote paper/dissertation claims.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

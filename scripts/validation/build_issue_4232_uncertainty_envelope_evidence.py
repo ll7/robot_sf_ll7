@@ -5,6 +5,8 @@ The builder consumes already-summarized alpha-sweep rows. It does not run a
 benchmark campaign, copy raw artifacts, or promote safety, conformal,
 deployment, paper, or dissertation claims.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

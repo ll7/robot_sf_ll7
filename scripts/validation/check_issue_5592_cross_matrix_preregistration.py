@@ -6,6 +6,8 @@ matrices, and verifies that the promoted atomic rows carry the expected map and
 failure-mode metadata. It does not run planner episodes, submit compute, or
 interpret a structural ranking.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

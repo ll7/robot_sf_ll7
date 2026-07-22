@@ -5,6 +5,8 @@ This script implements issue #4735: PR contract checks for closes-discipline,
 closure declaration, state-refresh-only, evidence tree hygiene, successor discipline,
 and worker-lane labeling.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

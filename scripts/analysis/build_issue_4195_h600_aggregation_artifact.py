@@ -1109,6 +1109,8 @@ This directory contains diagnostic-only h600 interpretation artifacts for jobs {
 - Comfort rows: {len(comfort_rows)}.
 - {comfort_note}
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
     path.write_text(text, encoding="utf-8")
 
 

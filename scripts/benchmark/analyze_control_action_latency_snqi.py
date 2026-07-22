@@ -25,6 +25,8 @@ Modes
   and fail closed on any violation.
 - ``--check-only``: classify and validate the input without writing artifacts.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

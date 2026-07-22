@@ -5,6 +5,8 @@ The packet is read-only analysis. It summarizes the current Social Navigation
 Quality Index (SNQI) governance state from existing diagnostics without choosing
 canonical weights, changing normalization, or changing benchmark semantics.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

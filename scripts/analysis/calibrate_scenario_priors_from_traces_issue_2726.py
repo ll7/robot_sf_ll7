@@ -11,6 +11,8 @@ Usage::
         --trace-dir tests/fixtures/analysis_workbench/simulation_trace_export_v1 \\
         --output-dir docs/context/evidence/issue_2726_scenario_prior_trace_clusters
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

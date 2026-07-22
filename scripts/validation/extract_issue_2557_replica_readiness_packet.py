@@ -5,6 +5,8 @@ This helper reads already-tracked public evidence only. It never submits Slurm
 work, reads private credentials, promotes raw artifacts, or claims benchmark
 success.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

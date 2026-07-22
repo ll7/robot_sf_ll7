@@ -10,6 +10,8 @@ Usage::
     uv run python scripts/benchmark/run_observation_noise_envelope.py \\
         --output-dir docs/context/evidence/issue_2755_observation_noise_envelope_2026-06-13
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

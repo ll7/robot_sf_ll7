@@ -548,6 +548,8 @@ The taxonomy is aggregate evidence. It can distinguish broad difficulty, candida
 collision-heavy cells, and timeout/unfinished-heavy cells. It does not prove behavioral mechanisms
 such as waiting, yielding, or hesitation without trace/video review.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
     (output_dir / "README.md").write_text(readme, encoding="utf-8")
 
 

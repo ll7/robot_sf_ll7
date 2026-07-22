@@ -59,6 +59,8 @@ Usage
 The committed baseline lives at
 ``scripts/validation/evidence_registry_baseline.json``.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

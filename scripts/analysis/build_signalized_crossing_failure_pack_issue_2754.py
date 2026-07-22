@@ -4,6 +4,8 @@ This script implements the issue #2754 requirement to extract failure cases from
 crossing episodes, capturing trace ranges, signal phases, stop lines, states, and claim wording.
 If no failures are present, it outputs a negative-control pack.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

@@ -40,6 +40,8 @@ campaign act reserved for a maintainer on a campaign host, and its output must
 not be treated as established evidence until the run completes and (per the
 #5498 acceptance contract) the second-host near-miss comparison is also done.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

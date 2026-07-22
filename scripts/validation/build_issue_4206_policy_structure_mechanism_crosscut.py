@@ -803,6 +803,8 @@ Blocked statuses distinguish three different next actions:
   (#4301). A sidecar backfill cannot recover these labels; re-run the h600 campaign with trace
   capture (or a deterministic replay), then re-run.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
     claim_boundary = """# Claim Boundary
 
 This packet can support a mechanism-level policy-structure cross-cut only for rows with

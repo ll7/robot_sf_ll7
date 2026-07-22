@@ -4,9 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
-import json
 import math
 import random
 from datetime import UTC, datetime
@@ -14,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from robot_sf.benchmark.identity.hash_utils import load_json as _load_json
+from robot_sf.evidence.writers import write_csv, write_json, write_sha256sums, write_text
 
 SCHEMA_VERSION = "issue-2557-seed-variance-report.v1"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -289,12 +287,8 @@ def build_report(
     }
 
 
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-
-
-def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    fieldnames = [
+def _provenance_fieldnames() -> list[str]:
+    return [
         "job_id",
         "seed",
         "lineage",
@@ -311,16 +305,13 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "source",
         "caveat",
     ]
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(
-                {
-                    field: row.get(field) if row.get(field) not in (None, "") else "na"
-                    for field in fieldnames
-                }
-            )
+
+
+def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        field: row.get(field) if row.get(field) not in (None, "") else "na"
+        for field in _provenance_fieldnames()
+    }
 
 
 def _readme(report: dict[str, Any]) -> str:
@@ -384,17 +375,8 @@ def _readme(report: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _write_sha256sums(output_dir: Path, filenames: list[str]) -> None:
-    lines = []
-    for filename in filenames:
-        path = output_dir / filename
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        try:
-            relative_path = path.resolve().relative_to(REPO_ROOT).as_posix()
-        except ValueError:
-            relative_path = filename
-        lines.append(f"{digest}  {relative_path}")
-    (output_dir / "SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+def _issue_ref() -> str:
+    return "robot_sf#4921"
 
 
 def write_artifact(report: dict[str, Any], output_dir: Path | None = None) -> None:
@@ -402,10 +384,11 @@ def write_artifact(report: dict[str, Any], output_dir: Path | None = None) -> No
     if output_dir is None:
         output_dir = DEFAULT_OUTPUT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
-    _write_json(output_dir / "report.json", report)
-    _write_csv(output_dir / "per_run_provenance.csv", report["provenance_rows"])
-    (output_dir / "README.md").write_text(_readme(report), encoding="utf-8")
-    _write_sha256sums(output_dir, ["README.md", "per_run_provenance.csv", "report.json"])
+    write_json(output_dir / "report.json", report)
+    provenance = [_normalize_row(row) for row in report["provenance_rows"]]
+    write_csv(output_dir / "per_run_provenance.csv", provenance)
+    write_text(output_dir / "README.md", _readme(report), issue_ref=_issue_ref())
+    write_sha256sums(output_dir)
 
 
 def main(argv: list[str] | None = None) -> int:

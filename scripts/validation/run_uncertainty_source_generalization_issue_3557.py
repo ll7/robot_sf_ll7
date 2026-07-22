@@ -5,6 +5,8 @@ This composes the controlled #3471 ScenarioBelief episode harness across the
 registered uncertainty sources. The output is diagnostic-tier evidence only:
 it is not a full benchmark campaign and does not promote paper-facing claims.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
 
 from __future__ import annotations
 

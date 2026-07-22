@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Temporary construction-corridor scenario: narrowing.
+     Models a corridor that narrows in the middle section due to temporary
+     construction barriers. The wide corridor (y=5..y=15, width 10) narrows
+     to width 4 (y=8..y=12) in the central section (x=8..x=12).
+     Source: WorkDrive AMMV ODD stress scenarios. -->
+<svg
+   width="20"
+   height="20"
+   viewBox="0 0 20 20"
+   version="1.1"
+   id="svg_construction_corridor_narrowing"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <g id="layer1" inkscape:label="Layer 1">
+    <!-- Outer boundary walls -->
+    <rect x="0" y="0" width="0.5" height="20" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="19.5" y="0" width="0.5" height="20" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="20" height="0.5" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="0" y="19.5" width="20" height="0.5" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Corridor walls (wide section, left of narrowing) -->
+    <rect id="corridor_top_left" x="0.5" y="0.5" width="7.5" height="4.5" style="fill:#000000" inkscape:label="obstacle" />
+    <rect id="corridor_bottom_left" x="0.5" y="10.5" width="7.5" height="4.5" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Temporary construction narrowing barriers -->
+    <rect id="construction_narrow_top" x="8.0" y="5.0" width="4.0" height="3.0" style="fill:#000000" inkscape:label="obstacle" />
+    <rect id="construction_narrow_bottom" x="8.0" y="12.0" width="4.0" height="3.0" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Corridor walls (wide section, right of narrowing) -->
+    <rect id="corridor_top_right" x="12.0" y="0.5" width="7.5" height="4.5" style="fill:#000000" inkscape:label="obstacle" />
+    <rect id="corridor_bottom_right" x="12.0" y="10.5" width="7.5" height="4.5" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Robot spawn and goal zones -->
+    <rect id="robot_spawn_zone_0" x="1.5" y="8.7" width="1.5" height="2.0" style="fill:#ffdf00" inkscape:label="robot_spawn_zone_0" />
+    <rect id="robot_goal_zone_0" x="17.0" y="8.7" width="1.5" height="2.0" style="fill:#ff6c00" inkscape:label="robot_goal_zone_0" />
+
+    <!-- Robot route through the narrowing -->
+    <path id="robot_route_0_0" d="M 2.25,9.7 8.0,9.7 10.0,9.7 12.0,9.7 17.75,9.7" style="fill:none;stroke:#0310b4;stroke-width:0.2" inkscape:label="robot_route_0_0" />
+  </g>
+</svg>

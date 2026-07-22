@@ -1,10 +1,8 @@
-"""Conservation test for Issue #5785: Package B 27-cell result durable registration.
+"""Diagnostic-summary checks for the Issue #5785 Package B 27-cell result.
 
-Verifies the registered conservation bundle (produced by exact CPU re-execution at the
-recorded execution commit with verified manifest identity) against the issue #5785
-acceptance criteria: the 27-cell population and provenance inputs are mechanically verified,
-every reported count regenerates from the conserved artifacts, and the confirmation sidecar
-stays censored (no failure silently counted as a confirmed discovery).
+The committed report supports an internally consistent 27-cell / 42-count diagnostic summary.
+It does not contain the raw candidate/replay tree or execution logs, so these tests deliberately
+avoid claiming raw-artifact conservation or independent replay verification.
 """
 
 from __future__ import annotations
@@ -40,8 +38,18 @@ def _totals_by_sampler(rows: Sequence[dict[str, object]]) -> dict[str, int]:
     return totals
 
 
+def _string_values(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [item for child in value.values() for item in _string_values(child)]
+    if isinstance(value, list):
+        return [item for child in value for item in _string_values(child)]
+    return []
+
+
 def test_bundle_files_present() -> None:
-    """All required durable artifacts exist in the conservation bundle."""
+    """All compact artifacts required for the diagnostic summary are committed."""
     required = (
         "report.json",
         "confirmation.json",
@@ -53,7 +61,7 @@ def test_bundle_files_present() -> None:
         "README.md",
     )
     for name in required:
-        assert (BUNDLE / name).is_file(), f"missing conserved artifact: {name}"
+        assert (BUNDLE / name).is_file(), f"missing diagnostic-summary artifact: {name}"
 
 
 def test_manifest_identity_matches_recorded_sha256() -> None:
@@ -65,22 +73,22 @@ def test_manifest_identity_matches_recorded_sha256() -> None:
     )
 
 
-def test_report_gate_ready_for_empirical_review() -> None:
-    """The conserved report passes the Package-B report gate."""
+def test_report_contract_gate_remains_structurally_valid() -> None:
+    """The committed summary still passes the existing report contract gate."""
     gate = validate_package_b_report(BUNDLE / "report.json")
     assert gate.ready is True
     assert gate.status == "ready_for_empirical_review"
     assert gate.matrix["observed_row_count"] == EXPECTED_CELLS
 
 
-def test_population_and_counts_regenerate_from_conserved_report() -> None:
-    """Every reported count regenerates: 27 cells, 42 failures, sampler split matches."""
+def test_population_and_counts_regenerate_from_committed_report() -> None:
+    """The committed report regenerates 27 cells and its recorded 42-count sampler split."""
     report = _load_report(BUNDLE)
     rows = [dict(r) for r in report["rows"]]  # type: ignore[arg-type]
     assert len(rows) == EXPECTED_CELLS
     assert sum(int(r["certified_valid_failure_count"]) for r in rows) == EXPECTED_TOTAL_FAILURES
     assert _totals_by_sampler(rows) == EXPECTED_TOTALS
-    # replayable == certified in every cell, no fallback/degraded execution
+    # These are self-consistency checks over source-report fields, not raw replay verification.
     for row in rows:
         assert int(row["replayable_valid_failure_count"]) == int(
             row["certified_valid_failure_count"]
@@ -92,9 +100,9 @@ def test_population_and_counts_regenerate_from_conserved_report() -> None:
 def test_confirmation_sidecar_stays_censored() -> None:
     """Confirmation does not count any certified failure as a confirmed discovery.
 
-    The conserved sidecar keeps every one of the 42 certified failures in the
+    The committed sidecar keeps every one of the 42 recorded certified failures in the
     `not_confirmed` state (independent-seed confirmation, deterministic replay, and stable
-    mechanism attribution remain deferred to issue #5785 step 5). No failure is silently
+    mechanism attribution remain deferred to residual issue #6131). No failure is silently
     promoted to a confirmed discovery.
     """
     sidecar = json.loads((BUNDLE / "confirmation.json").read_text(encoding="utf-8"))
@@ -105,13 +113,13 @@ def test_confirmation_sidecar_stays_censored() -> None:
     assert confirmed == 0, "no certified failure may be counted as a confirmed discovery"
     assert unconfirmed == EXPECTED_TOTAL_FAILURES
     assert all(r.get("confirmation_status") == "complete" for r in rows)
-    # the sidecar is artifact-bound to the conserved report
+    # The sidecar is byte-bound to the committed report.
     report_digest = hashlib.sha256((BUNDLE / "report.json").read_bytes()).hexdigest()
     assert sidecar["source_report_sha256"] == report_digest
 
 
 def test_durable_summary_sha256sums_match() -> None:
-    """The committed SHA256SUMS file verifies the four durable summary artifacts."""
+    """The committed SHA256SUMS file verifies the four compact summary artifacts."""
     checksums = (BUNDLE / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
     expected_files = {
         "report.json",
@@ -130,11 +138,41 @@ def test_durable_summary_sha256sums_match() -> None:
     assert verified == len(expected_files)
 
 
-def test_replay_tree_checksums_are_parseable_and_complete() -> None:
-    """The frozen replay-tree anchor is a well-formed SHA256SUMS over all replay artifacts."""
+def test_replay_tree_checksum_inventory_is_parseable_and_unique() -> None:
+    """The producer-recorded digest inventory has portable, unique logical identifiers."""
     lines = (BUNDLE / "candidate_replay_SHA256SUMS.txt").read_text(encoding="utf-8").splitlines()
-    assert lines, "frozen replay-tree checksum file must not be empty"
+    assert len(lines) == 4761
+    names = set()
     for line in lines:
         digest, _, name = line.partition("  ")
         assert len(digest) == 64, "malformed digest in candidate_replay_SHA256SUMS.txt"
-        assert Path(name.strip()).parts[0] == "worst_case_snqi"
+        path = Path(name.strip())
+        assert not path.is_absolute()
+        assert path.parts[0] == "worst_case_snqi"
+        assert "output" not in path.parts
+        names.add(path.as_posix())
+    assert len(names) == len(lines)
+
+
+def test_summary_references_are_portable_and_inventory_backed() -> None:
+    """Tracked JSON uses portable identifiers and never claims local output as durable proof."""
+    report = _load_report(BUNDLE)
+    summary = json.loads((BUNDLE / "replication_summary.json").read_text(encoding="utf-8"))
+    inventory = {
+        line.partition("  ")[2].strip()
+        for line in (BUNDLE / "candidate_replay_SHA256SUMS.txt")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    }
+
+    for value in _string_values(report) + _string_values(summary):
+        assert not value.startswith("/"), f"absolute artifact reference: {value}"
+        assert "output/" not in value, f"ignored-output artifact reference: {value}"
+
+    assert report["artifact_availability"] == "digest_inventory_only_raw_tree_unavailable"
+    for row in report["rows"]:  # type: ignore[union-attr]
+        row = dict(row)
+        manifest_id = str(row["manifest_path"])
+        bundle_id = str(row["best_bundle_path"])
+        assert manifest_id in inventory
+        assert any(name.startswith(f"{bundle_id}/") for name in inventory)

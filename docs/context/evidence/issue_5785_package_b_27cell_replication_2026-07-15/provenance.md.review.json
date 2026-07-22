@@ -1,7 +1,7 @@
 {
-  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/provenance.md",
-  "artifact_sha256": "266cff2b31ed4c407d82172393eb9499b2cb069e7f7df311d9688251115b8488",
+  "artifact_sha256": "d5670f708a704685ae067c1d40f348e246c4f48a7a9ec76809c9ff82ce1e81e7",
   "preserved_exact_bytes": true,
-  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
 }

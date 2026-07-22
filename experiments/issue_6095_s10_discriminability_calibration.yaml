@@ -1,0 +1,33 @@
+schema_version: experiment-record.v2
+experiment_id: issue_6095_s10_discriminability_calibration
+issue: 6095
+issue_url: https://github.com/ll7/robot_sf_ll7/issues/6095
+question: >
+  Does the stress scenario matrix have a success-rate floor that hides planner
+  differences between ORCA and PPO, compared to the nominal scenario matrix?
+hypothesis: >
+  Both planners will complete substantially more nominal episodes than stress
+  episodes. Even where success is zero for both on stress scenarios, at least
+  one safety or interaction metric may remain discriminative.
+config:
+  - configs/benchmarks/issue_6095_nominal_discriminability_v1.yaml
+  - configs/benchmarks/issue_6095_stress_discriminability_v1.yaml
+  - configs/baselines/ppo_15m_grid_socnav.yaml
+command: >
+  uv run python scripts/tools/run_camera_ready_benchmark.py
+  --config configs/benchmarks/issue_6095_nominal_discriminability_v1.yaml
+  --mode run
+  &&
+  uv run python scripts/tools/run_camera_ready_benchmark.py
+  --config configs/benchmarks/issue_6095_stress_discriminability_v1.yaml
+  --mode run
+inputs:
+  - path: configs/benchmarks/issue_6095_nominal_discriminability_v1.yaml
+  - path: configs/benchmarks/issue_6095_stress_discriminability_v1.yaml
+  - path: configs/baselines/ppo_15m_grid_socnav.yaml
+outputs: []
+expected_artifacts:
+  - name: nominal_campaign
+    path: output/benchmarks/camera_ready/issue_6095_nominal_discriminability_v1_*
+  - name: stress_campaign
+    path: output/benchmarks/camera_ready/issue_6095_stress_discriminability_v1_*

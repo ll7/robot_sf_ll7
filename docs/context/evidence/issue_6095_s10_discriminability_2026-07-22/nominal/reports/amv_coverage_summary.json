@@ -1,0 +1,50 @@
+{
+  "schema_version": "benchmark-amv-coverage-summary.v1",
+  "campaign_id": "issue_6095_nominal_discriminability_v1_20260722_163913",
+  "generated_at_utc": "2026-07-22T14:39:13.843582Z",
+  "profile_name": "amv-paper-v1",
+  "contract_version": "1",
+  "coverage_enforcement": "warn",
+  "status": "pass",
+  "required_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "observed_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "missing_dimensions": {
+    "use_case": [],
+    "context": [],
+    "speed_regime": [],
+    "maneuver_type": []
+  },
+  "scenario_count": 4,
+  "scenario_rows": [
+    {
+      "name": "empty_map_8_directions_east",
+      "scenario_family": "empty_map_8_directions",
+      "amv": {}
+    },
+    {
+      "name": "single_ped_crossing_orthogonal",
+      "scenario_family": "single_ped_crossing_orthogonal",
+      "amv": {}
+    },
+    {
+      "name": "classic_doorway_low",
+      "scenario_family": "doorway",
+      "amv": {}
+    },
+    {
+      "name": "classic_bottleneck_low",
+      "scenario_family": "bottleneck",
+      "amv": {}
+    }
+  ]
+}

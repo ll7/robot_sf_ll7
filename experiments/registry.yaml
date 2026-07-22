@@ -16,3 +16,4 @@ records:
   - issue_2128_heldout_family_transfer_pilot.yaml
   - issue_2135_seed_sufficiency_followup.yaml
   - issue_3193_closed_loop_forecast_falsification.yaml
+  - issue_6095_s10_discriminability_calibration.yaml

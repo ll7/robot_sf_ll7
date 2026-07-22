@@ -29,14 +29,15 @@ def _manifest() -> dict:
     return json.loads(MANIFEST.read_text(encoding="utf-8"))
 
 
-def test_checked_in_contract_fails_closed_on_unavailable_sources() -> None:
-    """A fresh checkout cannot treat absent source reports as export-ready."""
+def test_checked_in_contract_is_ready_with_recovered_sources() -> None:
+    """A fresh checkout verifies all recovered source reports and opens the export gate."""
     report = _MODULE.validate_source_reports(_manifest(), REPO_ROOT)
-    assert report["status"] == "blocked"
+    assert report["status"] == "ready"
     assert report["required_file_count"] == 6
-    assert report["missing_file_count"] == 6
+    assert report["verified_file_count"] == 6
+    assert report["missing_file_count"] == 0
     assert report["checksum_mismatch_count"] == 0
-    assert report["downstream_export_allowed"] is False
+    assert report["downstream_export_allowed"] is True
 
 
 def test_all_six_exact_sources_make_contract_ready(
@@ -105,8 +106,8 @@ def test_run_identity_drift_is_rejected(field: str, replacement: str) -> None:
         _MODULE.validate_source_reports(manifest, REPO_ROOT)
 
 
-def test_cli_emits_machine_readable_blocked_packet() -> None:
-    """Automation receives an explicit blocked packet and nonzero gate status."""
+def test_cli_emits_machine_readable_ready_packet() -> None:
+    """Automation receives an explicit ready packet after durable source recovery."""
     completed = subprocess.run(
         [sys.executable, str(SCRIPT), "--json"],
         cwd=REPO_ROOT,
@@ -114,11 +115,12 @@ def test_cli_emits_machine_readable_blocked_packet() -> None:
         capture_output=True,
         check=False,
     )
-    assert completed.returncode == 2
+    assert completed.returncode == 0
     payload = json.loads(completed.stdout)
-    assert payload["status"] == "blocked"
-    assert payload["missing_file_count"] == 6
-    assert payload["downstream_export_allowed"] is False
+    assert payload["status"] == "ready"
+    assert payload["verified_file_count"] == 6
+    assert payload["missing_file_count"] == 0
+    assert payload["downstream_export_allowed"] is True
 
 
 def test_cli_default_manifest_is_independent_of_calling_directory(tmp_path: Path) -> None:
@@ -131,7 +133,8 @@ def test_cli_default_manifest_is_independent_of_calling_directory(tmp_path: Path
         check=False,
     )
 
-    assert completed.returncode == 2
+    assert completed.returncode == 0
     payload = json.loads(completed.stdout)
-    assert payload["status"] == "blocked"
-    assert payload["missing_file_count"] == 6
+    assert payload["status"] == "ready"
+    assert payload["verified_file_count"] == 6
+    assert payload["missing_file_count"] == 0

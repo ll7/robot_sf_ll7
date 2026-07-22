@@ -67,11 +67,27 @@ Read when applicable:
 
 Declare at start:
 - PR set (all open, non-draft, filtered, or explicit numbers),
-- write mode (fix/comment/issue creation/`merge-ready` allowed by default),
+- write mode (fix, label, comment, branch/PR update, issue creation, thread resolution, and
+  `merge-ready` are allowed by default),
 - exclusions (drafts, heavy benchmark PRs, external infra blockers),
 - stop condition.
 
 Create `merge-ready` label if absent before first successful application.
+
+## Factory Authority And Label Source Of Truth
+
+Once the owner or parent orchestrator starts a bounded review run, review each in-scope PR without
+per-PR confirmation. The reviewer may apply labels, post comments, push safe fixes to writable
+branches, update PR bodies, create successor issues, and resolve threads whose findings are proven
+fixed. `gh-pr-merger` retains merge authority.
+
+Treat live GitHub labels and PR state as authoritative across machines. Projects, cached queue
+snapshots, local ledgers, and worker reports are evidence or mirrors only; they never override the
+current label set, head SHA, or GitHub thread state.
+
+Owner approval is required before deleting durable scientific artifacts, experiment records or
+runs, or GitHub releases. Routine scratch cleanup and deletion of a fully preserved merged feature
+branch do not waive that durable-deletion boundary.
 
 ## State Machine
 
@@ -123,9 +139,10 @@ presence, so `merge_ready` still requires the intended-design and proof gates be
    - perform an intended-design alignment check before readiness decisions:
      compare the linked issue, design note, PR body, changed behavior, tests, docs, and claims;
      record whether any narrowing was intentional, documented, and still sufficient for the PR,
-   - require artifact-first delegated review and validate in order: `result.json`, `RESULT.md`,
-     `diffstat.txt`, and `validation.json`, inspect route evidence first, then run targeted local checks
-     before raw logs,
+   - require artifact-first delegated review from an orchestrator artifact directory outside every
+     git worktree and validate in order: `result.json`, `RESULT.md`, `diffstat.txt`, and
+     `validation.json`; inspect route evidence first, then run targeted local checks before raw logs;
+     `RESULT.md` and `REVIEW.json` must never be staged or committed,
    - cap parent-thread raw output at about 200 lines; use `rg -l`, `rg --files`, bounded `sed -n`,
      and private artifacts instead of broad `rg -n .` or full file reads,
    - classify findings as fixable now, deferred, or blocker.
@@ -157,7 +174,8 @@ helper is route evidence only and does not perform GitHub-visible writes.
    when moving draft PRs to ready or when bot reviewers were previously pending or skipped.
 7. Resolve review threads only after the post-push thread snapshot confirms the fixes still cover all
    actionable comments.
-8. Update `merge-ready` only after full proof bar closes.
+8. After the full proof bar closes, post an exact-head review-evidence comment naming the reviewed
+   SHA, validation, findings disposition, and any single-account waiver; then update `merge-ready`.
 9. When CI is the only remaining external gate, put the PR in `awaiting_ci` and use compact,
    bounded one-shot polling in non-TTY agent sessions instead of `gh pr checks --watch`:
    `uv run python scripts/dev/watch_pr_ci_status.py <number> --once --json --expected-head-sha <sha>`.
@@ -180,6 +198,12 @@ Before applying `merge-ready`, reviewers must explicitly answer:
   useful on its own?
 - Are remaining gaps current-PR blockers, bounded follow-up issues, or handoff-only notes?
 
+For an intentionally partial PR, require `Refs #<parent>` rather than `Closes`/`Fixes`, keep the
+parent issue open, and create and cross-link a successor issue that owns every residual acceptance
+criterion and its proof tier. The reviewer is authorized to make these PR-body, comment, label, and
+successor-issue writes. Withhold `merge-ready` if narrowing would strand work required for a public
+claim, benchmark interpretation, metric/schema correctness, or safe runtime behavior.
+
 Create a follow-up issue when deferred work is real, actionable, and outside the current PR's safe
 scope. A good follow-up issue names:
 
@@ -194,6 +218,18 @@ contract, public claim, benchmark interpretation, schema/metric correctness, or 
 behavior. Use a handoff note instead of an issue when the item is only transient state, CI waiting,
 local cleanup, or reviewer context with no durable action.
 
+## Single-Account Internal-Review Waiver
+
+When the repository is operated through one effective GitHub account and no independent review
+identity exists, waive the distinct-account approval requirement. Record an internal review comment
+that names the exact reviewed head SHA, commands and artifacts checked, findings disposition, and
+the single-account waiver reason. Exact-head evidence remains mandatory: any head change invalidates
+the review record and `merge-ready` decision until the new head is reviewed and validated.
+
+The waiver does not bypass branch protection, an explicitly requested external reviewer, unresolved
+actionable threads, CI, or any domain-aware approval required for evidence classification or
+paper-facing claims.
+
 ## Proof and Validation
 
 Apply minimum tier by change surface:
@@ -205,9 +241,10 @@ Apply minimum tier by change surface:
 
 `merge-ready` conditions:
 - linked issue contract and intended design satisfied, or intentionally narrowed with explicit
-  rationale and linked follow-up issues,
+  rationale, `Refs #<parent>`, an open parent, and linked successor issues,
 - scope matches contract and tests and CI proof are current for reviewed SHA,
-- unresolved review threads closed via GitHub review-thread resolution,
+- unresolved actionable review threads closed via GitHub review-thread resolution, with any
+  single-account waiver recorded for the exact reviewed SHA,
 - artifacts from `output/` are durably represented or explicitly excluded,
 - evidence-producing PRs complete the `Downstream Propagation` section or give an explicit
   not-applicable rationale,
@@ -281,6 +318,10 @@ error. Record the recovery action and continue.
 - For benchmark-heavy PRs, require scenario set, seed count, and provenance metadata.
 - Before pushing/fixing, verify remote PR head has not advanced unexpectedly.
 - Avoid force-push and concurrent mutation of the same branch.
+- Keep review artifacts outside git worktrees; never commit `RESULT.md` or `REVIEW.json`.
+- Parallel reviews may use isolated read-only or fix worktrees when the parent orchestrator assigns
+  separate PRs. Never let two reviewers mutate the same branch, and refresh the exact head before
+  applying labels or resolving threads.
 
 ## Output Requirements
 

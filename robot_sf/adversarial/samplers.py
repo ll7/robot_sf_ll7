@@ -486,10 +486,6 @@ class CmaEsCandidateSampler:
         generation draws a full population and queues the rest; subsequent
         ``sample`` calls drain the queue until the generation is exhausted.
         """
-        if self._pending:
-            candidate, es, vec = self._pending.pop(0)
-            self._in_flight.append((candidate, es, vec))
-            return candidate
         if self._warm_starts:
             return self._warm_starts.pop(0)
         if not self._active_dims:
@@ -505,6 +501,10 @@ class CmaEsCandidateSampler:
                 ),
             )
             self._pending.append((candidate, None, []))
+            return candidate
+        if self._pending:
+            candidate, es, vec = self._pending.pop(0)
+            self._in_flight.append((candidate, es, vec))
             return candidate
         if self._es.stop():
             best = self._es.result.xbest if self._es.result.xbest is not None else self._es.mean

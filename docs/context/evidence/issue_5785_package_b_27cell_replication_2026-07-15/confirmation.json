@@ -607,5 +607,5 @@
   ],
   "schema_version": "adversarial-package-b-confirmation.v1",
   "source_report_schema_version": "adversarial-sampler-comparison.v3",
-  "source_report_sha256": "b00bf285c43d13e43e90bbfc3152b5bb2feb163f6c6432d26734cc71c6261ffb"
+  "source_report_sha256": "0d066ed70cfd0a55f163bfe190468cbe37d02bdd7f3b0d8dbdfb0edd1b8c40b6"
 }

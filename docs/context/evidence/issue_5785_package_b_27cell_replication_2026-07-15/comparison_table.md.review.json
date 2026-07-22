@@ -1,7 +1,7 @@
 {
-  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15/comparison_table.md",
-  "artifact_sha256": "b0d7094b97713dec653165c44608e6ee100545224805fef55fe7da0852591c6b",
+  "artifact_sha256": "6061caae140d28f27aeaac4c1a3f4330e533d8182b066c4cfaf6f65625e609dc",
   "preserved_exact_bytes": true,
-  "review_marker": "AI-GENERATED NEEDS-REVIEW"
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "evidence-review-marker.v1"
 }

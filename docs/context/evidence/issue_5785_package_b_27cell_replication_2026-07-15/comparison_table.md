@@ -1,6 +1,6 @@
-## Issue #5785: Durable Objective-Comparison Table (Diagnostic Tier)
+## Issue #5785: Package B 27-Cell Diagnostic Table
 
-> Claim scope: not paper-facing benchmark evidence. The `--synthetic` CPU path is reproducible by construction; the `--empirical` CPU path runs the real `pysocialforce` evaluator and produces certified/replayable failures without Slurm/GPU. Matched-budget confirmation at paper tier still requires artifact-level review of certification/replay/independent-seed evidence.
+> Claim scope: diagnostic summary only, not paper-facing benchmark evidence. The table renders fields from the committed report. Its `certified` and `replayable` labels are not independently reverified because the referenced raw candidate/replay bytes are unavailable. Issue #6131 owns that residual proof.
 
 | objective | sampler | budget | seed | best_valid_objective | certified_valid_failures | replayable_valid_failures | replay_success_rate | invalid_candidate_rate | signed_property_violations | held_out_family_status | fallback/degraded |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -34,7 +34,7 @@
 
 ### Stop-rule decision
 
-**DIRECTION NARROWED (diagnostic).** Both objectives compared under matched CPU-synthetic budgets with no degraded execution. This is a contract/structure check only; it does not constitute benchmark evidence for the signed-objective hypothesis (requires artifact-level confirmation of certification/replay/independent-seed evidence).
+**NO PERFORMANCE DIRECTION CLAIMED.** The 27 rows and sampler totals are internally consistent with the committed report. This table does not establish replay validity, independent confirmation, a sampler ranking, or evidence for the signed-objective hypothesis.
 
 ### Exclusions and caveats
 
@@ -43,4 +43,4 @@
 - paper-facing success claims: forbidden at this tier
 - confirmation tier: artifact-level review of certification/replay/independent-seed
 - report_status: diagnostic_local_nominal; schema adversarial-sampler-comparison.v3; budgets=[16, 32, 64]; seeds=[1101, 2202, 3303]
-- source report: unavailable://raw-artifact-tree/report.json
+- source report: `report.json` in this evidence bundle

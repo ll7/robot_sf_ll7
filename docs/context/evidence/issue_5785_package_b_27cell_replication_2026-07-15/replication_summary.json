@@ -1,4 +1,5 @@
 {
+  "artifact_availability": "summary_only_raw_tree_and_logs_unavailable",
   "confirmation_gate": {
     "blockers": {
       "intentional": [
@@ -9,11 +10,11 @@
       ],
       "new": [],
       "remaining": [
-        "The exact Package B campaign and durable artifact review remain external to this CPU-only checker."
+        "Raw candidate/replay bytes and execution logs are unavailable; Issue #6131 owns retrieval and second-reader verification."
       ]
     },
     "claim_boundary": "diagnostic-only confirmation-chain validation; this gate does not promote benchmark, paper, or dissertation evidence",
-    "confirmation_path": "unavailable://raw-artifact-tree/confirmation.json",
+    "confirmation_path": "confirmation.json",
     "errors": [],
     "issue": 3079,
     "matrix": {
@@ -38,15 +39,15 @@
       "observed_row_count": 27,
       "unconfirmed_certified_failure_count": 42
     },
-    "next_empirical_action": "Run the exact manifest command on an approved compute-capable path, emit one confirmation row per report cell, then review the referenced artifacts before interpreting any sampler difference.",
+    "next_empirical_action": "Complete Issue #6131 raw-artifact retrieval and second-reader verification before interpreting any sampler difference.",
     "ready": true,
-    "report_path": "unavailable://raw-artifact-tree/report.json",
+    "report_path": "report.json",
     "schema_version": "adversarial-package-b-confirmation.v1",
-    "source_report_sha256": "b00bf285c43d13e43e90bbfc3152b5bb2feb163f6c6432d26734cc71c6261ffb",
+    "source_report_sha256": "0d066ed70cfd0a55f163bfe190468cbe37d02bdd7f3b0d8dbdfb0edd1b8c40b6",
     "status": "ready_for_confirmed_failure_review"
   },
-  "confirmation_json": "unavailable://raw-artifact-tree/confirmation.json",
-  "durable_table_md": "unavailable://raw-artifact-tree/comparison_table.md",
+  "confirmation_json": "confirmation.json",
+  "durable_table_md": "comparison_table.md",
   "preflight_ready": true,
   "report_gate": {
     "blockers": {
@@ -84,12 +85,12 @@
       "fallback_candidate_count": 0,
       "observed_row_count": 27
     },
-    "next_empirical_action": "Run the exact manifest command on an approved compute-capable path, then review this gate together with certification and independent replay artifacts before interpreting any sampler difference.",
+    "next_empirical_action": "Complete Issue #6131 raw-artifact retrieval and independent replay verification before interpreting any sampler difference.",
     "ready": true,
-    "report_path": "unavailable://raw-artifact-tree/report.json",
+    "report_path": "report.json",
     "schema_version": "adversarial-package-b-report-gate.v1",
     "status": "ready_for_empirical_review"
   },
-  "report_json": "unavailable://raw-artifact-tree/report.json",
-  "stage": "complete"
+  "report_json": "report.json",
+  "stage": "diagnostic_summary_only"
 }

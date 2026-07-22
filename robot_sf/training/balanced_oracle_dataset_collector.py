@@ -170,6 +170,7 @@ class _CaptureEnv:
     def __init__(self, env: Any, sink: dict[str, Any]) -> None:
         self._env = env
         self._sink = sink
+        self._pending_observation: Any | None = None
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._env, name)
@@ -177,15 +178,20 @@ class _CaptureEnv:
     def reset(self, *args: Any, **kwargs: Any) -> Any:
         observation, info = self._env.reset(*args, **kwargs)
         self._sink["initial_observation"] = copy.deepcopy(observation)
+        self._pending_observation = copy.deepcopy(observation)
         return observation, info
 
     def step(self, action: Any) -> Any:
-        self._sink["actions"].append(np.asarray(action, dtype=np.float32).copy())
+        if self._pending_observation is None:
+            raise BalancedDatasetCollectionError("CaptureEnv.step called before reset")
+        policy_observation = copy.deepcopy(self._pending_observation)
         observation, reward, terminated, truncated, info = self._env.step(action)
-        self._sink["observations"].append(copy.deepcopy(observation))
+        self._sink["actions"].append(np.asarray(action, dtype=np.float32).copy())
+        self._sink["observations"].append(policy_observation)
         self._sink["rewards"].append(float(reward))
         self._sink["terminated"].append(bool(terminated))
         self._sink["truncated"].append(bool(truncated))
+        self._pending_observation = copy.deepcopy(observation)
         return observation, reward, terminated, truncated, info
 
 
@@ -367,6 +373,8 @@ class BalancedOracleCollector:
             "truncated": [],
         }
         original_factory = map_runner.make_robot_env
+        episode_module = map_runner._map_runner_episode_module
+        original_episode_factory = episode_module.make_robot_env
 
         def capture_factory(*args: Any, **kwargs: Any) -> _CaptureEnv:
             return _CaptureEnv(original_factory(*args, **kwargs), sink)
@@ -389,6 +397,7 @@ class BalancedOracleCollector:
             )
         finally:
             map_runner.make_robot_env = original_factory
+            episode_module.make_robot_env = original_episode_factory
 
         trace_steps = (
             record.get("algorithm_metadata", {}).get("simulation_step_trace", {}).get("steps", [])
@@ -418,12 +427,18 @@ class BalancedOracleCollector:
             or fallback_count > 0
             or _contains_degraded_marker(planner_runtime)
         )
-        degraded = pedestrian_status != "native" or _contains_degraded_marker(metadata)
+        degraded = pedestrian_status != "native" or _contains_degraded_marker(record)
         failed = str(record.get("status", "failed")) != "success"
-        actual_scenario = str(record.get("scenario_id", ""))
-        actual_seed = int(record.get("seed", -1))
+        actual_scenario = str(record.get("scenario_id") or "").strip()
+        try:
+            actual_seed = int(record.get("seed", -1))
+        except (TypeError, ValueError):
+            actual_seed = -1
         _declared_split, declared_scenario, declared_seed = parse_episode_id(episode_id, split)
-        leakage_invalid = actual_scenario != declared_scenario or actual_seed != declared_seed
+        identity_missing = not actual_scenario or actual_seed < 0
+        leakage_invalid = (
+            identity_missing or actual_scenario != declared_scenario or actual_seed != declared_seed
+        )
 
         return {
             "episode_id": episode_id,
@@ -445,6 +460,7 @@ class BalancedOracleCollector:
                 "execution_mode": execution_mode,
                 "fallback_count": fallback_count,
                 "pedestrian_fallback_degraded_status": pedestrian_status,
+                "identity_missing": identity_missing,
             },
         }
 
@@ -573,14 +589,14 @@ class BalancedOracleCollector:
             steps = len(actions)
 
             reason: str | None = None
-            if steps <= 1:
+            if bool(ep.get("leakage_invalid", False)):
+                reason = "leakage_invalid"
+            elif steps <= 1:
                 reason = "one-step"
             elif bool(ep.get("failed", False)):
                 reason = "failed"
             elif bool(ep.get("fallback", False) or ep.get("degraded", False)):
                 reason = "fallback"
-            elif bool(ep.get("leakage_invalid", False)):
-                reason = "leakage_invalid"
 
             if reason is not None:
                 exclusions.append(
@@ -643,6 +659,45 @@ class BalancedOracleCollector:
                 handle.write(json.dumps(_jsonable(episode), sort_keys=True) + "\n")
         return path
 
+    def _assert_yield_gates(
+        self,
+        *,
+        missing_episode_ids: list[str],
+        leakage_detected: bool,
+        usable_train_transitions: int,
+        stratum_counts: dict[str, dict[str, int]],
+        usable_split_counts: dict[str, int],
+    ) -> None:
+        """Raise before artifact creation when any promotion gate fails."""
+        if missing_episode_ids:
+            raise BalancedDatasetCollectionError(
+                "Insufficient yield: collection did not produce every predeclared "
+                f"packet episode: {missing_episode_ids[:10]}"
+            )
+        if leakage_detected:
+            raise BalancedDatasetCollectionError(
+                "Leakage-invalid episode identity detected; refusing to materialize a "
+                "training candidate"
+            )
+        if usable_train_transitions < self.min_usable_transitions:
+            raise BalancedDatasetCollectionError(
+                f"Insufficient yield: usable training transitions ({usable_train_transitions}) "
+                f"< required minimum ({self.min_usable_transitions})"
+            )
+        for sc_id in self.scenario_ids:
+            count = stratum_counts["train"].get(sc_id, 0)
+            if count < self.min_episodes_per_stratum:
+                raise BalancedDatasetCollectionError(
+                    f"Insufficient yield for training stratum {sc_id!r}: "
+                    f"usable episodes ({count}) < required minimum "
+                    f"({self.min_episodes_per_stratum})"
+                )
+        empty_splits = [split for split, count in usable_split_counts.items() if count == 0]
+        if empty_splits:
+            raise BalancedDatasetCollectionError(
+                "Insufficient yield: no usable episodes for split(s): " + ", ".join(empty_splits)
+            )
+
     def collect_dataset(
         self,
         *,
@@ -694,25 +749,20 @@ class BalancedOracleCollector:
             if split == "train":
                 usable_train_transitions += steps
 
+        usable_split_counts = {
+            split: sum(1 for episode in usable_episodes if episode["split"] == split)
+            for split in _SPLITS
+        }
+        leakage_detected = any(bool(episode.get("leakage_invalid")) for episode in raw_episodes)
+
         if not allow_insufficient_yield:
-            if missing_episode_ids:
-                raise BalancedDatasetCollectionError(
-                    "Insufficient yield: collection did not produce every predeclared "
-                    "packet episode: "
-                    f"{missing_episode_ids[:10]}"
-                )
-            if usable_train_transitions < self.min_usable_transitions:
-                raise BalancedDatasetCollectionError(
-                    f"Insufficient yield: usable training transitions ({usable_train_transitions}) "
-                    f"< required minimum ({self.min_usable_transitions})"
-                )
-            for sc_id in self.scenario_ids:
-                cnt = stratum_counts["train"].get(sc_id, 0)
-                if cnt < self.min_episodes_per_stratum:
-                    raise BalancedDatasetCollectionError(
-                        f"Insufficient yield for training stratum {sc_id!r}: "
-                        f"usable episodes ({cnt}) < required minimum ({self.min_episodes_per_stratum})"
-                    )
+            self._assert_yield_gates(
+                missing_episode_ids=missing_episode_ids,
+                leakage_detected=leakage_detected,
+                usable_train_transitions=usable_train_transitions,
+                stratum_counts=stratum_counts,
+                usable_split_counts=usable_split_counts,
+            )
 
         train_actions_list = [
             np.asarray(ep["actions"], dtype=np.float32) for ep in train_usable_episodes
@@ -742,10 +792,6 @@ class BalancedOracleCollector:
         sha256_npz = _file_sha256(npz_path)
         sha256_raw_provenance = _file_sha256(raw_provenance_path)
         public_sha = self._public_git_sha()
-        usable_split_counts = {
-            split: sum(1 for episode in usable_episodes if episode["split"] == split)
-            for split in _SPLITS
-        }
         gates_passed = not missing_episode_ids and all(
             [
                 usable_train_transitions >= self.min_usable_transitions,
@@ -754,7 +800,7 @@ class BalancedOracleCollector:
                     for sc_id in self.scenario_ids
                 ),
                 all(usable_split_counts[split] > 0 for split in _SPLITS),
-                not any(item["reason"] == "leakage_invalid" for item in exclusions),
+                not leakage_detected,
             ]
         )
 
@@ -765,19 +811,35 @@ class BalancedOracleCollector:
             f"--dataset-path {npz_path}"
         )
 
+        sha256_inventory = {
+            npz_filename: sha256_npz,
+            raw_provenance_path.name: sha256_raw_provenance,
+        }
+        artifact_paths = {
+            "dataset_npz": npz_filename,
+            "raw_episode_provenance": raw_provenance_path.name,
+        }
         manifest = {
             "schema_version": _SCHEMA_VERSION,
             "created_at": datetime.now(UTC).isoformat(),
             "git_commit": public_sha,
             "exact_public_sha": public_sha,
+            "generating_commit": public_sha,
             "dataset_id": self.dataset_id,
             "source_candidate": self.source_candidate,
+            "source_candidate_config": str(self.packet["source_candidate_config"]),
+            "scenario_ids": list(self.scenario_ids),
+            "seeds_by_split": copy.deepcopy(self.seeds_by_split),
+            "episode_ids_by_split": copy.deepcopy(self.episodes_by_split),
+            "hard_slice_assignment": copy.deepcopy(self.packet.get("hard_slice_assignment", [])),
+            "relabeling_policy": copy.deepcopy(self.packet.get("relabeling_policy")),
+            "exclusion_rules": copy.deepcopy(self.packet.get("exclusion_rules", [])),
+            "provenance": str(self.packet.get("provenance", "")),
             "source_packet_sha256": _file_sha256(self.config_path),
             "candidate_registry_sha256": _file_sha256(self.candidate_registry),
-            "sha256_inventory": {
-                npz_filename: sha256_npz,
-                raw_provenance_path.name: sha256_raw_provenance,
-            },
+            "artifact_paths": artifact_paths,
+            "checksums": sha256_inventory,
+            "sha256_inventory": sha256_inventory,
             "dataset_sha256": sha256_npz,
             "command": cmd_str,
             "exclusions": exclusions,
@@ -837,24 +899,27 @@ def _write_expert_traj_npz(
     action_weights: dict[str, np.ndarray],
 ) -> None:
     episode_count = len(episodes)
-    max_steps = max((len(ep["actions"]) for ep in episodes), default=1)
-
-    observations = np.empty((episode_count, max_steps), dtype=object)
-    actions = np.empty((episode_count, max_steps, 2), dtype=object)
-    positions = np.empty((episode_count, max_steps, 2), dtype=object)
-    rewards = np.empty((episode_count, max_steps), dtype=object)
-    return_to_go = np.empty((episode_count, max_steps), dtype=object)
-    terminated = np.empty((episode_count, max_steps), dtype=object)
-    truncated = np.empty((episode_count, max_steps), dtype=object)
-    episode_ids = np.empty((episode_count, 1), dtype=object)
-    scenario_ids = np.empty((episode_count, 1), dtype=object)
-    seeds = np.empty((episode_count, 1), dtype=object)
-    split_tags = np.empty((episode_count, 1), dtype=object)
-    balance_weights = np.zeros((episode_count, max_steps), dtype=np.float32)
+    per_episode: dict[str, list[np.ndarray]] = {
+        name: []
+        for name in (
+            "observations",
+            "actions",
+            "positions",
+            "rewards",
+            "return_to_go",
+            "terminated",
+            "truncated",
+            "action_balance_weights",
+        )
+    }
+    episode_ids: list[np.ndarray] = []
+    scenario_ids: list[np.ndarray] = []
+    seeds: list[np.ndarray] = []
+    split_tags: list[np.ndarray] = []
 
     splits_mapping: dict[str, list[str]] = {split: [] for split in _SPLITS}
 
-    for idx, ep in enumerate(episodes):
+    for ep in episodes:
         ep_id = str(ep["episode_id"])
         sc_id = str(ep["scenario_id"])
         seed = int(ep["seed"])
@@ -889,35 +954,47 @@ def _write_expert_traj_npz(
             rtg_vals.append(running_rtg)
         rtg_vals.reverse()
 
-        for step in range(steps):
-            observations[idx, step] = ep_obs[step]
-            actions[idx, step] = np.asarray(ep_act[step], dtype=np.float32)
-            positions[idx, step] = np.asarray(ep_pos[step], dtype=np.float32)
-            rewards[idx, step] = float(ep_rew[step])
-            return_to_go[idx, step] = float(rtg_vals[step])
-            terminated[idx, step] = bool(ep_terminated[step])
-            truncated[idx, step] = bool(ep_truncated[step])
-            balance_weights[idx, step] = float(weights[step])
+        per_episode["observations"].append(np.asarray(ep_obs, dtype=object))
+        per_episode["actions"].append(np.asarray(ep_act, dtype=np.float32))
+        per_episode["positions"].append(np.asarray(ep_pos, dtype=np.float32))
+        per_episode["rewards"].append(np.asarray(ep_rew, dtype=np.float32))
+        per_episode["return_to_go"].append(np.asarray(rtg_vals, dtype=np.float32))
+        per_episode["terminated"].append(np.asarray(ep_terminated, dtype=bool))
+        per_episode["truncated"].append(np.asarray(ep_truncated, dtype=bool))
+        per_episode["action_balance_weights"].append(np.asarray(weights, dtype=np.float32))
 
-        for step in range(steps, max_steps):
-            observations[idx, step] = None
-            actions[idx, step] = np.zeros(2, dtype=np.float32)
-            positions[idx, step] = np.zeros(2, dtype=np.float32)
-            rewards[idx, step] = 0.0
-            return_to_go[idx, step] = 0.0
-            terminated[idx, step] = False
-            truncated[idx, step] = False
+        episode_ids.append(np.asarray([ep_id], dtype=object))
+        scenario_ids.append(np.asarray([sc_id], dtype=object))
+        seeds.append(np.asarray([seed], dtype=np.int64))
+        split_tags.append(np.asarray([split], dtype=object))
 
-        episode_ids[idx, 0] = ep_id
-        scenario_ids[idx, 0] = sc_id
-        seeds[idx, 0] = seed
-        split_tags[idx, 0] = split
+    def ragged(values: list[np.ndarray]) -> np.ndarray:
+        array = np.empty(len(values), dtype=object)
+        array[:] = values
+        return array
+
+    scenario_coverage = {
+        scenario_id: sum(str(ep["scenario_id"]) == scenario_id for ep in episodes)
+        for scenario_id in sorted({str(ep["scenario_id"]) for ep in episodes})
+    }
+    observation_keys = sorted(
+        {
+            str(key)
+            for episode in episodes
+            for observation in episode.get("observations", [])
+            if isinstance(observation, dict)
+            for key in observation
+        }
+    )
 
     metadata = {
         "dataset_id": dataset_id,
         "source_policy_id": source_candidate,
         "dataset_schema": "trajectory_dataset.v2.decision_transformer_preflight",
         "splits": {split: {"episode_ids": ids} for split, ids in splits_mapping.items()},
+        "scenario_coverage": scenario_coverage,
+        "observation_contract": {"keys": observation_keys},
+        "action_contract": {"fields": ["acceleration", "angular_velocity"]},
         "data_collection_only": True,
         "training_performed": False,
     }
@@ -925,19 +1002,20 @@ def _write_expert_traj_npz(
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         path,
-        observations=observations,
-        actions=actions,
-        positions=positions,
-        rewards=rewards,
-        return_to_go=return_to_go,
-        terminated=terminated,
-        truncated=truncated,
-        episode_ids=episode_ids,
-        scenario_ids=scenario_ids,
-        seeds=seeds,
-        splits=split_tags,
-        action_balance_weights=balance_weights,
-        metadata=json.dumps(metadata),
+        observations=ragged(per_episode["observations"]),
+        actions=ragged(per_episode["actions"]),
+        positions=ragged(per_episode["positions"]),
+        rewards=ragged(per_episode["rewards"]),
+        return_to_go=ragged(per_episode["return_to_go"]),
+        terminated=ragged(per_episode["terminated"]),
+        truncated=ragged(per_episode["truncated"]),
+        episode_ids=np.asarray(episode_ids, dtype=object),
+        scenario_ids=np.asarray(scenario_ids, dtype=object),
+        seeds=np.asarray(seeds, dtype=object),
+        splits=np.asarray(split_tags, dtype=object),
+        action_balance_weights=ragged(per_episode["action_balance_weights"]),
+        episode_count=np.array(episode_count),
+        metadata=np.array(metadata, dtype=object),
     )
 
 

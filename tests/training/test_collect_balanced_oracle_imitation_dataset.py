@@ -373,6 +373,34 @@ def test_production_cli_collects_without_test_override(
     assert manifest["eligibility_status"] == "training_ready"
     assert len(manifest["exact_public_sha"]) == 40
     assert manifest["exact_public_sha"] != manifest["dataset_sha256"]
+    assert manifest["generating_commit"] == manifest["exact_public_sha"]
+    assert manifest["source_candidate_config"].endswith(
+        "hybrid_rule_v3_static_margin0_waypoint2.yaml"
+    )
+    assert (
+        manifest["scenario_ids"]
+        == collector_module.BalancedOracleCollector(
+            TEST_PACKET_PATH, output_root=tmp_path / "packet_contract"
+        ).scenario_ids
+    )
+    assert manifest["seeds_by_split"]["train"] == list(range(1001, 1301))
+    assert len(manifest["episode_ids_by_split"]["train"]) == 300
+    assert manifest["hard_slice_assignment"]
+    assert manifest["relabeling_policy"] is None
+    assert manifest["checksums"] == manifest["sha256_inventory"]
+    assert set(manifest["artifact_paths"].values()) == set(manifest["checksums"])
+
+    with np.load(Path(manifest["npz_path"]), allow_pickle=True) as dataset:
+        assert dataset["observations"].ndim == 1
+        assert dataset["actions"].ndim == 1
+        assert dataset["action_balance_weights"].ndim == 1
+        assert int(dataset["episode_count"].item()) == 306
+        metadata = dataset["metadata"].item()
+        assert isinstance(metadata, dict)
+        assert (
+            metadata["splits"]["train"]["episode_ids"]
+            == manifest["private_artifact_registry_candidate"]["splits"]["train"]["episode_ids"]
+        )
 
 
 def test_capture_episode_records_policy_io_and_fallback_guards(
@@ -390,6 +418,7 @@ def test_capture_episode_records_policy_io_and_fallback_guards(
             return _make_obs(1), 0.1, False, False, {}
 
     monkeypatch.setattr(collector_module.map_runner, "make_robot_env", FakeEnv)
+    episode_factory_before = collector_module.map_runner._map_runner_episode_module.make_robot_env
 
     def fake_run(scenario: dict[str, Any], seed: int, **_kwargs: Any) -> dict[str, Any]:
         env = collector_module.map_runner.make_robot_env()
@@ -427,9 +456,19 @@ def test_capture_episode_records_policy_io_and_fallback_guards(
         dt=0.1,
     )
     assert len(episode["actions"]) == len(episode["observations"]) == 2
+    np.testing.assert_array_equal(
+        episode["observations"][0]["robot_position"], _make_obs(0)["robot_position"]
+    )
+    np.testing.assert_array_equal(
+        episode["observations"][1]["robot_position"], _make_obs(1)["robot_position"]
+    )
     assert episode["fallback"] is False
     assert episode["degraded"] is False
     assert episode["leakage_invalid"] is False
+    assert (
+        collector_module.map_runner._map_runner_episode_module.make_robot_env
+        is episode_factory_before
+    )
 
     def fake_degraded_run(scenario: dict[str, Any], seed: int, **kwargs: Any) -> dict[str, Any]:
         record = fake_run(scenario, seed, **kwargs)
@@ -449,6 +488,28 @@ def test_capture_episode_records_policy_io_and_fallback_guards(
         dt=0.1,
     )
     assert degraded["fallback"] is True
+
+    def fake_missing_identity_run(
+        scenario: dict[str, Any], seed: int, **kwargs: Any
+    ) -> dict[str, Any]:
+        record = fake_run(scenario, seed, **kwargs)
+        record.pop("scenario_id")
+        record.pop("seed")
+        return record
+
+    monkeypatch.setattr(collector_module, "_run_map_episode", fake_missing_identity_run)
+    missing_identity = collector._capture_episode(
+        {"name": "planner_sanity_simple"},
+        seed=1001,
+        split="train",
+        episode_id="train__planner_sanity_simple__seed1001",
+        algo="hybrid_rule_local_planner",
+        algo_config={},
+        scenario_path=Path("configs/policy_search/nominal_sanity_matrix.yaml"),
+        horizon=2,
+        dt=0.1,
+    )
+    assert missing_identity["leakage_invalid"] is True
 
 
 def test_diagnostic_insufficient_manifest_is_rejected(
@@ -492,3 +553,56 @@ def test_identity_mismatch_is_excluded_as_leakage_invalid(tmp_path: Path) -> Non
     assert manifest["exclusions"][0]["reason"] == "leakage_invalid"
     provenance_lines = Path(manifest["raw_provenance_path"]).read_text(encoding="utf-8")
     assert "identity_mismatches" in provenance_lines
+
+
+def test_one_step_identity_mismatch_cannot_become_training_ready(tmp_path: Path) -> None:
+    """Leakage is terminal even when a stronger exclusion would otherwise hide its reason."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    episodes = _all_packet_episodes(collector)
+    mismatched = next(ep for ep in episodes if ep["split"] == "validation")
+    mismatched["seed"] += 1
+    for field in ("actions", "observations", "positions", "rewards", "terminated", "truncated"):
+        mismatched[field] = mismatched[field][:1]
+
+    manifest = collector.collect_dataset(
+        episodes_override=episodes,
+        allow_insufficient_yield=True,
+    )
+
+    assert manifest["eligibility_status"] == "diagnostic_insufficient_yield"
+    assert manifest["private_artifact_registry_candidate"] is None
+    assert any(row["reason"] == "leakage_invalid" for row in manifest["exclusions"])
+    with pytest.raises(ValueError, match="eligibility_status|leakage"):
+        validate_balanced_manifest(Path(manifest["manifest_path"]))
+
+    strict_collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path / "strict",
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    with pytest.raises(BalancedDatasetCollectionError, match="Leakage-invalid"):
+        strict_collector.collect_dataset(episodes_override=episodes)
+
+
+def test_manifest_validator_requires_split_contract_fields(tmp_path: Path) -> None:
+    """A training-ready manifest cannot omit the inherited #1397 split contract."""
+    collector = BalancedOracleCollector(
+        TEST_PACKET_PATH,
+        output_root=tmp_path,
+        min_usable_transitions=1,
+        min_episodes_per_stratum=1,
+    )
+    manifest = collector.collect_dataset(episodes_override=_all_packet_episodes(collector))
+    manifest_path = Path(manifest["manifest_path"])
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    payload.pop("source_candidate_config", None)
+    manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="source_candidate_config"):
+        validate_balanced_manifest(manifest_path)

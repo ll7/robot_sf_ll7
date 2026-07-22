@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 EXPECTED_SCHEMA = "balanced-oracle-dataset-manifest.v1"
+SPLITS = ("train", "validation", "evaluation")
+EPISODE_ID_RE = re.compile(r"^(?P<split>[a-z_]+)__(?P<scenario>.+)__seed(?P<seed>\d+)$")
 
 
 def _file_sha256(path: Path) -> str:
@@ -60,7 +62,118 @@ def _validate_balance_summary(manifest: dict[str, Any], errors: list[str]) -> No
         errors.append("action-bin accounting must include weights_sha256")
 
 
-def _validate_manifest_fields(manifest: dict[str, Any]) -> list[str]:  # noqa: C901, PLR0912
+def _validate_split_contract(  # noqa: C901, PLR0912, PLR0915
+    manifest: dict[str, Any], errors: list[str]
+) -> None:
+    """Append validation errors for the inherited #1397 split/provenance contract."""
+    for field_name in (
+        "source_candidate_config",
+        "provenance",
+        "generating_commit",
+        "created_at",
+    ):
+        value = manifest.get(field_name)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"{field_name} must be a non-empty string")
+
+    if manifest.get("generating_commit") != manifest.get("exact_public_sha"):
+        errors.append("generating_commit must match exact_public_sha")
+
+    scenario_ids = manifest.get("scenario_ids")
+    if (
+        not isinstance(scenario_ids, list)
+        or not scenario_ids
+        or not all(isinstance(value, str) and value.strip() for value in scenario_ids)
+    ):
+        errors.append("scenario_ids must be a non-empty list of strings")
+
+    seeds_by_split = manifest.get("seeds_by_split")
+    episodes_by_split = manifest.get("episode_ids_by_split")
+    split_seed_sets: dict[str, set[int]] = {}
+    all_episode_ids: set[str] = set()
+    if not isinstance(seeds_by_split, dict):
+        errors.append("seeds_by_split must be a mapping")
+    if not isinstance(episodes_by_split, dict):
+        errors.append("episode_ids_by_split must be a mapping")
+    if isinstance(seeds_by_split, dict) and isinstance(episodes_by_split, dict):
+        for split in SPLITS:
+            raw_seeds = seeds_by_split.get(split)
+            raw_episode_ids = episodes_by_split.get(split)
+            if (
+                not isinstance(raw_seeds, list)
+                or not raw_seeds
+                or not all(
+                    isinstance(seed, int) and not isinstance(seed, bool) for seed in raw_seeds
+                )
+            ):
+                errors.append(f"seeds_by_split.{split} must be a non-empty integer list")
+                continue
+            split_seed_sets[split] = set(raw_seeds)
+            if len(split_seed_sets[split]) != len(raw_seeds):
+                errors.append(f"seeds_by_split.{split} must not contain duplicates")
+            if not isinstance(raw_episode_ids, list) or not raw_episode_ids:
+                errors.append(f"episode_ids_by_split.{split} must be a non-empty list")
+                continue
+            for episode_id in raw_episode_ids:
+                episode_text = str(episode_id)
+                match = EPISODE_ID_RE.fullmatch(episode_text)
+                if match is None or match.group("split") != split:
+                    errors.append(
+                        f"episode_ids_by_split.{split} has invalid identity: {episode_id!r}"
+                    )
+                    continue
+                if int(match.group("seed")) not in split_seed_sets[split]:
+                    errors.append(
+                        f"episode_ids_by_split.{split} seed is absent from seeds_by_split: "
+                        f"{episode_id!r}"
+                    )
+                if episode_text in all_episode_ids:
+                    errors.append(f"episode_ids_by_split contains duplicate id: {episode_id!r}")
+                all_episode_ids.add(episode_text)
+        for index, left in enumerate(SPLITS):
+            for right in SPLITS[index + 1 :]:
+                if split_seed_sets.get(left, set()) & split_seed_sets.get(right, set()):
+                    errors.append(f"seeds_by_split overlaps between {left} and {right}")
+
+    hard_slices = manifest.get("hard_slice_assignment")
+    if not isinstance(hard_slices, list):
+        errors.append("hard_slice_assignment must be a list")
+    relabeling_policy = manifest.get("relabeling_policy")
+    if "relabeling_policy" not in manifest or (
+        relabeling_policy is not None and not isinstance(relabeling_policy, dict)
+    ):
+        errors.append("relabeling_policy must be null or a mapping")
+    exclusion_rules = manifest.get("exclusion_rules")
+    if not isinstance(exclusion_rules, list) or not exclusion_rules:
+        errors.append("exclusion_rules must be a non-empty list")
+
+    artifact_paths = manifest.get("artifact_paths")
+    checksums = manifest.get("checksums")
+    if not isinstance(artifact_paths, dict) or not artifact_paths:
+        errors.append("artifact_paths must be a non-empty mapping")
+    if not isinstance(checksums, dict) or not checksums:
+        errors.append("checksums must be a non-empty mapping")
+    if isinstance(artifact_paths, dict) and isinstance(checksums, dict):
+        raw_paths = list(artifact_paths.values())
+        paths_are_strings = all(isinstance(path, str) and path for path in raw_paths)
+        if not paths_are_strings:
+            errors.append("artifact_paths values must be non-empty strings")
+        declared_paths = set(raw_paths) if paths_are_strings else set()
+        if paths_are_strings and declared_paths != set(checksums):
+            errors.append("checksums must cover every artifact_paths value exactly")
+        for path, digest in checksums.items():
+            if (
+                not isinstance(path, str)
+                or not isinstance(digest, str)
+                or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            ):
+                errors.append("checksums entries must map artifact paths to SHA-256 strings")
+                break
+
+
+def _validate_manifest_fields(  # noqa: C901, PLR0912, PLR0915
+    manifest: dict[str, Any],
+) -> list[str]:
     """Return errors for required manifest metadata."""
     errors: list[str] = []
 
@@ -126,6 +239,11 @@ def _validate_manifest_fields(manifest: dict[str, Any]) -> list[str]:  # noqa: C
                 errors.append(f"training strata do not satisfy the yield gate: {inadequate}")
     if manifest.get("missing_episode_ids") not in ([], None):
         errors.append("missing_episode_ids must be empty")
+    exclusions = manifest.get("exclusions")
+    if isinstance(exclusions, list) and any(
+        isinstance(row, dict) and row.get("reason") == "leakage_invalid" for row in exclusions
+    ):
+        errors.append("training-ready manifest must not contain leakage-invalid episodes")
 
     registry_candidate = manifest.get("private_artifact_registry_candidate")
     if not isinstance(registry_candidate, dict):
@@ -137,7 +255,7 @@ def _validate_manifest_fields(manifest: dict[str, Any]) -> list[str]:  # noqa: C
         if not isinstance(splits, dict):
             errors.append("private_artifact_registry_candidate.splits must be a mapping")
         else:
-            for split in ("train", "validation", "evaluation"):
+            for split in SPLITS:
                 split_payload = splits.get(split)
                 episode_ids = (
                     split_payload.get("episode_ids") if isinstance(split_payload, dict) else None
@@ -145,6 +263,7 @@ def _validate_manifest_fields(manifest: dict[str, Any]) -> list[str]:  # noqa: C
                 if not isinstance(episode_ids, list) or not episode_ids:
                     errors.append(f"registry candidate split {split!r} must be non-empty")
 
+    _validate_split_contract(manifest, errors)
     _validate_balance_summary(manifest, errors)
     return errors
 

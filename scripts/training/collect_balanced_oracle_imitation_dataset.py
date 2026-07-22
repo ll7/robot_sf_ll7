@@ -91,7 +91,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(plan, indent=2, sort_keys=True))
         else:
             print(
-                f"Preflight completed successfully: plan written to {plan['manifest_destination']}"
+                "Preflight completed successfully: plan written to "
+                f"{args.output_root / 'balanced_oracle_collection_plan.json'}"
             )
         return 0
 
@@ -106,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(manifest, indent=2, sort_keys=True))
     else:
         print(f"Dataset collection complete. Manifest written to {manifest['manifest_path']}")
-        print(f"NPZ SHA-256: {manifest['exact_public_sha']}")
+        print(f"NPZ SHA-256: {manifest['dataset_sha256']}")
     return 0
 
 

@@ -63,7 +63,8 @@ annotations, and scenario use have been reviewed.
 
 The repository includes a small OpenStreetMap extract from the Otto von Guericke University (OVGU)
 campus under the Open Data Commons Open Database License (ODbL) v1.0. It retains four public source
-features and adds three clearly marked Robot SF route/zone annotations:
+features and adds three clearly marked Robot SF annotations: a short, clearance-certified walkway
+route plus its start and goal zones.
 
 - input and attribution: `maps/imported/ovgu_campus_walk.geojson` and
   `maps/imported/ovgu_campus_walk.provenance.yaml`;
@@ -79,13 +80,13 @@ uv run python scripts/validation/check_geojson_import.py \
   /tmp/ovgu_campus_walk.yaml
 ```
 
-Run the single-seed CPU smoke without video:
+Run the single-seed CPU smoke without video at the scenario's configured 80-step horizon:
 
 ```bash
 uv run robot_sf_bench run \
   --matrix configs/scenarios/single/ovgu_campus_walk.yaml \
   --out output/benchmarks/ovgu_campus_walk_smoke/episodes.jsonl \
-  --algo goal --workers 1 --horizon 5 --no-video --no-resume
+  --algo goal --workers 1 --horizon 80 --no-video --no-resume
 ```
 
 This is exploratory smoke evidence that a real extract converts, loads, and executes. It is not a

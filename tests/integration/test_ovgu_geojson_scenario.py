@@ -7,6 +7,7 @@ from pathlib import Path
 
 from robot_sf.benchmark.map_runner import run_map_batch
 from robot_sf.nav.geojson_map_provenance import validate_import_provenance
+from robot_sf.scenario_certification import certify_scenario_file
 from robot_sf.training.scenario_loader import load_scenarios, resolve_map_definition
 from scripts.validation.check_geojson_import import main as check_geojson_import
 
@@ -35,14 +36,32 @@ def test_real_extract_round_trips_to_the_tracked_scenario_map(tmp_path: Path) ->
     assert map_def.obstacles
 
 
-def test_real_extract_scenario_executes_one_cpu_smoke(tmp_path: Path) -> None:
-    """The actual map-based runner executes the imported scenario without an exception."""
+def test_real_extract_scenario_certifies_each_symmetric_route() -> None:
+    """The configured forward and reverse routes have collision-free inflated paths."""
+    certificate = certify_scenario_file(SCENARIO)[0]
+
+    assert certificate.classification == "valid"
+    assert certificate.benchmark_eligibility == "eligible"
+    assert len(certificate.route_certificates) == 2
+    assert all(
+        route.benchmark_eligibility == "eligible" for route in certificate.route_certificates
+    )
+    assert all(
+        route.checks["inflated_collision_free_path"] for route in certificate.route_certificates
+    )
+
+
+def test_real_extract_scenario_completes_at_its_configured_horizon(tmp_path: Path) -> None:
+    """The actual map-based runner reaches the goal before the configured timeout."""
     episodes = tmp_path / "episodes.jsonl"
+    scenario = load_scenarios(SCENARIO)[0]
+    horizon = scenario["simulation_config"]["max_episode_steps"]
+    assert horizon == 80
     summary = run_map_batch(
         SCENARIO,
         episodes,
         EPISODE_SCHEMA,
-        horizon=5,
+        horizon=horizon,
         record_forces=False,
         algo="goal",
         workers=1,
@@ -56,3 +75,7 @@ def test_real_extract_scenario_executes_one_cpu_smoke(tmp_path: Path) -> None:
     record = json.loads(episodes.read_text(encoding="utf-8").splitlines()[0])
     assert record["scenario_id"] == "ovgu_campus_walk_exploratory"
     assert record["seed"] == 4980
+    assert record["horizon"] == horizon
+    assert record["status"] == "success"
+    assert record["outcome"]["route_complete"] is True
+    assert record["outcome"]["timeout_event"] is False

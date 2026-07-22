@@ -10,11 +10,12 @@ source:
     and building=*; retained relation 6384505 and ways 31529872, 345185352,
     and 664099357.
 raw_input:
-  sha256: 2c4eedc34670a7945db1bfc02ed6cb0aed6fe3de8e7087deeab60f8302611fdd
+  sha256: aee415388f2c9ce4f646093d237af47fb094895ed24156a457c763b68c437fbd
 annotation:
   description: >-
-    Robot SF added one route and named start/goal zones to the retained public
-    geometry; features with element=robot_sf_annotation are project-authored.
+    Robot SF added one short, clearance-certified route and named start/goal zones
+    to the retained public geometry; features with element=robot_sf_annotation are
+    project-authored.
   reviewed_source_features:
     - https://www.openstreetmap.org/relation/6384505
     - https://www.openstreetmap.org/way/31529872

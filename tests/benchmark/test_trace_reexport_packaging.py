@@ -651,6 +651,9 @@ def test_resolver_mapping_receipt_adapts_a_complete_package(
     assert _tree_digests(package) == package_before
     assert build_resolver_mapping_receipt(package, output_path=receipt_path) == payload
     assert _tree_digests(package) == package_before
+    # Callers may request a validated in-memory payload without writing any receipt.
+    assert build_resolver_mapping_receipt(package) == payload
+    assert _tree_digests(package) == package_before
     package_trace_reexport(**synthetic_inputs.kwargs(package))
     assert _tree_digests(package) == package_before
 

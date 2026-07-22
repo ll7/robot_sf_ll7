@@ -630,6 +630,100 @@ class TestReproductionReport:
 class TestSubsetReplayComparison:
     """Tests for numeric subset replay execution and comparison logic."""
 
+    @pytest.mark.parametrize(
+        ("mutation", "expected_verdict"),
+        [
+            (None, "pass"),
+            ("fallback", "fail"),
+            ("numeric_mismatch", "fail"),
+        ],
+    )
+    def test_report_run_mode_reaches_comparison_and_fails_closed(
+        self, tmp_path: Path, mutation: str | None, expected_verdict: str
+    ) -> None:
+        """Exercise the public report boundary from run-mode output through comparison."""
+        from scripts.repro import cold_start_reproduction_report as report_module
+
+        clone_dir = tmp_path / "release-clone"
+        smoke_manifest = _read_yaml(MANIFEST_PATH)["subset_replay_contract"]["smoke_manifest"]
+        (clone_dir / smoke_manifest).parent.mkdir(parents=True)
+        (clone_dir / smoke_manifest).write_text("schema_version: test\n", encoding="utf-8")
+        (clone_dir / "uv.lock").write_text("release lock\n", encoding="utf-8")
+        output_dir = tmp_path / "reproduction"
+        actual = _valid_subset_actual()
+        if mutation == "fallback":
+            actual["planners"]["ppo"]["algorithm_metadata_status"] = "fallback"
+        elif mutation == "numeric_mismatch":
+            actual["planners"]["ppo"]["metrics"]["snqi"] = -5.0
+
+        def fake_run(command: list[str], **kwargs: Any) -> str:
+            assert command[command.index("--mode") + 1] == "run"
+            output_root = Path(command[command.index("--output-root") + 1])
+            assert output_root.is_absolute()
+            campaign_root = output_root / "campaign-001"
+            for planner, row in actual["planners"].items():
+                episode = {
+                    "algo": planner,
+                    "scenario_id": row["scenario_id"],
+                    "seed": row["seed"],
+                    "status": row["status"],
+                    "git_hash": row["git_hash"],
+                    "config_hash": row["config_hash"],
+                    "metrics": row["metrics"],
+                    "algorithm_metadata": {
+                        "status": row["algorithm_metadata_status"],
+                        "planner_kinematics": {"execution_mode": row["execution_mode"]},
+                    },
+                }
+                episode_path = campaign_root / "runs" / planner / "episodes.jsonl"
+                episode_path.parent.mkdir(parents=True, exist_ok=True)
+                episode_path.write_text(json.dumps(episode) + "\n", encoding="utf-8")
+            return json.dumps(
+                {
+                    "mode": "run",
+                    "status": "ok",
+                    "campaign_execution_status": "completed",
+                    "benchmark_success": True,
+                    "release_benchmark_success": True,
+                    "campaign_root": str(campaign_root),
+                }
+            )
+
+        with (
+            patch.object(report_module, "_env_info", return_value={}),
+            patch.object(report_module, "_git_commit_for_path", return_value="test-commit"),
+            patch.object(
+                report_module,
+                "_step_verify_checksums",
+                return_value={"step": "verify_checksums", "status": "pass"},
+            ),
+            patch.object(
+                report_module, "_step_build", return_value={"step": "build", "status": "pass"}
+            ),
+            patch.object(
+                report_module.subprocess, "check_output", side_effect=fake_run
+            ) as run_mock,
+        ):
+            report = report_module.generate_reproduction_report(
+                tag="0.0.2",
+                output_dir=output_dir,
+                local_repo=clone_dir,
+                checksums_only=False,
+            )
+
+        run_mock.assert_called_once()
+        assert report["steps"]["run_subset"]["status"] == "pass"
+        comparison = report["steps"]["compare_subset"]
+        assert comparison["status"] == expected_verdict
+        assert len(comparison["comparison_rows"]) == 7
+        assert report["overall_verdict"] == ("fail" if expected_verdict == "fail" else "partial")
+        if mutation == "fallback":
+            ppo_row = next(row for row in comparison["comparison_rows"] if row["planner"] == "ppo")
+            assert any("metadata status: fallback" in item for item in ppo_row["deviations"])
+        elif mutation == "numeric_mismatch":
+            ppo_row = next(row for row in comparison["comparison_rows"] if row["planner"] == "ppo")
+            assert any("SNQI score breach" in item for item in ppo_row["deviations"])
+
     def test_run_subset_executes_run_mode_not_preflight(self, tmp_path: Path) -> None:
         from scripts.repro.cold_start_reproduction_report import _step_run_subset
 

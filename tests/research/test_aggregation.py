@@ -404,7 +404,10 @@ def test_extract_seed_metrics_missing_metrics_fails(tmp_path: Path):
     assert failure["path"] == str(bad), f"Unexpected failure path: {failure}"
     assert failure["seed"] == 3, f"Unexpected failure seed: {failure}"
     assert failure["policy_type"] == "baseline", f"Unexpected policy type: {failure}"
-    assert "metrics not found" in failure["reason"], f"Unexpected failure reason: {failure}"
+    # Exact-equality on the reason string: KeyError stores the message verbatim and
+    # str(KeyError(msg)) wraps it in single quotes, so this also catches string-wrapping
+    # mutations such as "XXmetrics not foundXX" that a substring match would tolerate.
+    assert failure["reason"] == "'metrics not found'", f"Unexpected failure reason: {failure}"
 
 
 def test_extract_seed_metrics_no_numeric_metrics_fails(tmp_path: Path):
@@ -452,4 +455,75 @@ def test_extract_seed_metrics_missing_file_fails(tmp_path: Path):
     assert failure["policy_type"] is None, f"Unexpected policy type: {failure}"
     assert "no such file or directory" in failure["reason"].lower(), (
         f"Unexpected missing-file reason: {failure}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mutation-coverage slice: fallback-chain aliases & optional fields (issue #6122)
+# ---------------------------------------------------------------------------
+
+
+def _write_manifest(tmp_path: Path, name: str, metrics: dict, **payload_extra) -> Path:
+    """Write a single-seed manifest payload and return its path."""
+    path = tmp_path / name
+    payload = {"seed": 42, "policy_type": "baseline"}
+    payload.update(payload_extra)
+    payload["metrics"] = metrics
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def test_extract_seed_metrics_avg_timesteps_alias(tmp_path: Path):
+    """The ``avg_timesteps`` alias is used when ``timesteps_to_convergence`` is absent.
+
+    Exercises the second link of the ``metrics.get(...) or ...`` fallback chain so a
+    mutation of that alias key (e.g. ``metrics.get(None)``) drops the value.
+    """
+    path = _write_manifest(tmp_path, "a.json", {"success_rate": 0.8, "avg_timesteps": 12000.0})
+    records, _ = extract_seed_metrics([str(path)])
+    assert len(records) == 1, f"Expected one record, got: {records}"
+    assert records[0]["timesteps_to_convergence"] == 12000.0, (
+        f"avg_timesteps alias was not resolved: {records[0]}"
+    )
+
+
+def test_extract_seed_metrics_total_timesteps_alias(tmp_path: Path):
+    """The ``total_timesteps`` alias is used when no earlier timestep key is present.
+
+    Exercises the third link of the fallback chain so a mutation of that alias key
+    drops the value.
+    """
+    path = _write_manifest(tmp_path, "a.json", {"success_rate": 0.8, "total_timesteps": 99000.0})
+    records, _ = extract_seed_metrics([str(path)])
+    assert len(records) == 1, f"Expected one record, got: {records}"
+    assert records[0]["timesteps_to_convergence"] == 99000.0, (
+        f"total_timesteps alias was not resolved: {records[0]}"
+    )
+
+
+def test_extract_seed_metrics_final_reward_mean_field(tmp_path: Path):
+    """``final_reward_mean`` is carried through as an exact float value."""
+    path = _write_manifest(tmp_path, "a.json", {"success_rate": 0.8, "final_reward_mean": 12.5})
+    records, _ = extract_seed_metrics([str(path)])
+    assert len(records) == 1, f"Expected one record, got: {records}"
+    assert "final_reward_mean" in records[0], (
+        f"final_reward_mean presence not detected: {records[0]}"
+    )
+    assert records[0]["final_reward_mean"] == 12.5, (
+        f"final_reward_mean value not carried through: {records[0]}"
+    )
+
+
+def test_extract_seed_metrics_run_duration_seconds_field(tmp_path: Path):
+    """``run_duration_seconds`` is carried through as an exact float value."""
+    path = _write_manifest(
+        tmp_path, "a.json", {"success_rate": 0.8, "run_duration_seconds": 3600.0}
+    )
+    records, _ = extract_seed_metrics([str(path)])
+    assert len(records) == 1, f"Expected one record, got: {records}"
+    assert "run_duration_seconds" in records[0], (
+        f"run_duration_seconds presence not detected: {records[0]}"
+    )
+    assert records[0]["run_duration_seconds"] == 3600.0, (
+        f"run_duration_seconds value not carried through: {records[0]}"
     )

@@ -13,9 +13,10 @@
 
 ## Delivery
 
-- Commit: `17fa7b46a5a96557f478fd90cd11cc73efc3225d`
+- Implementation commit: `17fa7b46a5a96557f478fd90cd11cc73efc3225d`.
+- Result report commit: `4975176b0ef6f6712b22a4d380d628d5a185cea7`.
 - Pushed to PR branch `cheap/cheap-issue-6077-b5a9ba703747`.
-- Post-push head: `17fa7b46a5a96557f478fd90cd11cc73efc3225d`.
+- Current PR head: `4975176b0ef6f6712b22a4d380d628d5a185cea7`.
 
 ## Review state
 

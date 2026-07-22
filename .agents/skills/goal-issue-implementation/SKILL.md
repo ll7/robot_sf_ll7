@@ -67,20 +67,51 @@ Do not use it for:
 ## Preflight
 
 Record at start:
-- Issue source: queue filter, explicit list, Project #5 lane, or open-issues sweep.
-- Write permissions: branch/commit/PR/project writes allowed by default.
+- Issue source: explicit list or a live GitHub label query over open issues.
+- Write permissions: label, comment, branch, worktree, commit, push, PR, and thread writes are
+  allowed by default inside the bounded run.
 - Stop condition: queue exhausted, time budget reached, ambiguous issue contract, environment/auth blocker,
   validation dead-end, user stop.
 - Exclusions: benchmarks blocked by environment, blocked/decision-required issues, external-only work.
 - Instruction precedence: current maintainer direction and `docs/maintainer_values.md` override stale
-  workflow prose. Treat Project #5 ordering as advisory when it conflicts with fresh maintainer
-  direction or evidence; record the override and defer Project metadata cleanup when quota or API
-  limits make it impractical.
+  workflow prose. GitHub labels are authoritative workflow state; Projects and dashboards are
+  optional projections and must not gate admission, ordering, or completion.
 - Autonomy default: for bounded workflow cleanup, proceed without routine confirmation when
   assumptions, uncertainty, evidence grade, and follow-up risks are labeled in the issue, PR, or
   handoff.
 
+Interpret the runtime preflight's legacy `project5` requirement as an optional projection check.
+Missing Project access or tooling is non-blocking when `gh` and `git` pass, because the live label
+workflow must remain operable without Projects.
+
 Do not ask for extra confirmation after this preflight.
+
+## Factory Authority And Label Source Of Truth
+
+Once the owner or parent orchestrator starts a bounded implementation run, prepare and deliver its
+issues autonomously. The orchestrator may add or remove labels, post issue and PR comments, create
+branches and isolated worktrees, push commits, open or update PRs, and create or resolve workflow
+threads without per-item confirmation. Merging remains the responsibility of `gh-pr-merger`.
+
+Use live GitHub issue and PR labels as the source of truth across machines. Do not infer state from a
+Project column, Project field, cached dashboard, local ledger, branch name, or worker report when it
+conflicts with current labels and GitHub state. Projects may mirror label state for convenience, but
+Project access or freshness is never required for progress.
+
+The preparation phase is authorized to make these reversible queue decisions directly:
+
+- mark a clear, bounded issue `state:ready`;
+- split a broad issue into linked independently deliverable successors;
+- mark an issue covered by an exact open or merged PR and link that evidence;
+- apply `state:blocked` with a concrete unblock condition;
+- add `decision-required` with one focused owner decision;
+- close an exact duplicate after posting the canonical issue/PR link and the evidence that makes the
+  closure reversible through reopen.
+
+Do not close interesting lower-priority research merely because another issue ranks higher. Owner
+approval is required before deleting durable scientific artifacts, experiment records or runs, or
+GitHub releases. Reversible duplicate-issue closure, disposable scratch cleanup, and
+post-merge deletion of a fully preserved feature branch are not durable scientific deletion.
 
 ## State Machine
 
@@ -170,7 +201,9 @@ run the specific raw `gh`/`git` command named by the snapshot source metadata.
 For delegated implementation review and execution workers, enforce artifact-first evidence:
 
 - Workers must write, at minimum, `result.json`, `RESULT.md`, `diffstat.txt`, and `validation.json`
-  under a compact artifact directory.
+  under a compact orchestrator artifact directory outside every git worktree.
+- Pass that external artifact path explicitly to each worker. Route artifacts are control-plane
+  evidence, not repository content: `RESULT.md` and `REVIEW.json` must never be staged or committed.
 - The parent must read these artifacts first, in that order.
 - Parent review flow after delegation:
   1. Inspect `result.json` (status, failures, command list, suspicious signals).
@@ -189,21 +222,15 @@ For delegated implementation review and execution workers, enforce artifact-firs
 ## Queue Policy
 
 Default order:
-1. Project `#5 Ready`
-2. Project `#5 Todo`
-3. Project `#5 Tracked`
-4. explicitly requested
-5. other eligible open issues
+1. explicitly requested issues whose current labels remain eligible,
+2. unclaimed open issues labeled `state:ready`,
+3. other open issues that the authorized preparation phase can make ready,
+4. blocked or decision issues only after their unblock/decision condition changes.
 
-The Project #5 order this reads is leverage-aware: `goal-autopilot`'s `prioritize` phase auto-fills
-**empty** priorities via `gh-issue-priority-assessor` (`--only-empty`) before this phase runs, so
-research leverage (claim-boundary/hypothesis → `Improvement`; headline-companion/unblocks →
-`Unlock Factor`; local-vs-gated → `Success Probability`) is already encoded in the score. When
-running this skill standalone (no autopilot) and an eligible candidate has an **empty** priority,
-auto-fill it first with the same `--only-empty` pass so ranking is not driven by unscored gaps; never
-overwrite an existing priority to win a tie.
+Never use Project membership, columns, or numeric fields as the queue source or as an eligibility
+gate. If Project metadata is available, update it only as a best-effort mirror after the label write.
 
-Prioritize by (tie-breakers within the leverage-scored order):
+Prioritize by (tie-breakers within the same authoritative label state):
 - clearer contract,
 - lower validation cost,
 - smaller diff,
@@ -276,7 +303,9 @@ The audit should classify whether each remaining issue is actually implementable
 machine and with the available durable artifacts. If a supposedly ready issue needs unavailable
 hardware, SLURM, CARLA, private artifacts, checkpoint aliases, datasets, or a clearer proof path,
 mark it blocked or send it to issue clarification instead of counting the queue as empty. Keep this
-audit read-only until the orchestrator has reviewed the proposed label/body changes.
+audit read-only while workers scout; after the orchestrator verifies the evidence, the preparation
+authority may apply the resulting labels, comments, splits, decisions, or reversible duplicate
+closures without another confirmation round.
 
 Emit the compact `queue_audit.v1` shape alongside the prose handoff when the queue is exhausted or
 nearly exhausted. Each row must include:
@@ -407,11 +436,12 @@ Route remaining issues by their blocker:
 - Use `gh-issue-creator` or an explicit issue-splitting pass when one ready issue mixes multiple
   independently reviewable PRs.
 - Mark the run `blocked` instead of exhausted when the next issue requires unavailable hardware,
-  private artifacts, credentials, live external services, or unapproved Project writes.
+  private artifacts, credentials, or live external services.
 
 ## Process
 
-1. Select one issue (`gh-issue-sequencer` output or explicit user target).
+1. Build a live label-based queue and select one issue or an orchestrator-authorized bounded batch
+   of non-overlapping issues (`gh-issue-sequencer` output or explicit user targets).
 2. Re-check issue body/comments and open PRs for source-PR dependencies, active coverage, and
    duplicate branch/PR risk before branching.
 3. Acquire the cross-machine issue claim before branching:
@@ -425,8 +455,8 @@ Route remaining issues by their blocker:
    another PC or agent, run `uv run python scripts/dev/issue_claim.py status <issue-number>` for the
    handoff, and skip to the next candidate unless the claim is explicitly confirmed stale and
    released.
-4. Make the successful claim visible in the issue/project surfaces: move the issue to `In progress`
-   or `state:running`, assign the actor when practical, and add a concise issue comment with the
+4. Make the successful claim visible on the authoritative issue surface: apply `state:running`,
+   assign the actor when practical, and add a concise issue comment with the
    claim ref, machine/thread, planned branch, and stale-claim cleanup condition.
 5. Use detached latest-main checkouts only for read-only discovery, duplicate checks, and GitHub
    issue creation or update work. Before editing docs or code, running PR validation, pushing, or
@@ -438,14 +468,16 @@ Route remaining issues by their blocker:
    it after every delegated worker/sub-agent start/completion/failure, before any CI wait or compaction-prone
    pause, and after PR creation and claim release. Record route success separately from task
    success.
-7. Set up the linked git worktree for the selected issue.
+7. Set up one linked git worktree and one branch for each selected issue.
    - Follow `AGENTS.md` "Fresh Worktree Bootstrap" for location, naming, machine-context symlink, and early `origin/main` freshness.
    - Run the bootstrap commands inside the worktree (e.g. `uv sync --all-extras`, activate virtualenv).
 8. Delegate the actual implementation to a sub-agent.
    - Define a specialized sub-agent (e.g., inheriting the parent's tools and system prompt) with the workspace configured to share or inherit the worktree directory.
    - Invoke the sub-agent and pass the issue details, the target worktree path, and the validation requirements.
    - The sub-agent must perform planning, execution, and local validation (lint/format/tests) strictly inside that worktree.
-   - The sub-agent must generate the required worker artifacts: `result.json`, `RESULT.md`, `diffstat.txt`, and `validation.json` under the artifact directory, and notify the orchestrator when finished.
+   - The sub-agent must generate the required worker artifacts: `result.json`, `RESULT.md`,
+     `diffstat.txt`, and `validation.json` under its external artifact directory, and notify the
+     orchestrator when finished.
 9. Parent monitors and audits the sub-agent's work:
    - Check the sub-agent's status and wait for it to complete.
    - Once complete, inspect `result.json`, `RESULT.md`, `diffstat.txt`, and run targeted local verification before accepting.
@@ -461,6 +493,23 @@ Route remaining issues by their blocker:
     - Move to the next queue item.
 
 Never run unrelated refactors or paper-facing claims in this loop.
+
+### Parallel Lane Contract
+
+The parent orchestrator may authorize parallel implementation lanes when the issues and owned file
+surfaces are independent. Each lane must have a different issue claim, branch, linked worktree,
+external artifact directory, and ledger entry. Workers may not expand concurrency or reuse another
+lane's branch/worktree on their own. Serialize dependent or overlapping work, verify remote heads
+before every push, and merge PRs sequentially even when implementation and review ran in parallel.
+
+### Partial PR Narrowing
+
+When a lane proves a coherent useful subset but the original issue contains safely separable
+remaining work, the orchestrator may narrow the PR instead of discarding the proved subset. The PR
+must use `Refs #<parent>` rather than `Closes`/`Fixes`, keep the parent open, state the exact narrowed
+contract, and create and link a successor issue for the residual acceptance criteria and proof tier.
+Post the successor link on the parent and PR. Do not narrow when the residual work is required for a
+public claim, benchmark interpretation, metric/schema correctness, or safe runtime behavior.
 
 ## Validation Tiers
 
@@ -481,6 +530,8 @@ Do not use stale validation as proof.
   - `discard`, `ignored-cache`, `tracked-manifest`, `durable-required`.
 - Benchmark artifacts must include command, config, seeds, commit SHA, and provenance before PR handoff.
 - If a durable dependency cannot be guaranteed locally, stop with a blocker.
+- Keep worker and review control-plane artifacts outside the worktree. In particular, never commit
+  `RESULT.md` or `REVIEW.json`.
 
 ## Confidence
 
@@ -506,8 +557,7 @@ Each child skill or worker may fail. Handle failures per scenario:
 - `gh-issue-sequencer` failure:
   - If the queue is empty or unreachable, skip queue ordering and fall back to
     explicit user target or open-issues sweep.
-  - If Project #5 API writes fail, log the error and continue without priority
-    normalization.
+  - If an optional Project mirror write fails, log the error and continue from live labels.
 
 - `gh-issue-autopilot` failure:
   - If the issue is ambiguous mid-flow, route to `issue-contract-maintainer`,
@@ -548,11 +598,12 @@ When a delegated worker produces a reusable workflow lesson, include an
 
 ## Race-Condition / Multi-Agent Safety
 
-- Operate one implementation branch at a time by default.
+- Operate one branch/worktree per issue. Parallel lanes require explicit parent-orchestrator
+  authorization and non-overlapping ownership; otherwise operate one implementation lane at a time.
 - Use `uv run python scripts/dev/issue_claim.py acquire <issue-number>` as the first write after
   candidate selection and duplicate-PR checks. The remote `agent-claims/issue-<number>` ref is the atomic
-  cross-machine claim; labels, assignments, Project #5 status, and comments are secondary visibility
-  signals.
+  cross-machine lease; GitHub labels remain authoritative workflow state, while assignments and
+  comments provide supporting visibility.
 - If acquiring the claim fails, do not branch or implement. Record the existing claim status and
   select another issue. Release only stale or abandoned claims after checking for an open PR or a
   recent issue comment from the claimant.

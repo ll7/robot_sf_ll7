@@ -66,26 +66,27 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _purge_sicnav_family() -> None:
+    """Remove every SICNav/crowd_sim_plus module currently loaded in ``sys.modules``."""
+    for name in list(sys.modules):
+        if SICNavPlanner._is_sicnav_module(name):
+            sys.modules.pop(name, None)
+
+
 @pytest.fixture
 def _clean_sicnav_modules():
     """Remove any leaked sicnav-related modules before and after the test."""
-    for name in list(sys.modules):
-        if (
-            name == "sicnav"
-            or name.startswith("sicnav.")
-            or name == "sicnav_diffusion"
-            or name.startswith("sicnav_diffusion.")
-        ):
-            sys.modules.pop(name, None)
+    _purge_sicnav_family()
     yield
-    for name in list(sys.modules):
-        if (
-            name == "sicnav"
-            or name.startswith("sicnav.")
-            or name == "sicnav_diffusion"
-            or name.startswith("sicnav_diffusion.")
-        ):
-            sys.modules.pop(name, None)
+    _purge_sicnav_family()
+
+
+@pytest.fixture
+def _clean_sicnav_family_modules():
+    """Purge the full SICNav/crowd_sim_plus module family (incl. ``crowd_sim_plus``)."""
+    _purge_sicnav_family()
+    yield
+    _purge_sicnav_family()
 
 
 @pytest.fixture(autouse=True)
@@ -966,3 +967,465 @@ def test_get_metadata_payload_shape() -> None:
     assert meta["config"]["v_max"] == 1.25
     assert "config_hash" in meta
     assert "status" in meta
+
+
+# ---------------------------------------------------------------------------
+# Fake upstream CasADi/IPOPT campc repo fixtures and helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_campc_repo(repo_root: Path, *, campc_body: str | None = None) -> Path:
+    """Stage a fake upstream repo exposing ``sicnav.policy.campc`` and ``crowd_sim_plus``.
+
+    The repo mirrors the minimal upstream surface the wrapper drives: a top-level
+    ``sicnav`` package, the ``sicnav.policy.campc.CollisionAvoidMPC`` policy, the
+    ``crowd_sim_plus.envs.utils.state_plus`` state classes, and the default
+    ``sicnav/configs/{policy,env}.config`` files. ``campc_body`` overrides the campc
+    module body so tests can force import failures or constructor exceptions.
+    """
+    _write(repo_root / "sicnav" / "__init__.py", "")
+    _write(repo_root / "sicnav" / "policy" / "__init__.py", "")
+    _write(
+        repo_root / "sicnav" / "policy" / "campc.py",
+        campc_body
+        if campc_body is not None
+        else """
+class _Action:
+    def __init__(self, v, r):
+        self.v = v
+        self.r = r
+
+
+class CollisionAvoidMPC:
+    def __init__(self):
+        self.configured = False
+        self.env = None
+        self.time_step = None
+
+    def configure(self, policy_config):
+        self.configured = True
+        self.policy_config = policy_config
+
+    def set_env(self, env):
+        self.env = env
+
+    def predict(self, joint_state):
+        return _Action(0.5, 0.0)
+""",
+    )
+    _write(repo_root / "crowd_sim_plus" / "__init__.py", "")
+    _write(repo_root / "crowd_sim_plus" / "envs" / "__init__.py", "")
+    _write(repo_root / "crowd_sim_plus" / "envs" / "utils" / "__init__.py", "")
+    _write(
+        repo_root / "crowd_sim_plus" / "envs" / "utils" / "state_plus.py",
+        """
+class FullState:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
+class FullyObservableJointState:
+    def __init__(self, self_state=None, human_states=None, static_obs=None):
+        self.self_state = self_state
+        self.human_states = human_states
+        self.static_obs = static_obs
+""",
+    )
+    _write(repo_root / "sicnav" / "configs" / "policy.config", "[policy]\nsolver = ipopt\n")
+    _write(
+        repo_root / "sicnav" / "configs" / "env.config",
+        "[env]\ntime_step = 0.25\ntime_limit = 25.0\n",
+    )
+    return repo_root
+
+
+# ---------------------------------------------------------------------------
+# _build_campc_runner happy path and unavailable branches
+# ---------------------------------------------------------------------------
+
+
+def test_build_campc_runner_returns_runner_over_fake_upstream(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """``_build_campc_runner`` should wire the upstream campc policy into a runner."""
+    repo_root = _make_campc_repo(tmp_path / "sicnav_repo")
+    planner = SICNavPlanner({"repo_root": str(repo_root), "omega_max": 1.5}, seed=1)
+    runner = planner._build_campc_runner()
+    assert isinstance(runner, _CampcPolicyRunner)
+    assert runner._omega_max == 1.5
+    # The upstream policy received the configured env adapter and policy config.
+    assert planner._module is not None
+    assert runner._policy.configured is True
+    assert runner._policy.env is runner._env
+    assert runner._policy.time_step == pytest.approx(0.25)
+    # The default env config time settings are surfaced through the adapter.
+    assert runner._time_step == pytest.approx(0.25)
+
+
+def test_build_campc_runner_honors_explicit_config_paths(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """Explicit ``policy_config_path``/``env_config_path`` should override defaults."""
+    repo_root = _make_campc_repo(tmp_path / "sicnav_repo")
+    policy_cfg = tmp_path / "custom_policy.config"
+    env_cfg = tmp_path / "custom_env.config"
+    _write(policy_cfg, "[policy]\nsolver = ipopt\n")
+    _write(env_cfg, "[env]\ntime_step = 0.5\ntime_limit = 50.0\n")
+    planner = SICNavPlanner(
+        {
+            "repo_root": str(repo_root),
+            "policy_config_path": str(policy_cfg),
+            "env_config_path": str(env_cfg),
+        },
+        seed=1,
+    )
+    runner = planner._build_campc_runner()
+    assert isinstance(runner, _CampcPolicyRunner)
+    assert runner._time_step == pytest.approx(0.5)
+
+
+def test_build_campc_runner_raises_when_policy_config_missing(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """A missing explicit policy config should raise ``FileNotFoundError``."""
+    repo_root = _make_campc_repo(tmp_path / "sicnav_repo")
+    planner = SICNavPlanner(
+        {"repo_root": str(repo_root), "policy_config_path": str(tmp_path / "missing.config")},
+        seed=1,
+    )
+    with pytest.raises(FileNotFoundError, match="Policy config file not found"):
+        planner._build_campc_runner()
+
+
+def test_build_campc_runner_raises_when_env_config_missing(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """A missing explicit env config should raise ``FileNotFoundError``."""
+    repo_root = _make_campc_repo(tmp_path / "sicnav_repo")
+    planner = SICNavPlanner(
+        {"repo_root": str(repo_root), "env_config_path": str(tmp_path / "missing.config")},
+        seed=1,
+    )
+    with pytest.raises(FileNotFoundError, match="Env config file not found"):
+        planner._build_campc_runner()
+
+
+def test_build_campc_runner_returns_none_when_repo_dir_absent(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """A missing resolved repo dir should cause ``_build_campc_runner`` to return None.
+
+    The import probe is satisfied from the cached module (so it does not short-circuit
+    at the import guard), then the repo-root directory guard fires.
+    """
+    staged = _make_campc_repo(tmp_path / "sicnav_repo")
+    planner = SICNavPlanner({"repo_root": str(staged)}, seed=1)
+    # Cache the upstream module against the staged repo so the import probe succeeds.
+    assert planner._import_sicnav_module() is not None
+    # Repoint repo_root at a directory that does not exist on disk.
+    planner.config.repo_root = str(tmp_path / "does_not_exist")
+    assert planner._build_campc_runner() is None
+
+
+def test_build_campc_runner_returns_none_when_default_configs_absent(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """Missing default config files should cause ``_build_campc_runner`` to return None."""
+    repo_root = tmp_path / "sicnav_repo"
+    # Stage an importable sicnav package but no configs and no campc module.
+    _write(repo_root / "sicnav" / "__init__.py", "")
+    planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
+    assert planner._build_campc_runner() is None
+
+
+def test_build_campc_runner_returns_none_when_campc_import_fails(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """An import failure for ``sicnav.policy.campc`` should yield None."""
+    repo_root = _make_campc_repo(
+        tmp_path / "sicnav_repo",
+        campc_body="raise ImportError('campc unavailable')\n",
+    )
+    planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
+    assert planner._build_campc_runner() is None
+
+
+def test_build_campc_runner_returns_none_when_campc_missing_attribute(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """A campc module without ``CollisionAvoidMPC`` should yield None (AttributeError path)."""
+    repo_root = _make_campc_repo(tmp_path / "sicnav_repo", campc_body="VALUE = 1\n")
+    planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
+    assert planner._build_campc_runner() is None
+
+
+def test_build_campc_runner_returns_none_when_policy_init_raises(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """An exception during policy construction/configure should yield None."""
+    repo_root = _make_campc_repo(
+        tmp_path / "sicnav_repo",
+        campc_body="""
+class CollisionAvoidMPC:
+    def __init__(self):
+        raise RuntimeError('upstream init failed')
+""",
+    )
+    planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
+    assert planner._build_campc_runner() is None
+
+
+def test_build_campc_runner_returns_none_when_state_module_lacks_classes(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """A state module missing ``FullState`` should yield None (AttributeError path)."""
+    repo_root = _make_campc_repo(tmp_path / "sicnav_repo")
+    # Overwrite state_plus.py to drop the required classes.
+    _write(repo_root / "crowd_sim_plus" / "envs" / "utils" / "state_plus.py", "VALUE = 1\n")
+    planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
+    assert planner._build_campc_runner() is None
+
+
+# ---------------------------------------------------------------------------
+# _build_policy campc-runner path and fallback RuntimeError
+# ---------------------------------------------------------------------------
+
+
+def test_build_policy_uses_campc_runner_when_available(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """``_build_policy`` should return the campc runner and apply seed when available."""
+    repo_root = _make_campc_repo(tmp_path / "sicnav_repo")
+    planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=7)
+    policy = planner._build_policy()
+    assert isinstance(policy, _CampcPolicyRunner)
+    assert planner._policy is None  # _build_policy does not cache; step() does
+
+
+def test_build_policy_seeds_rng_when_seed_is_none(_clean_sicnav_modules, tmp_path: Path) -> None:
+    """With ``seed=None`` the ``_build_policy`` seeding block should be skipped cleanly."""
+    repo_root = tmp_path / "sicnav_repo"
+    _write(
+        repo_root / "sicnav_diffusion" / "__init__.py",
+        """
+def load_policy(checkpoint_path=None, device=None, solver=None):
+    class Policy:
+        def select_action(self, obs):
+            return {"v": 0.3, "omega": 0.0}
+    return Policy()
+""",
+    )
+    _write(repo_root / "sicnav" / "__init__.py", "")
+    planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False}, seed=None)
+    action = planner.step(_make_robot_observation())
+    assert action == {"v": 0.3, "omega": 0.0}
+
+
+def test_build_policy_raises_runtime_error_when_import_fails(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """A missing upstream module should surface as ``RuntimeError`` from ``_build_policy``."""
+    # No sicnav package staged under repo_root, and none installed in the venv.
+    planner = SICNavPlanner(
+        {"repo_root": str(tmp_path / "empty_repo"), "use_upstream_campc": False}, seed=1
+    )
+    with pytest.raises(RuntimeError, match="SICNav dependency is missing"):
+        planner._build_policy()
+
+
+def test_build_policy_runtime_error_when_import_fails_with_campc_enabled(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """With campc enabled but no upstream at all, ``_build_policy`` should raise RuntimeError."""
+    planner = SICNavPlanner({"repo_root": str(tmp_path / "empty_repo")}, seed=1)
+    with pytest.raises(RuntimeError, match="SICNav dependency is missing"):
+        planner._build_policy()
+
+
+# ---------------------------------------------------------------------------
+# step() observation parsing branch (Observation dataclass input)
+# ---------------------------------------------------------------------------
+
+
+def test_step_accepts_observation_dataclass(_clean_sicnav_modules, tmp_path: Path) -> None:
+    """``step`` should accept an ``Observation`` dataclass without re-mapping it."""
+    from robot_sf.baselines.interface import Observation
+
+    repo_root = tmp_path / "sicnav_repo"
+    _write(
+        repo_root / "sicnav_diffusion" / "__init__.py",
+        """
+class SICNavPolicy:
+    def __init__(self, **kw):
+        pass
+    def select_action(self, obs):
+        return {"v": 0.4, "omega": 0.0}
+""",
+    )
+    _write(repo_root / "sicnav" / "__init__.py", "")
+    planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False}, seed=1)
+    obs = Observation(
+        dt=0.1,
+        robot={"position": [0.0, 0.0], "velocity": [0.0, 0.0], "goal": [1.0, 0.0]},
+        agents=[],
+    )
+    action = planner.step(obs)
+    assert action == {"v": 0.4, "omega": 0.0}
+
+
+# ---------------------------------------------------------------------------
+# _has_campc_capability True/False branches
+# ---------------------------------------------------------------------------
+
+
+def test_has_campc_capability_true_when_campc_importable(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """``_has_campc_capability`` should return True when campc imports cleanly."""
+    repo_root = _make_campc_repo(tmp_path / "sicnav_repo")
+    planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
+    assert planner._has_campc_capability() is True
+
+
+def test_has_campc_capability_false_when_campc_unimportable(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """``_has_campc_capability`` should return False when campc import fails."""
+    repo_root = _make_campc_repo(
+        tmp_path / "sicnav_repo",
+        campc_body="raise ImportError('campc unavailable')\n",
+    )
+    planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
+    assert planner._has_campc_capability() is False
+
+
+def test_has_campc_capability_false_when_campc_absent(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """``_has_campc_capability`` should return False when campc module is absent."""
+    repo_root = tmp_path / "sicnav_repo"
+    _write(repo_root / "sicnav" / "__init__.py", "")
+    planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
+    assert planner._has_campc_capability() is False
+
+
+# ---------------------------------------------------------------------------
+# get_metadata missing_dependency branches
+# ---------------------------------------------------------------------------
+
+
+def test_get_metadata_missing_dependency_when_no_factory_and_campc_disabled(
+    _clean_sicnav_modules, tmp_path: Path
+) -> None:
+    """A module without a factory and campc disabled should report ``missing_dependency``."""
+    repo_root = tmp_path / "sicnav_repo"
+    _write(repo_root / "sicnav_diffusion" / "__init__.py", "VALUE = 1\n")
+    _write(repo_root / "sicnav" / "__init__.py", "")
+    planner = SICNavPlanner({"repo_root": str(repo_root), "use_upstream_campc": False}, seed=1)
+    assert planner.get_metadata()["status"] == "missing_dependency"
+
+
+def test_get_metadata_missing_dependency_when_import_raises(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """An import failure should report ``missing_dependency`` status."""
+    planner = SICNavPlanner({"repo_root": str(tmp_path / "empty_repo")}, seed=1)
+    assert planner.get_metadata()["status"] == "missing_dependency"
+
+
+def test_get_metadata_ok_when_campc_available(_clean_sicnav_family_modules, tmp_path: Path) -> None:
+    """With the campc path available, ``get_metadata`` should report ``ok``."""
+    repo_root = _make_campc_repo(tmp_path / "sicnav_repo")
+    planner = SICNavPlanner({"repo_root": str(repo_root)}, seed=1)
+    assert planner.get_metadata()["status"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# _upstream_import_context path/module cleanup and restore branches
+# ---------------------------------------------------------------------------
+
+
+def test_upstream_import_context_skips_path_insert_when_already_present(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """The context should not duplicate the repo root when already on ``sys.path``."""
+    repo_root = tmp_path / "sicnav_repo"
+    repo_root.mkdir()
+    planner = SICNavPlanner({"repo_root": str(repo_root)})
+    repo_str = str(planner._resolve_repo_root(str(repo_root)))
+    sys.path.insert(0, repo_str)
+    try:
+        assert repo_str in sys.path
+        with planner._upstream_import_context():
+            # Already present -> not duplicated by the context entry.
+            assert sys.path.count(repo_str) == 1
+    finally:
+        if repo_str in sys.path:
+            sys.path.remove(repo_str)
+
+
+def test_upstream_import_context_pops_and_restores_existing_sicnav_module(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """A pre-existing sicnav module should be popped at entry and restored at exit."""
+    import types
+
+    repo_root = tmp_path / "sicnav_repo"
+    repo_root.mkdir()
+    planner = SICNavPlanner({"repo_root": str(repo_root)})
+    sentinel = types.ModuleType("sicnav")
+    sys.modules["sicnav"] = sentinel
+    try:
+        with planner._upstream_import_context():
+            # Popped at entry so a fresh import resolves against the repo root.
+            assert "sicnav" not in sys.modules
+        # Restored to the original sentinel object after the context exits.
+        assert sys.modules.get("sicnav") is sentinel
+    finally:
+        sys.modules.pop("sicnav", None)
+
+
+def test_upstream_import_context_cleans_non_preserved_modules(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """A non-preserved sicnav module injected mid-context should be cleaned at exit."""
+    import types
+
+    repo_root = tmp_path / "sicnav_repo"
+    repo_root.mkdir()
+    planner = SICNavPlanner({"repo_root": str(repo_root)})
+    injected = types.ModuleType("sicnav.policy.campc")
+    with planner._upstream_import_context():
+        sys.modules["sicnav.policy.campc"] = injected
+        assert "sicnav.policy.campc" in sys.modules
+    # Not preserved -> removed by the finally cleanup loop.
+    assert "sicnav.policy.campc" not in sys.modules
+
+
+def test_upstream_import_context_preserves_marked_modules(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """A module added to ``preserved_modules`` should survive context exit."""
+    import types
+
+    repo_root = tmp_path / "sicnav_repo"
+    repo_root.mkdir()
+    planner = SICNavPlanner({"repo_root": str(repo_root)})
+    keep = types.ModuleType("sicnav.policy.campc")
+    with planner._upstream_import_context() as preserved:
+        sys.modules["sicnav.policy.campc"] = keep
+        preserved.add("sicnav.policy.campc")
+    assert sys.modules.get("sicnav.policy.campc") is keep
+
+
+def test_upstream_import_context_restores_sys_path(
+    _clean_sicnav_family_modules, tmp_path: Path
+) -> None:
+    """The context should restore ``sys.path`` exactly on exit."""
+    repo_root = tmp_path / "sicnav_repo"
+    repo_root.mkdir()
+    planner = SICNavPlanner({"repo_root": str(repo_root)})
+    original_path = list(sys.path)
+    with planner._upstream_import_context():
+        assert str(planner._resolve_repo_root(str(repo_root))) in sys.path
+    assert sys.path == original_path

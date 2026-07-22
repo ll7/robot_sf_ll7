@@ -1,34 +1,29 @@
-# Issue #1134 Closure Audit
+# Issue #1134 Closure Evidence
 
-Date: 2026-07-06
+Current status: 2026-07-22
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/1134>
 
 ## Claim Boundary
 
-This is a closure-audit and integration report for SocNavBench ETH map conversion. It maps the
-issue acceptance criteria to merged PR evidence and the current live preflight result. It is not a benchmark run, not a paper or dissertation claim, and not proof that the real
-`maps/svg_maps/socnavbench/socnavbench_eth.svg` artifact exists.
+This is **smoke evidence** that the committed SocNavBench ETH SVG loads through the scenario and
+headless environment path. It is not benchmark, paper, or planner-performance evidence.
 
-Conclusion: **keep #1134 open**. The CPU-only converter, fail-closed checks, wrapper, runbook
-policy, fixture parser validation, and fixture environment smoke are covered by merged PRs. The
-remaining original acceptance criteria still require the real licensed/user-supplied ETH source
-assets on the execution host, then a real conversion, checksum/provenance record, and parser/smoke
-validation for the generated SVG.
+Conclusion: **ready for #1134 closure**. PR #4693 committed
+`maps/svg_maps/socnavbench/socnavbench_eth.svg` with source and output SHA-256 provenance. PR #6118
+adds the focused scenario proof: it resolves that configured committed map, verifies its exact
+route/zone structure, creates a Robot SF environment, resets it, and executes headless steps. No
+external data root, raw-asset staging, or GPU is required for this smoke proof.
 
-## Closure Evidence Update (2026-07-22)
+The raw licensed source assets remain outside Git. The `eth_first` source preflight still correctly
+fails closed on hosts where those inputs are absent; that historical host condition does not negate
+the committed-SVG smoke evidence.
 
-This historical audit recorded the state before the real ETH SVG was committed. PR #4693 subsequently
-committed `maps/svg_maps/socnavbench/socnavbench_eth.svg` with the documented source and output
-SHA-256 values. PR #6118 adds the scenario-specific environment proof that was absent from the
-original audit: `tests/scenarios/test_socnavbench_eth_smoke_scenario.py` loads
-`configs/scenarios/single/socnavbench_eth_smoke.yaml`, creates the environment with
-`make_robot_env`, resets it, and executes up to three headless steps against that committed real-map
-artifact.
+## Historical Audit (2026-07-06, superseded)
 
-Evidence status: **smoke evidence**, not a benchmark or paper claim. This supersedes the row below
-that described the real ETH map environment smoke as unmet; the historical host preflight result is
-retained as evidence about that host's raw-asset availability, not as a claim that the committed SVG
-cannot run.
+The material below is the original pre-conversion audit. Its `keep #1134 open`, unmet-criterion
+rows, and next-action text are historical records only; they describe raw-source availability on
+that host before PR #4693 committed the real ETH SVG. They must not be read as the current closure
+status.
 
 ## Live Audit Inputs
 
@@ -47,7 +42,7 @@ progression slices, not merely guard-refresh PRs. This report is therefore a con
 one criterion-to-evidence table, one current fail-closed host preflight, and one explicit next
 empirical action.
 
-## Acceptance Criteria To Evidence
+## Historical Acceptance Criteria To Evidence
 
 | Criterion | Status | Evidence |
 | --- | --- | --- |
@@ -59,7 +54,7 @@ empirical action.
 | A smoke scenario exercises map through representative benchmark path. | **Met for converter code path; not met for real ETH map artifact** | PR #4610 added `test_converted_fixture_map_runs_headless_env_smoke`, proving converter output loads through `make_robot_env`, `reset`, and headless steps on a synthetic traversible fixture. Real ETH map smoke remains blocked until source assets and generated SVG exist. |
 | Raw SocNavBench/S3DIS assets remain untracked. | **Met** | PRs #3771, #4535, #4553, #4574, and #4610 did not commit raw SocNavBench/S3DIS bytes. This audit adds only Markdown/YAML evidence. |
 
-## Current Host Validation
+## Historical Host Validation
 
 Commands run from the isolated issue #1134 worktree at commit `c29158050`:
 
@@ -94,7 +89,7 @@ The explicit external-root preflight reports missing:
 - `sd3dis/stanford_building_parser_dataset/mesh/ETH`
 - `sd3dis/stanford_building_parser_dataset/traversibles/ETH/data.pkl`
 
-## Next Empirical Action
+## Historical Next Empirical Action
 
 Stage or hydrate the real SocNavBench ETH mesh/traversible under the external-data root on the
 execution host, rerun `validate_socnav_map_batch.py --batch-id eth_first --preflight`, then run

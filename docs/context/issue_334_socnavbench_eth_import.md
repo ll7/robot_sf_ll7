@@ -13,8 +13,8 @@ The batch is now represented in `configs/maps/socnavbench_import_batches.yaml`.
 ## Current Status (Updated 2026-07-22)
 
 The ETH traversible-to-SVG conversion is **complete** and committed to the repository.
-PR #4693 converted the official SocNavBench ETH traversible (`data.pkl`, SHA-256 prefix
-`02d450ee...`) into `maps/svg_maps/socnavbench/socnavbench_eth.svg` (SHA-256
+PR #4693 converted the official SocNavBench ETH traversible (`data.pkl`, SHA-256
+`02d450ee57bdab7aa357457085b3ddac6501ea8ec99324f2f02aecaed82562a6`) into `maps/svg_maps/socnavbench/socnavbench_eth.svg` (SHA-256
 `9fb9e126fac37b1c24c8849aeee47dfcccc5ef71fd7fc4e0fea7f78f19d1858d`). The raw licensed
 S3DIS/ETH source assets remain unstaged in this Git repository as required by the license-safe
 asset policy in `docs/socnav_assets_setup.md`.

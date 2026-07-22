@@ -1486,6 +1486,12 @@ def _draw_delta_gutter(ax: plt.Axes, gutter: dict[str, Any]) -> None:
         lines = _format_contrast_gutter_lines(gutter)
     else:
         lines = _format_gutter_lines(gutter)
+    # The hinge-mode delta gutter packs several multi-line labels into a narrow panel;
+    # shrink the font when the total rendered line count grows so labels never overlap
+    # (figure_qa.lint_figure flags text_text_overlap at error severity). Contrast-mode
+    # gutters are sparser and keep the default size.
+    total_visual_lines = sum(max(1, text.count("\n") + 1) for text in lines)
+    fontsize = 6.3 if gutter.get("mode") == "contrast" else max(4.0, 6.3 * 11 / total_visual_lines)
     n = len(lines)
     for i, text in enumerate(lines):
         y = 1.0 - (i + 0.5) / n
@@ -1494,7 +1500,7 @@ def _draw_delta_gutter(ax: plt.Axes, gutter: dict[str, Any]) -> None:
             0.5,
             y,
             text,
-            fontsize=6.3,
+            fontsize=fontsize,
             ha="center",
             va="center",
             weight=weight,

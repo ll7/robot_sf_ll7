@@ -1,34 +1,40 @@
-# PR #6068 Review Blocker Result
+# PR #5834 Review Fix Result
 
 ## Fixed comments
 
-- Updated `.github/actions/setup-ci-python/action.yml:39` from the pinned `actions/setup-python` v5
-  commit to the pinned v7.0.0 commit already used by the PR workflows.
-- Post-push GitHub review-thread and inline-review-comment queries returned no threads, so there
-  were no thread IDs to resolve.
+- Synchronized `proto-butterfly-video` with current `origin/main`
+  (`f7645fdffea168f279f4c838798780ee55a14c5b`) using a normal merge commit; the current main
+  commit is an ancestor of the pushed PR head.
+- Reconciled scope in a PR comment: successor PR #5933 already supplies the six-file prototype;
+  the only production delta remaining in #5834 is the one-file renderer-style change from stacked
+  #5953.
+- Added direct renderer-focused proof for the remaining delta. The test renders `layout="print"`,
+  checks the final 5.906-inch output width, and verifies shared `INK`/`ORANGE` role colors plus
+  redundant A/B marker/linestyle encoding.
 
 ## Validation
 
-- Passed: `git diff --check` and YAML parsing for all 18 GitHub workflow/action files.
-- Passed: repository-wide `.github` search found four `actions/setup-python` references; all are
-  pinned to v7.0.0 and no v5/5.6.0 references remain.
-- Passed: `uv sync --all-extras` completed in the isolated worktree.
-- Passed: `PR_READY_MODE=final PR_READY_PR_BODY_FILE=/tmp/pr6068-body.md BASE_REF=origin/main
-  scripts/dev/pr_ready_check.sh` on committed head `dd8e06990bf373d4d874fcac8cb5e81e6c32643f`.
-  Core readiness, fast-pysf preflight, formatting, 2,784-test core lane, docstring ratchets, and
-  PR contract checks passed; base SHA was `fcbb67a596b6c27181b0ff9be53107ffbb5e9ffb`.
+- `uv run ruff check tests/tools/test_butterfly_trace_tooling.py scripts/repro/butterfly_hinge_figure_proto.py` — passed.
+- `uv run ruff format --check tests/tools/test_butterfly_trace_tooling.py scripts/repro/butterfly_hinge_figure_proto.py` — passed.
+- `scripts/dev/run_focused_tests.sh tests/tools/test_butterfly_trace_tooling.py -q` — passed.
+- `git merge-base --is-ancestor origin/main HEAD` — passed.
+- `git diff --stat origin/main...HEAD` — two files: the one-file renderer delta and its focused test.
+- Existing `output/` files were only counted (5 files); no generated output artifact was added to git.
 
 ## Commit
 
-- Fix commit pushed to `dependabot/github_actions/actions/setup-python-7.0.0`:
-  `0b747302f7ed5ff9b2f2d40ac8fa3b1491cbfb4c`.
+- Pushed commit: `e13541f0adc44246efa9b61409206808a39f6a91`
+- PR head verified at the same SHA.
+- Exact-head GitHub checks were running when this result was recorded.
 
-## Unresolved threads
+## Review state
 
-- Post-push re-query at head `0b747302f7ed5ff9b2f2d40ac8fa3b1491cbfb4c` returned no review
-  threads; there were no thread IDs to resolve.
+- Post-push GraphQL review-thread query: zero thread nodes; zero unresolved threads.
+- Resolved thread IDs: none; there were no unresolved review-thread nodes to resolve.
+- Scope-reconciliation comment: https://github.com/ll7/robot_sf_ll7/pull/5834#issuecomment-5037858742
 
 ## Blockers
 
-- GitHub reports the pushed head as `MERGEABLE`; `route-coderabbit`, `fast-pysf-compat`, and
-  `docs-evidence-integrity` passed. The remaining CI checks were still in progress at handoff.
+- No local or inline-review blocker remains within the authorized scope.
+- External blocker: exact-head GitHub CI had not completed when this result was recorded; no CI
+  result is claimed here.

@@ -532,10 +532,7 @@ class TestReproductionReport:
         tooling_root = tmp_path / "tooling"
         release_clone = tmp_path / "release-clone"
         manifest_path = (
-            tooling_root
-            / "configs"
-            / "releases"
-            / "release_0_0_2_checksum_manifest.yaml"
+            tooling_root / "configs" / "releases" / "release_0_0_2_checksum_manifest.yaml"
         )
         manifest_path.parent.mkdir(parents=True)
         manifest_path.write_text("release_id: test\n")
@@ -571,12 +568,8 @@ class TestReproductionReport:
                 checksums_only=True,
             )
 
-        assert report["lockfile_sha256"] == hashlib.sha256(
-            b"executed release lock\n"
-        ).hexdigest()
-        assert report["tooling_lockfile_sha256"] == hashlib.sha256(
-            b"tooling lock\n"
-        ).hexdigest()
+        assert report["lockfile_sha256"] == hashlib.sha256(b"executed release lock\n").hexdigest()
+        assert report["tooling_lockfile_sha256"] == hashlib.sha256(b"tooling lock\n").hexdigest()
 
     def test_load_manifest_rejects_non_mapping_root(self, tmp_path: Path, monkeypatch: Any) -> None:
         from scripts.repro import cold_start_reproduction_report as report_module

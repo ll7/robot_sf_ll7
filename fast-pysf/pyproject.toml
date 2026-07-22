@@ -11,7 +11,7 @@ dependencies = [
     "toml>=0.10.2",
     "numba>=0.60.0",
     "scipy>=1.17.1",
-    "matplotlib>=3.9.2",
+    "matplotlib>=3.11.1",
     "pillow>=10.4.0",
     "pygame>=2.6.1",
 ]
@@ -27,7 +27,7 @@ dev = [
     "pylint>=3.3.1",
 ]
 plot = [
-    "matplotlib>=3.9.2",
+    "matplotlib>=3.11.1",
 ]
 
 [project.urls]

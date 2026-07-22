@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13268/scenario_family_breakdown.csv",
+  "artifact_sha256": "f2d7e3128eb956721a2724a2d8d9ca9645eced6df1a3219f1e3a4e597f8965b9",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

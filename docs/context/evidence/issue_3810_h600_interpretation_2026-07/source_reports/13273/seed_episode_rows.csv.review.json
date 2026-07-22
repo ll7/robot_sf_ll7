@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3810_h600_interpretation_2026-07/source_reports/13273/seed_episode_rows.csv",
+  "artifact_sha256": "f2e5960c2439f28745b4bd2f7cd19f4c94cabd86cb1387693095a656ac859e81",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

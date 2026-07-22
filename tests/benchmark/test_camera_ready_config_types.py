@@ -291,6 +291,7 @@ def test_campaign_config_seed_policy_default_is_a_frozen_shared_instance() -> No
         TuningSpec(),
         PlannerSpec(key="k", algo="a"),
         SnqiContractConfig(),
+        _minimal_campaign(),
     ],
 )
 def test_config_dataclasses_are_frozen(instance: object) -> None:

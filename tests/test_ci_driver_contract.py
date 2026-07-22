@@ -312,6 +312,7 @@ def test_parallel_test_driver_supports_full_sharded_coverage() -> None:
     assert '"$include_slow" != "1"' in script_text
     assert '[[ "$coverage_enabled" == "1" ]]' in script_text
     assert '[[ -z "${COVERAGE_FILE:-}" ]]' in script_text
+    assert 'mkdir -p "$(dirname "$COVERAGE_FILE")"' in script_text
     assert 'cmd+=("--cov=robot_sf" "--cov-report=")' in script_text
 
 

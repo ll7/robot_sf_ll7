@@ -34,8 +34,8 @@ Environment overrides:
   PYTEST_NUM_WORKERS=<int>|auto
   PYTEST_SHARD_COUNT=<int>
     pytest-split shard count (default 1). When >1, runs a disjoint subset via
-    `--splits N --group G` and disables coverage (partial shard data cannot be
-    combined in the single-job CI topology).
+    `--splits N --group G`. Coverage remains off unless explicitly enabled;
+    enabled shards require unique COVERAGE_FILE paths for downstream combine.
   PYTEST_SHARD_INDEX=<int>
     pytest-split shard index in 1..PYTEST_SHARD_COUNT (default 1).
   PR_READY_SERIAL_FALLBACK=1|0
@@ -290,6 +290,7 @@ if [[ "$coverage_enabled" == "1" ]]; then
       echo "Sharded coverage requires a unique COVERAGE_FILE per shard." >&2
       exit 2
     fi
+    mkdir -p "$(dirname "$COVERAGE_FILE")"
     cmd+=("--cov=robot_sf" "--cov-report=")
   else
     cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")

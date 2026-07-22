@@ -39,3 +39,41 @@ entries:
       compute_submit: false
       benchmark_campaign_run: false
       paper_claim_edited: false
+  - recorded_at_utc: "2026-07-22T18:08:00Z"
+    status: ready_for_closure
+    report: "PR #4693 (committed ETH SVG) + this PR (#1134 smoke scenario + test)"
+    source_issue: "https://github.com/ll7/robot_sf_ll7/issues/1134"
+    conclusion: "All remaining #1134 acceptance criteria are complete: the real ETH traversible conversion was committed by PR #4693 (maps/svg_maps/socnavbench/socnavbench_eth.svg), the smoke scenario YAML exercises the committed ETH map through the scenario pipeline, and the focused test proves the real map parses correctly. No external data root, raw asset staging, or GPU is required."
+    merged_pr_evidence:
+      - pr: 4693
+        role: "real ETH traversible-to-SVG conversion (committed to maps/svg_maps/socnavbench/socnavbench_eth.svg)"
+      - pr: 3771
+        role: "fail-closed eth_first preflight"
+      - pr: 4535
+        role: "traversible-to-SVG converter and fixture parser validation"
+      - pr: 4553
+        role: "stage/generate/convert/smoke wrapper"
+      - pr: 4574
+        role: "derived SVG artifact policy"
+      - pr: 4610
+        role: "headless environment smoke for converter fixture output"
+    source_sha256: "02d450ee... (original data.pkl source, documented in PR #4693)"
+    output_svg_sha256: "9fb9e126fac37b1c24c8849aeee47dfcccc5ef71fd7fc4e0fea7f78f19d1858d"
+    smoke_scenario:
+      path: "configs/scenarios/single/socnavbench_eth_smoke.yaml"
+      status: committed_this_pr
+    focused_test:
+      path: "tests/scenarios/test_socnavbench_eth_smoke_scenario.py"
+      status: committed_this_pr
+      headless_command: "DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest tests/scenarios/test_socnavbench_eth_smoke_scenario.py -q"
+    current_host_validation:
+      smoke_test:
+        command: "DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy uv run pytest tests/scenarios/test_socnavbench_eth_smoke_scenario.py -q"
+        exit_code: 0
+        passed: 6
+        status: all_tests_pass
+      socnavbench_tool_tests:
+        command: "uv run pytest tests/tools/test_validate_socnav_map_batch.py tests/tools/test_convert_socnavbench_traversible_to_svg.py -q"
+        exit_code: 0
+        passed: 17
+        status: existing_tests_green

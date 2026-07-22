@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "module": "robot_sf/research/aggregation.py",
+  "test_file": "tests/research/test_aggregation.py",
+  "description": "Baseline of tolerated surviving mutants for mutation testing ratchet. New un-baselined mutants will fail CI.",
+  "tolerated_mutants": [],
+  "metadata": {
+    "created": "2026-07-22",
+    "issue": "#5508",
+    "rationale": "Initial empty baseline - all surviving mutants should be triaged and either fixed or added here as tolerated equivalent mutants."
+  }
+}

@@ -1,0 +1,61 @@
+name: Mutation Testing
+
+on:
+  schedule:
+    # Weekly on Sunday at 03:00 UTC
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  mutation-testing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run mutation testing and check baseline
+        id: mutation-check
+        run: |
+          uv run python scripts/dev/mutation_ratchet.py --check --report output/mutation-report.json
+        continue-on-error: true
+
+      - name: Generate mutation report
+        if: always()
+        run: |
+          mkdir -p output/mutation-report
+          # Generate HTML report from mutmut cache
+          uv run python -m mutmut html --output-dir output/mutation-report/html || true
+          # Generate text summary
+          uv run python -m mutmut results > output/mutation-report/results.txt || true
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-report
+          path: output/mutation-report/
+          if-no-files-found: warn
+
+      - name: Fail if new mutants survived
+        if: steps.mutation-check.outcome == 'failure'
+        run: |
+          echo "::error::New un-baselined mutants survived. See mutation report artifact."
+          exit 1

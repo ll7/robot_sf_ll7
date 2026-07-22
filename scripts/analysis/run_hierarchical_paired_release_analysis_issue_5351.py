@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# evidence-writer-exempt: successor_rows.jsonl is checksum-pinned EpisodeEventLedger.v2 data; a review sidecar binds its exact bytes because an inline marker would invalidate the JSONL contract.
 """Hydrate release 0.0.3.post1, adapt episode rows, and execute issue #5351 analysis.
 
 This script implements the end-to-end pipeline for GitHub issue #5351:
@@ -34,6 +35,7 @@ from robot_sf.benchmark.hierarchical_paired_release_inputs import (
     load_hierarchical_paired_release_input_manifest,
 )
 from robot_sf.errors import RobotSfError
+from robot_sf.evidence.writers import write_json, write_review_sidecar, write_text
 
 EXPECTED_BUNDLE_SHA256 = "9bf6ea35a17ce812f0a9c841c3681bc072dcf7ba8c121cbcf05113b8514f4de1"
 EXPECTED_RELEASE_TAG = "0.0.3.post1"
@@ -294,6 +296,7 @@ def write_successor_rows_and_update_manifest(
     sorted_rows = sorted(rows, key=lambda r: (r["planner"], r["scenario_id"], r["seed"]))
     serialized = "\n".join(json.dumps(r, sort_keys=True) for r in sorted_rows) + "\n"
     rows_path.write_text(serialized, encoding="utf-8")
+    write_review_sidecar(rows_path, repo_root=repo_root)
     rows_sha256 = sha256_file(rows_path)
 
     relative_rows_path = rows_path.relative_to(repo_root).as_posix()
@@ -385,7 +388,7 @@ uv run python scripts/analysis/run_hierarchical_paired_release_analysis_issue_53
   --repo-root .
 ```
 """
-    readme_path.write_text(readme_content, encoding="utf-8")
+    write_text(readme_path, readme_content)
     return readme_path
 
 
@@ -470,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     report_path = evidence_dir / "hierarchical_paired_release_analysis_report.json"
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    write_json(report_path, report)
 
     relative_rows_path = rows_path.relative_to(repo_root).as_posix()
     readme_path = render_evidence_readme(

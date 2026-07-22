@@ -2839,6 +2839,7 @@
       "status": "delivered_analysis_pending_release_input"
     }
   ],
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "hierarchical_paired_release_analysis_report.v1",
   "semantics": {
     "analysis_executed": true,

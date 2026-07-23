@@ -454,12 +454,12 @@ def test_run_analysis_emits_machine_readable_report_with_blocked_claim_gate(tmp_
     assert sensitivity["seed_level"]["n_clusters"] == 4
     assert sensitivity["family_level"]["n_clusters"] == 4
     conformance = {row["id"]: row["status"] for row in report["protocol_conformance"]}
-    assert conformance["paired_effects"] == "delivered_analysis_pending_release_input"
-    assert conformance["censored_completion_time"] == "delivered_analysis_pending_release_input"
+    assert conformance["paired_effects"] == "delivered_analysis_pending_human_review"
+    assert conformance["censored_completion_time"] == "delivered_analysis_pending_human_review"
     assert conformance["normalized_near_miss_exposure"] == (
-        "delivered_analysis_pending_release_input"
+        "delivered_analysis_pending_human_review"
     )
-    assert conformance["sensitivity_analyses"] == "delivered_analysis_pending_release_input"
+    assert conformance["sensitivity_analyses"] == "delivered_analysis_pending_human_review"
     # Deterministic across runs given the seeded policy.
     again = run_hierarchical_paired_release_analysis(
         manifest,

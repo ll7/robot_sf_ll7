@@ -1064,7 +1064,7 @@ def _protocol_conformance(
             {
                 "id": element_id,
                 "declared_delivery": item["declared_delivery"],
-                "status": "delivered_analysis_pending_release_input"
+                "status": "delivered_analysis_pending_human_review"
                 if is_delivered
                 else "declared_pending_analysis",
             }

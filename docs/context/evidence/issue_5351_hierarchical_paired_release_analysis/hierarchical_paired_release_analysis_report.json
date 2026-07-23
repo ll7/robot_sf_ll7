@@ -340,7 +340,7 @@
       ]
     }
   ],
-  "claim_boundary": "Input-contract and claim-gate declaration only. It does not compute the hierarchical paired analysis, alter frozen metrics, or support a benchmark, release, paper, or dissertation claim.",
+  "claim_boundary": "Deterministic diagnostic hierarchical paired analysis over the checksum-pinned successor release input. It does not alter frozen metrics or support or promote a benchmark, release, paper, or dissertation claim; result interpretation and claim promotion remain blocked pending separate human review.",
   "claim_gate": {
     "reason": "analysis executed over successor rows; claim promotion requires human review of the deterministic report",
     "status": "blocked_review_pending"
@@ -2801,42 +2801,42 @@
     {
       "declared_delivery": "paired risk-difference and odds-risk-ratio table on matched cells",
       "id": "paired_effects",
-      "status": "delivered_analysis_pending_release_input"
+      "status": "delivered_analysis_pending_human_review"
     },
     {
       "declared_delivery": "scenario-family cluster hierarchical-bootstrap interval table",
       "id": "hierarchical_intervals",
-      "status": "delivered_analysis_pending_release_input"
+      "status": "delivered_analysis_pending_human_review"
     },
     {
       "declared_delivery": "seed-level and family-level sensitivity table",
       "id": "sensitivity_analyses",
-      "status": "delivered_analysis_pending_release_input"
+      "status": "delivered_analysis_pending_human_review"
     },
     {
       "declared_delivery": "predeclared planner-pair and family-comparison multiplicity table",
       "id": "multiplicity_control",
-      "status": "delivered_analysis_pending_release_input"
+      "status": "delivered_analysis_pending_human_review"
     },
     {
       "declared_delivery": "practical-effect threshold comparison table",
       "id": "practical_effect_reporting",
-      "status": "delivered_analysis_pending_release_input"
+      "status": "delivered_analysis_pending_human_review"
     },
     {
       "declared_delivery": "censored timeout-aware completion-time summary",
       "id": "censored_completion_time",
-      "status": "delivered_analysis_pending_release_input"
+      "status": "delivered_analysis_pending_human_review"
     },
     {
       "declared_delivery": "near-miss exposure normalization summary by time, distance, and opportunity",
       "id": "normalized_near_miss_exposure",
-      "status": "delivered_analysis_pending_release_input"
+      "status": "delivered_analysis_pending_human_review"
     },
     {
       "declared_delivery": "machine-readable claim gate and protocol conformance table",
       "id": "claim_gate_and_conformance",
-      "status": "delivered_analysis_pending_release_input"
+      "status": "delivered_analysis_pending_human_review"
     }
   ],
   "review_marker": "AI-GENERATED NEEDS-REVIEW",

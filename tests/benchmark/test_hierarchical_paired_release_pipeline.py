@@ -222,4 +222,4 @@ def test_clean_checkout_hydration_and_execution_against_release_0_0_3_post1() ->
     protocol_conformance = report["protocol_conformance"]
     assert len(protocol_conformance) == 8
     for item in protocol_conformance:
-        assert item["status"] == "delivered_analysis_pending_release_input"
+        assert item["status"] == "delivered_analysis_pending_human_review"

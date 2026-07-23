@@ -1,9 +1,10 @@
 # Fail-closed prerequisite manifest for issue #5351.
 schema_version: hierarchical_paired_release_analysis_input_manifest.v1
 issue: 5351
-claim_boundary: Input-contract and claim-gate declaration only. It does not compute
-  the hierarchical paired analysis, alter frozen metrics, or support a benchmark,
-  release, paper, or dissertation claim.
+claim_boundary: Deterministic diagnostic hierarchical paired analysis over the checksum-pinned
+  successor release input. It does not alter frozen metrics or support or promote
+  a benchmark, release, paper, or dissertation claim; result interpretation and claim
+  promotion remain blocked pending separate human review.
 successor_release:
   release_tag: 0.0.3.post1
   commit: ded9027d2928512c14bc241397e0ab1d8f586654

@@ -18,14 +18,14 @@ This directory registers the deterministic, checksum-pinned statistical analysis
 
 | Protocol Element | Declared Delivery | Status |
 | --- | --- | --- |
-| `paired_effects` | paired risk-difference and odds-risk-ratio table on matched cells | `delivered_analysis_pending_release_input` |
-| `hierarchical_intervals` | scenario-family cluster hierarchical-bootstrap interval table | `delivered_analysis_pending_release_input` |
-| `sensitivity_analyses` | seed-level and family-level sensitivity table | `delivered_analysis_pending_release_input` |
-| `multiplicity_control` | predeclared planner-pair and family-comparison multiplicity table | `delivered_analysis_pending_release_input` |
-| `practical_effect_reporting` | practical-effect threshold comparison table | `delivered_analysis_pending_release_input` |
-| `censored_completion_time` | censored timeout-aware completion-time summary | `delivered_analysis_pending_release_input` |
-| `normalized_near_miss_exposure` | near-miss exposure normalization summary by time, distance, and opportunity | `delivered_analysis_pending_release_input` |
-| `claim_gate_and_conformance` | machine-readable claim gate and protocol conformance table | `delivered_analysis_pending_release_input` |
+| `paired_effects` | paired risk-difference and odds-risk-ratio table on matched cells | `delivered_analysis_pending_human_review` |
+| `hierarchical_intervals` | scenario-family cluster hierarchical-bootstrap interval table | `delivered_analysis_pending_human_review` |
+| `sensitivity_analyses` | seed-level and family-level sensitivity table | `delivered_analysis_pending_human_review` |
+| `multiplicity_control` | predeclared planner-pair and family-comparison multiplicity table | `delivered_analysis_pending_human_review` |
+| `practical_effect_reporting` | practical-effect threshold comparison table | `delivered_analysis_pending_human_review` |
+| `censored_completion_time` | censored timeout-aware completion-time summary | `delivered_analysis_pending_human_review` |
+| `normalized_near_miss_exposure` | near-miss exposure normalization summary by time, distance, and opportunity | `delivered_analysis_pending_human_review` |
+| `claim_gate_and_conformance` | machine-readable claim gate and protocol conformance table | `delivered_analysis_pending_human_review` |
 
 ## Summary of Analysis
 

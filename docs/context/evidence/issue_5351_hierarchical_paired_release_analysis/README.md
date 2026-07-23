@@ -11,7 +11,7 @@ This directory registers the deterministic, checksum-pinned statistical analysis
 - Release Tag: `0.0.3.post1`
 - Publication Commit: `ded9027d2928512c14bc241397e0ab1d8f586654`
 - Typed Ledger Rows: [`docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl`](successor_rows.jsonl)
-- Rows SHA-256: `3bae1ea689d7dd2590ed8b6b552d27a32093790cfebc6499f833b4daceda7545`
+- Rows SHA-256: `c45c2ed8defdadaf47c001277e6bf9ca0c2238c101570d1d64be8015060febea`
 - Total Episode Rows: `20160` (14 arms × 1,440 episodes)
 
 ## Protocol Conformance
@@ -32,6 +32,7 @@ This directory registers the deterministic, checksum-pinned statistical analysis
 - Total Paired Comparisons Evaluated: 39
 - Multiplicity Method: holm_step_down
 - Practically Separable Effects (Clear min_risk_difference >= 0.02): 13 / 39
+- Exposure Handling: source near-miss event counts are retained; computed zero exposure remains zero, while non-derivable interaction opportunity is explicitly excluded without a synthetic denominator.
 - Claim Gate Status: `blocked_review_pending`
 - Claim Gate Reason: analysis executed over successor rows; claim promotion requires human review of the deterministic report
 

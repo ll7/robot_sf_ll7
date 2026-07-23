@@ -16,10 +16,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import subprocess
 import sys
 import tarfile
 import time
+from collections.abc import Mapping
 from itertools import combinations
 from pathlib import Path
 from typing import Any
@@ -33,6 +35,11 @@ from robot_sf.benchmark.hierarchical_paired_release_analysis import (
 )
 from robot_sf.benchmark.hierarchical_paired_release_inputs import (
     load_hierarchical_paired_release_input_manifest,
+)
+from robot_sf.benchmark.interaction_exposure import (
+    INTERACTION_EXPOSURE_COMPUTED_STATUS,
+    INTERACTION_EXPOSURE_SCHEMA_VERSION,
+    is_not_derivable_status,
 )
 from robot_sf.errors import RobotSfError
 from robot_sf.evidence.writers import write_json, write_review_sidecar, write_text
@@ -53,6 +60,131 @@ DEFAULT_EVIDENCE_DIR = "docs/context/evidence/issue_5351_hierarchical_paired_rel
 
 class ReleaseAnalysisPipelineError(RobotSfError, ValueError):
     """Raised when release hydration, adaptation, or execution fails closed."""
+
+
+def _non_negative_integer(value: Any, *, field: str) -> int:
+    """Return a finite non-negative integer without silently truncating source data."""
+
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or float(value) < 0.0
+        or not float(value).is_integer()
+    ):
+        raise ReleaseAnalysisPipelineError(f"{field} must be a finite non-negative integer")
+    return int(value)
+
+
+def _finite_non_negative(value: Any, *, field: str) -> float:
+    """Return a finite non-negative float from one frozen source metric."""
+
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or float(value) < 0.0
+    ):
+        raise ReleaseAnalysisPipelineError(f"{field} must be a finite non-negative number")
+    return float(value)
+
+
+def _optional_non_negative_integer(value: Any, *, field: str) -> int | None:
+    """Return a canonical optional integer used by non-derivable source rows."""
+
+    if value is None or value == "":
+        return None
+    return _non_negative_integer(value, field=field)
+
+
+def _validated_interaction_steps(
+    exposure: Mapping[str, Any], *, computed: bool
+) -> tuple[int | None, int | None]:
+    """Validate source exposure-step fields for a computed or unavailable row."""
+
+    parse = _non_negative_integer if computed else _optional_non_negative_integer
+    source_steps = parse(
+        exposure.get("interaction_exposure_steps"),
+        field="interaction_exposure.interaction_exposure_steps",
+    )
+    denominator_steps = parse(
+        exposure.get("interaction_exposure_denominator_steps"),
+        field="interaction_exposure.interaction_exposure_denominator_steps",
+    )
+    if computed and (denominator_steps is None or denominator_steps <= 0):
+        raise ReleaseAnalysisPipelineError(
+            "interaction_exposure.interaction_exposure_denominator_steps must be positive"
+        )
+    if (
+        source_steps is not None
+        and denominator_steps is not None
+        and source_steps > denominator_steps
+    ):
+        raise ReleaseAnalysisPipelineError(
+            "interaction_exposure.interaction_exposure_steps cannot exceed denominator steps"
+        )
+    return source_steps, denominator_steps
+
+
+def _interaction_opportunity(
+    record: Mapping[str, Any], *, near_miss_count: int
+) -> tuple[float | None, dict[str, Any]]:
+    """Validate and preserve the release interaction-exposure provenance.
+
+    Computed zero exposure is a valid observed zero.  Retained-but-not-derivable
+    exposure remains ``None`` for analysis, rather than being zero-imputed.  A
+    non-derivable row carrying near-miss events cannot be normalized and fails
+    closed.
+
+    Returns:
+        ``(analysis_opportunity_steps, retained_source_provenance)``.
+    """
+
+    exposure = record.get("interaction_exposure")
+    if not isinstance(exposure, Mapping):
+        raise ReleaseAnalysisPipelineError("interaction_exposure must be a mapping")
+
+    schema = exposure.get("interaction_exposure_schema_version")
+    if schema != INTERACTION_EXPOSURE_SCHEMA_VERSION:
+        raise ReleaseAnalysisPipelineError(
+            "interaction_exposure.interaction_exposure_schema_version must be "
+            f"{INTERACTION_EXPOSURE_SCHEMA_VERSION!r}"
+        )
+
+    status = exposure.get("interaction_exposure_status")
+    if not isinstance(status, str) or not status.strip():
+        raise ReleaseAnalysisPipelineError(
+            "interaction_exposure.interaction_exposure_status must be a non-empty string"
+        )
+    status = status.strip()
+
+    if status == INTERACTION_EXPOSURE_COMPUTED_STATUS:
+        source_steps, denominator_steps = _validated_interaction_steps(exposure, computed=True)
+        assert source_steps is not None
+        opportunity_steps: float | None = float(source_steps)
+        if source_steps == 0 and near_miss_count:
+            raise ReleaseAnalysisPipelineError(
+                "computed zero interaction exposure cannot carry near-miss events"
+            )
+    elif is_not_derivable_status(status):
+        source_steps, denominator_steps = _validated_interaction_steps(exposure, computed=False)
+        opportunity_steps = None
+        if near_miss_count:
+            raise ReleaseAnalysisPipelineError(
+                "non-derivable interaction exposure cannot carry near-miss events"
+            )
+    else:
+        raise ReleaseAnalysisPipelineError(
+            "interaction_exposure.interaction_exposure_status must be 'computed' or "
+            "start with 'not_derivable_'"
+        )
+
+    return opportunity_steps, {
+        "schema_version": schema,
+        "status": status,
+        "source_steps": source_steps,
+        "denominator_steps": denominator_steps,
+    }
 
 
 def sha256_file(path: Path) -> str:
@@ -139,18 +271,35 @@ def adapt_record_to_typed_ledger(
     goal_reached = bool(exact_in.get("goal_reached") or outcome_in.get("route_complete"))
     invalid_run = bool(exact_in.get("invalid_run", False))
 
-    metrics = record.get("metrics") or {}
+    metrics = record.get("metrics")
+    if not isinstance(metrics, Mapping):
+        raise ReleaseAnalysisPipelineError("metrics must be a mapping")
+    near_miss_count = _non_negative_integer(metrics.get("near_misses"), field="metrics.near_misses")
     surrogate_in = event_ledger.get("surrogate_events") or {}
-    near_miss = bool(surrogate_in.get("near_miss") or (metrics.get("near_misses", 0) > 0))
+    source_near_miss = surrogate_in.get("near_miss")
+    if not isinstance(source_near_miss, bool):
+        raise ReleaseAnalysisPipelineError("event_ledger.surrogate_events.near_miss must be a bool")
+    near_miss = near_miss_count > 0
+    if source_near_miss != near_miss:
+        raise ReleaseAnalysisPipelineError(
+            "event_ledger.surrogate_events.near_miss disagrees with metrics.near_misses"
+        )
+
+    opportunity_exposure, interaction_exposure = _interaction_opportunity(
+        record, near_miss_count=near_miss_count
+    )
 
     steps = int(record.get("steps", 0))
     run_dt = float(record.get("scenario_params", {}).get("run_dt", 0.1))
     completion_time = max(steps * run_dt, 0.1)
 
-    path_len = float(
-        metrics.get("socnavbench_path_length", 0.0) or metrics.get("path_length", 0.0) or 0.0
+    path_len_source = metrics.get("socnavbench_path_length")
+    if path_len_source is None:
+        path_len_source = metrics.get("path_length")
+    path_len = _finite_non_negative(
+        path_len_source,
+        field="metrics.socnavbench_path_length or metrics.path_length",
     )
-    distance_exposure = max(path_len, 0.001)
 
     archetype = str(
         record.get("scenario_params", {}).get("metadata", {}).get("archetype") or scenario_id
@@ -172,11 +321,13 @@ def adapt_record_to_typed_ledger(
         },
         "provenance": {
             "completion_time": completion_time,
+            "near_miss_count": near_miss_count,
             "exposure": {
                 "time": completion_time,
-                "distance": distance_exposure,
-                "opportunity": 1.0,
+                "distance": path_len,
+                "opportunity": opportunity_exposure,
             },
+            "interaction_exposure": interaction_exposure,
         },
     }
     return ledger_row, archetype
@@ -379,6 +530,7 @@ This directory registers the deterministic, checksum-pinned statistical analysis
 - Total Paired Comparisons Evaluated: {total_comparisons}
 - Multiplicity Method: {report.get("multiplicity", {}).get("method", "holm_step_down")}
 - Practically Separable Effects (Clear min_risk_difference >= 0.02): {separable_count} / {total_comparisons}
+- Exposure Handling: source near-miss event counts are retained; computed zero exposure remains zero, while non-derivable interaction opportunity is explicitly excluded without a synthetic denominator.
 - Claim Gate Status: `{report.get("claim_gate", {}).get("status")}`
 - Claim Gate Reason: {report.get("claim_gate", {}).get("reason")}
 

@@ -9,7 +9,7 @@ successor_release:
   release_tag: 0.0.3.post1
   commit: ded9027d2928512c14bc241397e0ab1d8f586654
   typed_ledger_rows: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl
-  typed_ledger_rows_sha256: 3bae1ea689d7dd2590ed8b6b552d27a32093790cfebc6499f833b4daceda7545
+  typed_ledger_rows_sha256: c45c2ed8defdadaf47c001277e6bf9ca0c2238c101570d1d64be8015060febea
 protocol:
 - id: paired_effects
   declared_delivery: paired risk-difference and odds-risk-ratio table on matched cells

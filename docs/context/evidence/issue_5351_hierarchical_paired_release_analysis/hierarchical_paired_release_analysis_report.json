@@ -590,861 +590,1511 @@
   "normalized_near_miss_exposure": [
     {
       "dimension": "time",
-      "normalized_rate": 0.02642850961954484,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.38993769650119703,
       "planner": "goal",
       "planner_pair": [
         "goal",
         "orca"
       ],
       "total_exposure": 27735.2,
-      "total_near_miss": 733
+      "total_near_miss": 10815
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.028511766744451498,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.420675319535295,
       "planner": "goal",
       "planner_pair": [
         "goal",
         "orca"
       ],
-      "total_exposure": 25708.683946870628,
-      "total_near_miss": 733
+      "total_exposure": 25708.662946870627,
+      "total_near_miss": 10815
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5090277777777777,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 610,
+      "normalized_rate": 0.7306938720356733,
       "planner": "goal",
       "planner_pair": [
         "goal",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 733
+      "total_exposure": 14801.0,
+      "total_near_miss": 10815
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "goal",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "goal",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "goal",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.016597828587705553,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.9626192797747515,
       "planner": "guarded_ppo",
       "planner_pair": [
         "guarded_ppo",
         "orca"
       ],
       "total_exposure": 36510.8,
-      "total_near_miss": 606
+      "total_near_miss": 35146
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.026599509856619127,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 22,
+      "normalized_rate": 1.5426852742302364,
       "planner": "guarded_ppo",
       "planner_pair": [
         "guarded_ppo",
         "orca"
       ],
-      "total_exposure": 22782.374685344083,
-      "total_near_miss": 606
+      "total_exposure": 22782.352685344085,
+      "total_near_miss": 35146
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.42083333333333334,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 704,
+      "normalized_rate": 0.6308175536211075,
       "planner": "guarded_ppo",
       "planner_pair": [
         "guarded_ppo",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 606
+      "total_exposure": 55715.0,
+      "total_near_miss": 35146
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "guarded_ppo",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "guarded_ppo",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "guarded_ppo",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030235674827574933,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 1.1941048605890237,
       "planner": "hybrid_rule_v3_fast_progress_static_escape",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape",
         "orca"
       ],
       "total_exposure": 24474.4,
-      "total_near_miss": 740
+      "total_near_miss": 29225
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02130640544694829,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.8414595617366408,
       "planner": "hybrid_rule_v3_fast_progress_static_escape",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape",
         "orca"
       ],
-      "total_exposure": 34731.33944824982,
-      "total_near_miss": 740
+      "total_exposure": 34731.31844824982,
+      "total_near_miss": 29225
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5138888888888888,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 603,
+      "normalized_rate": 0.7260328422726257,
       "planner": "hybrid_rule_v3_fast_progress_static_escape",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 740
+      "total_exposure": 40253.0,
+      "total_near_miss": 29225
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.023704296046666046,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 1.0772959966871103,
       "planner": "hybrid_rule_v3_fast_progress_static_escape_continuous",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
         "orca"
       ],
       "total_exposure": 28011.800000000003,
-      "total_near_miss": 664
+      "total_near_miss": 30177
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.018826668180040983,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 49,
+      "normalized_rate": 0.8556222213650055,
       "planner": "hybrid_rule_v3_fast_progress_static_escape_continuous",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
         "orca"
       ],
-      "total_exposure": 35269.118977936676,
-      "total_near_miss": 664
+      "total_exposure": 35269.06997793667,
+      "total_near_miss": 30177
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.46111111111111114,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 648,
+      "normalized_rate": 0.692387114537445,
       "planner": "hybrid_rule_v3_fast_progress_static_escape_continuous",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 664
+      "total_exposure": 43584.0,
+      "total_near_miss": 30177
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "hybrid_rule_v3_fast_progress_static_escape_continuous",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.03136935327095463,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.38094864066135825,
       "planner": "ppo",
       "planner_pair": [
         "ppo",
         "orca"
       ],
       "total_exposure": 20370.2,
-      "total_near_miss": 639
+      "total_near_miss": 7760
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.018396735033955666,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.2234096246849093,
       "planner": "ppo",
       "planner_pair": [
         "ppo",
         "orca"
       ],
-      "total_exposure": 34734.42427803463,
-      "total_near_miss": 639
+      "total_exposure": 34734.40327803463,
+      "total_near_miss": 7760
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.44375,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 667,
+      "normalized_rate": 0.7119919258647582,
       "planner": "ppo",
       "planner_pair": [
         "ppo",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 639
+      "total_exposure": 10899.0,
+      "total_near_miss": 7760
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "ppo",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "ppo",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "ppo",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.03422435458076308,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.9689284898332191,
       "planner": "prediction_planner",
       "planner_pair": [
         "prediction_planner",
         "orca"
       ],
       "total_exposure": 21885.0,
-      "total_near_miss": 749
+      "total_near_miss": 21205
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.026247580290375605,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.7430979301099986,
       "planner": "prediction_planner",
       "planner_pair": [
         "prediction_planner",
         "orca"
       ],
-      "total_exposure": 28535.963761758314,
-      "total_near_miss": 749
+      "total_exposure": 28535.942761758313,
+      "total_near_miss": 21205
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5201388888888889,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 602,
+      "normalized_rate": 0.8282556050308569,
       "planner": "prediction_planner",
       "planner_pair": [
         "prediction_planner",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 749
+      "total_exposure": 25602.0,
+      "total_near_miss": 21205
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "prediction_planner",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "prediction_planner",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "prediction_planner",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.022895520109898496,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7323659067534516,
       "planner": "predictive_mppi",
       "planner_pair": [
         "predictive_mppi",
         "orca"
       ],
       "total_exposure": 27516.3,
-      "total_near_miss": 630
+      "total_near_miss": 20152
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.022632315653051356,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.7239472525665848,
       "planner": "predictive_mppi",
       "planner_pair": [
         "predictive_mppi",
         "orca"
       ],
-      "total_exposure": 27836.30317187899,
-      "total_near_miss": 630
+      "total_exposure": 27836.28217187899,
+      "total_near_miss": 20152
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.4375,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 718,
+      "normalized_rate": 0.808635287508527,
       "planner": "predictive_mppi",
       "planner_pair": [
         "predictive_mppi",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 630
+      "total_exposure": 24921.0,
+      "total_near_miss": 20152
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "predictive_mppi",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "predictive_mppi",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "predictive_mppi",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.024074355163807983,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.5052084620299411,
       "planner": "risk_dwa",
       "planner_pair": [
         "risk_dwa",
         "orca"
       ],
       "total_exposure": 28328.9,
-      "total_near_miss": 682
+      "total_near_miss": 14312
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.023980516258935693,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5032395925582661,
       "planner": "risk_dwa",
       "planner_pair": [
         "risk_dwa",
         "orca"
       ],
-      "total_exposure": 28439.754700688358,
-      "total_near_miss": 682
+      "total_exposure": 28439.73370068836,
+      "total_near_miss": 14312
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.4736111111111111,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 669,
+      "normalized_rate": 0.7481051696199885,
       "planner": "risk_dwa",
       "planner_pair": [
         "risk_dwa",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 682
+      "total_exposure": 19131.0,
+      "total_near_miss": 14312
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "risk_dwa",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "risk_dwa",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "risk_dwa",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.022719180753123885,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.3631254132686797,
       "planner": "sacadrl",
       "planner_pair": [
         "sacadrl",
         "orca"
       ],
       "total_exposure": 23592.4,
-      "total_near_miss": 536
+      "total_near_miss": 8567
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.024117350677756506,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.3854730195609846,
       "planner": "sacadrl",
       "planner_pair": [
         "sacadrl",
         "orca"
       ],
-      "total_exposure": 22224.663362147574,
-      "total_near_miss": 536
+      "total_exposure": 22224.642362147577,
+      "total_near_miss": 8567
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.37222222222222223,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 829,
+      "normalized_rate": 0.7613757554212585,
       "planner": "sacadrl",
       "planner_pair": [
         "sacadrl",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 536
+      "total_exposure": 11252.0,
+      "total_near_miss": 8567
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "sacadrl",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "sacadrl",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "sacadrl",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030270137423966247,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 1.1457595182993017,
       "planner": "scenario_adaptive_hybrid_orca_v1",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v1",
         "orca"
       ],
       "total_exposure": 24413.5,
-      "total_near_miss": 739
+      "total_near_miss": 27972
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.021321192650273723,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.8070321544764618,
       "planner": "scenario_adaptive_hybrid_orca_v1",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v1",
         "orca"
       ],
-      "total_exposure": 34660.35001520014,
-      "total_near_miss": 739
+      "total_exposure": 34660.32901520015,
+      "total_near_miss": 27972
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5131944444444444,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 602,
+      "normalized_rate": 0.7137352963690643,
       "planner": "scenario_adaptive_hybrid_orca_v1",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v1",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 739
+      "total_exposure": 39191.0,
+      "total_near_miss": 27972
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v1",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v1",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v1",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.03005482259927445,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 1.1311838102519887,
       "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v2_collision_guard",
         "orca"
       ],
       "total_exposure": 24588.4,
-      "total_near_miss": 739
+      "total_near_miss": 27814
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.021351360941842725,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.8036090846515747,
       "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v2_collision_guard",
         "orca"
       ],
-      "total_exposure": 34611.37685850112,
-      "total_near_miss": 739
+      "total_exposure": 34611.35585850112,
+      "total_near_miss": 27814
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5131944444444444,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 602,
+      "normalized_rate": 0.7113191141118101,
       "planner": "scenario_adaptive_hybrid_orca_v2_collision_guard",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v2_collision_guard",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 739
+      "total_exposure": 39102.0,
+      "total_near_miss": 27814
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v2_collision_guard",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v2_collision_guard",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "scenario_adaptive_hybrid_orca_v2_collision_guard",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.013837233633252559,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.1998186534909203,
       "planner": "social_force",
       "planner_pair": [
         "social_force",
         "orca"
       ],
       "total_exposure": 44445.3,
-      "total_near_miss": 615
+      "total_near_miss": 8881
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.014561507898636934,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.2102777495105332,
       "planner": "social_force",
       "planner_pair": [
         "social_force",
         "orca"
       ],
-      "total_exposure": 42234.63698135058,
-      "total_near_miss": 615
+      "total_exposure": 42234.61598135058,
+      "total_near_miss": 8881
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.4270833333333333,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 747,
+      "normalized_rate": 0.7370124481327801,
       "planner": "social_force",
       "planner_pair": [
         "social_force",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 615
+      "total_exposure": 12050.0,
+      "total_near_miss": 8881
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "social_force",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "social_force",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "social_force",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.04354136429608128,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.22197558268590453,
       "planner": "socnav_sampling",
       "planner_pair": [
         "socnav_sampling",
         "orca"
       ],
       "total_exposure": 12884.300000000001,
-      "total_near_miss": 561
+      "total_near_miss": 2860
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02528625267866455,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.12891042979300593,
       "planner": "socnav_sampling",
       "planner_pair": [
         "socnav_sampling",
         "orca"
       ],
-      "total_exposure": 22185.968285974915,
-      "total_near_miss": 561
+      "total_exposure": 22185.947285974915,
+      "total_near_miss": 2860
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.38958333333333334,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 818,
+      "normalized_rate": 0.7354075597840062,
       "planner": "socnav_sampling",
       "planner_pair": [
         "socnav_sampling",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 561
+      "total_exposure": 3889.0,
+      "total_near_miss": 2860
     },
     {
       "dimension": "time",
-      "normalized_rate": 0.030018436520067443,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 0,
+      "normalized_rate": 0.7227667386268731,
       "planner": "orca",
       "planner_pair": [
         "socnav_sampling",
         "orca"
       ],
       "total_exposure": 25384.4,
-      "total_near_miss": 762
+      "total_near_miss": 18347
     },
     {
       "dimension": "distance",
-      "normalized_rate": 0.02161302526432895,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1440
+      },
+      "n_derivable_rows": 1440,
+      "n_not_derivable_rows": 0,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 21,
+      "normalized_rate": 0.5203863657667196,
       "planner": "orca",
       "planner_pair": [
         "socnav_sampling",
         "orca"
       ],
-      "total_exposure": 35256.517339922655,
-      "total_near_miss": 762
+      "total_exposure": 35256.496339922654,
+      "total_near_miss": 18347
     },
     {
       "dimension": "opportunity",
-      "normalized_rate": 0.5291666666666667,
+      "excluded_near_miss": 0,
+      "exposure_status_counts": {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30
+      },
+      "n_derivable_rows": 1410,
+      "n_not_derivable_rows": 30,
+      "n_rows": 1440,
+      "n_zero_exposure_rows": 582,
+      "normalized_rate": 0.7322105599233747,
       "planner": "orca",
       "planner_pair": [
         "socnav_sampling",
         "orca"
       ],
-      "total_exposure": 1440.0,
-      "total_near_miss": 762
+      "total_exposure": 25057.0,
+      "total_near_miss": 18347
     }
   ],
   "paired_effects": [

@@ -73,7 +73,14 @@ def _ledger_row(
         "surrogate_events": {"near_miss": near_miss},
         "provenance": {
             "completion_time": completion_time,
+            "near_miss_count": int(near_miss),
             "exposure": {"time": exposure, "distance": exposure, "opportunity": exposure},
+            "interaction_exposure": {
+                "schema_version": "interaction_exposure.v1",
+                "status": "computed",
+                "source_steps": int(exposure),
+                "denominator_steps": max(1, int(exposure)),
+            },
         },
     }
 
@@ -146,8 +153,8 @@ def test_build_matched_cells_pairs_ledger_rows_and_preserves_outcomes() -> None:
     assert all(cell.planner_a == "alpha" and cell.planner_b == "beta" for cell in cells)
     assert [cell.collision_a for cell in cells] == [1, 1, 1, 1]
     assert [cell.collision_b for cell in cells] == [0, 0, 0, 0]
-    assert [cell.exposure_a["time"] for cell in cells] == [2.0, 2.0, 2.0, 2.0]
-    assert [cell.exposure_b["opportunity"] for cell in cells] == [1.0, 1.0, 1.0, 1.0]
+    assert [cell.exposure_a["time"].value for cell in cells] == [2.0, 2.0, 2.0, 2.0]
+    assert [cell.exposure_b["opportunity"].value for cell in cells] == [1.0, 1.0, 1.0, 1.0]
 
 
 def test_build_matched_cells_rejects_unmatched_or_duplicate_rows() -> None:
@@ -374,27 +381,83 @@ def test_normalized_near_miss_exposure_normalizes_by_exposure_window() -> None:
     summaries = normalized_near_miss_exposure(
         cells, policy=AnalysisPolicy(exposure_opportunity=1.0)
     )
-    by_planner = {s.planner: s for s in summaries}
+    by_planner = {(s.planner, s.dimension): s for s in summaries}
     # alpha: 4 near-miss over 4*2.0=8.0 exposure -> 0.5 per unit opportunity.
-    assert by_planner["alpha"].total_near_miss == 4
-    assert by_planner["alpha"].total_exposure == pytest.approx(8.0)
-    assert by_planner["alpha"].normalized_rate == pytest.approx(0.5)
+    alpha = by_planner[("alpha", "opportunity")]
+    assert alpha.total_near_miss == 4
+    assert alpha.total_exposure == pytest.approx(8.0)
+    assert alpha.normalized_rate == pytest.approx(0.5)
+    assert alpha.n_derivable_rows == 4
+    assert alpha.n_not_derivable_rows == 0
     # beta: 0 near-miss.
-    assert by_planner["beta"].normalized_rate == pytest.approx(0.0)
+    assert by_planner[("beta", "opportunity")].normalized_rate == pytest.approx(0.0)
+
+
+def test_opportunity_exposure_reports_zero_and_not_derivable_rows_without_imputation() -> None:
+    """Zero exposure stays zero while non-derivable rows are explicitly excluded."""
+
+    rows = _two_arm_rows()
+    rows[0]["surrogate_events"]["near_miss"] = False
+    rows[0]["provenance"]["near_miss_count"] = 0
+    rows[0]["provenance"]["exposure"]["opportunity"] = 0.0
+    rows[0]["provenance"]["interaction_exposure"]["source_steps"] = 0
+    rows[1]["provenance"]["exposure"]["opportunity"] = None
+    rows[1]["provenance"]["interaction_exposure"].update(
+        {
+            "status": "not_derivable_no_pedestrians",
+            "source_steps": 0,
+        }
+    )
+
+    cells = build_matched_cells_from_ledger_rows(rows, planner_pair=("alpha", "beta"))
+    summaries = normalized_near_miss_exposure(cells)
+    by_planner = {(s.planner, s.dimension): s for s in summaries}
+
+    alpha = by_planner[("alpha", "opportunity")]
+    assert alpha.n_zero_exposure_rows == 1
+    assert alpha.n_not_derivable_rows == 0
+    beta = by_planner[("beta", "opportunity")]
+    assert beta.n_derivable_rows == 3
+    assert beta.n_not_derivable_rows == 1
+    assert beta.excluded_near_miss == 0
+    assert beta.exposure_status_counts == {
+        "computed": 3,
+        "not_derivable_no_pedestrians": 1,
+    }
+
+
+def test_non_derivable_opportunity_with_near_miss_events_fails_closed() -> None:
+    """Events cannot silently disappear behind an unavailable opportunity denominator."""
+
+    rows = _two_arm_rows()
+    rows[0]["provenance"]["exposure"]["opportunity"] = None
+    rows[0]["provenance"]["interaction_exposure"].update(
+        {
+            "status": "not_derivable_missing_trace",
+            "source_steps": 0,
+        }
+    )
+    cells = build_matched_cells_from_ledger_rows(rows, planner_pair=("alpha", "beta"))
+
+    with pytest.raises(
+        HierarchicalPairedReleaseAnalysisError,
+        match="near-miss events with non-derivable opportunity exposure",
+    ):
+        normalized_near_miss_exposure(cells)
 
 
 def test_exposure_and_completion_time_fallbacks_fail_closed_or_read_metric_values() -> None:
     """Exposure is required while row-level metric values remain a valid time source."""
 
     rows = _two_arm_rows()
-    rows[0]["provenance"] = {"exposure": {"time": 2.0, "distance": 2.0, "opportunity": 2.0}}
+    rows[0]["provenance"].pop("completion_time")
     rows[0]["metrics"] = {"completion_time": {"value": 7.5}}
     cells = build_matched_cells_from_ledger_rows(rows, planner_pair=("alpha", "beta"))
     assert cells[0].completion_time_a == pytest.approx(7.5)
 
     invalid_exposure = _two_arm_rows()
     invalid_exposure[0]["provenance"]["exposure"] = 0.0
-    with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="exposure must be a mapping"):
+    with pytest.raises(HierarchicalPairedReleaseAnalysisError, match="exposure must carry"):
         build_matched_cells_from_ledger_rows(invalid_exposure, planner_pair=("alpha", "beta"))
 
     for invalid_time in (None, False, -1.0, float("nan"), float("inf")):

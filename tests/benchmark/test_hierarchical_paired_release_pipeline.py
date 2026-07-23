@@ -12,6 +12,8 @@ import pytest
 
 from robot_sf.benchmark.hierarchical_paired_release_analysis import (
     CLAIM_GATE_BLOCKED_REVIEW_PENDING,
+    build_matched_cells_from_ledger_rows,
+    normalized_near_miss_exposure,
 )
 from robot_sf.benchmark.hierarchical_paired_release_inputs import (
     load_hierarchical_paired_release_input_manifest,
@@ -33,6 +35,45 @@ _MANIFEST_PATH = (
     _REPO_ROOT / "configs/benchmarks/releases/hierarchical_paired_release_analysis_issue_5351.yaml"
 )
 _EVIDENCE_DIR = _REPO_ROOT / "docs/context/evidence/issue_5351_hierarchical_paired_release_analysis"
+
+
+def _raw_episode(
+    *,
+    scenario_id: str,
+    seed: int,
+    near_misses: int = 0,
+    exposure_steps: int = 0,
+    exposure_status: str = "computed",
+    planner_path_length: float = 1.0,
+) -> dict:
+    """Build one minimal release-shaped source record for adapter tests."""
+
+    return {
+        "scenario_id": scenario_id,
+        "seed": seed,
+        "steps": 10,
+        "outcome": {"route_complete": True},
+        "scenario_params": {"run_dt": 0.1, "metadata": {"archetype": "bottleneck"}},
+        "metrics": {
+            "near_misses": near_misses,
+            "socnavbench_path_length": planner_path_length,
+        },
+        "event_ledger": {
+            "exact_events": {
+                "collision": False,
+                "goal_reached": True,
+                "timeout": False,
+                "invalid_run": False,
+            },
+            "surrogate_events": {"near_miss": near_misses > 0},
+        },
+        "interaction_exposure": {
+            "interaction_exposure_schema_version": "interaction_exposure.v1",
+            "interaction_exposure_status": exposure_status,
+            "interaction_exposure_steps": exposure_steps,
+            "interaction_exposure_denominator_steps": 10,
+        },
+    }
 
 
 def _make_mock_tar(tmp_path: Path, arm_data: dict[str, list[dict]]) -> Path:
@@ -75,17 +116,7 @@ def test_pipeline_fails_on_archive_digest_mismatch(tmp_path: Path) -> None:
 
 def test_pipeline_fails_on_incomplete_arm_count(tmp_path: Path) -> None:
     """An archive missing any of the 14 required arms must fail closed."""
-    mock_data = {
-        "goal__differential_drive": [
-            {
-                "scenario_id": "scn_1",
-                "seed": 1,
-                "steps": 10,
-                "outcome": {"route_complete": True},
-                "scenario_params": {"metadata": {"archetype": "bottleneck"}},
-            }
-        ]
-    }
+    mock_data = {"goal__differential_drive": [_raw_episode(scenario_id="scn_1", seed=1)]}
     tar_path = _make_mock_tar(tmp_path, mock_data)
 
     with pytest.raises(ReleaseAnalysisPipelineError, match="Expected 14 arms in archive"):
@@ -113,15 +144,7 @@ def test_pipeline_fails_on_duplicate_cell(tmp_path: Path) -> None:
     mock_data = {}
     for arm in all_14_arms:
         arm_dir = f"{arm}__differential_drive"
-        records = [
-            {
-                "scenario_id": f"scn_{i // 30}",
-                "seed": i % 30,
-                "steps": 10,
-                "outcome": {"route_complete": True},
-            }
-            for i in range(1440)
-        ]
+        records = [_raw_episode(scenario_id=f"scn_{i // 30}", seed=i % 30) for i in range(1440)]
         if arm == "goal":
             # Duplicate first cell
             records[1] = dict(records[0])
@@ -142,6 +165,21 @@ def test_adapt_record_to_typed_ledger_preserves_semantics() -> None:
         "scenario_params": {"run_dt": 0.1, "metadata": {"archetype": "doorway"}},
         "outcome": {"collision_event": True, "route_complete": False, "timeout_event": False},
         "metrics": {"near_misses": 3, "socnavbench_path_length": 15.5},
+        "event_ledger": {
+            "exact_events": {
+                "collision": True,
+                "goal_reached": False,
+                "timeout": False,
+                "invalid_run": False,
+            },
+            "surrogate_events": {"near_miss": True},
+        },
+        "interaction_exposure": {
+            "interaction_exposure_schema_version": "interaction_exposure.v1",
+            "interaction_exposure_status": "computed",
+            "interaction_exposure_steps": 8,
+            "interaction_exposure_denominator_steps": 150,
+        },
     }
     row, archetype = adapt_record_to_typed_ledger(record, planner_name="orca")
 
@@ -153,8 +191,89 @@ def test_adapt_record_to_typed_ledger_preserves_semantics() -> None:
     assert row["exact_events"]["goal_reached"] is False
     assert row["surrogate_events"]["near_miss"] is True
     assert row["provenance"]["completion_time"] == pytest.approx(15.0)
+    assert row["provenance"]["near_miss_count"] == 3
     assert row["provenance"]["exposure"]["distance"] == pytest.approx(15.5)
+    assert row["provenance"]["exposure"]["opportunity"] == pytest.approx(8.0)
+    assert row["provenance"]["interaction_exposure"] == {
+        "schema_version": "interaction_exposure.v1",
+        "status": "computed",
+        "source_steps": 8,
+        "denominator_steps": 150,
+    }
     assert archetype == "doorway"
+
+
+def test_source_near_miss_counts_and_opportunity_reach_report_summary() -> None:
+    """Raw release counts and exposure steps survive adapter-to-report transformation."""
+
+    alpha, _ = adapt_record_to_typed_ledger(
+        _raw_episode(scenario_id="scn", seed=7, near_misses=3, exposure_steps=6),
+        planner_name="alpha",
+    )
+    beta, _ = adapt_record_to_typed_ledger(
+        _raw_episode(scenario_id="scn", seed=7, near_misses=1, exposure_steps=2),
+        planner_name="beta",
+    )
+
+    cells = build_matched_cells_from_ledger_rows([alpha, beta], planner_pair=("alpha", "beta"))
+    summaries = normalized_near_miss_exposure(cells)
+    by_planner = {(summary.planner, summary.dimension): summary for summary in summaries}
+
+    alpha_opportunity = by_planner[("alpha", "opportunity")]
+    assert alpha_opportunity.total_near_miss == 3
+    assert alpha_opportunity.total_exposure == pytest.approx(6.0)
+    assert alpha_opportunity.normalized_rate == pytest.approx(0.5)
+    beta_opportunity = by_planner[("beta", "opportunity")]
+    assert beta_opportunity.total_near_miss == 1
+    assert beta_opportunity.total_exposure == pytest.approx(2.0)
+    assert beta_opportunity.normalized_rate == pytest.approx(0.5)
+
+
+@pytest.mark.parametrize(
+    ("status", "steps", "near_misses", "message"),
+    [
+        ("unknown", 1, 0, "must be 'computed'"),
+        ("not_derivable_missing_trace", 0, 1, "cannot carry near-miss events"),
+        ("computed", 0, 1, "zero interaction exposure"),
+    ],
+)
+def test_adapter_rejects_invalid_or_unusable_opportunity_exposure(
+    status: str, steps: int, near_misses: int, message: str
+) -> None:
+    """Malformed or unnormalizable source exposure fails before report generation."""
+
+    record = _raw_episode(
+        scenario_id="scn",
+        seed=7,
+        near_misses=near_misses,
+        exposure_steps=steps,
+        exposure_status=status,
+    )
+
+    with pytest.raises(ReleaseAnalysisPipelineError, match=message):
+        adapt_record_to_typed_ledger(record, planner_name="alpha")
+
+
+def test_adapter_preserves_canonical_blank_non_derivable_exposure_as_unavailable() -> None:
+    """Canonical blank non-derivable fields remain unavailable, never zero-imputed."""
+
+    record = _raw_episode(
+        scenario_id="scn",
+        seed=7,
+        exposure_status="not_derivable_missing_trace",
+    )
+    record["interaction_exposure"]["interaction_exposure_steps"] = ""
+    record["interaction_exposure"]["interaction_exposure_denominator_steps"] = ""
+
+    row, _ = adapt_record_to_typed_ledger(record, planner_name="alpha")
+
+    assert row["provenance"]["exposure"]["opportunity"] is None
+    assert row["provenance"]["interaction_exposure"] == {
+        "schema_version": "interaction_exposure.v1",
+        "status": "not_derivable_missing_trace",
+        "source_steps": None,
+        "denominator_steps": None,
+    }
 
 
 def test_seeded_determinism(tmp_path: Path) -> None:
@@ -218,6 +337,23 @@ def test_clean_checkout_hydration_and_execution_against_release_0_0_3_post1() ->
     assert report["issue"] == 5351
     assert report["analysis_executed"] is True
     assert report["claim_gate"]["status"] == CLAIM_GATE_BLOCKED_REVIEW_PENDING
+
+    goal_opportunity = next(
+        summary
+        for summary in report["normalized_near_miss_exposure"]
+        if summary["planner_pair"] == ["goal", "orca"]
+        and summary["planner"] == "goal"
+        and summary["dimension"] == "opportunity"
+    )
+    assert goal_opportunity["total_near_miss"] == 10815
+    assert goal_opportunity["total_exposure"] == pytest.approx(14801.0)
+    assert goal_opportunity["n_derivable_rows"] == 1410
+    assert goal_opportunity["n_not_derivable_rows"] == 30
+    assert goal_opportunity["n_zero_exposure_rows"] == 610
+    assert goal_opportunity["exposure_status_counts"] == {
+        "computed": 1410,
+        "not_derivable_no_pedestrians": 30,
+    }
 
     protocol_conformance = report["protocol_conformance"]
     assert len(protocol_conformance) == 8

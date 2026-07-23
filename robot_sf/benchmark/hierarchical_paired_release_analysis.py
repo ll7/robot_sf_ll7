@@ -36,6 +36,11 @@ from robot_sf.benchmark.hierarchical_paired_release_inputs import (
     evaluate_hierarchical_paired_release_inputs,
     validate_hierarchical_paired_release_input_manifest,
 )
+from robot_sf.benchmark.interaction_exposure import (
+    INTERACTION_EXPOSURE_COMPUTED_STATUS,
+    INTERACTION_EXPOSURE_SCHEMA_VERSION,
+    is_not_derivable_status,
+)
 from robot_sf.errors import RobotSfError
 
 if TYPE_CHECKING:
@@ -75,7 +80,8 @@ class MatchedCell:
         seed: Shared random seed so the two arms face identical conditions.
         planner_a/planner_b: Paired planner names.
         collision_a/collision_b: Exact collision outcome (0/1) for each arm.
-        near_miss_a/near_miss_b: Surrogate near-miss outcome (0/1) per arm.
+        near_miss_a/near_miss_b: Surrogate near-miss prevalence (0/1) per arm.
+        near_miss_count_a/near_miss_count_b: Preserved source event counts per arm.
         timeout_a/timeout_b: Exact timeout outcome (0/1) per arm.
         completion_time_a/completion_time_b: Observed completion time.  When
             the arm timed out the time is treated as right-censored at the
@@ -93,14 +99,24 @@ class MatchedCell:
     collision_b: int
     near_miss_a: int
     near_miss_b: int
+    near_miss_count_a: int
+    near_miss_count_b: int
     timeout_a: int
     timeout_b: int
     completion_time_a: float
     completion_time_b: float
     censored_a: bool
     censored_b: bool
-    exposure_a: dict[str, float]
-    exposure_b: dict[str, float]
+    exposure_a: dict[str, ExposureDimension]
+    exposure_b: dict[str, ExposureDimension]
+
+
+@dataclass(frozen=True, slots=True)
+class ExposureDimension:
+    """One exposure denominator with an explicit derivation status."""
+
+    value: float | None
+    status: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +203,12 @@ class NearMissExposureSummary:
     total_near_miss: int
     total_exposure: float
     normalized_rate: float
+    n_rows: int
+    n_derivable_rows: int
+    n_zero_exposure_rows: int
+    n_not_derivable_rows: int
+    excluded_near_miss: int
+    exposure_status_counts: dict[str, int]
 
 
 def build_matched_cells_from_ledger_rows(
@@ -262,6 +284,8 @@ def build_matched_cells_from_ledger_rows(
                 collision_b=_binary_outcome(row_b, "collision"),
                 near_miss_a=_count_outcome(row_a, "near_miss"),
                 near_miss_b=_count_outcome(row_b, "near_miss"),
+                near_miss_count_a=_near_miss_event_count(row_a),
+                near_miss_count_b=_near_miss_event_count(row_b),
                 timeout_a=_binary_outcome(row_a, "timeout"),
                 timeout_b=_binary_outcome(row_b, "timeout"),
                 completion_time_a=_completion_time(row_a),
@@ -538,34 +562,98 @@ def normalized_near_miss_exposure(
     require_finite_scalar("exposure_opportunity", opportunity)
     if opportunity <= 0.0:
         raise HierarchicalPairedReleaseAnalysisError("exposure_opportunity must be positive")
+    if not cells:
+        raise HierarchicalPairedReleaseAnalysisError(
+            "cannot normalize near-miss exposure from empty matched cells"
+        )
     summaries: list[NearMissExposureSummary] = []
     for planner, miss_attr, exposure_attr in (
-        (cells[0].planner_a, "near_miss_a", "exposure_a"),
-        (cells[0].planner_b, "near_miss_b", "exposure_b"),
+        (cells[0].planner_a, "near_miss_count_a", "exposure_a"),
+        (cells[0].planner_b, "near_miss_count_b", "exposure_b"),
     ):
-        total_near_miss = sum(int(getattr(cell, miss_attr)) for cell in cells)
         for dimension in EXPOSURE_DIMENSIONS:
-            exposures = [float(getattr(cell, exposure_attr)[dimension]) for cell in cells]
-            if any(not math.isfinite(exposure) or exposure <= 0.0 for exposure in exposures):
-                raise HierarchicalPairedReleaseAnalysisError(
-                    f"{planner} has missing, non-finite, or non-positive {dimension} exposure"
-                )
-            total_exposure = sum(exposures)
-            if not math.isfinite(total_exposure) or total_exposure <= 0.0:
-                raise HierarchicalPairedReleaseAnalysisError(
-                    f"{planner} has invalid total {dimension} exposure"
-                )
-            rate = total_near_miss / total_exposure
             summaries.append(
-                NearMissExposureSummary(
+                _summarize_near_miss_dimension(
+                    cells,
                     planner=planner,
                     dimension=dimension,
-                    total_near_miss=total_near_miss,
-                    total_exposure=float(total_exposure),
-                    normalized_rate=rate / opportunity,
+                    miss_attr=miss_attr,
+                    exposure_attr=exposure_attr,
+                    opportunity=opportunity,
                 )
             )
     return summaries
+
+
+def _summarize_near_miss_dimension(
+    cells: Sequence[MatchedCell],
+    *,
+    planner: str,
+    dimension: str,
+    miss_attr: str,
+    exposure_attr: str,
+    opportunity: float,
+) -> NearMissExposureSummary:
+    """Aggregate one planner/dimension while preserving unavailable denominators.
+
+    Returns:
+        A status-aware exposure-normalized event-count summary.
+    """
+
+    total_near_miss = 0
+    excluded_near_miss = 0
+    exposures: list[float] = []
+    status_counts: dict[str, int] = {}
+    zero_exposure_rows = 0
+    for cell in cells:
+        near_miss_count = int(getattr(cell, miss_attr))
+        exposure = getattr(cell, exposure_attr)[dimension]
+        status_counts[exposure.status] = status_counts.get(exposure.status, 0) + 1
+        if exposure.status == INTERACTION_EXPOSURE_COMPUTED_STATUS:
+            if exposure.value is None:
+                raise HierarchicalPairedReleaseAnalysisError(
+                    f"{planner} has missing computed {dimension} exposure"
+                )
+            if exposure.value == 0.0:
+                zero_exposure_rows += 1
+                if near_miss_count:
+                    raise HierarchicalPairedReleaseAnalysisError(
+                        f"{planner} has near-miss events with zero {dimension} exposure"
+                    )
+            exposures.append(exposure.value)
+            total_near_miss += near_miss_count
+        elif is_not_derivable_status(exposure.status):
+            if exposure.value is not None:
+                raise HierarchicalPairedReleaseAnalysisError(
+                    f"{planner} has a value for non-derivable {dimension} exposure"
+                )
+            excluded_near_miss += near_miss_count
+        else:
+            raise HierarchicalPairedReleaseAnalysisError(
+                f"{planner} has unsupported {dimension} exposure status {exposure.status!r}"
+            )
+    if excluded_near_miss:
+        raise HierarchicalPairedReleaseAnalysisError(
+            f"{planner} has near-miss events with non-derivable {dimension} exposure"
+        )
+    total_exposure = sum(exposures)
+    if not math.isfinite(total_exposure) or total_exposure <= 0.0:
+        raise HierarchicalPairedReleaseAnalysisError(
+            f"{planner} has invalid total {dimension} exposure"
+        )
+    return NearMissExposureSummary(
+        planner=planner,
+        dimension=dimension,
+        total_near_miss=total_near_miss,
+        total_exposure=float(total_exposure),
+        normalized_rate=(total_near_miss / total_exposure) / opportunity,
+        n_rows=len(cells),
+        n_derivable_rows=len(exposures),
+        n_zero_exposure_rows=zero_exposure_rows,
+        n_not_derivable_rows=len(cells) - len(exposures),
+        excluded_near_miss=excluded_near_miss,
+        exposure_status_counts=dict(sorted(status_counts.items())),
+    )
 
 
 def practical_effect_classification(
@@ -1101,6 +1189,28 @@ def _count_outcome(row: Mapping[str, Any], field: str) -> int:
     return 0
 
 
+def _near_miss_event_count(row: Mapping[str, Any]) -> int:
+    """Read the preserved finite non-negative source near-miss event count.
+
+    Returns:
+        The exact source event count retained by the release adapter.
+    """
+
+    provenance = row.get("provenance")
+    candidate = provenance.get("near_miss_count") if isinstance(provenance, Mapping) else None
+    if (
+        isinstance(candidate, bool)
+        or not isinstance(candidate, (int, float))
+        or not math.isfinite(float(candidate))
+        or float(candidate) < 0.0
+        or not float(candidate).is_integer()
+    ):
+        raise HierarchicalPairedReleaseAnalysisError(
+            "provenance.near_miss_count must be a finite non-negative integer"
+        )
+    return int(candidate)
+
+
 def _completion_time(row: Mapping[str, Any]) -> float:
     """Read a required finite non-negative completion time from a ledger row.
 
@@ -1153,34 +1263,77 @@ def _valid_completion_time(value: Any) -> bool:
     )
 
 
-def _exposure(row: Mapping[str, Any]) -> dict[str, float]:
-    """Read labeled positive interaction-exposure dimensions from provenance.
+def _exposure(row: Mapping[str, Any]) -> dict[str, ExposureDimension]:
+    """Read status-bearing non-negative exposure dimensions from provenance.
 
     Raises:
-        HierarchicalPairedReleaseAnalysisError: If exposure is absent, non-finite,
-            or not strictly positive.
+        HierarchicalPairedReleaseAnalysisError: If exposure or its interaction-
+            opportunity provenance is absent or malformed.
 
     Returns:
-        The validated, strictly positive exposure values by dimension.
+        Validated dimensions with explicit computed/not-derivable status.
     """
 
     provenance = row.get("provenance")
     if isinstance(provenance, Mapping):
         candidate = provenance.get("exposure")
-        if isinstance(candidate, Mapping) and set(candidate) == set(EXPOSURE_DIMENSIONS):
-            exposure: dict[str, float] = {}
-            for dimension in EXPOSURE_DIMENSIONS:
+        interaction = provenance.get("interaction_exposure")
+        if (
+            isinstance(candidate, Mapping)
+            and set(candidate) == set(EXPOSURE_DIMENSIONS)
+            and isinstance(interaction, Mapping)
+        ):
+            result: dict[str, ExposureDimension] = {}
+            for dimension in ("time", "distance"):
                 value = candidate[dimension]
-                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                if (
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(float(value))
+                    or float(value) < 0.0
+                ):
                     break
-                numeric = float(value)
-                if not math.isfinite(numeric) or numeric <= 0.0:
-                    break
-                exposure[dimension] = numeric
+                result[dimension] = ExposureDimension(
+                    value=float(value), status=INTERACTION_EXPOSURE_COMPUTED_STATUS
+                )
             else:
-                return exposure
+                schema = interaction.get("schema_version")
+                status = interaction.get("status")
+                if schema != INTERACTION_EXPOSURE_SCHEMA_VERSION or not isinstance(status, str):
+                    raise HierarchicalPairedReleaseAnalysisError(
+                        "interaction exposure must carry interaction_exposure.v1 schema and status"
+                    )
+                opportunity = candidate["opportunity"]
+                if status == INTERACTION_EXPOSURE_COMPUTED_STATUS:
+                    if (
+                        isinstance(opportunity, bool)
+                        or not isinstance(opportunity, (int, float))
+                        or not math.isfinite(float(opportunity))
+                        or float(opportunity) < 0.0
+                    ):
+                        raise HierarchicalPairedReleaseAnalysisError(
+                            "computed opportunity exposure must be finite and non-negative"
+                        )
+                    source_steps = interaction.get("source_steps")
+                    if (
+                        isinstance(source_steps, bool)
+                        or not isinstance(source_steps, int)
+                        or source_steps < 0
+                        or float(source_steps) != float(opportunity)
+                    ):
+                        raise HierarchicalPairedReleaseAnalysisError(
+                            "computed opportunity exposure must match source_steps"
+                        )
+                    result["opportunity"] = ExposureDimension(
+                        value=float(opportunity), status=status
+                    )
+                    return result
+                if is_not_derivable_status(status) and opportunity is None:
+                    result["opportunity"] = ExposureDimension(value=None, status=status)
+                    return result
     raise HierarchicalPairedReleaseAnalysisError(
-        "exposure must be a mapping with finite positive time, distance, and opportunity values"
+        "exposure must carry finite non-negative time/distance values and a status-bearing "
+        "interaction opportunity"
     )
 
 

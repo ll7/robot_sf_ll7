@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/preflight/preview_scenarios.json",
+  "artifact_sha256": "05eaece1071063614f68e303a8852a7e190563b7343e555a2e9a1b94314b93ab",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

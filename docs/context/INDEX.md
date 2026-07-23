@@ -10,8 +10,8 @@ Issue #5936 result-job durability gate — producer-side probe (`result_job_dura
 Issue #5792 one-command demo reproducibility and CPU UX smoke record:
 [issue_5792_demo_validation_2026-07-15.md](evidence/issue_5792_demo_validation_2026-07-15.md).
 
-Issue #5579 MPC tuning-budget archaeology and bounded sensitivity packet (two prediction-MPC arms,
-20-point shared grid, fixed paired slice, and fail-closed diagnostic read):
+Issue #5579 MPC tuning-budget archaeology and completed bounded sensitivity diagnostic (two
+prediction-MPC arms, 20-point shared grid, fixed paired slice, and blocked fail-closed read):
 [issue_5579_mpc_tuning_budget_sensitivity.md](issue_5579_mpc_tuning_budget_sensitivity.md).
 
 Collision causality, action-conditioned online risk, and statistically defensible Chapter 7

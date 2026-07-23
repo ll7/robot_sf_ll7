@@ -1,6 +1,6 @@
 # Temporary Construction-Corridor Scenarios
 
-[Back to Documentation Index](../README.md) | [Scenario Zoo](../scenario_zoo/index.md)
+[Back to Documentation Index](../README.md) | [Scenario Zoo](scenario_zoo/index.md)
 
 ## Purpose
 
@@ -87,13 +87,13 @@ All required metrics are reported by the existing metric pipeline without code c
 ## Configuration
 
 The scenario archetype is defined in
-[configs/scenarios/archetypes/temporary_construction_corridor.yaml](../../configs/scenarios/archetypes/temporary_construction_corridor.yaml).
+[configs/scenarios/archetypes/temporary_construction_corridor.yaml](../configs/scenarios/archetypes/temporary_construction_corridor.yaml).
 
 A manifest that includes all three scenarios is available at
-[configs/scenarios/sets/temporary_construction_corridor_v1.yaml](../../configs/scenarios/sets/temporary_construction_corridor_v1.yaml).
+[configs/scenarios/sets/temporary_construction_corridor_v1.yaml](../configs/scenarios/sets/temporary_construction_corridor_v1.yaml).
 
 Maps are registered in
-[maps/registry.yaml](../../maps/registry.yaml) under the map IDs
+[maps/registry.yaml](../maps/registry.yaml) under the map IDs
 `construction_corridor_narrowing`, `construction_corridor_detour`, and
 `construction_corridor_zigzag`.
 

@@ -954,23 +954,23 @@ def build_nmpc_social_config(cfg: dict[str, Any] | None) -> NMPCSocialConfig:
         "fallback_to_stop": _parse_bool,
     }
     kwargs = {}
-    for field in fields(NMPCSocialConfig):
-        value = cfg.get(field.name, getattr(defaults, field.name))
-        caster = numeric_casts.get(field.name)
+    for config_field in fields(NMPCSocialConfig):
+        value = cfg.get(config_field.name, getattr(defaults, config_field.name))
+        caster = numeric_casts.get(config_field.name)
         if caster is None:
-            kwargs[field.name] = value
+            kwargs[config_field.name] = value
             continue
         try:
-            kwargs[field.name] = caster(value)
+            kwargs[config_field.name] = caster(value)
         except (TypeError, ValueError):
-            default_value = getattr(defaults, field.name)
+            default_value = getattr(defaults, config_field.name)
             warnings.warn(
                 (
-                    f"Invalid NMPC config value for '{field.name}': {value!r}; "
+                    f"Invalid NMPC config value for '{config_field.name}': {value!r}; "
                     f"falling back to default {default_value!r}."
                 ),
                 RuntimeWarning,
                 stacklevel=2,
             )
-            kwargs[field.name] = default_value
+            kwargs[config_field.name] = default_value
     return NMPCSocialConfig(**kwargs)

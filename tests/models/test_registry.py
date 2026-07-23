@@ -692,3 +692,235 @@ def test_upsert_registry_entry_requires_model_id(tmp_path: Path) -> None:
             {"local_path": "output/model_cache/demo/model.zip"},
             registry_path=tmp_path / "registry.yaml",
         )
+
+
+# --- issue #6189: atomic, bounded-retry model preflight ------------------
+
+
+def _write_release_registry(
+    registry_path: Path,
+    *,
+    model_id: str,
+    expected_sha256: str,
+    asset_name: str = "public_model-model.zip",
+) -> None:
+    """Write a registry YAML pinning one GitHub-release model."""
+    registry_path.write_text(
+        "\n".join(
+            [
+                "version: 1",
+                "models:",
+                f"  - model_id: {model_id}",
+                "    local_path: missing/model.zip",
+                "    github_release:",
+                "      url: "
+                "https://github.com/ll7/robot_sf_ll7/releases/download/"
+                f"artifact/models-test/{asset_name}",
+                f"      asset_name: {asset_name}",
+                f"      sha256: {expected_sha256}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+class _BytesResponse:
+    """urlopen-style context manager that streams a fixed payload in chunks."""
+
+    def __init__(self, data: bytes) -> None:
+        self._data = data
+        self._offset = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args) -> None:
+        return None
+
+    def read(self, size: int) -> bytes:
+        chunk = self._data[self._offset : self._offset + size]
+        self._offset += len(chunk)
+        return chunk
+
+
+def test_release_download_retries_transient_failure_then_succeeds(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """A transient transport error is retried and the asset installs on retry (issue #6189)."""
+    payload = b"checkpoint-bytes"
+    probe = tmp_path / "_probe"
+    probe.write_bytes(payload)
+    expected_sha = registry._sha256(probe)
+    probe.unlink()
+
+    registry_path = tmp_path / "registry.yaml"
+    _write_release_registry(registry_path, model_id="public_model", expected_sha256=expected_sha)
+
+    attempts = 0
+
+    def _flaky_urlopen(url: str, timeout: int):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise TimeoutError("transient network blip")
+        return _BytesResponse(payload)
+
+    monkeypatch.setattr(registry, "urlopen", _flaky_urlopen)
+    # Backoff must not sleep during the test.
+    monkeypatch.setattr(registry, "DEFAULT_DOWNLOAD_RETRY_BACKOFF_SECONDS", ())
+
+    resolved = registry.resolve_model_path(
+        "public_model",
+        registry_path=registry_path,
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert attempts == 2, "first attempt must fail and the second must install"
+    assert resolved.read_bytes() == payload
+    assert resolved.exists()
+
+
+def test_release_download_exhausting_retries_fails_loudly_and_leaves_no_partial(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """Exhausting retries fails setup loudly and installs no cache file (issue #6189)."""
+    registry_path = tmp_path / "registry.yaml"
+    _write_release_registry(
+        registry_path,
+        model_id="public_model",
+        expected_sha256="a" * 64,
+    )
+
+    def _always_timeout(url: str, timeout: int):
+        raise TimeoutError("network down")
+
+    monkeypatch.setattr(registry, "urlopen", _always_timeout)
+    monkeypatch.setattr(registry, "DEFAULT_DOWNLOAD_RETRY_BACKOFF_SECONDS", ())
+
+    cache_dir = tmp_path / "cache"
+    with pytest.raises(RuntimeError, match="after 3 attempt"):
+        registry.resolve_model_path(
+            "public_model",
+            registry_path=registry_path,
+            cache_dir=cache_dir,
+        )
+
+    # No final asset is ever observable as present after a failed setup phase.
+    final_asset = cache_dir / "public_model" / "public_model-model.zip"
+    assert not final_asset.exists()
+    # And no stray partial files linger in the cache directory.
+    if final_asset.parent.exists():
+        assert not any(path.name.endswith(".partial") for path in final_asset.parent.iterdir())
+
+
+def test_release_download_is_atomic_under_midstream_failure(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """A connection drop mid-stream never leaves a partial file at the cache path.
+
+    The canonical cache path must only ever be observable with verified content;
+    a half-written asset is confined to a temp file that is cleaned up on failure.
+    """
+    payload = b"complete-checkpoint"
+    probe = tmp_path / "_probe"
+    probe.write_bytes(payload)
+    expected_sha = registry._sha256(probe)
+    probe.unlink()
+
+    registry_path = tmp_path / "registry.yaml"
+    _write_release_registry(registry_path, model_id="public_model", expected_sha256=expected_sha)
+
+    class _DroppingResponse:
+        """Stream part of the payload, then simulate a dropped connection."""
+
+        def __init__(self) -> None:
+            self._sent = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def read(self, size: int) -> bytes:
+            if self._sent >= 4:
+                raise ConnectionError("connection reset mid-stream")
+            chunk = payload[self._sent : self._sent + min(size, 4)]
+            self._sent += len(chunk)
+            return chunk
+
+    monkeypatch.setattr(registry, "urlopen", lambda url, timeout: _DroppingResponse())
+    monkeypatch.setattr(registry, "DEFAULT_DOWNLOAD_RETRY_BACKOFF_SECONDS", ())
+
+    cache_dir = tmp_path / "cache"
+    with pytest.raises(RuntimeError, match="after 3 attempt"):
+        registry.resolve_model_path(
+            "public_model",
+            registry_path=registry_path,
+            cache_dir=cache_dir,
+        )
+
+    final_asset = cache_dir / "public_model" / "public_model-model.zip"
+    assert not final_asset.exists(), "partial content must never appear at the cache path"
+
+
+def test_release_download_is_idempotent_for_cached_asset(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """A present, checksum-matching cache entry is reused without any download."""
+    payload = b"cached-checkpoint"
+    probe = tmp_path / "_probe"
+    probe.write_bytes(payload)
+    expected_sha = registry._sha256(probe)
+    probe.unlink()
+
+    cache_dir = tmp_path / "cache"
+    asset_dir = cache_dir / "public_model"
+    asset_dir.mkdir(parents=True)
+    (asset_dir / "public_model-model.zip").write_bytes(payload)
+
+    registry_path = tmp_path / "registry.yaml"
+    _write_release_registry(registry_path, model_id="public_model", expected_sha256=expected_sha)
+
+    def _fail_urlopen(url: str, timeout: int):
+        raise AssertionError("cache hit must never reach the network")
+
+    monkeypatch.setattr(registry, "urlopen", _fail_urlopen)
+
+    resolved = registry.resolve_model_path(
+        "public_model",
+        registry_path=registry_path,
+        cache_dir=cache_dir,
+    )
+    assert resolved.read_bytes() == payload
+
+
+def test_prefetch_model_stages_and_reports_sha256(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """prefetch_model stages a remote asset and returns its observed SHA-256."""
+    payload = b"prefetched-checkpoint"
+    probe = tmp_path / "_probe"
+    probe.write_bytes(payload)
+    expected_sha = registry._sha256(probe)
+    probe.unlink()
+
+    registry_path = tmp_path / "registry.yaml"
+    _write_release_registry(registry_path, model_id="public_model", expected_sha256=expected_sha)
+
+    monkeypatch.setattr(registry, "urlopen", lambda url, timeout: _BytesResponse(payload))
+
+    path, observed_sha = registry.prefetch_model(
+        "public_model",
+        registry_path=registry_path,
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert path.read_bytes() == payload
+    assert observed_sha == expected_sha

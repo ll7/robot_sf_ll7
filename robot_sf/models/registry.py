@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import time
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,6 +23,22 @@ except ImportError:  # pragma: no cover - optional dependency
     wandb = None  # type: ignore[assignment]
 
 DEFAULT_REGISTRY_PATH = Path("model/registry.yaml")
+# Bounded retry policy for GitHub-release model downloads. Transient network
+# blips (dropped connections, 5xx) get retried with linear backoff; exhausting
+# the attempts fails the *setup* phase loudly instead of letting a benchmark
+# discover a missing model mid-run (issue #6189). A genuinely wrong asset
+# (checksum mismatch after a complete transfer) is a hard failure, not retried.
+DEFAULT_DOWNLOAD_MAX_ATTEMPTS = 3
+DEFAULT_DOWNLOAD_RETRY_BACKOFF_SECONDS: tuple[float, ...] = (1.0, 3.0)
+# Transport-level exceptions that represent a transient download failure and
+# therefore qualify for a bounded retry. ``ValueError`` (checksum mismatch) is
+# intentionally excluded so a wrong pinned asset fails fast and loudly.
+_DOWNLOAD_RETRYABLE_ERRORS: tuple[type[BaseException], ...] = (
+    HTTPError,
+    URLError,
+    TimeoutError,
+    OSError,
+)
 _LOGGED_CACHED_MODEL_ARTIFACTS: set[Path] = set()
 BENCHMARK_PROMOTED_CLAIM_BOUNDARIES = {
     "benchmark_promoted",
@@ -270,6 +289,48 @@ def resolve_model_path(
     return _download_from_wandb(entry, cache_dir=cache_dir)
 
 
+def prefetch_model(
+    model_id: str,
+    *,
+    registry_path: str | Path | None = None,
+    cache_dir: str | Path | None = None,
+) -> tuple[Path, str]:
+    """Pre-fetch a model artifact into the cache before any worker uses it.
+
+    This is the reusable model preflight that both CI and scientific campaigns
+    invoke so no model asset is ever discovered or downloaded inside a timed
+    execution loop (issue #6189). It resolves ``model_id`` through the registry
+    -- downloading the asset with bounded retries, atomic cache replacement, and
+    a registry-pinned SHA-256 verification when it is not already cached -- and
+    returns the materialized local path plus the file's observed SHA-256.
+
+    The call is idempotent: a present cache entry that matches the pinned
+    checksum is reused without any network access, so re-runs cost nothing.
+
+    Args:
+        model_id: Registry model id to pre-fetch.
+        registry_path: Optional model-registry path override.
+        cache_dir: Optional cache directory override (default ``output/model_cache``).
+
+    Returns:
+        tuple[Path, str]: The resolved local artifact path and its observed
+        lowercase-hex SHA-256 digest.
+
+    Raises:
+        KeyError: When ``model_id`` is not registered.
+        RuntimeError: When the download fails after exhausting bounded retries.
+        ValueError: When a transferred asset fails the pinned SHA-256 check.
+        FileNotFoundError: When the model is local-only and unavailable.
+    """
+    path = resolve_model_path(
+        model_id,
+        registry_path=registry_path,
+        allow_download=True,
+        cache_dir=cache_dir,
+    )
+    return path, _sha256(path)
+
+
 def _sha256(path: Path) -> str:
     """Return the SHA256 digest for a local file."""
     digest = hashlib.sha256()
@@ -323,20 +384,101 @@ def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Pat
         return cached_path
 
     logger.info("Downloading model artifact {} from GitHub release {}", asset_name, url)
-    try:
-        _stream_download_url(url, cached_path)
-    except (HTTPError, URLError, TimeoutError) as exc:
-        raise RuntimeError(
-            f"Could not download model '{model_id}' from GitHub release asset: {url}"
-        ) from exc
-
-    _verify_download_checksum(
+    _download_and_install_release(
+        url,
         cached_path,
         expected_sha256=expected_sha256,
         model_id=model_id,
         asset_name=asset_name,
+        max_attempts=DEFAULT_DOWNLOAD_MAX_ATTEMPTS,
+        backoff_seconds=DEFAULT_DOWNLOAD_RETRY_BACKOFF_SECONDS,
     )
     return cached_path
+
+
+def _download_and_install_release(
+    url: str,
+    final_path: Path,
+    *,
+    expected_sha256: str,
+    model_id: str,
+    asset_name: str,
+    max_attempts: int = DEFAULT_DOWNLOAD_MAX_ATTEMPTS,
+    backoff_seconds: tuple[float, ...] = DEFAULT_DOWNLOAD_RETRY_BACKOFF_SECONDS,
+) -> None:
+    """Download a release asset atomically with bounded retries.
+
+    Each attempt streams into a same-directory temp file, verifies the
+    registry-pinned SHA-256 on that temp file, and only then atomically moves it
+    into ``final_path`` via :func:`os.replace`. A partial or corrupt file is
+    therefore never observable at the canonical cache path. Transient transport
+    failures (dropped connections, timeouts, 5xx) are retried up to
+    ``max_attempts`` times with backoff; exhausting them raises a loud setup
+    error. A checksum mismatch after a complete transfer is a hard failure and
+    is not retried (the pinned asset is wrong, not the network).
+
+    Raises:
+        RuntimeError: When every retry attempt fails with a transport error.
+        ValueError: When a complete transfer fails the pinned SHA-256 check.
+    """
+    max_attempts = max(1, int(max_attempts))
+    last_exc: BaseException | None = None
+    for attempt in range(1, max_attempts + 1):
+        partial_path = final_path.with_name(
+            f".{final_path.name}.{os.getpid()}.{uuid.uuid4().hex}.partial"
+        )
+        try:
+            _stream_download_url(url, partial_path)
+            _verify_download_checksum(
+                partial_path,
+                expected_sha256=expected_sha256,
+                model_id=model_id,
+                asset_name=asset_name,
+            )
+            os.replace(partial_path, final_path)
+            if attempt > 1:
+                logger.info(
+                    "Model artifact {} installed after {} attempt(s)",
+                    asset_name,
+                    attempt,
+                )
+            return
+        except _DOWNLOAD_RETRYABLE_ERRORS as exc:
+            last_exc = exc
+            logger.warning(
+                "Model download attempt {}/{} for {} failed: {}",
+                attempt,
+                max_attempts,
+                asset_name,
+                exc,
+            )
+            if attempt < max_attempts:
+                _sleep_download_backoff(attempt, backoff_seconds)
+            continue
+        finally:
+            # ``finally`` (not the retry handler) owns temp cleanup so a partial
+            # file is removed on every exit path, including a checksum-mismatch
+            # ValueError that propagates without retry.
+            partial_path.unlink(missing_ok=True)
+    raise RuntimeError(
+        f"Could not download model '{model_id}' from GitHub release asset after "
+        f"{max_attempts} attempt(s): {url} (last error: {last_exc})"
+    ) from last_exc
+
+
+def _sleep_download_backoff(attempt: int, backoff_seconds: tuple[float, ...]) -> None:
+    """Sleep a bounded, monotonically increasing backoff before the next retry.
+
+    ``attempt`` is 1-indexed; the first retry (attempt 1) uses ``backoff_seconds[0]``.
+    Missing entries repeat the last available delay so a short backoff tuple is
+    still safe for a larger attempt count.
+    """
+    if not backoff_seconds:
+        return
+    index = min(attempt - 1, len(backoff_seconds) - 1)
+    delay = float(backoff_seconds[index])
+    if delay > 0:
+        time.sleep(delay)
 
 
 def _github_release_expected_sha256(release: dict[str, Any]) -> str:

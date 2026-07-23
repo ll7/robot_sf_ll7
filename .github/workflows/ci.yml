@@ -77,6 +77,40 @@ jobs:
         if: ${{ matrix.shard == 1 }}
         run: scripts/dev/ci_driver.sh typecheck
 
+      # Pre-seed the runtime model cache (issue #6189) so the exact-repeat
+      # benchmark test never downloads a model inside its timed repeat loop.
+      # The test is auto-marked ``slow`` and only runs when
+      # ROBOT_SF_SHARD_INCLUDE_SLOW=1 (push to main / merge_group / dispatch),
+      # so the pre-seed is gated to that same context and runs on every shard
+      # (the sharded suite may collect the slow test on any shard). A transient
+      # download failure fails this setup step loudly instead of producing
+      # differing trajectory fingerprints inside the benchmark.
+      - name: Restore model artifact cache
+        if: ${{ env.ROBOT_SF_SHARD_INCLUDE_SLOW == '1' }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: output/model_cache
+          # The pinned SHA-256 lives in model/registry.yaml; keying on it makes
+          # a cache hit content-addressed and a pin change a clean miss.
+          key: model-cache-${{ runner.os }}-${{ hashFiles('model/registry.yaml') }}
+          restore-keys: |
+            model-cache-${{ runner.os }}-
+
+      - name: Pre-seed model cache for exact-repeat benchmark
+        if: ${{ env.ROBOT_SF_SHARD_INCLUDE_SLOW == '1' }}
+        # The exact-repeat PPO test (tests/benchmark/test_exact_repeat_executor.py)
+        # binds the ppo arm to configs/baselines/
+        # ppo_issue_791_eval_aligned_large_capacity_cpu.yaml, which loads both
+        # the PPO checkpoint and the predictive-foresight proxy through
+        # resolve_model_path. Both are GitHub-release assets fetched into
+        # output/model_cache; pre-seed them here so the timed repeat loop only
+        # ever reads a present, checksum-verified cache file. Add further
+        # --model-id entries if additional slow benchmark tests need models.
+        run: >-
+          uv run python scripts/dev/prefetch_models.py
+          --model-id predictive_proxy_selected_v2_full
+          --model-id ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417
+
       - name: Unit tests
         run: scripts/dev/ci_driver.sh test
 

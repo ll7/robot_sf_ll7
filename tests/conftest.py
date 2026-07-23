@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -25,6 +26,11 @@ from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
 from tests.support.process_teardown import reap_matching_descendants
+from tests.support.pytest_temproot import (
+    clean_stale_process_roots,
+    is_pid_running,
+)
+from tests.support.pytest_temproot import pytest_process_root as _pytest_process_root
 
 try:
     from tests.perf_utils.policy import PerformanceBudgetPolicy
@@ -44,22 +50,58 @@ if root_str not in sys.path:
     sys.path.insert(0, root_str)
 
 
+_is_pid_running = is_pid_running
+
+
+def _clean_stale_proc_dirs(wt_dir: Path) -> None:
+    """Clean up process temproot directories whose PID is no longer running."""
+    clean_stale_process_roots(wt_dir)
+
+
+def _setup_isolated_pytest_temproot() -> None:
+    """Isolate pytest temporary directory root per worktree and process.
+
+    Prevents cross-session temporary directory cleanup collisions and PytestWarning (rm_rf)
+    cleanup warnings when multiple pytest sessions run concurrently.
+    """
+    configured_temproot = os.environ.get("PYTEST_DEBUG_TEMPROOT")
+    if configured_temproot:
+        _clean_stale_proc_dirs(Path(configured_temproot).parent)
+        return
+    for arg in sys.argv:
+        if arg.startswith("--basetemp"):
+            return
+
+    temproot = _pytest_process_root(PROJECT_ROOT, os.getpid())
+    _clean_stale_proc_dirs(temproot.parent)
+    temproot.mkdir(parents=True, exist_ok=True)
+    os.environ["PYTEST_DEBUG_TEMPROOT"] = str(temproot)
+
+
+_setup_isolated_pytest_temproot()
+
+
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """Reap leaked nested pytest children on LiCCA/simulated-LiCCA lanes."""
+    """Reap leaked nested pytest children and clean up process temproot."""
     del session, exitstatus
     enabled = (
         os.environ.get("ROBOT_SF_TEST_ENV") == "licca"
         or os.environ.get("ROBOT_SF_REAP_LEAKED_PYTEST_CHILDREN") == "1"
     )
-    if not enabled:
-        return
-    reaped = reap_matching_descendants(command_substrings=("pytest",), grace_seconds=2.0)
-    if reaped:
-        print(
-            "robot_sf pytest teardown reaped leaked child processes: "
-            + ", ".join(str(pid) for pid in reaped),
-            file=sys.stderr,
-        )
+    if enabled:
+        reaped = reap_matching_descendants(command_substrings=("pytest",), grace_seconds=2.0)
+        if reaped:
+            print(
+                "robot_sf pytest teardown reaped leaked child processes: "
+                + ", ".join(str(pid) for pid in reaped),
+                file=sys.stderr,
+            )
+
+    temproot_env = os.environ.get("PYTEST_DEBUG_TEMPROOT")
+    if temproot_env and Path(temproot_env) == _pytest_process_root(PROJECT_ROOT, os.getpid()):
+        temproot_path = Path(temproot_env)
+        if temproot_path.exists():
+            shutil.rmtree(temproot_path, ignore_errors=True)
 
 
 def _import_torch_optional():

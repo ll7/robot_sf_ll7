@@ -237,6 +237,102 @@ def test_metric_output_feedable_to_agreement_builder(
     assert summary["disagreement_row_count"] >= 1
 
 
+def _identical_dyadic_rows(planner_keys: list[str]) -> list[dict[str, str]]:
+    """Rows whose metric values are exactly representable binary fractions.
+
+    Dyadic values keep per-class means bit-identical even when structural classes
+    aggregate different planner counts, so exact score-tuple ties are guaranteed.
+    """
+    return [
+        {
+            "planner_key": planner,
+            "success_rate": "0.75",
+            "collision_event_rate": "0.25",
+            "near_miss_event_rate": "0.125",
+            "timeout_rate": "0.0625",
+            "snqi_mean": "0.5",
+        }
+        for planner in planner_keys
+    ]
+
+
+def test_exact_equal_score_tuples_share_rank(tmp_path: Path) -> None:
+    """Exact-equal score tuples must share a rank, never become a strict ordering.
+
+    ``constraint_first_hybrid`` and ``learned_policy`` receive bit-identical metrics,
+    so identity order must not serialize them as distinct performance ranks.
+    """
+    rows = _rows_with_success(
+        {
+            "prediction_planner": 0.6,
+            "prediction_mpc": 0.6,
+            "prediction_mpc_cbf": 0.6,
+            "goal": 0.4,
+            "social_force": 0.4,
+            "orca": 0.4,
+            "socnav_sampling": 0.4,
+            "sacadrl": 0.4,
+        }
+    )
+    tied_planners = (
+        PLANNERS_BY_CLASS["constraint_first_hybrid"] + PLANNERS_BY_CLASS["learned_policy"]
+    )
+    rows = [row for row in rows if row["planner_key"] not in tied_planners]
+    rows.extend(
+        {**row, "success_rate": "0.875", "collision_event_rate": "0.125"}
+        for row in _identical_dyadic_rows(tied_planners)
+    )
+    out = tmp_path / "tied_ranking.csv"
+    ranking = metric.build_ranking_for_matrix(
+        packet_path=PACKET,
+        episode_rows_path=_write_rows(tmp_path, "tied_rows.csv", rows),
+        output_path=out,
+    )
+    # Competition ("1224") semantics: the two tied classes share rank 1, rank 2 is
+    # skipped, and the remaining classes keep their strict positions.
+    assert ranking["constraint_first_hybrid"] == 1
+    assert ranking["learned_policy"] == 1
+    assert ranking["predictive"] == 3
+    assert ranking["baseline_reactive"] == 4
+
+    # The shared rank is serialized explicitly in the output CSV.
+    lines = out.read_text(encoding="utf-8").splitlines()
+    ranks_by_class = {line.split(",")[0]: line.split(",")[1] for line in lines[1:]}
+    assert ranks_by_class["constraint_first_hybrid"] == "1"
+    assert ranks_by_class["learned_policy"] == "1"
+
+
+def test_all_classes_tied_share_rank_one() -> None:
+    """When every class scores identically, all classes share rank 1."""
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    rows = _identical_dyadic_rows(sorted(planner_to_class))
+    ranking = metric.compute_structural_ranking(rows, planner_to_class=planner_to_class)
+    assert ranking == dict.fromkeys(metric.STRUCTURAL_CLASS_ORDER, 1)
+
+
+def test_agreement_builder_fails_closed_on_tied_ranking(tmp_path: Path) -> None:
+    """The agreement builder must not consume shared ranks as a strict ordering."""
+    from scripts.validation import build_issue_5592_cross_matrix_agreement as builder
+
+    planner_to_class = metric._planner_to_class(metric._load_packet(PACKET))
+    tied_ranking = tmp_path / "tied_ranking.csv"
+    metric.build_ranking_for_matrix(
+        packet_path=PACKET,
+        episode_rows_path=_write_rows(
+            tmp_path, "tied_rows.csv", _identical_dyadic_rows(sorted(planner_to_class))
+        ),
+        output_path=tied_ranking,
+    )
+    with pytest.raises(builder.BuildError, match="tie_not_identifiable"):
+        builder.build_packet(
+            packet_path=PACKET,
+            reference_ranking_path=tied_ranking,
+            candidate_ranking_path=tied_ranking,
+            output_dir=tmp_path / "out",
+            generated_at="2026-07-23T00:00:00+00:00",
+        )
+
+
 def test_fixture_rejects_unknown_success_override() -> None:
     """Fixture typos must fail instead of silently changing no planner."""
     with pytest.raises(KeyError, match="unknown planner override"):

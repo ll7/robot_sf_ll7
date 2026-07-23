@@ -5,9 +5,12 @@ This module implements the metric named but never defined in the pre-registratio
 packet (`configs/benchmarks/issue_5592_cross_matrix_preregistration.yaml`,
 ``comparison_contract.metric: constraints_first_structural_rank``). It converts
 per-planner episode aggregates (the output of the frozen-contract paid campaign once
-it exists) into an independent ``1..4`` ranking of the four structural planner
-classes, one ranking per matrix. The ranking CSV it writes carries the preregistered
-12-planner roster signature and is consumed directly by
+it exists) into an independent ranking of the four structural planner classes, one
+ranking per matrix. Ranks use standard competition ("1224") semantics: classes with
+exactly equal score tuples share the same rank and the following rank is skipped, so
+the output is a unique ``1..4`` permutation only when no exact tie occurs. The
+ranking CSV it writes carries the preregistered 12-planner roster signature and is
+consumed directly by
 ``scripts/validation/build_issue_5592_cross_matrix_agreement.py``.
 
 The metric is pure CPU aggregation: it never runs a campaign, Slurm job, or training
@@ -19,6 +22,9 @@ when its planners complete routes more often (higher success rate), collide less
 (lower collision event rate), cause fewer near-miss events, time out less, and
 achieve higher social-navigation quality (SNQI). The score tuple orders classes so
 that rank 1 is the best-performing structural class for the matrix under test.
+Exact tuple equality is a true tie: tied classes receive the same shared rank and
+are serialized in stable structural-class identity order without implying that one
+tied class outperformed the other.
 """
 
 from __future__ import annotations
@@ -190,7 +196,7 @@ def compute_structural_ranking(
     *,
     planner_to_class: Mapping[str, str],
 ) -> dict[str, int]:
-    """Compute a ``1..4`` structural-class ranking for one matrix from episode rows.
+    """Compute a structural-class ranking for one matrix from episode rows.
 
     Args:
         episode_rows: Iterable of per-planner aggregate records, each carrying
@@ -201,7 +207,11 @@ def compute_structural_ranking(
             class names.
 
     Returns:
-        Mapping from structural class to a unique integer rank in ``1..4`` (1 = best).
+        Mapping from structural class to an integer rank (1 = best) with standard
+        competition ("1224") semantics: a class's rank is one plus the number of
+        classes with a strictly better score tuple. Classes whose score tuples are
+        exactly equal share the same rank and the next rank is skipped, so the
+        ranks form a unique ``1..4`` permutation only when no exact tie occurs.
 
     Raises:
         RankingMetricError: If a row is a fallback/degraded execution, a planner key
@@ -237,8 +247,14 @@ def compute_structural_ranking(
     for klass, rows in by_class.items():
         class_scores[klass] = _score(rows)
 
-    ranked = sorted(STRUCTURAL_CLASS_ORDER, key=lambda klass: class_scores[klass])
-    return {klass: rank for rank, klass in enumerate(ranked, start=1)}
+    # Standard competition ("1224") ranking: exact score-tuple equality is a true
+    # tie, so tied classes share a rank instead of being strictly ordered by the
+    # stable structural-class identity order.
+    return {
+        klass: 1
+        + sum(1 for other in STRUCTURAL_CLASS_ORDER if class_scores[other] < class_scores[klass])
+        for klass in STRUCTURAL_CLASS_ORDER
+    }
 
 
 def _planner_to_class(packet: Mapping[str, Any]) -> dict[str, str]:
@@ -281,7 +297,9 @@ def build_ranking_for_matrix(
 
     Reads the per-planner episode aggregates, derives the constraints-first
     structural ranking, and writes it to ``output_path`` with the frozen roster
-    signature. Returns the ranking mapping.
+    signature. Exact-score ties are represented explicitly as shared (competition)
+    ranks in the ``rank`` column; rows are serialized in stable structural-class
+    identity order. Returns the ranking mapping.
     """
     packet = _load_packet(packet_path)
     roster_signature = _roster_signature(packet)
@@ -322,6 +340,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"matrix_ranking: {args.output}")
     for klass in STRUCTURAL_CLASS_ORDER:
         print(f"  {klass}: rank {ranking[klass]}")
+    for rank in sorted(set(ranking.values())):
+        tied = [klass for klass in STRUCTURAL_CLASS_ORDER if ranking[klass] == rank]
+        if len(tied) > 1:
+            print(f"  tie: {', '.join(tied)} share rank {rank} (exact-equal score tuples)")
     return 0
 
 

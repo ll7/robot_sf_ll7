@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import gymnasium as gym
 import numpy as np
@@ -17,8 +18,10 @@ from loguru import logger
 
 from robot_sf.gym_env.env_config import SimulationSettings
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
-from robot_sf.render.sim_view import SimulationView
 from robot_sf.sim.simulator import Simulator
+
+if TYPE_CHECKING:
+    from robot_sf.render.sim_view import SimulationView
 
 
 @dataclass
@@ -344,7 +347,14 @@ class CrowdSimEnv(gym.Env):
             Lazily constructed or cached simulation view.
         """
         if self._sim_ui is None:
-            self._sim_ui = SimulationView(
+            try:
+                sim_view_module = importlib.import_module("robot_sf.render.sim_view")
+            except ImportError as err:
+                raise ImportError(
+                    "Visualization features require optional dependency 'pygame'. "
+                    "Install with: pip install robot_sf[viz] (or uv sync --extra viz)"
+                ) from err
+            self._sim_ui = sim_view_module.SimulationView(
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,
                 caption="RobotSF Crowd Simulation",

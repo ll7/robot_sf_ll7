@@ -1,3 +1,4 @@
+<!-- AI-GENERATED (robot_sf#6192, 2026-07-23) — NEEDS-REVIEW -->
 # Historical Evidence Audit: Silent Predictive-Foresight Fallback Contamination
 
 **Issue**: [#6192](https://github.com/ll7/robot_sf_ll7/issues/6192)

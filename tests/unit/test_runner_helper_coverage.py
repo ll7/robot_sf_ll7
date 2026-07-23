@@ -217,7 +217,7 @@ def test_planner_step_worker_covers_initialization_and_command_loop(
     assert torch.thread_count == 1
     assert connection.sent == [
         ("init_ok", None),
-        ("ok", {"payload": {"observation": 1}}),
+        ("ok", ({"payload": {"observation": 1}}, None)),
     ]
     assert connection.closed is True
 

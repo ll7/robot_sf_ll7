@@ -49,7 +49,7 @@ from robot_sf.benchmark.last_avoidable_fixtures import (
     ObservableTraceEvent,
     build_collision_cause_fixtures,
 )
-from robot_sf.benchmark.last_avoidable_replay import VERDICT_ALREADY_UNAVOIDABLE
+from robot_sf.benchmark.last_avoidable_replay import VERDICT_ALREADY_UNAVOIDABLE, VERDICT_AVOIDABLE
 
 _MANIFEST_PATH = (
     Path(__file__).parent / "fixtures" / "collision_cause_attribution_manifest_5443.json"
@@ -247,9 +247,20 @@ def test_causal_attribution_metric_artifact_rejected_when_physical_contact_follo
 
 
 def test_causal_attribution_already_unavoidable_from_pure_replay() -> None:
-    """The already-unavoidable fixture is attributed from the replay verdict alone."""
+    """Full-window replay derives the fixture's step-18 point of no return."""
     fixture = COLLISION_CAUSE_FIXTURE_BUILDERS["already_unavoidable_01"]()
     assert fixture.faults == ()
+    assert fixture.replay_config is not None
+    assert fixture.replay_config.t_danger == 0
+
+    from robot_sf.benchmark.collision_cause_analyser import run_replay
+
+    replay, _ = run_replay(fixture)
+    assert replay.verdict == VERDICT_AVOIDABLE
+    assert replay.t_inevitable == 18
+    assert [branch.step for branch in replay.branches if branch.any_prevented] == list(range(18))
+    assert [branch.step for branch in replay.branches if not branch.any_prevented] == [18, 19]
+
     verdict = analyse_cause(fixture)
     assert verdict.predicted_cause == "already_unavoidable_contact"
     assert verdict.predicted_activation_step == 18
@@ -302,13 +313,9 @@ def test_causal_attribution_answer_key_permutation_does_not_change_predictions()
     assert permuted_report.report.verdict != VERDICT_PASS
 
 
-def test_causal_attribution_already_unavoidable_replay_verdict() -> None:
-    """The already-unavoidable and negative-control fixtures replay as unavoidable."""
-    unavoidable_replay_ids = {
-        "already_unavoidable_01",
-        "negative_control_jitter_01",
-        "negative_control_guard_flap_01",
-    }
+def test_causal_attribution_negative_control_replay_verdicts() -> None:
+    """Negative controls replay as unavoidable without being promoted to causes."""
+    unavoidable_replay_ids = {"negative_control_jitter_01", "negative_control_guard_flap_01"}
     from robot_sf.benchmark.collision_cause_analyser import run_replay
 
     for fixture in build_collision_cause_fixtures():

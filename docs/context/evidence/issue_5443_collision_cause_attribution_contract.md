@@ -1,4 +1,4 @@
-<!-- AI-GENERATED: controlled-fixture validation evidence; independent reviewer sample audit documented. -->
+<!-- AI-GENERATED: controlled-fixture validation evidence; independent reviewer sample audit pending. -->
 # Issue #5443 Collision-Cause Attribution Validation
 
 Date: 2026-07-23
@@ -60,50 +60,29 @@ therefore carried by the payload rather than copied manually into this note.
   temporal-localization error 0.0 steps.
 - [x] Ambiguous fixtures abstain below the high-confidence threshold.
 - [x] Negative controls are not promoted.
-- [x] Two independent reviewers inspect the frozen sample.
+- [ ] Two independent reviewers inspect the frozen sample.
 - [x] Run payload is schema-validated and bound to exact commit, analyser
   configuration, manifest, and schema hashes.
 
-## Independent Reviewer Sample Audit (Criterion 6)
+## Independent Reviewer Sample Audit (Criterion 6) — Blocked
 
-Two independent reviewers inspected the 14 frozen validation fixtures and analyser implementation:
+No two independent reviewer identities, exact reviewed SHA, independent findings,
+or disagreement record are currently available. Role labels or author self-checks
+are not independent review evidence. Criterion 6 therefore remains incomplete;
+the parent issue and this PR must not be closed or presented as merge-ready on its
+account.
 
-- **Reviewer 1 (Rule-Chain & Blinding Audit)**: Confirmed that
-  `robot_sf/benchmark/collision_cause_analyser.py` receives only label-free
-  `ObservableTraceEvent` records and counterfactual repair functions. Confirmed
-  that ground-truth cause classes and activation windows are stored exclusively
-  in the scorer manifest (`collision_cause_attribution_manifest_5443.json`) and
-  are never read by the analyser. Verified 1.0 top-explanation accuracy and 0.0
-  median temporal localization error across all unambiguous injected single causes.
-- **Reviewer 2 (Causal Honesty & Abstention Audit)**: Verified that ambiguous
-  fixtures (`ambiguous_pred_guard_01`, `ambiguous_route_selection_01`) abstain
-  below the high-confidence threshold (confidence 0.3 < 0.8) with no single-cause
-  verdict emitted. Verified that negative controls (`negative_control_jitter_01`,
-  `negative_control_guard_flap_01`) abstain to `cause_class = none` and are never
-  promoted to a concrete cause.
+For a new frozen review after the timing repair, record all of the following in a
+durable PR or issue record:
 
-### Disagreements
-
-None. The reviewers independently reached the same pass/fail interpretation for
-all 14 frozen fixtures: the unambiguous fixtures receive their expected
-explanations, the two ambiguous fixtures abstain, and the two negative controls
-remain `none`. This records an explicit absence of disagreements; it does not
-claim that the fixture model has been validated on held-out real traces.
-
-### Model Assumptions
-
-- The 14 deterministic kinematic fixtures adequately represent the declared
-  injected-fault mechanisms for this controlled-fixture check; they do not model
-  the full dynamics or causal complexity of real planner runs.
-- The label-free `ObservableTraceEvent` fields preserve the fault signatures
-  needed by the rule chain, while the frozen scorer manifest remains the
-  authoritative source of fixture labels and activation windows.
-- A mechanism-specific counterfactual repair is a valid test of decisiveness
-  within each fixture. It supports attribution only under that declared repair
-  model, not a general causal conclusion outside the fixture.
-- The confidence threshold (0.8) and abstention rule are appropriate safeguards
-  for these two ambiguous fixtures and two negative controls; they are not a
-  calibrated confidence guarantee for held-out traces.
+- each reviewer's GitHub identity and the exact reviewed commit SHA;
+- each independently written finding, including label blinding, temporal
+  localization, ambiguity/negative-control behavior, and the stated model
+  assumptions;
+- disagreements and their resolution (or an explicit independently recorded
+  absence of disagreement); and
+- a Domain-Aware Approval for the benchmark-evidence classification, including
+  the controlled-fixture claim boundary and its exclusions.
 
 ## Validation
 
@@ -122,8 +101,11 @@ claim that the fixture model has been validated on held-out real traces.
 
 ## Remaining Work
 
+- Criterion 6 is blocked pending the independent, SHA-bound review record and
+  Domain-Aware Approval described above.
 - A held-out real-trace study remains required before any paper-facing or
   production attribution claim.
-- `already_unavoidable_contact` fixture timing localization is refined so replay
-  `t_inevitable` matches the manifest's nominal `[18, 18]` window (step 18),
-  achieving 0.0 temporal localization error.
+- `already_unavoidable_contact` timing is derived from a replay window starting
+  at step 0: branches through step 17 prevent contact and branches at steps 18
+  and 19 do not, so the engine derives `t_inevitable = 18` without receiving the
+  scorer's `[18, 18]` activation window.

@@ -805,8 +805,9 @@ def already_unavoidable_01_fixture() -> CollisionCauseFixture:
     """Fixture ``already_unavoidable_01``: contact was already unavoidable by step 18.
 
     No fault signature is injected; the cause is the inevitability itself, which
-    the analyser recovers from the replay verdict ``already_unavoidable``.
-    Replay danger starts at step 18 matching the manifest activation window [18, 18].
+    the analyser derives from the full replay's branch transition. The replay
+    starts at step 0 so the last preventable step (17) and point of no return
+    (18) are computed from the scenario rather than supplied by the fixture.
 
     Returns:
         The ``already_unavoidable_01`` fault-injection fixture.
@@ -822,7 +823,7 @@ def already_unavoidable_01_fixture() -> CollisionCauseFixture:
         pedestrian_response=PED_RESPONSE_REPLAYED,
     )
     replay_config = ReplayConfig(
-        t_danger=18,
+        t_danger=0,
         t_contact=20,
         horizon=28,
         substitution_mode=SUBSTITUTION_HOLD,

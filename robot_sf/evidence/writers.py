@@ -10,6 +10,7 @@ import csv
 import hashlib
 import json
 import subprocess
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -322,6 +323,16 @@ def _maybe_register(
     catalog classification can still pass ``catalog_area`` explicitly. This
     deliberately avoids a git lookup or catalog mutation for ordinary outputs
     outside ``docs/context/evidence``.
+
+    Catalog registration is best-effort here: it must never take down the
+    evidence-writing call that triggered it (#6198 regression). When the
+    catalog file does not exist yet, or ``path`` fails one of
+    :func:`register_evidence`'s safety checks (outside the repository,
+    outside ``docs/context/evidence/``, or a non-canonical status/freshness),
+    this warns and skips registration instead of propagating the exception.
+    Callers that need those checks enforced as hard errors should invoke
+    :func:`register_evidence` directly rather than going through a ``write_*``
+    helper.
     """
     root = repo_root.resolve() if repo_root is not None else None
     if catalog_area is None:
@@ -337,13 +348,19 @@ def _maybe_register(
     else:
         registration_path = path
 
-    register_evidence(
-        registration_path,
-        area=catalog_area,
-        status=catalog_status,
-        freshness=catalog_freshness,
-        repo_root=root,
-    )
+    try:
+        register_evidence(
+            registration_path,
+            area=catalog_area,
+            status=catalog_status,
+            freshness=catalog_freshness,
+            repo_root=root,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        warnings.warn(
+            f"skipping catalog.yaml registration for {registration_path}: {exc}",
+            stacklevel=2,
+        )
 
 
 def write_csv(

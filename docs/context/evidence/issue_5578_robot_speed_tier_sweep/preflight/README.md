@@ -37,3 +37,14 @@ command/environment manifest, the disjoint pilot seeds, planned versus resolved
 cap/acceleration/deceleration values, commanded and realized speed summaries,
 cap-saturation / fraction-above-2.0 summaries, native execution status, and the
 binary activation-gate result.
+
+## Provenance
+
+- **Seeds**: disjoint pilot seeds 211-214 (outside the registered 111-140 block).
+- **Config**: no tunable algorithm config is used — the speed-tier manifest is
+  compiled by `scripts/benchmark/run_issue_5578_speed_tier_campaign.py`, and the
+  probe reads/writes through the fixed
+  `command_environment_manifest` recorded in the JSON artifact (env/runner/cap
+  reader function paths).
+- **Hash**: the JSON artifact's `git_provenance.git_head` field records the exact
+  commit SHA the preflight ran against, for reproducibility.

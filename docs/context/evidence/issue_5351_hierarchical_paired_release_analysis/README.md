@@ -1,4 +1,4 @@
-<!-- AI-GENERATED (robot_sf#5351, 2026-07-23) - NEEDS-REVIEW -->
+<!-- AI-GENERATED (robot_sf#5351) - NEEDS-REVIEW -->
 # Issue #5351 Hierarchical Paired Release Analysis Report
 
 This directory registers the deterministic, checksum-pinned statistical analysis artifacts for issue #5351 over benchmark release `0.0.3.post1`.
@@ -10,7 +10,7 @@ This directory registers the deterministic, checksum-pinned statistical analysis
 
 - Release Tag: `0.0.3.post1`
 - Publication Commit: `ded9027d2928512c14bc241397e0ab1d8f586654`
-- Typed Ledger Rows: [`docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl`](docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl)
+- Typed Ledger Rows: [`docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl`](successor_rows.jsonl)
 - Rows SHA-256: `3bae1ea689d7dd2590ed8b6b552d27a32093790cfebc6499f833b4daceda7545`
 - Total Episode Rows: `20160` (14 arms × 1,440 episodes)
 

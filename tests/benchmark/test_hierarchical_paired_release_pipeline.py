@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import tarfile
 from pathlib import Path
 
@@ -157,23 +158,46 @@ def test_adapt_record_to_typed_ledger_preserves_semantics() -> None:
 
 
 def test_seeded_determinism(tmp_path: Path) -> None:
-    """Running the pipeline script produces identical report output and digest."""
-    report_path = _EVIDENCE_DIR / "hierarchical_paired_release_analysis_report.json"
-    assert report_path.is_file()
+    """Two isolated runs produce identical registered evidence bytes."""
+    isolated_root = tmp_path / "repo"
+    isolated_manifest = isolated_root / _MANIFEST_PATH.relative_to(_REPO_ROOT)
+    isolated_evidence = isolated_root / _EVIDENCE_DIR.relative_to(_REPO_ROOT)
+    isolated_manifest.parent.mkdir(parents=True)
+    shutil.copyfile(_MANIFEST_PATH, isolated_manifest)
 
-    first_content = report_path.read_text(encoding="utf-8")
-    first_digest = sha256_file(report_path)
+    bundle = find_or_download_bundle(None, repo_root=_REPO_ROOT)
+    args = [
+        "--repo-root",
+        str(isolated_root),
+        "--bundle-tar",
+        str(bundle),
+    ]
+    assert main(args) == 0
 
-    report_data = json.loads(first_content)
+    artifact_names = (
+        "README.md",
+        "hierarchical_paired_release_analysis_report.json",
+        "successor_rows.jsonl",
+        "successor_rows.jsonl.review.json",
+    )
+    first_digests = {name: sha256_file(isolated_evidence / name) for name in artifact_names}
+    first_digests["manifest"] = sha256_file(isolated_manifest)
+
+    report_data = json.loads(
+        (isolated_evidence / "hierarchical_paired_release_analysis_report.json").read_text(
+            encoding="utf-8"
+        )
+    )
     assert report_data["claim_gate"]["status"] == CLAIM_GATE_BLOCKED_REVIEW_PENDING
     assert report_data["issue"] == 5351
     assert report_data["evidence_status"] == "not_benchmark_evidence"
+    readme = (isolated_evidence / "README.md").read_text(encoding="utf-8")
+    assert "](successor_rows.jsonl)" in readme
 
-    code = main(["--repo-root", str(_REPO_ROOT)])
-    assert code == 0
-
-    second_digest = sha256_file(report_path)
-    assert second_digest == first_digest
+    assert main(args) == 0
+    second_digests = {name: sha256_file(isolated_evidence / name) for name in artifact_names}
+    second_digests["manifest"] = sha256_file(isolated_manifest)
+    assert second_digests == first_digests
 
 
 def test_clean_checkout_hydration_and_execution_against_release_0_0_3_post1() -> None:

@@ -351,7 +351,10 @@ def render_evidence_readme(
         if p.get("practical_effect", {}).get("verdict") == "practically_separable"
     )
 
-    readme_content = f"""<!-- AI-GENERATED (robot_sf#5351, {time.strftime("%Y-%m-%d")}) - NEEDS-REVIEW -->
+    # Keep the tracked evidence byte-for-byte reproducible.  Wall-clock time is
+    # intentionally excluded from the generated marker.
+    rows_link = Path(relative_rows_path).name
+    readme_content = f"""<!-- AI-GENERATED (robot_sf#5351) - NEEDS-REVIEW -->
 # Issue #5351 Hierarchical Paired Release Analysis Report
 
 This directory registers the deterministic, checksum-pinned statistical analysis artifacts for issue #5351 over benchmark release `{EXPECTED_RELEASE_TAG}`.
@@ -363,7 +366,7 @@ This directory registers the deterministic, checksum-pinned statistical analysis
 
 - Release Tag: `{EXPECTED_RELEASE_TAG}`
 - Publication Commit: `{EXPECTED_PUBLICATION_COMMIT}`
-- Typed Ledger Rows: [`{relative_rows_path}`]({relative_rows_path})
+- Typed Ledger Rows: [`{relative_rows_path}`]({rows_link})
 - Rows SHA-256: `{rows_sha256}`
 - Total Episode Rows: `{report.get("paired_effects", [{}])[0].get("n_cells", 1440) * 14 if report.get("paired_effects") else 20160}` (14 arms × 1,440 episodes)
 

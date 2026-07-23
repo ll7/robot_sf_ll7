@@ -42,6 +42,7 @@ _LAZY_EXPORTS = {
     "VisibilityPlanner": "robot_sf.planner.visibility_planner",
     "plot_global_plan": "robot_sf.planner.visualization",
     "plot_visibility_graph": "robot_sf.planner.visualization",
+    "TopologyParallelNMPCPlannerAdapter": "robot_sf.planner.topology_parallel_nmpc",
 }
 
 __all__ = sorted([*_LAZY_EXPORTS, "GlobalPlanner"])  # noqa: PLE0605

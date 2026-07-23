@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import time
 import warnings
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from typing import Any
 
 import numpy as np
@@ -79,6 +80,27 @@ class NMPCSocialConfig:
         """Validate uncertainty-envelope fields."""
         if float(self.pedestrian_uncertainty_alpha_mps) < 0.0:
             raise ValueError("pedestrian_uncertainty_alpha_mps must be >= 0")
+
+
+@dataclass
+class NMPCSolveResult:
+    """Deterministic NMPC solve output for one initialization hypothesis.
+
+    This is the public seam used by the topology-parallel NMPC harness and
+    must not be confused with the private ``_RolloutContext`` or with the
+    ad-hoc tuple returned by the legacy ``plan()`` code path.
+    """
+
+    solve_id: str
+    feasible: bool
+    objective: float
+    solver_status: str
+    solver_iterations: int
+    solver_runtime: float
+    solution: np.ndarray
+    controls: np.ndarray
+    rollout_states: np.ndarray
+    initialization_signature: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -708,6 +730,149 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         )
         self._record_command(linear, angular)
         return (linear, angular)
+
+    def _solve_context(
+        self, observation: dict[str, Any], preferred_turn: float = 0.0
+    ) -> _RolloutContext:
+        """Build rollout context, optionally overriding the preferred turn for hypothesis evaluation.
+
+        Returns:
+            _RolloutContext: Populated rollout context for one solver call.
+        """
+        context = self._build_context(observation)
+        if preferred_turn != 0.0:
+            object.__setattr__(context, "preferred_turn", preferred_turn)
+        return context
+
+    def _build_rollout_context(self, observation: dict[str, Any]) -> _RolloutContext:
+        return self._build_context(observation)
+
+    def _command_from_solution(
+        self, result: NMPCSolveResult, context: _RolloutContext
+    ) -> tuple[float, float]:
+        """Extract the first (linear, angular) command from a solve result.
+
+        Returns:
+            tuple[float, float]: Clipped (v, omega) command.
+        """
+        if result.solution is None or result.solution.size < 2:
+            return (0.0, 0.0)
+        linear = float(np.clip(result.solution[0], 0.0, float(context.speed_cap)))
+        angular = float(
+            np.clip(
+                result.solution[1],
+                -float(self.config.max_angular_speed),
+                float(self.config.max_angular_speed),
+            )
+        )
+        return linear, angular
+
+    def solve_initialization(
+        self,
+        observation: dict[str, Any],
+        preferred_turn: float = 0.0,
+    ) -> NMPCSolveResult:
+        """Run one NMPC solve and return the full deterministic result.
+
+        This is the initialization seam used by the topology-parallel NMPC.
+        It does NOT mutate planner warm-start state (``_last_solution``),
+        enabling multiple hypothesis solves from the same planner instance.
+
+        Returns:
+            NMPCSolveResult: Full solve record with feasibility, objective,
+            solver metadata, solution, controls, and rollout states.
+        """
+        t_start = time.perf_counter()
+        context = self._solve_context(observation, preferred_turn=preferred_turn)
+        goal_delta = context.goal - context.robot_pos
+        goal_distance = float(np.linalg.norm(goal_delta))
+        if goal_distance <= float(self.config.goal_tolerance):
+            horizon = max(int(self.config.horizon_steps), 1)
+            zero_ctrl = np.zeros(horizon * 2, dtype=float)
+            t_elapsed = time.perf_counter() - t_start
+            return NMPCSolveResult(
+                solve_id="at_goal",
+                feasible=True,
+                objective=0.0,
+                solver_status="at_goal",
+                solver_iterations=0,
+                solver_runtime=t_elapsed,
+                solution=zero_ctrl,
+                controls=zero_ctrl.reshape(-1, 2),
+                rollout_states=np.zeros((horizon, 3), dtype=float),
+                initialization_signature={
+                    "goal_distance": float(goal_distance),
+                    "goal_tolerance": float(self.config.goal_tolerance),
+                    "preferred_turn": preferred_turn,
+                },
+            )
+
+        goal_heading_error = _wrap_angle(
+            float(
+                np.arctan2(
+                    context.goal[1] - context.robot_pos[1],
+                    context.goal[0] - context.robot_pos[0],
+                )
+            )
+            - context.heading
+        )
+        x0 = self._initial_guess(
+            goal_heading_error=goal_heading_error,
+            current_speed=context.current_speed,
+            goal_distance=goal_distance,
+            preferred_turn=context.preferred_turn,
+            speed_cap=context.speed_cap,
+        )
+        horizon = max(int(self.config.horizon_steps), 1)
+        lower = np.empty(horizon * 2, dtype=float)
+        upper = np.empty(horizon * 2, dtype=float)
+        lower[0::2] = 0.0
+        upper[0::2] = float(context.speed_cap)
+        lower[1::2] = -float(self.config.max_angular_speed)
+        upper[1::2] = float(self.config.max_angular_speed)
+
+        result = minimize(
+            lambda u: self._rollout_cost(u, context=context),
+            x0,
+            method="SLSQP",
+            bounds=Bounds(lower, upper),
+            constraints=self._optimizer_constraints(context),
+            options={
+                "ftol": float(self.config.solver_ftol),
+                "maxiter": int(self.config.solver_max_iterations),
+                "disp": False,
+            },
+        )
+        t_elapsed = time.perf_counter() - t_start
+        feasible = bool(result.success)
+        solution = np.asarray(result.x if result.x is not None else x0, dtype=float)
+        controls = np.asarray(solution, dtype=float).reshape(-1, 2)
+        rollout_states = self._rollout_states(solution, context=context)
+        objective = float(
+            result.fun if result.fun is not None else self._rollout_cost(solution, context=context)
+        )
+        return NMPCSolveResult(
+            solve_id="initialization",
+            feasible=feasible,
+            objective=objective,
+            solver_status=str(result.status),
+            solver_iterations=int(result.nit) if hasattr(result, "nit") else 0,
+            solver_runtime=t_elapsed,
+            solution=solution,
+            controls=controls,
+            rollout_states=rollout_states,
+            initialization_signature={
+                "goal_distance": float(goal_distance),
+                "goal_heading_error": float(goal_heading_error),
+                "preferred_turn": float(context.preferred_turn),
+                "speed_cap": float(context.speed_cap),
+                "initial_guess_first_v": float(x0[0]) if x0.size > 0 else 0.0,
+                "initial_guess_first_w": float(x0[1]) if x0.size > 1 else 0.0,
+                "feasible": feasible,
+                "solver_status": str(result.status),
+                "solver_iterations": int(result.nit) if hasattr(result, "nit") else 0,
+            },
+        )
 
     def _record_command(self, linear: float, angular: float) -> None:
         """Accumulate simple command-level diagnostics for one emitted NMPC action."""

@@ -10,6 +10,15 @@ as portable names and producer-recorded digest assertions only; the referenced b
 logs are unavailable. This bundle maintains the diagnostic-only claim boundary and is not
 paper-facing evidence. Issue #6131 remains blocked on a durable raw-artifact archive.
 
+## PR #6185 Scope and Residual Ownership
+
+PR #6185 is a partial preparatory change. It adds a fail-closed retrieval and
+verification helper, but it does not complete or close Issue #6131.
+
+Issue #6131 remains open and owns publication of the original raw-tree archive
+and stdout/stderr logs, committed portable retrieval metadata, and clean-checkout
+verification of all 4,761 inventory entries against the retrieved bytes.
+
 - Schema (report): `adversarial-sampler-comparison.v3`
 - Schema (confirmation): `adversarial-package-b-confirmation.v1`
 - Execution commit: `7ec582b81cdcb871fb4fcb47700338194e7617d5`

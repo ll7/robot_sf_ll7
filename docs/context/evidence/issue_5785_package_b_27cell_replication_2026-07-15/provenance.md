@@ -12,6 +12,15 @@ logs. The summary is diagnostic-only and not paper-facing evidence.
 - The committed report and digest inventory are retained as compact diagnostic metadata. They are
   not a substitute for the missing bytes; Issue #6131 owns retrieval and second-reader proof.
 
+## PR #6185 Scope and Residual Ownership
+
+PR #6185 is a partial preparatory change. It supplies fail-closed retrieval and
+verification behavior only; it does not complete or close Issue #6131.
+
+Issue #6131 remains open and owns the original archive and stdout/stderr publication,
+the committed portable retrieval metadata, and verification of all 4,761 inventory
+entries against bytes retrieved from a clean checkout.
+
 ## Reproduction identity
 
 - Execution commit: `7ec582b81cdcb871fb4fcb47700338194e7617d5`

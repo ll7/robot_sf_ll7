@@ -321,6 +321,9 @@ def test_raw_artifact_retrieval_status_is_explicitly_blocked() -> None:
     provenance_text = (BUNDLE / "provenance.md").read_text(encoding="utf-8")
 
     for text in (readme_text, provenance_text):
+        assert "PR #6185 is a partial preparatory change" in text
+        assert "it does not complete or close Issue #6131" in text
+        assert "Issue #6131 remains open and owns" in text
         assert "Raw Artifact Retrieval Status (Issue #6131)" in text
         assert "7ec582b81cdcb871fb4fcb47700338194e7617d5" in text
         assert "9f174f067d23efd374c019702168213a27085dfffa1b0b5bc10adafaa9614e04" in text

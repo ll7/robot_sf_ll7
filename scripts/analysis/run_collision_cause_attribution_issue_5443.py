@@ -1,50 +1,43 @@
-"""Drive the rule-based cause analyser over the #5443 injected-fault fixtures.
+"""Run the label-blind #5443 collision-cause analyser and frozen scorer.
 
-This runner wires the issue #5443 stack end to end on CPU:
-
-    fixtures (kinematic fault injections)
-      -> last-avoidable counterfactual replay (per fixture)
-      -> deterministic rule-based cause analyser
-      -> AttributionVerdict set
-      -> frozen validation report (``collision_cause_attribution.py``)
-
-It runs no simulation, trains no classifier, and makes no campaign or paper-grade
-claim. It is *controlled-fixture injected-fault validation only* (criterion 3-5).
-
-The analyser never reads the manifest's ground-truth ``cause_class``: the fixture
-builders provide only observable fault evidence plus counterfactual repairs, and
-the analyser attributes from computed replay/repair evidence. The frozen scoring
-module then compares the analyser's verdicts against the manifest answer key.
-
-Usage::
-
-    # Emit analyser verdicts only (for inspection or external scoring):
-    uv run python scripts/analysis/run_collision_cause_attribution_issue_5443.py \\
-        --verdicts output/issue_5443_verdicts.json
-
-    # Emit verdicts and score them against the frozen manifest, exiting non-zero
-    # on a ``revise`` verdict (the issue stop rule):
-    uv run python scripts/analysis/run_collision_cause_attribution_issue_5443.py \\
-        --verdicts output/issue_5443_verdicts.json --score --out output/issue_5443_report.json
+This CPU-only runner is controlled-fixture injected-fault validation. It makes
+no real-trace, campaign, legal, or moral root-cause claim. The analyser consumes
+only low-level trace events and counterfactual repairs; the manifest answer key
+is loaded separately by the scorer.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
 
-from robot_sf.benchmark.collision_cause_analyser import analyse_suite
+from jsonschema import Draft202012Validator
+
+from robot_sf.benchmark.collision_cause_analyser import (
+    DetectedFault,
+    analyse_suite,
+    analyser_config,
+)
 from robot_sf.benchmark.collision_cause_attribution import (
     REPORT_STATUS_SCORED,
     VERDICT_PASS,
     build_validation_report,
 )
-from robot_sf.benchmark.last_avoidable_fixtures import build_collision_cause_fixtures
+from robot_sf.benchmark.last_avoidable_fixtures import (
+    ObservableTraceEvent,
+    build_collision_cause_fixtures,
+)
 
-_DEFAULT_MANIFEST = Path("tests/benchmark/fixtures/collision_cause_attribution_manifest_5443.json")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_MANIFEST = (
+    _REPO_ROOT / "tests/benchmark/fixtures/collision_cause_attribution_manifest_5443.json"
+)
+_RUN_SCHEMA = _REPO_ROOT / "robot_sf/benchmark/schemas/collision_cause_analyser_run.v1.json"
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -54,53 +47,106 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--verdicts",
         type=Path,
         default=None,
-        help="Optional path to write the analyser verdicts JSON.",
+        help="Optional path for the schema-validated analyser payload.",
     )
     parser.add_argument(
         "--manifest",
         type=Path,
         default=_DEFAULT_MANIFEST,
-        help="Path to the frozen ground-truth fixture manifest JSON (for scoring).",
+        help="Frozen ground-truth manifest used only by the scorer.",
     )
     parser.add_argument(
         "--score",
         action="store_true",
-        help="Score the analyser verdicts against the frozen manifest and apply the stop rule.",
+        help="Score analyser verdicts against the frozen manifest.",
     )
     parser.add_argument(
         "--out",
         type=Path,
         default=None,
-        help="Optional path to write the scored validation report JSON (requires --score).",
+        help="Optional path for the scored validation report.",
     )
     return parser.parse_args(argv)
 
 
-def build_verdicts_payload() -> dict[str, Any]:
-    """Build analyser verdicts over all 14 fixtures with provenance.
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
-    Returns:
-        A JSON-safe mapping with the analyser schema version, the verdict list,
-        and per-fixture computed evidence (for transparency).
-    """
-    fixtures = build_collision_cause_fixtures()
-    result = analyse_suite(fixtures)
+
+def _sha256_path(path: Path) -> str:
+    return _sha256_bytes(path.read_bytes())
+
+
+def _canonical_sha256(payload: object) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return _sha256_bytes(encoded)
+
+
+def _git_output(*args: str) -> str:
+    process = subprocess.run(
+        ["git", *args],
+        cwd=_REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return process.stdout.strip()
+
+
+def _event_mapping(event: ObservableTraceEvent) -> dict[str, object]:
+    return {
+        "step": event.step,
+        "channel": event.channel,
+        "field": event.field,
+        "expected": event.expected,
+        "observed": event.observed,
+    }
+
+
+def _detected_fault_mapping(detected_fault: DetectedFault) -> dict[str, object]:
+    return {
+        "predicted_cause": detected_fault.predicted_cause,
+        "activation_step": detected_fault.activation_step,
+        "gates_applied_command": detected_fault.fault.gates_applied_command,
+        "events": [_event_mapping(event) for event in detected_fault.fault.events],
+    }
+
+
+def validate_verdicts_payload(payload: dict[str, Any]) -> None:
+    """Validate a generated run payload against its committed JSON Schema."""
+    schema = json.loads(_RUN_SCHEMA.read_text(encoding="utf-8"))
+    Draft202012Validator(schema).validate(payload)
+
+
+def build_verdicts_payload(
+    *,
+    manifest_path: Path = _DEFAULT_MANIFEST,
+) -> dict[str, Any]:
+    """Build and schema-validate verdicts, evidence, and exact provenance."""
+    manifest_path = manifest_path.resolve()
+    config = analyser_config()
+    result = analyse_suite(build_collision_cause_fixtures())
     evidence = [
         {
-            "fixture_id": ev.fixture_id,
-            "replay_verdict": ev.replay.verdict,
-            "replay_t_uca": ev.replay.t_uca,
-            "replay_t_inevitable": ev.replay.t_inevitable,
-            "replay_t_contact": ev.replay.config.t_contact,
-            "replay_deterministic": ev.replay.determinism.deterministic,
-            "decisive_faults": [f.fault_type for f in ev.decisive_faults],
-            "present_faults": [f.fault_type for f in ev.present_faults],
-            "metric_quirk": ev.metric_quirk,
-            "avoidable_pred": ev.avoidable_pred,
+            "fixture_id": item.fixture_id,
+            "replay_verdict": item.replay.verdict,
+            "replay_t_uca": item.replay.t_uca,
+            "replay_t_inevitable": item.replay.t_inevitable,
+            "replay_t_contact": item.replay.config.t_contact,
+            "replay_deterministic": item.replay.determinism.deterministic,
+            "decisive_faults": [_detected_fault_mapping(fault) for fault in item.decisive_faults],
+            "present_faults": [_detected_fault_mapping(fault) for fault in item.present_faults],
+            "metric_quirk_onset": item.metric_quirk_onset,
+            "avoidable_pred": item.avoidable_pred,
         }
-        for ev in result.evidence
+        for item in result.evidence
     ]
-    return {
+    payload: dict[str, Any] = {
         "schema_version": "collision_cause_analyser_run.v1",
         "analyser": "rule_based_kinematic_replay",
         "issue": 5443,
@@ -108,31 +154,36 @@ def build_verdicts_payload() -> dict[str, Any]:
             "controlled-fixture injected-fault validation only; not a real-trace "
             "root-cause claim; assigns no legal or moral fault"
         ),
+        "provenance": {
+            "git_commit": _git_output("rev-parse", "HEAD"),
+            "git_tree_dirty": bool(_git_output("status", "--porcelain", "--untracked-files=no")),
+            "manifest_path": manifest_path.relative_to(_REPO_ROOT).as_posix(),
+            "manifest_sha256": _sha256_path(manifest_path),
+            "analyser_config": config,
+            "analyser_config_sha256": _canonical_sha256(config),
+            "payload_schema_sha256": _sha256_path(_RUN_SCHEMA),
+        },
         "verdicts": result.verdict_mappings(),
         "evidence": evidence,
     }
+    validate_verdicts_payload(payload)
+    return payload
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run the analyser and optionally score the verdicts.
-
-    Returns:
-        Process exit code: 0 when no scoring is requested, or when a scored
-        report returns ``pass``; 1 when a scored report returns ``revise``.
-    """
+    """Run the analyser and optionally score its verdicts."""
     args = _parse_args(argv)
-
-    payload = build_verdicts_payload()
+    payload = build_verdicts_payload(manifest_path=args.manifest)
 
     if args.verdicts is not None:
         args.verdicts.parent.mkdir(parents=True, exist_ok=True)
         args.verdicts.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
         )
 
     if not args.score:
-        # Print just the verdicts for inspection.
-        print(json.dumps(payload["verdicts"], indent=2, sort_keys=True))
+        print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
 
     fixtures = json.loads(args.manifest.read_text(encoding="utf-8"))["fixtures"]
@@ -142,10 +193,9 @@ def main(argv: list[str] | None = None) -> int:
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(text + "\n", encoding="utf-8")
     print(text)
-
     if report.status == REPORT_STATUS_SCORED and report.report is not None:
         return 0 if report.report.verdict == VERDICT_PASS else 1
-    return 0
+    return 1
 
 
 if __name__ == "__main__":

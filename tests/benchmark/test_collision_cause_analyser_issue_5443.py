@@ -16,16 +16,20 @@ Selectable with ``pytest -k 'causal and attribution'`` (the issue command).
 
 from __future__ import annotations
 
+import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from jsonschema import ValidationError as JsonSchemaValidationError
 
 from robot_sf.benchmark.collision_cause_analyser import (
     ABSTAIN_CONFIDENCE,
     HIGH_CONFIDENCE,
     analyse_cause,
     analyse_suite,
+    analyser_config,
     scenario_collides,
 )
 from robot_sf.benchmark.collision_cause_attribution import (
@@ -41,6 +45,8 @@ from robot_sf.benchmark.collision_cause_attribution import (
 from robot_sf.benchmark.last_avoidable_fixtures import (
     COLLISION_CAUSE_FIXTURE_BUILDERS,
     CollisionCauseFixture,
+    KinematicScenario,
+    ObservableTraceEvent,
     build_collision_cause_fixtures,
 )
 from robot_sf.benchmark.last_avoidable_replay import VERDICT_ALREADY_UNAVOIDABLE
@@ -124,7 +130,7 @@ def test_causal_attribution_ambiguous_partial_repairs_each_still_collide() -> No
             assert fault.repair_scenario is not None
             repaired = fault.repair_scenario(fixture.scenario)
             assert scenario_collides(repaired), (
-                f"partial repair for {fault.fault_type} must still collide"
+                f"partial repair for {fault.events[0].channel} must still collide"
             )
 
 
@@ -222,6 +228,24 @@ def test_causal_attribution_metric_artifact_detected_from_reported_physical_mism
     assert verdict.confidence == HIGH_CONFIDENCE
 
 
+def test_causal_attribution_metric_artifact_rejected_when_physical_contact_follows() -> None:
+    """An early inflated-radius report is not an artifact if bodies later touch."""
+    scenario = KinematicScenario(
+        robot_x0=0.0,
+        robot_speed0=5.0,
+        ped_pos0=(5.0, 0.0),
+        ped_vel0=(0.0, 0.0),
+        collision_radius=1.2,
+        physical_collision_radius=0.4,
+    )
+    fixture = CollisionCauseFixture(
+        fixture_id="physical_contact_after_reported",
+        scenario=scenario,
+    )
+    verdict = analyse_cause(fixture)
+    assert verdict.predicted_cause != "metric_artifact"
+
+
 def test_causal_attribution_already_unavoidable_from_pure_replay() -> None:
     """The already-unavoidable fixture is attributed from the replay verdict alone."""
     fixture = COLLISION_CAUSE_FIXTURE_BUILDERS["already_unavoidable_01"]()
@@ -234,32 +258,47 @@ def test_causal_attribution_already_unavoidable_from_pure_replay() -> None:
 # --- Honesty: analyser reasons from evidence, not the answer key ------------
 
 
-def test_causal_attribution_analyser_evidence_drives_verdict() -> None:
-    """A decisive fault's evidence (not the manifest label) drives the verdict.
-
-    Swapping the observable fault_type on a decisive single fixture changes the
-    predicted cause, proving the analyser reads the injected evidence rather than
-    a hidden answer key.
-    """
-    from robot_sf.benchmark.last_avoidable_fixtures import InjectedFault, obs_omission_01_fixture
-
-    base = obs_omission_01_fixture()
-    original = analyse_cause(base)
-    assert original.predicted_cause == "observation_omission"
-    # Relabel the observable fault: the analyser must follow the evidence.
-    relabeled = CollisionCauseFixture(
-        fixture_id=base.fixture_id,
-        scenario=base.scenario,
-        faults=(
-            InjectedFault(
-                fault_type="prediction_miss",
-                activation_window=base.faults[0].activation_window,
-                repair_scenario=base.faults[0].repair_scenario,
-            ),
+def test_causal_attribution_fixture_input_has_no_answer_key_fields() -> None:
+    """Fixture faults expose trace values, never typed labels or target windows."""
+    fixture = COLLISION_CAUSE_FIXTURE_BUILDERS["obs_omission_01"]()
+    fault = fixture.faults[0]
+    assert not hasattr(fault, "fault_type")
+    assert not hasattr(fault, "activation_window")
+    assert fault.events == (
+        ObservableTraceEvent(
+            step=12,
+            channel="observation",
+            field="detection_present",
+            expected=True,
+            observed=False,
         ),
     )
-    swapped = analyse_cause(relabeled)
-    assert swapped.predicted_cause == "prediction_miss"
+
+
+def test_causal_attribution_fixture_id_cannot_select_the_cause() -> None:
+    """Permuting the scorer key leaves the observable-derived cause unchanged."""
+    fixture = COLLISION_CAUSE_FIXTURE_BUILDERS["obs_omission_01"]()
+    rekeyed = replace(fixture, fixture_id="route_trap_01")
+    assert analyse_cause(fixture).predicted_cause == "observation_omission"
+    assert analyse_cause(rekeyed).predicted_cause == "observation_omission"
+
+
+def test_causal_attribution_answer_key_permutation_does_not_change_predictions() -> None:
+    """Manifest labels are scorer-only and cannot feed back into the analyser."""
+    fixtures = build_collision_cause_fixtures()
+    before = [analyse_cause(fixture).predicted_cause for fixture in fixtures]
+    manifest = _load_manifest()
+    first = manifest[0]["cause_class"]
+    manifest[0]["cause_class"] = manifest[7]["cause_class"]
+    manifest[7]["cause_class"] = first
+    after = [analyse_cause(fixture).predicted_cause for fixture in fixtures]
+    assert after == before
+    permuted_report = build_validation_report(
+        manifest,
+        analyse_suite(fixtures).verdict_mappings(),
+    )
+    assert permuted_report.report is not None
+    assert permuted_report.report.verdict != VERDICT_PASS
 
 
 def test_causal_attribution_already_unavoidable_replay_verdict() -> None:
@@ -283,7 +322,9 @@ def test_causal_attribution_already_unavoidable_replay_verdict() -> None:
 
 def test_causal_attribution_runner_payload_passes_frozen_scorer(tmp_path: Path) -> None:
     """The analysis runner's verdict payload passes the frozen validation scorer."""
-    from scripts.analysis.run_collision_cause_attribution_issue_5443 import build_verdicts_payload
+    from scripts.analysis.run_collision_cause_attribution_issue_5443 import (
+        build_verdicts_payload,
+    )
 
     payload = build_verdicts_payload()
     report = build_validation_report(_load_manifest(), payload["verdicts"])
@@ -294,6 +335,29 @@ def test_causal_attribution_runner_payload_passes_frozen_scorer(tmp_path: Path) 
     assert len(payload["verdicts"]) == 14
     assert len(payload["evidence"]) == 14
     assert all("replay_verdict" in e for e in payload["evidence"])
+    provenance = payload["provenance"]
+    assert len(provenance["git_commit"]) == 40
+    assert provenance["manifest_sha256"] == hashlib.sha256(_MANIFEST_PATH.read_bytes()).hexdigest()
+    encoded_config = json.dumps(
+        analyser_config(),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode()
+    assert provenance["analyser_config_sha256"] == hashlib.sha256(encoded_config).hexdigest()
+
+
+def test_causal_attribution_runner_payload_schema_fails_closed_on_bad_provenance() -> None:
+    """The committed run schema rejects malformed commit provenance."""
+    from scripts.analysis.run_collision_cause_attribution_issue_5443 import (
+        build_verdicts_payload,
+        validate_verdicts_payload,
+    )
+
+    payload = build_verdicts_payload()
+    payload["provenance"]["git_commit"] = "not-a-commit"
+    with pytest.raises(JsonSchemaValidationError):
+        validate_verdicts_payload(payload)
 
 
 def test_causal_attribution_abstention_confidence_below_threshold() -> None:

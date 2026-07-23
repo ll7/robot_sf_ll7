@@ -409,6 +409,69 @@ def _repair_pedestrian_clears(scenario: KinematicScenario) -> KinematicScenario:
     return replace(scenario, ped_vel0=(0.0, 2.0))
 
 
+def _repair_early_conservative_speed(scenario: KinematicScenario) -> KinematicScenario:
+    """Represent an early observation arriving before the speed decision.
+
+    Returns:
+        Repaired scenario with a conservative initial speed.
+    """
+    return replace(scenario, robot_speed0=3.5)
+
+
+def _repair_prediction_crossing(scenario: KinematicScenario) -> KinematicScenario:
+    """Represent a corrected crossing forecast in the replayed pedestrian path.
+
+    Returns:
+        Repaired scenario with the correctly forecast crossing velocity.
+    """
+    return replace(scenario, ped_vel0=(0.0, 1.8))
+
+
+def _repair_restore_evasive_candidate(scenario: KinematicScenario) -> KinematicScenario:
+    """Represent the restored evasive candidate selected before contact.
+
+    Returns:
+        Repaired scenario following the restored evasive candidate.
+    """
+    return replace(scenario, robot_speed0=3.0)
+
+
+def _repair_select_safe_candidate(scenario: KinematicScenario) -> KinematicScenario:
+    """Represent the safe candidate changing the crossing separation.
+
+    Returns:
+        Repaired scenario with safe crossing separation.
+    """
+    return replace(scenario, ped_pos0=(scenario.ped_pos0[0], -3.2))
+
+
+def _repair_guard_intervention(scenario: KinematicScenario) -> KinematicScenario:
+    """Represent the safety guard applying its conservative command.
+
+    Returns:
+        Repaired scenario after the guard intervention.
+    """
+    return replace(scenario, robot_speed0=2.5)
+
+
+def _repair_feasible_command(scenario: KinematicScenario) -> KinematicScenario:
+    """Represent the requested feasible deceleration reaching actuation.
+
+    Returns:
+        Repaired scenario after feasible actuation.
+    """
+    return replace(scenario, robot_speed0=2.0)
+
+
+def _repair_route_escape(scenario: KinematicScenario) -> KinematicScenario:
+    """Represent a route escape branch that separates the crossing in time.
+
+    Returns:
+        Repaired scenario using the route escape.
+    """
+    return replace(scenario, ped_pos0=(14.5, scenario.ped_pos0[1]))
+
+
 def _repair_pedestrian_partially_clears(scenario: KinematicScenario) -> KinematicScenario:
     """Partial repair (faster pedestrian) that *still* collides on its own.
 
@@ -418,7 +481,7 @@ def _repair_pedestrian_partially_clears(scenario: KinematicScenario) -> Kinemati
     Returns:
         The partially repaired scenario that still collides.
     """
-    return replace(scenario, ped_vel0=(0.0, 1.6))
+    return replace(scenario, ped_vel0=(0.0, 1.2))
 
 
 def _repair_robot_slows_slightly(scenario: KinematicScenario) -> KinematicScenario:
@@ -429,33 +492,45 @@ def _repair_robot_slows_slightly(scenario: KinematicScenario) -> KinematicScenar
     Returns:
         The partially repaired scenario that still collides.
     """
-    return replace(scenario, robot_speed0=4.2)
+    return replace(scenario, robot_speed0=4.8)
 
 
-def _repair_remove_footprint_inflation(scenario: KinematicScenario) -> KinematicScenario:
-    """Repair that sets the reported radius back to the physical radius.
+TraceValue = bool | int | float | str
 
-    Returns:
-        The repaired scenario with the reported radius equal to the physical radius.
+
+@dataclass(frozen=True)
+class ObservableTraceEvent:
+    """One low-level pipeline observation at a concrete control step.
+
+    The event deliberately contains no cause-class label and no answer-key
+    activation window. The analyser derives both the cause and its onset by
+    matching observed pipeline state against its expected state.
+
+    Attributes:
+        step: Control step at which the deviation was observed.
+        channel: Pipeline channel that emitted the observation.
+        field: Observable field on that channel.
+        expected: Expected value for a healthy execution.
+        observed: Value recorded on the injected execution.
     """
-    return replace(scenario, collision_radius=scenario.physical_collision_radius or 0.5)
+
+    step: int
+    channel: str
+    field: str
+    expected: TraceValue
+    observed: TraceValue
 
 
 @dataclass(frozen=True)
 class InjectedFault:
-    """One observable fault signature injected into a controlled fixture.
+    """A label-free observable deviation plus its counterfactual repair.
 
-    This is the *trace evidence* the analyser detects, not the answer key: it
-    records what kind of pipeline fault occurred and the control-step window in
-    which it is observable. Decisiveness is computed by the analyser via
-    ``repair_scenario``; it is not declared here.
+    ``events`` are the analyser input. They expose low-level trace values, not
+    the scorer's cause label or activation window. Decisiveness is computed by
+    applying ``repair_scenario`` and replaying the repaired scenario.
 
     Attributes:
-        fault_type: Observable fault category (one of the single cause-class
-            labels). For a negative control this is the *suspicious* signal type.
-        activation_window: Inclusive ``(start, end)`` control-step window in which
-            the fault is observable. Negative controls that never truly activate
-            use ``(-1, -1)``.
+        events: Low-level trace deviations observed for this injected mechanism.
         repair_scenario: Callable returning the kinematic scenario with this fault
             removed, used to *compute* whether repairing the fault avoids contact.
             ``None`` when no repair is testable.
@@ -464,8 +539,7 @@ class InjectedFault:
             correlation without causal effect (negative-control guard flap).
     """
 
-    fault_type: str
-    activation_window: tuple[int, int]
+    events: tuple[ObservableTraceEvent, ...]
     repair_scenario: Callable[[KinematicScenario], KinematicScenario] | None = None
     gates_applied_command: bool = True
 
@@ -486,15 +560,12 @@ class CollisionCauseFixture:
         faults: Observable injected fault signatures.
         replay_config: Optional replay configuration override; when ``None`` the
             analyser derives a deterministic config from the contact step.
-        metric_artifact: When ``True`` the scenario reports a collision that has
-            no physical contact (footprint inflation).
     """
 
     fixture_id: str
     scenario: KinematicScenario
     faults: tuple[InjectedFault, ...] = ()
     replay_config: ReplayConfig | None = None
-    metric_artifact: bool = False
 
 
 def _avoidable_collision_scenario() -> KinematicScenario:
@@ -506,12 +577,42 @@ def _avoidable_collision_scenario() -> KinematicScenario:
     return KinematicScenario(
         robot_x0=0.0,
         robot_speed0=5.0,
-        ped_pos0=(5.0, -1.2),
+        ped_pos0=(12.0, -2.4),
         ped_vel0=(0.0, 1.0),
         dt=0.1,
         collision_radius=0.5,
         decel_levels=(0.0, 2.0, 4.0, 8.0),
         pedestrian_response=PED_RESPONSE_REPLAYED,
+    )
+
+
+def _observable_fault(
+    *,
+    step: int,
+    channel: str,
+    field: str,
+    expected: TraceValue,
+    observed: TraceValue,
+    repair_scenario: Callable[[KinematicScenario], KinematicScenario] | None,
+    gates_applied_command: bool = True,
+) -> InjectedFault:
+    """Build one label-free trace deviation used by a controlled fixture.
+
+    Returns:
+        Injected deviation containing only observable trace evidence.
+    """
+    return InjectedFault(
+        events=(
+            ObservableTraceEvent(
+                step=step,
+                channel=channel,
+                field=field,
+                expected=expected,
+                observed=observed,
+            ),
+        ),
+        repair_scenario=repair_scenario,
+        gates_applied_command=gates_applied_command,
     )
 
 
@@ -531,9 +632,12 @@ def obs_omission_01_fixture() -> CollisionCauseFixture:
         fixture_id="obs_omission_01",
         scenario=_avoidable_collision_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="observation_omission",
-                activation_window=(12, 12),
+            _observable_fault(
+                step=12,
+                channel="observation",
+                field="detection_present",
+                expected=True,
+                observed=False,
                 repair_scenario=_repair_pedestrian_clears,
             ),
         ),
@@ -550,10 +654,13 @@ def obs_delay_01_fixture() -> CollisionCauseFixture:
         fixture_id="obs_delay_01",
         scenario=_avoidable_collision_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="observation_delay",
-                activation_window=(8, 11),
-                repair_scenario=_repair_pedestrian_clears,
+            _observable_fault(
+                step=8,
+                channel="observation",
+                field="age_steps",
+                expected=0,
+                observed=3,
+                repair_scenario=_repair_early_conservative_speed,
             ),
         ),
     )
@@ -569,10 +676,13 @@ def prediction_miss_01_fixture() -> CollisionCauseFixture:
         fixture_id="prediction_miss_01",
         scenario=_avoidable_collision_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="prediction_miss",
-                activation_window=(15, 15),
-                repair_scenario=_repair_pedestrian_clears,
+            _observable_fault(
+                step=15,
+                channel="prediction",
+                field="crossing_predicted",
+                expected=True,
+                observed=False,
+                repair_scenario=_repair_prediction_crossing,
             ),
         ),
     )
@@ -588,10 +698,13 @@ def candidate_omission_01_fixture() -> CollisionCauseFixture:
         fixture_id="candidate_omission_01",
         scenario=_avoidable_collision_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="candidate_omission",
-                activation_window=(9, 9),
-                repair_scenario=_repair_pedestrian_clears,
+            _observable_fault(
+                step=9,
+                channel="candidate_generation",
+                field="evasive_candidate_present",
+                expected=True,
+                observed=False,
+                repair_scenario=_repair_restore_evasive_candidate,
             ),
         ),
     )
@@ -607,10 +720,13 @@ def bad_selection_01_fixture() -> CollisionCauseFixture:
         fixture_id="bad_selection_01",
         scenario=_avoidable_collision_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="bad_selection",
-                activation_window=(10, 10),
-                repair_scenario=_repair_pedestrian_clears,
+            _observable_fault(
+                step=10,
+                channel="selection",
+                field="selected_candidate_safe",
+                expected=True,
+                observed=False,
+                repair_scenario=_repair_select_safe_candidate,
             ),
         ),
     )
@@ -626,10 +742,13 @@ def guard_omission_01_fixture() -> CollisionCauseFixture:
         fixture_id="guard_omission_01",
         scenario=_avoidable_collision_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="guard_omission",
-                activation_window=(13, 14),
-                repair_scenario=_repair_pedestrian_clears,
+            _observable_fault(
+                step=13,
+                channel="safety_guard",
+                field="intervention_applied",
+                expected=True,
+                observed=False,
+                repair_scenario=_repair_guard_intervention,
             ),
         ),
     )
@@ -645,10 +764,13 @@ def infeasible_command_01_fixture() -> CollisionCauseFixture:
         fixture_id="infeasible_command_01",
         scenario=_avoidable_collision_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="infeasible_applied_command",
-                activation_window=(11, 11),
-                repair_scenario=_repair_pedestrian_clears,
+            _observable_fault(
+                step=11,
+                channel="actuation",
+                field="command_feasible",
+                expected=True,
+                observed=False,
+                repair_scenario=_repair_feasible_command,
             ),
         ),
     )
@@ -664,10 +786,13 @@ def route_trap_01_fixture() -> CollisionCauseFixture:
         fixture_id="route_trap_01",
         scenario=_avoidable_collision_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="route_trap",
-                activation_window=(3, 3),
-                repair_scenario=_repair_pedestrian_clears,
+            _observable_fault(
+                step=3,
+                channel="route",
+                field="escape_available",
+                expected=True,
+                observed=False,
+                repair_scenario=_repair_route_escape,
             ),
         ),
     )
@@ -709,7 +834,7 @@ def metric_artifact_01_fixture() -> CollisionCauseFixture:
     scenario = KinematicScenario(
         robot_x0=0.0,
         robot_speed0=5.0,
-        ped_pos0=(5.0, -0.9),
+        ped_pos0=(10.5, -0.9),
         ped_vel0=(0.0, 0.0),
         dt=0.1,
         collision_radius=1.2,  # inflated reported radius
@@ -720,14 +845,7 @@ def metric_artifact_01_fixture() -> CollisionCauseFixture:
     return CollisionCauseFixture(
         fixture_id="metric_artifact_01",
         scenario=scenario,
-        faults=(
-            InjectedFault(
-                fault_type="metric_artifact",
-                activation_window=(20, 20),
-                repair_scenario=_repair_remove_footprint_inflation,
-            ),
-        ),
-        metric_artifact=True,
+        faults=(),
     )
 
 
@@ -747,14 +865,20 @@ def ambiguous_pred_guard_01_fixture() -> CollisionCauseFixture:
         fixture_id="ambiguous_pred_guard_01",
         scenario=_avoidable_collision_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="prediction_miss",
-                activation_window=(10, 14),
+            _observable_fault(
+                step=10,
+                channel="prediction",
+                field="crossing_predicted",
+                expected=True,
+                observed=False,
                 repair_scenario=_repair_pedestrian_partially_clears,
             ),
-            InjectedFault(
-                fault_type="guard_omission",
-                activation_window=(10, 14),
+            _observable_fault(
+                step=10,
+                channel="safety_guard",
+                field="intervention_applied",
+                expected=True,
+                observed=False,
                 repair_scenario=_repair_robot_slows_slightly,
             ),
         ),
@@ -774,14 +898,20 @@ def ambiguous_route_selection_01_fixture() -> CollisionCauseFixture:
         fixture_id="ambiguous_route_selection_01",
         scenario=_avoidable_collision_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="route_trap",
-                activation_window=(5, 12),
+            _observable_fault(
+                step=5,
+                channel="route",
+                field="escape_available",
+                expected=True,
+                observed=False,
                 repair_scenario=_repair_robot_slows_slightly,
             ),
-            InjectedFault(
-                fault_type="bad_selection",
-                activation_window=(5, 12),
+            _observable_fault(
+                step=5,
+                channel="selection",
+                field="selected_candidate_safe",
+                expected=True,
+                observed=False,
                 repair_scenario=_repair_pedestrian_partially_clears,
             ),
         ),
@@ -805,9 +935,12 @@ def negative_control_jitter_01_fixture() -> CollisionCauseFixture:
         fixture_id="negative_control_jitter_01",
         scenario=already_unavoidable_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="observation_omission",
-                activation_window=(-1, -1),
+            _observable_fault(
+                step=2,
+                channel="observation",
+                field="detection_present",
+                expected=True,
+                observed=False,
                 repair_scenario=None,
                 gates_applied_command=False,
             ),
@@ -828,9 +961,12 @@ def negative_control_guard_flap_01_fixture() -> CollisionCauseFixture:
         fixture_id="negative_control_guard_flap_01",
         scenario=already_unavoidable_scenario(),
         faults=(
-            InjectedFault(
-                fault_type="guard_omission",
-                activation_window=(-1, -1),
+            _observable_fault(
+                step=2,
+                channel="safety_guard",
+                field="intervention_applied",
+                expected=True,
+                observed=False,
                 repair_scenario=None,
                 gates_applied_command=False,
             ),

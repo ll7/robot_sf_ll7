@@ -1,48 +1,18 @@
-"""Deterministic rule-based cause analyser for injected collision faults (#5443).
+"""Deterministic collision-cause analyser for controlled injected traces (#5443).
 
-This module is the *analyser under test* for issue #5443 (child of #5440; depends
-on the cause-report contract #5441 and the last-avoidable replay #5442). It
-translates controlled, fault-injected kinematic fixtures plus last-avoidable
-counterfactual replay results into :class:`AttributionVerdict` objects that
-conform to the 10-class cause schema in
-:mod:`robot_sf.benchmark.collision_cause_attribution`.
+The scorer's manifest is an answer key and is never an analyser input. Fixtures
+provide only low-level expected/observed pipeline events, kinematic state, and a
+counterfactual repair. The analyser:
 
-Honesty contract (non-circular)
--------------------------------
-The analyser **never reads the manifest's ground-truth ``cause_class``** (the
-answer key). It attributes a cause solely from *observable evidence* and
-*computed counterfactuals*:
+1. maps observable event patterns to a cause class;
+2. derives activation from the first matching event step;
+3. verifies decisiveness by replaying the repaired scenario;
+4. detects metric artifacts only when no physical contact occurs over the full
+   observation horizon; and
+5. abstains on ambiguous or non-causal signals.
 
-1. **Observable fault signatures** — each fixture carries
-   :class:`InjectedFault` records (a fault type and the control-step window in
-   which it is observable). These are the trace evidence a real rule-based
-   analyser detects, *not* the answer key.
-2. **Computed replay verdict** — :func:`locate_last_avoidable` is run on the
-   faulted scenario, yielding ``avoidable`` / ``already_unavoidable`` /
-   ``unknown`` plus ``t_uca`` / ``t_inevitable``.
-3. **Computed counterfactual decisiveness** — for each fault's ``repair_scenario``
-   the analyser checks whether the repaired kinematic world still collides
-   (:func:`scenario_collides`). A fault is *decisive* only when repairing it
-   alone removes contact. This is computed, never declared.
-4. **Computed metric quirk** — when the reported collision predicate fires but
-   the true geometric distance exceeds the physical radius, the collision is a
-   metric artifact.
-
-The attribution rules combine these:
-
-* Exactly one decisive fault and no ambiguity -> attribute that fault's type at
-  high confidence; localize activation to the fault's observable onset.
-* >=2 faults present and none alone decisive (each single repair still collides)
-  -> abstain as ``interacting_ambiguous`` at low confidence (criterion 4).
-* A suspicious signal present that is neither decisive nor gates the applied
-  command, with no decisive fault -> abstain as ``none`` at low confidence
-  (criterion 5, negative control).
-* No fault signature and a pure already-unavoidable replay ->
-  ``already_unavoidable_contact``, localized to ``t_inevitable``.
-* Reported collision with no physical contact -> ``metric_artifact``.
-
-Evidence grade: this is *controlled-fixture injected-fault validation only*. It
-is not a real-trace root-cause claim and assigns no legal or moral fault.
+Evidence grade: controlled-fixture injected-fault validation only. This is not
+a real-trace root-cause claim and assigns no legal or moral fault.
 """
 
 from __future__ import annotations
@@ -52,9 +22,17 @@ from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.collision_cause_attribution import (
     CAUSE_ALREADY_UNAVOIDABLE_CONTACT,
+    CAUSE_BAD_SELECTION,
+    CAUSE_CANDIDATE_OMISSION,
+    CAUSE_GUARD_OMISSION,
+    CAUSE_INFEASIBLE_APPLIED_COMMAND,
     CAUSE_INTERACTING_AMBIGUOUS,
     CAUSE_METRIC_ARTIFACT,
     CAUSE_NONE,
+    CAUSE_OBSERVATION_DELAY,
+    CAUSE_OBSERVATION_OMISSION,
+    CAUSE_PREDICTION_MISS,
+    CAUSE_ROUTE_TRAP,
     AttributionVerdict,
 )
 from robot_sf.benchmark.last_avoidable_fixtures import (
@@ -62,6 +40,8 @@ from robot_sf.benchmark.last_avoidable_fixtures import (
     InjectedFault,
     KinematicCollisionModel,
     KinematicScenario,
+    ObservableTraceEvent,
+    TraceValue,
     find_contact_step,
 )
 from robot_sf.benchmark.last_avoidable_replay import (
@@ -75,83 +55,170 @@ from robot_sf.benchmark.last_avoidable_replay import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-# Confidence at which a single-cause verdict is reported as "high confidence".
-# Simple decisive causes are reported here; ambiguous and negative-control
-# abstentions are reported well below it so the scoring honesty guards pass.
+
 HIGH_CONFIDENCE = 0.95
 ABSTAIN_CONFIDENCE = 0.3
-
-# Determinism replays used when the analyser drives its own replay config.
 _DETERMINISM_REPLAYS = 5
-# Lookahead horizon (control ticks) used when testing whether a repaired scenario
-# still collides. Generous enough to catch the contact in every fixture.
 _REPAIR_CONTACT_LOOKAHEAD = 120
 
 
 @dataclass(frozen=True)
-class AnalyserEvidence:
-    """The computed evidence the analyser reasons over for one fixture.
+class SignatureRule:
+    """Map one low-level expected/observed trace pattern to a cause class."""
 
-    Exposed so tests and the runner can inspect exactly what the analyser used
-    (transparency of the rule chain), independent of the verdict label.
-    """
+    channel: str
+    field: str
+    expected: TraceValue
+    observed: TraceValue
+    cause: str
+
+    def matches(self, event: ObservableTraceEvent) -> bool:
+        """Return whether ``event`` exhibits this observable signature."""
+        return (
+            event.channel == self.channel
+            and event.field == self.field
+            and event.expected == self.expected
+            and event.observed == self.observed
+        )
+
+    def as_mapping(self) -> dict[str, TraceValue]:
+        """Return a JSON-safe representation for provenance hashing."""
+        return {
+            "channel": self.channel,
+            "field": self.field,
+            "expected": self.expected,
+            "observed": self.observed,
+            "cause": self.cause,
+        }
+
+
+_SIGNATURE_RULES = (
+    SignatureRule(
+        "observation",
+        "detection_present",
+        True,
+        False,
+        CAUSE_OBSERVATION_OMISSION,
+    ),
+    SignatureRule("observation", "age_steps", 0, 3, CAUSE_OBSERVATION_DELAY),
+    SignatureRule(
+        "prediction",
+        "crossing_predicted",
+        True,
+        False,
+        CAUSE_PREDICTION_MISS,
+    ),
+    SignatureRule(
+        "candidate_generation",
+        "evasive_candidate_present",
+        True,
+        False,
+        CAUSE_CANDIDATE_OMISSION,
+    ),
+    SignatureRule(
+        "selection",
+        "selected_candidate_safe",
+        True,
+        False,
+        CAUSE_BAD_SELECTION,
+    ),
+    SignatureRule(
+        "safety_guard",
+        "intervention_applied",
+        True,
+        False,
+        CAUSE_GUARD_OMISSION,
+    ),
+    SignatureRule(
+        "actuation",
+        "command_feasible",
+        True,
+        False,
+        CAUSE_INFEASIBLE_APPLIED_COMMAND,
+    ),
+    SignatureRule("route", "escape_available", True, False, CAUSE_ROUTE_TRAP),
+)
+
+
+def analyser_config() -> dict[str, object]:
+    """Return the complete JSON-safe rule configuration used by this analyser."""
+    return {
+        "schema_version": "collision_cause_analyser_config.v1",
+        "signature_rules": [rule.as_mapping() for rule in _SIGNATURE_RULES],
+        "high_confidence": HIGH_CONFIDENCE,
+        "abstain_confidence": ABSTAIN_CONFIDENCE,
+        "determinism_replays": _DETERMINISM_REPLAYS,
+        "repair_contact_lookahead": _REPAIR_CONTACT_LOOKAHEAD,
+        "metric_artifact_requires_no_physical_contact_over_horizon": True,
+    }
+
+
+@dataclass(frozen=True)
+class DetectedFault:
+    """A label inferred from observable events, separate from fixture inputs."""
+
+    fault: InjectedFault
+    predicted_cause: str
+    activation_step: int
+
+
+@dataclass(frozen=True)
+class AnalyserEvidence:
+    """Computed evidence used by the rule chain for one fixture."""
 
     fixture_id: str
     replay: LastAvoidableReport
-    decisive_faults: tuple[InjectedFault, ...]
-    present_faults: tuple[InjectedFault, ...]
-    metric_quirk: bool
+    decisive_faults: tuple[DetectedFault, ...]
+    present_faults: tuple[DetectedFault, ...]
+    metric_quirk_onset: int | None
     avoidable_pred: bool
 
 
 def scenario_collides(
-    scenario: KinematicScenario, *, lookahead: int = _REPAIR_CONTACT_LOOKAHEAD
+    scenario: KinematicScenario,
+    *,
+    lookahead: int = _REPAIR_CONTACT_LOOKAHEAD,
 ) -> bool:
-    """Return whether a scenario collides on the maintain-speed baseline.
-
-    Used to *compute* whether repairing a fault avoids contact: a decisive repair
-    produces a scenario that no longer collides within ``lookahead`` steps.
-
-    Args:
-        scenario: The (possibly repaired) kinematic scenario.
-        lookahead: Maximum number of maintain-speed steps to roll forward.
-
-    Returns:
-        ``True`` if contact occurs at step 0 or within ``lookahead`` steps.
-    """
+    """Return whether maintain-speed contact occurs within ``lookahead`` steps."""
     return find_contact_step(scenario, max_steps=lookahead) is not None
 
 
-def _reported_but_no_physical_contact(scenario: KinematicScenario) -> bool:
-    """Return whether the scenario ever reports a collision with no physical contact.
+def _reported_but_no_physical_contact(
+    scenario: KinematicScenario,
+    *,
+    lookahead: int = _REPAIR_CONTACT_LOOKAHEAD,
+) -> int | None:
+    """Return first reported-contact step only if physical contact never occurs.
 
-    A metric artifact: the reported (possibly footprint-inflated) collision
-    predicate fires at some step while the true geometric distance stays beyond
-    the physical radius at every step.
+    The complete horizon is scanned before a metric artifact is returned. An
+    inflated footprint that reports contact early but reaches physical contact
+    later is a real collision, not a metric artifact.
     """
     model = KinematicCollisionModel(scenario)
-    for _ in range(_REPAIR_CONTACT_LOOKAHEAD):
-        if model.collision() and not model.physical_collision():
-            return True
-        model.step(0.0)
-    return model.collision() and not model.physical_collision()
+    first_reported: int | None = None
+    for step in range(lookahead + 1):
+        if model.physical_collision():
+            return None
+        if first_reported is None and model.collision():
+            first_reported = step
+        if step < lookahead:
+            model.step(0.0)
+    return first_reported
 
 
 def _derive_replay_config(scenario: KinematicScenario) -> ReplayConfig:
-    """Build a deterministic replay config from the faulted scenario's contact step.
+    """Build deterministic replay config from the first reported contact.
 
     Returns:
-        A :class:`ReplayConfig` with ``t_danger=0``, ``t_contact`` at the first
-        contact step, and a hold-substitution horizon past the contact step.
+        Replay configuration covering the reported contact and repair horizon.
     """
     contact_step = find_contact_step(scenario)
     if contact_step is None or contact_step < 1:
         contact_step = 1
-    horizon = contact_step + 8
     return ReplayConfig(
         t_danger=0,
         t_contact=contact_step,
-        horizon=horizon,
+        horizon=contact_step + 8,
         substitution_mode=SUBSTITUTION_HOLD,
         determinism_replays=_DETERMINISM_REPLAYS,
         action_set_id="decel_lattice",
@@ -164,13 +231,10 @@ def _derive_replay_config(scenario: KinematicScenario) -> ReplayConfig:
 def run_replay(
     fixture: CollisionCauseFixture,
 ) -> tuple[LastAvoidableReport, KinematicCollisionModel]:
-    """Run the last-avoidable replay on the faulted scenario.
-
-    Args:
-        fixture: The controlled fault-injection fixture.
+    """Run last-avoidable replay on one controlled fixture.
 
     Returns:
-        The :class:`LastAvoidableReport` and the positioned model.
+        Replay report and the initialized model used for that replay.
     """
     config = fixture.replay_config or _derive_replay_config(fixture.scenario)
     model = KinematicCollisionModel(fixture.scenario)
@@ -179,89 +243,82 @@ def run_replay(
     return report, model
 
 
-def _gather_evidence(fixture: CollisionCauseFixture) -> AnalyserEvidence:
-    """Compute all evidence the analyser reasons over for ``fixture``.
+def _detect_fault(fault: InjectedFault) -> DetectedFault | None:
+    """Infer one cause and onset from label-free observable events.
 
     Returns:
-        The :class:`AnalyserEvidence` (replay, decisive/present faults, quirk).
+        Detected cause and onset, or ``None`` for unmatched/mixed signatures.
+    """
+    matches = [
+        (rule.cause, event.step)
+        for event in fault.events
+        for rule in _SIGNATURE_RULES
+        if rule.matches(event)
+    ]
+    causes = {cause for cause, _step in matches}
+    if len(causes) != 1:
+        return None
+    cause = causes.pop()
+    activation_step = min(step for matched_cause, step in matches if matched_cause == cause)
+    return DetectedFault(
+        fault=fault,
+        predicted_cause=cause,
+        activation_step=activation_step,
+    )
+
+
+def _gather_evidence(fixture: CollisionCauseFixture) -> AnalyserEvidence:
+    """Compute replay, trace-signature, repair, and metric evidence.
+
+    Returns:
+        Complete evidence consumed by the attribution rule chain.
     """
     replay, _model = run_replay(fixture)
-    metric_quirk = fixture.metric_artifact or _reported_but_no_physical_contact(fixture.scenario)
-
-    decisive: list[InjectedFault] = []
-    for fault in fixture.faults:
-        if fault.repair_scenario is None:
-            continue
-        repaired = fault.repair_scenario(fixture.scenario)
-        if not scenario_collides(repaired):
-            decisive.append(fault)
-
-    avoidable_pred = replay.verdict != VERDICT_ALREADY_UNAVOIDABLE and not metric_quirk
+    detected = tuple(
+        detected_fault
+        for fault in fixture.faults
+        if (detected_fault := _detect_fault(fault)) is not None
+    )
+    decisive: list[DetectedFault] = []
+    for detected_fault in detected:
+        repair = detected_fault.fault.repair_scenario
+        if repair is not None and not scenario_collides(repair(fixture.scenario)):
+            decisive.append(detected_fault)
     return AnalyserEvidence(
         fixture_id=fixture.fixture_id,
         replay=replay,
         decisive_faults=tuple(decisive),
-        present_faults=fixture.faults,
-        metric_quirk=metric_quirk,
-        avoidable_pred=avoidable_pred,
+        present_faults=detected,
+        metric_quirk_onset=_reported_but_no_physical_contact(fixture.scenario),
+        avoidable_pred=replay.verdict != VERDICT_ALREADY_UNAVOIDABLE,
     )
 
 
-def analyse_cause(fixture: CollisionCauseFixture) -> AttributionVerdict:
-    """Attribute a collision cause for one fixture from observable evidence.
-
-    Applies the deterministic rule chain described in the module docstring. The
-    verdict's ``predicted_cause`` is always a valid schema cause class, the
-    ``confidence`` is high only for a single decisive cause, and the analyser
-    abstains (``abstained=True``, low confidence) on ambiguous and negative-
-    control fixtures.
-
-    Args:
-        fixture: The controlled fault-injection fixture.
-
-    Returns:
-        The :class:`AttributionVerdict` for the fixture.
-    """
-    evidence = _gather_evidence(fixture)
-    return _verdict_from_evidence(evidence)
-
-
 def _verdict_from_evidence(evidence: AnalyserEvidence) -> AttributionVerdict:
-    """Map computed evidence to an :class:`AttributionVerdict` via the rule chain.
+    """Map computed evidence to one cautious attribution verdict.
 
     Returns:
-        The attribution verdict for the fixture.
+        Schema-compatible cause attribution or low-confidence abstention.
     """
-    fixture_id = evidence.fixture_id
-
-    # Criterion 5 guard: a negative-control signal that is neither decisive nor
-    # gates the applied command is correlation without causal effect -> abstain.
     non_causal_signals = [
-        f
-        for f in evidence.present_faults
-        if f not in evidence.decisive_faults and not f.gates_applied_command
+        detected
+        for detected in evidence.present_faults
+        if detected not in evidence.decisive_faults and not detected.fault.gates_applied_command
     ]
 
-    # Rule 1: metric artifact. A reported collision with no physical contact is a
-    # metric artifact regardless of any fault signature.
-    if evidence.metric_quirk:
-        onset = _earliest_onset(evidence.present_faults)
-        if onset is None:
-            onset = evidence.replay.config.t_contact
+    if evidence.metric_quirk_onset is not None:
         return AttributionVerdict(
-            fixture_id=fixture_id,
+            fixture_id=evidence.fixture_id,
             predicted_cause=CAUSE_METRIC_ARTIFACT,
-            predicted_activation_step=onset,
+            predicted_activation_step=evidence.metric_quirk_onset,
             confidence=HIGH_CONFIDENCE,
             avoidable_pred=False,
             abstained=False,
         )
 
-    # Rule 2: ambiguous interaction. Two or more faults are present and none is
-    # decisive on its own -> no single cause is decisive; abstain.
     if len(evidence.present_faults) >= 2 and not evidence.decisive_faults:
         return AttributionVerdict(
-            fixture_id=fixture_id,
+            fixture_id=evidence.fixture_id,
             predicted_cause=CAUSE_INTERACTING_AMBIGUOUS,
             predicted_activation_step=None,
             confidence=ABSTAIN_CONFIDENCE,
@@ -269,24 +326,20 @@ def _verdict_from_evidence(evidence: AnalyserEvidence) -> AttributionVerdict:
             abstained=True,
         )
 
-    # Rule 3: single decisive cause. Exactly one fault is counterfactually
-    # decisive -> attribute it at high confidence, localized to its onset.
     if len(evidence.decisive_faults) == 1:
-        fault = evidence.decisive_faults[0]
+        detected = evidence.decisive_faults[0]
         return AttributionVerdict(
-            fixture_id=fixture_id,
-            predicted_cause=fault.fault_type,
-            predicted_activation_step=fault.activation_window[0],
+            fixture_id=evidence.fixture_id,
+            predicted_cause=detected.predicted_cause,
+            predicted_activation_step=detected.activation_step,
             confidence=HIGH_CONFIDENCE,
             avoidable_pred=evidence.avoidable_pred,
             abstained=False,
         )
 
-    # Rule 4: negative control. A suspicious signal is present but not decisive
-    # and never gated the command -> correlation, not cause; abstain as none.
-    if non_causal_signals and not evidence.decisive_faults:
+    if non_causal_signals:
         return AttributionVerdict(
-            fixture_id=fixture_id,
+            fixture_id=evidence.fixture_id,
             predicted_cause=CAUSE_NONE,
             predicted_activation_step=None,
             confidence=ABSTAIN_CONFIDENCE,
@@ -294,25 +347,22 @@ def _verdict_from_evidence(evidence: AnalyserEvidence) -> AttributionVerdict:
             abstained=True,
         )
 
-    # Rule 5: pure already-unavoidable contact. No decisive fault and no causal
-    # signal, but the replay determined contact was already unavoidable.
     if evidence.replay.verdict == VERDICT_ALREADY_UNAVOIDABLE:
-        t_inevitable = evidence.replay.t_inevitable
-        step = t_inevitable if t_inevitable is not None else evidence.replay.config.t_contact
+        activation_step = evidence.replay.t_inevitable
+        if activation_step is None:
+            activation_step = evidence.replay.config.t_contact
         return AttributionVerdict(
-            fixture_id=fixture_id,
+            fixture_id=evidence.fixture_id,
             predicted_cause=CAUSE_ALREADY_UNAVOIDABLE_CONTACT,
-            predicted_activation_step=step,
+            predicted_activation_step=activation_step,
             confidence=HIGH_CONFIDENCE,
             avoidable_pred=False,
             abstained=False,
         )
 
-    # Fallback: under-determined (e.g. an unknown replay with no decisive fault).
-    # Abstain honestly rather than fabricate a confident cause.
     return AttributionVerdict(
-        fixture_id=fixture_id,
-        predicted_cause=CAUSE_INTERACTING_AMBIGUOUS,
+        fixture_id=evidence.fixture_id,
+        predicted_cause=CAUSE_NONE,
         predicted_activation_step=None,
         confidence=ABSTAIN_CONFIDENCE,
         avoidable_pred=evidence.avoidable_pred,
@@ -320,48 +370,49 @@ def _verdict_from_evidence(evidence: AnalyserEvidence) -> AttributionVerdict:
     )
 
 
-def _earliest_onset(faults: Sequence[InjectedFault]) -> int | None:
-    """Return the earliest non-sentinel activation onset among ``faults``."""
-    onsets = [f.activation_window[0] for f in faults if f.activation_window[0] >= 0]
-    return min(onsets) if onsets else None
+def analyse_cause(fixture: CollisionCauseFixture) -> AttributionVerdict:
+    """Attribute one fixture from observable evidence and counterfactual replay.
+
+    Returns:
+        Cause verdict derived without scorer answer-key input.
+    """
+    return _verdict_from_evidence(_gather_evidence(fixture))
 
 
 @dataclass(frozen=True)
 class AnalyserRunResult:
-    """All analyser verdicts and per-fixture evidence for one run over a suite."""
+    """Analyser verdicts and transparent evidence for a fixture suite."""
 
-    verdicts: tuple[AttributionVerdict, ...]
+    verdicts: tuple[AttributionVerdict, ...] = field(default_factory=tuple)
     evidence: tuple[AnalyserEvidence, ...] = field(default_factory=tuple)
 
-    def verdict_mappings(self) -> list[dict]:
-        """Return the verdicts as JSON-style mappings for the scoring harness."""
+    def verdict_mappings(self) -> list[dict[str, object]]:
+        """Return verdicts as JSON-safe mappings for the scoring CLI.
+
+        Returns:
+            One JSON-safe mapping per verdict.
+        """
         return [
             {
-                "fixture_id": v.fixture_id,
-                "predicted_cause": v.predicted_cause,
-                "predicted_activation_step": v.predicted_activation_step,
-                "confidence": v.confidence,
-                "avoidable_pred": v.avoidable_pred,
-                "abstained": v.abstained,
+                "fixture_id": verdict.fixture_id,
+                "predicted_cause": verdict.predicted_cause,
+                "predicted_activation_step": verdict.predicted_activation_step,
+                "confidence": verdict.confidence,
+                "avoidable_pred": verdict.avoidable_pred,
+                "abstained": verdict.abstained,
             }
-            for v in self.verdicts
+            for verdict in self.verdicts
         ]
 
 
 def analyse_suite(fixtures: Sequence[CollisionCauseFixture]) -> AnalyserRunResult:
-    """Run the analyser over a suite of fixtures and collect verdicts + evidence.
-
-    Args:
-        fixtures: The controlled fault-injection fixtures.
+    """Run the analyser over fixtures while retaining its computed evidence.
 
     Returns:
-        An :class:`AnalyserRunResult` with one verdict and one evidence record per
-        fixture, in input order.
+        Ordered verdicts and corresponding transparent evidence.
     """
-    verdicts: list[AttributionVerdict] = []
-    evidence: list[AnalyserEvidence] = []
-    for fixture in fixtures:
-        ev = _gather_evidence(fixture)
-        evidence.append(ev)
-        verdicts.append(_verdict_from_evidence(ev))
-    return AnalyserRunResult(verdicts=tuple(verdicts), evidence=tuple(evidence))
+    evidence = tuple(_gather_evidence(fixture) for fixture in fixtures)
+    return AnalyserRunResult(
+        verdicts=tuple(_verdict_from_evidence(item) for item in evidence),
+        evidence=evidence,
+    )

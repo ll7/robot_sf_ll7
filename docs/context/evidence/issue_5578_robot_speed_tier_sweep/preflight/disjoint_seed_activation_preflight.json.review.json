@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/disjoint_seed_activation_preflight.json",
+  "artifact_sha256": "6bf8f3a912aac5cb4a9a890c4f63a15381e7aa2d91dbc316aabc6915dcb7472e",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

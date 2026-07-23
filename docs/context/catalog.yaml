@@ -4680,3 +4680,11 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/disjoint_seed_activation_preflight.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/disjoint_seed_activation_preflight.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

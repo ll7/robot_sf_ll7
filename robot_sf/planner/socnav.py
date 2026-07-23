@@ -3192,7 +3192,11 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             }
         )
 
-    def _record_foresight_load_failure(self, exc: Exception) -> None:
+    def _record_foresight_load_failure(
+        self,
+        exc: Exception,
+        checkpoint_sha256: str | None,
+    ) -> None:
         """Record a predictive-model load failure in foresight provenance."""
         self._foresight_provenance.update(
             {
@@ -3201,6 +3205,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 "fallback_used": bool(self._allow_fallback),
                 "fallback_reason": "predictive_model_load_failed",
                 "load_error": f"{type(exc).__name__}: {exc}",
+                "requested_checkpoint_sha256": checkpoint_sha256,
             }
         )
 
@@ -3293,10 +3298,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return self._model
         if self._load_error is not None:
             return None if self._allow_fallback else self._raise_cached_error()
+        # Hash a readable requested checkpoint before deserializing it. A corrupt
+        # or schema-incompatible artifact still needs provenance in the fallback
+        # record even though model construction will fail.
+        checkpoint_sha256 = self._compute_checkpoint_sha256()
         try:
             self._model = self._build_model()
         except Exception as exc:
-            self._record_foresight_load_failure(exc)
+            self._record_foresight_load_failure(exc, checkpoint_sha256)
             if self._allow_fallback:
                 self._load_error = exc
                 if not self._fallback_warned:
@@ -3308,7 +3317,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                     self._fallback_warned = True
                 return None
             raise
-        self._record_foresight_load_success(self._compute_checkpoint_sha256())
+        self._record_foresight_load_success(checkpoint_sha256)
         return self._model
 
     def _compute_checkpoint_sha256(self) -> str | None:
@@ -3320,7 +3329,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         """
         try:
             checkpoint = self._resolve_checkpoint_path()
-        except (FileNotFoundError, OSError, ValueError, RuntimeError):
+        except (FileNotFoundError, KeyError, OSError, ValueError, RuntimeError):
             return None
         try:
             import hashlib  # noqa: PLC0415

@@ -9,11 +9,16 @@ determinism assertion fires.
 
 from __future__ import annotations
 
+import hashlib
+import multiprocessing as mp
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
 import pytest
 
+from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
+from robot_sf.benchmark import runner as runner_module
 from robot_sf.benchmark.algorithm_metadata import (
     PREDICTIVE_FORESIGHT_MODEL_FALLBACK_STATUS,
     enrich_algorithm_metadata,
@@ -23,6 +28,25 @@ from robot_sf.planner.predictive_foresight import PredictiveForesightConfig
 from robot_sf.planner.socnav import PredictionPlannerAdapter, SocNavPlannerConfig
 
 _UNKNOWN_MODEL_ID = "nonexistent_predictive_model_for_fallback_test"
+
+
+class _ForesightDemandingPPOModel:
+    """Minimal PPO model whose Dict contract forces predictive feature construction."""
+
+    def __init__(self) -> None:
+        self.observation_space = SimpleNamespace(
+            spaces={
+                "predictive_min_clearance": SimpleNamespace(
+                    shape=(1,),
+                    dtype=np.float32,
+                ),
+            },
+        )
+
+    def predict(self, _observation: Any, *, deterministic: bool) -> tuple[np.ndarray, None]:
+        """Return a stable velocity action after the foresight feature is materialized."""
+        assert deterministic is True
+        return np.array([0.0, 0.0], dtype=np.float32), None
 
 
 def _two_pedestrian_state() -> tuple[np.ndarray, np.ndarray]:
@@ -58,6 +82,92 @@ def test_foresight_adapter_records_degraded_metadata_on_model_load_failure():
     # Structured provenance carries the requested asset identifiers.
     assert provenance["requested_model_id"] == _UNKNOWN_MODEL_ID
     assert provenance["requested_checkpoint_path"] == _UNKNOWN_MODEL_ID
+
+
+def test_foresight_failed_load_retains_digest_for_readable_checkpoint(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A readable but invalid checkpoint retains its digest after load failure."""
+    checkpoint = tmp_path / "invalid-predictive-checkpoint.pt"
+    checkpoint.write_bytes(b"not a valid predictive checkpoint")
+
+    def fail_deserialization(*_args: Any, **_kwargs: Any) -> None:
+        """Simulate checkpoint deserialization/schema validation failure."""
+        raise ValueError("invalid predictive checkpoint payload")
+
+    monkeypatch.setattr("robot_sf.planner.socnav.load_predictive_checkpoint", fail_deserialization)
+    adapter = PredictionPlannerAdapter(
+        SocNavPlannerConfig(predictive_checkpoint_path=str(checkpoint)),
+        allow_fallback=True,
+    )
+    state, mask = _two_pedestrian_state()
+
+    adapter._predict_trajectories(state, mask)
+
+    provenance = adapter.foresight_diagnostics()["foresight_prediction"]
+    assert provenance["load_status"] == "failed"
+    assert (
+        provenance["requested_checkpoint_sha256"]
+        == hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+    )
+
+
+@pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")
+def test_run_episode_relays_ppo_child_foresight_fallback_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real PPO child fallback reaches episode metadata and degraded classification."""
+
+    def load_test_ppo_model(self: PPOPlanner) -> None:
+        """Install a Dict-policy model so normal PPO stepping invokes foresight."""
+        self._model = _ForesightDemandingPPOModel()
+        self._status = "ok"
+        self._fallback_reason = None
+
+    planner = PPOPlanner(
+        PPOPlannerConfig(
+            model_path="unused-test-model.zip",
+            obs_mode="dict",
+            predictive_foresight_enabled=True,
+            predictive_foresight_model_id=_UNKNOWN_MODEL_ID,
+        ),
+        defer_model_loading=True,
+    )
+    monkeypatch.setattr(PPOPlanner, "_load_model", load_test_ppo_model)
+    monkeypatch.setattr(
+        runner_module,
+        "_load_baseline_planner",
+        lambda _algo, _config_path, _seed: (planner, runner_module.Observation, {}),
+    )
+
+    record = runner_module.run_episode(
+        {
+            "id": "ppo-child-foresight-fallback",
+            "density": "low",
+            "flow": "uni",
+            "obstacle": "open",
+            "groups": 0.0,
+            "speed_var": "low",
+            "goal_topology": "point",
+            "robot_context": "embedded",
+            "repeats": 1,
+        },
+        seed=17,
+        horizon=1,
+        dt=0.1,
+        record_forces=False,
+        algo="ppo",
+    )
+
+    metadata = record["algorithm_metadata"]
+    provenance = metadata["foresight_prediction"]
+    assert metadata["status"] == PREDICTIVE_FORESIGHT_MODEL_FALLBACK_STATUS
+    assert provenance["load_status"] == "failed"
+    assert provenance["effective_prediction_mode"] == "constant_velocity"
+    assert provenance["fallback_used"] is True
+    assert provenance["evidence_eligible"] is False
+    assert _record_is_degraded(record) is True
 
 
 def test_enrich_algorithm_metadata_marks_foresight_fallback_degraded_and_ineligible():

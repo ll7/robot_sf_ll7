@@ -33,6 +33,7 @@ CI_JOB_TIMEOUTS = {
     "examples-smoke": 30,
     "notebooks-smoke": 30,
     "determinism-gate": 30,
+    "exact-repeat-model-preflight": 30,
     "ci": 5,
 }
 PHASE_PATTERN = re.compile(

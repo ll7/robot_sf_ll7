@@ -177,6 +177,38 @@ def test_failed_download_leaves_no_partial_cache_file(monkeypatch, tmp_path: Pat
     assert list((cache_dir / "preflight_model").glob("*.part")) == []
 
 
+def test_bad_checksum_never_publishes_a_cache_file(monkeypatch, tmp_path: Path) -> None:
+    """Checksum verification occurs before atomic publication to the shared cache."""
+    target = tmp_path / "cache" / "model.pt"
+    target.parent.mkdir()
+    monkeypatch.setattr(registry, "urlopen", lambda url, timeout: _Response(b"untrusted"))
+
+    with pytest.raises(ValueError, match="Checksum mismatch"):
+        registry._stream_download_url(
+            "https://github.com/ll7/robot_sf_ll7/releases/download/tag/model.pt",
+            target,
+            expected_sha256="0" * 64,
+        )
+
+    assert not target.exists()
+    assert list(target.parent.glob("*.part")) == []
+
+
+def test_runtime_download_guard_blocks_late_model_resolution(monkeypatch, tmp_path: Path) -> None:
+    """Timed execution cannot turn a cache miss into an on-demand download."""
+    registry_path = _write_registry(tmp_path, "0" * 64)
+    calls: list[str] = []
+    monkeypatch.setattr(registry, "urlopen", lambda url, timeout: calls.append(url))
+    monkeypatch.setenv("ROBOT_SF_DISABLE_MODEL_DOWNLOADS", "1")
+
+    with pytest.raises(FileNotFoundError, match="downloads are disabled"):
+        registry.resolve_model_path(
+            "preflight_model", registry_path=registry_path, cache_dir=tmp_path / "cache"
+        )
+
+    assert calls == []
+
+
 # --- Test C: preflight fails loudly after bounded retries --------------------
 
 

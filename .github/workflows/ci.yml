@@ -448,7 +448,6 @@ jobs:
     # timed test never downloads a model inside its loop. The test itself
     # monkeypatches the downloader to fail-closed if any in-loop fetch is
     # attempted.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -550,7 +549,7 @@ jobs:
             echo "determinism-gate finished with ${{ needs.determinism-gate.result }}" >&2
             exit 1
           fi
-          if [[ "${{ github.event_name }}" == "pull_request" && "${{ needs.exact-repeat-model-preflight.result }}" != "success" ]]; then
+          if [[ "${{ needs.exact-repeat-model-preflight.result }}" != "success" ]]; then
             echo "exact-repeat-model-preflight finished with ${{ needs.exact-repeat-model-preflight.result }}" >&2
             exit 1
           fi

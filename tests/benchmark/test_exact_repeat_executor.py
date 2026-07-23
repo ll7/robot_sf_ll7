@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import json
+import multiprocessing
+import os
 from pathlib import Path
 from typing import Any
 
@@ -1022,6 +1024,39 @@ def test_native_ppo_target_runs_deterministically_with_real_runner(tmp_path, res
     assert len(set(fingerprints)) == 1, "native PPO repeats must be bitwise-identical"
 
 
+def test_native_runner_preflights_before_repeats_and_blocks_late_downloads(
+    monkeypatch, tmp_path, resolved_bundle
+):
+    """The production exact-repeat path stages models once and disables late downloads."""
+    import robot_sf.benchmark.exact_repeat_campaign as campaign
+
+    ppo_target = next(target for target in resolved_bundle["targets"] if target["planner"] == "ppo")
+    ppo_bundle = {key: value for key, value in resolved_bundle.items() if key != "bundle_sha256"}
+    ppo_bundle["targets"] = [ppo_target]
+    ppo_bundle["bundle_sha256"] = canonical_sha256(ppo_bundle)
+
+    preflight_calls: list[tuple[object, object]] = []
+    monkeypatch.setattr(
+        campaign,
+        "_preflight_runtime_model_assets",
+        lambda targets, definitions: preflight_calls.append((targets, definitions)),
+    )
+    download_guards: list[str | None] = []
+
+    def native_runner(*args, **kwargs):
+        download_guards.append(os.environ.get("ROBOT_SF_DISABLE_MODEL_DOWNLOADS"))
+        return _build_mock_record(int(kwargs["seed"]))
+
+    native_runner.__module__ = "robot_sf.benchmark.runner"
+    host_result = execute_campaign(
+        ppo_bundle, output_dir=tmp_path / "native_preflight", run_episode=native_runner
+    )
+
+    assert len(preflight_calls) == 1
+    assert download_guards == ["1", "1", "1"]
+    assert "disposition" not in host_result["results"][0]
+
+
 @pytest.mark.slow
 def test_native_ppo_runs_offline_after_model_preflight(tmp_path, resolved_bundle, monkeypatch):
     """After preflight seeds the model, the exact-repeat PPO path runs with networking disabled.
@@ -1041,14 +1076,23 @@ def test_native_ppo_runs_offline_after_model_preflight(tmp_path, resolved_bundle
     three bitwise-identical repeats, this shows the run succeeded offline using the
     preflighted asset.
 
-    Fail-closed like the sibling determinism test: a transient process-isolation
-    failure is infra noise, not a planner regression, so it skips rather than flakes.
+    This is a required CI proof, not an optional local diagnostic: unavailable
+    dependencies, preflight failure, unsupported process isolation, or a native
+    worker failure are test failures rather than green skips.
     """
     if not is_runnable_algo("ppo"):
-        pytest.skip("ppo baseline not runnable on this host")
+        pytest.fail("native PPO is required for the offline exact-repeat proof")
     # The native-PPO real-runner path needs the ``training`` extra (stable_baselines3)
-    # to load the policy; CI installs it before this job. Skip cleanly otherwise.
-    pytest.importorskip("stable_baselines3")
+    # to load the policy; CI installs it before this job.
+    try:
+        __import__("stable_baselines3")
+    except ImportError as exc:
+        pytest.fail(f"stable_baselines3 is required for the offline exact-repeat proof: {exc}")
+
+    if multiprocessing.get_start_method() != "fork":
+        pytest.fail(
+            "offline exact-repeat proof requires fork so workers inherit the network sentinel"
+        )
 
     import yaml
 
@@ -1064,8 +1108,8 @@ def test_native_ppo_runs_offline_after_model_preflight(tmp_path, resolved_bundle
     # 1) Preflight: resolve + checksum-verify EVERY model the PPO arm resolves at
     #    runtime (its own policy checkpoint AND, because the config enables the
     #    predictive-foresight planner, the predictive checkpoint) into the cache
-    #    BEFORE any worker is created. If an asset is unavailable (e.g. offline CI
-    #    without the seeded actions/cache), skip -- the CI job seeds it first.
+    #    BEFORE any worker is created. The CI setup job seeds this cache; failure to
+    #    stage is a failed proof rather than a green skip.
     ppo_algo_config = yaml.safe_load(
         (
             REPOSITORY_ROOT / "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml"
@@ -1076,13 +1120,13 @@ def test_native_ppo_runs_offline_after_model_preflight(tmp_path, resolved_bundle
     try:
         preflight_models(required_models, backoff_seconds=0.0)
     except ModelPreflightError as exc:
-        pytest.skip(f"required model asset not available to seed the cache: {exc}")
+        pytest.fail(f"required model asset could not be preflighted: {exc}")
 
     # 2) Disable networking for the timed loop. Any download attempt -- in the
     #    parent or an inherited fork -- drops a sentinel and raises.
     sentinel = tmp_path / "in_loop_download_attempted"
 
-    def _network_disabled(url: str, target_path):
+    def _network_disabled(url: str, target_path, **_):
         sentinel.write_text(url, encoding="utf-8")
         raise AssertionError(f"in-loop network download attempted after preflight: {url}")
 
@@ -1096,9 +1140,9 @@ def test_native_ppo_runs_offline_after_model_preflight(tmp_path, resolved_bundle
     result = host_result["results"][0]
 
     if result.get("disposition") == PROCESS_ISOLATION_DISPOSITION:
-        pytest.skip(
+        pytest.fail(
             "native PPO could not execute: planner-step isolation boundary failed "
-            "(process-isolation failure, not a planner regression); skipping fail-closed"
+            "during the required offline proof"
         )
 
     # No worker fetched the model inside the timed loop -- the preflighted cache

@@ -68,6 +68,7 @@ def _cell(
         else (0.5 if cap > 2.0 else 0.0)
     )
     peak = realized_speed_peak_m_s if realized_speed_peak_m_s is not None else cap
+    realized_mean = min(cap * 0.85, peak)
     return {
         "scenario_id": scenario_id,
         "speed_tier_id": tier_id,
@@ -85,7 +86,7 @@ def _cell(
         "agent_collision_rate": 0.0,
         "unclassified_collision_rate": 0.0,
         "commanded_speed_mean_m_s": cap * 0.9,
-        "realized_speed_mean_m_s": cap * 0.85,
+        "realized_speed_mean_m_s": realized_mean,
         "realized_speed_peak_m_s": peak,
         "fraction_above_2_0_mps": frac,
         "cap_saturation_fraction": 0.3,
@@ -427,13 +428,9 @@ def test_directional_holm_families_are_independent_per_planner() -> None:
 
 def test_holm_ties_receive_the_same_conservative_one_sided_confidence() -> None:
     values = [("orca", f"test_{index}", 0.01) for index in range(6)]
-    _, confidence = _holm_adjust_by_planner(
-        values, family_alpha=DIRECTIONAL_FAMILY_ALPHA
-    )
+    _, confidence = _holm_adjust_by_planner(values, family_alpha=DIRECTIONAL_FAMILY_ALPHA)
     assert len(set(confidence.values())) == 1
-    assert next(iter(confidence.values())) == pytest.approx(
-        1.0 - DIRECTIONAL_FAMILY_ALPHA / 6.0
-    )
+    assert next(iter(confidence.values())) == pytest.approx(1.0 - DIRECTIONAL_FAMILY_ALPHA / 6.0)
 
 
 def test_synthesis_paired_delta_is_tier_minus_nominal_and_detects_harm() -> None:

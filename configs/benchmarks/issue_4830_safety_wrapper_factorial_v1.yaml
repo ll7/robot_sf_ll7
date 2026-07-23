@@ -1,0 +1,173 @@
+# Runnable camera-ready campaign for the planner-agnostic safety-wrapper paired factorial
+# ablation (issue #4830 / design contract #3501).
+#
+# Derived from configs/research/safety_wrapper_ablation_v1.yaml. That file is the design /
+# provenance contract only (status: launch_packet); it enumerates the factorial cells and paired
+# seeds but does not carry the fields run_camera_ready_benchmark.py consumes. This config is the
+# executable form: it materializes the declared planner x {wrapper_off, wrapper_on} roster as six
+# stable camera-ready arms and pins the runner-form contract (scenario_matrix, amv_profile,
+# comparability_mapping, seed_policy, snqi, arm_isolation).
+#
+# Claim boundary: this config is a RUNNABLE PROVENANCE CONTRACT, not benchmark evidence. It runs
+# no episodes by being authored. The paired wrapper-on/off delta and any mitigation-effectiveness
+# interpretation are downstream campaign/SLURM results produced by executing this config and
+# promoted through a compact evidence bundle. Fallback/degraded execution never counts as success.
+#
+# Pairing: the same seed list [111, 112, 113] is applied identically to BOTH wrapper arms of every
+# planner, so the only difference within a planner pair is the wrapper itself. Each off/on pair
+# shares identical planner config (algo, algo_config, benchmark_profile, planner_group) and differs
+# ONLY in its safety_wrapper block. Stable per-arm keys encode planner + wrapper_arm so the paired
+# report (#4598 builder) can join wrapper_off vs wrapper_on rows.
+
+schema_version: issue-4830-safety-wrapper-factorial-v1
+parent_issue: 4830
+design_contract: configs/research/safety_wrapper_ablation_v1.yaml
+status: runnable_contract
+
+name: issue_4830_safety_wrapper_factorial_v1
+paper_facing: false
+paper_interpretation_profile: diagnostic-safety-wrapper-factorial-v1-preregistered
+
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+comparability_mapping: configs/benchmarks/alyassi_comparability_map_v1.yaml
+
+amv_profile:
+  name: amv-paper-v1
+  contract_version: "1"
+  coverage_enforcement: warn
+  required_dimensions:
+    use_case: [delivery_robot, shared_space_micromobility]
+    context: [sidewalk, shared_space]
+    speed_regime: [walking_speed, scooter_speed]
+    maneuver_type: [overtake, crossing, bottleneck]
+
+# Runner-form seed policy preserving the exact paired seeds declared in the design contract
+# (configs/research/safety_wrapper_ablation_v1.yaml::fixed_scope.seeds). The SAME list is applied
+# identically to both wrapper arms, so the only difference within a planner pair is the wrapper.
+seed_policy:
+  mode: fixed-list
+  seeds: [111, 112, 113]
+  seed_sets_path: configs/benchmarks/seed_sets_v1.yaml
+
+snqi_weights: configs/benchmarks/snqi_weights_camera_ready_v3.json
+snqi_baseline: configs/benchmarks/snqi_baseline_camera_ready_v3.json
+snqi_contract:
+  enabled: true
+  enforcement: warn
+  rank_alignment_warn_threshold: 0.5
+  rank_alignment_fail_threshold: 0.3
+  outcome_separation_warn_threshold: 0.05
+  outcome_separation_fail_threshold: 0.0
+  max_component_dominance_warn_threshold: 0.24
+  max_component_dominance_fail_threshold: 0.27
+  calibration_seed: 123
+  calibration_trials: 6000
+
+# Pinned by the #4826 isolation gate and the submit wrapper: each arm runs in its own subprocess
+# so GPU/VRAM is fully released between arms (predecessor job 13333 died of VRAM exhaustion 14.5h
+# in under the serial in-process runner).
+arm_isolation: subprocess
+
+workers: 2
+horizon: 100
+dt: 0.1
+record_forces: true
+resume: true
+stop_on_failure: false
+bootstrap_samples: 300
+bootstrap_confidence: 0.95
+bootstrap_seed: 123
+kinematics_matrix:
+  - differential_drive
+export_publication_bundle: false
+include_videos_in_publication: false
+overwrite_publication_bundle: false
+repository_url: https://github.com/ll7/robot_sf_ll7
+release_tag: "{release_tag}"
+doi: 10.5281/zenodo.<record-id>
+
+# Standard campaign report suite contract for the paired report builder (#4598) and evidence
+# registration. Sharding is a downstream ops decision; this config declares the full six-arm
+# factorial roster.
+report_contract:
+  paired_report_builder_issue: 4598
+  pairing_key_fields: [planner, scenario_id, seed]
+  expected_wrapper_arms: [wrapper_off, wrapper_on]
+  expected_arm_count: 6
+  claim_boundary: >
+    Paired diagnostic campaign, not safety certification. Any wrapper-on/off delta is diagnostic
+    until durable, paired-seed evidence over the full scenario distribution is collected.
+
+# Six factorial arms: 3 planners x {wrapper_off, wrapper_on}. Each planner's off/on pair is
+# identical except for the safety_wrapper block, so the factorial contrast is clean.
+#
+# safety_wrapper thresholds are the FIXED, PREDECLARED modeling choices that match
+# robot_sf.robot.safety_wrapper.SafetyWrapperConfig defaults (no per-planner tuning); the runtime
+# validator (runtime_config_from_mapping) enforces these on the wrapper_on arm.
+planners:
+  # --- ORCA planner pair ---
+  - key: orca__wrapper_off
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fail-fast
+    safety_wrapper:
+      enabled: false
+      arm_key: wrapper_off
+
+  - key: orca__wrapper_on
+    algo: orca
+    planner_group: core
+    benchmark_profile: baseline-safe
+    socnav_missing_prereq_policy: fail-fast
+    safety_wrapper:
+      enabled: true
+      arm_key: wrapper_on
+      pedestrian_caution_radius_m: 2.0
+      capped_speed_m_s: 0.5
+      ttc_veto_threshold_s: 1.0
+      clearance_veto_m: 0.3
+
+  # --- Social-force planner pair ---
+  - key: social_force__wrapper_off
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+    safety_wrapper:
+      enabled: false
+      arm_key: wrapper_off
+
+  - key: social_force__wrapper_on
+    algo: social_force
+    planner_group: core
+    benchmark_profile: baseline-safe
+    safety_wrapper:
+      enabled: true
+      arm_key: wrapper_on
+      pedestrian_caution_radius_m: 2.0
+      capped_speed_m_s: 0.5
+      ttc_veto_threshold_s: 1.0
+      clearance_veto_m: 0.3
+
+  # --- Prediction (learned, model-based) planner pair ---
+  - key: prediction_planner__wrapper_off
+    algo: prediction_planner
+    planner_group: experimental
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    benchmark_profile: experimental
+    safety_wrapper:
+      enabled: false
+      arm_key: wrapper_off
+
+  - key: prediction_planner__wrapper_on
+    algo: prediction_planner
+    planner_group: experimental
+    algo_config: configs/algos/prediction_planner_camera_ready.yaml
+    benchmark_profile: experimental
+    safety_wrapper:
+      enabled: true
+      arm_key: wrapper_on
+      pedestrian_caution_radius_m: 2.0
+      capped_speed_m_s: 0.5
+      ttc_veto_threshold_s: 1.0
+      clearance_veto_m: 0.3

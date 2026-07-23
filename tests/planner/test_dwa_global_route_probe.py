@@ -265,3 +265,37 @@ def test_global_route_probe_deterministic() -> None:
     first = planner.plan(observation)
     second = planner.plan(observation)
     assert first == second
+
+
+def test_global_route_probe_config_enables_route_waypoint_env_override() -> None:
+    """The probe config carries env_overrides.include_route_waypoints for the sensor."""
+    config_dir = Path(__file__).resolve().parents[2] / "configs" / "algos"
+    probe = yaml.safe_load((config_dir / "dwa_global_route_probe.yaml").read_text(encoding="utf-8"))
+    env_overrides = probe.get("env_overrides")
+    assert isinstance(env_overrides, dict)
+    assert env_overrides.get("include_route_waypoints") is True
+
+
+def test_global_route_probe_env_override_propagates_to_sim_config() -> None:
+    """apply_policy_env_observation_overrides propagates include_route_waypoints."""
+    from robot_sf.benchmark.map_runner_env import apply_policy_env_observation_overrides
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+
+    config = RobotSimulationConfig()
+    assert config.include_route_waypoints is False
+
+    apply_policy_env_observation_overrides(
+        config,
+        {"env_overrides": {"include_route_waypoints": True}},
+    )
+    assert config.include_route_waypoints is True
+
+
+def test_global_route_probe_env_override_absent_leaves_default() -> None:
+    """Without env_overrides, include_route_waypoints stays False."""
+    from robot_sf.benchmark.map_runner_env import apply_policy_env_observation_overrides
+    from robot_sf.gym_env.unified_config import RobotSimulationConfig
+
+    config = RobotSimulationConfig()
+    apply_policy_env_observation_overrides(config, {})
+    assert config.include_route_waypoints is False

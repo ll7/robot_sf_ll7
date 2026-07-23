@@ -262,13 +262,13 @@ def resolve_model_path(
             local_path=str(local_path) if local_path is not None else None,
         )
 
-    if not allow_download:
-        raise FileNotFoundError(f"Model '{model_id}' not found locally and downloads are disabled.")
-
+    downloads_allowed = allow_download and os.environ.get("ROBOT_SF_DISABLE_MODEL_DOWNLOADS") != "1"
     if entry.get("github_release"):
-        return _download_from_github_release(entry, cache_dir=cache_dir)
+        return _download_from_github_release(
+            entry, cache_dir=cache_dir, allow_download=downloads_allowed
+        )
 
-    return _download_from_wandb(entry, cache_dir=cache_dir)
+    return _download_from_wandb(entry, cache_dir=cache_dir, allow_download=downloads_allowed)
 
 
 def _sha256(path: Path) -> str:
@@ -278,6 +278,12 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _require_downloads_allowed(*, allow_download: bool, model_id: str) -> None:
+    """Raise when a cache miss would require a disabled model download."""
+    if not allow_download:
+        raise FileNotFoundError(f"Model '{model_id}' not found locally and downloads are disabled.")
 
 
 def sha256_of_file(path: str | Path) -> str:
@@ -292,7 +298,9 @@ def sha256_of_file(path: str | Path) -> str:
     return _sha256(Path(path))
 
 
-def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:
+def _download_from_github_release(
+    entry: dict[str, Any], *, cache_dir: str | Path | None, allow_download: bool = True
+) -> Path:
     """Download a model artifact from a GitHub release asset.
 
     Returns:
@@ -322,6 +330,8 @@ def _download_from_github_release(entry: dict[str, Any], *, cache_dir: str | Pat
 
     if cached_path.exists() and _cached_release_path_is_valid(cached_path, expected_sha256):
         return cached_path
+
+    _require_downloads_allowed(allow_download=allow_download, model_id=model_id)
 
     logger.info("Downloading model artifact {} from GitHub release {}", asset_name, url)
     try:
@@ -557,7 +567,9 @@ def find_latest_wandb_model(
     return candidates[-1][1]
 
 
-def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None) -> Path:
+def _download_from_wandb(
+    entry: dict[str, Any], *, cache_dir: str | Path | None, allow_download: bool = True
+) -> Path:
     """Download a model artifact from W&B using metadata stored in the registry.
 
     Returns:
@@ -580,6 +592,8 @@ def _download_from_wandb(entry: dict[str, Any], *, cache_dir: str | Path | None)
             _LOGGED_CACHED_MODEL_ARTIFACTS.add(resolved_cached_path)
             logger.info("Using cached model artifact: {}", cached_path)
         return cached_path
+
+    _require_downloads_allowed(allow_download=allow_download, model_id=model_id)
 
     artifact_path = entry.get("wandb_artifact_path")
     if artifact_path:

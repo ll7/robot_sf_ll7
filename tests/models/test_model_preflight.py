@@ -114,6 +114,14 @@ def test_preflight_resolves_and_checksum_verifies_into_cache(monkeypatch, tmp_pa
     assert again == resolved
     assert calls == [], "a cached, checksum-valid asset must not be re-downloaded"
 
+    # The timed loop disables downloads, but must still resolve this verified cache hit.
+    monkeypatch.setenv("ROBOT_SF_DISABLE_MODEL_DOWNLOADS", "1")
+    offline = registry.resolve_model_path(
+        "preflight_model", registry_path=registry_path, cache_dir=cache_dir
+    )
+    assert offline == resolved
+    assert calls == [], "offline resolution must reuse the verified cache without networking"
+
 
 def test_preflight_models_stages_each_required_id(monkeypatch, tmp_path: Path) -> None:
     """``preflight_models`` returns a verified cache path for every required id."""

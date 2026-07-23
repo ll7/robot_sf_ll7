@@ -1068,8 +1068,7 @@ def test_native_ppo_runs_offline_after_model_preflight(tmp_path, resolved_bundle
     #    without the seeded actions/cache), skip -- the CI job seeds it first.
     ppo_algo_config = yaml.safe_load(
         (
-            REPOSITORY_ROOT
-            / "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml"
+            REPOSITORY_ROOT / "configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml"
         ).read_text(encoding="utf-8")
     )
     required_models = required_model_ids_for_config(ppo_algo_config)

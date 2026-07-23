@@ -198,6 +198,27 @@ class TestWriteReviewSidecar:
         assert artifact.read_bytes() == original_bytes
         assert sha256_file(artifact) == expected_digest
 
+    def test_registers_evidence_bundle_for_sidecar_only_artifacts(self, tmp_path: Path) -> None:
+        """A byte-preserving artifact and its sidecar share one catalog bundle row."""
+        from scripts.dev.check_docs_evidence_integrity import check_files
+
+        catalog = _init_fake_repo(tmp_path)
+        evidence_dir = tmp_path / "docs/context/evidence/issue_5911_archive"
+        evidence_dir.mkdir(parents=True)
+        artifact = evidence_dir / "archive.json"
+        artifact.write_text('{"a": 1}\n', encoding="utf-8")
+
+        sidecar = write_review_sidecar(artifact, repo_root=tmp_path)
+
+        payload = yaml.safe_load(catalog.read_text(encoding="utf-8"))
+        registered_paths = {entry["path"] for entry in payload["entries"]}
+        assert "docs/context/evidence/issue_5911_archive" in registered_paths
+        paths = [
+            "docs/context/evidence/issue_5911_archive/archive.json",
+            sidecar.relative_to(tmp_path).as_posix(),
+        ]
+        assert check_files(paths, root=tmp_path) == []
+
 
 class TestWriteText:
     """Test marker enforcement for Markdown/text evidence."""
@@ -325,8 +346,8 @@ class TestRegisterEvidence:
             register_evidence(evidence, area="benchmark_evidence", repo_root=tmp_path)
 
 
-class TestWriterCatalogRegistrationOptIn:
-    """Test that write_*(catalog_area=...) registers via the shared writer (issue #6116)."""
+class TestWriterCatalogRegistration:
+    """Test shared writers register evidence-tree output (issue #6116)."""
 
     def test_write_json_registers_when_catalog_area_set(
         self, tmp_path: Path, monkeypatch: MonkeyPatch
@@ -342,16 +363,30 @@ class TestWriterCatalogRegistrationOptIn:
         registered_paths = {entry["path"] for entry in payload["entries"]}
         assert "docs/context/evidence/issue_6116_probe/summary.json" in registered_paths
 
-    def test_write_json_omits_registration_by_default(
+    def test_write_json_registers_evidence_path_by_default(
+        self, tmp_path: Path, monkeypatch: MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("robot_sf.evidence.writers._repo_root", lambda: tmp_path)
+        catalog = _init_fake_repo(tmp_path)
+        path = tmp_path / "docs/context/evidence/issue_6116_probe/summary.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        write_json(path, {"ok": True})
+
+        payload = yaml.safe_load(catalog.read_text(encoding="utf-8"))
+        registered_paths = {entry["path"] for entry in payload["entries"]}
+        assert "docs/context/evidence/issue_6116_probe" in registered_paths
+
+    def test_write_json_omits_registration_outside_evidence_tree(
         self, tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:
         monkeypatch.setattr("robot_sf.evidence.writers._repo_root", lambda: tmp_path)
         catalog = _init_fake_repo(tmp_path)
         original_text = catalog.read_text(encoding="utf-8")
-        path = tmp_path / "docs/context/evidence/issue_6116_probe/summary.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
 
-        write_json(path, {"ok": True})
+        write_json(output_dir / "summary.json", {"ok": True})
 
         assert catalog.read_text(encoding="utf-8") == original_text
 
@@ -401,3 +436,48 @@ class TestRegisterEvidenceIntegrationWithCheck:
 
         after = check_files([rel], root=tmp_path)
         assert after == []
+
+
+class TestProductionWriterCatalogRegistration:
+    """Exercise a production caller, not only the shared helper (issue #6116)."""
+
+    def test_acceptance_audit_registers_emitted_evidence_paths(
+        self, tmp_path: Path, monkeypatch: MonkeyPatch
+    ) -> None:
+        """The production audit writer leaves its changed evidence files integrity-clean."""
+        from scripts.analysis import audit_issue_4013_acceptance as acceptance_audit
+        from scripts.dev.check_docs_evidence_integrity import check_files
+
+        monkeypatch.setattr("robot_sf.evidence.writers._repo_root", lambda: tmp_path)
+        production_audit = {
+            "schema_version": "test.v1",
+            "closure_status": "blocked",
+            "claim_boundary": "test-only production writer probe",
+            "next_empirical_action": "none",
+            "criteria": [
+                {
+                    "criterion": "test criterion",
+                    "status": "met",
+                    "evidence": ["test evidence"],
+                    "remaining_work": None,
+                }
+            ],
+            "merged_pr_evidence": [{"pr": 1, "evidence": "test evidence"}],
+            "blockers_remaining": [],
+            "intentional_non_actions": ["test non-action"],
+        }
+        monkeypatch.setattr(
+            acceptance_audit,
+            "build_acceptance_audit",
+            lambda *, evidence_dir: production_audit,
+        )
+        _init_fake_repo(tmp_path)
+        evidence_dir = tmp_path / "docs/context/evidence/issue_4013_production_probe"
+
+        acceptance_audit.write_acceptance_audit(evidence_dir=evidence_dir)
+
+        emitted_paths = [
+            "docs/context/evidence/issue_4013_production_probe/acceptance_audit.v1.json",
+            "docs/context/evidence/issue_4013_production_probe/acceptance_audit.v1.md",
+        ]
+        assert check_files(emitted_paths, root=tmp_path) == []

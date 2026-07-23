@@ -36,6 +36,7 @@ _CATALOG_RELATIVE_PATH = Path("docs/context/catalog.yaml")
 _EVIDENCE_RELATIVE_DIR = Path("docs/context/evidence")
 _CATALOG_STATUSES = frozenset({"current", "historical", "superseded", "evidence", "proposal"})
 _CATALOG_FRESHNESS = frozenset({"maintained", "dated", "policy", "evidence"})
+_DEFAULT_EVIDENCE_CATALOG_AREA = "benchmark_evidence"
 
 
 def _repo_root() -> Path:
@@ -128,10 +129,11 @@ def write_json(
 ) -> None:
     """Write deterministic JSON with review marker.
 
-    Pass ``catalog_area`` to also register ``path`` in
-    ``docs/context/catalog.yaml`` via :func:`register_evidence` (issue #6116),
-    so the ``docs-evidence-integrity`` CI check passes without a follow-up
-    catalog edit. Omitted by default so existing callers are unaffected.
+    Paths written under ``docs/context/evidence/`` register their evidence
+    bundle automatically in ``docs/context/catalog.yaml`` via
+    :func:`register_evidence` (issue #6116), using ``benchmark_evidence``
+    unless ``catalog_area`` overrides it. Paths outside the evidence tree
+    remain unaffected.
     """
     # Add review marker at top level
     marked_payload = {"review_marker": review_marker_json(), **payload}
@@ -188,6 +190,8 @@ def write_review_sidecar(
         "preserved_exact_bytes": preserved_exact_bytes,
     }
     sidecar_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _maybe_register(artifact_path, repo_root=root)
+    _maybe_register(sidecar_path, repo_root=root)
     return sidecar_path
 
 
@@ -231,10 +235,10 @@ def register_evidence(
     Issue #6116: the ``docs-evidence-integrity`` CI check
     (``scripts/dev/check_docs_evidence_integrity.py``) fails a PR whenever a changed
     ``docs/context/evidence/**`` file has no exact-path or ancestor-directory entry in
-    ``docs/context/catalog.yaml``. Evidence-writer call sites should invoke this after
-    writing an artifact (or pass ``catalog_area`` to the ``write_*`` helpers below,
-    which call it automatically) so future evidence-producing PRs register their own
-    output and pass that check without a follow-up catalog edit.
+    ``docs/context/catalog.yaml``. The shared ``write_*`` helpers below register
+    evidence-tree output automatically; callers can invoke this directly when they
+    need a specific path or catalog area. This keeps future evidence-producing PRs
+    from requiring a follow-up catalog edit.
 
     Idempotent and additive: if ``path`` (or an ancestor evidence-bundle directory) is
     already registered, this is a no-op that returns ``False``. Otherwise it appends
@@ -302,14 +306,44 @@ def register_evidence(
 def _maybe_register(
     path: Path,
     *,
-    catalog_area: str | None,
-    catalog_status: str,
-    catalog_freshness: str,
+    catalog_area: str | None = None,
+    catalog_status: str = "evidence",
+    catalog_freshness: str = "evidence",
+    repo_root: Path | None = None,
 ) -> None:
-    """Call :func:`register_evidence` when ``catalog_area`` opts a caller in."""
+    """Register emitted evidence paths while leaving non-evidence writes alone.
+
+    A shared writer has enough information to safely infer registration only
+    after it has written a path within the active worktree's evidence tree.
+    Automatic registration records the nearest bundle directory rather than
+    only the emitted file, so sibling artifacts written by the same production
+    exporter are covered as well. Those paths receive the generic
+    ``benchmark_evidence`` area by default; callers with a more specific
+    catalog classification can still pass ``catalog_area`` explicitly. This
+    deliberately avoids a git lookup or catalog mutation for ordinary outputs
+    outside ``docs/context/evidence``.
+    """
+    root = repo_root.resolve() if repo_root is not None else None
     if catalog_area is None:
-        return
-    register_evidence(path, area=catalog_area, status=catalog_status, freshness=catalog_freshness)
+        try:
+            root = root if root is not None else _repo_root().resolve()
+            relative_path = path.resolve().relative_to(root)
+        except (OSError, subprocess.CalledProcessError, ValueError):
+            return
+        if _EVIDENCE_RELATIVE_DIR not in relative_path.parents:
+            return
+        catalog_area = _DEFAULT_EVIDENCE_CATALOG_AREA
+        registration_path = path if relative_path.parent == _EVIDENCE_RELATIVE_DIR else path.parent
+    else:
+        registration_path = path
+
+    register_evidence(
+        registration_path,
+        area=catalog_area,
+        status=catalog_status,
+        freshness=catalog_freshness,
+        repo_root=root,
+    )
 
 
 def write_csv(
@@ -322,10 +356,10 @@ def write_csv(
 ) -> None:
     """Write CSV rows with review marker header.
 
-    Pass ``catalog_area`` to also register ``path`` in
-    ``docs/context/catalog.yaml`` via :func:`register_evidence` (issue #6116),
-    so the ``docs-evidence-integrity`` CI check passes without a follow-up
-    catalog edit. Omitted by default so existing callers are unaffected.
+    Paths written under ``docs/context/evidence/`` register their bundle
+    automatically in ``docs/context/catalog.yaml`` (issue #6116).
+    ``catalog_area`` overrides the default ``benchmark_evidence``
+    classification when needed.
     """
     if not rows:
         raise ValueError(f"cannot write empty CSV: {path}")
@@ -360,10 +394,10 @@ def write_text(
     keeps marker ownership in one module while preserving pinned marker dates
     and byte-stable reruns.
 
-    Pass ``catalog_area`` to also register ``path`` in
-    ``docs/context/catalog.yaml`` via :func:`register_evidence` (issue #6116),
-    so the ``docs-evidence-integrity`` CI check passes without a follow-up
-    catalog edit. Omitted by default so existing callers are unaffected.
+    Paths written under ``docs/context/evidence/`` register their bundle
+    automatically in ``docs/context/catalog.yaml`` (issue #6116).
+    ``catalog_area`` overrides the default ``benchmark_evidence``
+    classification when needed.
     """
     if issue_ref is not None:
         marker = review_marker(issue_ref, marker_date=marker_date)
@@ -411,13 +445,14 @@ def write_distance_series_csv(
             (``center_center`` / ``surface_clearance`` / ``center_segment``).
         series_name: Optional series identifier for error messages; defaults
             to the file name.
-        catalog_area: When set, also registers ``path`` in
-            ``docs/context/catalog.yaml`` via :func:`register_evidence`
-            (issue #6116). Omitted by default so existing callers are
-            unaffected.
-        catalog_status: Catalog ``status`` used when ``catalog_area`` is set.
-        catalog_freshness: Catalog ``freshness`` used when ``catalog_area`` is
-            set.
+        catalog_area: Optional catalog-area override. Paths under
+            ``docs/context/evidence/`` otherwise register their evidence
+            bundle automatically with the default ``benchmark_evidence`` area
+            (issue #6116).
+        catalog_status: Catalog ``status`` used for automatic or explicit
+            registration.
+        catalog_freshness: Catalog ``freshness`` used for automatic or
+            explicit registration.
     """
     resolved = require_distance_convention(
         {DISTANCE_CONVENTION_FIELD: convention}, series_name or path.name
@@ -450,13 +485,12 @@ def write_sha256sums(
     Computes hashes over the marked files (including markers).
 
     ``write_sha256sums`` is typically the last step of finishing an evidence
-    bundle directory, so pass ``catalog_area`` here to register the whole
-    ``output_dir`` bundle in ``docs/context/catalog.yaml`` via
-    :func:`register_evidence` (issue #6116): one directory-level entry covers
-    every file already written under it (including this ``SHA256SUMS`` file),
-    matching the ancestor-directory registration rule enforced by the
-    ``docs-evidence-integrity`` CI check. Omitted by default so existing
-    callers are unaffected.
+    bundle directory. When ``output_dir`` is under ``docs/context/evidence/``,
+    it therefore registers the whole bundle automatically in
+    ``docs/context/catalog.yaml`` (issue #6116). One directory-level entry
+    covers every file already written under it, including this ``SHA256SUMS``
+    file; ``catalog_area`` can override the default ``benchmark_evidence``
+    classification.
     """
     files = sorted(
         path for path in output_dir.iterdir() if path.is_file() and path.name != "SHA256SUMS"

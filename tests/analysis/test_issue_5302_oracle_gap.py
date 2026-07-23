@@ -16,6 +16,8 @@ from robot_sf.benchmark.issue_5302_oracle_gap import (
     IncompleteEpisodeError,
     InvalidRowStatusError,
     NonNativeRowError,
+    OracleGapAnalysisError,
+    ProvenanceGapError,
     SplitLeakageError,
     compute_claim_gate,
     run_full_oracle_gap_analysis,
@@ -138,7 +140,7 @@ def test_bootstrap_determinism_and_seed() -> None:
 
 def test_missing_arm_fails_closed() -> None:
     """Verify that incomplete episodes (< 6 arms) raise IncompleteEpisodeError."""
-    rows = _make_synthetic_six_arm_dataset(n_families=2, with_selection_split=False)
+    rows = _make_synthetic_six_arm_dataset(n_families=4, with_selection_split=True)
 
     # Omit one planner row from the first episode
     ep0_id = rows[0]["episode_id"]
@@ -164,7 +166,7 @@ def test_split_leakage_fails_closed() -> None:
 
 def test_non_native_row_fails_closed() -> None:
     """Verify that non-native execution mode rows raise NonNativeRowError."""
-    rows = _make_synthetic_six_arm_dataset(n_families=2, with_selection_split=False)
+    rows = _make_synthetic_six_arm_dataset(n_families=4, with_selection_split=True)
     rows[0]["execution_mode"] = "adapter"
 
     with pytest.raises(NonNativeRowError, match="non-native execution mode rows"):
@@ -173,7 +175,7 @@ def test_non_native_row_fails_closed() -> None:
 
 def test_invalid_row_status_fails_closed() -> None:
     """Verify that invalid row_status raises InvalidRowStatusError."""
-    rows = _make_synthetic_six_arm_dataset(n_families=2, with_selection_split=False)
+    rows = _make_synthetic_six_arm_dataset(n_families=4, with_selection_split=True)
     rows[0]["row_status"] = "diagnostic_only"
 
     with pytest.raises(InvalidRowStatusError, match="invalid row_status rows"):
@@ -198,21 +200,146 @@ def test_claim_gate_practical_equivalence_and_universally_best() -> None:
     """Verify practical equivalence band thresholding and universally_best_emitted guard."""
     # Case A: Gaps small (low CI <= 0.02) -> STOP_SELECTOR
     cis_small = {
-        "gap.family_gap.selection_score": {"ci_low": 0.01, "ci_high": 0.03},
-        "gap.cell_gap.selection_score": {"ci_low": 0.015, "ci_high": 0.04},
+        "gap.family_gap.completion_rate": {"ci_low": 0.01, "ci_high": 0.03},
+        "gap.cell_gap.completion_rate": {"ci_low": 0.015, "ci_high": 0.04},
     }
     gate_small = compute_claim_gate(cis_small)
     assert gate_small["status"] == "STOP_SELECTOR"
+    assert gate_small["decision_metric"] == "completion_rate"
     assert gate_small["universally_best_emitted"] is False
 
     # Case B: Gaps large (low CI > 0.02) -> PROCEED_TO_SELECTOR_ISSUE
     cis_large = {
-        "gap.family_gap.selection_score": {"ci_low": 0.03, "ci_high": 0.06},
-        "gap.cell_gap.selection_score": {"ci_low": 0.04, "ci_high": 0.08},
+        "gap.family_gap.completion_rate": {"ci_low": 0.03, "ci_high": 0.06},
+        "gap.cell_gap.completion_rate": {"ci_low": 0.04, "ci_high": 0.08},
     }
     gate_large = compute_claim_gate(cis_large)
     assert gate_large["status"] == "PROCEED_TO_SELECTOR_ISSUE"
     assert gate_large["universally_best_emitted"] is False
+
+
+def test_evaluation_only_input_fails_closed() -> None:
+    """A held-out claim requires distinct non-empty selection and evaluation families."""
+    rows = _make_synthetic_six_arm_dataset(n_families=2, with_selection_split=False)
+
+    with pytest.raises(SplitLeakageError, match="non-empty selection and evaluation"):
+        validate_rows_fail_closed(rows)
+
+
+def test_unknown_split_value_fails_closed() -> None:
+    """Only the frozen selection/evaluation split vocabulary is admissible."""
+    rows = _make_synthetic_six_arm_dataset(n_families=4, with_selection_split=True)
+    rows[0]["split"] = "holdout"
+
+    with pytest.raises(SplitLeakageError, match="allowed values"):
+        validate_rows_fail_closed(rows)
+
+
+@pytest.mark.parametrize("field", ["config_hash", "repo_commit"])
+def test_empty_provenance_fails_closed(field: str) -> None:
+    """Required provenance fields must contain usable values, not only exist."""
+    rows = _make_synthetic_six_arm_dataset(n_families=4, with_selection_split=True)
+    for row in rows:
+        row[field] = ""
+
+    with pytest.raises(ProvenanceGapError, match=field):
+        validate_rows_fail_closed(rows)
+
+
+def test_invalid_or_mixed_repo_commit_fails_closed() -> None:
+    """A durable campaign bundle must identify one valid repository commit."""
+    rows = _make_synthetic_six_arm_dataset(n_families=4, with_selection_split=True)
+    rows[0]["repo_commit"] = "not-a-commit"
+    with pytest.raises(ProvenanceGapError, match="repo_commit"):
+        validate_rows_fail_closed(rows)
+
+    rows = _make_synthetic_six_arm_dataset(n_families=4, with_selection_split=True)
+    rows[0]["repo_commit"] = "1234567890abcdef1234567890abcdef12345678"
+    with pytest.raises(ProvenanceGapError, match="single repo_commit"):
+        validate_rows_fail_closed(rows)
+
+
+@pytest.mark.parametrize("field,replacement", [("scenario_id", "other"), ("seed", 999999)])
+def test_cross_arm_episode_identity_drift_fails_closed(field: str, replacement: object) -> None:
+    """All six planner rows in an episode must describe the same frozen episode."""
+    rows = _make_synthetic_six_arm_dataset(n_families=4, with_selection_split=True)
+    episode_id = str(rows[0]["episode_id"])
+    for row in rows:
+        if row["episode_id"] == episode_id and row["planner_id"] == "ppo":
+            row[field] = replacement
+            break
+
+    with pytest.raises(IncompleteEpisodeError, match="inconsistent"):
+        validate_rows_fail_closed(rows)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+def test_nonfinite_numeric_metric_fails_closed(value: float) -> None:
+    """NaN and infinities must never reach estimators or JSON evidence."""
+    rows = _make_synthetic_six_arm_dataset(n_families=4, with_selection_split=True)
+    rows[0]["selection_score"] = value
+
+    with pytest.raises(ProvenanceGapError, match="finite"):
+        validate_rows_fail_closed(rows)
+
+
+def test_string_numeric_metric_fails_closed() -> None:
+    """Numeric-looking strings must not pass validation and fail later in estimators."""
+    rows = _make_synthetic_six_arm_dataset(n_families=4, with_selection_split=True)
+    rows[0]["selection_score"] = "0.5"
+
+    with pytest.raises(ProvenanceGapError, match="numeric"):
+        validate_rows_fail_closed(rows)
+
+
+def test_zero_bootstrap_samples_fail_closed() -> None:
+    """A claim gate cannot substitute zeroes for a missing bootstrap distribution."""
+    rows = _make_synthetic_six_arm_dataset(
+        n_families=4,
+        cells_per_family=2,
+        episodes_per_cell=2,
+        with_selection_split=True,
+    )
+
+    with pytest.raises(OracleGapAnalysisError, match="n_bootstrap must be positive"):
+        run_full_oracle_gap_analysis(rows, n_bootstrap=0, seed=5302)
+
+
+def test_claim_gate_rejects_missing_or_nonfinite_completion_intervals() -> None:
+    """The frozen claim gate requires finite completion-gap lower bounds."""
+    with pytest.raises(OracleGapAnalysisError, match="completion-rate interval"):
+        compute_claim_gate({})
+
+    with pytest.raises(OracleGapAnalysisError, match="finite"):
+        compute_claim_gate(
+            {
+                "gap.family_gap.completion_rate": {
+                    "ci_low": float("nan"),
+                    "ci_high": 0.03,
+                },
+                "gap.cell_gap.completion_rate": {"ci_low": 0.01, "ci_high": 0.04},
+            }
+        )
+
+
+def test_pareto_dominance_reports_hierarchical_bootstrap_probabilities() -> None:
+    """Pareto output must be bootstrap probabilities, not a boolean point matrix."""
+    rows = _make_synthetic_six_arm_dataset(
+        n_families=4,
+        cells_per_family=2,
+        episodes_per_cell=3,
+        with_selection_split=True,
+    )
+    result = run_full_oracle_gap_analysis(rows, n_bootstrap=40, seed=5302)
+    pareto = result["pareto_dominance"]
+
+    assert pareto["bootstrap_samples"] == 40
+    probabilities = pareto["pareto_dominance_probability"]
+    assert set(probabilities) == set(pareto["entities"])
+    for entity, row in probabilities.items():
+        assert set(row) == set(pareto["entities"])
+        assert row[entity] == 0.0
+        assert all(isinstance(value, float) and 0.0 <= value <= 1.0 for value in row.values())
 
 
 def test_cli_end_to_end_execution(tmp_path: Path) -> None:

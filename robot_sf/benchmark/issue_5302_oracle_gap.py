@@ -18,6 +18,7 @@ import csv
 import json
 import math
 import random
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,29 @@ REQUIRED_METRICS: tuple[str, ...] = (
     "compute_time_ms_p95",
     "compute_time_ms_p99",
 )
+
+NUMERIC_ROW_FIELDS: tuple[str, ...] = (
+    "selection_score",
+    "collision_rate",
+    "severe_intrusion_rate",
+    "completion_rate",
+    "timeout_rate",
+    "tail_clearance",
+    "jerk",
+    "pedestrian_disturbance",
+    "compute_time_ms",
+)
+
+EPISODE_IDENTITY_FIELDS: tuple[str, ...] = (
+    "scenario_id",
+    "scenario_family",
+    "scenario_cell",
+    "split",
+    "seed",
+)
+
+ALLOWED_SPLITS = frozenset({"selection", "evaluation"})
+_COMMIT_PATTERN = re.compile(r"^[0-9a-fA-F]{7,64}$")
 
 CEILING_IDS: tuple[str, ...] = (
     "best_fixed_planner",
@@ -181,6 +205,64 @@ def _percentile_ci(sorted_vals: list[float], conf: float = 0.95) -> tuple[float,
     return (sorted_vals[low_idx], sorted_vals[high_idx])
 
 
+def _require_nonempty_string(row: dict[str, Any], field: str, row_index: int) -> str:
+    """Return a stripped required string or fail closed."""
+    value = row.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ProvenanceGapError(f"Row {row_index} field '{field}' must be a non-empty string")
+    return value.strip()
+
+
+def _validate_row_values(row: dict[str, Any], row_index: int) -> None:
+    """Validate one row's frozen split, provenance, identity, and numeric values."""
+    for field in (
+        "episode_id",
+        "scenario_id",
+        "scenario_family",
+        "scenario_cell",
+        "planner_id",
+        "config_hash",
+        "repo_commit",
+    ):
+        _require_nonempty_string(row, field, row_index)
+
+    split = _require_nonempty_string(row, "split", row_index).lower()
+    if split not in ALLOWED_SPLITS:
+        raise SplitLeakageError(
+            f"Row {row_index} split '{split}' is not one of the allowed values: "
+            f"{sorted(ALLOWED_SPLITS)}"
+        )
+
+    repo_commit = str(row["repo_commit"]).strip()
+    if _COMMIT_PATTERN.fullmatch(repo_commit) is None:
+        raise ProvenanceGapError(
+            f"Row {row_index} repo_commit must be a 7-64 character hexadecimal commit id"
+        )
+
+    seed = row.get("seed")
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise ProvenanceGapError(f"Row {row_index} field 'seed' must be an integer")
+
+    for field in NUMERIC_ROW_FIELDS:
+        value = row.get(field)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ProvenanceGapError(f"Row {row_index} field '{field}' must be numeric")
+        numeric_value = float(value)
+        if not math.isfinite(numeric_value):
+            raise ProvenanceGapError(f"Row {row_index} field '{field}' must be finite")
+
+
+def _validate_episode_identity(ep_id: str, ep_rows: list[dict[str, Any]]) -> None:
+    """Require all six planner rows to describe the same frozen episode."""
+    for field in EPISODE_IDENTITY_FIELDS:
+        values = {row[field] for row in ep_rows}
+        if len(values) != 1:
+            raise IncompleteEpisodeError(
+                f"Episode {ep_id} has inconsistent '{field}' values across planner arms: "
+                f"{sorted(str(value) for value in values)}"
+            )
+
+
 def validate_rows_fail_closed(rows: list[dict[str, Any]]) -> dict[str, Any]:  # noqa: C901
     """Validate input rows under fail-closed contract rules.
 
@@ -207,6 +289,7 @@ def validate_rows_fail_closed(rows: list[dict[str, Any]]) -> dict[str, Any]:  # 
         missing = required_set - set(row.keys())
         if missing:
             raise ProvenanceGapError(f"Row {i} is missing required fields: {sorted(missing)}")
+        _validate_row_values(row, i)
         if str(row["execution_mode"]).strip().lower() != "native":
             non_native_rows += 1
         if str(row["row_status"]).strip().lower() != "successful_evidence":
@@ -223,6 +306,13 @@ def validate_rows_fail_closed(rows: list[dict[str, Any]]) -> dict[str, Any]:  # 
             "only successful_evidence rows are eligible evidence"
         )
 
+    repo_commits = {str(row["repo_commit"]).strip().lower() for row in rows}
+    if len(repo_commits) != 1:
+        raise ProvenanceGapError(
+            "All rows in one analysis bundle must identify a single repo_commit; "
+            f"found {sorted(repo_commits)}"
+        )
+
     # Check split leakage (disjoint scenario_family sets between selection and evaluation)
     selection_families = {
         str(r["scenario_family"]) for r in rows if str(r["split"]).strip().lower() == "selection"
@@ -230,6 +320,10 @@ def validate_rows_fail_closed(rows: list[dict[str, Any]]) -> dict[str, Any]:  # 
     evaluation_families = {
         str(r["scenario_family"]) for r in rows if str(r["split"]).strip().lower() == "evaluation"
     }
+    if not selection_families or not evaluation_families:
+        raise SplitLeakageError(
+            "Held-out analysis requires non-empty selection and evaluation scenario-family sets"
+        )
     overlap = selection_families & evaluation_families
     if overlap:
         raise SplitLeakageError(
@@ -252,6 +346,8 @@ def validate_rows_fail_closed(rows: list[dict[str, Any]]) -> dict[str, Any]:  # 
                 f"Episode {ep_id} does not contain complete 6-arm roster. "
                 f"Found planners: {sorted(planner_ids)}, expected: {EXPECTED_PLANNERS}"
             )
+
+        _validate_episode_identity(ep_id, ep_rows)
 
     found_planners = sorted({str(r["planner_id"]) for r in rows})
     return {
@@ -481,34 +577,47 @@ def summarize_ceiling_metrics(
     return summary
 
 
-def run_hierarchical_bootstrap(  # noqa: C901
+def _pareto_dominates(first: dict[str, float], second: dict[str, float]) -> bool:
+    """Return whether the first entity strictly Pareto-dominates the second."""
+    first_values = (
+        first["completion_rate"],
+        -first["collision_rate"],
+        -first["severe_intrusion_rate"],
+        first["tail_clearance"],
+    )
+    second_values = (
+        second["completion_rate"],
+        -second["collision_rate"],
+        -second["severe_intrusion_rate"],
+        second["tail_clearance"],
+    )
+    return all(
+        left >= right for left, right in zip(first_values, second_values, strict=True)
+    ) and any(left > right for left, right in zip(first_values, second_values, strict=True))
+
+
+def run_hierarchical_bootstrap(  # noqa: C901, PLR0912, PLR0915
     eval_episodes_by_hierarchy: dict[str, dict[str, list[list[dict[str, Any]]]]],
     selection_rows: list[dict[str, Any]],
     n_samples: int = 1000,
     seed: int = 5302,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """Run 3-level (family -> cell -> episode) hierarchical bootstrap resampling.
 
     Returns:
         dict[str, Any]: Bootstrap distributions and 95% CIs for metrics and paired gaps.
     """
+    if n_samples <= 0:
+        raise OracleGapAnalysisError("n_bootstrap must be positive")
+
     rng = random.Random(seed)
 
     families = sorted(eval_episodes_by_hierarchy.keys())
     if not families:
-        return {}
+        raise OracleGapAnalysisError("Evaluation hierarchy must contain at least one family")
 
     # Identify pre-selected fixed/family/cell planners on base dataset
-    eval_rows_flat = [
-        r
-        for fam_cells in eval_episodes_by_hierarchy.values()
-        for cell_eps in fam_cells.values()
-        for ep in cell_eps
-        for r in ep
-    ]
-    sel_rows = selection_rows if selection_rows else eval_rows_flat
-
-    base_fixed = _select_fixed_planner(sel_rows)
+    base_fixed = _select_fixed_planner(selection_rows)
     base_family_map = _select_family_planners(
         [
             ep
@@ -528,6 +637,8 @@ def run_hierarchical_bootstrap(  # noqa: C901
 
     # Storage for bootstrap replicates
     bootstrap_results: dict[str, list[float]] = {}
+    pareto_entities = [*EXPECTED_PLANNERS, *CEILING_IDS]
+    dominance_counts = {entity: dict.fromkeys(pareto_entities, 0) for entity in pareto_entities}
 
     for _ in range(n_samples):
         # 1. Resample families
@@ -576,7 +687,10 @@ def run_hierarchical_bootstrap(  # noqa: C901
             bootstrap_results.setdefault(f"gap.{gap_name}.selection_score", []).append(score_gap)
             bootstrap_results.setdefault(f"gap.{gap_name}.completion_rate", []).append(comp_gap)
 
-        # Store individual planner metrics
+        # Store individual planner metrics and the same replicate's Pareto entities.
+        replicate_entity_metrics: dict[str, dict[str, float]] = {
+            cid: summary[cid] for cid in CEILING_IDS
+        }
         planner_ep_rows: dict[str, list[dict[str, Any]]] = {p: [] for p in EXPECTED_PLANNERS}
         for ep in boot_episodes:
             for r in ep:
@@ -590,10 +704,25 @@ def run_hierarchical_bootstrap(  # noqa: C901
             n_p = len(p_rows)
             p_comp = float(sum(r["completion_rate"] for r in p_rows) / n_p)
             p_col = float(sum(r["collision_rate"] for r in p_rows) / n_p)
+            p_severe = float(sum(r["severe_intrusion_rate"] for r in p_rows) / n_p)
+            p_tail = float(sum(r["tail_clearance"] for r in p_rows) / n_p)
             p_score = float(sum(r["selection_score"] for r in p_rows) / n_p)
             bootstrap_results.setdefault(f"planner.{pid}.completion_rate", []).append(p_comp)
             bootstrap_results.setdefault(f"planner.{pid}.collision_rate", []).append(p_col)
             bootstrap_results.setdefault(f"planner.{pid}.selection_score", []).append(p_score)
+            replicate_entity_metrics[pid] = {
+                "completion_rate": p_comp,
+                "collision_rate": p_col,
+                "severe_intrusion_rate": p_severe,
+                "tail_clearance": p_tail,
+            }
+
+        for entity in pareto_entities:
+            for other in pareto_entities:
+                if entity != other and _pareto_dominates(
+                    replicate_entity_metrics[entity], replicate_entity_metrics[other]
+                ):
+                    dominance_counts[entity][other] += 1
 
     # Compute summary intervals
     cis: dict[str, dict[str, Any]] = {}
@@ -609,7 +738,17 @@ def run_hierarchical_bootstrap(  # noqa: C901
             "ci_high": float(high),
         }
 
-    return cis
+    probabilities = {
+        entity: {
+            other: float(dominance_counts[entity][other] / n_samples) for other in pareto_entities
+        }
+        for entity in pareto_entities
+    }
+    return cis, {
+        "bootstrap_samples": n_samples,
+        "entities": pareto_entities,
+        "pareto_dominance_probability": probabilities,
+    }
 
 
 def compute_pareto_dominance(
@@ -700,6 +839,36 @@ def compute_normalized_regret(
     return results
 
 
+def _required_completion_interval_low(bootstrap_cis: dict[str, Any], key: str) -> float:
+    """Return a finite ordered completion-rate CI lower bound or fail closed."""
+    interval = bootstrap_cis.get(key)
+    if not isinstance(interval, dict):
+        raise OracleGapAnalysisError(f"Missing required completion-rate interval '{key}'")
+    bounds: dict[str, float] = {}
+    for bound_name in ("ci_low", "ci_high"):
+        value = interval.get(bound_name)
+        if isinstance(value, bool):
+            raise OracleGapAnalysisError(
+                f"Completion-rate interval '{key}' bound '{bound_name}' must be finite"
+            )
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError) as exc:
+            raise OracleGapAnalysisError(
+                f"Completion-rate interval '{key}' bound '{bound_name}' must be finite"
+            ) from exc
+        if not math.isfinite(numeric_value):
+            raise OracleGapAnalysisError(
+                f"Completion-rate interval '{key}' bound '{bound_name}' must be finite"
+            )
+        bounds[bound_name] = numeric_value
+    if bounds["ci_low"] > bounds["ci_high"]:
+        raise OracleGapAnalysisError(
+            f"Completion-rate interval '{key}' has ci_low greater than ci_high"
+        )
+    return bounds["ci_low"]
+
+
 def compute_claim_gate(
     bootstrap_cis: dict[str, Any],
 ) -> dict[str, Any]:
@@ -708,13 +877,8 @@ def compute_claim_gate(
     Returns:
         dict[str, Any]: Claim gate decision rule status, thresholds, and rationale.
     """
-    family_gap_ci = bootstrap_cis.get(
-        "gap.family_gap.selection_score", {"ci_low": 0.0, "ci_high": 0.0}
-    )
-    cell_gap_ci = bootstrap_cis.get("gap.cell_gap.selection_score", {"ci_low": 0.0, "ci_high": 0.0})
-
-    fam_low = float(family_gap_ci.get("ci_low", 0.0))
-    cell_low = float(cell_gap_ci.get("ci_low", 0.0))
+    fam_low = _required_completion_interval_low(bootstrap_cis, "gap.family_gap.completion_rate")
+    cell_low = _required_completion_interval_low(bootstrap_cis, "gap.cell_gap.completion_rate")
 
     if fam_low <= PRACTICAL_EQUIVALENCE_THRESHOLD or cell_low <= PRACTICAL_EQUIVALENCE_THRESHOLD:
         status = "STOP_SELECTOR"
@@ -735,6 +899,7 @@ def compute_claim_gate(
 
     return {
         "status": status,
+        "decision_metric": "completion_rate",
         "practical_equivalence_threshold": PRACTICAL_EQUIVALENCE_THRESHOLD,
         "family_gap_ci_lower": fam_low,
         "cell_gap_ci_lower": cell_low,
@@ -759,10 +924,6 @@ def run_full_oracle_gap_analysis(
     selection_rows = [r for r in rows if str(r["split"]).strip().lower() == "selection"]
     evaluation_rows = [r for r in rows if str(r["split"]).strip().lower() == "evaluation"]
 
-    # If no evaluation split present, use all rows as evaluation
-    if not evaluation_rows:
-        evaluation_rows = list(rows)
-
     # Build evaluation episode hierarchy: family -> cell -> list of episodes (each 6 rows)
     eval_episodes_map: dict[str, list[dict[str, Any]]] = {}
     for r in evaluation_rows:
@@ -778,8 +939,7 @@ def run_full_oracle_gap_analysis(
         eval_hierarchy.setdefault(fam, {}).setdefault(cell, []).append(ep)
 
     # Compute base ceiling selections
-    sel_input = selection_rows if selection_rows else evaluation_rows
-    fixed_planner = _select_fixed_planner(sel_input)
+    fixed_planner = _select_fixed_planner(selection_rows)
     family_planners = _select_family_planners(eval_episodes)
     cell_planners = _select_cell_planners(eval_episodes)
 
@@ -789,7 +949,7 @@ def run_full_oracle_gap_analysis(
     base_ceiling_summary = summarize_ceiling_metrics(selections)
 
     # Hierarchical bootstrap
-    bootstrap_cis = run_hierarchical_bootstrap(
+    bootstrap_cis, bootstrap_pareto = run_hierarchical_bootstrap(
         eval_hierarchy, selection_rows, n_samples=n_bootstrap, seed=seed
     )
 
@@ -820,6 +980,7 @@ def run_full_oracle_gap_analysis(
     entity_metrics.update(base_ceiling_summary)
 
     pareto_data = compute_pareto_dominance(entity_metrics)
+    pareto_data.update(bootstrap_pareto)
     normalized_regret_rows = compute_normalized_regret(eval_episodes, selections)
     claim_gate = compute_claim_gate(bootstrap_cis)
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from tests.conftest import _clean_stale_proc_dirs, _is_pid_running
@@ -94,33 +95,39 @@ def test_quiet_pass(tmp_path):
         text=True,
     )
 
-    # Let session 1 start writing
-    for _ in range(50):
-        if ready_file.exists():
-            break
-        import time
+    out1 = ""
+    err1 = ""
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not ready_file.exists() and proc1.poll() is None:
+            time.sleep(0.02)
+        assert ready_file.exists(), "The active child pytest session did not start writing in time"
 
-        time.sleep(0.02)
-    assert ready_file.exists(), "The active child pytest session did not start writing in time"
-
-    proc2 = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            "-q",
-            "-W",
-            "error::pytest.PytestWarning",
-            str(quiet_test_file),
-        ],
-        env=env2,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-    )
-
-    out1, err1 = proc1.communicate(timeout=30)
+        proc2 = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-W",
+                "error::pytest.PytestWarning",
+                str(quiet_test_file),
+            ],
+            env=env2,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        out1, err1 = proc1.communicate(timeout=30)
+    finally:
+        if proc1.poll() is None:
+            proc1.terminate()
+            try:
+                proc1.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc1.kill()
+                proc1.wait(timeout=5)
 
     assert proc1.returncode == 0, f"Session 1 failed: {err1}\n{out1}"
     assert proc2.returncode == 0, (
@@ -165,3 +172,16 @@ def test_xdist_2(tmp_path):
 
     assert res.returncode == 0, f"xdist run failed: {res.stderr}\n{res.stdout}"
     assert "(rm_rf)" not in res.stderr
+
+
+def test_shell_wrappers_use_shared_portable_temproot_contract() -> None:
+    """Both shell entry points should delegate ownership to the portable helper."""
+    repo_root = Path(__file__).resolve().parents[2]
+    for relative_path in (
+        "scripts/dev/run_focused_tests.sh",
+        "scripts/dev/run_tests_parallel.sh",
+    ):
+        script = (repo_root / relative_path).read_text(encoding="utf-8")
+        assert "tests/support/pytest_temproot.py" in script
+        assert "trap cleanup_pytest_temproot EXIT" in script
+        assert "sha256sum" not in script

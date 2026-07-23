@@ -232,9 +232,17 @@ esac
 
 if [[ -z "${PYTEST_DEBUG_TEMPROOT:-}" ]]; then
   repo_root="$(cd "$SCRIPT_DIR/../.." && pwd)"
-  repo_hash="$(printf '%s' "$repo_root" | sha256sum | cut -c1-10)"
-  export PYTEST_DEBUG_TEMPROOT="${TMPDIR:-/tmp}/pytest-of-${USER:-unknown}/wt-${repo_hash}/proc-$$"
-  mkdir -p "$PYTEST_DEBUG_TEMPROOT"
+  pytest_temproot_owner_pid="$$"
+  pytest_temproot_helper="$repo_root/tests/support/pytest_temproot.py"
+  export PYTEST_DEBUG_TEMPROOT="$(
+    python3 "$pytest_temproot_helper" prepare \
+      --project-root "$repo_root" --pid "$pytest_temproot_owner_pid"
+  )"
+  cleanup_pytest_temproot() {
+    python3 "$pytest_temproot_helper" cleanup \
+      --project-root "$repo_root" --pid "$pytest_temproot_owner_pid"
+  }
+  trap cleanup_pytest_temproot EXIT
 fi
 
 cmd=(uv run pytest -n "$worker_spec" --dist "$dist_mode")

@@ -5,9 +5,6 @@ Rewritten to purge legacy pytest_sessionfinish hook with invalid signature.
 
 from __future__ import annotations
 
-import errno
-import getpass
-import hashlib
 import importlib
 import os
 import shutil
@@ -29,6 +26,11 @@ from robot_sf.nav.global_route import GlobalRoute
 from robot_sf.nav.map_config import MapDefinition
 from robot_sf.planner import ClassicGlobalPlanner, ClassicPlannerConfig
 from tests.support.process_teardown import reap_matching_descendants
+from tests.support.pytest_temproot import (
+    clean_stale_process_roots,
+    is_pid_running,
+)
+from tests.support.pytest_temproot import pytest_process_root as _pytest_process_root
 
 try:
     from tests.perf_utils.policy import PerformanceBudgetPolicy
@@ -48,38 +50,12 @@ if root_str not in sys.path:
     sys.path.insert(0, root_str)
 
 
-def _is_pid_running(pid: int) -> bool:
-    """Return True if a process with *pid* is currently running.
-
-    Args:
-        pid: Process ID to check.
-
-    Returns:
-        True if process exists or belongs to another user, False if dead.
-    """
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except OSError as err:
-        if err.errno == errno.ESRCH:
-            return False
-        return True
+_is_pid_running = is_pid_running
 
 
 def _clean_stale_proc_dirs(wt_dir: Path) -> None:
     """Clean up process temproot directories whose PID is no longer running."""
-    if not wt_dir.exists():
-        return
-    current_pid = os.getpid()
-    for proc_dir in wt_dir.glob("proc-*"):
-        try:
-            proc_pid = int(proc_dir.name.split("-", 1)[1])
-            if proc_pid != current_pid and not _is_pid_running(proc_pid):
-                shutil.rmtree(proc_dir, ignore_errors=True)
-        except (ValueError, IndexError, OSError):
-            pass
+    clean_stale_process_roots(wt_dir)
 
 
 def _setup_isolated_pytest_temproot() -> None:
@@ -88,22 +64,16 @@ def _setup_isolated_pytest_temproot() -> None:
     Prevents cross-session temporary directory cleanup collisions and PytestWarning (rm_rf)
     cleanup warnings when multiple pytest sessions run concurrently.
     """
-    wt_hash = hashlib.sha256(str(PROJECT_ROOT).encode("utf-8")).hexdigest()[:10]
-    try:
-        user = getpass.getuser()
-    except Exception:
-        user = "unknown"
-
-    wt_dir = Path(f"/tmp/pytest-of-{user}/wt-{wt_hash}")
-    _clean_stale_proc_dirs(wt_dir)
-
-    if "PYTEST_DEBUG_TEMPROOT" in os.environ:
+    configured_temproot = os.environ.get("PYTEST_DEBUG_TEMPROOT")
+    if configured_temproot:
+        _clean_stale_proc_dirs(Path(configured_temproot).parent)
         return
     for arg in sys.argv:
         if arg.startswith("--basetemp"):
             return
 
-    temproot = wt_dir / f"proc-{os.getpid()}"
+    temproot = _pytest_process_root(PROJECT_ROOT, os.getpid())
+    _clean_stale_proc_dirs(temproot.parent)
     temproot.mkdir(parents=True, exist_ok=True)
     os.environ["PYTEST_DEBUG_TEMPROOT"] = str(temproot)
 
@@ -128,7 +98,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             )
 
     temproot_env = os.environ.get("PYTEST_DEBUG_TEMPROOT")
-    if temproot_env and f"/proc-{os.getpid()}" in temproot_env:
+    if temproot_env and Path(temproot_env) == _pytest_process_root(PROJECT_ROOT, os.getpid()):
         temproot_path = Path(temproot_env)
         if temproot_path.exists():
             shutil.rmtree(temproot_path, ignore_errors=True)

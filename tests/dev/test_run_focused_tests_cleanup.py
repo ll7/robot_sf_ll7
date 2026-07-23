@@ -81,7 +81,7 @@ def test_focused_tests_uses_portable_owned_temproot_and_removes_it(helper_repo: 
     """The wrapper should remove its exact macOS-style temporary root on exit."""
     capture = helper_repo / "captured-temproot.txt"
     (helper_repo / "bin" / "uv").write_text(
-        "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%s' \"$PYTEST_DEBUG_TEMPROOT\" > \"$CAPTURE_TEMPROOT\"\n",
+        '#!/usr/bin/env bash\nset -euo pipefail\nprintf \'%s\' "$PYTEST_DEBUG_TEMPROOT" > "$CAPTURE_TEMPROOT"\n',
         encoding="utf-8",
     )
     (helper_repo / "bin" / "uv").chmod(0o755)

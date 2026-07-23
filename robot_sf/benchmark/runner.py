@@ -2579,6 +2579,10 @@ def run_batch(  # noqa: PLR0913
     workers: int = 1,
     resume: bool = True,
     circuit_breaker_threshold: int | None = None,
+    # Planner-agnostic safety-wrapper binding (issue #3501 / #4830). Forwarded to
+    # ``run_map_batch`` for map-based scenarios so the campaign can opt an arm into the
+    # runtime wrapper step logic. ``None`` keeps the wrapper off (the runtime default).
+    safety_wrapper: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a batch of episodes and write JSONL records.
 
@@ -2641,6 +2645,7 @@ def run_batch(  # noqa: PLR0913
             record_simulation_step_trace=record_simulation_step_trace,
             workers=workers,
             resume=resume,
+            safety_wrapper=safety_wrapper,
         )
 
     # Expand jobs

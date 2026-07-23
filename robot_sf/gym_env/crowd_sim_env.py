@@ -8,7 +8,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import gymnasium as gym
 import numpy as np
@@ -17,10 +17,8 @@ from loguru import logger
 
 from robot_sf.gym_env.env_config import SimulationSettings
 from robot_sf.nav.map_config import MapDefinition, MapDefinitionPool
+from robot_sf.render.sim_view import SimulationView
 from robot_sf.sim.simulator import Simulator
-
-if TYPE_CHECKING:
-    from robot_sf.render.sim_view import SimulationView
 
 
 @dataclass
@@ -346,8 +344,6 @@ class CrowdSimEnv(gym.Env):
             Lazily constructed or cached simulation view.
         """
         if self._sim_ui is None:
-            from robot_sf.render.sim_view import SimulationView  # noqa: PLC0415
-
             self._sim_ui = SimulationView(
                 map_def=self.map_def,
                 obstacles=self.map_def.obstacles,

@@ -57,7 +57,7 @@ benchmark = [
     "scipy>=1.17.1",
 ]
 gpu = [
-    "torch>=2.13.0,<2.14.0",
+    "torch[cuda]>=2.13.0,<2.14.0",
 ]
 training = [
     "stable-baselines3>=2.9.0",

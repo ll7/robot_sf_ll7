@@ -2,7 +2,8 @@
 #
 # Plain-language summary: this freezes a comparable six-scenario speed sweep so
 # future results can test whether the current <=2.0 m/s evidence boundary changes
-# in the 3.0-4.2 m/s micromobility band. This packet is protocol evidence only.
+# at 3.0 m/s and the supported 4.0 m/s micromobility-direction tier. This
+# packet is protocol evidence only.
 schema_version: robot_sf.issue_5578_robot_speed_tier_preregistration.v1
 issue: 5578
 governance_issue: 5557
@@ -114,6 +115,7 @@ robot_speed_axis:
   baseline_cap_m_s: 2.0
   tiers:
     - tier_id: cap_2_0_nominal
+      runtime_variant_key: bicycle_2_0_mps
       cap_m_s: 2.0
       drive_model: bicycle_drive
       max_accel_m_s2: 1.0
@@ -125,6 +127,7 @@ robot_speed_axis:
         normalized_action_range: [0.0, 1.0]
       role: nominal_reference
     - tier_id: cap_3_0
+      runtime_variant_key: bicycle_3_0_mps_nominal
       cap_m_s: 3.0
       drive_model: bicycle_drive
       max_accel_m_s2: 1.5
@@ -135,20 +138,22 @@ robot_speed_axis:
         linear_speed_range_m_s: [0.0, 3.0]
         normalized_action_range: [0.0, 1.0]
       role: preregistered_extension
-    - tier_id: cap_4_2
-      cap_m_s: 4.2
+    - tier_id: cap_4_0
+      runtime_variant_key: bicycle_4_0_mps_micromobility
+      cap_m_s: 4.0
       drive_model: bicycle_drive
-      max_accel_m_s2: 2.1
-      max_decel_m_s2: 4.2
-      stopping_distance_envelope_m: 2.1
+      max_accel_m_s2: 2.0
+      max_decel_m_s2: 4.0
+      stopping_distance_envelope_m: 2.0
       command_action_scaling:
         scaling_method: linear_unicycle_action_to_drive_speed_cap
-        linear_speed_range_m_s: [0.0, 4.2]
+        linear_speed_range_m_s: [0.0, 4.0]
         normalized_action_range: [0.0, 1.0]
       role: preregistered_extension
   override_contract:
     runtime_binding: robot_config.drive_speed_cap
     runtime_reference_config: configs/research/robot_speed_band_v1.yaml
+    top_tier_resolution: supported_4_0_variant_used_because_no_exact_4_2_runtime_variant_exists
     robot_only_axis: true
     pedestrian_speed_axis_fixed: true
     supported_drive_models:
@@ -167,7 +172,7 @@ robot_speed_axis:
       min_fraction_above_2_0_mps: 0.05
       min_peak_speed_m_s: 2.2
       rule_definition: >-
-        For non-nominal tiers (3.0 and 4.2 m/s), an intervention is activated if
+        For non-nominal tiers (3.0 and 4.0 m/s), an intervention is activated if
         fraction_above_2_0_mps >= 0.05 or realized_speed_peak_m_s > 2.2.
         If an intervention is not activated (cap-inactive), the tier cannot support
         a no-harm / no-effect conclusion and must be reported as intervention_not_activated.
@@ -229,8 +234,17 @@ inference_contract:
     family: planner_by_non_nominal_tier_by_primary_metric
     tests_per_planner: 6
     hypothesis_alignment: margin_aligned_one_sided
+    directional_families:
+      - materially_harmful
+      - noninferiority
+    familywise_alpha: 0.05
+    directional_family_alpha: 0.025
+    directional_alpha_allocation: bonferroni_equal_split
   decision_rule:
     confidence_level: 0.95
+    interval_method: paired_seed_block_percentile_bootstrap_one_sided
+    bootstrap_replicates: 2000
+    tail_probability_rule: plus_one_empirical_tail_at_harm_margin
     success_rate_harm_threshold: -0.05
     collision_rate_harm_threshold: 0.02
     near_miss_rate_harm_threshold: 0.05
@@ -252,8 +266,9 @@ inference_contract:
       Collision and near-miss frequencies measure event occurrence rate, not
       physical impact severity, impulse, or injury risk.
     speed_range_validity_note: >-
-      The 4.2 m/s (~15.1 km/h) top tier tests the low end of the micromobility
-      speed range and does not validate safety across the full 15-25 km/h platform range.
+      The supported 4.0 m/s (~14.4 km/h) top tier is a micromobility-direction
+      stress test below 15 km/h and does not validate safety across the
+      15-25 km/h platform range.
 
 result_contract:
   required_cell_keys:
@@ -265,12 +280,24 @@ result_contract:
     - horizon_steps
     - dt_seconds
     - execution_mode
+    - success_rate
+    - collision_rate
+    - near_miss_rate
+    - ped_collision_rate
+    - obstacle_collision_rate
+    - agent_collision_rate
+    - unclassified_collision_rate
     - commanded_speed_mean_m_s
     - realized_speed_mean_m_s
     - realized_speed_peak_m_s
     - fraction_above_2_0_mps
     - cap_saturation_fraction
     - resolved_actuation_envelope
+    - time_to_goal_norm
+    - total_exposure_seconds
+    - travel_distance_m
+    - mean_clearance_m
+    - min_clearance_m
   required_per_tier_summary:
     - success_rate
     - collision_rate

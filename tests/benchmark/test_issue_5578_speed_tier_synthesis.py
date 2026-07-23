@@ -8,20 +8,27 @@ failed rows. No campaign is run; synthetic per-cell summaries drive the checks.
 
 from __future__ import annotations
 
+import math
+import statistics
 from typing import Any
 
 import pytest
 
 from robot_sf.benchmark.issue_5578_speed_tier_synthesis import (
     CONFIDENCE_LEVEL,
+    DIRECTIONAL_FAMILY_ALPHA,
+    FAMILYWISE_ALPHA,
+    HARM_THRESHOLDS,
     NOMINAL_TIER_ID,
     NON_NOMINAL_TIERS,
     PRIMARY_METRICS,
-    _classify_interval,
     _holm_adjust,
-    _margin_aligned_one_sided_p_value,
+    _holm_adjust_by_planner,
+    _margin_aligned_one_sided_p_values,
+    _one_sided_bound,
     _z_critical,
     classify_excluded,
+    main,
     parse_cell,
     synthesize_speed_tier_sweep,
 )
@@ -84,10 +91,10 @@ def _cell(
         "cap_saturation_fraction": 0.3,
         "resolved_actuation_envelope": {
             "drive_model": "bicycle_drive",
-            "max_velocity": cap,
-            "max_accel": cap * 0.5,
-            "max_decel": cap,
-            "stopping_distance": cap * 0.5,
+            "max_forward_accel_m_s2": cap * 0.5,
+            "max_braking_decel_m_s2": cap,
+            "peak_forward_speed_m_s": cap,
+            "stopping_distance_envelope_m": cap * 0.5,
         },
         "time_to_goal_norm": 0.5,
         "total_exposure_seconds": 30.0,
@@ -118,7 +125,7 @@ def _full_native_grid(
                         metrics=nominal_metrics,
                     )
                 )
-                for t_id, t_cap in (("cap_3_0", 3.0), ("cap_4_2", 4.2)):
+                for t_id, t_cap in (("cap_3_0", 3.0), ("cap_4_0", 4.0)):
                     cells.append(
                         _cell(
                             scenario,
@@ -191,6 +198,57 @@ def test_parse_cell_requires_typed_collision_breakdown() -> None:
         parse_cell(row)
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "commanded_speed_mean_m_s",
+        "realized_speed_mean_m_s",
+        "realized_speed_peak_m_s",
+        "fraction_above_2_0_mps",
+        "cap_saturation_fraction",
+        "resolved_actuation_envelope",
+        "time_to_goal_norm",
+        "total_exposure_seconds",
+        "travel_distance_m",
+        "mean_clearance_m",
+        "min_clearance_m",
+    ],
+)
+def test_parse_cell_requires_actuation_and_exposure_diagnostics(field: str) -> None:
+    """Missing actuation/exposure data must fail instead of being fabricated."""
+    row = _cell("classic_doorway_medium", NOMINAL_TIER_ID, 2.0, "orca", 111, metrics={})
+    row.pop(field)
+    with pytest.raises(ValueError, match=field):
+        parse_cell(row)
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "commanded_speed_mean_m_s",
+        "realized_speed_mean_m_s",
+        "realized_speed_peak_m_s",
+        "time_to_goal_norm",
+        "total_exposure_seconds",
+    ],
+)
+def test_parse_cell_rejects_non_finite_diagnostics(field: str) -> None:
+    """Non-finite diagnostics cannot enter a registered synthesis row."""
+    row = _cell("classic_doorway_medium", NOMINAL_TIER_ID, 2.0, "orca", 111, metrics={})
+    row[field] = math.nan
+    with pytest.raises(ValueError, match="finite"):
+        parse_cell(row)
+
+
+def test_parse_cell_requires_complete_actuation_envelope() -> None:
+    row = _cell("classic_doorway_medium", NOMINAL_TIER_ID, 2.0, "orca", 111, metrics={})
+    envelope = dict(row["resolved_actuation_envelope"])
+    envelope.pop("peak_forward_speed_m_s")
+    row["resolved_actuation_envelope"] = envelope
+    with pytest.raises(ValueError, match="peak_forward_speed_m_s"):
+        parse_cell(row)
+
+
 def test_classify_excluded_marks_non_native_rows() -> None:
     """Only native rows pass; fallback/degraded/failed are visible exclusions."""
     native = parse_cell(_cell("s", "t", 2.0, "orca", 1, metrics={}, execution_mode="native"))
@@ -222,27 +280,23 @@ def test_two_sided_critical_value_matches_declared_confidence() -> None:
         _z_critical(1.0)
 
 
-def test_classify_interval_detects_harmful_collision_increase() -> None:
-    """A collision-rate CI entirely above the +0.02 harm threshold is harmful."""
-    ci_low, ci_high = 0.05, 0.10
-    assert _classify_interval("collision_rate", ci_low, ci_high, n_pairs=6) == "materially_harmful"
-    assert _classify_interval("collision_rate", 0.0, 0.01, n_pairs=6) == "no_material_shift"
-    assert _classify_interval("collision_rate", -0.01, 0.05, n_pairs=6) == "inconclusive"
-    assert _classify_interval("collision_rate", 0.05, 0.10, n_pairs=1) == "inconclusive"
-
-
-def test_classify_interval_detects_harmful_success_decrease() -> None:
-    """A success-rate CI entirely below the -0.05 harm threshold is harmful."""
-    assert _classify_interval("success_rate", -0.20, -0.08, n_pairs=6) == "materially_harmful"
-    assert _classify_interval("success_rate", 0.0, 0.10, n_pairs=6) == "no_material_shift"
-
-
-def test_classify_interval_handles_cap_inactive_case() -> None:
-    """When intervention is not activated, classification must be intervention_not_activated."""
-    assert (
-        _classify_interval("success_rate", 0.0, 0.10, n_pairs=6, intervention_activated=False)
-        == "intervention_not_activated"
-    )
+@pytest.mark.parametrize(
+    ("metric", "claim", "expected_type", "expected_bound"),
+    [
+        ("success_rate", "materially_harmful", "upper", 0.95),
+        ("success_rate", "noninferiority", "lower", 0.05),
+        ("collision_rate", "materially_harmful", "lower", 0.05),
+        ("collision_rate", "noninferiority", "upper", 0.95),
+    ],
+)
+def test_one_sided_bound_uses_alpha_not_alpha_over_two(
+    metric: str, claim: str, expected_type: str, expected_bound: float
+) -> None:
+    """The exact bound is directional; central 2.5/97.5 intervals are forbidden."""
+    values = [index / 100 for index in range(101)]
+    bound_type, bound = _one_sided_bound(values, metric, claim, 0.95)
+    assert bound_type == expected_type
+    assert bound == pytest.approx(expected_bound)
 
 
 def test_synthesis_full_native_grid_reports_all_cells() -> None:
@@ -263,10 +317,13 @@ def test_synthesis_full_native_grid_reports_all_cells() -> None:
         PRIMARY_METRICS
     )
     for row in result.decision_table:
-        assert row["p_value_holm"] <= 1.0
+        assert row["p_value_harm_holm"] <= 1.0
+        assert row["p_value_noninferiority_holm"] <= 1.0
         assert row["n_scenarios"] == len(SCENARIOS)
         assert row["classification"] == "no_material_shift"
-        assert row["adjusted_confidence_level"] >= CONFIDENCE_LEVEL
+        assert row["harm_adjusted_confidence_level"] >= CONFIDENCE_LEVEL
+        assert row["noninferiority_adjusted_confidence_level"] >= CONFIDENCE_LEVEL
+        assert row["directional_family_alpha"] == pytest.approx(0.025)
         assert set(row["typed_collision_breakdown"]) == {
             "ped_collision_rate",
             "obstacle_collision_rate",
@@ -275,6 +332,16 @@ def test_synthesis_full_native_grid_reports_all_cells() -> None:
         }
         assert "activation_diagnostics_summary" in row
         assert "exposure_summary" in row
+    success_row = next(
+        row
+        for row in result.decision_table
+        if row["planner_id"] == "orca"
+        and row["speed_tier_id"] == "cap_3_0"
+        and row["metric"] == "success_rate"
+    )
+    expected_se = statistics.stdev(scenario_effects.values()) / math.sqrt(len(SCENARIOS))
+    assert success_row["pooled_delta_mean"] == pytest.approx(0.035)
+    assert success_row["pooled_delta_se"] == pytest.approx(expected_se)
 
 
 def test_synthesis_flags_fallback_rows_as_exclusions() -> None:
@@ -326,8 +393,143 @@ def test_descriptive_ranking_stability_computation() -> None:
     assert "tier_rankings" in ranking
 
 
-def test_margin_aligned_one_sided_p_value() -> None:
-    """Margin-aligned one-sided p-value measures proportion of bootstrap mass in harm region."""
-    sorted_deltas = [-0.10, -0.08, -0.07, -0.06, -0.05, 0.0, 0.01, 0.02, 0.03, 0.04]
-    p_val = _margin_aligned_one_sided_p_value(sorted_deltas, "success_rate")
-    assert p_val == pytest.approx(6 / 11)
+def test_margin_aligned_one_sided_tail_probabilities_reverse_by_claim() -> None:
+    """Safe and harmful evidence must support opposite predeclared tails."""
+    safe_harm, safe_noninferiority = _margin_aligned_one_sided_p_values(
+        [0.0] * 100, "collision_rate"
+    )
+    harmful_harm, harmful_noninferiority = _margin_aligned_one_sided_p_values(
+        [0.1] * 100, "collision_rate"
+    )
+    assert safe_harm == 1.0
+    assert safe_noninferiority == pytest.approx(1 / 101)
+    assert harmful_harm == pytest.approx(1 / 101)
+    assert harmful_noninferiority == 1.0
+
+
+def test_directional_holm_families_are_independent_per_planner() -> None:
+    """Each planner has six comparisons at the split directional alpha."""
+    values = [
+        *(("a", f"a{i}", p) for i, p in enumerate((0.001, 0.01, 0.02, 0.2, 0.3, 0.4))),
+        *(("b", f"b{i}", p) for i, p in enumerate((0.002, 0.03, 0.04, 0.5, 0.6, 0.7))),
+    ]
+    adjusted, confidence = _holm_adjust_by_planner(values, family_alpha=DIRECTIONAL_FAMILY_ALPHA)
+    assert {key: adjusted[key] for key in adjusted if key.startswith("a")} == _holm_adjust(
+        [(test_id, p_value) for planner, test_id, p_value in values if planner == "a"]
+    )
+    assert {key: adjusted[key] for key in adjusted if key.startswith("b")} == _holm_adjust(
+        [(test_id, p_value) for planner, test_id, p_value in values if planner == "b"]
+    )
+    assert confidence["a0"] == pytest.approx(1.0 - DIRECTIONAL_FAMILY_ALPHA / 6.0)
+    assert confidence["b0"] == pytest.approx(1.0 - DIRECTIONAL_FAMILY_ALPHA / 6.0)
+    assert FAMILYWISE_ALPHA == pytest.approx(0.05)
+
+
+def test_holm_ties_receive_the_same_conservative_one_sided_confidence() -> None:
+    values = [("orca", f"test_{index}", 0.01) for index in range(6)]
+    _, confidence = _holm_adjust_by_planner(
+        values, family_alpha=DIRECTIONAL_FAMILY_ALPHA
+    )
+    assert len(set(confidence.values())) == 1
+    assert next(iter(confidence.values())) == pytest.approx(
+        1.0 - DIRECTIONAL_FAMILY_ALPHA / 6.0
+    )
+
+
+def test_synthesis_paired_delta_is_tier_minus_nominal_and_detects_harm() -> None:
+    cells = _full_native_grid(
+        nominal_metrics={"collision_rate": 0.10},
+        tier_metrics={"collision_rate": 0.18},
+    )
+    result = synthesize_speed_tier_sweep(cells)
+    row = next(
+        item
+        for item in result.decision_table
+        if item["planner_id"] == "orca"
+        and item["speed_tier_id"] == "cap_3_0"
+        and item["metric"] == "collision_rate"
+    )
+    assert row["pooled_delta_mean"] == pytest.approx(0.08)
+    assert row["p_value_harm_holm"] <= DIRECTIONAL_FAMILY_ALPHA
+    assert row["p_value_noninferiority_holm"] > DIRECTIONAL_FAMILY_ALPHA
+    assert row["classification"] == "materially_harmful"
+
+
+def test_synthesis_fails_closed_on_missing_primary_metric() -> None:
+    bad = _cell("classic_doorway_medium", NOMINAL_TIER_ID, 2.0, "orca", 111, metrics={})
+    bad.pop("success_rate")
+    with pytest.raises(ValueError, match="success_rate"):
+        synthesize_speed_tier_sweep([bad])
+
+
+def test_synthesis_holm_family_is_six_tests_per_planner_per_direction() -> None:
+    cells = _full_native_grid(
+        nominal_metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
+        tier_metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
+    )
+    result = synthesize_speed_tier_sweep(cells)
+    for planner in PLANNERS:
+        rows = [row for row in result.decision_table if row["planner_id"] == planner]
+        assert len(rows) == 6
+        assert set(result.holm_adjusted) == {"materially_harmful", "noninferiority"}
+        for direction in result.holm_adjusted.values():
+            assert (
+                len([test_id for test_id in direction if test_id.startswith(f"{planner}__")]) == 6
+            )
+    assert HARM_THRESHOLDS == {
+        "success_rate": -0.05,
+        "collision_rate": 0.02,
+        "near_miss_rate": 0.05,
+    }
+
+
+def test_synthesis_rejects_incomplete_duplicate_and_drifted_grids() -> None:
+    cells = _full_native_grid(nominal_metrics={}, tier_metrics={})
+    with pytest.raises(ValueError, match="grid incomplete"):
+        synthesize_speed_tier_sweep(cells[:-1])
+    with pytest.raises(ValueError, match="duplicate declared cell identity"):
+        synthesize_speed_tier_sweep([*cells, dict(cells[0])])
+    drifted = [dict(cell) for cell in cells]
+    drifted[0]["speed_cap_m_s"] = 2.1
+    with pytest.raises(ValueError, match="speed cap drift"):
+        synthesize_speed_tier_sweep(drifted)
+    envelope_drift = [dict(cell) for cell in cells]
+    envelope_drift[0]["resolved_actuation_envelope"] = {
+        **dict(envelope_drift[0]["resolved_actuation_envelope"]),
+        "peak_forward_speed_m_s": 3.0,
+    }
+    with pytest.raises(ValueError, match="resolved actuation envelope drift"):
+        synthesize_speed_tier_sweep(envelope_drift)
+    impossible_speed = [dict(cell) for cell in cells]
+    impossible_speed[0]["commanded_speed_mean_m_s"] = 2.1
+    with pytest.raises(ValueError, match="commanded_speed_mean_m_s exceeds tier cap"):
+        synthesize_speed_tier_sweep(impossible_speed)
+
+
+def test_custom_declared_dimensions_remain_smoke_not_benchmark_evidence() -> None:
+    cells = [
+        _cell(
+            "classic_doorway_medium",
+            tier_id,
+            cap,
+            "orca",
+            111,
+            metrics={"success_rate": 0.8, "collision_rate": 0.1, "near_miss_rate": 0.2},
+        )
+        for tier_id, cap in ((NOMINAL_TIER_ID, 2.0), ("cap_3_0", 3.0), ("cap_4_0", 4.0))
+    ]
+    result = synthesize_speed_tier_sweep(
+        cells,
+        declared_scenarios={"classic_doorway_medium"},
+        declared_planners={"orca"},
+        declared_seeds={111},
+    )
+    assert result.grid_complete is True
+    assert result.evidence_status == "smoke_or_incomplete_not_benchmark_evidence"
+
+
+def test_cli_demo_is_explicit_smoke_not_benchmark_evidence(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert main([]) == 0
+    assert capsys.readouterr().out.startswith("SMOKE (not benchmark evidence):")

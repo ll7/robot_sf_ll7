@@ -33,6 +33,12 @@ def test_checked_in_preregistration_passes() -> None:
     assert payload["primary_claim_scope"] == "per_planner_robustness"
     assert payload["ranking_claim_scope"] == "descriptive_only"
     assert payload["inference_contract"]["resampling_unit"] == "paired_seed_block"
+    assert payload["robot_speed_axis"]["tiers"][2]["cap_m_s"] == 4.0
+    assert (
+        payload["robot_speed_axis"]["tiers"][2]["runtime_variant_key"]
+        == "bicycle_4_0_mps_micromobility"
+    )
+    assert payload["inference_contract"]["multiplicity"]["directional_family_alpha"] == 0.025
 
 
 def test_checker_fails_closed_when_inference_population_is_removed() -> None:
@@ -47,9 +53,9 @@ def test_checker_fails_closed_when_inference_population_is_removed() -> None:
 def test_checker_fails_closed_when_speed_tier_changes() -> None:
     """Changing a tier silently would invalidate the pre-registered speed contrast."""
     payload = _payload()
-    payload["robot_speed_axis"]["tiers"][2]["cap_m_s"] = 4.0
+    payload["robot_speed_axis"]["tiers"][2]["cap_m_s"] = 4.2
 
-    with pytest.raises(ValueError, match="speed tiers must be exactly"):
+    with pytest.raises(ValueError, match=r"tier\[2\]\.cap_m_s drifted"):
         validate_preregistration(payload)
 
 
@@ -122,7 +128,7 @@ def test_checker_fails_closed_when_actuation_envelope_inconsistent() -> None:
     payload = _payload()
     payload["robot_speed_axis"]["tiers"][2]["stopping_distance_envelope_m"] = 5.0
 
-    with pytest.raises(ValueError, match="stopping_distance_envelope_m inconsistent"):
+    with pytest.raises(ValueError, match="stopping_distance_envelope_m drifted"):
         validate_preregistration(payload)
 
 
@@ -151,4 +157,88 @@ def test_checker_fails_closed_when_safety_notes_missing() -> None:
     del payload["inference_contract"]["safety_interpretation_contract"]
 
     with pytest.raises(ValueError, match="safety_interpretation_contract must be a mapping"):
+        validate_preregistration(payload)
+
+
+def test_checker_binds_every_tier_to_exact_supported_runtime_variant() -> None:
+    payload = _payload()
+    payload["robot_speed_axis"]["tiers"][2]["runtime_variant_key"] = "bicycle_4_2_mps"
+    with pytest.raises(ValueError, match=r"tier\[2\]\.runtime_variant_key drifted"):
+        validate_preregistration(payload)
+
+
+@pytest.mark.parametrize(
+    ("index", "field", "value", "message"),
+    [
+        (2, "linear_speed_range_m_s", [99.0, 999.0], "linear_speed_range_m_s"),
+        (1, "normalized_action_range", [-1.0, 1.0], "normalized_action_range"),
+        (0, "scaling_method", "identity", "scaling_method drifted"),
+    ],
+)
+def test_checker_freezes_exact_command_action_scaling(
+    index: int, field: str, value: object, message: str
+) -> None:
+    payload = _payload()
+    payload["robot_speed_axis"]["tiers"][index]["command_action_scaling"][field] = value
+    with pytest.raises(ValueError, match=message):
+        validate_preregistration(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("min_fraction_above_2_0_mps", 0.0, "must be 0.05"),
+        ("min_peak_speed_m_s", 0.0, "must be 2.2"),
+    ],
+)
+def test_checker_freezes_activation_thresholds(field: str, value: float, message: str) -> None:
+    payload = _payload()
+    payload["robot_speed_axis"]["activation_contract"]["minimum_activation_rule"][field] = value
+    with pytest.raises(ValueError, match=message):
+        validate_preregistration(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("success_rate_harm_threshold", -0.99, "must be -0.05"),
+        ("collision_rate_harm_threshold", 0.99, "must be 0.02"),
+        ("near_miss_rate_harm_threshold", 0.99, "must be 0.05"),
+    ],
+)
+def test_checker_freezes_harm_margins(field: str, value: float, message: str) -> None:
+    payload = _payload()
+    payload["inference_contract"]["decision_rule"][field] = value
+    with pytest.raises(ValueError, match=message):
+        validate_preregistration(payload)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("interval_method", "central_two_sided", "interval_method"),
+        ("bootstrap_replicates", 100, "bootstrap_replicates"),
+        ("tail_probability_rule", "zero_effect", "tail_probability_rule"),
+    ],
+)
+def test_checker_freezes_one_sided_inference_contract(
+    field: str, value: object, message: str
+) -> None:
+    payload = _payload()
+    payload["inference_contract"]["decision_rule"][field] = value
+    with pytest.raises(ValueError, match=message):
+        validate_preregistration(payload)
+
+
+def test_checker_requires_all_exposure_fields_per_cell() -> None:
+    payload = _payload()
+    payload["result_contract"]["required_cell_keys"].remove("total_exposure_seconds")
+    with pytest.raises(ValueError, match="metrics, typed collisions, activation, and exposure"):
+        validate_preregistration(payload)
+
+
+def test_checker_rejects_top_hybrid_roster_role_drift() -> None:
+    payload = _payload()
+    payload["planner_roster"]["arms"][0]["role"] = "top_hybrid_candidate"
+    with pytest.raises(ValueError, match="top_hybrid_promoted"):
         validate_preregistration(payload)

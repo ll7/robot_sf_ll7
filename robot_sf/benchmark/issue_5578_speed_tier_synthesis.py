@@ -29,11 +29,12 @@ import json
 import math
 import random
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Sequence
 
 PRIMARY_METRICS = ("success_rate", "collision_rate", "near_miss_rate")
 TYPED_COLLISION_BREAKDOWN = (
@@ -50,8 +51,15 @@ ACTIVATION_DIAGNOSTICS = (
     "cap_saturation_fraction",
     "resolved_actuation_envelope",
 )
+EXPOSURE_DIAGNOSTICS = (
+    "time_to_goal_norm",
+    "total_exposure_seconds",
+    "travel_distance_m",
+    "mean_clearance_m",
+    "min_clearance_m",
+)
 NOMINAL_TIER_ID = "cap_2_0_nominal"
-NON_NOMINAL_TIERS = ("cap_3_0", "cap_4_2")
+NON_NOMINAL_TIERS = ("cap_3_0", "cap_4_0")
 HARM_THRESHOLDS = {
     "success_rate": -0.05,
     "collision_rate": 0.02,
@@ -84,13 +92,38 @@ DECLARED_SEEDS = tuple(range(111, 141))
 TIER_CAPS_M_S = {
     NOMINAL_TIER_ID: 2.0,
     "cap_3_0": 3.0,
-    "cap_4_2": 4.2,
+    "cap_4_0": 4.0,
+}
+TIER_ACTUATION_ENVELOPES = {
+    NOMINAL_TIER_ID: {
+        "drive_model": "bicycle_drive",
+        "max_forward_accel_m_s2": 1.0,
+        "max_braking_decel_m_s2": 2.0,
+        "peak_forward_speed_m_s": 2.0,
+        "stopping_distance_envelope_m": 1.0,
+    },
+    "cap_3_0": {
+        "drive_model": "bicycle_drive",
+        "max_forward_accel_m_s2": 1.5,
+        "max_braking_decel_m_s2": 3.0,
+        "peak_forward_speed_m_s": 3.0,
+        "stopping_distance_envelope_m": 1.5,
+    },
+    "cap_4_0": {
+        "drive_model": "bicycle_drive",
+        "max_forward_accel_m_s2": 2.0,
+        "max_braking_decel_m_s2": 4.0,
+        "peak_forward_speed_m_s": 4.0,
+        "stopping_distance_envelope_m": 2.0,
+    },
 }
 EXPECTED_HORIZON_STEPS = 600
 EXPECTED_DT_SECONDS = 0.1
 BOOTSTRAP_REPLICATES = 2_000
 MIN_ACTIVATION_FRACTION_ABOVE_2_0 = 0.05
 MIN_ACTIVATION_PEAK_SPEED = 2.2
+FAMILYWISE_ALPHA = 0.05
+DIRECTIONAL_FAMILY_ALPHA = 0.025
 
 
 def _erf_inv(p: float) -> float:
@@ -137,6 +170,8 @@ def _required_keys() -> tuple[str, ...]:
         "horizon_steps",
         "dt_seconds",
         "execution_mode",
+        *ACTIVATION_DIAGNOSTICS,
+        *EXPOSURE_DIAGNOSTICS,
     )
 
 
@@ -153,18 +188,18 @@ class CellSummary:
     dt_seconds: float
     execution_mode: str
     metrics: dict[str, float]
-    typed_collisions: dict[str, float] = field(default_factory=dict)
-    commanded_speed_mean_m_s: float = 0.0
-    realized_speed_mean_m_s: float = 0.0
-    realized_speed_peak_m_s: float = 0.0
-    fraction_above_2_0_mps: float = 0.0
-    cap_saturation_fraction: float = 0.0
-    resolved_actuation_envelope: dict[str, Any] = field(default_factory=dict)
-    time_to_goal_norm: float = 1.0
-    total_exposure_seconds: float = 0.0
-    travel_distance_m: float = 0.0
-    mean_clearance_m: float = 0.0
-    min_clearance_m: float = 0.0
+    typed_collisions: dict[str, float]
+    commanded_speed_mean_m_s: float
+    realized_speed_mean_m_s: float
+    realized_speed_peak_m_s: float
+    fraction_above_2_0_mps: float
+    cap_saturation_fraction: float
+    resolved_actuation_envelope: dict[str, Any]
+    time_to_goal_norm: float
+    total_exposure_seconds: float
+    travel_distance_m: float
+    mean_clearance_m: float
+    min_clearance_m: float
 
 
 def _as_float(value: Any, field_name: str) -> float:
@@ -197,6 +232,46 @@ def _as_rate(value: Any, field_name: str) -> float:
     return rate
 
 
+def _as_nonnegative_float(value: Any, field_name: str) -> float:
+    number = _as_float(value, field_name)
+    if number < 0.0:
+        raise ValueError(f"{field_name} must be non-negative, got {value!r}")
+    return number
+
+
+def _parse_actuation_envelope(value: Any) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError("resolved_actuation_envelope must be a mapping")
+    required = {
+        "drive_model",
+        "max_forward_accel_m_s2",
+        "max_braking_decel_m_s2",
+        "peak_forward_speed_m_s",
+        "stopping_distance_envelope_m",
+    }
+    missing = required - set(value)
+    if missing:
+        raise ValueError(
+            "resolved_actuation_envelope missing required keys: " + ", ".join(sorted(missing))
+        )
+    return {
+        "drive_model": _as_nonempty_string(value["drive_model"], "actuation.drive_model"),
+        "max_forward_accel_m_s2": _as_nonnegative_float(
+            value["max_forward_accel_m_s2"], "actuation.max_forward_accel_m_s2"
+        ),
+        "max_braking_decel_m_s2": _as_nonnegative_float(
+            value["max_braking_decel_m_s2"], "actuation.max_braking_decel_m_s2"
+        ),
+        "peak_forward_speed_m_s": _as_nonnegative_float(
+            value["peak_forward_speed_m_s"], "actuation.peak_forward_speed_m_s"
+        ),
+        "stopping_distance_envelope_m": _as_nonnegative_float(
+            value["stopping_distance_envelope_m"],
+            "actuation.stopping_distance_envelope_m",
+        ),
+    }
+
+
 def parse_cell(row: Mapping[str, Any]) -> CellSummary:
     """Parse and validate one per-cell summary row into a CellSummary.
 
@@ -224,55 +299,24 @@ def parse_cell(row: Mapping[str, Any]) -> CellSummary:
     if dt_seconds <= 0.0:
         raise ValueError(f"dt_seconds must be positive, got {dt_seconds!r}")
 
-    commanded_speed_mean = (
-        _as_float(row["commanded_speed_mean_m_s"], "commanded_speed_mean_m_s")
-        if "commanded_speed_mean_m_s" in row
-        else 0.0
+    commanded_speed_mean = _as_nonnegative_float(
+        row["commanded_speed_mean_m_s"], "commanded_speed_mean_m_s"
     )
-    realized_speed_mean = (
-        _as_float(row["realized_speed_mean_m_s"], "realized_speed_mean_m_s")
-        if "realized_speed_mean_m_s" in row
-        else 0.0
+    realized_speed_mean = _as_nonnegative_float(
+        row["realized_speed_mean_m_s"], "realized_speed_mean_m_s"
     )
-    realized_speed_peak = (
-        _as_float(row["realized_speed_peak_m_s"], "realized_speed_peak_m_s")
-        if "realized_speed_peak_m_s" in row
-        else (speed_cap_m_s if row.get("execution_mode") == "native" else 0.0)
+    realized_speed_peak = _as_nonnegative_float(
+        row["realized_speed_peak_m_s"], "realized_speed_peak_m_s"
     )
-    fraction_above_2_0 = (
-        _as_rate(row["fraction_above_2_0_mps"], "fraction_above_2_0_mps")
-        if "fraction_above_2_0_mps" in row
-        else (0.5 if speed_cap_m_s > 2.0 else 0.0)
-    )
-    cap_saturation = (
-        _as_rate(row["cap_saturation_fraction"], "cap_saturation_fraction")
-        if "cap_saturation_fraction" in row
-        else 0.0
-    )
-    actuation_env = row.get("resolved_actuation_envelope")
-    resolved_actuation = dict(actuation_env) if isinstance(actuation_env, dict) else {}
+    fraction_above_2_0 = _as_rate(row["fraction_above_2_0_mps"], "fraction_above_2_0_mps")
+    cap_saturation = _as_rate(row["cap_saturation_fraction"], "cap_saturation_fraction")
+    resolved_actuation = _parse_actuation_envelope(row["resolved_actuation_envelope"])
 
-    time_to_goal = (
-        _as_float(row["time_to_goal_norm"], "time_to_goal_norm")
-        if "time_to_goal_norm" in row
-        else 1.0
-    )
-    total_exposure = (
-        _as_float(row["total_exposure_seconds"], "total_exposure_seconds")
-        if "total_exposure_seconds" in row
-        else (row.get("horizon_steps", 600) * dt_seconds)
-    )
-    travel_dist = (
-        _as_float(row["travel_distance_m"], "travel_distance_m")
-        if "travel_distance_m" in row
-        else (realized_speed_mean * total_exposure)
-    )
-    mean_clear = (
-        _as_float(row["mean_clearance_m"], "mean_clearance_m") if "mean_clearance_m" in row else 0.0
-    )
-    min_clear = (
-        _as_float(row["min_clearance_m"], "min_clearance_m") if "min_clearance_m" in row else 0.0
-    )
+    time_to_goal = _as_nonnegative_float(row["time_to_goal_norm"], "time_to_goal_norm")
+    total_exposure = _as_nonnegative_float(row["total_exposure_seconds"], "total_exposure_seconds")
+    travel_dist = _as_nonnegative_float(row["travel_distance_m"], "travel_distance_m")
+    mean_clear = _as_float(row["mean_clearance_m"], "mean_clearance_m")
+    min_clear = _as_float(row["min_clearance_m"], "min_clearance_m")
 
     return CellSummary(
         scenario_id=_as_nonempty_string(row["scenario_id"], "scenario_id"),
@@ -388,48 +432,6 @@ def _paired_delta(
     )
 
 
-def _harmful_direction(metric: str) -> str:
-    """Return whether the harmful direction for a metric is a decrease or increase.
-
-    Returns:
-        ``"decrease"`` or ``"increase"`` based on metric semantics.
-    """
-    return HARM_DIRECTION[metric]
-
-
-def _classify_interval(
-    metric: str,
-    ci_low: float,
-    ci_high: float,
-    n_pairs: int,
-    *,
-    intervention_activated: bool = True,
-) -> str:
-    """Classify a single metric's adjusted interval against its harm threshold.
-
-    Returns:
-        Classification string: materially_harmful, no_material_shift, inconclusive,
-        or intervention_not_activated.
-    """
-    if not intervention_activated:
-        return "intervention_not_activated"
-    if n_pairs != len(DECLARED_SCENARIOS):
-        return "inconclusive"
-    threshold = HARM_THRESHOLDS[metric]
-    direction = _harmful_direction(metric)
-    if direction == "decrease":
-        if ci_high < threshold:
-            return "materially_harmful"
-        if ci_low > threshold:
-            return "no_material_shift"
-    else:  # increase
-        if ci_low > threshold:
-            return "materially_harmful"
-        if ci_high < threshold:
-            return "no_material_shift"
-    return "inconclusive"
-
-
 def _holm_adjust(p_values: list[tuple[str, float]]) -> dict[str, float]:
     """Holm-Bonferroni adjusted p-values keyed by test id.
 
@@ -439,7 +441,9 @@ def _holm_adjust(p_values: list[tuple[str, float]]) -> dict[str, float]:
     adjusted: dict[str, float] = {}
     m = len(p_values)
     running_max = 0.0
-    for rank, (test_id, p_value) in enumerate(sorted(p_values, key=lambda item: item[1]), start=1):
+    for rank, (test_id, p_value) in enumerate(
+        sorted(p_values, key=lambda item: (item[1], item[0])), start=1
+    ):
         raw = min(1.0, (m - rank + 1) * p_value)
         running_max = max(running_max, raw)
         adjusted[test_id] = running_max
@@ -458,7 +462,7 @@ class SynthesisResult:
     paired_deltas: list[dict[str, Any]]
     per_tier_summary: list[dict[str, Any]]
     decision_table: list[dict[str, Any]]
-    holm_adjusted: dict[str, float]
+    holm_adjusted: dict[str, dict[str, float]]
     all_native: bool
     grid_complete: bool
     evidence_status: str
@@ -467,6 +471,43 @@ class SynthesisResult:
 
 def _cell_identity(cell: CellSummary) -> tuple[str, str, str, int]:
     return (cell.scenario_id, cell.speed_tier_id, cell.planner_id, cell.seed)
+
+
+def _validate_actuation_contract(cell: CellSummary, expected_cap: float) -> None:
+    if cell.commanded_speed_mean_m_s > expected_cap + 1e-9:
+        raise ValueError(
+            f"commanded_speed_mean_m_s exceeds tier cap for {cell.speed_tier_id}: "
+            f"cap={expected_cap}, mean={cell.commanded_speed_mean_m_s}"
+        )
+    if cell.realized_speed_peak_m_s > expected_cap + 1e-9:
+        raise ValueError(
+            f"realized_speed_peak_m_s exceeds tier cap for {cell.speed_tier_id}: "
+            f"cap={expected_cap}, peak={cell.realized_speed_peak_m_s}"
+        )
+    if cell.realized_speed_mean_m_s > cell.realized_speed_peak_m_s + 1e-9:
+        raise ValueError(
+            f"realized_speed_mean_m_s exceeds realized peak for {cell.speed_tier_id}: "
+            f"mean={cell.realized_speed_mean_m_s}, peak={cell.realized_speed_peak_m_s}"
+        )
+    expected_envelope = TIER_ACTUATION_ENVELOPES[cell.speed_tier_id]
+    for field_name, expected_value in expected_envelope.items():
+        actual_value = cell.resolved_actuation_envelope.get(field_name)
+        if isinstance(expected_value, str):
+            if actual_value != expected_value:
+                raise ValueError(
+                    f"resolved actuation envelope drift for {cell.speed_tier_id}."
+                    f"{field_name}: expected {expected_value!r}, got {actual_value!r}"
+                )
+            continue
+        if not isinstance(actual_value, (int, float)) or isinstance(actual_value, bool):
+            raise ValueError(
+                f"resolved actuation envelope {field_name} must be numeric for {cell.speed_tier_id}"
+            )
+        if not math.isclose(float(actual_value), expected_value, abs_tol=1e-9):
+            raise ValueError(
+                f"resolved actuation envelope drift for {cell.speed_tier_id}."
+                f"{field_name}: expected {expected_value}, got {actual_value}"
+            )
 
 
 def _validate_declared_cell(
@@ -496,6 +537,7 @@ def _validate_declared_cell(
         )
     if not math.isclose(cell.dt_seconds, EXPECTED_DT_SECONDS, abs_tol=1e-12):
         raise ValueError(f"dt_seconds drift: expected {EXPECTED_DT_SECONDS}, got {cell.dt_seconds}")
+    _validate_actuation_contract(cell, expected_cap)
 
 
 def _validate_declared_grid(
@@ -840,25 +882,64 @@ def _percentile(sorted_values: Sequence[float], probability: float) -> float:
     return sorted_values[lower] * (1.0 - weight) + sorted_values[upper] * weight
 
 
-def _bootstrap_interval(sorted_values: Sequence[float], confidence: float) -> tuple[float, float]:
+def _one_sided_bound(
+    sorted_values: Sequence[float],
+    metric: str,
+    claim: str,
+    confidence: float,
+) -> tuple[str, float]:
+    """Return the percentile-bootstrap bound aligned to one directional claim."""
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be between 0 and 1")
+    if claim not in {"materially_harmful", "noninferiority"}:
+        raise ValueError(f"unsupported one-sided claim: {claim!r}")
     alpha = 1.0 - confidence
-    return (
-        _percentile(sorted_values, alpha / 2.0),
-        _percentile(sorted_values, 1.0 - alpha / 2.0),
-    )
+    harmful_direction = HARM_DIRECTION[metric]
+    alternative_is_decrease = (claim == "materially_harmful") == (harmful_direction == "decrease")
+    if alternative_is_decrease:
+        return "upper", _percentile(sorted_values, 1.0 - alpha)
+    return "lower", _percentile(sorted_values, alpha)
 
 
-def _margin_aligned_one_sided_p_value(sorted_values: Sequence[float], metric: str) -> float:
+def _margin_aligned_one_sided_p_values(
+    sorted_values: Sequence[float], metric: str
+) -> tuple[float, float]:
+    """Return plus-one bootstrap tail probabilities for harm and noninferiority.
+
+    The first value tests the harmful directional alternative at the non-zero
+    harm margin; the second tests the opposite noninferiority alternative.
+    """
     if not sorted_values:
-        return 1.0
+        return 1.0, 1.0
     threshold = HARM_THRESHOLDS[metric]
     direction = HARM_DIRECTION[metric]
     n = len(sorted_values)
     if direction == "decrease":
-        harm_count = sum(v <= threshold for v in sorted_values)
+        harm_null_tail = sum(v >= threshold for v in sorted_values)
+        noninferiority_null_tail = sum(v <= threshold for v in sorted_values)
     else:  # increase
-        harm_count = sum(v >= threshold for v in sorted_values)
-    return (harm_count + 1) / (n + 1)
+        harm_null_tail = sum(v <= threshold for v in sorted_values)
+        noninferiority_null_tail = sum(v >= threshold for v in sorted_values)
+    return (
+        (harm_null_tail + 1) / (n + 1),
+        (noninferiority_null_tail + 1) / (n + 1),
+    )
+
+
+def _bound_supports_claim(metric: str, claim: str, bound_type: str, bound: float) -> bool:
+    threshold = HARM_THRESHOLDS[metric]
+    harmful_direction = HARM_DIRECTION[metric]
+    if claim == "materially_harmful":
+        expected_type = "upper" if harmful_direction == "decrease" else "lower"
+        if bound_type != expected_type:
+            raise ValueError(f"wrong bound type for {metric} {claim}: {bound_type}")
+        return bound < threshold if expected_type == "upper" else bound > threshold
+    if claim == "noninferiority":
+        expected_type = "lower" if harmful_direction == "decrease" else "upper"
+        if bound_type != expected_type:
+            raise ValueError(f"wrong bound type for {metric} {claim}: {bound_type}")
+        return bound > threshold if expected_type == "lower" else bound < threshold
+    raise ValueError(f"unsupported one-sided claim: {claim!r}")
 
 
 def _aggregate_per_tier(
@@ -881,21 +962,23 @@ def _aggregate_per_tier(
         pooled_se = scenario_sd / math.sqrt(n_scenarios) if n_scenarios else float("nan")
         test_id = f"{planner_id}__{tier_id}__{metric}"
         bootstrap_distribution = _paired_seed_block_bootstrap(items, test_id=test_id)
-        ci_low, ci_high = _bootstrap_interval(bootstrap_distribution, CONFIDENCE_LEVEL)
-        p_value_one_sided = _margin_aligned_one_sided_p_value(bootstrap_distribution, metric)
-        act_info = activation_summary.get(
-            (planner_id, tier_id),
-            {
-                "commanded_speed_mean_m_s": 0.0,
-                "realized_speed_mean_m_s": 0.0,
-                "realized_speed_peak_m_s": 0.0,
-                "fraction_above_2_0_mps": 0.0,
-                "cap_saturation_fraction": 0.0,
-                "resolved_actuation_envelope": {},
-                "intervention_activated": True,
-            },
+        harm_bound_type, harm_bound = _one_sided_bound(
+            bootstrap_distribution,
+            metric,
+            "materially_harmful",
+            CONFIDENCE_LEVEL,
         )
-        exp_info = exposure_summary.get((planner_id, tier_id), {})
+        noninferiority_bound_type, noninferiority_bound = _one_sided_bound(
+            bootstrap_distribution,
+            metric,
+            "noninferiority",
+            CONFIDENCE_LEVEL,
+        )
+        p_value_harm, p_value_noninferiority = _margin_aligned_one_sided_p_values(
+            bootstrap_distribution, metric
+        )
+        act_info = activation_summary[(planner_id, tier_id)]
+        exp_info = exposure_summary[(planner_id, tier_id)]
         per_tier_summary.append(
             {
                 "test_id": test_id,
@@ -905,13 +988,16 @@ def _aggregate_per_tier(
                 "n_scenarios": n_scenarios,
                 "pooled_delta_mean": pooled_mean,
                 "pooled_delta_se": pooled_se,
-                "ci_low_unadjusted": ci_low,
-                "ci_high_unadjusted": ci_high,
-                "p_value_raw": p_value_one_sided,
-                "typed_collision_breakdown": dict(typed_summary.get((planner_id, tier_id), {})),
+                "harm_bound_unadjusted": harm_bound,
+                "harm_bound_type": harm_bound_type,
+                "noninferiority_bound_unadjusted": noninferiority_bound,
+                "noninferiority_bound_type": noninferiority_bound_type,
+                "p_value_harm_raw": p_value_harm,
+                "p_value_noninferiority_raw": p_value_noninferiority,
+                "typed_collision_breakdown": dict(typed_summary[(planner_id, tier_id)]),
                 "activation_diagnostics_summary": act_info,
                 "exposure_summary": exp_info,
-                "intervention_activated": act_info.get("intervention_activated", True),
+                "intervention_activated": act_info["intervention_activated"],
                 "_bootstrap_distribution": bootstrap_distribution,
             }
         )
@@ -920,6 +1006,8 @@ def _aggregate_per_tier(
 
 def _holm_adjust_by_planner(
     p_values: Sequence[tuple[str, str, float]],
+    *,
+    family_alpha: float = FAMILYWISE_ALPHA,
 ) -> tuple[dict[str, float], dict[str, float]]:
     families: dict[str, list[tuple[str, float]]] = defaultdict(list)
     for planner_id, test_id, p_value in p_values:
@@ -929,55 +1017,77 @@ def _holm_adjust_by_planner(
     for family in families.values():
         adjusted.update(_holm_adjust(family))
         m = len(family)
-        for rank, (test_id, _) in enumerate(sorted(family, key=lambda item: item[1]), start=1):
-            local_alpha = (1.0 - CONFIDENCE_LEVEL) / (m - rank + 1)
+        ordered = sorted(family, key=lambda item: (item[1], item[0]))
+        first_rank_by_p: dict[float, int] = {}
+        for rank, (_, p_value) in enumerate(ordered, start=1):
+            first_rank_by_p.setdefault(p_value, rank)
+        for test_id, p_value in ordered:
+            local_alpha = family_alpha / (m - first_rank_by_p[p_value] + 1)
             confidence[test_id] = 1.0 - local_alpha
     return adjusted, confidence
 
 
 def _build_decision_table(
     per_tier_summary: Sequence[Mapping[str, Any]],
-) -> tuple[list[dict[str, Any]], dict[str, float]]:
-    p_values = [
-        (entry["planner_id"], entry["test_id"], entry["p_value_raw"]) for entry in per_tier_summary
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, float]]]:
+    harm_p_values = [
+        (entry["planner_id"], entry["test_id"], entry["p_value_harm_raw"])
+        for entry in per_tier_summary
     ]
-    holm_adjusted, adjusted_confidence = _holm_adjust_by_planner(p_values)
-    entries_by_planner: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
-    for entry in per_tier_summary:
-        entries_by_planner[entry["planner_id"]].append(entry)
-
-    interval_decisions: dict[str, tuple[float, float, bool, str]] = {}
-    for family in entries_by_planner.values():
-        step_down_open = True
-        for entry in sorted(family, key=lambda item: item["p_value_raw"]):
-            test_id = entry["test_id"]
-            confidence = adjusted_confidence[test_id]
-            ci_low, ci_high = _bootstrap_interval(entry["_bootstrap_distribution"], confidence)
-            is_activated = bool(entry.get("intervention_activated", True))
-            if not is_activated:
-                classification = "intervention_not_activated"
-                eligible = False
-                step_down_open = False
-            else:
-                candidate = _classify_interval(
-                    entry["metric"],
-                    ci_low,
-                    ci_high,
-                    entry["n_scenarios"],
-                    intervention_activated=True,
-                )
-                eligible = step_down_open
-                classification = candidate if eligible else "inconclusive"
-                if candidate == "inconclusive":
-                    step_down_open = False
-            interval_decisions[test_id] = (ci_low, ci_high, eligible, classification)
+    noninferiority_p_values = [
+        (entry["planner_id"], entry["test_id"], entry["p_value_noninferiority_raw"])
+        for entry in per_tier_summary
+    ]
+    harm_adjusted, harm_confidence = _holm_adjust_by_planner(
+        harm_p_values, family_alpha=DIRECTIONAL_FAMILY_ALPHA
+    )
+    noninferiority_adjusted, noninferiority_confidence = _holm_adjust_by_planner(
+        noninferiority_p_values, family_alpha=DIRECTIONAL_FAMILY_ALPHA
+    )
 
     decision_table: list[dict[str, Any]] = []
     for entry in per_tier_summary:
         test_id = entry["test_id"]
         n = entry["n_scenarios"]
-        confidence = adjusted_confidence[test_id]
-        ci_low, ci_high, eligible, classification = interval_decisions[test_id]
+        harm_bound_type, harm_bound = _one_sided_bound(
+            entry["_bootstrap_distribution"],
+            entry["metric"],
+            "materially_harmful",
+            harm_confidence[test_id],
+        )
+        noninferiority_bound_type, noninferiority_bound = _one_sided_bound(
+            entry["_bootstrap_distribution"],
+            entry["metric"],
+            "noninferiority",
+            noninferiority_confidence[test_id],
+        )
+        is_activated = bool(entry["intervention_activated"])
+        complete = n == len(DECLARED_SCENARIOS)
+        harm_rejected = harm_adjusted[
+            test_id
+        ] <= DIRECTIONAL_FAMILY_ALPHA and _bound_supports_claim(
+            entry["metric"], "materially_harmful", harm_bound_type, harm_bound
+        )
+        noninferiority_rejected = noninferiority_adjusted[
+            test_id
+        ] <= DIRECTIONAL_FAMILY_ALPHA and _bound_supports_claim(
+            entry["metric"],
+            "noninferiority",
+            noninferiority_bound_type,
+            noninferiority_bound,
+        )
+        if not is_activated:
+            classification = "intervention_not_activated"
+        elif not complete:
+            classification = "inconclusive"
+        elif harm_rejected and noninferiority_rejected:
+            raise ValueError(f"contradictory directional decisions for {test_id}")
+        elif harm_rejected:
+            classification = "materially_harmful"
+        elif noninferiority_rejected:
+            classification = "no_material_shift"
+        else:
+            classification = "inconclusive"
         decision_table.append(
             {
                 "test_id": test_id,
@@ -987,22 +1097,33 @@ def _build_decision_table(
                 "n_scenarios": n,
                 "pooled_delta_mean": entry["pooled_delta_mean"],
                 "pooled_delta_se": entry["pooled_delta_se"],
-                "ci_low_unadjusted": entry["ci_low_unadjusted"],
-                "ci_high_unadjusted": entry["ci_high_unadjusted"],
-                "ci_low": ci_low,
-                "ci_high": ci_high,
-                "adjusted_confidence_level": confidence,
-                "holm_step_down_eligible": eligible,
+                "harm_bound_unadjusted": entry["harm_bound_unadjusted"],
+                "noninferiority_bound_unadjusted": entry["noninferiority_bound_unadjusted"],
+                "harm_bound": harm_bound,
+                "harm_bound_type": harm_bound_type,
+                "noninferiority_bound": noninferiority_bound,
+                "noninferiority_bound_type": noninferiority_bound_type,
+                "harm_adjusted_confidence_level": harm_confidence[test_id],
+                "noninferiority_adjusted_confidence_level": noninferiority_confidence[test_id],
                 "classification": classification,
-                "intervention_activated": entry.get("intervention_activated", True),
-                "p_value_raw": entry["p_value_raw"],
-                "p_value_holm": holm_adjusted[test_id],
+                "intervention_activated": is_activated,
+                "p_value_harm_raw": entry["p_value_harm_raw"],
+                "p_value_harm_holm": harm_adjusted[test_id],
+                "harm_holm_rejected": harm_rejected,
+                "p_value_noninferiority_raw": entry["p_value_noninferiority_raw"],
+                "p_value_noninferiority_holm": noninferiority_adjusted[test_id],
+                "noninferiority_holm_rejected": noninferiority_rejected,
+                "familywise_alpha": FAMILYWISE_ALPHA,
+                "directional_family_alpha": DIRECTIONAL_FAMILY_ALPHA,
                 "typed_collision_breakdown": entry["typed_collision_breakdown"],
-                "activation_diagnostics_summary": entry.get("activation_diagnostics_summary", {}),
-                "exposure_summary": entry.get("exposure_summary", {}),
+                "activation_diagnostics_summary": entry["activation_diagnostics_summary"],
+                "exposure_summary": entry["exposure_summary"],
             }
         )
-    return decision_table, holm_adjusted
+    return decision_table, {
+        "materially_harmful": harm_adjusted,
+        "noninferiority": noninferiority_adjusted,
+    }
 
 
 def _compute_descriptive_ranking_stability(
@@ -1058,7 +1179,7 @@ def _compute_descriptive_ranking_stability(
 
 def _build_cli_rows() -> list[dict[str, object]]:
     demo: list[dict[str, object]] = []
-    for tier_id, cap in (("cap_2_0_nominal", 2.0), ("cap_3_0", 3.0), ("cap_4_2", 4.2)):
+    for tier_id, cap in (("cap_2_0_nominal", 2.0), ("cap_3_0", 3.0), ("cap_4_0", 4.0)):
         demo.append(
             {
                 "scenario_id": "classic_doorway_medium",
@@ -1083,10 +1204,10 @@ def _build_cli_rows() -> list[dict[str, object]]:
                 "cap_saturation_fraction": 0.3,
                 "resolved_actuation_envelope": {
                     "drive_model": "bicycle_drive",
-                    "max_velocity": cap,
-                    "max_accel": cap * 0.5,
-                    "max_decel": cap,
-                    "stopping_distance": cap * 0.5,
+                    "max_forward_accel_m_s2": cap * 0.5,
+                    "max_braking_decel_m_s2": cap,
+                    "peak_forward_speed_m_s": cap,
+                    "stopping_distance_envelope_m": cap * 0.5,
                 },
                 "time_to_goal_norm": 0.5,
                 "total_exposure_seconds": 30.0,

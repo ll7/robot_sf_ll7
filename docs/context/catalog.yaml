@@ -4776,6 +4776,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+<<<<<<< HEAD
 - path: docs/context/evidence/issue_6474_social_compliance_preregistration.json
   status: evidence
   freshness: evidence
@@ -4785,6 +4786,7 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_6412_real_reexport_package
+- path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22
   status: evidence
   freshness: evidence
   area: benchmark_evidence

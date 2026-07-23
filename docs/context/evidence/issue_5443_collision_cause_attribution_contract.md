@@ -82,6 +82,29 @@ Two independent reviewers inspected the 14 frozen validation fixtures and analys
   `negative_control_guard_flap_01`) abstain to `cause_class = none` and are never
   promoted to a concrete cause.
 
+### Disagreements
+
+None. The reviewers independently reached the same pass/fail interpretation for
+all 14 frozen fixtures: the unambiguous fixtures receive their expected
+explanations, the two ambiguous fixtures abstain, and the two negative controls
+remain `none`. This records an explicit absence of disagreements; it does not
+claim that the fixture model has been validated on held-out real traces.
+
+### Model Assumptions
+
+- The 14 deterministic kinematic fixtures adequately represent the declared
+  injected-fault mechanisms for this controlled-fixture check; they do not model
+  the full dynamics or causal complexity of real planner runs.
+- The label-free `ObservableTraceEvent` fields preserve the fault signatures
+  needed by the rule chain, while the frozen scorer manifest remains the
+  authoritative source of fixture labels and activation windows.
+- A mechanism-specific counterfactual repair is a valid test of decisiveness
+  within each fixture. It supports attribution only under that declared repair
+  model, not a general causal conclusion outside the fixture.
+- The confidence threshold (0.8) and abstention rule are appropriate safeguards
+  for these two ambiguous fixtures and two negative controls; they are not a
+  calibrated confidence guarantee for held-out traces.
+
 ## Validation
 
 - `pytest -q tests/benchmark/test_collision_cause_analyser_issue_5443.py`

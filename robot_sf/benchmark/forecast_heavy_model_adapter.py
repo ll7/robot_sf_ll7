@@ -181,7 +181,12 @@ class HeavyModelForecastAdapter:
         n_horizons = len(config.horizons_s)
 
         det = np.asarray(deterministic_trajectories, dtype=float)
-        if det.ndim != 3 or det.shape[0] != n_actors or det.shape[1] != n_horizons or det.shape[2] != 2:
+        if (
+            det.ndim != 3
+            or det.shape[0] != n_actors
+            or det.shape[1] != n_horizons
+            or det.shape[2] != 2
+        ):
             raise ValueError(
                 f"deterministic_trajectories must have shape ({n_actors}, {n_horizons}, 2), "
                 f"got {det.shape}"
@@ -191,7 +196,12 @@ class HeavyModelForecastAdapter:
 
         if p.samples is not None:
             sam = np.asarray(p.samples, dtype=float)
-            if sam.ndim != 4 or sam.shape[0] != n_actors or sam.shape[2] != n_horizons or sam.shape[3] != 2:
+            if (
+                sam.ndim != 4
+                or sam.shape[0] != n_actors
+                or sam.shape[2] != n_horizons
+                or sam.shape[3] != 2
+            ):
                 raise ValueError(
                     f"samples must have shape ({n_actors}, n_samples, {n_horizons}, 2), "
                     f"got {sam.shape}"
@@ -206,7 +216,9 @@ class HeavyModelForecastAdapter:
 
         actor_mask = [True] * n_actors
         safe_feature_schema = dict(p.feature_schema) if p.feature_schema else {"position": "x_y"}
-        safe_actor_mask_metadata = dict(p.actor_mask_metadata) if p.actor_mask_metadata else {"mask": "all_included"}
+        safe_actor_mask_metadata = (
+            dict(p.actor_mask_metadata) if p.actor_mask_metadata else {"mask": "all_included"}
+        )
         safe_actor_classes = dict(p.actor_classes) if p.actor_classes else {}
 
         provenance = ForecastBatchProvenance(

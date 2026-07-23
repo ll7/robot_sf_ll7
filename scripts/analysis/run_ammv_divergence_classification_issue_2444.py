@@ -33,7 +33,6 @@ trace pair as behavioral evidence.
 """
 # evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
-
 from __future__ import annotations
 
 import argparse

@@ -4628,3 +4628,19 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/hierarchical_paired_release_analysis_report.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

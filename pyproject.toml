@@ -24,34 +24,40 @@ dependencies = [
     "numpy>=2.4.6",
     "gymnasium>=0.29,<1.2",
     "numba>=0.66.0",
-    "pygame>=2.6.1",
-    # Data processing
-    "pandas>=3.0.3",
-    "scipy>=1.17.1",
-    "matplotlib>=3.11.1",
-    "pillow>=10.4.0",
     "svgelements>=1.9.6",
     # Utilities
     "loguru>=0.7.2",
     "rich>=15.0.0",
     "psutil>=6.1.0",
-    "moviepy>=2.0.0",
     "jsonschema>=4.23.0",
     "shapely>=2.1.2",
     "networkx>=3.6.1,<4.0",
     "pyvisgraph>=0.2.1",
     "python-motion-planning>=2.0.1,<3",
-    # OSM map extraction (Issue #392)
-    "osmnx>=2.1.0",
-    "geopandas>=1.1.4",
-    "pyproj>=3.6",
+    "tqdm>=4.69.0",
     "pyyaml>=6.0",
     "orjson>=3.11.5",
 ]
 
 [project.optional-dependencies]
+viz = [
+    "pygame>=2.6.1",
+    "matplotlib>=3.11.1",
+    "pillow>=10.4.0",
+    "moviepy>=2.0.0",
+    "seaborn>=0.13.2",
+]
+maps = [
+    "osmnx>=2.1.0",
+    "geopandas>=1.1.4",
+    "pyproj>=3.6",
+]
+benchmark = [
+    "pandas>=3.0.3",
+    "scipy>=1.17.1",
+]
 gpu = [
-    "torch[cuda]>=2.13.0,<2.14.0",
+    "torch>=2.13.0,<2.14.0",
 ]
 training = [
     "stable-baselines3>=2.9.0",
@@ -78,9 +84,6 @@ analytics = [
     "duckdb>=1.5.4",
     "pyarrow>=25.0.0",
 ]
-viz = [
-    "seaborn>=0.13.2",
-]
 browser = [
     "playwright>=1.61.0",
 ]
@@ -103,6 +106,9 @@ socnav = [
 ]
 criticality = [
     "cma>=3.3.0",
+]
+all = [
+    "robot_sf[viz,maps,benchmark,training,gpu,recurrent,progress,analysis,analytics,browser,sacadrl,orca,socnav,criticality]",
 ]
 
 [build-system]

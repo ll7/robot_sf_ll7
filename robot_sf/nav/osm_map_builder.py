@@ -24,8 +24,18 @@ Design decisions:
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import geopandas
-import pandas as pd
+try:
+    import geopandas
+except ImportError as err:
+    geopandas = None  # type: ignore[assignment]
+    _GEOPANDAS_IMPORT_ERROR = err
+
+try:
+    import pandas as pd
+except ImportError as err:
+    pd = None  # type: ignore[assignment]
+    _PD_IMPORT_ERROR = err
+
 from loguru import logger
 from shapely.affinity import translate
 from shapely.errors import TopologicalError

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
@@ -351,6 +351,55 @@ def _certify_route(
     planned_line = _line_from_points(planned_path)
     shortest_length = _polyline_length(planned_path)
     path_length_ratio = _safe_ratio(shortest_length, direct_length)
+
+    # Issue #6139: the A* occupancy-grid verdict is necessary but not sufficient.
+    # Grid inflation approximates the robot disc by cells, so a diagonally adjacent
+    # free cell can produce a planned path whose continuous swept envelope (the disc
+    # swept along the polyline) clips an obstacle corner. Re-validate the planned
+    # path continuously against the same parsed obstacle geometry and robot envelope
+    # the simulator uses, and fail closed when the envelope collides or the geometry
+    # cannot be verified.
+    swept_envelope = _validate_planned_path_swept_envelope(
+        planned_path,
+        obstacle_union=obstacle_union,
+        robot_radius=robot_radius,
+    )
+    checks["swept_envelope"] = swept_envelope
+    if not swept_envelope["validated"]:
+        reasons.append(f"planned_path_swept_envelope_unverifiable: {swept_envelope['blocker']}")
+        checks["inflated_collision_free_path"] = False
+        return _route_certificate(
+            route,
+            route_id=route_id,
+            status=INVALID,
+            reasons=reasons,
+            checks=checks,
+            evidence=evidence,
+        )
+    if swept_envelope["clips_obstacle"]:
+        reasons.append(
+            "planned_path_swept_envelope_clips_obstacle: "
+            f"full_polyline_clearance_m={swept_envelope['clearance_m']:.6g}"
+        )
+        checks["inflated_collision_free_path"] = False
+        checks.update(
+            {
+                "shortest_path_length_m": shortest_length,
+                "path_length_ratio": path_length_ratio,
+                "planner": planner_info,
+                "planned_waypoint_count": len(planned_path),
+                "planned_turn_count": _turn_count(planned_path),
+            }
+        )
+        return _route_certificate(
+            route,
+            route_id=route_id,
+            status=GEOMETRICALLY_INFEASIBLE,
+            reasons=reasons,
+            checks=checks,
+            evidence=evidence,
+        )
+
     checks.update(
         {
             "inflated_collision_free_path": True,
@@ -671,6 +720,122 @@ def _minimum_static_clearance(
     if obstacle_union.is_empty:
         return None
     return float(line.distance(obstacle_union) - robot_radius)
+
+
+def measure_planned_path_clearance(
+    path: Sequence[Vec2D],
+    obstacle_union: Any,
+    robot_radius: float,
+) -> tuple[int, float | None, float | None]:
+    """Measure vertex and full-polyline clearance of a planned path.
+
+    This is the canonical continuous swept-envelope clearance check shared by the
+    certifier (issue #6139) and the diagnostic oracle. ``clearance`` is the signed
+    distance from the path geometry to the parsed obstacle union minus the robot
+    envelope radius: a negative value means the swept robot disc intersects an
+    obstacle (a clipped corner); zero or positive means the full swept envelope is
+    collision-free. Any non-finite measurement returns ``None`` clearances so the
+    caller can fail closed without emitting non-standard JSON.
+
+    Args:
+        path: Planned polyline waypoints in world coordinates.
+        obstacle_union: Unioned static obstacle geometry (may be empty).
+        robot_radius: Robot collision-envelope radius in meters.
+
+    Returns:
+        Tuple of ``(clipped_vertex_count, minimum_vertex_clearance_m,
+        minimum_path_clearance_m)``. Clearance values are ``None`` when the
+        obstacle set is empty or the measurement is non-finite.
+    """
+    if obstacle_union.is_empty:
+        return 0, None, None
+    clipped = 0
+    min_vertex_clearance: float | None = None
+    for vertex in path:
+        vertex_clearance = float(Point(vertex).distance(obstacle_union) - robot_radius)
+        if not math.isfinite(vertex_clearance):
+            return clipped, None, None
+        if vertex_clearance < 0.0:
+            clipped += 1
+        if min_vertex_clearance is None or vertex_clearance < min_vertex_clearance:
+            min_vertex_clearance = vertex_clearance
+
+    path_clearance = float(LineString(path).distance(obstacle_union) - robot_radius)
+    if not math.isfinite(path_clearance):
+        return clipped, None, None
+    return clipped, min_vertex_clearance, path_clearance
+
+
+def _validate_planned_path_swept_envelope(
+    planned_path: list[Vec2D],
+    *,
+    obstacle_union: Any,
+    robot_radius: float,
+) -> dict[str, Any]:
+    """Validate the continuous swept envelope of a planned A* path.
+
+    Records the occupancy-grid/A* verdict together with the continuous swept-disc
+    geometry verdict so a diagonally adjacent blocked-cell fixture cannot certify by
+    corner cutting. Invalid, empty, or unverifiable geometry fails closed.
+
+    Args:
+        planned_path: Planned polyline waypoints in world coordinates.
+        obstacle_union: Unioned static obstacle geometry (may be empty).
+        robot_radius: Robot collision-envelope radius in meters.
+
+    Returns:
+        JSON-safe verdict dict with ``validated``, ``clips_obstacle``, ``clearance_m``,
+        ``vertex_clearance_m``, ``clipped_vertex_count``, and ``planned_waypoint_count``.
+    """
+    base: dict[str, Any] = {
+        "validated": False,
+        "clips_obstacle": None,
+        "clearance_m": None,
+        "vertex_clearance_m": None,
+        "clipped_vertex_count": None,
+        "planned_waypoint_count": len(planned_path),
+        "blocker": None,
+    }
+    if len(planned_path) < 2:
+        return {**base, "blocker": "planned_path_has_fewer_than_two_waypoints"}
+    if not math.isfinite(robot_radius) or robot_radius < 0.0:
+        return {**base, "blocker": "robot_radius_must_be_finite_and_non_negative"}
+    try:
+        planned_line = LineString(planned_path)
+    except (ValueError, TypeError) as exc:
+        return {**base, "blocker": f"planned_path_geometry_invalid: {exc}"}
+    if planned_line.is_empty or not planned_line.is_valid:
+        return {**base, "blocker": "planned_path_geometry_empty_or_invalid"}
+    if obstacle_union.is_empty:
+        # No static obstacles to clip: the swept envelope is trivially collision-free.
+        return {
+            **base,
+            "validated": True,
+            "clips_obstacle": False,
+            "clearance_m": None,
+            "vertex_clearance_m": None,
+            "clipped_vertex_count": 0,
+        }
+    try:
+        clipped, min_vertex_clearance, min_path_clearance = measure_planned_path_clearance(
+            planned_path,
+            obstacle_union,
+            robot_radius,
+        )
+    except Exception as exc:  # noqa: BLE001 - certifier must fail closed on geometry errors.
+        return {**base, "blocker": f"clearance_measurement_error: {exc}"}
+    if min_vertex_clearance is None or min_path_clearance is None:
+        return {**base, "blocker": "clearance_measurement_is_non_finite"}
+    clips = clipped > 0 or min_path_clearance < 0.0
+    return {
+        "validated": True,
+        "clips_obstacle": clips,
+        "clearance_m": float(min_path_clearance),
+        "vertex_clearance_m": float(min_vertex_clearance),
+        "clipped_vertex_count": int(clipped),
+        "planned_waypoint_count": len(planned_path),
+        "blocker": None,
+    }
 
 
 def _plan_inflated_shortest_path(

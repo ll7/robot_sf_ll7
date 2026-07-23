@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/preflight/checkpoint_resolvability.json",
+  "artifact_sha256": "74f19453305c7fafba79134009c176e01b06722b3ee1edffb51bac41a2fb2c4b",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

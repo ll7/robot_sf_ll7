@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/stress/reports/amv_coverage_summary.json",
+  "artifact_sha256": "c517d3569b98a3f7e7fef17fbf58de24888408defd9a002f50df1c4db3ff9c4e",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

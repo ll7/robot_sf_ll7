@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/stress/reports/matrix_summary.csv",
+  "artifact_sha256": "bfc916aadcca6a906eb4bc6db960264ce42e79ed36f54d991ca4cd1cc3310b33",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

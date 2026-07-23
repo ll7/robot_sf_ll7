@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/stress/reports/comparability_matrix.md",
+  "artifact_sha256": "c32a1e54c7ba14224473792a9080639a536c2d1cdf1f0942818ca20e011e97a7",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

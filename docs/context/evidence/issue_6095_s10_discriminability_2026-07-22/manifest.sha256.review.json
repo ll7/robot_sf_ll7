@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/manifest.sha256",
+  "artifact_sha256": "486e39434fc88c1ff5bc2d86d44f7586639f87d005e80c82ed2f4f2b9a5c3203",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

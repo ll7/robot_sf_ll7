@@ -1326,6 +1326,12 @@ def _create_robot_policy(  # noqa: C901, PLR0915
 
     if step_runner is not None:
         policy_fn.close = step_runner.close  # type: ignore[attr-defined]
+    # Issue #6190: expose the predictive planner's live foresight-model-load
+    # provenance on the policy closure so ``run_episode`` can thread it into the
+    # episode metadata after the (lazy) model load/fallback has actually occurred.
+    foresight_diagnostics_fn = getattr(planner, "foresight_diagnostics", None)
+    if callable(foresight_diagnostics_fn):
+        policy_fn.foresight_diagnostics = foresight_diagnostics_fn  # type: ignore[attr-defined]
     # Ensure consistent metadata schema
     metadata.setdefault("algorithm", algo)
     metadata["config"] = algo_config
@@ -1986,6 +1992,17 @@ def run_episode(  # noqa: PLR0913
         live_diag = policy_diag()
         if isinstance(live_diag, dict):
             algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = live_diag
+
+    # Issue #6190: refresh the predictive planner's foresight-model-load
+    # provenance (captured during the episode) so ``enrich_algorithm_metadata``
+    # can derive the degraded ``status``/``evidence_eligible`` for a silent
+    # constant-velocity fallback. Read after the episode because the model load
+    # (and any fallback) happens lazily during prediction.
+    foresight_diag = getattr(robot_policy, "foresight_diagnostics", None)
+    if callable(foresight_diag):
+        live_foresight = foresight_diag()
+        if isinstance(live_foresight, dict):
+            algo_metadata.update(live_foresight)
 
     collision = bool(metric_scalar(metrics, "collisions", "collision_rate") > 0.0)
     route_complete = bool(metric_scalar(metrics, "success", "success_rate") > 0.0)

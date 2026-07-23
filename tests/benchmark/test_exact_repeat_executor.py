@@ -600,6 +600,44 @@ def test_record_is_degraded_ignores_malformed_fallback_counter():
     )
 
 
+# --- _record_is_degraded foresight-model-load fallback (issue #6190) ------
+
+
+def test_record_is_degraded_detects_predictive_foresight_model_fallback():
+    """A foresight-model-load fallback status marks a record as degraded (issue #6190).
+
+    When ``PredictionPlannerAdapter`` cannot load the predictive model with
+    ``allow_fallback=True`` it silently degrades to constant-velocity prediction.
+    ``enrich_algorithm_metadata`` surfaces that as a
+    ``predictive_foresight_model_fallback`` status prefix; the classifier must
+    disposition the run as degraded before the determinism assertion fires.
+    """
+    assert (
+        _record_is_degraded(
+            {
+                "algorithm_metadata": {
+                    "status": "predictive_foresight_model_fallback",
+                    "foresight_prediction": {"fallback_used": True},
+                },
+                "outcome": {},
+            }
+        )
+        is True
+    )
+    # Diagnostic suffixes (load error class, model id) must still match the prefix.
+    assert (
+        _record_is_degraded(
+            {
+                "algorithm_metadata": {
+                    "status": "predictive_foresight_model_fallback:KeyError",
+                },
+                "outcome": {},
+            }
+        )
+        is True
+    )
+
+
 # --- _record_is_isolation_failure (issue #5781) --------------------------
 
 
@@ -1045,6 +1083,77 @@ def test_execute_campaign_dispositions_mixed_degraded_repeats(tmp_path, manifest
     assert all(result["degraded"] is True for result in host_result["results"])
     assert all(result["repeats"] == [] for result in host_result["results"])
     verified = verify_host_report(manifest, host_result)
+    assert verified["summary"]["n_runnable_cells"] == 0
+    assert verified["summary"]["n_unrunnable_cells"] == 7
+    assert verified["summary"]["all_cells_bitwise_identical"] is False
+
+
+def _foresight_fallback_mock_runner(
+    scenario_params: dict[str, Any],
+    seed: int,
+    *,
+    algo: str = "goal",
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Mock run_episode whose records look like a silent foresight fallback.
+
+    Issue #6190: ``PredictionPlannerAdapter`` silently degrades to
+    constant-velocity prediction when the predictive model cannot be loaded with
+    ``allow_fallback=True``. ``enrich_algorithm_metadata`` surfaces that as a
+    ``predictive_foresight_model_fallback`` status with evidence-ineligible
+    structured foresight provenance. The campaign must disposition such a run as
+    degraded (excluded from the bitwise-identical determinism claim) rather than
+    asserting bitwise trajectory identity.
+    """
+    record = _build_mock_record(seed)
+    record["algorithm_metadata"] = {
+        "status": "predictive_foresight_model_fallback",
+        "foresight_prediction": {
+            "requested_model_id": "predictive_proxy_selected_v2_full",
+            "load_status": "failed",
+            "effective_prediction_mode": "constant_velocity",
+            "fallback_used": True,
+            "fallback_reason": "predictive_model_load_failed",
+            "evidence_eligible": False,
+        },
+    }
+    record["outcome"] = {"timeout_event": True}
+    return record
+
+
+def test_execute_campaign_dispositions_foresight_fallback_as_degraded(
+    tmp_path, manifest, resolved_bundle
+):
+    """A silent foresight-model-load fallback is dispositioned as degraded (issue #6190).
+
+    The classifier must surface the degraded status (via ``_record_is_degraded``)
+    *before* the determinism assertion is reached, so a constant-velocity
+    fallback run is recorded with the ``unrunnable_on_current_main`` disposition
+    (``degraded=True``, empty repeats) and excluded from the bitwise-identical
+    determinism claim — instead of failing with a cryptic fingerprint mismatch.
+    """
+    host_result = execute_campaign(
+        resolved_bundle,
+        output_dir=tmp_path / "foresight_fallback_disposition",
+        run_episode=_foresight_fallback_mock_runner,
+    )
+
+    by_planner = {}
+    for result in host_result["results"]:
+        by_planner.setdefault(result["planner"], []).append(result)
+
+    # Every planner target silently degraded to constant-velocity prediction.
+    for results in by_planner.values():
+        for result in results:
+            assert result["disposition"] == UNRUNNABLE_DISPOSITION
+            assert result["degraded"] is True
+            assert result["repeats"] == []
+            assert "fallback" in result["disposition_reason"]
+            # It is degraded, never a process-isolation failure.
+            assert result.get("isolation_failure") is not True
+
+    verified = verify_host_report(manifest, host_result)
+    # No cell is promoted to a bitwise-identical determinism verdict.
     assert verified["summary"]["n_runnable_cells"] == 0
     assert verified["summary"]["n_unrunnable_cells"] == 7
     assert verified["summary"]["all_cells_bitwise_identical"] is False

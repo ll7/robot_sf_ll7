@@ -12,7 +12,10 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from robot_sf.benchmark.adversarial_package_b_report import validate_package_b_report
+from robot_sf.benchmark.adversarial_package_b_report import (
+    validate_package_b_report,
+    verify_package_b_candidate_replay_inventory,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -176,3 +179,36 @@ def test_summary_references_are_portable_and_inventory_backed() -> None:
         bundle_id = str(row["best_bundle_path"])
         assert manifest_id in inventory
         assert any(name.startswith(f"{bundle_id}/") for name in inventory)
+
+
+def test_candidate_replay_inventory_verifier_passes_and_fails_closed(tmp_path: Path) -> None:
+    """Verification helper verifies 4,761 entries and fails closed on corrupted input."""
+    result = verify_package_b_candidate_replay_inventory(BUNDLE)
+    assert result.is_valid is True
+    assert result.total_entries == 4761
+    assert result.verified_entries == 4761
+    assert result.missing_entries == 0
+    assert result.mismatched_entries == 0
+    assert not result.errors
+
+    # Fail closed on corrupted inventory
+    bad_manifest = tmp_path / "candidate_replay_SHA256SUMS.txt"
+    bad_manifest.write_text("invalid_digest_line\n", encoding="utf-8")
+    bad_result = verify_package_b_candidate_replay_inventory(tmp_path)
+    assert bad_result.is_valid is False
+    assert len(bad_result.errors) > 0
+
+
+def test_second_reader_verification_record_is_documented_and_valid() -> None:
+    """Second-reader verification record is present with portable metadata and commands."""
+    readme_text = (BUNDLE / "README.md").read_text(encoding="utf-8")
+    provenance_text = (BUNDLE / "provenance.md").read_text(encoding="utf-8")
+
+    for text in (readme_text, provenance_text):
+        assert "Second-Reader Verification Record (Issue #6131)" in text
+        assert "7ec582b81cdcb871fb4fcb47700338194e7617d5" in text
+        assert "9f174f067d23efd374c019702168213a27085dfffa1b0b5bc10adafaa9614e04" in text
+        assert "4761" in text
+        assert "verify_package_b_raw_artifacts.py" in text
+        assert "run_adversarial_package_b.py" in text
+        assert "diagnostic-only" in text or "not paper-facing" in text

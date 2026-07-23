@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 from robot_sf.benchmark.adversarial_package_b_preflight import (
     EXPECTED_BUDGETS,
@@ -13,9 +15,6 @@ from robot_sf.benchmark.adversarial_package_b_preflight import (
     EXPECTED_REPORTING_FIELDS,
     EXPECTED_SAMPLERS,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 SCHEMA_VERSION = "adversarial-package-b-report-gate.v1"
 REPORT_SCHEMA_VERSION = "adversarial-sampler-comparison.v3"
@@ -395,3 +394,163 @@ def _is_non_negative_count(value: Any) -> bool:
 def _non_negative_count(value: Any) -> int:
     """Return a valid non-negative count or zero for error accumulation."""
     return value if _is_non_negative_count(value) else 0
+
+
+@dataclass(frozen=True)
+class PackageBCandidateReplayVerificationResult:
+    """Verification result for Package B candidate/replay artifact inventory."""
+
+    inventory_path: str
+    total_entries: int
+    verified_entries: int
+    missing_entries: int
+    mismatched_entries: int
+    is_valid: bool
+    errors: tuple[str, ...]
+    claim_boundary: str
+
+    def to_payload(self) -> dict[str, Any]:
+        """Return a stable JSON representation of the verification result."""
+        return {
+            "inventory_path": self.inventory_path,
+            "total_entries": self.total_entries,
+            "verified_entries": self.verified_entries,
+            "missing_entries": self.missing_entries,
+            "mismatched_entries": self.mismatched_entries,
+            "is_valid": self.is_valid,
+            "errors": list(self.errors),
+            "claim_boundary": self.claim_boundary,
+        }
+
+
+def _parse_inventory_entry(
+    line_no: int,
+    line: str,
+    seen_paths: set[str],
+) -> tuple[tuple[str, Path] | None, str | None]:
+    digest, sep, name = line.partition("  ")
+    name = name.strip()
+    if not sep or len(digest) != 64 or not all(c in "0123456789abcdefABCDEF" for c in digest):
+        return None, f"line {line_no}: malformed SHA-256 digest or separator: {line!r}"
+    rel_path = Path(name)
+    if rel_path.is_absolute():
+        return None, f"line {line_no}: absolute path prohibited: {name}"
+    if "output" in rel_path.parts:
+        return None, f"line {line_no}: ignored output/ path prohibited: {name}"
+    if not rel_path.parts or rel_path.parts[0] != "worst_case_snqi":
+        return None, f"line {line_no}: path must start with worst_case_snqi/: {name}"
+    posix_name = rel_path.as_posix()
+    if posix_name in seen_paths:
+        return None, f"line {line_no}: duplicate path entry: {name}"
+    seen_paths.add(posix_name)
+    return (digest.lower(), rel_path), None
+
+
+def _verify_raw_tree_bytes(
+    parsed_entries: list[tuple[str, Path]],
+    raw_root: Path,
+) -> tuple[int, int, int, list[str]]:
+    errors: list[str] = []
+    verified_entries = 0
+    missing_entries = 0
+    mismatched_entries = 0
+
+    if not raw_root.is_dir():
+        errors.append(f"raw_tree_dir directory not found: {raw_root}")
+        return 0, 0, 0, errors
+
+    for digest, rel_path in parsed_entries:
+        target_file = raw_root / rel_path
+        if not target_file.is_file():
+            missing_entries += 1
+            errors.append(f"missing raw artifact file: {rel_path}")
+            continue
+        actual_digest = hashlib.sha256(target_file.read_bytes()).hexdigest()
+        if actual_digest != digest:
+            mismatched_entries += 1
+            errors.append(
+                f"SHA-256 mismatch for {rel_path}: expected {digest}, got {actual_digest}"
+            )
+        else:
+            verified_entries += 1
+
+    return verified_entries, missing_entries, mismatched_entries, errors
+
+
+def verify_package_b_candidate_replay_inventory(
+    bundle_dir: Path | str,
+    raw_tree_dir: Path | str | None = None,
+) -> PackageBCandidateReplayVerificationResult:
+    """Verify Package B raw candidate/replay SHA-256 inventory against portable rules and disk bytes.
+
+    Validates that:
+    1. candidate_replay_SHA256SUMS.txt exists and contains 4,761 unique, portable entries.
+    2. Every digest is a 64-character SHA-256 hex string.
+    3. Every path is relative, starts with worst_case_snqi/, and contains no 'output' or absolute components.
+    4. If raw_tree_dir is provided and exists, computes actual SHA-256 digests for all 4,761 files
+       and verifies exact match.
+
+    Returns:
+        A structured result object with counts, validity, errors, and claim boundary.
+    """
+    bundle_path = Path(bundle_dir)
+    inventory_path = (
+        bundle_path if bundle_path.is_file() else bundle_path / "candidate_replay_SHA256SUMS.txt"
+    )
+
+    errors: list[str] = []
+    if not inventory_path.is_file():
+        errors.append(f"inventory manifest not found: {inventory_path}")
+        return PackageBCandidateReplayVerificationResult(
+            inventory_path=str(inventory_path),
+            total_entries=0,
+            verified_entries=0,
+            missing_entries=0,
+            mismatched_entries=0,
+            is_valid=False,
+            errors=tuple(errors),
+            claim_boundary=(
+                "diagnostic-only candidate/replay inventory verification; "
+                "not paper-facing benchmark evidence"
+            ),
+        )
+
+    lines = inventory_path.read_text(encoding="utf-8").splitlines()
+    if len(lines) != 4761:
+        errors.append(f"expected 4761 inventory entries, found {len(lines)}")
+
+    seen_paths: set[str] = set()
+    parsed_entries: list[tuple[str, Path]] = []
+    for line_no, line in enumerate(lines, start=1):
+        entry, err = _parse_inventory_entry(line_no, line, seen_paths)
+        if err:
+            errors.append(err)
+        elif entry:
+            parsed_entries.append(entry)
+
+    verified_entries = len(parsed_entries)
+    missing_entries = 0
+    mismatched_entries = 0
+
+    if raw_tree_dir is not None:
+        v_entries, m_entries, mm_entries, disk_errs = _verify_raw_tree_bytes(
+            parsed_entries, Path(raw_tree_dir)
+        )
+        verified_entries = v_entries
+        missing_entries = m_entries
+        mismatched_entries = mm_entries
+        errors.extend(disk_errs)
+
+    return PackageBCandidateReplayVerificationResult(
+        inventory_path=str(inventory_path),
+        total_entries=len(lines),
+        verified_entries=verified_entries,
+        missing_entries=missing_entries,
+        mismatched_entries=mismatched_entries,
+        is_valid=(len(errors) == 0),
+        errors=tuple(errors),
+        claim_boundary=(
+            "diagnostic-only candidate/replay inventory verification; "
+            "not paper-facing benchmark evidence"
+        ),
+    )

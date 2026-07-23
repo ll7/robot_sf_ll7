@@ -1,0 +1,362 @@
+schema_version: oracle-imitation-launch-packet.v1
+dataset_id: issue_6127_balanced_oracle_v1
+source_candidate: hybrid_rule_v3_static_margin0_waypoint2
+source_candidate_config: configs/policy_search/candidates/hybrid_rule_v3_static_margin0_waypoint2.yaml
+source_report: docs/context/policy_search/reports/2026-04-30_best_non_learning_local_policy_report.md
+split_contract: docs/context/policy_search/contracts/oracle_imitation_dataset_split.md
+scenario_source: configs/policy_search/nominal_sanity_matrix.yaml
+scenario_ids:
+  - planner_sanity_simple
+  - classic_head_on_corridor_low
+  - classic_crossing_low
+  - classic_doorway_low
+  - classic_overtaking_low
+  - francis2023_following_human
+seed_set_refs:
+  manifest: configs/benchmarks/seed_sets_v1.yaml
+  validation: dev
+  evaluation: eval
+  train_excludes: paper_eval_s20
+seeds_by_split:
+  train: [1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020, 1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030, 1031, 1032, 1033, 1034, 1035, 1036, 1037, 1038, 1039, 1040, 1041, 1042, 1043, 1044, 1045, 1046, 1047, 1048, 1049, 1050, 1051, 1052, 1053, 1054, 1055, 1056, 1057, 1058, 1059, 1060, 1061, 1062, 1063, 1064, 1065, 1066, 1067, 1068, 1069, 1070, 1071, 1072, 1073, 1074, 1075, 1076, 1077, 1078, 1079, 1080, 1081, 1082, 1083, 1084, 1085, 1086, 1087, 1088, 1089, 1090, 1091, 1092, 1093, 1094, 1095, 1096, 1097, 1098, 1099, 1100, 1101, 1102, 1103, 1104, 1105, 1106, 1107, 1108, 1109, 1110, 1111, 1112, 1113, 1114, 1115, 1116, 1117, 1118, 1119, 1120, 1121, 1122, 1123, 1124, 1125, 1126, 1127, 1128, 1129, 1130, 1131, 1132, 1133, 1134, 1135, 1136, 1137, 1138, 1139, 1140, 1141, 1142, 1143, 1144, 1145, 1146, 1147, 1148, 1149, 1150, 1151, 1152, 1153, 1154, 1155, 1156, 1157, 1158, 1159, 1160, 1161, 1162, 1163, 1164, 1165, 1166, 1167, 1168, 1169, 1170, 1171, 1172, 1173, 1174, 1175, 1176, 1177, 1178, 1179, 1180, 1181, 1182, 1183, 1184, 1185, 1186, 1187, 1188, 1189, 1190, 1191, 1192, 1193, 1194, 1195, 1196, 1197, 1198, 1199, 1200, 1201, 1202, 1203, 1204, 1205, 1206, 1207, 1208, 1209, 1210, 1211, 1212, 1213, 1214, 1215, 1216, 1217, 1218, 1219, 1220, 1221, 1222, 1223, 1224, 1225, 1226, 1227, 1228, 1229, 1230, 1231, 1232, 1233, 1234, 1235, 1236, 1237, 1238, 1239, 1240, 1241, 1242, 1243, 1244, 1245, 1246, 1247, 1248, 1249, 1250, 1251, 1252, 1253, 1254, 1255, 1256, 1257, 1258, 1259, 1260, 1261, 1262, 1263, 1264, 1265, 1266, 1267, 1268, 1269, 1270, 1271, 1272, 1273, 1274, 1275, 1276, 1277, 1278, 1279, 1280, 1281, 1282, 1283, 1284, 1285, 1286, 1287, 1288, 1289, 1290, 1291, 1292, 1293, 1294, 1295, 1296, 1297, 1298, 1299, 1300]
+  validation: [101, 102, 103]
+  evaluation: [111, 112, 113]
+episode_ids_by_split:
+  train:
+    - train__planner_sanity_simple__seed1001
+    - train__planner_sanity_simple__seed1002
+    - train__planner_sanity_simple__seed1003
+    - train__planner_sanity_simple__seed1004
+    - train__planner_sanity_simple__seed1005
+    - train__planner_sanity_simple__seed1006
+    - train__planner_sanity_simple__seed1007
+    - train__planner_sanity_simple__seed1008
+    - train__planner_sanity_simple__seed1009
+    - train__planner_sanity_simple__seed1010
+    - train__planner_sanity_simple__seed1011
+    - train__planner_sanity_simple__seed1012
+    - train__planner_sanity_simple__seed1013
+    - train__planner_sanity_simple__seed1014
+    - train__planner_sanity_simple__seed1015
+    - train__planner_sanity_simple__seed1016
+    - train__planner_sanity_simple__seed1017
+    - train__planner_sanity_simple__seed1018
+    - train__planner_sanity_simple__seed1019
+    - train__planner_sanity_simple__seed1020
+    - train__planner_sanity_simple__seed1021
+    - train__planner_sanity_simple__seed1022
+    - train__planner_sanity_simple__seed1023
+    - train__planner_sanity_simple__seed1024
+    - train__planner_sanity_simple__seed1025
+    - train__planner_sanity_simple__seed1026
+    - train__planner_sanity_simple__seed1027
+    - train__planner_sanity_simple__seed1028
+    - train__planner_sanity_simple__seed1029
+    - train__planner_sanity_simple__seed1030
+    - train__planner_sanity_simple__seed1031
+    - train__planner_sanity_simple__seed1032
+    - train__planner_sanity_simple__seed1033
+    - train__planner_sanity_simple__seed1034
+    - train__planner_sanity_simple__seed1035
+    - train__planner_sanity_simple__seed1036
+    - train__planner_sanity_simple__seed1037
+    - train__planner_sanity_simple__seed1038
+    - train__planner_sanity_simple__seed1039
+    - train__planner_sanity_simple__seed1040
+    - train__planner_sanity_simple__seed1041
+    - train__planner_sanity_simple__seed1042
+    - train__planner_sanity_simple__seed1043
+    - train__planner_sanity_simple__seed1044
+    - train__planner_sanity_simple__seed1045
+    - train__planner_sanity_simple__seed1046
+    - train__planner_sanity_simple__seed1047
+    - train__planner_sanity_simple__seed1048
+    - train__planner_sanity_simple__seed1049
+    - train__planner_sanity_simple__seed1050
+    - train__classic_head_on_corridor_low__seed1051
+    - train__classic_head_on_corridor_low__seed1052
+    - train__classic_head_on_corridor_low__seed1053
+    - train__classic_head_on_corridor_low__seed1054
+    - train__classic_head_on_corridor_low__seed1055
+    - train__classic_head_on_corridor_low__seed1056
+    - train__classic_head_on_corridor_low__seed1057
+    - train__classic_head_on_corridor_low__seed1058
+    - train__classic_head_on_corridor_low__seed1059
+    - train__classic_head_on_corridor_low__seed1060
+    - train__classic_head_on_corridor_low__seed1061
+    - train__classic_head_on_corridor_low__seed1062
+    - train__classic_head_on_corridor_low__seed1063
+    - train__classic_head_on_corridor_low__seed1064
+    - train__classic_head_on_corridor_low__seed1065
+    - train__classic_head_on_corridor_low__seed1066
+    - train__classic_head_on_corridor_low__seed1067
+    - train__classic_head_on_corridor_low__seed1068
+    - train__classic_head_on_corridor_low__seed1069
+    - train__classic_head_on_corridor_low__seed1070
+    - train__classic_head_on_corridor_low__seed1071
+    - train__classic_head_on_corridor_low__seed1072
+    - train__classic_head_on_corridor_low__seed1073
+    - train__classic_head_on_corridor_low__seed1074
+    - train__classic_head_on_corridor_low__seed1075
+    - train__classic_head_on_corridor_low__seed1076
+    - train__classic_head_on_corridor_low__seed1077
+    - train__classic_head_on_corridor_low__seed1078
+    - train__classic_head_on_corridor_low__seed1079
+    - train__classic_head_on_corridor_low__seed1080
+    - train__classic_head_on_corridor_low__seed1081
+    - train__classic_head_on_corridor_low__seed1082
+    - train__classic_head_on_corridor_low__seed1083
+    - train__classic_head_on_corridor_low__seed1084
+    - train__classic_head_on_corridor_low__seed1085
+    - train__classic_head_on_corridor_low__seed1086
+    - train__classic_head_on_corridor_low__seed1087
+    - train__classic_head_on_corridor_low__seed1088
+    - train__classic_head_on_corridor_low__seed1089
+    - train__classic_head_on_corridor_low__seed1090
+    - train__classic_head_on_corridor_low__seed1091
+    - train__classic_head_on_corridor_low__seed1092
+    - train__classic_head_on_corridor_low__seed1093
+    - train__classic_head_on_corridor_low__seed1094
+    - train__classic_head_on_corridor_low__seed1095
+    - train__classic_head_on_corridor_low__seed1096
+    - train__classic_head_on_corridor_low__seed1097
+    - train__classic_head_on_corridor_low__seed1098
+    - train__classic_head_on_corridor_low__seed1099
+    - train__classic_head_on_corridor_low__seed1100
+    - train__classic_crossing_low__seed1101
+    - train__classic_crossing_low__seed1102
+    - train__classic_crossing_low__seed1103
+    - train__classic_crossing_low__seed1104
+    - train__classic_crossing_low__seed1105
+    - train__classic_crossing_low__seed1106
+    - train__classic_crossing_low__seed1107
+    - train__classic_crossing_low__seed1108
+    - train__classic_crossing_low__seed1109
+    - train__classic_crossing_low__seed1110
+    - train__classic_crossing_low__seed1111
+    - train__classic_crossing_low__seed1112
+    - train__classic_crossing_low__seed1113
+    - train__classic_crossing_low__seed1114
+    - train__classic_crossing_low__seed1115
+    - train__classic_crossing_low__seed1116
+    - train__classic_crossing_low__seed1117
+    - train__classic_crossing_low__seed1118
+    - train__classic_crossing_low__seed1119
+    - train__classic_crossing_low__seed1120
+    - train__classic_crossing_low__seed1121
+    - train__classic_crossing_low__seed1122
+    - train__classic_crossing_low__seed1123
+    - train__classic_crossing_low__seed1124
+    - train__classic_crossing_low__seed1125
+    - train__classic_crossing_low__seed1126
+    - train__classic_crossing_low__seed1127
+    - train__classic_crossing_low__seed1128
+    - train__classic_crossing_low__seed1129
+    - train__classic_crossing_low__seed1130
+    - train__classic_crossing_low__seed1131
+    - train__classic_crossing_low__seed1132
+    - train__classic_crossing_low__seed1133
+    - train__classic_crossing_low__seed1134
+    - train__classic_crossing_low__seed1135
+    - train__classic_crossing_low__seed1136
+    - train__classic_crossing_low__seed1137
+    - train__classic_crossing_low__seed1138
+    - train__classic_crossing_low__seed1139
+    - train__classic_crossing_low__seed1140
+    - train__classic_crossing_low__seed1141
+    - train__classic_crossing_low__seed1142
+    - train__classic_crossing_low__seed1143
+    - train__classic_crossing_low__seed1144
+    - train__classic_crossing_low__seed1145
+    - train__classic_crossing_low__seed1146
+    - train__classic_crossing_low__seed1147
+    - train__classic_crossing_low__seed1148
+    - train__classic_crossing_low__seed1149
+    - train__classic_crossing_low__seed1150
+    - train__classic_doorway_low__seed1151
+    - train__classic_doorway_low__seed1152
+    - train__classic_doorway_low__seed1153
+    - train__classic_doorway_low__seed1154
+    - train__classic_doorway_low__seed1155
+    - train__classic_doorway_low__seed1156
+    - train__classic_doorway_low__seed1157
+    - train__classic_doorway_low__seed1158
+    - train__classic_doorway_low__seed1159
+    - train__classic_doorway_low__seed1160
+    - train__classic_doorway_low__seed1161
+    - train__classic_doorway_low__seed1162
+    - train__classic_doorway_low__seed1163
+    - train__classic_doorway_low__seed1164
+    - train__classic_doorway_low__seed1165
+    - train__classic_doorway_low__seed1166
+    - train__classic_doorway_low__seed1167
+    - train__classic_doorway_low__seed1168
+    - train__classic_doorway_low__seed1169
+    - train__classic_doorway_low__seed1170
+    - train__classic_doorway_low__seed1171
+    - train__classic_doorway_low__seed1172
+    - train__classic_doorway_low__seed1173
+    - train__classic_doorway_low__seed1174
+    - train__classic_doorway_low__seed1175
+    - train__classic_doorway_low__seed1176
+    - train__classic_doorway_low__seed1177
+    - train__classic_doorway_low__seed1178
+    - train__classic_doorway_low__seed1179
+    - train__classic_doorway_low__seed1180
+    - train__classic_doorway_low__seed1181
+    - train__classic_doorway_low__seed1182
+    - train__classic_doorway_low__seed1183
+    - train__classic_doorway_low__seed1184
+    - train__classic_doorway_low__seed1185
+    - train__classic_doorway_low__seed1186
+    - train__classic_doorway_low__seed1187
+    - train__classic_doorway_low__seed1188
+    - train__classic_doorway_low__seed1189
+    - train__classic_doorway_low__seed1190
+    - train__classic_doorway_low__seed1191
+    - train__classic_doorway_low__seed1192
+    - train__classic_doorway_low__seed1193
+    - train__classic_doorway_low__seed1194
+    - train__classic_doorway_low__seed1195
+    - train__classic_doorway_low__seed1196
+    - train__classic_doorway_low__seed1197
+    - train__classic_doorway_low__seed1198
+    - train__classic_doorway_low__seed1199
+    - train__classic_doorway_low__seed1200
+    - train__classic_overtaking_low__seed1201
+    - train__classic_overtaking_low__seed1202
+    - train__classic_overtaking_low__seed1203
+    - train__classic_overtaking_low__seed1204
+    - train__classic_overtaking_low__seed1205
+    - train__classic_overtaking_low__seed1206
+    - train__classic_overtaking_low__seed1207
+    - train__classic_overtaking_low__seed1208
+    - train__classic_overtaking_low__seed1209
+    - train__classic_overtaking_low__seed1210
+    - train__classic_overtaking_low__seed1211
+    - train__classic_overtaking_low__seed1212
+    - train__classic_overtaking_low__seed1213
+    - train__classic_overtaking_low__seed1214
+    - train__classic_overtaking_low__seed1215
+    - train__classic_overtaking_low__seed1216
+    - train__classic_overtaking_low__seed1217
+    - train__classic_overtaking_low__seed1218
+    - train__classic_overtaking_low__seed1219
+    - train__classic_overtaking_low__seed1220
+    - train__classic_overtaking_low__seed1221
+    - train__classic_overtaking_low__seed1222
+    - train__classic_overtaking_low__seed1223
+    - train__classic_overtaking_low__seed1224
+    - train__classic_overtaking_low__seed1225
+    - train__classic_overtaking_low__seed1226
+    - train__classic_overtaking_low__seed1227
+    - train__classic_overtaking_low__seed1228
+    - train__classic_overtaking_low__seed1229
+    - train__classic_overtaking_low__seed1230
+    - train__classic_overtaking_low__seed1231
+    - train__classic_overtaking_low__seed1232
+    - train__classic_overtaking_low__seed1233
+    - train__classic_overtaking_low__seed1234
+    - train__classic_overtaking_low__seed1235
+    - train__classic_overtaking_low__seed1236
+    - train__classic_overtaking_low__seed1237
+    - train__classic_overtaking_low__seed1238
+    - train__classic_overtaking_low__seed1239
+    - train__classic_overtaking_low__seed1240
+    - train__classic_overtaking_low__seed1241
+    - train__classic_overtaking_low__seed1242
+    - train__classic_overtaking_low__seed1243
+    - train__classic_overtaking_low__seed1244
+    - train__classic_overtaking_low__seed1245
+    - train__classic_overtaking_low__seed1246
+    - train__classic_overtaking_low__seed1247
+    - train__classic_overtaking_low__seed1248
+    - train__classic_overtaking_low__seed1249
+    - train__classic_overtaking_low__seed1250
+    - train__francis2023_following_human__seed1251
+    - train__francis2023_following_human__seed1252
+    - train__francis2023_following_human__seed1253
+    - train__francis2023_following_human__seed1254
+    - train__francis2023_following_human__seed1255
+    - train__francis2023_following_human__seed1256
+    - train__francis2023_following_human__seed1257
+    - train__francis2023_following_human__seed1258
+    - train__francis2023_following_human__seed1259
+    - train__francis2023_following_human__seed1260
+    - train__francis2023_following_human__seed1261
+    - train__francis2023_following_human__seed1262
+    - train__francis2023_following_human__seed1263
+    - train__francis2023_following_human__seed1264
+    - train__francis2023_following_human__seed1265
+    - train__francis2023_following_human__seed1266
+    - train__francis2023_following_human__seed1267
+    - train__francis2023_following_human__seed1268
+    - train__francis2023_following_human__seed1269
+    - train__francis2023_following_human__seed1270
+    - train__francis2023_following_human__seed1271
+    - train__francis2023_following_human__seed1272
+    - train__francis2023_following_human__seed1273
+    - train__francis2023_following_human__seed1274
+    - train__francis2023_following_human__seed1275
+    - train__francis2023_following_human__seed1276
+    - train__francis2023_following_human__seed1277
+    - train__francis2023_following_human__seed1278
+    - train__francis2023_following_human__seed1279
+    - train__francis2023_following_human__seed1280
+    - train__francis2023_following_human__seed1281
+    - train__francis2023_following_human__seed1282
+    - train__francis2023_following_human__seed1283
+    - train__francis2023_following_human__seed1284
+    - train__francis2023_following_human__seed1285
+    - train__francis2023_following_human__seed1286
+    - train__francis2023_following_human__seed1287
+    - train__francis2023_following_human__seed1288
+    - train__francis2023_following_human__seed1289
+    - train__francis2023_following_human__seed1290
+    - train__francis2023_following_human__seed1291
+    - train__francis2023_following_human__seed1292
+    - train__francis2023_following_human__seed1293
+    - train__francis2023_following_human__seed1294
+    - train__francis2023_following_human__seed1295
+    - train__francis2023_following_human__seed1296
+    - train__francis2023_following_human__seed1297
+    - train__francis2023_following_human__seed1298
+    - train__francis2023_following_human__seed1299
+    - train__francis2023_following_human__seed1300
+  validation:
+    - validation__planner_sanity_simple__seed101
+    - validation__classic_crossing_low__seed102
+    - validation__classic_doorway_low__seed103
+  evaluation:
+    - evaluation__planner_sanity_simple__seed111
+    - evaluation__classic_crossing_low__seed112
+    - evaluation__classic_doorway_low__seed113
+hard_slice_assignment:
+  - slice_id: stress_slice
+    split: validation
+    predeclared_for_evaluation: false
+    reason: "Use stress-slice style failures for gate tuning, not final evaluation."
+  - slice_id: corridor_deadlock_recovery
+    split: train
+    predeclared_for_evaluation: false
+    reason: "Recovery relabeling examples belong to train unless a holdout slice is predeclared."
+relabeling_policy: null
+exclusion_rules:
+  - "Exclude every validation/evaluation seed from train, including paper_eval_s20."
+  - "Exclude one-step, failed, fallback, and leakage-invalid trajectories from usable counts."
+provenance: >
+  Launch packet for issue #6127 balanced oracle dataset collection. Uses hybrid_rule_v3_static_margin0_waypoint2
+  as the oracle policy, multi-scenario strata, and fail-closed yield gates.
+created_at: "2026-07-22T21:00:00+00:00"
+generating_commit: current
+artifact_paths:
+  future_dataset_manifest_uri: wandb-artifact://robot-sf/oracle-imitation/issue_6127_balanced_oracle_v1_manifest:pending
+  future_dataset_npz_uri: wandb-artifact://robot-sf/oracle-imitation/issue_6127_balanced_oracle_v1_npz:pending
+checksums: {}
+collection_roots:
+  log_root: wandb-artifact://robot-sf/oracle-imitation/issue_6127_balanced_oracle_v1_logs:pending
+  dataset_output_root: wandb-artifact://robot-sf/oracle-imitation/issue_6127_balanced_oracle_v1_raw_traces:pending
+  manifest_destination: wandb-artifact://robot-sf/oracle-imitation/issue_6127_balanced_oracle_v1_manifest:pending
+artifact_promotion_policy:
+  raw_outputs_are_durable: false
+  downstream_training_ready: false

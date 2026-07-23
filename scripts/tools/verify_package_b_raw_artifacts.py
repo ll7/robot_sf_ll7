@@ -10,10 +10,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.adversarial_package_b_report import (
+    RAW_ARTIFACT_METADATA_FILENAME,
+    retrieve_package_b_raw_artifacts,
     verify_package_b_candidate_replay_inventory,
 )
 
@@ -36,7 +40,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--raw-tree-dir",
         type=Path,
         default=None,
-        help="Optional directory containing actual raw candidate/replay files to verify on disk.",
+        help="Existing raw candidate/replay tree to byte-verify instead of retrieving the archive.",
+    )
+    parser.add_argument(
+        "--metadata",
+        type=Path,
+        default=None,
+        help=(
+            "Pinned raw-artifact metadata JSON. Defaults to raw_artifact_bundle.json in --bundle "
+            "when retrieving."
+        ),
+    )
+    parser.add_argument(
+        "--retrieve-to",
+        type=Path,
+        default=None,
+        help="Directory for the retrieved archive and extracted tree; must be empty.",
     )
     parser.add_argument(
         "--output",
@@ -47,7 +66,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--fail-closed",
         action="store_true",
-        help="Return non-zero exit code if verification fails.",
+        help="Deprecated compatibility flag; verification now always exits non-zero on failure.",
     )
     return parser
 
@@ -55,20 +74,45 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run candidate/replay inventory verification."""
     args = build_parser().parse_args(argv)
-    result = verify_package_b_candidate_replay_inventory(
-        bundle_dir=args.bundle,
-        raw_tree_dir=args.raw_tree_dir,
-    )
+    if args.raw_tree_dir is not None and args.retrieve_to is not None:
+        raise SystemExit("--raw-tree-dir and --retrieve-to cannot be used together")
+
+    retrieval = None
+    if args.raw_tree_dir is not None:
+        result = verify_package_b_candidate_replay_inventory(args.bundle, args.raw_tree_dir)
+    else:
+        metadata_path = args.metadata or args.bundle / RAW_ARTIFACT_METADATA_FILENAME
+        if args.retrieve_to is not None:
+            retrieval = retrieve_package_b_raw_artifacts(
+                args.bundle, args.retrieve_to, metadata_path=metadata_path
+            )
+            result = verify_package_b_candidate_replay_inventory(
+                args.bundle, retrieval.raw_tree_dir if retrieval.is_valid else None
+            )
+        else:
+            with TemporaryDirectory(prefix="robot_sf_package_b_raw_") as temporary_dir:
+                retrieval = retrieve_package_b_raw_artifacts(
+                    args.bundle, temporary_dir, metadata_path=metadata_path
+                )
+                result = verify_package_b_candidate_replay_inventory(
+                    args.bundle, retrieval.raw_tree_dir if retrieval.is_valid else None
+                )
+        if retrieval is not None and not retrieval.is_valid:
+            result = replace(
+                result,
+                is_valid=False,
+                errors=(*retrieval.errors, *result.errors),
+            )
     payload = result.to_payload()
+    if retrieval is not None:
+        payload["retrieval"] = retrieval.to_payload()
     rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     if args.output is not None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
 
-    if args.fail_closed and not result.is_valid:
-        return 1
-    return 0
+    return 0 if result.is_valid else 1
 
 
 if __name__ == "__main__":

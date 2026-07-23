@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tarfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from robot_sf.benchmark.adversarial_package_b_report import (
+    retrieve_package_b_raw_artifacts,
     validate_package_b_report,
     verify_package_b_candidate_replay_inventory,
 )
+from scripts.tools.verify_package_b_raw_artifacts import main as verify_raw_artifacts_main
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -26,6 +29,7 @@ RECORDED_MANIFEST_SHA256 = "9f174f067d23efd374c019702168213a27085dfffa1b0b5bc10a
 EXPECTED_TOTALS = {"random": 24, "optuna": 18, "coordinate": 0}
 EXPECTED_CELLS = 27
 EXPECTED_TOTAL_FAILURES = 42
+EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 
 
 def _load_report(bundle: Path) -> dict[str, object]:
@@ -49,6 +53,59 @@ def _string_values(value: object) -> list[str]:
     if isinstance(value, list):
         return [item for child in value for item in _string_values(child)]
     return []
+
+
+def _write_raw_artifact_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    """Write a byte-verifiable 4,761-entry archive fixture with both process logs."""
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    archive_root = tmp_path / "source" / "package_b_raw_artifacts"
+    raw_tree = archive_root / "worst_case_snqi" / "fixture"
+    raw_tree.mkdir(parents=True)
+    entries: list[str] = []
+    for index in range(4761):
+        name = f"worst_case_snqi/fixture/artifact_{index:04d}.json"
+        (archive_root / name).write_bytes(b"")
+        entries.append(f"{EMPTY_SHA256}  {name}")
+    (bundle / "candidate_replay_SHA256SUMS.txt").write_text(
+        "\n".join(entries) + "\n", encoding="utf-8"
+    )
+    logs_dir = archive_root / "logs"
+    logs_dir.mkdir()
+    stdout_log = logs_dir / "stdout.log"
+    stderr_log = logs_dir / "stderr.log"
+    stdout_log.write_text("Package B stdout\n", encoding="utf-8")
+    stderr_log.write_text("Package B stderr\n", encoding="utf-8")
+
+    archive_path = tmp_path / "package_b_raw_artifacts.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        archive.add(archive_root, arcname="package_b_raw_artifacts")
+    metadata = {
+        "schema_version": "package-b-raw-artifact-bundle.v1",
+        "archive": {
+            "uri": archive_path.as_uri(),
+            "sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+            "format": "tar.gz",
+        },
+        "archive_root": "package_b_raw_artifacts",
+        "raw_tree_path": "worst_case_snqi",
+        "logs": [
+            {
+                "stream": "stdout",
+                "path": "logs/stdout.log",
+                "sha256": hashlib.sha256(stdout_log.read_bytes()).hexdigest(),
+            },
+            {
+                "stream": "stderr",
+                "path": "logs/stderr.log",
+                "sha256": hashlib.sha256(stderr_log.read_bytes()).hexdigest(),
+            },
+        ],
+    }
+    (bundle / "raw_artifact_bundle.json").write_text(
+        json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+    )
+    return bundle, raw_tree
 
 
 def test_bundle_files_present() -> None:
@@ -153,6 +210,8 @@ def test_replay_tree_checksum_inventory_is_parseable_and_unique() -> None:
         assert not path.is_absolute()
         assert path.parts[0] == "worst_case_snqi"
         assert "output" not in path.parts
+        assert "." not in path.parts
+        assert ".." not in path.parts
         names.add(path.as_posix())
     assert len(names) == len(lines)
 
@@ -181,17 +240,17 @@ def test_summary_references_are_portable_and_inventory_backed() -> None:
         assert any(name.startswith(f"{bundle_id}/") for name in inventory)
 
 
-def test_candidate_replay_inventory_verifier_passes_and_fails_closed(tmp_path: Path) -> None:
-    """Verification helper verifies 4,761 entries and fails closed on corrupted input."""
+def test_candidate_replay_inventory_verifier_requires_raw_bytes(tmp_path: Path) -> None:
+    """A committed inventory alone cannot be counted as verified raw evidence."""
     result = verify_package_b_candidate_replay_inventory(BUNDLE)
-    assert result.is_valid is True
+    assert result.is_valid is False
     assert result.total_entries == 4761
-    assert result.verified_entries == 4761
+    assert result.verified_entries == 0
     assert result.missing_entries == 0
     assert result.mismatched_entries == 0
-    assert not result.errors
+    assert any("raw_tree_dir is required" in error for error in result.errors)
 
-    # Fail closed on corrupted inventory
+    # Fail closed on corrupted inventory as well as absent raw bytes.
     bad_manifest = tmp_path / "candidate_replay_SHA256SUMS.txt"
     bad_manifest.write_text("invalid_digest_line\n", encoding="utf-8")
     bad_result = verify_package_b_candidate_replay_inventory(tmp_path)
@@ -199,16 +258,74 @@ def test_candidate_replay_inventory_verifier_passes_and_fails_closed(tmp_path: P
     assert len(bad_result.errors) > 0
 
 
-def test_second_reader_verification_record_is_documented_and_valid() -> None:
-    """Second-reader verification record is present with portable metadata and commands."""
+def test_raw_artifact_retrieval_verifies_bytes_logs_and_failures(tmp_path: Path) -> None:
+    """The retriever verifies archive, raw bytes, both logs, and all failure modes."""
+    bundle, _raw_tree = _write_raw_artifact_fixture(tmp_path)
+    retrieval = retrieve_package_b_raw_artifacts(bundle, tmp_path / "retrieved")
+    assert retrieval.is_valid is True
+    assert retrieval.raw_tree_dir is not None
+    assert retrieval.verified_log_entries == 2
+
+    verified = verify_package_b_candidate_replay_inventory(bundle, retrieval.raw_tree_dir)
+    assert verified.is_valid is True
+    assert verified.verified_entries == 4761
+
+    target = Path(retrieval.raw_tree_dir) / "worst_case_snqi" / "fixture" / "artifact_0000.json"
+    target.write_bytes(b"corrupted")
+    corrupt = verify_package_b_candidate_replay_inventory(bundle, retrieval.raw_tree_dir)
+    assert corrupt.is_valid is False
+    assert corrupt.mismatched_entries == 1
+
+    target.unlink()
+    missing = verify_package_b_candidate_replay_inventory(bundle, retrieval.raw_tree_dir)
+    assert missing.is_valid is False
+    assert missing.missing_entries == 1
+
+    metadata_path = bundle / "raw_artifact_bundle.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    metadata["archive"]["uri"] = (tmp_path / "missing.tar.gz").as_uri()
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    unavailable = retrieve_package_b_raw_artifacts(bundle, tmp_path / "unavailable")
+    assert unavailable.is_valid is False
+    assert any("could not retrieve raw-artifact archive" in error for error in unavailable.errors)
+
+
+def test_raw_artifact_cli_retrieves_or_fails_closed(tmp_path: Path) -> None:
+    """The CLI retrieves pinned metadata by default and rejects unavailable metadata."""
+    bundle, _raw_tree = _write_raw_artifact_fixture(tmp_path)
+    assert (
+        verify_raw_artifacts_main(
+            ["--bundle", str(bundle), "--retrieve-to", str(tmp_path / "cli-retrieved")]
+        )
+        == 0
+    )
+    assert verify_raw_artifacts_main(["--bundle", str(tmp_path / "missing-bundle")]) == 1
+
+
+def test_candidate_replay_inventory_rejects_traversal_components(tmp_path: Path) -> None:
+    """A traversal path is rejected before joining it to a raw-tree root."""
+    inventory = (BUNDLE / "candidate_replay_SHA256SUMS.txt").read_text(encoding="utf-8")
+    first_line, remainder = inventory.split("\n", maxsplit=1)
+    digest = first_line.partition("  ")[0]
+    (tmp_path / "candidate_replay_SHA256SUMS.txt").write_text(
+        f"{digest}  worst_case_snqi/../../outside\n{remainder}", encoding="utf-8"
+    )
+    result = verify_package_b_candidate_replay_inventory(tmp_path)
+    assert result.is_valid is False
+    assert any("must not contain traversal components" in error for error in result.errors)
+
+
+def test_raw_artifact_retrieval_status_is_explicitly_blocked() -> None:
+    """Docs do not represent an absent raw tree/log archive as independently verified."""
     readme_text = (BUNDLE / "README.md").read_text(encoding="utf-8")
     provenance_text = (BUNDLE / "provenance.md").read_text(encoding="utf-8")
 
     for text in (readme_text, provenance_text):
-        assert "Second-Reader Verification Record (Issue #6131)" in text
+        assert "Raw Artifact Retrieval Status (Issue #6131)" in text
         assert "7ec582b81cdcb871fb4fcb47700338194e7617d5" in text
         assert "9f174f067d23efd374c019702168213a27085dfffa1b0b5bc10adafaa9614e04" in text
         assert "4761" in text
         assert "verify_package_b_raw_artifacts.py" in text
         assert "run_adversarial_package_b.py" in text
+        assert "unavailable" in text
         assert "diagnostic-only" in text or "not paper-facing" in text

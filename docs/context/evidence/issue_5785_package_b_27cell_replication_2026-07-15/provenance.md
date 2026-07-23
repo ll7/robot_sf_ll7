@@ -50,23 +50,29 @@ logs. The summary is diagnostic-only and not paper-facing evidence.
 
 - The committed bundle contains the summary artifacts and the
   `candidate_replay_SHA256SUMS.txt` checksum manifest.
-- The 4,761-file candidate/replay tree digest inventory is registered in `candidate_replay_SHA256SUMS.txt`
-  as portable metadata. All 4,761 entries are verified for path portability, non-absoluteness, and digest integrity.
-- Issue #6131 completes portable metadata registration, deterministic retrieval/regeneration commands,
-  and second-reader verification without blocking the narrower diagnostic summary.
+- The 4,761-file candidate/replay tree digest inventory is registered in
+  `candidate_replay_SHA256SUMS.txt` as portable names and producer-recorded digests. The file has
+  no raw bytes, so its digest strings cannot be independently checked against the original files.
+- Issue #6131 now fails closed on missing raw bytes, archive retrieval, archive checksums, log
+  checksums, and changed files. Its durable-archive acceptance condition remains unmet.
 
-## Second-Reader Verification Record (Issue #6131)
+## Raw Artifact Retrieval Status (Issue #6131)
 
-- Date: 2026-07-23
-- Verified public commit head: `7ec582b81cdcb871fb4fcb47700338194e7617d5`
+- Status: `blocked`; a durable raw-tree/log archive and its content address have not been found.
+- Producer public commit head: `7ec582b81cdcb871fb4fcb47700338194e7617d5`
 - Manifest SHA-256: `9f174f067d23efd374c019702168213a27085dfffa1b0b5bc10adafaa9614e04`
 - Total candidate/replay inventory entries: `4761`
-- Inventory verification status: `verified_4761_entries` (all entries checked for portable paths, 64-character SHA-256 hex digests, and uniqueness)
-- Deterministic retrieval/regeneration command:
+- Inventory verification status: `unavailable_raw_bytes`; the inventory was checked only for
+  portable paths, 64-character SHA-256 syntax, and uniqueness.
+- Bounded recovery command attempted:
   `python scripts/tools/run_adversarial_package_b.py --manifest configs/adversarial/issue_3079_package_b_budget_matched.yaml --repo-root . --empirical`
-- Manifest verification command:
+- Recovery result: `96` matching files, `4,594` missing files, and `71` changed files. The current
+  source cannot recreate the producer bytes, and its stdout/stderr are local-only diagnostics.
+- Fail-closed verifier command:
   `python scripts/tools/verify_package_b_raw_artifacts.py --bundle docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15`
-- Second-reader confirmation: clean checkouts execute manifest verification without machine-local absolute paths or ignored `output/` file dependencies.
+- A clean checkout cannot retrieve or byte-verify this evidence until a durable archive is published.
+  The required metadata schema pins an HTTPS archive SHA-256, archive layout, and both stdout/stderr
+  log SHA-256 digests before it extracts the archive and verifies all 4,761 bytes.
 
 ## Disagreement handling
 
@@ -87,9 +93,9 @@ mechanism attribution, and held-out-family yield remain unresolved.
 - `comparison_table.md`: diagnostic rendering of the report fields.
 - `replication_summary.json`: pipeline summary payload.
 - `SHA256SUMS`: checksums for the four committed summary artifacts above.
-- `candidate_replay_SHA256SUMS.txt`: producer-recorded SHA-256 inventory for 4,761 candidate/replay files. Relative names are portable, verifiable identifiers.
+- `candidate_replay_SHA256SUMS.txt`: producer-recorded SHA-256 inventory for 4,761 candidate/replay
+  files. Relative names are portable identifiers, not retrievable or byte-verified evidence.
 - `provenance.md`: this file.
 - `README.md`: human-readable diagnostic-summary boundary.
 
 Related work: Refs #5785, #6095, and #6131.
-

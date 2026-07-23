@@ -9,9 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG = ROOT / "configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml"
-EVIDENCE = (
-    ROOT / "docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14"
-)
+EVIDENCE = ROOT / "docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14"
 REPORT_JSON = EVIDENCE / "sensitivity_report.json"
 REPORT_MD = EVIDENCE / "sensitivity_report.md"
 CANDIDATE_CSV = EVIDENCE / "sensitivity_candidate_rows.csv"
@@ -32,8 +30,18 @@ def test_compact_report_preserves_the_preregistered_claim_boundary() -> None:
     assert report["candidate_count"] == 20
     assert report["target_arm_count"] == 2
     assert report["total_episode_rows"] == 396
-    assert report["eligible_episode_rows"] + report["excluded_episode_rows"] == 396
+    assert report["eligible_episode_rows"] == 295
+    assert report["excluded_episode_rows"] == 101
+    assert report["read"]["decision"] == "blocked"
+    assert report["read"]["detail"] == (
+        "Complete native/adapter rows are required before the pre-registered read."
+    )
     assert not Path(report["raw_artifact_root"]).is_absolute()
+
+    exclusion_reasons = {
+        reason for row in report["candidate_rows"] for reason in row["exclusion_reasons"]
+    }
+    assert exclusion_reasons == {"fallback", "solver_failure"}
 
 
 def test_candidate_table_matches_the_compact_json_report() -> None:
@@ -62,5 +70,10 @@ def test_markdown_leads_with_status_and_claim_boundary_before_results() -> None:
 
     assert status_position < results_position
     assert boundary_position < results_position
-    assert "Fallback, degraded, failed, and unavailable rows are never treated as success evidence." in markdown
+    assert (
+        "Fallback, degraded, failed, and unavailable rows are never treated as success evidence."
+        in markdown
+    )
     assert "does not change benchmark metrics, roster status, or paper-facing claims" in markdown
+    assert "295 eligible" in markdown
+    assert "101 excluded" in markdown

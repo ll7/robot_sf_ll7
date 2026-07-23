@@ -113,7 +113,7 @@
       "context": "_execute_campaign_planner_batch",
       "fingerprint": "ba3cb2a07fb0c63c",
       "handler": "Exception",
-      "lineno": 412,
+      "lineno": 437,
       "path": "robot_sf/benchmark/camera_ready/campaign.py",
       "source": "except Exception as exc:"
     },
@@ -122,7 +122,7 @@
       "context": "_main_subprocess_worker",
       "fingerprint": "f52dd654553d63c5",
       "handler": "Exception",
-      "lineno": 381,
+      "lineno": 387,
       "path": "robot_sf/benchmark/camera_ready/resource_lifecycle.py",
       "source": "except Exception as exc:  # noqa: BLE001 - worker must always emit structured output (#4826)"
     },
@@ -131,7 +131,7 @@
       "context": "_main_subprocess_worker",
       "fingerprint": "a5a4fb83bfe617b4",
       "handler": "Exception",
-      "lineno": 394,
+      "lineno": 400,
       "path": "robot_sf/benchmark/camera_ready/resource_lifecycle.py",
       "source": "except Exception:  # noqa: BLE001 - cleanup must never mask the original error"
     },
@@ -140,7 +140,7 @@
       "context": "load_campaign_result_store",
       "fingerprint": "be56e321c978a733",
       "handler": "Exception",
-      "lineno": 158,
+      "lineno": 212,
       "path": "robot_sf/benchmark/candidate_trace_resolution.py",
       "source": "except Exception as exc:"
     },
@@ -149,7 +149,7 @@
       "context": "_run_env_smoke",
       "fingerprint": "c68a0e0b1fcaafb1",
       "handler": "Exception",
-      "lineno": 207,
+      "lineno": 236,
       "path": "robot_sf/benchmark/doctor.py",
       "source": "except Exception as exc:"
     },
@@ -203,7 +203,7 @@
       "context": "_preflight_policy",
       "fingerprint": "9d6addfc4094f787",
       "handler": "Exception",
-      "lineno": 850,
+      "lineno": 851,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as exc:"
     },
@@ -212,7 +212,7 @@
       "context": "_preflight_policy",
       "fingerprint": "3f6860893c2f6ced",
       "handler": "Exception",
-      "lineno": 880,
+      "lineno": 881,
       "path": "robot_sf/benchmark/map_runner.py",
       "source": "except Exception as fallback_exc:"
     },
@@ -257,7 +257,7 @@
       "context": "_planner_step_worker",
       "fingerprint": "3f7dbbaed386afda",
       "handler": "Exception",
-      "lineno": 306,
+      "lineno": 327,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:"
     },
@@ -266,7 +266,7 @@
       "context": "_planner_step_worker",
       "fingerprint": "a8cc46e15ae90443",
       "handler": "Exception",
-      "lineno": 327,
+      "lineno": 348,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as exc:  # pragma: no cover - defensive child-process path"
     },
@@ -275,7 +275,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "6a761009a771ebe5",
       "handler": "Exception",
-      "lineno": 1702,
+      "lineno": 2181,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover - progress best-effort"
     },
@@ -284,7 +284,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "e7dc39de4571ff10",
       "handler": "Exception",
-      "lineno": 1704,
+      "lineno": 2183,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover - error path"
     },
@@ -293,7 +293,7 @@
       "context": "_run_batch_sequential",
       "fingerprint": "92d92f1cb4a3a0e5",
       "handler": "Exception",
-      "lineno": 1720,
+      "lineno": 2199,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
     },
@@ -302,7 +302,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "6a475b0e80195804",
       "handler": "Exception",
-      "lineno": 1804,
+      "lineno": 2283,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
     },
@@ -311,7 +311,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "448c5c0fff47cfc4",
       "handler": "Exception",
-      "lineno": 1806,
+      "lineno": 2285,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception as e:  # pragma: no cover"
     },
@@ -320,7 +320,7 @@
       "context": "_run_batch_parallel",
       "fingerprint": "6a475b0e80195804",
       "handler": "Exception",
-      "lineno": 1822,
+      "lineno": 2301,
       "path": "robot_sf/benchmark/runner.py",
       "source": "except Exception:  # pragma: no cover"
     },
@@ -536,7 +536,7 @@
       "context": "run_benchmark_pipeline",
       "fingerprint": "0aa035d993001eac",
       "handler": "Exception",
-      "lineno": 76,
+      "lineno": 160,
       "path": "scripts/benchmark_repro_check.py",
       "source": "except Exception as e:"
     },
@@ -545,7 +545,7 @@
       "context": "run_benchmark_pipeline",
       "fingerprint": "0aa035d993001eac",
       "handler": "Exception",
-      "lineno": 109,
+      "lineno": 190,
       "path": "scripts/benchmark_repro_check.py",
       "source": "except Exception as e:"
     },
@@ -608,7 +608,7 @@
       "context": "main",
       "fingerprint": "49eef50940c10a67",
       "handler": "Exception",
-      "lineno": 409,
+      "lineno": 450,
       "path": "scripts/dev/stale_worktree_reaper.py",
       "source": "except Exception as exc:"
     },
@@ -1409,7 +1409,7 @@
       "context": "_parse_changed_line_ranges",
       "fingerprint": "d65863623fffbd26",
       "handler": "Exception",
-      "lineno": 107,
+      "lineno": 108,
       "path": "scripts/validation/check_docstring_todos.py",
       "source": "except Exception:"
     },

@@ -628,8 +628,6 @@ filterwarnings = [
     "ignore::DeprecationWarning:stable_baselines3.*",
     "ignore::UserWarning:stable_baselines3.*",
     "ignore::UserWarning:gymnasium.*",
-    # Suppress pytest rm_rf cleanup warnings from concurrent/stale sessions
-    "ignore:.*(rm_rf).*:pytest.PytestWarning",
     # Keep our own warnings visible
     "default::DeprecationWarning:robot_sf.*",
     "default::UserWarning:robot_sf.*",

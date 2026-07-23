@@ -10,6 +10,19 @@ from pathlib import Path
 from tests.conftest import _clean_stale_proc_dirs, _is_pid_running
 
 
+def _isolated_subprocess_env(tmp_path: Path, name: str) -> tuple[dict[str, str], Path]:
+    """Return an environment with a temp root unique to one child pytest session.
+
+    The child test files live outside the repository and therefore do not load
+    ``tests/conftest.py``. They must receive the isolation contract explicitly.
+    """
+    temproot = tmp_path / f"pytest-{name}"
+    temproot.mkdir(parents=True)
+    env = dict(os.environ)
+    env["PYTEST_DEBUG_TEMPROOT"] = str(temproot)
+    return env, temproot
+
+
 def test_is_pid_running_returns_expected_status() -> None:
     """_is_pid_running should return True for current PID and False for non-existent PID."""
     assert _is_pid_running(os.getpid()) is True
@@ -47,10 +60,12 @@ def test_stale_process_temproot_cleaned_up(tmp_path: Path) -> None:
 def test_concurrent_pytest_sessions_no_cleanup_warnings(tmp_path: Path) -> None:
     """Concurrent pytest sessions must not interfere with each other or produce (rm_rf) warnings."""
     helper_code = """
+import os
 import time
 def test_active_writer(tmp_path):
     out_dir = tmp_path / "checkout"
     out_dir.mkdir(parents=True, exist_ok=True)
+    open(os.environ["PYTEST_TEMP_ISOLATION_READY"], "w").close()
     for i in range(200):
         (out_dir / f"file_{i}.txt").write_text("data", encoding="utf-8")
         time.sleep(0.005)
@@ -65,11 +80,11 @@ def test_quiet_pass(tmp_path):
     quiet_test_file = tmp_path / "test_quiet_pass.py"
     quiet_test_file.write_text(quiet_code, encoding="utf-8")
 
-    env1 = dict(os.environ)
-    env1.pop("PYTEST_DEBUG_TEMPROOT", None)
-
-    env2 = dict(os.environ)
-    env2.pop("PYTEST_DEBUG_TEMPROOT", None)
+    env1, temproot1 = _isolated_subprocess_env(tmp_path, "active-writer")
+    env2, temproot2 = _isolated_subprocess_env(tmp_path, "quiet-pass")
+    ready_file = tmp_path / "active-writer-ready"
+    env1["PYTEST_TEMP_ISOLATION_READY"] = str(ready_file)
+    assert temproot1 != temproot2
 
     proc1 = subprocess.Popen(
         [sys.executable, "-m", "pytest", "-q", str(helper_test_file)],
@@ -81,11 +96,12 @@ def test_quiet_pass(tmp_path):
 
     # Let session 1 start writing
     for _ in range(50):
-        if (tmp_path / "checkout").exists():
+        if ready_file.exists():
             break
         import time
 
         time.sleep(0.02)
+    assert ready_file.exists(), "The active child pytest session did not start writing in time"
 
     proc2 = subprocess.run(
         [
@@ -126,8 +142,7 @@ def test_xdist_2(tmp_path):
     xdist_test_file = tmp_path / "test_xdist_isolation.py"
     xdist_test_file.write_text(xdist_code, encoding="utf-8")
 
-    env = dict(os.environ)
-    env.pop("PYTEST_DEBUG_TEMPROOT", None)
+    env, _ = _isolated_subprocess_env(tmp_path, "xdist")
 
     res = subprocess.run(
         [

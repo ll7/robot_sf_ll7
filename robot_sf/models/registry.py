@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -401,13 +402,25 @@ def _cached_release_path_is_valid(path: Path, expected_sha256: str) -> bool:
 
 
 def _stream_download_url(url: str, target_path: Path) -> None:
-    """Stream a URL to a local target path."""
-    with urlopen(url, timeout=60) as response, target_path.open("wb") as handle:
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            handle.write(chunk)
+    """Stream a URL to a local target path atomically.
+
+    The response is streamed to a sibling temp file and then moved into place with
+    :func:`os.replace`, which is atomic within the cache directory. This guarantees
+    a partial/aborted download is never left at ``target_path`` (a corrupt cache
+    file that later callers would treat as present). On any failure the temp file
+    is removed.
+    """
+    tmp_path = target_path.with_name(f".{target_path.name}.{os.getpid()}.part")
+    try:
+        with urlopen(url, timeout=60) as response, tmp_path.open("wb") as handle:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+        os.replace(tmp_path, target_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def _verify_download_checksum(

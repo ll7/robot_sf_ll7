@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Any
 import pytest
 import yaml
 
+from scripts.validation import check_issue_5578_robot_speed_tier_preregistration as checker
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -38,6 +40,15 @@ def test_checked_in_preregistration_passes() -> None:
         payload["robot_speed_axis"]["tiers"][2]["runtime_variant_key"]
         == "bicycle_4_0_mps_micromobility"
     )
+    assert (
+        payload["robot_speed_axis"]["tiers"][2]["planner_command_contract"]["command_space"]
+        == "unicycle_vw"
+    )
+    assert (
+        payload["robot_speed_axis"]["tiers"][2]["environment_action_contract"]["command_space"]
+        == "bicycle_acceleration_steering"
+    )
+    assert "normalized_action_range" not in str(payload["robot_speed_axis"]["tiers"])
     assert payload["inference_contract"]["multiplicity"]["directional_family_alpha"] == 0.025
 
 
@@ -168,18 +179,107 @@ def test_checker_binds_every_tier_to_exact_supported_runtime_variant() -> None:
 
 
 @pytest.mark.parametrize(
-    ("index", "field", "value", "message"),
+    ("index", "contract", "field", "value", "message"),
     [
-        (2, "linear_speed_range_m_s", [99.0, 999.0], "linear_speed_range_m_s"),
-        (1, "normalized_action_range", [-1.0, 1.0], "normalized_action_range"),
-        (0, "scaling_method", "identity", "scaling_method drifted"),
+        (
+            2,
+            "planner_command_contract",
+            "linear_velocity_bounds_m_s",
+            [0.0, 99.0],
+            "linear_velocity_bounds_m_s",
+        ),
+        (
+            1,
+            "planner_command_contract",
+            "angular_velocity_bounds_rad_s",
+            [-1.0, 1.0],
+            "angular_velocity_bounds_rad_s",
+        ),
+        (
+            0,
+            "environment_action_contract",
+            "acceleration_bounds_m_s2",
+            [-1.0, 1.0],
+            "acceleration_bounds_m_s2",
+        ),
+        (
+            1,
+            "environment_action_contract",
+            "steering_bounds_rad",
+            [-0.5, 0.5],
+            "steering_bounds_rad",
+        ),
+        (
+            2,
+            "environment_action_contract",
+            "wheelbase_m",
+            2.0,
+            "wheelbase_m",
+        ),
+        (
+            0,
+            "environment_action_contract",
+            "dt_seconds",
+            0.2,
+            "dt_seconds",
+        ),
+        (
+            2,
+            "environment_action_contract",
+            "acceleration_formula",
+            "direct_speed_passthrough",
+            "acceleration_formula",
+        ),
+        (
+            2,
+            "environment_action_contract",
+            "final_clip",
+            "none",
+            "final_clip",
+        ),
     ],
 )
-def test_checker_freezes_exact_command_action_scaling(
-    index: int, field: str, value: object, message: str
+def test_checker_freezes_two_stage_production_control_contract(
+    index: int,
+    contract: str,
+    field: str,
+    value: object,
+    message: str,
 ) -> None:
     payload = _payload()
-    payload["robot_speed_axis"]["tiers"][index]["command_action_scaling"][field] = value
+    payload["robot_speed_axis"]["tiers"][index][contract][field] = value
+    with pytest.raises(ValueError, match=message):
+        validate_preregistration(payload)
+
+
+def test_checker_cross_reads_live_production_control_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A runtime wheelbase/steering/timestep change invalidates the frozen packet."""
+    monkeypatch.setattr(
+        checker,
+        "_production_control_defaults",
+        lambda: {"wheelbase_m": 1.5, "max_steer_rad": 0.78, "dt_seconds": 0.1},
+    )
+    with pytest.raises(ValueError, match="production bicycle wheelbase/steering/timestep"):
+        checker.validate_preregistration(_payload())
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("normalization", "linear_zero_one", "normalization"),
+        ("linear_velocity_bounds_m_s", [0.0, 4.0], "linear velocity bounds"),
+        ("angular_velocity_bounds_rad_s", [-2.0, 2.0], "angular velocity bounds"),
+        ("tier_rescaling", "rescale_to_tier", "must not be silently tier-rescaled"),
+    ],
+)
+def test_checker_binds_ppo_physical_command_adapter_separately(
+    field: str, value: object, message: str
+) -> None:
+    payload = _payload()
+    ppo = next(arm for arm in payload["planner_roster"]["arms"] if arm["planner_id"] == "ppo")
+    ppo["command_adapter_contract"][field] = value
     with pytest.raises(ValueError, match=message):
         validate_preregistration(payload)
 

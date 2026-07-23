@@ -23,7 +23,29 @@ This amendment freezes the final run-ready protocol contract for the issue #5578
   - `cap_2_0_nominal` (2.0 m/s): max_accel = 1.0 m/s², max_decel = 2.0 m/s², stopping distance = 1.0 m ($v^2 / (2 \cdot a_{\text{decel}})$).
   - `cap_3_0` (3.0 m/s): max_accel = 1.5 m/s², max_decel = 3.0 m/s², stopping distance = 1.5 m.
   - `cap_4_0` (4.0 m/s): max_accel = 2.0 m/s², max_decel = 4.0 m/s², stopping distance = 2.0 m.
-- **Action Scaling**: Linear unicycle action scaling mapped to `[0.0, cap_m_s]`.
+- **Two-stage production control path**:
+  1. Planners emit physical `unicycle_vw` commands, not normalized actions.
+     Linear velocity is bounded to `[0.0, cap_m_s]`. Angular velocity is
+     bounded to
+     `[-cap_m_s * tan(0.78) / 1.0, +cap_m_s * tan(0.78) / 1.0]`, yielding
+     approximately ±1.9785, ±2.9678, and ±3.9570 rad/s for the three tiers.
+  2. The campaign runner's production `_env_action` converts target speed and
+     yaw rate into the bicycle environment's native
+     `[acceleration, steering_angle]` action. It clips target speed to the tier,
+     computes acceleration as
+     `(target_speed - current_speed) / max(dt, 1e-6)`, computes steering as zero
+     below the target-speed epsilon or
+     `atan(omega * wheelbase / max(abs(target_speed), 1e-6)) * sign(target_speed)`,
+     and finally clips to the environment action space.
+- **Frozen native parameters**: `wheelbase=1.0 m`, `max_steer=0.78 rad`,
+  `dt=0.1 s`; native acceleration bounds are `[-max_decel, +max_accel]`, and
+  steering bounds are `[-0.78, +0.78]`.
+- **PPO adapter boundary**: the zero-shot PPO baseline is separately bound to
+  `ppo_action_to_unicycle`. Its checked-in configuration emits physical
+  `unicycle_vw` commands bounded to `[0.0, 2.0] m/s` and `[-1.0, 1.0] rad/s`;
+  there is no `[0,1]` normalization and no silent tier rescaling. Consequently,
+  the activation gate may correctly classify PPO's higher tiers as
+  `intervention_not_activated`.
 
 ### 2. Manipulation-Activation Diagnostics & Minimum Activation Rule
 - **Mandatory Diagnostic Fields**:
@@ -58,9 +80,13 @@ This amendment freezes the final run-ready protocol contract for the issue #5578
 ## Fail-Closed Checker & Synthesis Verification
 
 The checked-in protocol, row parser, and focused tests fail closed on missing
-actuation/exposure diagnostics, runtime-tier drift, numeric threshold drift,
-incomplete grids, and claim-boundary drift. They do not constitute campaign
-evidence. The enforcement surfaces are:
+actuation/exposure diagnostics, runtime-tier drift, planner-command or native
+action-bound drift, conversion-formula drift, PPO adapter drift, numeric
+threshold drift, incomplete grids, and claim-boundary drift. The checker reads
+the production runtime variant configuration and live bicycle/simulation
+defaults; real-path tests instantiate the environment and execute the
+`unicycle_vw` → `_env_action` conversion at all three tiers. They do not
+constitute campaign evidence. The enforcement surfaces are:
 - `scripts/validation/check_issue_5578_robot_speed_tier_preregistration.py`
 - `robot_sf/benchmark/issue_5578_speed_tier_synthesis.py`
 - `tests/validation/test_check_issue_5578_robot_speed_tier_preregistration.py`

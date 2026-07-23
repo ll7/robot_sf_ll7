@@ -4,12 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import math
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from robot_sf.robot.bicycle_drive import BicycleDriveRobot, BicycleDriveSettings
+from robot_sf.sim.sim_config import SimulationSettings
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "configs/benchmarks/issue_5578_robot_speed_tier_preregistration.yaml"
@@ -94,6 +98,18 @@ FORBIDDEN_ROUTING_KEYS = {
     "queue_route",
     "worktree",
 }
+EXPECTED_CONTROL_FORMULAS = {
+    "angular_bound_formula": "cap_m_s_times_tan_max_steer_rad_div_wheelbase_m",
+    "target_speed_formula": "clip_desired_linear_to_min_velocity_and_max_velocity",
+    "acceleration_formula": "target_speed_minus_current_speed_div_max_dt_and_1e_minus_6",
+    "steering_formula": (
+        "zero_below_1e_minus_6_else_atan_omega_times_wheelbase_div_"
+        "max_abs_target_speed_and_1e_minus_6_times_sign_target_speed"
+    ),
+    "final_clip": "numpy_clip_to_env_action_space_low_high",
+}
+CAMPAIGN_RUNTIME_PATH = REPO_ROOT / "scripts/benchmark/run_fidelity_sensitivity_campaign.py"
+PPO_ADAPTER_PATH = REPO_ROOT / "robot_sf/benchmark/map_runner_policy_actions.py"
 
 
 def _require(condition: bool, message: str) -> None:
@@ -122,6 +138,31 @@ def _assert_no_transient_routing_state(value: Any, path: str = "config") -> None
     elif isinstance(value, list):
         for index, child in enumerate(value):
             _assert_no_transient_routing_state(child, f"{path}[{index}]")
+
+
+def _require_top_level_callable(path: Path, callable_name: str) -> None:
+    """Require a named top-level production callable in a tracked Python module."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    except (OSError, SyntaxError) as exc:
+        raise ValueError(f"cannot inspect production runtime {path}: {exc}") from exc
+    names = {
+        node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    _require(
+        callable_name in names, f"production runtime callable missing: {path}::{callable_name}"
+    )
+
+
+def _production_control_defaults() -> dict[str, float]:
+    """Read the live bicycle and simulation defaults used by the campaign runtime."""
+    bicycle = BicycleDriveSettings()
+    simulation = SimulationSettings()
+    return {
+        "wheelbase_m": float(bicycle.wheelbase),
+        "max_steer_rad": float(bicycle.max_steer),
+        "dt_seconds": float(simulation.time_per_step_in_secs),
+    }
 
 
 def _scenario_ids(path: Path) -> set[str]:
@@ -269,8 +310,149 @@ def _validate_seeds(payload: dict[str, Any]) -> None:
     )
 
 
+def _validate_tier_control_contract(
+    tier: dict[str, Any],
+    expected: dict[str, Any],
+    *,
+    index: int,
+    runtime_variants: dict[str, dict[str, Any]],
+    production_defaults: dict[str, float],
+) -> None:
+    """Cross-check one frozen tier against the live planner and drive contracts."""
+    for field in (
+        "tier_id",
+        "runtime_variant_key",
+        "cap_m_s",
+        "drive_model",
+        "max_accel_m_s2",
+        "max_decel_m_s2",
+        "stopping_distance_envelope_m",
+        "role",
+    ):
+        _require(
+            tier.get(field) == expected[field],
+            f"tier[{index}].{field} drifted: expected {expected[field]!r}",
+        )
+    cap = float(expected["cap_m_s"])
+    expected_dist = cap**2 / (2.0 * float(expected["max_decel_m_s2"]))
+    _require(
+        math.isclose(float(expected["stopping_distance_envelope_m"]), expected_dist, abs_tol=1e-12),
+        f"tier[{index}] stopping_distance_envelope_m inconsistent",
+    )
+    planner_command = _mapping(
+        tier.get("planner_command_contract"), f"tier[{index}].planner_command_contract"
+    )
+    _require(
+        planner_command.get("command_space") == "unicycle_vw",
+        f"tier[{index}].planner command space must be unicycle_vw",
+    )
+    _require(
+        planner_command.get("linear_velocity_bounds_m_s") == [0.0, cap],
+        f"tier[{index}].linear_velocity_bounds_m_s must be [0.0, {cap}]",
+    )
+    angular_cap = (
+        cap * math.tan(production_defaults["max_steer_rad"]) / production_defaults["wheelbase_m"]
+    )
+    angular_bounds = planner_command.get("angular_velocity_bounds_rad_s")
+    _require(
+        isinstance(angular_bounds, list) and len(angular_bounds) == 2,
+        f"tier[{index}].angular_velocity_bounds_rad_s must contain two bounds",
+    )
+    _require(
+        math.isclose(float(angular_bounds[0]), -angular_cap, abs_tol=1e-12)
+        and math.isclose(float(angular_bounds[1]), angular_cap, abs_tol=1e-12),
+        f"tier[{index}].angular_velocity_bounds_rad_s drifted from production formula",
+    )
+    _require(
+        planner_command.get("angular_bound_formula")
+        == EXPECTED_CONTROL_FORMULAS["angular_bound_formula"],
+        f"tier[{index}].angular_bound_formula drifted",
+    )
+    runtime_key = str(expected["runtime_variant_key"])
+    _require(runtime_key in runtime_variants, f"runtime speed variant missing: {runtime_key}")
+    runtime_patch = runtime_variants[runtime_key]
+    _require(
+        runtime_patch
+        == {
+            "type": expected["drive_model"],
+            "max_velocity": expected["cap_m_s"],
+            "max_accel": expected["max_accel_m_s2"],
+            "max_decel": expected["max_decel_m_s2"],
+        },
+        f"runtime speed variant {runtime_key} does not exactly match preregistered tier",
+    )
+    runtime_settings = BicycleDriveSettings(
+        wheelbase=production_defaults["wheelbase_m"],
+        max_steer=production_defaults["max_steer_rad"],
+        max_velocity=float(runtime_patch["max_velocity"]),
+        max_accel=float(runtime_patch["max_accel"]),
+        max_decel=float(runtime_patch["max_decel"]),
+        allow_backwards=False,
+    )
+    native_action_space = BicycleDriveRobot(runtime_settings).action_space
+    env_action = _mapping(
+        tier.get("environment_action_contract"), f"tier[{index}].environment_action_contract"
+    )
+    _require(
+        env_action.get("command_space") == "bicycle_acceleration_steering",
+        f"tier[{index}].environment action space drifted",
+    )
+    _require(
+        env_action.get("runtime_converter")
+        == "scripts/benchmark/run_fidelity_sensitivity_campaign.py::_env_action",
+        f"tier[{index}].runtime_converter drifted",
+    )
+    _require(
+        env_action.get("target_speed_clip_bounds_m_s") == [0.0, cap],
+        f"tier[{index}].target_speed_clip_bounds_m_s drifted",
+    )
+    _require(
+        env_action.get("target_speed_formula") == EXPECTED_CONTROL_FORMULAS["target_speed_formula"],
+        f"tier[{index}].target_speed_formula drifted",
+    )
+    expected_native_bounds = [
+        [float(native_action_space.low[0]), float(native_action_space.high[0])],
+        [float(native_action_space.low[1]), float(native_action_space.high[1])],
+    ]
+    for field, expected_bounds in zip(
+        ("acceleration_bounds_m_s2", "steering_bounds_rad"),
+        expected_native_bounds,
+        strict=True,
+    ):
+        actual_bounds = env_action.get(field)
+        _require(
+            isinstance(actual_bounds, list)
+            and len(actual_bounds) == 2
+            and all(
+                math.isclose(float(actual), expected_value, abs_tol=1e-7)
+                for actual, expected_value in zip(actual_bounds, expected_bounds, strict=True)
+            ),
+            f"tier[{index}].{field} drifted from native action space",
+        )
+    for field in ("acceleration_formula", "steering_formula", "final_clip"):
+        _require(
+            env_action.get(field) == EXPECTED_CONTROL_FORMULAS[field],
+            f"tier[{index}].{field} drifted",
+        )
+    _require(
+        env_action.get("wheelbase_m") == production_defaults["wheelbase_m"],
+        f"tier[{index}].wheelbase_m drifted from production runtime",
+    )
+    _require(
+        env_action.get("dt_seconds") == production_defaults["dt_seconds"],
+        f"tier[{index}].dt_seconds drifted from production runtime",
+    )
+
+
 def _validate_speed_axis(payload: dict[str, Any]) -> None:
     """Validate speed caps, tier actuation parameters, and activation contract."""
+    for callable_name in ("_robot_speed_cap", "_robot_angular_cap", "_env_action"):
+        _require_top_level_callable(CAMPAIGN_RUNTIME_PATH, callable_name)
+    production_defaults = _production_control_defaults()
+    _require(
+        production_defaults == {"wheelbase_m": 1.0, "max_steer_rad": 0.78, "dt_seconds": 0.1},
+        "production bicycle wheelbase/steering/timestep defaults drifted",
+    )
     speed_axis = _mapping(payload.get("robot_speed_axis"), "robot_speed_axis")
     _require(speed_axis.get("baseline_cap_m_s") == 2.0, "baseline speed cap must be 2.0 m/s")
     tiers = speed_axis.get("tiers")
@@ -292,59 +474,12 @@ def _validate_speed_axis(payload: dict[str, Any]) -> None:
     )
 
     for index, (tier_val, expected) in enumerate(zip(tiers, EXPECTED_TIERS, strict=True)):
-        tier = _mapping(tier_val, f"robot_speed_axis.tiers[{index}]")
-        for field in (
-            "tier_id",
-            "runtime_variant_key",
-            "cap_m_s",
-            "drive_model",
-            "max_accel_m_s2",
-            "max_decel_m_s2",
-            "stopping_distance_envelope_m",
-            "role",
-        ):
-            _require(
-                tier.get(field) == expected[field],
-                f"tier[{index}].{field} drifted: expected {expected[field]!r}",
-            )
-        cap = float(expected["cap_m_s"])
-        max_decel = float(expected["max_decel_m_s2"])
-        stopping_dist = float(expected["stopping_distance_envelope_m"])
-        expected_dist = cap**2 / (2.0 * max_decel)
-        _require(
-            math.isclose(stopping_dist, expected_dist, abs_tol=1e-12),
-            f"tier[{index}] stopping_distance_envelope_m inconsistent",
-        )
-        scaling = _mapping(
-            tier.get("command_action_scaling"), f"tier[{index}].command_action_scaling"
-        )
-        _require(
-            scaling.get("scaling_method") == "linear_unicycle_action_to_drive_speed_cap",
-            f"tier[{index}].scaling_method drifted",
-        )
-        _require(
-            scaling.get("linear_speed_range_m_s") == [0.0, cap],
-            f"tier[{index}].linear_speed_range_m_s must be [0.0, {cap}]",
-        )
-        _require(
-            scaling.get("normalized_action_range") == [0.0, 1.0],
-            f"tier[{index}].normalized_action_range must be [0.0, 1.0]",
-        )
-        runtime_key = str(expected["runtime_variant_key"])
-        _require(
-            runtime_key in runtime_variants,
-            f"runtime speed variant missing: {runtime_key}",
-        )
-        runtime_patch = runtime_variants[runtime_key]
-        expected_runtime = {
-            "type": expected["drive_model"],
-            "max_velocity": expected["cap_m_s"],
-            "max_accel": expected["max_accel_m_s2"],
-            "max_decel": expected["max_decel_m_s2"],
-        }
-        _require(
-            runtime_patch == expected_runtime,
-            f"runtime speed variant {runtime_key} does not exactly match preregistered tier",
+        _validate_tier_control_contract(
+            _mapping(tier_val, f"robot_speed_axis.tiers[{index}]"),
+            expected,
+            index=index,
+            runtime_variants=runtime_variants,
+            production_defaults=production_defaults,
         )
 
     _require(override.get("robot_only_axis") is True, "speed axis must be robot-only")
@@ -355,6 +490,24 @@ def _validate_speed_axis(payload: dict[str, Any]) -> None:
         override.get("supported_drive_models")
         == {"bicycle_drive": "max_velocity", "differential_drive": "max_linear_speed"},
         "drive-model speed fields drifted",
+    )
+    _require(
+        override.get("planner_command_bounds_runtime")
+        == (
+            "scripts/benchmark/run_fidelity_sensitivity_campaign.py::_robot_speed_cap "
+            "plus _robot_angular_cap"
+        ),
+        "planner command-bound runtime reference drifted",
+    )
+    _require(
+        override.get("environment_action_runtime")
+        == "scripts/benchmark/run_fidelity_sensitivity_campaign.py::_env_action",
+        "environment action runtime reference drifted",
+    )
+    _require(
+        override.get("native_action_space_runtime")
+        == "robot_sf.robot.bicycle_drive.BicycleDriveRobot.action_space",
+        "native action-space runtime reference drifted",
     )
 
     activation = _mapping(speed_axis.get("activation_contract"), "activation_contract")
@@ -409,6 +562,44 @@ def _validate_roster(payload: dict[str, Any]) -> None:
             _require(
                 arm.get("retraining_status") == "none_zero_shot_eval_only",
                 "PPO retraining_status must be none_zero_shot_eval_only",
+            )
+            _require_top_level_callable(PPO_ADAPTER_PATH, "ppo_action_to_unicycle")
+            _require(isinstance(config_path_value, str), "PPO config_path is required")
+            ppo_runtime = _mapping(
+                yaml.safe_load((REPO_ROOT / config_path_value).read_text(encoding="utf-8")),
+                "PPO runtime config",
+            )
+            adapter = _mapping(arm.get("command_adapter_contract"), "PPO command_adapter_contract")
+            _require(
+                adapter.get("runtime_adapter")
+                == "robot_sf.benchmark.map_runner_policy_actions.ppo_action_to_unicycle",
+                "PPO runtime adapter drifted",
+            )
+            _require(
+                ppo_runtime.get("action_space") == "unicycle"
+                and adapter.get("configured_action_space") == ppo_runtime["action_space"],
+                "PPO configured action space must cross-read as unicycle",
+            )
+            _require(
+                adapter.get("output_command_space") == "unicycle_vw",
+                "PPO output command space must be unicycle_vw",
+            )
+            _require(
+                adapter.get("normalization") == "none_physical_units",
+                "PPO normalization must remain none_physical_units",
+            )
+            _require(
+                adapter.get("linear_velocity_bounds_m_s") == [0.0, float(ppo_runtime["v_max"])],
+                "PPO linear velocity bounds drifted from runtime config",
+            )
+            omega_max = float(ppo_runtime["omega_max"])
+            _require(
+                adapter.get("angular_velocity_bounds_rad_s") == [-omega_max, omega_max],
+                "PPO angular velocity bounds drifted from runtime config",
+            )
+            _require(
+                adapter.get("tier_rescaling") == "none_zero_shot_training_bounds_retained",
+                "PPO zero-shot command bounds must not be silently tier-rescaled",
             )
         if planner_id == "scenario_adaptive_hybrid_orca_v2_collision_guard":
             _require(

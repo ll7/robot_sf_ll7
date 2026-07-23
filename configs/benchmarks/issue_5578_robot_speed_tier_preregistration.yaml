@@ -121,10 +121,24 @@ robot_speed_axis:
       max_accel_m_s2: 1.0
       max_decel_m_s2: 2.0
       stopping_distance_envelope_m: 1.0
-      command_action_scaling:
-        scaling_method: linear_unicycle_action_to_drive_speed_cap
-        linear_speed_range_m_s: [0.0, 2.0]
-        normalized_action_range: [0.0, 1.0]
+      planner_command_contract:
+        command_space: unicycle_vw
+        linear_velocity_bounds_m_s: [0.0, 2.0]
+        angular_velocity_bounds_rad_s: [-1.97852307375321, 1.97852307375321]
+        angular_bound_formula: cap_m_s_times_tan_max_steer_rad_div_wheelbase_m
+      environment_action_contract:
+        command_space: bicycle_acceleration_steering
+        runtime_converter: scripts/benchmark/run_fidelity_sensitivity_campaign.py::_env_action
+        target_speed_clip_bounds_m_s: [0.0, 2.0]
+        target_speed_formula: clip_desired_linear_to_min_velocity_and_max_velocity
+        acceleration_bounds_m_s2: [-2.0, 1.0]
+        acceleration_formula: target_speed_minus_current_speed_div_max_dt_and_1e_minus_6
+        steering_bounds_rad: [-0.78, 0.78]
+        steering_formula: >-
+          zero_below_1e_minus_6_else_atan_omega_times_wheelbase_div_max_abs_target_speed_and_1e_minus_6_times_sign_target_speed
+        wheelbase_m: 1.0
+        dt_seconds: 0.1
+        final_clip: numpy_clip_to_env_action_space_low_high
       role: nominal_reference
     - tier_id: cap_3_0
       runtime_variant_key: bicycle_3_0_mps_nominal
@@ -133,10 +147,24 @@ robot_speed_axis:
       max_accel_m_s2: 1.5
       max_decel_m_s2: 3.0
       stopping_distance_envelope_m: 1.5
-      command_action_scaling:
-        scaling_method: linear_unicycle_action_to_drive_speed_cap
-        linear_speed_range_m_s: [0.0, 3.0]
-        normalized_action_range: [0.0, 1.0]
+      planner_command_contract:
+        command_space: unicycle_vw
+        linear_velocity_bounds_m_s: [0.0, 3.0]
+        angular_velocity_bounds_rad_s: [-2.967784610629815, 2.967784610629815]
+        angular_bound_formula: cap_m_s_times_tan_max_steer_rad_div_wheelbase_m
+      environment_action_contract:
+        command_space: bicycle_acceleration_steering
+        runtime_converter: scripts/benchmark/run_fidelity_sensitivity_campaign.py::_env_action
+        target_speed_clip_bounds_m_s: [0.0, 3.0]
+        target_speed_formula: clip_desired_linear_to_min_velocity_and_max_velocity
+        acceleration_bounds_m_s2: [-3.0, 1.5]
+        acceleration_formula: target_speed_minus_current_speed_div_max_dt_and_1e_minus_6
+        steering_bounds_rad: [-0.78, 0.78]
+        steering_formula: >-
+          zero_below_1e_minus_6_else_atan_omega_times_wheelbase_div_max_abs_target_speed_and_1e_minus_6_times_sign_target_speed
+        wheelbase_m: 1.0
+        dt_seconds: 0.1
+        final_clip: numpy_clip_to_env_action_space_low_high
       role: preregistered_extension
     - tier_id: cap_4_0
       runtime_variant_key: bicycle_4_0_mps_micromobility
@@ -145,10 +173,24 @@ robot_speed_axis:
       max_accel_m_s2: 2.0
       max_decel_m_s2: 4.0
       stopping_distance_envelope_m: 2.0
-      command_action_scaling:
-        scaling_method: linear_unicycle_action_to_drive_speed_cap
-        linear_speed_range_m_s: [0.0, 4.0]
-        normalized_action_range: [0.0, 1.0]
+      planner_command_contract:
+        command_space: unicycle_vw
+        linear_velocity_bounds_m_s: [0.0, 4.0]
+        angular_velocity_bounds_rad_s: [-3.95704614750642, 3.95704614750642]
+        angular_bound_formula: cap_m_s_times_tan_max_steer_rad_div_wheelbase_m
+      environment_action_contract:
+        command_space: bicycle_acceleration_steering
+        runtime_converter: scripts/benchmark/run_fidelity_sensitivity_campaign.py::_env_action
+        target_speed_clip_bounds_m_s: [0.0, 4.0]
+        target_speed_formula: clip_desired_linear_to_min_velocity_and_max_velocity
+        acceleration_bounds_m_s2: [-4.0, 2.0]
+        acceleration_formula: target_speed_minus_current_speed_div_max_dt_and_1e_minus_6
+        steering_bounds_rad: [-0.78, 0.78]
+        steering_formula: >-
+          zero_below_1e_minus_6_else_atan_omega_times_wheelbase_div_max_abs_target_speed_and_1e_minus_6_times_sign_target_speed
+        wheelbase_m: 1.0
+        dt_seconds: 0.1
+        final_clip: numpy_clip_to_env_action_space_low_high
       role: preregistered_extension
   override_contract:
     runtime_binding: robot_config.drive_speed_cap
@@ -160,6 +202,11 @@ robot_speed_axis:
       bicycle_drive: max_velocity
       differential_drive: max_linear_speed
     braking_authority: carry_drive_model_max_decel_into_each_tier
+    planner_command_bounds_runtime: >-
+      scripts/benchmark/run_fidelity_sensitivity_campaign.py::_robot_speed_cap
+      plus _robot_angular_cap
+    environment_action_runtime: scripts/benchmark/run_fidelity_sensitivity_campaign.py::_env_action
+    native_action_space_runtime: robot_sf.robot.bicycle_drive.BicycleDriveRobot.action_space
   activation_contract:
     required_diagnostics:
       - commanded_speed_mean_m_s
@@ -192,6 +239,14 @@ planner_roster:
       config_path: configs/baselines/ppo_issue_791_eval_aligned_large_capacity.yaml
       estimand_type: zero_shot_ood_robustness
       retraining_status: none_zero_shot_eval_only
+      command_adapter_contract:
+        runtime_adapter: robot_sf.benchmark.map_runner_policy_actions.ppo_action_to_unicycle
+        configured_action_space: unicycle
+        output_command_space: unicycle_vw
+        normalization: none_physical_units
+        linear_velocity_bounds_m_s: [0.0, 2.0]
+        angular_velocity_bounds_rad_s: [-1.0, 1.0]
+        tier_rescaling: none_zero_shot_training_bounds_retained
     - planner_id: orca
       algorithm: orca
       role: classical_baseline

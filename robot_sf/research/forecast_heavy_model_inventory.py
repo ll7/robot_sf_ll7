@@ -339,6 +339,18 @@ ENTRY_POINT_SURFACES: tuple[EntryPointSpec, ...] = (
         required=False,
         note="Context only: an existing learned scaffold a transformer study could extend.",
     ),
+    EntryPointSpec(
+        key="heavy_model_adapter",
+        title="Heavy-model -> ActorForecast/ForecastBatch adapter",
+        module="robot_sf.benchmark.forecast_heavy_model_adapter",
+        file_path="robot_sf/benchmark/forecast_heavy_model_adapter.py",
+        required_symbols=(
+            "HeavyModelForecastAdapter",
+            "HeavyModelPredictionPayload",
+            "build_heavy_model_forecast_batch",
+        ),
+        note="Adapter that converts heavy-model predictions into the forecast-batch contract.",
+    ),
 )
 
 

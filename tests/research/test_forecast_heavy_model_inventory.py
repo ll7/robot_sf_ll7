@@ -252,20 +252,20 @@ def test_import_verdict_fails_closed_when_required_surfaces_missing(tmp_path):
     assert report.exit_code() == 1
 
 
-def test_real_checkout_imports_but_minimum_experiment_is_blocked():
-    """On the live repo every required surface imports, yet the minimum experiment is blocked.
+def test_real_checkout_imports_and_local_prerequisites_now_satisfied():
+    """On the live repo every required surface imports and local prerequisites are satisfied.
 
-    This keeps the declared required surfaces honest against the current tree (if a named
-    forecast surface is renamed, this fails) while documenting that the offline heavy-model
-    experiment cannot run yet: its local prerequisites (dataset, adapter, runtime budget) and
-    external prerequisites (dependency decision, trained checkpoint) are not satisfied.
+    The heavy-model adapter, holdout dataset manifest, and CPU budget config have been staged,
+    so local prerequisites are present. External prerequisites (dependency decision, trained
+    checkpoint) remain as standing blockers. This documents that the offline heavy-model
+    experiment can reach local_ready_external_blocked status.
     """
     report = build_inventory_report(root=repo_root())
     assert report.ok, [b.to_dict() for b in report.surface_blockers]
     assert report.exit_code() == 0
-    assert report.minimum_experiment_status is MinimumExperimentStatus.BLOCKED
-    pending_keys = {p.spec.key for p in report.pending_prerequisites}
-    assert {"staged_holdout_dataset", "heavy_model_adapter", "cpu_runtime_budget"} <= pending_keys
+    assert report.minimum_experiment_status is MinimumExperimentStatus.READY
+    pending_keys = {p.spec.key for p in report.local_pending_prerequisites}
+    assert not pending_keys, f"unexpected local pending: {pending_keys}"
     external = {p.spec.key for p in report.prerequisites if p.status is PrerequisiteStatus.EXTERNAL}
     assert {"dependency_decision", "trained_checkpoint"} <= external
 

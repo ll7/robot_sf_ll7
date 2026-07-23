@@ -252,6 +252,7 @@ def test_causal_attribution_already_unavoidable_from_pure_replay() -> None:
     assert fixture.faults == ()
     verdict = analyse_cause(fixture)
     assert verdict.predicted_cause == "already_unavoidable_contact"
+    assert verdict.predicted_activation_step == 18
     assert verdict.avoidable_pred is False
 
 

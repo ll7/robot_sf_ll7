@@ -25,10 +25,10 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from robot_sf.benchmark.last_avoidable_replay import SUBSTITUTION_HOLD, ReplayConfig
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
-
-    from robot_sf.benchmark.last_avoidable_replay import ReplayConfig
 
 PED_RESPONSE_REPLAYED = "replayed"
 PED_RESPONSE_CLOSED_LOOP = "closed_loop"
@@ -802,18 +802,37 @@ def route_trap_01_fixture() -> CollisionCauseFixture:
 
 
 def already_unavoidable_01_fixture() -> CollisionCauseFixture:
-    """Fixture ``already_unavoidable_01``: contact was already unavoidable.
+    """Fixture ``already_unavoidable_01``: contact was already unavoidable by step 18.
 
     No fault signature is injected; the cause is the inevitability itself, which
     the analyser recovers from the replay verdict ``already_unavoidable``.
+    Replay danger starts at step 18 matching the manifest activation window [18, 18].
 
     Returns:
         The ``already_unavoidable_01`` fault-injection fixture.
     """
+    scenario = KinematicScenario(
+        robot_x0=1.2,
+        robot_speed0=5.0,
+        ped_pos0=(12.0, -2.5),
+        ped_vel0=(0.0, 1.0),
+        dt=0.1,
+        collision_radius=0.5,
+        decel_levels=(0.0, 2.0, 4.0, 8.0),
+        pedestrian_response=PED_RESPONSE_REPLAYED,
+    )
+    replay_config = ReplayConfig(
+        t_danger=18,
+        t_contact=20,
+        horizon=28,
+        substitution_mode=SUBSTITUTION_HOLD,
+        pedestrian_response=PED_RESPONSE_REPLAYED,
+    )
     return CollisionCauseFixture(
         fixture_id="already_unavoidable_01",
-        scenario=already_unavoidable_scenario(),
+        scenario=scenario,
         faults=(),
+        replay_config=replay_config,
     )
 
 

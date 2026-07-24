@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_3078_package_a_readiness/no_eligible_comparator.json",
+  "artifact_sha256": "4f24133797dd7631a992e96d2f9cddcd7dffd9c4d287a5fdc609af85b3869c06",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

@@ -796,3 +796,70 @@ def test_publication_preflight_lane_coverage_routing(preflight_repo: Path) -> No
     ]
     assert "Optional-extra changed files requiring the predictive lane" in result.stderr
     assert "robot_sf/benchmark/artifact_publication.py" in result.stderr
+
+
+def test_pr_ready_check_fails_closed_when_changed_optional_test_omitted_from_allowlist(
+    preflight_repo: Path,
+) -> None:
+    """Issue #6208: PR readiness must fail closed when a changed optional test is omitted from allowlist."""
+    # Omit tests/planner/ from allowlist file
+    allowlist = preflight_repo / "tests" / "support" / "optional_test_allowlist.txt"
+    allowlist.write_text("tests/benchmark/\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "update allowlist fixture")
+
+    changed_file = preflight_repo / "tests" / "planner" / "test_unlisted_opt.py"
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("def test_unlisted(): pass\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "unlisted optional test change")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={
+            "BASE_REF": "HEAD~1",
+            "PR_READY_MODE": "interim",
+        },
+    )
+
+    assert result.returncode == 2
+    assert "omitted from optional test allowlist" in result.stderr
+    assert "Expected lane: optional" in result.stderr
+    assert "Actual collection decision: omitted" in result.stderr
+    assert "Remediation:" in result.stderr
+
+
+def test_pr_ready_check_regression_shapes_classification(preflight_repo: Path) -> None:
+    """Issue #6208: Verify top-level, nested core, and optional regression shapes are properly classified."""
+    lane_log = _write_lane_logging_stub(preflight_repo)
+
+    top_level = preflight_repo / "tests" / "test_toplevel_shape.py"
+    top_level.write_text("def test_top(): pass\n", encoding="utf-8")
+
+    nested_core = preflight_repo / "tests" / "ped_npc" / "test_nested_shape.py"
+    nested_core.parent.mkdir(parents=True, exist_ok=True)
+    nested_core.write_text("def test_nested(): pass\n", encoding="utf-8")
+
+    opt_test = preflight_repo / "tests" / "planner" / "test_optional_shape.py"
+    opt_test.parent.mkdir(parents=True, exist_ok=True)
+    opt_test.write_text("def test_opt(): pass\n", encoding="utf-8")
+
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "add 3 regression shapes")
+
+    result = _run_pr_ready(
+        preflight_repo,
+        help_flag=False,
+        env_overrides={
+            "BASE_REF": "HEAD~1",
+            "PR_READY_MODE": "interim",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    lane_lines = lane_log.read_text(encoding="utf-8").splitlines()
+    assert lane_lines == [
+        "core --lane core",
+        "optional --lane optional",
+    ]

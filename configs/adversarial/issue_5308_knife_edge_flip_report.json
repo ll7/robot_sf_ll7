@@ -1,0 +1,46 @@
+{
+  "schema_version": "knife-edge-flip-report.v1",
+  "source": "issue_5308_qd_doorway_warm_start",
+  "description": "Knife-edge flip-report warm-start seeds for the doorway-family QD campaign (issue #5308). Each entry is a near-boundary doorway candidate (|outcome_margin| <= 0.5) whose geometry lies inside the campaign search space. These seed the warm-started Random and CoordinateRefinement emitters before diversity-driven CMA-ME fills the remaining behavior grid.",
+  "entries": [
+    {
+      "scenario": "doorway_blocker",
+      "planner": "goal",
+      "outcome_margin": 0.05,
+      "candidate": {
+        "start": {"x": 26.5, "y": 15.4},
+        "goal": {"x": 18.7, "y": 12.5},
+        "spawn_time_s": 0.0,
+        "pedestrian_speed_mps": 1.2,
+        "pedestrian_delay_s": 0.0,
+        "scenario_seed": 7
+      }
+    },
+    {
+      "scenario": "doorway_blocker",
+      "planner": "goal",
+      "outcome_margin": -0.10,
+      "candidate": {
+        "start": {"x": 26.8, "y": 15.2},
+        "goal": {"x": 18.4, "y": 12.7},
+        "spawn_time_s": 0.0,
+        "pedestrian_speed_mps": 1.3,
+        "pedestrian_delay_s": 0.0,
+        "scenario_seed": 19
+      }
+    },
+    {
+      "scenario": "doorway_blocker",
+      "planner": "goal",
+      "outcome_margin": 0.20,
+      "candidate": {
+        "start": {"x": 26.2, "y": 15.8},
+        "goal": {"x": 19.0, "y": 12.3},
+        "spawn_time_s": 0.0,
+        "pedestrian_speed_mps": 1.1,
+        "pedestrian_delay_s": 0.0,
+        "scenario_seed": 31
+      }
+    }
+  ]
+}

@@ -1,18 +1,18 @@
 {
   "description": "Mutation-testing downward ratchet for benchmark-critical semantics (issue #5508). The ratchet gates on the surviving-mutant set for robot_sf/research/aggregation.py exercised by tests/research/test_aggregation.py: a survivor absent from this baseline fails, and a baselined survivor that disappears is a ratchet opportunity. This is a scheduled diagnostic, never a required PR gate. Refresh this baseline with `scripts/dev/mutation_ratchet.py --write-baseline` after killing survivors with new assertions; triage guidance lives in `mutation_testing_triage.md`.",
-  "generated_at": "2026-07-22T21:31:40Z",
+  "generated_at": "2026-07-24T03:42:34Z",
   "schema_version": 1,
   "source_path": "robot_sf/research/aggregation.py",
   "summary": {
-    "killed": 391,
+    "killed": 394,
     "skipped": 0,
-    "survived": 32,
+    "survived": 29,
     "survivors_by_function": {
       "robot_sf.research.aggregation.x__load_manifest_payload": 2,
       "robot_sf.research.aggregation.x_aggregate_metrics": 3,
       "robot_sf.research.aggregation.x_bootstrap_ci": 1,
       "robot_sf.research.aggregation.x_compute_completeness_score": 1,
-      "robot_sf.research.aggregation.x_export_metrics_csv": 4,
+      "robot_sf.research.aggregation.x_export_metrics_csv": 1,
       "robot_sf.research.aggregation.x_export_metrics_json": 6,
       "robot_sf.research.aggregation.x_extract_seed_metrics": 15
     },
@@ -28,10 +28,7 @@
     "robot_sf.research.aggregation.x_aggregate_metrics__mutmut_59",
     "robot_sf.research.aggregation.x_bootstrap_ci__mutmut_13",
     "robot_sf.research.aggregation.x_compute_completeness_score__mutmut_3",
-    "robot_sf.research.aggregation.x_export_metrics_csv__mutmut_1",
     "robot_sf.research.aggregation.x_export_metrics_csv__mutmut_11",
-    "robot_sf.research.aggregation.x_export_metrics_csv__mutmut_3",
-    "robot_sf.research.aggregation.x_export_metrics_csv__mutmut_6",
     "robot_sf.research.aggregation.x_export_metrics_json__mutmut_10",
     "robot_sf.research.aggregation.x_export_metrics_json__mutmut_13",
     "robot_sf.research.aggregation.x_export_metrics_json__mutmut_17",

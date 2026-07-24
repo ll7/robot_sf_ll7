@@ -640,9 +640,11 @@ def test_reproducibility_check_job_contract() -> None:
     repro_job = workflow["jobs"]["reproducibility-check"]
     ci_job = workflow["jobs"]["ci"]
 
-    # Trigger is pull_request OR workflow_dispatch
-    assert "pull_request" in repro_job["if"]
-    assert "workflow_dispatch" in repro_job["if"]
+    # Trigger is exclusively pull_request OR workflow_dispatch. Equality is
+    # intentional: containment would allow an undocumented third event.
+    assert repro_job["if"] == (
+        "github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'"
+    )
 
     # No continue-on-error on the job or any step
     assert "continue-on-error" not in repro_job

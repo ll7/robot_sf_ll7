@@ -1,9 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "failure_mechanism_taxonomy_crosswalk.schema.v1.json",
+  "$id": "https://robot-sf.local/schemas/failure_mechanism_taxonomy_crosswalk.schema.v1.json",
   "title": "Failure Mechanism Taxonomy Crosswalk v1",
   "description": "Diagnostic crosswalk from classifier labels to explicitly unavailable canonical taxonomy attribution. The classifier operates on paired aggregate metrics without trace or provenance sidecar inputs, so every entry remains unknown and must not be mistaken for causal proof.",
   "type": "object",
+  "additionalProperties": false,
   "required": [
     "crosswalk_schema_version",
     "crosswalk_source",
@@ -14,12 +15,14 @@
       "const": "failure_mechanism_taxonomy_crosswalk.v1"
     },
     "crosswalk_source": {
-      "type": "string"
+      "const": "failure_mechanism_classifier.v1"
     },
     "entries": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "row_index",
           "classifier_label",
@@ -36,7 +39,18 @@
             "minimum": 0
           },
           "classifier_label": {
-            "type": "string"
+            "enum": [
+              "time_budget_clean_relief",
+              "exposure_enabled_completion",
+              "safety_regressed_long_horizon",
+              "persistent_low_progress_timeout",
+              "scenario_contract_blocker",
+              "unsupported_wait_then_go_hypothesis",
+              "collision",
+              "near_miss",
+              "timeout_without_progress",
+              "unavailable"
+            ]
           },
           "taxonomy_label": {
             "const": "unknown"
@@ -54,7 +68,8 @@
             "const": "not_derivable_missing_trace_or_provenance"
           },
           "caveat": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1
           }
         }
       }

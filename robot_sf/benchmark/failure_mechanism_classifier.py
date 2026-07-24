@@ -174,7 +174,7 @@ def validate_failure_mechanism_payload(payload: dict[str, Any]) -> dict[str, Any
 
     When ``taxonomy_crosswalk`` is present, validates that:
     - The crosswalk schema version and source are correct.
-    - Every entry has the required fields.
+    - Every classifier row has one linked entry with the same classifier label.
     - Classifier-only rows remain unknown without trace/provenance evidence.
 
     Returns:
@@ -226,6 +226,11 @@ def validate_failure_mechanism_payload(payload: dict[str, Any]) -> dict[str, Any
         entries = crosswalk.get("entries")
         if not isinstance(entries, list):
             raise FailureMechanismClassificationError("taxonomy_crosswalk.entries must be a list")
+        if len(entries) != len(rows):
+            raise FailureMechanismClassificationError(
+                "taxonomy_crosswalk.entries must contain exactly one entry per classifier row"
+            )
+        row_indexes: set[int] = set()
         for entry_index, entry in enumerate(entries):
             if not isinstance(entry, dict):
                 raise FailureMechanismClassificationError(
@@ -246,6 +251,27 @@ def validate_failure_mechanism_payload(payload: dict[str, Any]) -> dict[str, Any
                         f"taxonomy_crosswalk.entries[{entry_index}] missing required field "
                         f"{field!r}"
                     )
+            row_index = entry["row_index"]
+            if not isinstance(row_index, int) or isinstance(row_index, bool):
+                raise FailureMechanismClassificationError(
+                    f"taxonomy_crosswalk.entries[{entry_index}].row_index must be an integer"
+                )
+            if not 0 <= row_index < len(rows):
+                raise FailureMechanismClassificationError(
+                    f"taxonomy_crosswalk.entries[{entry_index}].row_index must reference a "
+                    "classifier row"
+                )
+            if row_index in row_indexes:
+                raise FailureMechanismClassificationError(
+                    f"taxonomy_crosswalk.entries[{entry_index}].row_index must be unique"
+                )
+            row_indexes.add(row_index)
+            expected_label = rows[row_index]["label"]
+            if entry["classifier_label"] != expected_label:
+                raise FailureMechanismClassificationError(
+                    f"taxonomy_crosswalk.entries[{entry_index}].classifier_label must match "
+                    f"rows[{row_index}].label"
+                )
             if entry.get("evidence_mode") != _CROSSWALK_EVIDENCE_MODE:
                 raise FailureMechanismClassificationError(
                     f"taxonomy_crosswalk.entries[{entry_index}] evidence_mode must be "

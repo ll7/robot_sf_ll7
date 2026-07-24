@@ -20,6 +20,22 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/issue_5578_activation_preflight.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/issue_5578_activation_preflight.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/issue_6008_state.yaml
   status: current
   freshness: maintained

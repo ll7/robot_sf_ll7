@@ -169,52 +169,95 @@ def test_load_baseline_planner_defers_ppo_loading(
     assert observed == {"seed": 13, "defer_model_loading": True}
 
 
+class _InitLoopCuda:
+    """Stub ``torch.cuda`` for the init-loop worker coverage test."""
+
+    def is_available(self) -> bool:
+        return False
+
+    def manual_seed_all(self, seed: int) -> None:  # pragma: no cover - not reached
+        raise AssertionError("cuda.manual_seed_all should not be called when unavailable")
+
+
+class _InitLoopCudnn:
+    """Stub ``torch.backends.cudnn`` for the init-loop worker coverage test."""
+
+    def __init__(self) -> None:
+        self.deterministic: bool | None = None
+        self.benchmark: bool | None = None
+
+
+class _InitLoopBackends:
+    """Stub ``torch.backends`` for the init-loop worker coverage test."""
+
+    def __init__(self) -> None:
+        self.cudnn = _InitLoopCudnn()
+
+
+class _InitLoopTorch:
+    """Stub ``torch`` module recording the calls ``_config_torch_worker`` makes."""
+
+    def __init__(self) -> None:
+        self.thread_count: int | None = None
+        self.manual_seed_value: int | None = None
+        self.cuda = _InitLoopCuda()
+        self.backends = _InitLoopBackends()
+
+    def set_num_threads(self, count: int) -> None:
+        self.thread_count = count
+
+    def manual_seed(self, seed: int) -> None:
+        self.manual_seed_value = seed
+
+
+class _InitLoopConnection:
+    """Minimal duplex connection stub serving one step then a close command."""
+
+    def __init__(self) -> None:
+        self.messages = iter([("step", {"observation": 1}), ("close", None)])
+        self.sent: list[object] = []
+        self.closed = False
+
+    def send(self, payload: object) -> None:
+        self.sent.append(payload)
+
+    def recv(self) -> object:
+        return next(self.messages)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _InitLoopPlanner:
+    """Minimal planner stub tracking lazy-load and step calls."""
+
+    def __init__(self) -> None:
+        self.loaded = False
+        self._seed = 7
+
+    def _ensure_model_loaded(self) -> None:
+        self.loaded = True
+
+    def step(self, payload: object) -> dict[str, object]:
+        return {"payload": payload}
+
+
 def test_planner_step_worker_covers_initialization_and_command_loop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The child worker initializes lazily and serves a step before close."""
-
-    class _Torch:
-        def __init__(self) -> None:
-            self.thread_count: int | None = None
-
-        def set_num_threads(self, count: int) -> None:
-            self.thread_count = count
-
-    class _Connection:
-        def __init__(self) -> None:
-            self.messages = iter([("step", {"observation": 1}), ("close", None)])
-            self.sent: list[object] = []
-            self.closed = False
-
-        def send(self, payload: object) -> None:
-            self.sent.append(payload)
-
-        def recv(self) -> object:
-            return next(self.messages)
-
-        def close(self) -> None:
-            self.closed = True
-
-    class _Planner:
-        def __init__(self) -> None:
-            self.loaded = False
-
-        def _ensure_model_loaded(self) -> None:
-            self.loaded = True
-
-        def step(self, payload: object) -> dict[str, object]:
-            return {"payload": payload}
-
-    torch = _Torch()
-    connection = _Connection()
-    planner = _Planner()
+    torch = _InitLoopTorch()
+    connection = _InitLoopConnection()
+    planner = _InitLoopPlanner()
     monkeypatch.setattr(runner_mod, "try_import", lambda _: torch)
 
     runner_mod._planner_step_worker(connection, planner)
 
     assert planner.loaded is True
     assert torch.thread_count == 1
+    assert torch.manual_seed_value == 7
+    assert torch.backends.cudnn.deterministic is True
+    assert torch.backends.cudnn.benchmark is False
     assert connection.sent == [
         ("init_ok", None),
         ("ok", ({"payload": {"observation": 1}}, None)),

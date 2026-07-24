@@ -110,7 +110,23 @@ def run_browser_smoke(
                     " return canvas && canvas.width > 0 && canvas.height > 0; }",
                     timeout=timeout_ms,
                 )
-                canvas.screenshot(path=str(screenshot_path))
+                page.wait_for_function(
+                    "() => document.documentElement.dataset.traceViewerRendered === 'true'",
+                    timeout=timeout_ms,
+                )
+                page.evaluate(
+                    "() => new Promise((resolve) => requestAnimationFrame("
+                    "() => requestAnimationFrame(resolve)))"
+                )
+                page.wait_for_timeout(500)
+                page.evaluate(
+                    "() => document.querySelectorAll('#hud, #controls').forEach("
+                    "(element) => { element.style.visibility = 'hidden'; })"
+                )
+                canvas_box = canvas.bounding_box()
+                if canvas_box is None:
+                    raise RuntimeError("Three.js browser smoke could not locate the visible canvas")
+                page.screenshot(path=str(screenshot_path), clip=canvas_box)
             finally:
                 browser.close()
     finally:

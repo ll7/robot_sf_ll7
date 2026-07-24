@@ -1006,6 +1006,50 @@ def test_cli_fails_for_file_evidence_without_domain_approval(tmp_path: Path) -> 
     assert "file-based" in result.stderr
 
 
+def test_cli_blocks_scoped_title_and_context_evidence_path_without_domain_approval(
+    tmp_path: Path,
+) -> None:
+    """Canonical evidence paths and conventional scopes must not bypass the approval gate."""
+    event_path = tmp_path / "event.json"
+    files_path = tmp_path / "files.txt"
+    title = "feat(benchmark): classify figure eligibility evidence"
+    event_path.write_text(
+        json.dumps(
+            {
+                "pull_request": {
+                    "body": "## Summary\nClassifies figure eligibility documentation.\n",
+                    "title": title,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    files_path.write_text(
+        "docs/context/evidence/issue_6267/figure_eligibility.md\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--github-event-path",
+            str(event_path),
+            "--changed-files-file",
+            str(files_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "status=missing_domain_approval" in result.stderr
+    assert f"title-based evidence signal: {title}" in result.stderr
+    assert "file-based evidence signal: docs/context/evidence" in result.stderr
+
+
 def test_cli_accepts_clean_title_and_files_with_domain_approval(tmp_path: Path) -> None:
     """PRs with evidence title but proper Domain-Aware Approval pass."""
     body_path = tmp_path / "body.md"

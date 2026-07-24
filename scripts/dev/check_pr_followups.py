@@ -83,19 +83,22 @@ _FREEFORM_TRIGGER_PREFIX = "free-form evidence marker: "
 _TITLE_EVIDENCE_PREFIX = "title-based evidence signal: "
 _FILE_EVIDENCE_PREFIX = "file-based evidence signal: "
 
-# Title patterns that suggest evidence-changing work (e.g. "benchmark: add metric")
+# Title patterns that suggest evidence-changing work, including conventional scopes such as
+# "feat(benchmark): add metric".
 EVIDENCE_TITLE_PREFIX_RE = re.compile(
     r"^(?:(?:\[(?:benchmark|validation|metric|eval|paper)\]\s*)|"
+    r"(?:[a-z][a-z0-9-]*\((?:benchmark|validation|metric|eval|paper)\)!?:\s*)|"
     r"(?:benchmark|validation|metric|eval|paper)[:\s])",
     re.IGNORECASE,
 )
 
-# File path prefixes suggesting evidence-changing work
+# File path prefixes suggesting evidence-changing work, including the canonical evidence context.
 EVIDENCE_PATH_PREFIXES = (
     "robot_sf/benchmark/",
     "scripts/benchmark/",
     "configs/benchmark/",
     "tests/benchmark/",
+    "docs/context/evidence/",
 )
 BOT_ONLY_MARKERS = (
     "auto-generated comment: release notes by coderabbit.ai",

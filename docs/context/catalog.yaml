@@ -4728,3 +4728,7 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5303_search_promotion_preregistration
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence

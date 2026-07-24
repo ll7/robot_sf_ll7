@@ -43,8 +43,6 @@ def _pr(
     expected_head_sha: str = "",
     artifacts: bool | None = None,
     gate_verdict: str | dict[str, str] | None = None,
-    base_sha: str = "",
-    main_sha: str = "",
 ) -> dict[str, object]:
     """Build a compact PR snapshot dict for testing.
 
@@ -71,11 +69,18 @@ def _pr(
         result["expected_head_sha"] = expected_head_sha
     if artifacts is not None:
         result["artifacts"] = artifacts
+    _apply_gate_verdict(result, gate_verdict)
+    return result
+
+
+def _with_merge_base(
+    result: dict[str, object], *, base_sha: str = "", main_sha: str = ""
+) -> dict[str, object]:
+    """Attach optional merge-base metadata without widening the PR fixture helper."""
     if base_sha:
         result["base_sha"] = base_sha
     if main_sha:
         result["main_sha"] = main_sha
-    _apply_gate_verdict(result, gate_verdict)
     return result
 
 
@@ -207,12 +212,14 @@ def test_classify_ready_to_merge() -> None:
 
 def test_classify_stale_merge_base() -> None:
     """Stale merge base should fail closed and not reach ready_to_merge."""
-    pr = _pr(
-        4000,
-        overall="success",
-        labels=["merge-ready"],
-        head_sha=FULL_SHA,
-        gate_verdict=FULL_SHA,
+    pr = _with_merge_base(
+        _pr(
+            4000,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
         base_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         main_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     )
@@ -221,12 +228,14 @@ def test_classify_stale_merge_base() -> None:
 
 def test_classify_stale_merge_base_equal_shas_ok() -> None:
     """Equal base_sha and main_sha should not trigger stale_merge_base."""
-    pr = _pr(
-        4001,
-        overall="success",
-        labels=["merge-ready"],
-        head_sha=FULL_SHA,
-        gate_verdict=FULL_SHA,
+    pr = _with_merge_base(
+        _pr(
+            4001,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
         base_sha=FULL_SHA,
         main_sha=FULL_SHA,
     )
@@ -235,22 +244,26 @@ def test_classify_stale_merge_base_equal_shas_ok() -> None:
 
 def test_classify_stale_merge_base_missing_sha_ok() -> None:
     """Missing base_sha or main_sha should not trigger stale_merge_base."""
-    pr = _pr(
-        4002,
-        overall="success",
-        labels=["merge-ready"],
-        head_sha=FULL_SHA,
-        gate_verdict=FULL_SHA,
+    pr = _with_merge_base(
+        _pr(
+            4002,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
         base_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     )
     assert classify_pr_state(pr) == "ready_to_merge"
 
-    pr2 = _pr(
-        4003,
-        overall="success",
-        labels=["merge-ready"],
-        head_sha=FULL_SHA,
-        gate_verdict=FULL_SHA,
+    pr2 = _with_merge_base(
+        _pr(
+            4003,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
         main_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     )
     assert classify_pr_state(pr2) == "ready_to_merge"
@@ -599,12 +612,14 @@ def test_evaluate_queue_gate_verdict_missing_reroutes_to_await() -> None:
 def test_evaluate_queue_stale_merge_base_rejected() -> None:
     """A green merge-ready PR with stale merge base must be rejected."""
     prs = [
-        _pr(
-            4040,
-            overall="success",
-            labels=["merge-ready"],
-            head_sha=FULL_SHA,
-            gate_verdict=FULL_SHA,
+        _with_merge_base(
+            _pr(
+                4040,
+                overall="success",
+                labels=["merge-ready"],
+                head_sha=FULL_SHA,
+                gate_verdict=FULL_SHA,
+            ),
             base_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             main_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         )

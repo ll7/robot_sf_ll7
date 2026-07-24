@@ -403,7 +403,13 @@ def _compute_flow_decision(
     match state:
         case "pending_ci" | "pending_gate_verdict" | "ready_to_merge":
             return "continue"
-        case "failed_ci" | "failed_validation" | "missing_artifacts" | "stale_worktree" | "stale_merge_base":
+        case (
+            "failed_ci"
+            | "failed_validation"
+            | "missing_artifacts"
+            | "stale_worktree"
+            | "stale_merge_base"
+        ):
             return "reroute"
         case _:
             return "stop"

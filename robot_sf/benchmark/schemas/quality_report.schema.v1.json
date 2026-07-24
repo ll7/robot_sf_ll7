@@ -1,0 +1,662 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robot-sf.dev/specs/quality/quality_report.schema.v1.json",
+  "title": "QualityReport",
+  "description": "Commit- and environment-stamped aggregate of repository quality signals. This schema deliberately separates diagnostic signals from required gates and never collapses them into a single vanity score (issue #6213). Each signal family carries its own availability, source, role, and decision use. When a signal cannot be computed from an existing authoritative surface, it is recorded as 'unavailable' or 'deferred' with a 'source_gap'; metrics are never invented and gates are never silently changed.",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "report_id",
+    "generated_at",
+    "scope",
+    "cadence",
+    "provenance",
+    "tree_clean",
+    "inputs",
+    "signals"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "quality_report.v1",
+      "description": "Discriminator naming this report shape."
+    },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^1\\.0\\.\\d+$",
+      "description": "Schema version following semver (major.minor.patch)."
+    },
+    "report_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable identifier for this report instance, typically commit + generated_at."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp the report was produced."
+    },
+    "scope": {
+      "$ref": "#/$defs/scope",
+      "description": "What the report covers: package(s), changed-files view, and the baseline it is compared against."
+    },
+    "cadence": {
+      "$ref": "#/$defs/cadence",
+      "description": "When the report is produced and which lane owns it."
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance",
+      "description": "Commit and environment provenance required for reproducibility."
+    },
+    "tree_clean": {
+      "type": "boolean",
+      "description": "True only when the report was produced from a clean working tree (git dirty == false). A false value is a reproducibility caveat, not a failure by itself."
+    },
+    "inputs": {
+      "$ref": "#/$defs/inputs",
+      "description": "Declared reproducible command and the authoritative source surfaces read to build the report."
+    },
+    "notes": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Optional free-form caveats (e.g. degraded/fallback execution notes). Not a substitute for structured signals."
+    },
+    "signals": {
+      "type": "object",
+      "required": [
+        "test_results",
+        "coverage",
+        "mutation",
+        "test_duration",
+        "flakiness",
+        "contract_scenario_coverage",
+        "reproducibility",
+        "performance_regression",
+        "escaped_defects"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "test_results": {"$ref": "#/$defs/testResultsSignal"},
+        "coverage": {"$ref": "#/$defs/coverageSignal"},
+        "mutation": {"$ref": "#/$defs/mutationSignal"},
+        "test_duration": {"$ref": "#/$defs/testDurationSignal"},
+        "flakiness": {"$ref": "#/$defs/flakinessSignal"},
+        "contract_scenario_coverage": {"$ref": "#/$defs/contractScenarioCoverageSignal"},
+        "reproducibility": {"$ref": "#/$defs/reproducibilitySignal"},
+        "performance_regression": {"$ref": "#/$defs/performanceRegressionSignal"},
+        "escaped_defects": {"$ref": "#/$defs/escapedDefectsSignal"}
+      }
+    }
+  },
+  "$defs": {
+    "role": {
+      "type": "string",
+      "enum": ["gate", "diagnostic"],
+      "description": "Whether the signal is a required gate that can block merge, or a diagnostic that informs judgment without blocking. This distinction is preserved throughout the report and must never be collapsed."
+    },
+    "availability": {
+      "type": "string",
+      "enum": ["available", "unavailable", "deferred"],
+      "description": "'available' = computed from an existing authoritative surface; 'unavailable' = no authoritative surface exists yet (source_gap required); 'deferred' = surface exists but was intentionally not run this cycle (source_gap required)."
+    },
+    "sourceGap": {
+      "type": "object",
+      "required": ["reason", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Why the signal is unavailable or deferred, naming the missing surface or the deferred command."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The authoritative surface that would compute this signal when it exists (script path, CI job, or artifact path)."
+        },
+        "follow_up": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional next smallest step to make the signal available."
+        }
+      }
+    },
+    "availabilityBlock": {
+      "type": "object",
+      "required": ["availability"],
+      "additionalProperties": false,
+      "properties": {
+        "availability": {"$ref": "#/$defs/availability"},
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The authoritative surface used (script path, CI job, or artifact path). Required when availability is 'available'."
+        },
+        "source_gap": {"$ref": "#/$defs/sourceGap"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"availability": {"const": "available"}}},
+          "then": {"required": ["source"]}
+        },
+        {
+          "if": {"properties": {"availability": {"enum": ["unavailable", "deferred"]}}},
+          "then": {"required": ["source_gap"]}
+        }
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "required": ["package", "view"],
+      "additionalProperties": false,
+      "properties": {
+        "package": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Primary package under analysis (e.g. 'robot_sf')."
+        },
+        "view": {
+          "type": "string",
+          "enum": ["full_suite", "changed_files", "module_subset"],
+          "description": "Whether the signals cover the full suite, only changed files, or a declared module subset."
+        },
+        "baseline_ref": {
+          "type": ["string", "null"],
+          "description": "Git ref the report is compared against (e.g. 'origin/main'). Null when the report is absolute-only."
+        },
+        "changed_files": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Repository-root-relative changed files when view is 'changed_files'."
+        }
+      }
+    },
+    "cadence": {
+      "type": "object",
+      "required": ["when", "owner"],
+      "additionalProperties": false,
+      "properties": {
+        "when": {
+          "type": "string",
+          "enum": ["per_pr", "scheduled", "manual", "release"],
+          "description": "When the report is produced. Per-PR is advisory-only by default; mutation and long benchmarks stay scheduled/manual and are never forced per-PR."
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Owning lane or role (e.g. 'fast-feedback', 'quality-engineering')."
+        },
+        "lane_command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical command that produces the report."
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["git_commit", "git_branch", "git_dirty", "python_version", "key_packages", "timestamp"],
+      "additionalProperties": false,
+      "properties": {
+        "git_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$",
+          "description": "Full Git commit hash the report was built from."
+        },
+        "git_branch": {
+          "type": ["string", "null"],
+          "description": "Git branch name, or null in a detached HEAD state."
+        },
+        "git_dirty": {
+          "type": "boolean",
+          "description": "Whether uncommitted changes were present at report time. tree_clean is the negation of this value."
+        },
+        "python_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+.*$",
+          "description": "Python version string (major.minor.micro plus optional suffix)."
+        },
+        "platform": {
+          "type": ["string", "null"],
+          "description": "Platform identifier from platform.platform(), if captured."
+        },
+        "key_packages": {
+          "type": "object",
+          "additionalProperties": {"type": "string"},
+          "description": "Package name to version mapping for packages that affect quality signals (e.g. pytest, coverage, mutmut, jsonschema)."
+        },
+        "hardware": {"$ref": "#/$defs/hardwareProfile"},
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC timestamp provenance was captured."
+        }
+      }
+    },
+    "hardwareProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpu_model": {"type": ["string", "null"]},
+        "cpu_cores": {"type": ["integer", "null"], "minimum": 1},
+        "memory_gb": {"type": ["integer", "null"], "minimum": 1},
+        "gpu_model": {"type": ["string", "null"]},
+        "gpu_memory_gb": {"type": ["integer", "null"], "minimum": 1}
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "required": ["command", "sources"],
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The exact reproducible command that produced the report."
+        },
+        "sources": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Repository-root-relative authoritative source surfaces read (artifact paths or commands). Empty when all sources are live command output."
+        },
+        "seed": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Random seed if the producing command is stochastic, else null."
+        }
+      }
+    },
+    "countWithTotal": {
+      "type": "object",
+      "required": ["count", "total"],
+      "additionalProperties": false,
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0}
+      }
+    },
+    "percentField": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "A percentage in the inclusive range 0..100."
+    },
+    "testResultsSignal": {
+      "type": "object",
+      "required": ["role", "availability", "decision_use"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {"$ref": "#/$defs/role", "description": "Pass rate is a gate; collection completeness is a gate."},
+        "availability": {"$ref": "#/$defs/availability"},
+        "source": {"type": "string", "minLength": 1},
+        "source_gap": {"$ref": "#/$defs/sourceGap"},
+        "decision_use": {
+          "type": "string",
+          "minLength": 1,
+          "description": "How maintainers use this signal and which action it justifies."
+        },
+        "pass_rate": {
+          "type": "object",
+          "description": "Formula: passed / collected, where collected = passed + failed + errored (skips excluded from the denominator).",
+          "additionalProperties": false,
+          "properties": {
+            "passed": {"$ref": "#/$defs/countWithTotal", "description": "{count: passed, total: collected}."},
+            "value": {"$ref": "#/$defs/percentField"}
+          }
+        },
+        "collection_completeness": {
+          "type": "object",
+          "description": "Formula: collected / selected, where selected is the configured test selection. A value below 100% means some selected tests were not collected (collection error or deselection).",
+          "additionalProperties": false,
+          "properties": {
+            "collected": {"type": "integer", "minimum": 0},
+            "selected": {"type": "integer", "minimum": 0},
+            "value": {"$ref": "#/$defs/percentField"},
+            "collection_errors": {"type": "integer", "minimum": 0}
+          }
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "passed": {"type": "integer", "minimum": 0},
+            "failed": {"type": "integer", "minimum": 0},
+            "errored": {"type": "integer", "minimum": 0},
+            "skipped": {"type": "integer", "minimum": 0},
+            "xfailed": {"type": "integer", "minimum": 0},
+            "xpassed": {"type": "integer", "minimum": 0},
+            "warnings": {"type": "integer", "minimum": 0}
+          }
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"availability": {"const": "available"}}}, "then": {"required": ["source"]}},
+        {"if": {"properties": {"availability": {"enum": ["unavailable", "deferred"]}}}, "then": {"required": ["source_gap"]}}
+      ]
+    },
+    "coverageSignal": {
+      "type": "object",
+      "required": ["role", "availability", "decision_use"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {"$ref": "#/$defs/role", "description": "Line coverage absolute floor is a gate on non-PR CI; changed-file and branch coverage are diagnostics unless a lane enforces them."},
+        "availability": {"$ref": "#/$defs/availability"},
+        "source": {"type": "string", "minLength": 1},
+        "source_gap": {"$ref": "#/$defs/sourceGap"},
+        "decision_use": {"type": "string", "minLength": 1},
+        "line": {
+          "type": "object",
+          "description": "Formula: covered_lines / num_statements * 100.",
+          "additionalProperties": false,
+          "properties": {
+            "covered_lines": {"type": "integer", "minimum": 0},
+            "num_statements": {"type": "integer", "minimum": 0},
+            "value": {"$ref": "#/$defs/percentField"}
+          }
+        },
+        "branch": {
+          "type": "object",
+          "description": "Formula: covered_branches / num_branches * 100. Reported as diagnostic when branch coverage is not enforced.",
+          "additionalProperties": false,
+          "properties": {
+            "covered_branches": {"type": "integer", "minimum": 0},
+            "num_branches": {"type": "integer", "minimum": 0},
+            "value": {"$ref": "#/$defs/percentField"}
+          }
+        },
+        "changed_files": {
+          "type": "object",
+          "description": "Per-PR diagnostic: aggregate line coverage over the changed-file set vs the base ref.",
+          "additionalProperties": false,
+          "properties": {
+            "covered_lines": {"type": "integer", "minimum": 0},
+            "num_statements": {"type": "integer", "minimum": 0},
+            "value": {"$ref": "#/$defs/percentField"},
+            "min_threshold": {"type": "number", "minimum": 0, "maximum": 100, "description": "Configured minimum changed-file coverage (default 80). Diagnostic unless a lane enforces it."},
+            "goal_threshold": {"type": "number", "minimum": 0, "maximum": 100, "description": "Configured goal changed-file coverage (default 100)."},
+            "files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "path": {"type": "string", "minLength": 1},
+                  "value": {"$ref": "#/$defs/percentField"}
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"availability": {"const": "available"}}}, "then": {"required": ["source"]}},
+        {"if": {"properties": {"availability": {"enum": ["unavailable", "deferred"]}}}, "then": {"required": ["source_gap"]}}
+      ]
+    },
+    "mutationSignal": {
+      "type": "object",
+      "description": "Mutation score is always a scheduled diagnostic, never a per-PR gate. Categories are kept separately visible: killed, survived, equivalent, timeout, no_test, plus suspicious/skipped execution anomalies. No category is folded into another.",
+      "required": ["role", "availability", "decision_use"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {"$ref": "#/$defs/role", "description": "Diagnostic only. Never required per-PR before a baseline exists."},
+        "availability": {"$ref": "#/$defs/availability"},
+        "source": {"type": "string", "minLength": 1},
+        "source_gap": {"$ref": "#/$defs/sourceGap"},
+        "decision_use": {"type": "string", "minLength": 1},
+        "categories": {
+          "type": "object",
+          "required": ["total_mutants"],
+          "additionalProperties": false,
+          "properties": {
+            "total_mutants": {"type": "integer", "minimum": 0},
+            "killed": {"type": "integer", "minimum": 0},
+            "survived": {"type": "integer", "minimum": 0},
+            "equivalent": {"type": "integer", "minimum": 0, "description": "Surviving mutants reviewed and judged semantically equivalent to the original. Reported separately from 'survived' so un-reviewed survivors are never hidden."},
+            "timeout": {"type": "integer", "minimum": 0, "description": "Mutants whose execution timed out; kept separate because they may mask undetected faults."},
+            "no_test": {"type": "integer", "minimum": 0, "description": "Generated mutants not exercised by any test; kept separate to expose coverage-of-assertions gaps."},
+            "suspicious": {"type": "integer", "minimum": 0},
+            "skipped": {"type": "integer", "minimum": 0}
+          }
+        },
+        "mutation_score": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Formula: killed / (total_mutants - equivalent) * 100, with equivalent excluded because they are not detectable faults. Reported as a diagnostic only.",
+          "properties": {
+            "value": {"$ref": "#/$defs/percentField"},
+            "equivalent_excluded": {"type": "boolean", "description": "True when equivalent mutants are excluded from the denominator."}
+          }
+        },
+        "baselined_survivors": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Survivors tolerated by the downward ratchet baseline; a new un-baselined survivor is the ratchet failure condition."
+        },
+        "new_unbaselined_survivors": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Suriving mutants not present in the committed baseline. Non-zero is a ratchet regression (diagnostic lane)."
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"availability": {"const": "available"}}}, "then": {"required": ["source"]}},
+        {"if": {"properties": {"availability": {"enum": ["unavailable", "deferred"]}}}, "then": {"required": ["source_gap"]}}
+      ]
+    },
+    "testDurationSignal": {
+      "type": "object",
+      "required": ["role", "availability", "decision_use"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {"$ref": "#/$defs/role", "description": "Duration is diagnostic; timeout-budget compliance can be a gate when a lane enforces per-test budgets."},
+        "availability": {"$ref": "#/$defs/availability"},
+        "source": {"type": "string", "minLength": 1},
+        "source_gap": {"$ref": "#/$defs/sourceGap"},
+        "decision_use": {"type": "string", "minLength": 1},
+        "total_seconds": {"type": "number", "minimum": 0},
+        "slowest_tests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "nodeid": {"type": "string", "minLength": 1},
+              "duration_seconds": {"type": "number", "minimum": 0}
+            }
+          }
+        },
+        "timeout_budget_compliance": {
+          "type": "object",
+          "description": "Per-test duration budget: count of tests exceeding the configured budget over the count measured.",
+          "additionalProperties": false,
+          "properties": {
+            "over_budget": {"type": "integer", "minimum": 0},
+            "measured": {"type": "integer", "minimum": 0},
+            "budget_seconds": {"type": ["number", "null"], "minimum": 0, "description": "Configured per-test budget in seconds, or null when no budget is declared."},
+            "compliant": {"type": "boolean", "description": "True only when over_budget == 0."}
+          }
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"availability": {"const": "available"}}}, "then": {"required": ["source"]}},
+        {"if": {"properties": {"availability": {"enum": ["unavailable", "deferred"]}}}, "then": {"required": ["source_gap"]}}
+      ]
+    },
+    "flakinessSignal": {
+      "type": "object",
+      "required": ["role", "availability", "decision_use"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {"$ref": "#/$defs/role", "description": "Flaky/rerun rate and skip/xfail age are diagnostics that inform quarantine and triage; they are not themselves merge gates."},
+        "availability": {"$ref": "#/$defs/availability"},
+        "source": {"type": "string", "minLength": 1},
+        "source_gap": {"$ref": "#/$defs/sourceGap"},
+        "decision_use": {"type": "string", "minLength": 1},
+        "flaky_rate": {
+          "type": "object",
+          "description": "Formula: tests that failed at least once but passed on rerun / tests_run, over a rerun-enabled cycle.",
+          "additionalProperties": false,
+          "properties": {
+            "flaky_tests": {"type": "integer", "minimum": 0},
+            "tests_run": {"type": "integer", "minimum": 0},
+            "value": {"$ref": "#/$defs/percentField"}
+          }
+        },
+        "rerun_rate": {
+          "type": "object",
+          "description": "Formula: rerun_invocations / total_test_invocations. Measures retry volume.",
+          "additionalProperties": false,
+          "properties": {
+            "rerun_invocations": {"type": "integer", "minimum": 0},
+            "total_invocations": {"type": "integer", "minimum": 0},
+            "value": {"$ref": "#/$defs/percentField"}
+          }
+        },
+        "skip_xfail_age": {
+          "type": "object",
+          "description": "Age of skip/xfail markers since their introducing commit, to surface stale suppressions.",
+          "additionalProperties": false,
+          "properties": {
+            "count": {"type": "integer", "minimum": 0},
+            "oldest_age_days": {"type": ["integer", "null"], "minimum": 0},
+            "stale_threshold_days": {"type": ["integer", "null"], "minimum": 0, "description": "Configured staleness threshold; entries older than this are flagged for re-triage."},
+            "over_threshold": {"type": "integer", "minimum": 0}
+          }
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"availability": {"const": "available"}}}, "then": {"required": ["source"]}},
+        {"if": {"properties": {"availability": {"enum": ["unavailable", "deferred"]}}}, "then": {"required": ["source_gap"]}}
+      ]
+    },
+    "contractScenarioCoverageSignal": {
+      "type": "object",
+      "description": "Coverage of protected behavior contracts by tests: contract/schema, scenario, hazard/ODD, and compatibility dimensions. These are diagnostics that map critical behavior to its protecting test level; they are not yet enforced gates unless a lane declares so.",
+      "required": ["role", "availability", "decision_use"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {"$ref": "#/$defs/role"},
+        "availability": {"$ref": "#/$defs/availability"},
+        "source": {"type": "string", "minLength": 1},
+        "source_gap": {"$ref": "#/$defs/sourceGap"},
+        "decision_use": {"type": "string", "minLength": 1},
+        "dimensions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "contract_schema": {"$ref": "#/$defs/coverageDimension"},
+            "scenario": {"$ref": "#/$defs/coverageDimension"},
+            "hazard_odd": {"$ref": "#/$defs/coverageDimension"},
+            "compatibility": {"$ref": "#/$defs/coverageDimension"}
+          }
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"availability": {"const": "available"}}}, "then": {"required": ["source"]}},
+        {"if": {"properties": {"availability": {"enum": ["unavailable", "deferred"]}}}, "then": {"required": ["source_gap"]}}
+      ]
+    },
+    "coverageDimension": {
+      "type": "object",
+      "required": ["covered", "total"],
+      "additionalProperties": false,
+      "properties": {
+        "covered": {"type": "integer", "minimum": 0},
+        "total": {"type": "integer", "minimum": 0},
+        "value": {"$ref": "#/$defs/percentField"},
+        "mapping_source": {"type": ["string", "null"], "description": "Artifact or script backing this dimension's covered/total counts, or null."}
+      }
+    },
+    "reproducibilitySignal": {
+      "type": "object",
+      "description": "Reproducibility status of the deterministic lanes plus benchmark fallback/degraded counts. Fallback and degraded executions are kept separately visible and are never counted as success evidence (issue #6213 stop condition).",
+      "required": ["role", "availability", "decision_use"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {"$ref": "#/$defs/role", "description": "Strict-lane reproducibility is a gate for deterministic contracts; benchmark reproducibility is diagnostic."},
+        "availability": {"$ref": "#/$defs/availability"},
+        "source": {"type": "string", "minLength": 1},
+        "source_gap": {"$ref": "#/$defs/sourceGap"},
+        "decision_use": {"type": "string", "minLength": 1},
+        "strict_lane_reproducible": {
+          "type": ["boolean", "null"],
+          "description": "True when the deterministic strict lane reproduces for the same commit and environment. Null when not measured."
+        },
+        "benchmark": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reproducible": {"type": ["boolean", "null"]},
+            "fallback_count": {"type": "integer", "minimum": 0, "description": "Benchmark runs that fell back to a degraded/native adapter path. Counted separately, never as success."},
+            "degraded_count": {"type": "integer", "minimum": 0, "description": "Benchmark runs that executed in a degraded mode. Counted separately, never as success."},
+            "native_count": {"type": "integer", "minimum": 0, "description": "Benchmark runs that executed on the intended native contract."},
+            "total_runs": {"type": "integer", "minimum": 0},
+            "seed": {"type": ["integer", "null"], "minimum": 0}
+          }
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"availability": {"const": "available"}}}, "then": {"required": ["source"]}},
+        {"if": {"properties": {"availability": {"enum": ["unavailable", "deferred"]}}}, "then": {"required": ["source_gap"]}}
+      ]
+    },
+    "performanceRegressionSignal": {
+      "type": "object",
+      "required": ["role", "availability", "decision_use"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {"$ref": "#/$defs/role", "description": "Cold/warm regression is advisory on PRs and enforced on main/dispatch; full performance smoke runs only in strict mode."},
+        "availability": {"$ref": "#/$defs/availability"},
+        "source": {"type": "string", "minLength": 1},
+        "source_gap": {"$ref": "#/$defs/sourceGap"},
+        "decision_use": {"type": "string", "minLength": 1},
+        "regressions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "baseline_seconds": {"type": ["number", "null"], "minimum": 0},
+              "current_seconds": {"type": ["number", "null"], "minimum": 0},
+              "relative_change": {"type": ["number", "null"], "description": "(current - baseline) / baseline; positive is a slowdown."},
+              "enforced": {"type": "boolean", "description": "True when this regression is enforced (fails the lane) in the current cadence."}
+            }
+          }
+        },
+        "regression_count": {"type": "integer", "minimum": 0}
+      },
+      "allOf": [
+        {"if": {"properties": {"availability": {"const": "available"}}}, "then": {"required": ["source"]}},
+        {"if": {"properties": {"availability": {"enum": ["unavailable", "deferred"]}}}, "then": {"required": ["source_gap"]}}
+      ]
+    },
+    "escapedDefectsSignal": {
+      "type": "object",
+      "description": "Defects that escaped the test suite and were found downstream (in production, release validation, or later cycles). A diagnostic leading indicator for test-strategy gaps; never aggregated into a vanity score.",
+      "required": ["role", "availability", "decision_use"],
+      "additionalProperties": false,
+      "properties": {
+        "role": {"$ref": "#/$defs/role", "description": "Diagnostic leading indicator."},
+        "availability": {"$ref": "#/$defs/availability"},
+        "source": {"type": "string", "minLength": 1},
+        "source_gap": {"$ref": "#/$defs/sourceGap"},
+        "decision_use": {"type": "string", "minLength": 1},
+        "escaped_count": {"type": "integer", "minimum": 0, "description": "Defects found downstream in the reporting window."},
+        "window": {"type": ["string", "null"], "description": "Reporting window for the escaped count (e.g. 'since last release')."},
+        "linked_issues": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Issue references for escaped defects captured this cycle."
+        }
+      },
+      "allOf": [
+        {"if": {"properties": {"availability": {"const": "available"}}}, "then": {"required": ["source"]}},
+        {"if": {"properties": {"availability": {"enum": ["unavailable", "deferred"]}}}, "then": {"required": ["source_gap"]}}
+      ]
+    }
+  }
+}

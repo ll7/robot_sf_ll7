@@ -1382,6 +1382,8 @@ to confirm it passes, then use the wrapper for the coverage snapshot.
 
 For complete coverage collection details, baseline tracking, absolute floor enforcement, and CI integration, see [Coverage Guide](coverage_guide.md) (Note: gap analysis and trend tracking were descoped under issue #3349).
 
+For the reproducible, commit-stamped aggregate of all quality signals (test results, coverage, mutation, duration, flakiness, contract/scenario coverage, reproducibility, performance regression, and escaped defects) — which preserves the diagnostic-vs-gate distinction and never collapses signals into a single score — see [Quality Report Guide](quality_report_guide.md) (issue #6213).
+
 ### Must-have checklist
 
 - [ ] Use factory env creators; do not instantiate env classes directly.

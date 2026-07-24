@@ -244,6 +244,7 @@ def _optional_string(value: Any, default: str) -> str:
 
 
 def _validation_from_dict(payload: Any) -> ValidationRecord | None:
+    """Build a :class:`ValidationRecord` from a YAML mapping, or ``None`` when absent."""
     if payload is None or not isinstance(payload, dict):
         return None
     status_raw = payload.get("status", "valid")
@@ -260,6 +261,7 @@ def _validation_from_dict(payload: Any) -> ValidationRecord | None:
 
 
 def _naturalistic_prior_from_dict(payload: Any) -> NaturalisticPriorRecord | None:
+    """Build a :class:`NaturalisticPriorRecord` from a YAML mapping, or ``None`` when absent."""
     if payload is None or not isinstance(payload, dict):
         return None
     constraints_raw = payload.get("constraints", [])
@@ -451,6 +453,7 @@ def compute_control_hash(candidate: CandidateSpec, precision: int = 6) -> str:
 
 
 def _candidate_controls_dict(candidate: CandidateSpec) -> dict[str, Any]:
+    """Serialize a candidate's control parameters into a JSON-safe mapping."""
     controls: dict[str, Any] = {
         "start": {"x": float(candidate.start.x), "y": float(candidate.start.y)},
         "goal": {"x": float(candidate.goal.x), "y": float(candidate.goal.y)},
@@ -472,6 +475,7 @@ def _candidate_from_controls(controls: dict[str, Any]) -> CandidateSpec:
     """Build a CandidateSpec from serialized manifest controls."""
 
     def _pose(name: str) -> dict[str, float]:
+        """Return the ``{x, y}`` pose named ``name`` from ``controls``, raising on a malformed entry."""
         raw_pose = controls.get(name)
         if not isinstance(raw_pose, dict):
             raise ValueError(f"candidate_controls.{name} must be a mapping")
@@ -480,6 +484,7 @@ def _candidate_from_controls(controls: dict[str, Any]) -> CandidateSpec:
         return {"x": float(raw_pose["x"]), "y": float(raw_pose["y"])}
 
     def _float(name: str) -> float:
+        """Return the required float control ``name`` from ``controls``, raising if absent."""
         if name not in controls:
             raise ValueError(f"candidate_controls.{name} is required")
         return float(controls[name])

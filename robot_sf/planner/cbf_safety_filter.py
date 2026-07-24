@@ -90,6 +90,8 @@ def build_cbf_safety_filter_config(config: dict[str, Any] | None) -> CbfSafetyFi
 
 @dataclass(frozen=True)
 class _ObstacleState:
+    """Frozen snapshot of one dynamic obstacle's position, velocity, and inflated radius."""
+
     position: np.ndarray
     velocity: np.ndarray
     radius: float
@@ -288,6 +290,11 @@ class CollisionConeCbfSafetyFilter:
         return decision
 
     def _command_to_velocity(self, command: ActionCommand, heading: float) -> np.ndarray:
+        """Convert an action command into a body-frame velocity vector at the given heading.
+
+        Returns:
+            The body-frame velocity vector ``[vx, vy]``.
+        """
         linear = float(command[0])
         if self.config.max_linear_speed is not None:
             linear = float(
@@ -301,6 +308,14 @@ class CollisionConeCbfSafetyFilter:
         heading: float,
         proposed_command: ActionCommand,
     ) -> ActionCommand:
+        """Project a filtered velocity back into an action command.
+
+        Derives the linear speed along the heading and a proportional yaw-rate
+        correction toward the velocity direction, then clamps both to limits.
+
+        Returns:
+            The ``(linear, angular)`` action command.
+        """
         speed = float(np.linalg.norm(velocity))
         if speed <= 1e-12:
             linear = 0.0
@@ -326,6 +341,11 @@ class CollisionConeCbfSafetyFilter:
         robot_radius: float,
         obstacles: list[_ObstacleState],
     ) -> list[tuple[np.ndarray, float, str]]:
+        """Build one affine CBF constraint per obstacle from relative position and the barrier.
+
+        Returns:
+            One ``(normal, lower_bound, label)`` constraint per obstacle.
+        """
         constraints: list[tuple[np.ndarray, float, str]] = []
         for idx, obstacle in enumerate(obstacles):
             relative_pos = np.asarray(obstacle.position - robot_pos, dtype=float)
@@ -341,6 +361,11 @@ class CollisionConeCbfSafetyFilter:
         return constraints
 
     def _cap_velocity(self, velocity: np.ndarray) -> np.ndarray:
+        """Scale ``velocity`` down to ``max_linear_speed`` in place when it exceeds the cap.
+
+        Returns:
+            The speed-limited velocity vector.
+        """
         if self.config.max_linear_speed is None:
             return velocity
         speed = float(np.linalg.norm(velocity))
@@ -352,6 +377,7 @@ class CollisionConeCbfSafetyFilter:
     def _min_margin(
         velocity: np.ndarray, constraints: list[tuple[np.ndarray, float, str]]
     ) -> float:
+        """Return the smallest constraint margin over all constraints, or ``inf`` when empty."""
         if not constraints:
             return float("inf")
         return min(
@@ -359,6 +385,7 @@ class CollisionConeCbfSafetyFilter:
         )
 
     def _record_decision(self, decision: ShieldDecision, *, fallback: bool) -> None:
+        """Update running decision statistics (feasible/projected/fallback) for telemetry."""
         self._stats["decision_count"] = int(self._stats["decision_count"]) + 1
         if decision.decision_label == "cbf_feasible":
             self._stats["feasible_count"] = int(self._stats["feasible_count"]) + 1

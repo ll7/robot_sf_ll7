@@ -13,14 +13,18 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKET = REPO_ROOT / "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
 
 
-def test_packet_passes_tracked_geometry_and_roster_gate() -> None:
-    """The shipped packet resolves all four rows and exactly five opt-in planners."""
+def test_packet_blocks_tracked_excluded_geometry_and_preserves_roster() -> None:
+    """The shipped packet keeps excluded rows visible and blocks execution."""
     result = checker.validate_packet(checker.load_packet(PACKET))
 
-    assert result["status"] == "ready"
+    assert result["status"] == "blocked"
     assert result["planner_count"] == 5
     assert result["scenario_count"] == 4
-    assert result["blocked_rows"] == []
+    assert result["blocked_rows"] == [
+        "classic_doorway_low",
+        "classic_station_platform_medium",
+        "classic_merging_low",
+    ]
     assert [row["scenario_id"] for row in result["certification"]] == [
         "classic_head_on_corridor_low",
         "classic_doorway_low",
@@ -38,7 +42,7 @@ def test_packet_preserves_excluded_geometry_as_visible_caveat() -> None:
 
     assert doorway["classification"] == "geometrically_infeasible"
     assert doorway["benchmark_eligibility"] == "excluded"
-    assert doorway["gate"] == "pass"
+    assert doorway["gate"] == "blocked"
 
 
 def test_packet_rejects_transient_routing_state() -> None:
@@ -77,8 +81,8 @@ def test_packet_rejects_outcome_name_drift() -> None:
         checker.validate_packet(packet)
 
 
-def test_packet_allows_excluded_geometry_with_pass_gate(monkeypatch) -> None:
-    """An excluded certificate passes the campaign gate when allowed_eligibility includes excluded."""
+def test_packet_rejects_excluded_geometry(monkeypatch) -> None:
+    """An excluded certificate blocks the campaign gate and remains machine-visible."""
 
     def fake_certify(path, *, scenario_id=None):
         return [object()]
@@ -95,8 +99,13 @@ def test_packet_allows_excluded_geometry_with_pass_gate(monkeypatch) -> None:
     monkeypatch.setattr(checker, "certificate_to_dict", fake_to_dict)
 
     result = checker.validate_packet(checker.load_packet(PACKET))
-    assert result["status"] == "ready"
-    assert result["blocked_rows"] == []
+    assert result["status"] == "blocked"
+    assert result["blocked_rows"] == [
+        "classic_head_on_corridor_low",
+        "classic_doorway_low",
+        "classic_station_platform_medium",
+        "classic_merging_low",
+    ]
 
 
 def test_metadata_only_mode_skips_geometry_certification(monkeypatch) -> None:

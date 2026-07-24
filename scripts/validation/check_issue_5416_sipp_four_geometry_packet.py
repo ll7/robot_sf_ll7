@@ -54,7 +54,7 @@ EXPECTED_DIAGNOSTICS = (
     "fallback_count",
     "commitment_invalidations",
 )
-ALLOWED_CERTIFICATION_ELIGIBILITY = {"eligible", "stress_only", "excluded"}
+ALLOWED_CERTIFICATION_ELIGIBILITY = {"eligible", "stress_only"}
 FORBIDDEN_TRANSIENT_KEYS = {
     "target_host",
     "packet_lineage",

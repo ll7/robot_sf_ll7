@@ -56,7 +56,7 @@ scenario_contract:
   geometry_gate:
     certifier: scenario_cert.v1
     checker_command: uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --json
-    allowed_eligibility: [eligible, stress_only, excluded]
+    allowed_eligibility: [eligible, stress_only]
     excluded_row_action: visible_exclusion_and_no_attribution
     post_certification_caveat: >-
       As of PR #6172 the path-swept-envelope certifier correctly classifies

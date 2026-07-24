@@ -340,7 +340,7 @@ def test_ci_workflow_requires_the_proven_core_compatibility_matrix() -> None:
     }
     assert setup_step["with"] == {
         "python-version": "${{ matrix.python }}",
-        "sync-args": "--frozen",
+        "sync-args": "--all-extras --frozen",
     }
     assert any(
         "pytest tests/common tests/contract tests/factories tests/gym_env tests/maps" in step

@@ -539,13 +539,17 @@ def test_trace_viewer_browser_renders_ped_crowded_zone(tmp_path: Path, monkeypat
     )
     base_screenshot = tmp_path / "base.png"
     crowded_screenshot = tmp_path / "crowded.png"
+    skip_reason: str | None = None
     try:
         browser_smoke.run_browser_smoke(base_result.output_dir, base_screenshot)
         browser_smoke.run_browser_smoke(crowded_result.output_dir, crowded_screenshot)
     except Exception as exc:
         if browser_smoke._is_browser_dependency_error(exc):
-            pytest.skip("Chromium is unavailable for the optional browser rendering check")
-        raise
+            skip_reason = "Chromium is unavailable for the optional browser rendering check"
+        else:
+            raise
+    if skip_reason:
+        pytest.skip(skip_reason)
 
     with Image.open(base_screenshot) as base_image, Image.open(crowded_screenshot) as crowded_image:
         base_crop = base_image.convert("RGB").crop((580, 280, 620, 320))

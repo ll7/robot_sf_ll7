@@ -278,11 +278,6 @@ def run_campaign(  # noqa: C901
     if packet is None:
         packet = load_packet(config_path)
     gate = validate_packet(packet, repo_root=REPO_ROOT)
-    if gate.get("status") != "ready":
-        raise CampaignError(
-            "frozen packet geometry gate is not ready: "
-            + ", ".join(str(row) for row in gate.get("blocked_rows", []))
-        )
     rows = enumerate_rows(packet)
     planned_count = len(rows)
     if planned_count != len(_FROZEN_NATIVE_CONFIGS) * 4 * 5:
@@ -305,6 +300,8 @@ def run_campaign(  # noqa: C901
         "output_root": str(output_root) if output_root else None,
         "dry_run": dry_run,
         "rows_spec": rows_spec,
+        "geometry_gate_status": gate.get("status"),
+        "geometry_blocked_rows": list(gate.get("blocked_rows", [])),
         "planned_rows": planned_count,
         "selected_rows": len(selected),
         "executed_rows": 0,
@@ -326,6 +323,11 @@ def run_campaign(  # noqa: C901
     if dry_run:
         return summary
 
+    if gate.get("status") != "ready":
+        raise CampaignError(
+            "frozen packet geometry gate is not ready: "
+            + ", ".join(str(row) for row in gate.get("blocked_rows", []))
+        )
     if output_root is None:
         raise CampaignError("--output-root is required unless --dry-run is set")
     output_root = Path(output_root)

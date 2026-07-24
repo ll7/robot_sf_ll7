@@ -3072,7 +3072,7 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     # closest robot/pedestrian distance and minimum time-to-collision. Both are
     # NaN when there are no pedestrians or no approaching pairs, so the archive
     # descriptor drops non-finite values rather than admitting empty cells.
-    values["distance_to_human_min"] = distance_to_human_min(data)
+    values["distance_to_human_min"] = robot_ped_summary["min_distance"]
     values["time_to_collision_min"] = time_to_collision_min(data)
     values["min_clearance"] = robot_ped_summary["min_clearance"]
     values["mean_clearance"] = robot_ped_summary["mean_clearance"]

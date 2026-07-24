@@ -13,14 +13,18 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKET = REPO_ROOT / "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
 
 
-def test_packet_passes_tracked_geometry_and_roster_gate() -> None:
-    """The shipped packet resolves all four rows and exactly five opt-in planners."""
+def test_packet_blocks_tracked_excluded_geometry_and_preserves_roster() -> None:
+    """The shipped packet keeps excluded rows visible and blocks execution."""
     result = checker.validate_packet(checker.load_packet(PACKET))
 
-    assert result["status"] == "ready"
+    assert result["status"] == "blocked"
     assert result["planner_count"] == 5
     assert result["scenario_count"] == 4
-    assert result["blocked_rows"] == []
+    assert result["blocked_rows"] == [
+        "classic_doorway_low",
+        "classic_station_platform_medium",
+        "classic_merging_low",
+    ]
     assert [row["scenario_id"] for row in result["certification"]] == [
         "classic_head_on_corridor_low",
         "classic_doorway_low",
@@ -29,16 +33,16 @@ def test_packet_passes_tracked_geometry_and_roster_gate() -> None:
     ]
 
 
-def test_packet_preserves_stress_only_geometry_as_visible_caveat() -> None:
-    """Doorway remains visible as stress-only rather than being promoted or dropped."""
+def test_packet_preserves_excluded_geometry_as_visible_caveat() -> None:
+    """Doorway remains visible as excluded/geometrically_infeasible."""
     result = checker.validate_packet(checker.load_packet(PACKET))
     doorway = next(
         row for row in result["certification"] if row["scenario_id"] == "classic_doorway_low"
     )
 
-    assert doorway["classification"] == "knife_edge"
-    assert doorway["benchmark_eligibility"] == "stress_only"
-    assert doorway["gate"] == "pass"
+    assert doorway["classification"] == "geometrically_infeasible"
+    assert doorway["benchmark_eligibility"] == "excluded"
+    assert doorway["gate"] == "blocked"
 
 
 def test_packet_rejects_transient_routing_state() -> None:

@@ -3,8 +3,9 @@
 
 **Issue**: [#6192](https://github.com/ll7/robot_sf_ll7/issues/6192)
 **Date**: 2026-07-23
-**Status**: Complete
-**Evidence tier**: diagnostic-only (config analysis, no retained runtime logs)
+**Status**: Complete within the durable tracked-evidence scope
+**Evidence tier**: diagnostic-only (tracked config and provenance analysis; no
+tracked runtime outcome evidence)
 
 ## Scope
 
@@ -43,20 +44,19 @@ output paths documented in the registry.
 
 ---
 
-## Retained Log Search
+## Durable Evidence Search
 
-Searched for retained log files and the fallback warning string
-`"Falling back to constant-velocity predictive planner behavior"` across:
+The audit searched repository-tracked campaign configs, release manifests, model
+registry metadata, and context evidence for an explicit runtime record of either
+successful model loading or the warning
+`"Falling back to constant-velocity predictive planner behavior"`.
 
-- `output/` directory: **no log files found** (only `compute_feasibility_matrix_v1/`
-  rows and `repos/` README, neither containing predictive foresight runs)
-- `output/model_cache/`: **absent** in this worktree
-- Any `.log`, `.stdout`, `.stderr`, or `.jsonl` files outside `.venv`/`.git`:
-  **none found**
-
-**Finding**: No retained runtime logs exist in this worktree for any campaign that
-uses `predictive_foresight_enabled: true`. No log file contains or could be searched
-for the fallback warning.
+**Finding**: The tracked evidence contains no campaign receipt, log, or sidecar
+recording either runtime outcome for a campaign that uses
+`predictive_foresight_enabled: true`. Those campaigns are therefore unverifiable
+from durable tracked evidence. Ephemeral host-local files and remote SLURM, W&B,
+or CI logs were not used, and this audit does not assert that such records do not
+exist.
 
 ---
 
@@ -110,8 +110,9 @@ The following paper-facing campaigns reference only baselines that do NOT set
 
 #### Unverifiable (foresight enabled, no retained model-load evidence)
 
-The following paper-facing campaigns use baselines with `predictive_foresight_enabled: true`.
-No retained runtime logs exist to confirm whether the model loaded or fell back.
+The following paper-facing campaigns use baselines with
+`predictive_foresight_enabled: true`. No tracked runtime outcome evidence confirms
+whether the model loaded or fell back.
 
 **Their reported PPO-arm results cannot be proven to have run with genuine foresight
 features or silent constant-velocity fallback.**
@@ -173,8 +174,8 @@ config and are therefore **unverifiable** by inheritance:
 | Outcome Class | Count | Campaigns |
 |---|---|---|
 | **Confirmed-unaffected** | 14 | Paper-facing campaigns that use baselines without `predictive_foresight_enabled: true` |
-| **Confirmed-fallback** | 0 | No retained logs found containing the fallback warning |
-| **Unverifiable** | 23 (+ 5 releases) | All 18 paper-facing + 5 non-paper campaigns using baselines with `predictive_foresight_enabled: true`; no retained runtime logs exist |
+| **Confirmed-fallback** | 0 | No tracked runtime evidence records the fallback warning |
+| **Unverifiable** | 24 (+ 5 releases) | All 18 paper-facing + 6 non-paper campaigns using baselines with `predictive_foresight_enabled: true`; no tracked runtime outcome evidence exists |
 
 ---
 
@@ -230,12 +231,12 @@ and [#6190](https://github.com/ll7/robot_sf_ll7/issues/6190).
 
 ## Caveats
 
-- **No retained logs**: the "unverifiable" classification is driven by log absence,
-  not by evidence of fallback. The actual fallback rate is unknown and could be
-  zero.
-- **Worktree-local output only**: this audit searched the current worktree's
-  `output/` directory. SLURM job logs, W&B run logs, CI artifacts on other hosts
-  or in `.github/` archives were not accessible from this environment.
+- **No tracked runtime outcome evidence**: The "unverifiable" classification is
+  driven by the durable evidence boundary, not evidence of fallback. The actual
+  fallback rate is unknown and could be zero.
+- **Durable-source boundary**: This report audits repository-tracked evidence only.
+  Host-local runtime files and remote SLURM, W&B, or CI logs were not available,
+  and no claim is made that they do not exist.
 - **Config analysis only**: the classification relies on static config inspection.
   Runtime behavior may differ if configs were overridden or the code path changed
   between the campaign date and the current HEAD.

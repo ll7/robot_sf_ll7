@@ -380,7 +380,7 @@ class SimulationView:
         # On non-Linux platforms, rely on SDL driver only (do not treat missing DISPLAY as headless)
         return False
 
-    def render(self, state: VisualizableSimState, target_fps: float = 60):
+    def render(self, state: VisualizableSimState, target_fps: float = 60) -> None:
         """
         Render one frame and handle events.
 
@@ -643,7 +643,7 @@ class SimulationView:
             self.offset[1] = self._prev_offset_for_ego_up[1]
             self._prev_offset_for_ego_up = None
 
-    def exit_simulation(self, return_frames: bool = False):
+    def exit_simulation(self, return_frames: bool = False) -> list | None:
         """Exit the simulation.
 
         Returns:
@@ -768,7 +768,7 @@ class SimulationView:
             # Limit this loop to 30 event checks per second (sufficient for UI interaction)
             self.clock.tick(30)
 
-    def clear(self):
+    def clear(self) -> None:
         """
         Clears the screen and updates the display.
 

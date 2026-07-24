@@ -30,6 +30,7 @@ import numpy as np
 from loguru import logger
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from multiprocessing.connection import Connection
 from robot_sf.errors import RobotSfError
 
@@ -1384,7 +1385,7 @@ def _encode_frames_to_video(frames: list[np.ndarray], video_path: str, fps: int)
         ImageSequenceClip = _load_image_sequence_clip()
 
         # Use a generator to avoid loading all frames into memory at once
-        def frame_generator():
+        def frame_generator() -> Iterator[np.ndarray]:
             """Yield frames for moviepy encoding."""
             yield from frames
 

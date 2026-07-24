@@ -192,11 +192,11 @@ class BaseEnv(Env):
                 video_fps=video_fps,
             )
 
-    def render(self):
+    def render(self) -> None:
         """Close the environment and release resources."""
         raise NotImplementedError
 
-    def step(self, action):
+    def step(self, action) -> None:
         """Step the environment forward.
 
         Args:
@@ -204,14 +204,14 @@ class BaseEnv(Env):
         """
         raise NotImplementedError
 
-    def exit(self):
+    def exit(self) -> None:
         """
         Clean up and exit the simulation UI, if it exists.
         """
         if self.sim_ui:
             self.sim_ui.exit_simulation()
 
-    def save_recording(self, filename: str | None = None):
+    def save_recording(self, filename: str | None = None) -> None:
         """
         Save the recorded states to a file.
 

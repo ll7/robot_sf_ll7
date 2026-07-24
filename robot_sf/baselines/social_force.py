@@ -157,7 +157,7 @@ class SocialForcePlanner(BasePolicy):
             low: int,
             high: int | None = None,
             size: int | tuple[int, ...] | None = None,
-        ):
+        ) -> np.integer | np.ndarray:
             """Generate random integers from low (inclusive) to high (exclusive).
 
             Provides compatibility with legacy random.randint() where a single
@@ -182,7 +182,7 @@ class SocialForcePlanner(BasePolicy):
             loc: float = 0.0,
             scale: float = 1.0,
             size: int | tuple[int, ...] | None = None,
-        ):
+        ) -> np.floating | np.ndarray:
             """Return samples from a normal distribution.
 
             Args:

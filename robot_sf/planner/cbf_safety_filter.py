@@ -290,10 +290,10 @@ class CollisionConeCbfSafetyFilter:
         return decision
 
     def _command_to_velocity(self, command: ActionCommand, heading: float) -> np.ndarray:
-        """Convert an action command into a body-frame velocity vector at the given heading.
+        """Convert an action command into a world-frame velocity vector at the given heading.
 
         Returns:
-            The body-frame velocity vector ``[vx, vy]``.
+            The world-frame velocity vector ``[vx, vy]``.
         """
         linear = float(command[0])
         if self.config.max_linear_speed is not None:
@@ -361,7 +361,7 @@ class CollisionConeCbfSafetyFilter:
         return constraints
 
     def _cap_velocity(self, velocity: np.ndarray) -> np.ndarray:
-        """Scale ``velocity`` down to ``max_linear_speed`` in place when it exceeds the cap.
+        """Scale ``velocity`` down to ``max_linear_speed`` when it exceeds the cap.
 
         Returns:
             The speed-limited velocity vector.

@@ -2,13 +2,13 @@
 
 [Back to Documentation Index](./README.md)
 
-This document is the canonical contributor-facing Quality Assurance (QA) runbook and test taxonomy for `robot_sf_ll7`. It provides a single reference for selecting validation lanes, interpreting test failures, understanding evidence boundaries, and applying explicit CI rerun rules without needing private context or relying on implicit rerun practices.
+This document is the canonical contributor-facing Quality Assurance (QA) runbook and test taxonomy for `robot_sf_ll7`. It provides a single reference for selecting validation lanes, interpreting test failures, understanding evidence boundaries, and applying explicit Continuous Integration (CI) rerun rules without needing private context or relying on implicit rerun practices.
 
 ---
 
 ## Plain-Language Summary
 
-Quality Assurance (QA) in `robot_sf_ll7` ensures that code changes preserve simulation stability, metric validity, and reproducible research progress across all Autonomous Mobile Vehicle (AMV) and Vulnerable Road User (VRU) navigation scenarios. This runbook categorizes test types, provides a command matrix for local and Continuous Integration (CI) validation lanes, defines failure classification rules, and establishes clear rerun boundaries.
+Quality Assurance (QA) in `robot_sf_ll7` ensures that code changes preserve simulation stability, metric validity, and reproducible research progress across all Autonomous Mobility Vehicle (AMV) and Vulnerable Road User (VRU) navigation scenarios. This runbook categorizes test types, provides a command matrix for local and CI validation lanes, defines failure classification rules, and establishes clear rerun boundaries.
 
 ---
 
@@ -31,7 +31,7 @@ The repository classifies tests into 12 distinct categories. Understanding these
 | --- | --- | --- | --- |
 | **Unit** | Test isolated module functions, dataclasses, or math primitives in fast execution loops. | `tests/` | Deterministic contract. Runs in fast feedback (`pytest -m "not slow"`). |
 | **Contract / Schema** | Verify Pydantic/dataclass schemas, API signatures, JSON/YAML layout, and config structures. | `tests/` | Deterministic contract. Must pass before PR merge. |
-| **Integration** | Test interaction between multiple components (e.g., gym environment + SocialForce backend + telemetry). | `tests/` | Deterministic contract. Auto-marked as `slow` if execution exceeds budget. |
+| **Integration** | Test interaction between multiple components (e.g., gym environment + SocialForce backend + telemetry). | `tests/` | Deterministic contract. The `slow` marker is assigned at collection time from test paths and allowlists; elapsed-time budgets are reported separately. |
 | **Subprocess / CLI** | Test command-line interfaces, script entry points, and process launch wrappers via `subprocess`. | `tests/` | Deterministic contract. Verifies CLI flags, exit codes, and output streams. |
 | **Scenario** | Exercise specific robot-pedestrian interaction configurations and map layouts. | `tests/`, `maps/` | Deterministic or seed-controlled. Verifies collision detection and path tracking. |
 | **Benchmark** | Measure planner performance, safety metrics, and Social Navigation Quality Index (SNQI) across standard splits. | `robot_sf/benchmark/`, `configs/benchmarks/` | Executable proof required. Requires seed matrices and fail-closed status verification. |
@@ -39,7 +39,7 @@ The repository classifies tests into 12 distinct categories. Understanding these
 | **Visual** | GUI playback, Pygame rendering, telemetry overlay, and video generation. | `tests/pygame/` | Headless execution required (`DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). |
 | **Performance** | Measure step-throughput, JIT compilation latency, and execution timing against soft/hard budgets. | `scripts/validation/performance_smoke_test.py` | Advisory on PRs; strictly enforced on `main` branch pushes. |
 | **Compatibility** | Validate backwards compatibility for model checkpoints, configuration schemas, and dataset intake. | `tests/` | Deterministic contract. Prevents schema drift across releases. |
-| **Reproducibility** | Verify that identical seeds yield bitwise or statistical equivalence across environment instances. | `scripts/benchmark_repro_check.py` | Diagnostic/campaign evidence. Triggered via `workflow_dispatch` or targeted local checks. |
+| **Reproducibility** | Verify that identical seeds yield bitwise or statistical equivalence across environment instances. | `scripts/benchmark_repro_check.py` | Diagnostic/campaign evidence. The CI job runs for pull requests and `workflow_dispatch`; contributors can also run the targeted local check. |
 | **Acceptance** | End-to-end contributor workflow or feature verification using structured scenario specifications. | `tests/` | High-level user story verification. Follows the selective `pytest-bdd` policy when specified. |
 
 ---
@@ -95,8 +95,10 @@ To preserve benchmark credibility and prevent wasted CI compute, test failures m
 | **Environment-Class Flake** | Runner network/apt timeout, headless display initialization race (`SDL_VIDEODRIVER`), GitHub Actions cache restore miss. | **SINGLE RERUN PERMITTED** | Rerun the failing job once. If failure persists, open an infrastructure debt issue. |
 | **Stochastic / Statistical Variance** | Bootstrap CI width variation, seed-draw fluctuation, minor aggregate rank shifts within confidence intervals. | **NEVER PERMITTED** | Inspect sample size and seed count. Do not rerun solely to seek a favorable draw. |
 | **Fallback / Degraded Execution** | Planner fell back to default velocity vector or ran in degraded mode due to missing dependency or solver failure. | **NEVER PERMITTED** | Treat as non-success. Mark as `fallback` or `degraded` per [Issue #691](./context/issue_691_benchmark_fallback_policy.md). |
-| **Timeout (Performance / JIT)** | Budget breach in cold/warm performance test near execution threshold. | **ADVISORY ON PR / ENFORCED ON MAIN** | Soft breaches generate warnings on PRs; hard breaches on `main` require performance optimization. |
-| **Quarantined / Skipped / Xfail** | Known issue or platform-specific test marked with `@pytest.mark.skip` or `@pytest.mark.xfail`. | **STANDARD EXECUTION** | Ensure skip/xfail includes a clear reason and linked GitHub issue number. |
+| **Timeout / Performance Breach** | Budget breach in a cold/warm performance test or a test timeout near an execution threshold. | **ONLY AFTER ENVIRONMENT-CLASS DIAGNOSIS** | A threshold breach alone never permits a rerun. The cold/warm smoke is advisory on PRs, but strict-mode regressions, deterministic failures, and hard timeouts require investigation and a fix; rerun once only when evidence identifies an environment-class cause. |
+| **Quarantined Test** | A temporarily excluded test with a known blocker that cannot safely contribute to a required lane. | **NOT A PASS OR A RERUN BASIS** | Keep the exclusion visible with a linked tracking issue, reason, and re-enable condition. Record the resulting coverage gap; do not present the quarantined test or lane as green success evidence. |
+| **Skipped Test** | A test whose prerequisite or platform condition is unavailable, marked with `@pytest.mark.skip` or `@pytest.mark.skipif`. | **STANDARD EXECUTION** | Include a precise reason and linked GitHub issue when the condition is temporary or repository-owned; restore normal execution when the prerequisite is available. |
+| **Expected Failure (`xfail`)** | A test that exercises a known failing behavior, marked with `@pytest.mark.xfail`. | **STANDARD EXECUTION** | Include a clear reason and linked GitHub issue, and investigate an unexpected pass rather than treating it as an unreviewed exemption. |
 
 ---
 

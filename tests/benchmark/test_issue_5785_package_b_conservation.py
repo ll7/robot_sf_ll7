@@ -290,6 +290,54 @@ def test_raw_artifact_retrieval_verifies_bytes_logs_and_failures(tmp_path: Path)
     assert any("could not retrieve raw-artifact archive" in error for error in unavailable.errors)
 
 
+def test_raw_artifact_retrieval_rejects_invalid_metadata_and_nonempty_destination(
+    tmp_path: Path,
+) -> None:
+    """Retrieval rejects malformed portable metadata before accessing an archive."""
+    bundle, _raw_tree = _write_raw_artifact_fixture(tmp_path)
+    metadata_path = bundle / "raw_artifact_bundle.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    invalid_payloads = []
+
+    bad_schema = json.loads(json.dumps(metadata))
+    bad_schema["schema_version"] = "unexpected-schema"
+    invalid_payloads.append((bad_schema, "schema_version"))
+
+    bad_uri = json.loads(json.dumps(metadata))
+    bad_uri["archive"]["uri"] = "ftp://example.invalid/package-b.tar.gz"
+    invalid_payloads.append((bad_uri, "archive.uri"))
+
+    bad_digest = json.loads(json.dumps(metadata))
+    bad_digest["archive"]["sha256"] = "not-a-digest"
+    invalid_payloads.append((bad_digest, "archive.sha256"))
+
+    bad_root = json.loads(json.dumps(metadata))
+    bad_root["archive_root"] = "../package_b_raw_artifacts"
+    invalid_payloads.append((bad_root, "archive_root"))
+
+    bad_raw_tree = json.loads(json.dumps(metadata))
+    bad_raw_tree["raw_tree_path"] = "other_tree"
+    invalid_payloads.append((bad_raw_tree, "raw_tree_path"))
+
+    bad_logs = json.loads(json.dumps(metadata))
+    bad_logs["logs"] = [{"stream": "stdout", "path": "logs/stdout.log", "sha256": EMPTY_SHA256}]
+    invalid_payloads.append((bad_logs, "one stdout and one stderr"))
+
+    for index, (payload, expected_error) in enumerate(invalid_payloads):
+        metadata_path.write_text(json.dumps(payload), encoding="utf-8")
+        retrieval = retrieve_package_b_raw_artifacts(bundle, tmp_path / f"invalid-{index}")
+        assert retrieval.is_valid is False
+        assert any(expected_error in error for error in retrieval.errors)
+
+    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
+    occupied_destination = tmp_path / "occupied"
+    occupied_destination.mkdir()
+    (occupied_destination / "already-present").write_text("do not overwrite", encoding="utf-8")
+    occupied = retrieve_package_b_raw_artifacts(bundle, occupied_destination)
+    assert occupied.is_valid is False
+    assert any("destination must be empty" in error for error in occupied.errors)
+
+
 def test_raw_artifact_cli_retrieves_or_fails_closed(tmp_path: Path) -> None:
     """The CLI retrieves pinned metadata by default and rejects unavailable metadata."""
     bundle, _raw_tree = _write_raw_artifact_fixture(tmp_path)

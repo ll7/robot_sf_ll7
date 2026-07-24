@@ -20,6 +20,22 @@ freshness_values:
   policy: Durable policy boundary; update only when the policy changes.
   evidence: Evidence pointer or manifest; preserve provenance and checksums when applicable.
 entries:
+- path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/README.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/issue_5578_activation_preflight.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/issue_5578_activation_preflight.json.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/issue_6008_state.yaml
   status: current
   freshness: maintained
@@ -160,6 +176,42 @@ entries:
   status: evidence
   freshness: dated
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/sensitivity_report.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/sensitivity_report.json.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/sensitivity_report.md
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/sensitivity_report.md.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/sensitivity_candidate_rows.csv
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/checksums.sha256
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/checksums.sha256.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/agent_run_manifest.yaml
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/agent_run_manifest.yaml.review.json
+  status: evidence
+  freshness: dated
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5097_release_0_0_3_collision_consumer_audit/README.md
   status: evidence
   freshness: evidence
@@ -173,6 +225,14 @@ entries:
   freshness: dated
   area: research_design
 - path: docs/context/evidence/issue_5443_collision_cause_attribution_contract.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5443_covered_by_pr_revalidation_2026-07-24.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5443_covered_by_pr_revalidation_2026-07-24.md.review.json
   status: evidence
   freshness: evidence
   area: benchmark_evidence
@@ -4625,6 +4685,30 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5602_scenario_evidence_crosswalk_release_0_0_3_2026-07-17
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/README.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/hierarchical_paired_release_analysis_report.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6192_predictive_foresight_fallback_audit.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5302_oracle_gap
   status: evidence
   freshness: evidence
   area: benchmark_evidence

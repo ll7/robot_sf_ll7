@@ -19,6 +19,8 @@ CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CI_SETUP_ACTION = ROOT / ".github" / "actions" / "setup-ci-python" / "action.yml"
 CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
 WHEEL_INSTALL_SMOKE = ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
+ISSUE_1436_POLICY = ROOT / "docs" / "context" / "issue_1436_reproducibility_flaky_acceptance.md"
+QA_TEST_STRATEGY = ROOT / "docs" / "qa_test_strategy.md"
 PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
@@ -32,6 +34,8 @@ CI_JOB_TIMEOUTS = {
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
     "notebooks-smoke": 30,
+    "determinism-gate": 30,
+    "exact-repeat-model-preflight": 30,
     "ci": 5,
 }
 PHASE_PATTERN = re.compile(
@@ -625,3 +629,40 @@ def test_ci_driver_lint_passes_when_all_checks_pass(tmp_path: Path) -> None:
         env=env,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_reproducibility_check_job_contract() -> None:
+    """Verify reproducibility-check trigger, fail-closed, and ci-aggregate exclusion.
+
+    The reproducibility-check job runs on pull_request and workflow_dispatch,
+    has no continue-on-error, and is intentionally excluded from the ci
+    aggregate's needs list so it provides visible diagnostic evidence without
+    blocking PR merges.
+    """
+    workflow = yaml.safe_load(_workflow_text())
+    repro_job = workflow["jobs"]["reproducibility-check"]
+    ci_job = workflow["jobs"]["ci"]
+
+    # Trigger is exclusively pull_request OR workflow_dispatch. Equality is
+    # intentional: containment would allow an undocumented third event.
+    assert repro_job["if"] == (
+        "github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'"
+    )
+
+    # No continue-on-error on the job or any step
+    assert "continue-on-error" not in repro_job
+    for step in repro_job.get("steps", []):
+        assert "continue-on-error" not in step
+
+    # Excluded from ci aggregate needs
+    assert "reproducibility-check" not in ci_job["needs"]
+
+    policy_text = ISSUE_1436_POLICY.read_text(encoding="utf-8")
+    assert "cannot make that aggregate job fail" in policy_text
+    assert "no GitHub branch-protection required-status-check configuration" in policy_text
+    assert "reproducibility-check` is not presently merge-blocking" in policy_text
+    assert "If branch protection\nis added or changed" in policy_text
+
+    strategy_text = QA_TEST_STRATEGY.read_text(encoding="utf-8")
+    assert "no\nGitHub branch-protection required-status-check configuration" in strategy_text
+    assert "future branch-protection\nchange must explicitly decide" in strategy_text

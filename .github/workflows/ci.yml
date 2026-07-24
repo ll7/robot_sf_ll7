@@ -181,13 +181,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up matrixed core CI environment
+      - name: Set up matrixed compatibility CI environment
         uses: ./.github/actions/setup-ci-python
         with:
           python-version: ${{ matrix.python }}
-          sync-args: "--frozen"
+          sync-args: "--all-extras --frozen"
 
-      - name: Run core compatibility tests
+      - name: Run compatibility tests with full extras
         run: >-
           uv run pytest tests/common tests/contract tests/factories tests/gym_env tests/maps
           tests/nav tests/ped_npc tests/render tests/scenarios tests/sensor tests/sim tests/unit
@@ -293,7 +293,7 @@ jobs:
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
 
-      - name: Run optional reproducibility diagnostic
+      - name: Run reproducibility diagnostic
         run: uv run python scripts/benchmark_repro_check.py
 
       - name: Upload reproducibility report
@@ -376,6 +376,120 @@ jobs:
       - name: Notebook smoke tests
         run: scripts/dev/ci_driver.sh notebooks-smoke
 
+  # --- Path-triggered exact-repeat determinism gate (Option B, issue #6191) ---
+  #
+  # Runs the full exact-repeat determinism test suite only when the PR diff
+  # touches paths that can affect determinism.  Most PRs pay zero overhead.
+  # When triggered the check is genuinely blocking (failing it fails CI).
+  #
+  # Determinism-relevant paths — update this list when code moves:
+  #   robot_sf/planner/        – planner implementations
+  #   robot_sf/models/registry.py – model registry
+  #   robot_sf/benchmark/      – benchmark runner / exact-repeat campaign
+  #   configs/baselines/       – baseline configs
+  determinism-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check determinism-relevant path changes
+        id: check-changes
+        shell: bash
+        run: |
+          # Determine the base ref for diffing
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_REF="${{ github.event.pull_request.base.sha }}"
+          elif [[ "${{ github.event_name }}" == "merge_group" ]]; then
+            BASE_REF="${{ github.event.merge_group.base_sha }}"
+          else
+            BASE_REF="origin/main"
+          fi
+
+          # Determinism-relevant paths — single source of truth for the
+          # path-triggered gate.  Keep in sync with the comment above.
+          DETERMINISM_PATHS=(
+            "robot_sf/planner/"
+            "robot_sf/models/registry.py"
+            "robot_sf/benchmark/"
+            "configs/baselines/"
+          )
+
+          CHANGED=$(git diff --name-only "$BASE_REF...HEAD" -- "${DETERMINISM_PATHS[@]}")
+          if [[ -n "$CHANGED" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changed determinism-relevant paths:"
+            echo "$CHANGED"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No determinism-relevant paths changed"
+          fi
+
+      - name: No determinism-relevant changes
+        if: steps.check-changes.outputs.changed == 'false'
+        run: echo "Skipping exact-repeat determinism check (no changes to determinism-relevant paths)"
+
+      - name: Set up CI Python environment
+        if: steps.check-changes.outputs.changed == 'true'
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run exact-repeat determinism test
+        if: steps.check-changes.outputs.changed == 'true'
+        run: uv run pytest tests/benchmark/test_exact_repeat_executor.py -v
+
+  exact-repeat-model-preflight:
+    # Issue #6189: prove the exact-repeat native-PPO path runs offline. The
+    # required model assets are staged (checksum-verified) in a SETUP step and
+    # cached via actions/cache keyed on their registry-pinned SHA-256, so the
+    # timed test never downloads a model inside its loop. The test itself
+    # monkeypatches the downloader to fail-closed if any in-loop fetch is
+    # attempted.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PPO_ALGO_CONFIG: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Derive model-cache key from registry-pinned digests
+        id: model-cache-key
+        run: |
+          KEY=$(uv run python -c "
+          import hashlib, yaml
+          from robot_sf.models.registry import get_registry_entry
+          from robot_sf.models.preflight import required_model_ids_for_config
+          cfg = yaml.safe_load(open('${PPO_ALGO_CONFIG}'))
+          ids = required_model_ids_for_config(cfg)
+          shas = [str(get_registry_entry(m).get('github_release', {}).get('sha256', '')) for m in ids]
+          print(hashlib.sha256('|'.join(shas).encode()).hexdigest()[:16])
+          ")
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Restore model cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: output/model_cache
+          key: model-cache-exact-repeat-ppo-${{ steps.model-cache-key.outputs.key }}
+
+      - name: Preflight required model assets (before the timed test)
+        run: uv run python scripts/models/preflight_models.py --config "${PPO_ALGO_CONFIG}"
+
+      - name: Run exact-repeat native-PPO determinism offline
+        run: |
+          uv run pytest -m slow -p no:cacheprovider \
+            tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_runs_offline_after_model_preflight \
+            -q
+
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -389,6 +503,8 @@ jobs:
       - wheel-smoke-install
       - examples-smoke
       - notebooks-smoke
+      - determinism-gate
+      - exact-repeat-model-preflight
     if: always()
     steps:
       - name: Check split job results
@@ -427,5 +543,13 @@ jobs:
           fi
           if [[ "${{ needs.notebooks-smoke.result }}" != "success" ]]; then
             echo "notebooks-smoke finished with ${{ needs.notebooks-smoke.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.determinism-gate.result }}" != "success" ]]; then
+            echo "determinism-gate finished with ${{ needs.determinism-gate.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.exact-repeat-model-preflight.result }}" != "success" ]]; then
+            echo "exact-repeat-model-preflight finished with ${{ needs.exact-repeat-model-preflight.result }}" >&2
             exit 1
           fi

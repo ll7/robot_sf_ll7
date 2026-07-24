@@ -1,0 +1,18 @@
+scenarios:
+- name: socnavbench_eth_smoke
+  map_file: ../../../maps/svg_maps/socnavbench/socnavbench_eth.svg
+  simulation_config:
+    max_episode_steps: 300
+    ped_density: 0.0
+  single_pedestrians: []
+  robot_config: {}
+  metadata:
+    archetype: socnavbench_eth_map_smoke
+    flow: none
+    behavior: none
+    purpose: Verify committed SocNavBench ETH map loads and parses through scenario pipeline
+    import_batch: eth_first
+    map_sha256: 9fb9e126fac37b1c24c8849aeee47dfcccc5ef71fd7fc4e0fea7f78f19d1858d
+    source_pr: 4693
+  seeds:
+  - 1134

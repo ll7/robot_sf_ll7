@@ -1,0 +1,187 @@
+"""Contract and regression tests for pytest temporary-tree isolation across concurrent sessions."""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+from tests.conftest import _clean_stale_proc_dirs, _is_pid_running
+
+
+def _isolated_subprocess_env(tmp_path: Path, name: str) -> tuple[dict[str, str], Path]:
+    """Return an environment with a temp root unique to one child pytest session.
+
+    The child test files live outside the repository and therefore do not load
+    ``tests/conftest.py``. They must receive the isolation contract explicitly.
+    """
+    temproot = tmp_path / f"pytest-{name}"
+    temproot.mkdir(parents=True)
+    env = dict(os.environ)
+    env["PYTEST_DEBUG_TEMPROOT"] = str(temproot)
+    return env, temproot
+
+
+def test_is_pid_running_returns_expected_status() -> None:
+    """_is_pid_running should return True for current PID and False for non-existent PID."""
+    assert _is_pid_running(os.getpid()) is True
+    # PID 9999999 is out of standard Linux PID range
+    assert _is_pid_running(9999999) is False
+
+
+def test_pytest_temp_isolation_env_set(tmp_path: Path) -> None:
+    """PYTEST_DEBUG_TEMPROOT should be configured by conftest.py with worktree and proc isolation."""
+    temproot = os.environ.get("PYTEST_DEBUG_TEMPROOT")
+    assert temproot is not None, "PYTEST_DEBUG_TEMPROOT must be set"
+    assert "/wt-" in temproot, f"PYTEST_DEBUG_TEMPROOT '{temproot}' must contain worktree hash"
+    assert "/proc-" in temproot, (
+        f"PYTEST_DEBUG_TEMPROOT '{temproot}' must contain process isolation segment"
+    )
+    assert tmp_path.exists()
+
+
+def test_stale_process_temproot_cleaned_up(tmp_path: Path) -> None:
+    """Stale process temproot directories with dead PIDs should be quietly cleaned up."""
+    temproot_env = os.environ.get("PYTEST_DEBUG_TEMPROOT")
+    assert temproot_env is not None
+    wt_dir = Path(temproot_env).parent
+
+    stale_proc_dir = wt_dir / "proc-9999999"
+    stale_proc_dir.mkdir(parents=True, exist_ok=True)
+    (stale_proc_dir / "stale_file.txt").write_text("abandoned", encoding="utf-8")
+
+    # Cleaning stale proc dirs under wt_dir should prune stale_proc_dir
+    _clean_stale_proc_dirs(wt_dir)
+
+    assert not stale_proc_dir.exists(), "Stale process directory should have been cleaned up"
+
+
+def test_concurrent_pytest_sessions_no_cleanup_warnings(tmp_path: Path) -> None:
+    """Concurrent pytest sessions must not interfere with each other or produce (rm_rf) warnings."""
+    helper_code = """
+import os
+import time
+def test_active_writer(tmp_path):
+    out_dir = tmp_path / "checkout"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    open(os.environ["PYTEST_TEMP_ISOLATION_READY"], "w").close()
+    for i in range(200):
+        (out_dir / f"file_{i}.txt").write_text("data", encoding="utf-8")
+        time.sleep(0.005)
+"""
+    helper_test_file = tmp_path / "test_active_writer.py"
+    helper_test_file.write_text(helper_code, encoding="utf-8")
+
+    quiet_code = """
+def test_quiet_pass(tmp_path):
+    assert tmp_path.exists()
+"""
+    quiet_test_file = tmp_path / "test_quiet_pass.py"
+    quiet_test_file.write_text(quiet_code, encoding="utf-8")
+
+    env1, temproot1 = _isolated_subprocess_env(tmp_path, "active-writer")
+    env2, temproot2 = _isolated_subprocess_env(tmp_path, "quiet-pass")
+    ready_file = tmp_path / "active-writer-ready"
+    env1["PYTEST_TEMP_ISOLATION_READY"] = str(ready_file)
+    assert temproot1 != temproot2
+
+    proc1 = subprocess.Popen(
+        [sys.executable, "-m", "pytest", "-q", str(helper_test_file)],
+        env=env1,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    out1 = ""
+    err1 = ""
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not ready_file.exists() and proc1.poll() is None:
+            time.sleep(0.02)
+        assert ready_file.exists(), "The active child pytest session did not start writing in time"
+
+        proc2 = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-W",
+                "error::pytest.PytestWarning",
+                str(quiet_test_file),
+            ],
+            env=env2,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        out1, err1 = proc1.communicate(timeout=30)
+    finally:
+        if proc1.poll() is None:
+            proc1.terminate()
+            try:
+                proc1.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc1.kill()
+                proc1.wait(timeout=5)
+
+    assert proc1.returncode == 0, f"Session 1 failed: {err1}\n{out1}"
+    assert proc2.returncode == 0, (
+        f"Session 2 failed with warning/error: {proc2.stderr}\n{proc2.stdout}"
+    )
+    assert "(rm_rf)" not in proc2.stderr
+    assert "(rm_rf)" not in err1
+
+
+def test_pytest_temp_isolation_under_xdist(tmp_path: Path) -> None:
+    """Pytest temporary directories under xdist should be properly isolated without warnings."""
+    xdist_code = """
+def test_xdist_1(tmp_path):
+    (tmp_path / "file1.txt").write_text("ok", encoding="utf-8")
+
+def test_xdist_2(tmp_path):
+    (tmp_path / "file2.txt").write_text("ok", encoding="utf-8")
+"""
+    xdist_test_file = tmp_path / "test_xdist_isolation.py"
+    xdist_test_file.write_text(xdist_code, encoding="utf-8")
+
+    env, _ = _isolated_subprocess_env(tmp_path, "xdist")
+
+    res = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-n",
+            "2",
+            "-q",
+            "-W",
+            "error::pytest.PytestWarning",
+            str(xdist_test_file),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert res.returncode == 0, f"xdist run failed: {res.stderr}\n{res.stdout}"
+    assert "(rm_rf)" not in res.stderr
+
+
+def test_shell_wrappers_use_shared_portable_temproot_contract() -> None:
+    """Both shell entry points should delegate ownership to the portable helper."""
+    repo_root = Path(__file__).resolve().parents[2]
+    for relative_path in (
+        "scripts/dev/run_focused_tests.sh",
+        "scripts/dev/run_tests_parallel.sh",
+    ):
+        script = (repo_root / relative_path).read_text(encoding="utf-8")
+        assert "tests/support/pytest_temproot.py" in script
+        assert "trap cleanup_pytest_temproot EXIT" in script
+        assert "sha256sum" not in script

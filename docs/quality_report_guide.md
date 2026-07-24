@@ -101,10 +101,11 @@ requires a `source_gap`.
 
 ### 1. Test results (`signals.test_results`) — gate
 
-- **pass_rate** = `passed / collected`, where
-  `collected = passed + failed + errored` (skips excluded from the denominator).
-- **collection_completeness** = `collected / selected`, where `selected` is the
-  configured test selection; below 100% means a collection error or deselection.
+- **pass_rate** = `passed / evaluated`, where
+  `evaluated = passed + failed + errored` (skips excluded from the denominator).
+- **collection_completeness** = `collected / selected`, where `collected`
+  includes collected skipped/xfail tests and `selected` is the configured test
+  selection; below 100% means a collection error or deselection.
 - **counts**: `passed`, `failed`, `errored`, `skipped`, `xfailed`, `xpassed`,
   `warnings`.
 - **Decision use**: a failed or errored test, or a collection error, blocks
@@ -140,10 +141,12 @@ requires a `source_gap`.
     expose coverage-of-assertions gaps.
 - **mutation_score** = `killed / (total_mutants - equivalent) * 100`
   (`equivalent_excluded: true`), because equivalent mutants are not detectable
-  faults. Reported as a diagnostic only.
-- **baselined_survivors** / **new_unbaselined_survivors**: the downward-ratchet
-  view. A non-zero `new_unbaselined_survivors` is a ratchet regression for the
-  diagnostic lane, not a merge blocker.
+  faults. The score is omitted when the authoritative baseline does not provide
+  an equivalent-mutant count; an omitted category is not inferred as zero.
+- **baselined_survivors**: the downward-ratchet view when the baseline provides
+  a survivor count. `new_unbaselined_survivors` requires a current mutmut
+  comparison and is not emitted from a baseline alone. A non-zero value is a
+  ratchet regression for the diagnostic lane, not a merge blocker.
 - **Decision use**: mutation testing is a scheduled diagnostic only and is
   **never required per-PR before a baseline exists** (issue stop condition). See
   [mutation-testing triage](../mutation_testing_triage.md).
@@ -194,7 +197,9 @@ requires a `source_gap`.
 - **Decision use**: strict-lane reproducibility is a gate for deterministic
   contracts; benchmark reproducibility and fallback/degraded counts are
   diagnostics.
-- **Source**: `scripts/benchmark_repro_check.py`.
+- **Source**: an explicit result from `scripts/benchmark_repro_check.py` when
+  supplied. Without a result, the signal is `unavailable`; the generator does
+  not report zero fallback/degraded/native runs from a missing surface.
 
 ### 8. Performance regression (`signals.performance_regression`) — diagnostic (advisory on PR, enforced on main)
 

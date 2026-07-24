@@ -29,7 +29,8 @@ Authoritative surfaces currently consumed (extend, do not duplicate):
   ``output/coverage/coverage.json``.
 - Mutation: ``scripts/validation/mutation_baseline.json`` and
   ``scripts/dev/mutation_ratchet.py`` (scheduled diagnostic, never per-PR gate).
-- Reproducibility: ``scripts/benchmark_repro_check.py``.
+- Reproducibility: an explicit result from ``scripts/benchmark_repro_check.py``;
+  no result is treated as unavailable rather than as a zero-count benchmark run.
 
 Surfaces not yet producing machine-readable output are recorded as
 ``unavailable`` with their ``source_gap`` (stop condition: do not invent a
@@ -191,6 +192,14 @@ def _percent(numerator: float, denominator: float) -> float | None:
     return round(numerator / denominator * 100.0, 4)
 
 
+def _optional_int(mapping: dict[str, Any], *names: str) -> int | None:
+    """Read the first explicitly provided integer field without inventing zero."""
+    for name in names:
+        if name in mapping and mapping[name] is not None:
+            return int(mapping[name])
+    return None
+
+
 def _load_json(path: Path) -> dict[str, Any] | None:
     """Load a JSON object from ``path``, returning None when missing or invalid."""
     if not path.is_file():
@@ -227,7 +236,7 @@ def _build_test_results(pytest_report: dict[str, Any] | None, source_path: str) 
     """Build the test pass-rate and collection-completeness signal.
 
     Formulae:
-      - pass_rate = passed / collected, where collected = passed + failed + errored.
+      - pass_rate = passed / evaluated, where evaluated = passed + failed + errored.
       - collection_completeness = collected / selected.
     """
     base = {
@@ -264,11 +273,13 @@ def _build_test_results(pytest_report: dict[str, Any] | None, source_path: str) 
         "xpassed": int(pytest_report.get("xpassed", 0) or 0),
         "warnings": int(pytest_report.get("warnings", 0) or 0),
     }
-    collected = counts["passed"] + counts["failed"] + counts["errored"]
+    evaluated = counts["passed"] + counts["failed"] + counts["errored"]
+    observed_outcomes = evaluated + counts["skipped"] + counts["xfailed"] + counts["xpassed"]
+    collected = int(pytest_report.get("collected", observed_outcomes) or observed_outcomes)
     selected = int(pytest_report.get("selected", collected) or collected)
-    pass_value = _percent(counts["passed"], collected)
+    pass_value = _percent(counts["passed"], evaluated)
     pass_rate: dict[str, Any] = {
-        "passed": {"count": counts["passed"], "total": collected},
+        "passed": {"count": counts["passed"], "total": evaluated},
     }
     if pass_value is not None:
         pass_rate["value"] = pass_value
@@ -394,34 +405,42 @@ def _build_mutation(mutation_baseline: dict[str, Any] | None, source_path: str) 
         return base
     base.update(_available_block(source_path))
     summary = mutation_baseline.get("summary", {})
-    killed = int(summary.get("killed", 0) or 0)
-    survived = int(summary.get("survived", 0) or 0)
-    timeout = int(summary.get("timeout", 0) or 0)
-    suspicious = int(summary.get("suspicious", 0) or 0)
-    skipped = int(summary.get("skipped", 0) or 0)
-    no_test = int(summary.get("no_test", summary.get("not-tested", 0)) or 0)
-    equivalent = int(summary.get("equivalent", 0) or 0)
-    total_mutants = int(summary.get("total_mutants", 0) or 0)
-    base["categories"] = {
-        "total_mutants": total_mutants,
-        "killed": killed,
-        "survived": survived,
-        "equivalent": equivalent,
-        "timeout": timeout,
-        "no_test": no_test,
-        "suspicious": suspicious,
-        "skipped": skipped,
-    }
-    # mutation_score excludes equivalent mutants (not detectable faults).
-    score_denom = total_mutants - equivalent
-    score_value = _percent(killed, score_denom)
-    if score_value is not None:
-        base["mutation_score"] = {
-            "value": score_value,
-            "equivalent_excluded": True,
-        }
-    base["baselined_survivors"] = survived
-    base["new_unbaselined_survivors"] = 0
+    if not isinstance(summary, dict):
+        summary = {}
+
+    total_mutants = _optional_int(summary, "total_mutants")
+    killed = _optional_int(summary, "killed")
+    survived = _optional_int(summary, "survived")
+    equivalent = _optional_int(summary, "equivalent")
+    categories: dict[str, int] = {}
+    if total_mutants is not None:
+        categories["total_mutants"] = total_mutants
+    for name, aliases in (
+        ("killed", ("killed",)),
+        ("survived", ("survived",)),
+        ("equivalent", ("equivalent",)),
+        ("timeout", ("timeout",)),
+        ("no_test", ("no_test", "not-tested")),
+        ("suspicious", ("suspicious",)),
+        ("skipped", ("skipped",)),
+    ):
+        value = _optional_int(summary, *aliases)
+        if value is not None:
+            categories[name] = value
+    if "total_mutants" in categories:
+        base["categories"] = categories
+
+    # A score requires an explicit equivalent-mutant count. The baseline alone
+    # cannot establish that an omitted category is zero.
+    if total_mutants is not None and killed is not None and equivalent is not None:
+        score_value = _percent(killed, total_mutants - equivalent)
+        if score_value is not None:
+            base["mutation_score"] = {
+                "value": score_value,
+                "equivalent_excluded": True,
+            }
+    if survived is not None:
+        base["baselined_survivors"] = survived
     return base
 
 
@@ -548,16 +567,29 @@ def _build_reproducibility(
             "never counted as success evidence."
         ),
     }
-    base.update(_available_block(source_path))
-    base["strict_lane_reproducible"] = reproducible
-    base["benchmark"] = benchmark_block or {
-        "reproducible": None,
-        "fallback_count": 0,
-        "degraded_count": 0,
-        "native_count": 0,
-        "total_runs": 0,
-        "seed": None,
-    }
+    source = source_path or "scripts/benchmark_repro_check.py"
+    if reproducible is None and benchmark_block is None:
+        base.update(
+            _unavailable_block(
+                reason=(
+                    "No strict-lane reproducibility result or benchmark report was "
+                    "provided. The report does not infer zero fallback/degraded runs "
+                    "from a missing surface."
+                ),
+                source=source,
+                follow_up=(
+                    "Run the canonical reproducibility lane and pass its result, then "
+                    "add a structured benchmark-status report before populating "
+                    "fallback/degraded/native counts."
+                ),
+            )
+        )
+        return base
+    base.update(_available_block(source))
+    if reproducible is not None:
+        base["strict_lane_reproducible"] = reproducible
+    if benchmark_block is not None:
+        base["benchmark"] = benchmark_block
     return base
 
 
@@ -584,8 +616,6 @@ def _build_performance_regression(source_path: str) -> dict[str, Any]:
             ),
         )
     )
-    base["regressions"] = []
-    base["regression_count"] = 0
     return base
 
 
@@ -706,7 +736,8 @@ def _parse_pytest_report(path: Path) -> dict[str, Any] | None:
             "xfailed": summary.get("xfailed", 0),
             "xpassed": summary.get("xpassed", 0),
             "warnings": summary.get("warnings", 0),
-            "selected": summary.get("collected", total),
+            "collected": summary.get("collected", total),
+            "selected": summary.get("selected", summary.get("collected", total)),
             "tests": [
                 {
                     "nodeid": t.get("nodeid", t.get("name", "")),
@@ -755,14 +786,14 @@ def build_report(
         "inputs": {
             "command": producing_command,
             "sources": [
-                s
-                for s in (
-                    inputs.coverage_source,
-                    inputs.mutation_source,
-                    inputs.pytest_source,
-                    inputs.reproducibility_source,
+                source
+                for source, loaded in (
+                    (inputs.coverage_source, inputs.coverage_json is not None),
+                    (inputs.mutation_source, inputs.mutation_baseline is not None),
+                    (inputs.pytest_source, inputs.pytest_report is not None),
+                    (inputs.reproducibility_source, inputs.reproducible is not None),
                 )
-                if s
+                if source and loaded
             ],
             "seed": None,
         },

@@ -206,6 +206,35 @@ def _record_has_benchmark_caveat(record: dict[str, Any]) -> bool:
     return False
 
 
+def _record_is_evidence_eligible(record: dict[str, Any]) -> bool:
+    """Return whether a record may contribute to benchmark aggregation.
+
+    A foresight planner that substituted constant-velocity prediction records
+    ``evidence_eligible=false`` in its structured provenance. Its diagnostics
+    remain available in episode JSONL, but its metrics must not enter aggregate
+    evidence summaries (issue #6190). Records without that explicit marker keep
+    the legacy eligible behavior.
+    """
+    algorithm_metadata = record.get("algorithm_metadata")
+    if not isinstance(algorithm_metadata, dict):
+        return True
+    foresight = algorithm_metadata.get("foresight_prediction")
+    return not isinstance(foresight, dict) or foresight.get("evidence_eligible") is not False
+
+
+def filter_evidence_eligible_records(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Return aggregation-eligible records and the number structurally excluded.
+
+    The filter is intentionally narrow: only an explicit ``False`` provenance
+    marker excludes a row, so historical records and other diagnostic metadata
+    remain backward compatible.
+    """
+    eligible = [record for record in records if _record_is_evidence_eligible(record)]
+    return eligible, len(records) - len(eligible)
+
+
 def build_observation_track_meta(
     records: list[dict[str, Any]],
     *,
@@ -630,6 +659,7 @@ def compute_aggregates(  # noqa: PLR0913
     Returns:
         Nested dict of group -> metric -> summary statistics.
     """
+    records, excluded_evidence_records = filter_evidence_eligible_records(records)
     for rec in records:
         _ensure_snqi(
             rec,
@@ -686,6 +716,15 @@ def compute_aggregates(  # noqa: PLR0913
             "explicit_profile_records": threshold_meta["explicit_profile_records"],
         },
         "observation_tracks": observation_track_meta,
+        "evidence_eligibility": {
+            "input_record_count": len(records) + excluded_evidence_records,
+            "eligible_record_count": len(records),
+            "excluded_record_count": excluded_evidence_records,
+            "policy": (
+                "Rows with algorithm_metadata.foresight_prediction.evidence_eligible=false "
+                "are excluded from benchmark evidence aggregation."
+            ),
+        },
     }
 
     if expected_algorithms:
@@ -1016,6 +1055,9 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
     Returns:
         Nested dictionary mapping group names to metric names to aggregate statistics.
     """
+    # Apply the same evidence gate as the base analyzer before bootstrap
+    # resampling; otherwise an ineligible row could re-enter through CI groups.
+    records, _ = filter_evidence_eligible_records(records)
     # Start from base aggregates (no CI) for consistency
     base = compute_aggregates(
         records,
@@ -1083,6 +1125,7 @@ __all__ = [
     "compute_aggregates",
     "compute_aggregates_with_ci",
     "ensure_observation_track_policy",
+    "filter_evidence_eligible_records",
     "flatten_metrics",
     "normalize_observation_track_mode",
     "observation_track_group_label",

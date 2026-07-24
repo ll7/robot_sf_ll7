@@ -19,11 +19,14 @@ import pytest
 
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.benchmark import runner as runner_module
+from robot_sf.benchmark.aggregate import compute_aggregates
 from robot_sf.benchmark.algorithm_metadata import (
     PREDICTIVE_FORESIGHT_MODEL_FALLBACK_STATUS,
     enrich_algorithm_metadata,
 )
 from robot_sf.benchmark.exact_repeat_campaign import _record_is_degraded
+from robot_sf.models import get_registry_entry
+from robot_sf.planner import socnav as socnav_module
 from robot_sf.planner.predictive_foresight import PredictiveForesightConfig
 from robot_sf.planner.socnav import PredictionPlannerAdapter, SocNavPlannerConfig
 
@@ -108,9 +111,35 @@ def test_foresight_failed_load_retains_digest_for_readable_checkpoint(
     provenance = adapter.foresight_diagnostics()["foresight_prediction"]
     assert provenance["load_status"] == "failed"
     assert (
-        provenance["requested_checkpoint_sha256"]
+        provenance["observed_checkpoint_sha256"]
         == hashlib.sha256(checkpoint.read_bytes()).hexdigest()
     )
+
+
+def test_foresight_failed_load_retains_registry_expected_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing registered model retains its expected digest without local bytes."""
+    model_id = "predictive_proxy_selected_v2_full"
+    expected_digest = get_registry_entry(model_id)["github_release"]["sha256"]
+
+    def missing_model_path(_model_id: str) -> None:
+        """Prevent model hydration so the fallback path is exercised locally."""
+        raise FileNotFoundError("test model cache miss")
+
+    monkeypatch.setattr(socnav_module, "resolve_model_path", missing_model_path)
+    adapter = PredictionPlannerAdapter(
+        SocNavPlannerConfig(predictive_model_id=model_id), allow_fallback=True
+    )
+    state, mask = _two_pedestrian_state()
+
+    adapter._predict_trajectories(state, mask)
+
+    provenance = adapter.foresight_diagnostics()["foresight_prediction"]
+    assert provenance["load_status"] == "failed"
+    assert provenance["requested_model_id"] == model_id
+    assert provenance["requested_checkpoint_sha256"] == expected_digest
+    assert provenance["observed_checkpoint_sha256"] is None
 
 
 @pytest.mark.skipif("fork" not in mp.get_all_start_methods(), reason="requires fork isolation")
@@ -205,6 +234,52 @@ def test_foresight_fallback_record_is_dispositioned_as_degraded():
     record = {"algorithm_metadata": metadata, "outcome": {}}
 
     assert _record_is_degraded(record) is True
+
+
+def test_aggregate_analyzer_excludes_foresight_fallback_from_evidence() -> None:
+    """A real fallback is classifier-detected then excluded by the aggregate analyzer."""
+    adapter = PredictionPlannerAdapter(
+        SocNavPlannerConfig(predictive_model_id=_UNKNOWN_MODEL_ID), allow_fallback=True
+    )
+    state, mask = _two_pedestrian_state()
+    adapter._predict_trajectories(state, mask)
+    fallback_metadata = enrich_algorithm_metadata(
+        algo="prediction_planner", metadata=dict(adapter.foresight_diagnostics())
+    )
+    fallback_record = {
+        "episode_id": "fallback",
+        "scenario_id": "scenario",
+        "algo": "prediction_planner",
+        "metrics": {"success": 0.0},
+        "algorithm_metadata": fallback_metadata,
+    }
+    assert _record_is_degraded(fallback_record) is True
+
+    records = [
+        {
+            "episode_id": "eligible",
+            "scenario_id": "scenario",
+            "algo": "prediction_planner",
+            "metrics": {"success": 1.0},
+            "algorithm_metadata": {
+                "foresight_prediction": {"evidence_eligible": True},
+            },
+        },
+        fallback_record,
+    ]
+
+    summary = compute_aggregates(records, group_by="algo")
+
+    assert summary["prediction_planner"]["success"]["mean"] == 1.0
+    assert summary["_meta"]["evidence_eligibility"] == {
+        "input_record_count": 2,
+        "eligible_record_count": 1,
+        "excluded_record_count": 1,
+        "policy": (
+            "Rows with algorithm_metadata.foresight_prediction.evidence_eligible=false "
+            "are excluded from benchmark evidence aggregation."
+        ),
+    }
 
 
 def test_foresight_adapter_fail_closed_when_fallback_disabled():

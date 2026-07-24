@@ -45,7 +45,7 @@ try:  # pragma: no cover - optional dependency
 except ImportError:  # pragma: no cover - optional dependency
     sf_forces = None  # type: ignore[assignment]
 
-from robot_sf.models import resolve_model_path
+from robot_sf.models import get_registry_entry, resolve_model_path
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
@@ -3171,13 +3171,34 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         return {
             "requested_model_id": model_id,
             "requested_checkpoint_path": requested_checkpoint,
-            "requested_checkpoint_sha256": None,
+            # This is the registry's expected digest, not a digest computed from
+            # a locally resolved file. A missing/unloadable asset must retain the
+            # requested provenance even when no local bytes exist to hash.
+            "requested_checkpoint_sha256": self._expected_checkpoint_sha256(),
+            "observed_checkpoint_sha256": None,
             "load_status": "not_attempted",
             "effective_prediction_mode": "not_attempted",
             "fallback_used": False,
             "fallback_reason": None,
             "load_error": None,
         }
+
+    def _expected_checkpoint_sha256(self) -> str | None:
+        """Return the configured model asset's expected registry digest, if declared."""
+        model_id = getattr(self.config, "predictive_model_id", None)
+        if not isinstance(model_id, str) or not model_id.strip():
+            return None
+        try:
+            entry = get_registry_entry(model_id)
+        except (FileNotFoundError, KeyError, TypeError, ValueError):
+            return None
+        release = entry.get("github_release")
+        if not isinstance(release, dict):
+            return None
+        digest = release.get("sha256")
+        if not isinstance(digest, str) or not digest.strip():
+            return None
+        return digest.strip().lower()
 
     def _record_foresight_load_success(self, checkpoint_sha256: str | None) -> None:
         """Record a successful predictive-model load in foresight provenance."""
@@ -3188,7 +3209,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 "fallback_used": False,
                 "fallback_reason": None,
                 "load_error": None,
-                "requested_checkpoint_sha256": checkpoint_sha256,
+                "observed_checkpoint_sha256": checkpoint_sha256,
             }
         )
 
@@ -3205,7 +3226,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                 "fallback_used": bool(self._allow_fallback),
                 "fallback_reason": "predictive_model_load_failed",
                 "load_error": f"{type(exc).__name__}: {exc}",
-                "requested_checkpoint_sha256": checkpoint_sha256,
+                "observed_checkpoint_sha256": checkpoint_sha256,
             }
         )
 

@@ -104,15 +104,81 @@ if [[ -n "${EXTRAS_SMOKE}" ]]; then
     python3 -m venv "${extra_venv}"
     echo "Installing optional extra independently: ${extra}"
     "${extra_pip}" install --no-cache-dir "${WHEEL_PATH}[${extra}]"
-    cd /tmp && PYTHONPATH= PYTHONNOUSERSITE=1 "${extra_python}" - "${extra}" >>"${extras_status_file}" <<'PY'
+    (
+      cd /tmp
+      PYTHONPATH= PYTHONNOUSERSITE=1 "${extra_python}" - "${extra}" >>"${extras_status_file}" <<'PY'
+import importlib
 import json
 import sys
 
 import robot_sf
 
 extra = sys.argv[1]
-print(json.dumps({"extra": extra, "status": "passed", "module_file": robot_sf.__file__}))
+feature_modules = {
+    "progress": ["tqdm"],
+    "analysis": ["seaborn"],
+    "analytics": ["duckdb", "pyarrow"],
+    "viz": [
+        "pygame",
+        "matplotlib",
+        "PIL",
+        "moviepy",
+        "seaborn",
+        "robot_sf.render.sim_view",
+    ],
+    "maps": [
+        "osmnx",
+        "geopandas",
+        "pyproj",
+        "robot_sf.nav.osm_map_builder",
+    ],
+    "benchmark": [
+        "pandas",
+        "scipy",
+        "robot_sf.benchmark.aggregate",
+    ],
+    "training": [
+        "stable_baselines3",
+        "torch",
+        "sklearn",
+        "optuna",
+        "tensorboard",
+        "wandb",
+        "optuna_dashboard",
+    ],
+    # The all-extra install is itself the dependency-resolution assertion. Probe
+    # representative modules from every new feature group so a self-referential
+    # meta-extra cannot pass while silently omitting one of the split stacks.
+    "all": [
+        "pygame",
+        "matplotlib",
+        "osmnx",
+        "geopandas",
+        "pandas",
+        "scipy",
+        "stable_baselines3",
+        "torch",
+        "robot_sf.render.sim_view",
+        "robot_sf.nav.osm_map_builder",
+        "robot_sf.benchmark.aggregate",
+    ],
+}
+modules = feature_modules.get(extra, [])
+for module_name in modules:
+    importlib.import_module(module_name)
+
+print(
+    json.dumps(
+        {
+            "extra": extra,
+            "status": "passed",
+            "module_file": robot_sf.__file__,
+            "feature_modules": modules,
+        }
+    )
+)
 PY
+    )
   done
   extras_status_json="$("${PYTHON_BIN}" - "${extras_status_file}" <<'PY'
 import json

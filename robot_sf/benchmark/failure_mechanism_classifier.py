@@ -15,6 +15,7 @@ from robot_sf.errors import RobotSfError
 
 SCHEMA_VERSION = "failure_mechanism_classification.v1"
 CLASSIFICATION_SOURCE = "failure_mechanism_classifier.v1"
+TAXONOMY_CROSSWALK_SCHEMA_VERSION = "failure_mechanism_taxonomy_crosswalk.v1"
 
 FAILURE_MECHANISM_LABELS = (
     "time_budget_clean_relief",
@@ -54,6 +55,108 @@ _REQUIRED_PAIRED_METRICS = (
     "time_to_goal_norm",
 )
 
+#: Conservative per-label crosswalk from classifier labels to taxonomy labels.
+#: Every mapping uses aggregate_summary evidence mode (classifier has no trace access)
+#: and limits confidence to supported_hypothesis or weaker so consumers cannot mistake
+#: the mapping for causal proof. Labels that cannot be mapped conservatively produce
+#: unknown taxonomy entries with an explicit caveat.
+_CLASSIFIER_TO_TAXONOMY_CROSSWALK: dict[str, dict[str, str]] = {
+    "time_budget_clean_relief": {
+        "taxonomy_label": "time_budget_artifact",
+        "taxonomy_confidence": "supported_hypothesis",
+        "caveat": (
+            "Fixed horizon timed out without collision/near-miss; long horizon "
+            "succeeded with clean or lower exposure. Consistent with time-budget "
+            "sensitivity but aggregate metrics alone cannot confirm mechanism; "
+            "trace review required."
+        ),
+    },
+    "exposure_enabled_completion": {
+        "taxonomy_label": "time_budget_artifact",
+        "taxonomy_confidence": "weak_hypothesis",
+        "caveat": (
+            "Fixed horizon timed out; long horizon completed with elevated exposure "
+            "or clearance pressure. May reflect clearance tradeoff rather than pure "
+            "time pressure; trace review required."
+        ),
+    },
+    "safety_regressed_long_horizon": {
+        "taxonomy_label": "proxemic_or_clearance_tradeoff",
+        "taxonomy_confidence": "supported_hypothesis",
+        "caveat": (
+            "Collision appeared only in the long horizon. Consistent with clearance "
+            "pressure accumulating over longer exposure, but aggregate metrics "
+            "cannot confirm causal mechanism; trace review required."
+        ),
+    },
+    "persistent_low_progress_timeout": {
+        "taxonomy_label": "static_deadlock_or_local_minimum",
+        "taxonomy_confidence": "supported_hypothesis",
+        "caveat": (
+            "Both horizons timed out with low progress and no collisions. Consistent "
+            "with a local minimum or deadlock but aggregate metrics cannot "
+            "distinguish from other persistent timeout causes; trace review required."
+        ),
+    },
+    "scenario_contract_blocker": {
+        "taxonomy_label": "scenario_contract_blocker",
+        "taxonomy_confidence": "supported_hypothesis",
+        "caveat": (
+            "Scenario certificate blocks planner-mechanism attribution. The "
+            "certificate reports scenario-level infeasibility, not a planner "
+            "failure mechanism."
+        ),
+    },
+    "unsupported_wait_then_go_hypothesis": {
+        "taxonomy_label": "unknown",
+        "taxonomy_confidence": "unknown",
+        "caveat": (
+            "Classifier emitted unsupported_wait_then_go_hypothesis. This label "
+            "cannot be mapped to a taxonomy mechanism without trace or video "
+            "evidence."
+        ),
+    },
+    "collision": {
+        "taxonomy_label": "proxemic_or_clearance_tradeoff",
+        "taxonomy_confidence": "weak_hypothesis",
+        "caveat": (
+            "Collision observed in aggregate metrics. Cannot distinguish between "
+            "clearance tradeoff, dynamic sensitivity, or actuation saturation "
+            "without trace review."
+        ),
+    },
+    "near_miss": {
+        "taxonomy_label": "proxemic_or_clearance_tradeoff",
+        "taxonomy_confidence": "weak_hypothesis",
+        "caveat": (
+            "Near-miss observed in aggregate metrics. Closest taxonomy label is "
+            "proxemic/clearance but cannot confirm mechanism without trace review."
+        ),
+    },
+    "timeout_without_progress": {
+        "taxonomy_label": "time_budget_artifact",
+        "taxonomy_confidence": "weak_hypothesis",
+        "caveat": (
+            "Timeout without progress. Could reflect time budget artifact, static "
+            "deadlock, or learned policy low progress; aggregate metrics cannot "
+            "distinguish."
+        ),
+    },
+    "unavailable": {
+        "taxonomy_label": "unknown",
+        "taxonomy_confidence": "unknown",
+        "caveat": (
+            "Classifier inputs were unavailable or execution was degraded/fallback. "
+            "No mechanism label can be inferred."
+        ),
+    },
+}
+
+#: Crosswalk evidence mode for all classifier-derived mappings.
+#: The classifier operates on paired aggregate metrics, not trace-level data,
+#: so every crosswalk entry uses aggregate_summary.
+_CROSSWALK_EVIDENCE_MODE = "aggregate_summary"
+
 
 class FailureMechanismClassificationError(RobotSfError, ValueError):
     """Raised when failure-mechanism classification inputs are malformed."""
@@ -68,11 +171,15 @@ def classify_failure_mechanisms_from_jsonl(
     fixed_horizon: int = 100,
     long_horizon: int = 500,
     generated_at_utc: str | None = None,
+    include_taxonomy_crosswalk: bool = False,
 ) -> dict[str, Any]:
     """Classify paired fixed/long-horizon episode records from JSONL input.
 
+    When ``include_taxonomy_crosswalk`` is ``True``, the returned payload includes a
+    ``taxonomy_crosswalk`` field.
+
     Returns:
-        ``failure_mechanism_classification.v1`` payload.
+        ``failure_mechanism_classification.v1`` payload with optional crosswalk.
     """
     records = read_jsonl(episodes_jsonl)
     certs = load_scenario_certificates(scenario_certificates) if scenario_certificates else {}
@@ -82,6 +189,7 @@ def classify_failure_mechanisms_from_jsonl(
         fixed_horizon=fixed_horizon,
         long_horizon=long_horizon,
         generated_at_utc=generated_at_utc,
+        include_taxonomy_crosswalk=include_taxonomy_crosswalk,
         inputs={
             "episodes_jsonl": [str(path) for path in _as_paths(episodes_jsonl)],
             "scenario_certificates": str(scenario_certificates) if scenario_certificates else None,
@@ -104,14 +212,19 @@ def classify_failure_mechanisms(
     long_horizon: int = 500,
     generated_at_utc: str | None = None,
     inputs: dict[str, Any] | None = None,
+    include_taxonomy_crosswalk: bool = False,
 ) -> dict[str, Any]:
     """Classify paired fixed/long-horizon episode records.
 
     The classifier is intentionally rule-based and fail-closed: labels that require pair evidence
     are emitted only when the matching scenario/planner/seed pair and required metrics are present.
 
+    When ``include_taxonomy_crosswalk`` is ``True``, the returned payload includes a
+    ``taxonomy_crosswalk`` field mapping each classifier label to its canonical taxonomy label,
+    evidence mode (``aggregate_summary``), and a non-causal caveat.
+
     Returns:
-        ``failure_mechanism_classification.v1`` payload.
+        ``failure_mechanism_classification.v1`` payload with optional crosswalk.
     """
     if not records:
         raise FailureMechanismClassificationError("Cannot classify zero episode records")
@@ -129,7 +242,7 @@ def classify_failure_mechanisms(
             long_horizon=long_horizon,
         )
         rows.append(row)
-    payload = {
+    payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "classification_source": CLASSIFICATION_SOURCE,
         "generated_at_utc": generated_at_utc or datetime.now(UTC).isoformat(),
@@ -143,11 +256,19 @@ def classify_failure_mechanisms(
         "missing_fields": _missing_fields(rows),
         "caveats": _payload_caveats(rows),
     }
+    if include_taxonomy_crosswalk:
+        payload["taxonomy_crosswalk"] = build_taxonomy_crosswalk(rows)
     return validate_failure_mechanism_payload(payload)
 
 
-def validate_failure_mechanism_payload(payload: dict[str, Any]) -> dict[str, Any]:  # noqa: C901
+def validate_failure_mechanism_payload(payload: dict[str, Any]) -> dict[str, Any]:  # noqa: C901, PLR0912
     """Validate the local classifier payload shape.
+
+    When ``taxonomy_crosswalk`` is present, validates that:
+    - The crosswalk schema version and source are correct.
+    - Every entry has the required fields.
+    - Taxonomy labels and confidence values are valid.
+    - Evidence mode is ``aggregate_summary`` (classifier has no trace access).
 
     Returns:
         Normalized payload.
@@ -182,6 +303,45 @@ def validate_failure_mechanism_payload(payload: dict[str, Any]) -> dict[str, Any
             raise FailureMechanismClassificationError(
                 f"coverage_axes.failure_modes.{label}.classification_source is required"
             )
+    crosswalk = payload.get("taxonomy_crosswalk")
+    if crosswalk is not None:
+        if not isinstance(crosswalk, dict):
+            raise FailureMechanismClassificationError("taxonomy_crosswalk must be an object")
+        if crosswalk.get("crosswalk_schema_version") != TAXONOMY_CROSSWALK_SCHEMA_VERSION:
+            raise FailureMechanismClassificationError(
+                "taxonomy_crosswalk.crosswalk_schema_version must be "
+                f"{TAXONOMY_CROSSWALK_SCHEMA_VERSION!r}"
+            )
+        if crosswalk.get("crosswalk_source") != CLASSIFICATION_SOURCE:
+            raise FailureMechanismClassificationError(
+                f"taxonomy_crosswalk.crosswalk_source must be {CLASSIFICATION_SOURCE!r}"
+            )
+        entries = crosswalk.get("entries")
+        if not isinstance(entries, list):
+            raise FailureMechanismClassificationError("taxonomy_crosswalk.entries must be a list")
+        for entry_index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                raise FailureMechanismClassificationError(
+                    f"taxonomy_crosswalk.entries[{entry_index}] must be an object"
+                )
+            for field in (
+                "row_index",
+                "classifier_label",
+                "taxonomy_label",
+                "taxonomy_confidence",
+                "evidence_mode",
+                "caveat",
+            ):
+                if field not in entry:
+                    raise FailureMechanismClassificationError(
+                        f"taxonomy_crosswalk.entries[{entry_index}] missing required field "
+                        f"{field!r}"
+                    )
+            if entry.get("evidence_mode") != _CROSSWALK_EVIDENCE_MODE:
+                raise FailureMechanismClassificationError(
+                    f"taxonomy_crosswalk.entries[{entry_index}] evidence_mode must be "
+                    f"{_CROSSWALK_EVIDENCE_MODE!r} (classifier has no trace access)"
+                )
     return payload
 
 
@@ -757,11 +917,55 @@ def _as_paths(paths: str | Path | list[str | Path]) -> list[Path]:
     return [Path(path) for path in paths]
 
 
+def build_taxonomy_crosswalk(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build a conservative taxonomy crosswalk from classifier rows.
+
+    Each classifier row is mapped to its canonical taxonomy label with
+    ``aggregate_summary`` evidence mode (the classifier has no trace access).
+    Unrecognised classifier labels produce an unknown mapping with a
+    descriptive caveat instead of raising.
+
+    Returns:
+        A ``failure_mechanism_taxonomy_crosswalk.v1`` payload.
+    """
+    if not rows:
+        raise FailureMechanismClassificationError(
+            "Cannot build taxonomy crosswalk from zero classifier rows"
+        )
+    entries: list[dict[str, str]] = []
+    for index, row in enumerate(rows):
+        label = row.get("label", "unavailable")
+        mapping = _CLASSIFIER_TO_TAXONOMY_CROSSWALK.get(str(label))
+        if mapping is None:
+            mapping = {
+                "taxonomy_label": "unknown",
+                "taxonomy_confidence": "unknown",
+                "caveat": f"No crosswalk mapping defined for classifier label {label!r}.",
+            }
+        entries.append(
+            {
+                "row_index": index,
+                "classifier_label": str(label),
+                "taxonomy_label": str(mapping["taxonomy_label"]),
+                "taxonomy_confidence": str(mapping["taxonomy_confidence"]),
+                "evidence_mode": _CROSSWALK_EVIDENCE_MODE,
+                "caveat": str(mapping["caveat"]),
+            }
+        )
+    return {
+        "crosswalk_schema_version": TAXONOMY_CROSSWALK_SCHEMA_VERSION,
+        "crosswalk_source": CLASSIFICATION_SOURCE,
+        "entries": entries,
+    }
+
+
 __all__ = [
     "CLASSIFICATION_SOURCE",
     "FAILURE_MECHANISM_LABELS",
     "SCHEMA_VERSION",
+    "TAXONOMY_CROSSWALK_SCHEMA_VERSION",
     "FailureMechanismClassificationError",
+    "build_taxonomy_crosswalk",
     "classify_failure_mechanisms",
     "classify_failure_mechanisms_from_jsonl",
     "load_scenario_certificates",

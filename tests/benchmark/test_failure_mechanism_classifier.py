@@ -13,8 +13,15 @@ from robot_sf.benchmark.cli import cli_main
 from robot_sf.benchmark.failure_mechanism_classifier import (
     CLASSIFICATION_SOURCE,
     SCHEMA_VERSION,
+    TAXONOMY_CROSSWALK_SCHEMA_VERSION,
+    build_taxonomy_crosswalk,
     classify_failure_mechanisms,
     classify_failure_mechanisms_from_jsonl,
+)
+from robot_sf.benchmark.failure_mechanism_taxonomy import (
+    MECHANISM_CONFIDENCES,
+    MECHANISM_EVIDENCE_MODES,
+    MECHANISM_LABELS,
 )
 
 
@@ -315,3 +322,197 @@ def test_classify_failure_mechanisms_from_jsonl_loads_certificates(tmp_path: Pat
     assert payload["rows"][0]["label"] == "scenario_contract_blocker"
     assert payload["inputs"]["episodes_jsonl"] == [str(jsonl_path)]
     assert payload["inputs"]["scenario_certificates"] == str(cert_path)
+
+
+class TestTaxonomyCrosswalk:
+    """Tests for the optional failure-mechanism taxonomy crosswalk."""
+
+    def test_crosswalk_absent_by_default(self) -> None:
+        """Payload must not include taxonomy_crosswalk unless requested."""
+        records = [
+            _record("solo", horizon=100, near_misses=1),
+            _record("solo", horizon=500, near_misses=1),
+        ]
+        payload = classify_failure_mechanisms(records, generated_at_utc="2026-06-01T00:00:00+00:00")
+        assert "taxonomy_crosswalk" not in payload
+
+    def test_crosswalk_present_when_requested(self) -> None:
+        """Payload must include taxonomy_crosswalk when include_taxonomy_crosswalk=True."""
+        records = [
+            _record("near_miss_pair", horizon=100, near_misses=1),
+            _record("near_miss_pair", horizon=500, near_misses=1),
+        ]
+        payload = classify_failure_mechanisms(
+            records,
+            generated_at_utc="2026-06-01T00:00:00+00:00",
+            include_taxonomy_crosswalk=True,
+        )
+        crosswalk = payload["taxonomy_crosswalk"]
+        assert crosswalk["crosswalk_schema_version"] == TAXONOMY_CROSSWALK_SCHEMA_VERSION
+        assert crosswalk["crosswalk_source"] == CLASSIFICATION_SOURCE
+        assert len(crosswalk["entries"]) == 1
+
+    def test_crosswalk_entry_shape(self) -> None:
+        """Each crosswalk entry must have all required fields."""
+        records = [
+            _record("collision_pair", horizon=100, collisions=1),
+            _record("collision_pair", horizon=500, collisions=1),
+        ]
+        payload = classify_failure_mechanisms(
+            records,
+            generated_at_utc="2026-06-01T00:00:00+00:00",
+            include_taxonomy_crosswalk=True,
+        )
+        entry = payload["taxonomy_crosswalk"]["entries"][0]
+        assert entry["row_index"] == 0
+        assert entry["classifier_label"] == "collision"
+        assert entry["taxonomy_label"] in MECHANISM_LABELS
+        assert entry["taxonomy_confidence"] in MECHANISM_CONFIDENCES
+        assert entry["evidence_mode"] == "aggregate_summary"
+        assert isinstance(entry["caveat"], str)
+        assert len(entry["caveat"]) > 0
+
+    def test_crosswalk_all_classifier_labels_mapped(self) -> None:
+        """Every classifier FAILURE_MECHANISM_LABELS must have a crosswalk mapping.
+
+        This is a coverage gate: if a new classifier label is added, the crosswalk
+        must be updated with a conservative taxonomy mapping.
+        """
+        records = [
+            _record("near_miss_pair", horizon=100, near_misses=1),
+            _record("near_miss_pair", horizon=500, near_misses=1),
+        ]
+        payload = classify_failure_mechanisms(
+            records,
+            generated_at_utc="2026-06-01T00:00:00+00:00",
+        )
+        rows = payload["rows"]
+        crosswalk = build_taxonomy_crosswalk(rows)
+        mapped_labels = {entry["classifier_label"] for entry in crosswalk["entries"]}
+        for row in rows:
+            assert row["label"] in mapped_labels, (
+                f"Classifier label {row['label']!r} appears in rows but "
+                f"is not in the crosswalk entries"
+            )
+
+    def test_crosswalk_handles_multiple_labels(self) -> None:
+        """Crosswalk correctly maps various classifier labels."""
+        records = [
+            # time_budget_clean_relief: fixed timeout, long success clean
+            _record("clean_relief", horizon=100, comfort_exposure=0.0, min_distance=1.5),
+            _record(
+                "clean_relief",
+                horizon=500,
+                success=1,
+                termination_reason="success",
+                comfort_exposure=0.0,
+                min_distance=1.5,
+                time_to_goal_norm=0.4,
+            ),
+            # collision
+            _record("collision_scenario", horizon=100, collisions=1),
+            _record("collision_scenario", horizon=500, collisions=1),
+            # unavailable (degraded)
+            _record("degraded_run", horizon=100, status="degraded"),
+            _record("degraded_run", horizon=500, status="degraded"),
+        ]
+        payload = classify_failure_mechanisms(
+            records,
+            generated_at_utc="2026-06-01T00:00:00+00:00",
+            include_taxonomy_crosswalk=True,
+        )
+        entries = payload["taxonomy_crosswalk"]["entries"]
+        label_map = {e["classifier_label"] for e in entries}
+        # Should have exactly 3 rows: clean_relief, collision_scenario, degraded_run
+        assert len(entries) == 3
+        assert "time_budget_clean_relief" in label_map
+        assert "collision" in label_map
+        assert "unavailable" in label_map
+        # Verify taxonomy labels are valid
+        for entry in entries:
+            if entry["classifier_label"] == "time_budget_clean_relief":
+                assert entry["taxonomy_label"] == "time_budget_artifact"
+            elif entry["classifier_label"] == "collision":
+                assert entry["taxonomy_label"] == "proxemic_or_clearance_tradeoff"
+            elif entry["classifier_label"] == "unavailable":
+                assert entry["taxonomy_label"] == "unknown"
+
+    def test_crosswalk_preserves_non_causal_caveats(self) -> None:
+        """All crosswalk caveats must include a non-causal limitation statement."""
+        records = [
+            _record("near_miss_pair", horizon=100, near_misses=1),
+            _record("near_miss_pair", horizon=500, near_misses=1),
+            _record("collision_pair", horizon=100, collisions=1),
+            _record("collision_pair", horizon=500, collisions=1),
+        ]
+        payload = classify_failure_mechanisms(
+            records,
+            generated_at_utc="2026-06-01T00:00:00+00:00",
+            include_taxonomy_crosswalk=True,
+        )
+        for entry in payload["taxonomy_crosswalk"]["entries"]:
+            caveat = entry["caveat"].lower()
+            assert "trace review" in caveat or "cannot" in caveat or "unsupported" in caveat, (
+                f"Caveat for {entry['classifier_label']!r} must include a non-causal "
+                f"limitation: {entry['caveat']}"
+            )
+
+    def test_crosswalk_schema_valid(self) -> None:
+        """Crosswalk payload must validate against its JSON Schema."""
+        schema = json.loads(
+            Path(
+                "robot_sf/benchmark/schemas/failure_mechanism_taxonomy_crosswalk.schema.v1.json"
+            ).read_text(encoding="utf-8")
+        )
+        records = [
+            _record("near_miss_pair", horizon=100, near_misses=1),
+            _record("near_miss_pair", horizon=500, near_misses=1),
+        ]
+        payload = classify_failure_mechanisms(
+            records,
+            generated_at_utc="2026-06-01T00:00:00+00:00",
+            include_taxonomy_crosswalk=True,
+        )
+        jsonschema.validate(instance=payload["taxonomy_crosswalk"], schema=schema)
+
+    def test_crosswalk_rejects_zero_rows(self) -> None:
+        """build_taxonomy_crosswalk must raise when given zero rows."""
+        import pytest
+
+        with pytest.raises(Exception, match="zero classifier rows"):
+            build_taxonomy_crosswalk([])
+
+    def test_crosswalk_preserves_unknown_for_unrecognised_label(self) -> None:
+        """Unrecognised classifier labels must produce unknown taxonomy mapping."""
+        rows = [
+            {
+                "scenario_id": "unknown_label",
+                "label": "nonexistent_label",
+                "confidence": 0.5,
+            }
+        ]
+        crosswalk = build_taxonomy_crosswalk(rows)
+        entry = crosswalk["entries"][0]
+        assert entry["classifier_label"] == "nonexistent_label"
+        assert entry["taxonomy_label"] == "unknown"
+        assert entry["taxonomy_confidence"] == "unknown"
+        assert "No crosswalk mapping defined" in entry["caveat"]
+
+    def test_crosswalk_from_jsonl_passthrough(self, tmp_path: Path) -> None:
+        """classify_failure_mechanisms_from_jsonl must pass include_taxonomy_crosswalk."""
+        jsonl_path = tmp_path / "episodes.jsonl"
+        records = [
+            _record("crosswalk_test", horizon=100, near_misses=1),
+            _record("crosswalk_test", horizon=500, near_misses=1),
+        ]
+        jsonl_path.write_text(
+            "".join(json.dumps(rec, sort_keys=True) + "\n" for rec in records),
+            encoding="utf-8",
+        )
+        payload = classify_failure_mechanisms_from_jsonl(
+            jsonl_path,
+            generated_at_utc="2026-06-01T00:00:00+00:00",
+            include_taxonomy_crosswalk=True,
+        )
+        assert "taxonomy_crosswalk" in payload
+        assert len(payload["taxonomy_crosswalk"]["entries"]) == 1

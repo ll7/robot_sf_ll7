@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -1012,6 +1013,8 @@ def test_cli_fails_for_file_evidence_without_domain_approval(tmp_path: Path) -> 
         "robot_sf/benchmark/last_avoidable_fixtures.py\n",
         encoding="utf-8",
     )
+    env = dict(os.environ)
+    env.pop("GITHUB_EVENT_PATH", None)
     result = subprocess.run(
         [
             sys.executable,
@@ -1025,6 +1028,7 @@ def test_cli_fails_for_file_evidence_without_domain_approval(tmp_path: Path) -> 
         text=True,
         timeout=30,
         check=False,
+        env=env,
     )
     assert result.returncode == 2
     assert "status=missing_domain_approval" in result.stderr

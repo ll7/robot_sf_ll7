@@ -349,6 +349,19 @@ uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero 
 `ty` currently runs in advisory mode with `--exit-zero`: it reports findings, but the canonical
 typecheck phase is not a PR-readiness merge blocker by itself.
 
+### Acceptance tests (pytest-bdd pilot)
+
+Acceptance scenarios live in `tests/bdd/` as Gherkin `.feature` files with pytest-bdd step
+definitions. These tests describe deterministic, fixture-first repository workflows and must not
+require network, GUI, CARLA, GPU, or long benchmark execution. Run them with:
+
+```bash
+uv run pytest tests/bdd -q
+uv run pytest --collect-only tests/bdd -q
+```
+
+The pilot covers episode schema validation: a valid record passes, a malformed record is rejected.
+
 ### Merge-race prevention (ADR — issue #5389)
 
 **Problem.** Three main-red incidents in 36 hours (2026-07-11/12) had the same shape: two PRs, each

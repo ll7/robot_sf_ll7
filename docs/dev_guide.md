@@ -22,14 +22,22 @@ LLM Constitution and guides can be found here:
 # Check host tools that live outside uv.
 scripts/dev/check_runtime_requirements.sh
 
-# One‑time setup with all extras and pre-commit
+# Slim core setup (or use --extra viz / maps / benchmark / training / all)
 uv sync --all-extras
 source .venv/bin/activate
 uv run pre-commit install
 
-# Quick import check
+# Quick import check (works in core install without optional extras)
 uv run python -c "from robot_sf.gym_env.environment_factory import make_robot_env; print('Import successful')"
 ```
+
+Robot SF uses an aggressive extras split to keep the default core installation slim:
+- Core (`uv sync`): Gymnasium env factory, simulator basics, minimal SVG maps, random/social-force smoke
+- `[viz]` (`uv sync --extra viz`): PyGame, Matplotlib, MoviePy, Seaborn rendering and video tooling
+- `[maps]` (`uv sync --extra maps`): OSMnx, GeoPandas, PyProj geospatial map authoring
+- `[benchmark]` (`uv sync --extra benchmark`): Pandas, SciPy benchmark evaluation and reporting
+- `[training]` (`uv sync --extra training`): Stable-Baselines3, PyTorch, Optuna, W&B, TensorBoard
+- `[all]` (`uv sync --extra all`): all optional feature extras
 
 Host tools and optional machine capabilities that are not installed by `uv` are tracked in
 [`docs/dev_runtime_requirements.md`](dev_runtime_requirements.md).

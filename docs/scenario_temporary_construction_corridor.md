@@ -1,6 +1,6 @@
 # Temporary Construction-Corridor Scenarios
 
-[Back to Documentation Index](../README.md) | [Scenario Zoo](scenario_zoo/index.md)
+[Back to Documentation Index](README.md) | [Scenario Zoo](scenario_zoo/index.md)
 
 ## Purpose
 

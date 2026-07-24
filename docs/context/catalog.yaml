@@ -4708,6 +4708,22 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml.sha256
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml.review.json
+  status: evidence
+  freshness: evidence
+  area: release_evidence
+- path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml.sha256.review.json
+  status: evidence
+  freshness: evidence
+  area: release_evidence
 - path: docs/context/evidence/issue_6192_predictive_foresight_fallback_audit.md
   status: evidence
   freshness: evidence

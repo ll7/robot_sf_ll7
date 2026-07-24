@@ -65,6 +65,7 @@ VALID_STATES = frozenset(
         "failed_validation",
         "missing_artifacts",
         "stale_worktree",
+        "stale_merge_base",
         "pending_gate_verdict",
         "ready_to_merge",
         "no_action",
@@ -282,8 +283,15 @@ def _merge_ready_state(
     label_names: list[str],
     overall: str,
     head_sha: str,
+    base_sha: str = "",
+    main_sha: str = "",
 ) -> str | None:
     """Return the merge-readiness state for a green, merge-ready PR, or None.
+
+    Stale merge base (issue #6269): when ``base_sha`` and ``main_sha`` are both
+    present and differ, the PR's merge base is not current with ``origin/main``.
+    Fail closed — ``stale_merge_base`` — so the PR is never marked ``ready_to_merge``
+    without an up-to-date base.
 
     Gate-verdict contract (issue #6019): reject any exact head unless a current
     exact-head ``gate-verdict: accepted @ <head_sha>`` trailer exists. Fail
@@ -291,6 +299,8 @@ def _merge_ready_state(
     """
     if "merge-ready" not in label_names or overall != "success":
         return None
+    if base_sha and main_sha and base_sha != main_sha:
+        return "stale_merge_base"
     if not has_current_accepted_gate_verdict(pr, head_sha):
         return "pending_gate_verdict"
     return "ready_to_merge"
@@ -329,12 +339,16 @@ def classify_pr_state(
     artifact_state = _artifact_state(artifacts, compact_artifacts=compact_artifacts)
     if artifact_state is not None:
         return artifact_state
+    base_sha = str(pr.get("base_sha", "") or "")
+    main_sha = str(pr.get("main_sha", "") or "")
     return (
         _merge_ready_state(
             pr,
             label_names=label_names,
             overall=overall,
             head_sha=head_sha,
+            base_sha=base_sha,
+            main_sha=main_sha,
         )
         or "no_action"
     )
@@ -389,13 +403,19 @@ def _compute_flow_decision(
     match state:
         case "pending_ci" | "pending_gate_verdict" | "ready_to_merge":
             return "continue"
-        case "failed_ci" | "failed_validation" | "missing_artifacts" | "stale_worktree":
+        case (
+            "failed_ci"
+            | "failed_validation"
+            | "missing_artifacts"
+            | "stale_worktree"
+            | "stale_merge_base"
+        ):
             return "reroute"
         case _:
             return "stop"
 
 
-def recommend_action(
+def recommend_action(  # noqa: C901
     state: str,
     *,
     pr_number: int,
@@ -403,6 +423,8 @@ def recommend_action(
     has_merge_ready: bool = False,
     ci_success: bool = False,
     review_state: str = "",
+    stale_base_sha: str = "",
+    current_main_sha: str = "",
 ) -> PolicyDecision:
     """Map a classified state to a deterministic next action.
 
@@ -500,6 +522,21 @@ def recommend_action(
                 ),
                 actions_remaining=remaining,
             )
+        case "stale_merge_base":
+            stale = stale_base_sha or "?"
+            current = current_main_sha or "?"
+            return PolicyDecision(
+                pr=pr_number,
+                action="refresh_snapshot",
+                state=state,
+                flow_decision=flow_decision,
+                reason=(
+                    f"merge base SHA {stale} does not match "
+                    f"current main SHA {current}; "
+                    "PR must be rebased onto main"
+                ),
+                actions_remaining=remaining,
+            )
         case _:
             return PolicyDecision(
                 pr=pr_number,
@@ -566,6 +603,8 @@ def evaluate_queue(
                 ).to_dict()
             )
             break
+        stale_base = str(enriched.get("base_sha", "")) if state == "stale_merge_base" else ""
+        current_main = str(enriched.get("main_sha", "")) if state == "stale_merge_base" else ""
         decision = recommend_action(
             state,
             pr_number=num,
@@ -573,6 +612,8 @@ def evaluate_queue(
             has_merge_ready=has_merge,
             ci_success=ci_ok,
             review_state=review,
+            stale_base_sha=stale_base,
+            current_main_sha=current_main,
         )
         decisions.append(decision.to_dict())
         actions_used += 1

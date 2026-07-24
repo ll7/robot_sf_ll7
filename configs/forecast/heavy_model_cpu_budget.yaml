@@ -1,0 +1,52 @@
+# CPU runtime budget for the heavy forecast-model offline experiment (issue #2845).
+#
+# Defines the resource limits and runtime constraints for the minimum viable
+# offline experiment. The issue requires CPU-only execution (no SLURM/GPU
+# campaign) and a bounded runtime that fits within a local developer session.
+#
+# schema: heavy_model_cpu_budget.v1
+
+experiment_id: "heavy_model_offline_cpu_smoke"
+schema_version: "heavy_model_cpu_budget.v1"
+
+description: >
+  CPU-bounded runtime budget for scoring one trained heavy model (start with
+  CVAE) against the lightweight baseline ladder on the held-out forecast
+  dataset, recording ADE/FDE, calibration coverage gap, conformal coverage,
+  and wall-clock runtime.
+
+compute:
+  mode: "cpu_only"
+  max_workers: 1
+  runtime_limit_minutes: 30
+  memory_limit_gb: 8
+
+evaluation:
+  metrics:
+    - ade
+    - fde
+    - miss_rate
+    - nll
+  calibration_report: true
+  conformal_pilot: true
+  baseline_comparison: true
+
+baseline_comparison:
+  families:
+    - key: "constant_velocity"
+      label: "Constant-Velocity Gaussian"
+    - key: "semantic_cv"
+      label: "Semantic CV Baseline"
+    - key: "heavy_model"
+      label: "Heavy Model (placeholder)"
+
+output:
+  artifacts:
+    - "forecast_metrics.jsonl"
+    - "calibration_report.json"
+    - "conformal_pilot_report.json"
+    - "baseline_comparison.json"
+  provenance:
+    record_git_sha: true
+    record_config: true
+    record_runtime_s: true

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from scripts.dev.check_pr_followups import (
+    _read_event_title,
     analyze_body,
     analyze_body_quality,
     analyze_domain_approval,
@@ -69,6 +71,30 @@ Adds a small workflow guard for PR body quality.
 - Deferred work: none
 - Issues opened for follow-up: none
 """
+
+
+def test_read_event_title_returns_title_for_valid_pull_request_event(tmp_path: Path) -> None:
+    """Valid GitHub event payloads still provide their pull-request title."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps({"pull_request": {"title": "fix: guard event input"}}))
+
+    assert _read_event_title(event_path) == "fix: guard event input"
+
+
+@pytest.mark.parametrize("payload", ["not json", "[]", "null", "{}"])
+def test_read_event_title_fails_closed_for_unusable_event_payloads(
+    tmp_path: Path, payload: str
+) -> None:
+    """Missing title data must not crash PR-body validation."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(payload)
+
+    assert _read_event_title(event_path) is None
+
+
+def test_read_event_title_fails_closed_for_missing_event_file(tmp_path: Path) -> None:
+    """A missing GitHub event file is treated as unavailable input."""
+    assert _read_event_title(tmp_path / "missing-event.json") is None
 
 
 def test_analyze_body_passes_when_no_deferred_work_is_declared() -> None:
@@ -864,6 +890,222 @@ def test_cli_require_body_fails_closed_without_pr_body_source(monkeypatch) -> No
 
     assert result.returncode == 2
     assert "status=missing_body" in result.stdout
+
+
+def test_domain_approval_rejects_title_based_evidence_without_approval() -> None:
+    """PR title suggesting evidence-changing work requires Domain-Aware Approval section."""
+    body = "## Summary\nA routine timing localization refinement.\n"
+    report = analyze_domain_approval(
+        body,
+        source="fixture",
+        title="validation: benchmark collision-cause attribution timing localization (#6179)",
+    )
+    assert report.status == "missing_domain_approval"
+    assert any("title-based" in term for term in report.sensitive_terms)
+
+
+def test_domain_approval_rejects_file_based_evidence_without_approval() -> None:
+    """Changed files in benchmark paths require Domain-Aware Approval section."""
+    body = "## Summary\nA routine timing localization refinement.\n"
+    report = analyze_domain_approval(
+        body,
+        source="fixture",
+        changed_files=("robot_sf/benchmark/last_avoidable_fixtures.py",),
+    )
+    assert report.status == "missing_domain_approval"
+    assert any("file-based" in term for term in report.sensitive_terms)
+
+
+def test_domain_approval_title_signal_not_blocked_by_docs_only_body() -> None:
+    """Title-based evidence signal still requires domain approval even with docs-only opt-out."""
+    body = """## Summary
+Adds a reference table.
+
+## Domain-Aware Approval
+- Required for this PR: no - docs-only
+- Domains reviewed: NA
+- Status: not required
+- Approver/review source or waiver: NA
+"""
+    report = analyze_domain_approval(
+        body,
+        source="fixture",
+        title="benchmark: add new reward profile reference table",
+    )
+    assert report.status == "domain_approval_required"
+
+
+def test_domain_approval_file_signal_not_blocked_by_docs_only_body() -> None:
+    """File-based evidence signal still requires domain approval even with docs-only opt-out."""
+    body = """## Summary
+Adds a reference table.
+
+## Domain-Aware Approval
+- Required for this PR: no - docs-only
+- Domains reviewed: NA
+- Status: not required
+- Approver/review source or waiver: NA
+"""
+    report = analyze_domain_approval(
+        body,
+        source="fixture",
+        changed_files=("robot_sf/benchmark/camera_ready/_summaries.py",),
+    )
+    assert report.status == "domain_approval_required"
+
+
+def test_domain_approval_accepts_clean_title_and_files_with_docs_only_body() -> None:
+    """Docs-only opt-out still works when title and files do not suggest evidence work."""
+    body = """## Summary
+Adds a single reference table for reward profiles to aid benchmark interpretation.
+
+## Domain-Aware Approval
+- Required for this PR: no - docs-only reference table, no evidence classification change
+- Domains reviewed: NA
+- Status: not required
+- Approver/review source or waiver: NA - docs-only
+"""
+    report = analyze_domain_approval(
+        body,
+        source="fixture",
+        title="docs: add reward profile reference table",
+        changed_files=("docs/context/reward_profiles.md",),
+    )
+    assert report.status == "ok"
+    assert any("free-form evidence marker" in term for term in report.sensitive_terms)
+
+
+def test_cli_fails_for_title_evidence_without_domain_approval(tmp_path: Path) -> None:
+    """The CLI blocks PRs with evidence-signaling title and no Domain-Aware Approval."""
+    body_path = tmp_path / "body.md"
+    body_path.write_text(
+        "## Summary\nA routine timing localization refinement.\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--body-file",
+            str(body_path),
+            "--title",
+            "benchmark: add new evaluation metric",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 2
+    assert "status=missing_domain_approval" in result.stderr
+    assert "title-based" in result.stderr
+
+
+def test_cli_fails_for_file_evidence_without_domain_approval(tmp_path: Path) -> None:
+    """The CLI blocks PRs touching benchmark paths with no Domain-Aware Approval."""
+    body_path = tmp_path / "body.md"
+    files_path = tmp_path / "files.txt"
+    body_path.write_text(
+        "## Summary\nA routine timing refinement.\n",
+        encoding="utf-8",
+    )
+    files_path.write_text(
+        "robot_sf/benchmark/last_avoidable_fixtures.py\n",
+        encoding="utf-8",
+    )
+    env = dict(os.environ)
+    env.pop("GITHUB_EVENT_PATH", None)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--body-file",
+            str(body_path),
+            "--changed-files-file",
+            str(files_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+        env=env,
+    )
+    assert result.returncode == 2
+    assert "status=missing_domain_approval" in result.stderr
+    assert "file-based" in result.stderr
+
+
+def test_cli_blocks_scoped_title_and_context_evidence_path_without_domain_approval(
+    tmp_path: Path,
+) -> None:
+    """Canonical evidence paths and conventional scopes must not bypass the approval gate."""
+    event_path = tmp_path / "event.json"
+    files_path = tmp_path / "files.txt"
+    title = "feat(benchmark): classify figure eligibility evidence"
+    event_path.write_text(
+        json.dumps(
+            {
+                "pull_request": {
+                    "body": "## Summary\nClassifies figure eligibility documentation.\n",
+                    "title": title,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    files_path.write_text(
+        "docs/context/evidence/issue_6267/figure_eligibility.md\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--github-event-path",
+            str(event_path),
+            "--changed-files-file",
+            str(files_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "status=missing_domain_approval" in result.stderr
+    assert f"title-based evidence signal: {title}" in result.stderr
+    assert "file-based evidence signal: docs/context/evidence" in result.stderr
+
+
+def test_cli_accepts_clean_title_and_files_with_domain_approval(tmp_path: Path) -> None:
+    """PRs with evidence title but proper Domain-Aware Approval pass."""
+    body_path = tmp_path / "body.md"
+    body_path.write_text(
+        _domain_body(
+            domain_section=_approved_domain_section(
+                note="maintainer review of claim boundary and fallback exclusions"
+            )
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--body-file",
+            str(body_path),
+            "--title",
+            "validation: benchmark timing localization refinement",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "status=ok" in result.stdout or "status=ok" in result.stderr
 
 
 def test_domain_approval_ignores_negated_evidence_marker() -> None:

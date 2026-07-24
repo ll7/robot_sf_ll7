@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Temporary construction-corridor scenario: detour.
+     Models a corridor with a central temporary construction barrier that
+     blocks the direct path, forcing the robot to detour around the top of
+     the barrier. The corridor (y=4..y=16, width 12) has a central barrier
+     (x=8..x=12, y=7..y=13) with a narrow gap above (y=4..y=7, width 3).
+     Source: WorkDrive AMMV ODD stress scenarios. -->
+<svg
+   width="20"
+   height="20"
+   viewBox="0 0 20 20"
+   version="1.1"
+   id="svg_construction_corridor_detour"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape">
+  <g id="layer1" inkscape:label="Layer 1">
+    <!-- Outer boundary walls -->
+    <rect x="0" y="0" width="0.5" height="20" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="19.5" y="0" width="0.5" height="20" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="0" y="0" width="20" height="0.5" style="fill:#000000" inkscape:label="obstacle" />
+    <rect x="0" y="19.5" width="20" height="0.5" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Corridor walls (left section) -->
+    <rect id="corridor_top_left" x="0.5" y="0.5" width="7.5" height="3.5" style="fill:#000000" inkscape:label="obstacle" />
+    <rect id="corridor_bottom_left" x="0.5" y="16.0" width="7.5" height="3.5" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Temporary construction barrier (blocks direct path) -->
+    <rect id="construction_barrier_center" x="8.0" y="7.0" width="4.0" height="6.0" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Corridor walls (right section) -->
+    <rect id="corridor_top_right" x="12.0" y="0.5" width="7.5" height="3.5" style="fill:#000000" inkscape:label="obstacle" />
+    <rect id="corridor_bottom_right" x="12.0" y="16.0" width="7.5" height="3.5" style="fill:#000000" inkscape:label="obstacle" />
+
+    <!-- Robot spawn and goal zones -->
+    <rect id="robot_spawn_zone_0" x="1.5" y="9.0" width="1.5" height="2.0" style="fill:#ffdf00" inkscape:label="robot_spawn_zone_0" />
+    <rect id="robot_goal_zone_0" x="17.0" y="9.0" width="1.5" height="2.0" style="fill:#ff6c00" inkscape:label="robot_goal_zone_0" />
+
+    <!-- Robot route: detour around the top of the central barrier -->
+    <path id="robot_route_0_0" d="M 2.25,10.0 8.0,10.0 8.0,5.5 12.0,5.5 12.0,10.0 17.75,10.0" style="fill:none;stroke:#0310b4;stroke-width:0.2" inkscape:label="robot_route_0_0" />
+  </g>
+</svg>

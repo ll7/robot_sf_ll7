@@ -349,6 +349,19 @@ uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero 
 `ty` currently runs in advisory mode with `--exit-zero`: it reports findings, but the canonical
 typecheck phase is not a PR-readiness merge blocker by itself.
 
+### Acceptance tests (pytest-bdd pilot)
+
+Acceptance scenarios live in `tests/bdd/` as Gherkin `.feature` files with pytest-bdd step
+definitions. These tests describe deterministic, fixture-first repository workflows and must not
+require network, GUI, CARLA, GPU, or long benchmark execution. Run them with:
+
+```bash
+uv run pytest tests/bdd -q
+uv run pytest --collect-only tests/bdd -q
+```
+
+The pilot covers episode schema validation: a valid record passes, a malformed record is rejected.
+
 ### Merge-race prevention (ADR — issue #5389)
 
 **Problem.** Three main-red incidents in 36 hours (2026-07-11/12) had the same shape: two PRs, each
@@ -887,6 +900,11 @@ For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the sub
 wall time tracks the live partition and QoS maximum instead of an outdated hardcoded
 `#SBATCH --time` value. See `docs/dev/slurm_submission.md` for the workflow.
 
+After a job reaches a terminal state, use `scripts/tools/slurm_job_finalize.py` to record
+the observed state, required local artifacts, checksums, and issue-update summary. See the
+[SLURM post-run closeout guide](dev/slurm_submission.md#post-run-closeout); the finalizer is
+metadata-only and does not turn local files into durable benchmark evidence.
+
 For paper-facing benchmark release runs, use the dedicated release wrapper:
 
 ```bash
@@ -1150,6 +1168,10 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 
 ### Testing strategy (UNIFIED test suite)
 
+For the canonical contributor QA runbook, 12-class test taxonomy, command matrix, failure classification, and explicit CI rerun rules, see **[Contributor QA Runbook and Test Taxonomy](./qa_test_strategy.md)**.
+For the risk-based map of critical shared contracts to their direct tests and validation lanes, see
+**[Test Traceability Matrix](./test_traceability_matrix.md)**.
+
 **The project now uses a unified test suite** running both robot_sf and fast-pysf tests via a single command.
 
 #### Unified Test Suite
@@ -1273,8 +1295,13 @@ open output/coverage/htmlcov/index.html
 
 #### What gets measured
 
-- **Included**: All code in `robot_sf/` package
-- **Excluded**: Tests, examples, scripts, `fast-pysf/` subtree
+- **Included**: The canonical wrapper and non-PR CI measure only the `robot_sf/` package. Their
+  `--cov=robot_sf` argument overrides the broader `pyproject.toml` coverage.py source list.
+- **Not measured by this command**: `fast-pysf/pysocialforce`. It remains in the coverage.py
+  configuration but is not included in wrapper reports or the non-PR CI coverage gate.
+- **Excluded when the configured source list is used**: Test files (`*/tests/*`, `*/test_*`,
+  `fast-pysf/tests/*`), examples (`examples/*`, `fast-pysf/examples/*`), scripts (`scripts/*`),
+  `tests/pygame/*`, `*/conftest.py`, `*/__pycache__/*`
 - **Output formats**: 
   - Terminal summary (printed after test run)
   - HTML report (`output/coverage/htmlcov/index.html` - interactive, detailed)
@@ -1345,7 +1372,7 @@ ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests/test_batched_
 If you need focused changed-line coverage during development, run the test without `--cov` first
 to confirm it passes, then use the wrapper for the coverage snapshot.
 
-For coverage gap analysis, trend tracking, and CI integration, see `docs/coverage_guide.md` (created as part of US2/US3).
+For complete coverage collection details, baseline tracking, absolute floor enforcement, and CI integration, see [Coverage Guide](coverage_guide.md) (Note: gap analysis and trend tracking were descoped under issue #3349).
 
 ### Must-have checklist
 
@@ -1531,6 +1558,7 @@ Here’s a concise map of the docs folder to help you find the right guidance qu
 #### Top-level guides (entry points)
 - README.md — Main docs landing page.
 - dev_guide.md — Primary development reference (setup, workflow, testing, CI).
+- `qa_test_strategy.md` — Canonical contributor QA runbook and test taxonomy.
 - `ENVIRONMENT.md` — Environment overview and usage.
 - `SIM_VIEW.md` — Simulation view/UI notes.
 - `UV_MIGRATION.md` — Migration notes to uv.
@@ -1628,7 +1656,7 @@ CI mapping to local tasks and CLI:
 - `fast-feedback` matrix → four `scripts/dev/ci_driver.sh test` shards on every event; shard 1
   also runs lint and advisory type checking. Pull requests exclude slow tests, while non-PR events
   run the complete suite and upload one coverage database per shard.
-- `coverage-gate` job → combines all four non-PR coverage databases, enforces the absolute coverage
+- `coverage-gate` job → combines all four non-PR coverage databases, enforces the 85.0% absolute coverage
   floor, and updates the advisory main baseline.
 - `smoke-artifacts` job → `scripts/dev/ci_driver.sh smoke artifact-policy`
 - aggregate `ci` job → requires the coverage gate on non-PR events and all other split jobs while
@@ -1680,7 +1708,7 @@ The CI pipeline separates fast feedback from the heavier smoke/artifact tail:
 
 - `fast-feedback` distributes pytest over four runners; pull requests use the fast-only marker,
   while main, manual, and merge-queue events run the complete suite with per-shard coverage data.
-- `coverage-gate` combines the complete non-PR coverage data before enforcing the absolute floor
+- `coverage-gate` combines the complete non-PR coverage data before enforcing the 85.0% absolute floor
   and advisory baseline comparison.
 - `smoke-artifacts` runs validation smoke checks, uploads benchmark/recording artifacts, and enforces
   the artifact-root policy.

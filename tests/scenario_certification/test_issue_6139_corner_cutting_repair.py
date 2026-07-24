@@ -35,6 +35,7 @@ from robot_sf.scenario_certification.v1 import (
     GEOMETRICALLY_INFEASIBLE,
     VALID,
     CertificationSettings,
+    _validate_planned_path_simulator_collision,
     _validate_planned_path_swept_envelope,
     measure_planned_path_clearance,
 )
@@ -198,6 +199,22 @@ def test_validate_swept_envelope_trivially_clear_without_obstacles() -> None:
     assert verdict["validated"] is True
     assert verdict["clips_obstacle"] is False
     assert verdict["clipped_vertex_count"] == 0
+
+
+def test_runtime_collision_verdict_fails_closed_on_invalid_radius() -> None:
+    """A non-finite runtime collision radius is unverifiable rather than collision-free."""
+    map_def = _map([(1.0, 1.0), (10.0, 1.0)])
+
+    verdict = _validate_planned_path_simulator_collision(
+        [(1.0, 1.0), (10.0, 1.0)],
+        map_def=map_def,
+        goal=(10.0, 1.0),
+        robot_radius=float("nan"),
+    )
+
+    assert verdict["validated"] is False
+    assert verdict["collides_obstacle"] is None
+    assert verdict["blocker"] == "robot_radius_must_be_finite_and_non_negative"
 
 
 # ---------------------------------------------------------------------------

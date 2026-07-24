@@ -315,6 +315,23 @@ NATIVE_COMMAND_RUNTIME_FIELD: str = "planner_step_runtime_seconds"
 _episode_identity_hash = episode_identity_hash
 
 
+def _planner_foresight_diagnostics(planner: Any) -> dict[str, Any] | None:
+    """Return serializable live foresight diagnostics from a planner, when available.
+
+    PPO runs behind a forked process boundary. Its predictive-foresight encoder
+    therefore mutates only in the child, so each IPC response must carry the
+    child's diagnostics back to the parent episode runner.
+    """
+    diagnostics_fn = getattr(planner, "foresight_diagnostics", None)
+    if not callable(diagnostics_fn):
+        return None
+    try:
+        diagnostics = diagnostics_fn()
+    except Exception:  # pragma: no cover - diagnostics must not break policy execution
+        return None
+    return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
+
+
 def _config_torch_worker(planner: Any) -> None:
     """Configure torch for deterministic single-threaded execution in a forked worker."""
     torch = try_import("torch")
@@ -322,6 +339,8 @@ def _config_torch_worker(planner: Any) -> None:
         return
     torch.set_num_threads(1)
     seed = getattr(planner, "_seed", 0)
+    if seed is None:
+        seed = 0
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
@@ -331,13 +350,13 @@ def _config_torch_worker(planner: Any) -> None:
 
 
 def _planner_step_worker(conn: Any, planner: Any) -> None:
-    """Run planner steps in an isolated child process."""
+    """Run planner steps in an isolated child process and relay live diagnostics."""
     try:
         _config_torch_worker(planner)
         ensure_load = getattr(planner, "_ensure_model_loaded", None)
         if callable(ensure_load):
             ensure_load()
-        conn.send(("init_ok", None))
+        conn.send(("init_ok", _planner_foresight_diagnostics(planner)))
     except Exception as exc:
         try:
             conn.send(("init_error", (type(exc).__name__, str(exc))))
@@ -358,7 +377,8 @@ def _planner_step_worker(conn: Any, planner: Any) -> None:
                 conn.send(("error", ("RuntimeError", f"unknown command: {command!r}")))
                 continue
             try:
-                conn.send(("ok", planner.step(payload)))
+                action = planner.step(payload)
+                conn.send(("ok", (action, _planner_foresight_diagnostics(planner))))
             except Exception as exc:  # pragma: no cover - defensive child-process path
                 conn.send(("error", (type(exc).__name__, str(exc))))
     finally:
@@ -386,6 +406,7 @@ class _PlannerStepProcess:
         self._ctx = mp.get_context("fork")
         self._process: mp.Process | None = None
         self._conn: Any | None = None
+        self._latest_foresight_diagnostics: dict[str, Any] | None = None
 
     def step(self, obs: Any) -> Any:
         """Run one planner step or raise when timeout/isolation fails.
@@ -422,8 +443,10 @@ class _PlannerStepProcess:
                         "planner step worker exited before returning an action"
                     ) from exc
                 if status == "ok":
+                    action, diagnostics = payload
+                    self._set_foresight_diagnostics(diagnostics)
                     self._worker_needs_warmup = False
-                    return payload
+                    return action
                 error_type, message = payload
                 raise RuntimeError(f"Planner step failed in worker ({error_type}: {message})")
             if not self._process.is_alive():
@@ -478,7 +501,17 @@ class _PlannerStepProcess:
                 raise RuntimeError("planner step worker initialization timed out")
             error_type, msg = payload
             raise RuntimeError(f"planner step worker failed to initialize ({error_type}: {msg})")
+        self._set_foresight_diagnostics(payload)
         self._worker_needs_warmup = True
+
+    def foresight_diagnostics(self) -> dict[str, Any]:
+        """Return foresight diagnostics most recently relayed from the child worker."""
+        return dict(self._latest_foresight_diagnostics or {})
+
+    def _set_foresight_diagnostics(self, diagnostics: Any) -> None:
+        """Store serializable diagnostics relayed by the child process."""
+        if isinstance(diagnostics, Mapping):
+            self._latest_foresight_diagnostics = dict(diagnostics)
 
     def _terminate_worker(self) -> None:
         """Terminate the current worker after a timeout."""
@@ -1340,6 +1373,12 @@ def _create_robot_policy(  # noqa: C901, PLR0915
 
     if step_runner is not None:
         policy_fn.close = step_runner.close  # type: ignore[attr-defined]
+    # Issue #6190: expose the predictive planner's live foresight-model-load
+    # provenance on the policy closure. PPO executes behind ``step_runner``;
+    # its encoder mutates in the forked child, so the parent planner is stale and
+    # diagnostics must be read from the IPC relay instead.
+    if step_runner is not None and callable(getattr(planner, "foresight_diagnostics", None)):
+        policy_fn.foresight_diagnostics = step_runner.foresight_diagnostics  # type: ignore[attr-defined]
     # Ensure consistent metadata schema
     metadata.setdefault("algorithm", algo)
     metadata["config"] = algo_config
@@ -2007,6 +2046,17 @@ def run_episode(  # noqa: PLR0913
         live_diag = policy_diag()
         if isinstance(live_diag, dict):
             algo_metadata[NATIVE_COMMAND_DIAGNOSTICS_KEY] = live_diag
+
+    # Issue #6190: refresh the predictive planner's foresight-model-load
+    # provenance (captured during the episode) so ``enrich_algorithm_metadata``
+    # can derive the degraded ``status``/``evidence_eligible`` for a silent
+    # constant-velocity fallback. Read after the episode because the model load
+    # (and any fallback) happens lazily during prediction.
+    foresight_diag = getattr(robot_policy, "foresight_diagnostics", None)
+    if callable(foresight_diag):
+        live_foresight = foresight_diag()
+        if isinstance(live_foresight, dict):
+            algo_metadata.update(live_foresight)
 
     collision = bool(metric_scalar(metrics, "collisions", "collision_rate") > 0.0)
     route_complete = bool(metric_scalar(metrics, "success", "success_rate") > 0.0)

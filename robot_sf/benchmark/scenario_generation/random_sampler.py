@@ -103,6 +103,12 @@ def sample_episode_jobs(
 
 
 def _is_supported(scenario: Mapping[str, Any]) -> bool:
+    """Return whether a scenario is eligible for sampling.
+
+    Treated as supported unless the scenario or its metadata is explicitly
+    marked ``supported: False``.
+    """
+
     metadata = scenario.get("metadata")
     return scenario.get("supported") is not False and not (
         isinstance(metadata, Mapping) and metadata.get("supported") is False
@@ -110,6 +116,8 @@ def _is_supported(scenario: Mapping[str, Any]) -> bool:
 
 
 def _scenario_name(scenario: Mapping[str, Any]) -> str:
+    """Return a scenario's non-empty ``name`` (or ``id`` fallback), raising if neither is set."""
+
     value = scenario.get("name") or scenario.get("id")
     if not isinstance(value, str) or not value.strip():
         raise ValueError("every source scenario must have a non-empty name or id")
@@ -117,6 +125,11 @@ def _scenario_name(scenario: Mapping[str, Any]) -> str:
 
 
 def _source_map(scenario: Mapping[str, Any]) -> str:
+    """Return a scenario's non-empty map reference (``map_file`` or ``map_id``).
+
+    Absolute paths are normalized to POSIX form for stable provenance.
+    """
+
     value = scenario.get("map_file") or scenario.get("map_id")
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"source scenario '{_scenario_name(scenario)}' has no map reference")

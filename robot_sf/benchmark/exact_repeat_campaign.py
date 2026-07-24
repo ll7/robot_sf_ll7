@@ -68,7 +68,18 @@ MIXED_DISPOSITION = "mixed_runnability"
 # excludes it from the bitwise-identical claim, with a distinct ``degraded`` flag
 # and reason to distinguish a degraded run from a clean registry-unavailable planner.
 DEGRADED_DISPOSITION = "degraded_fallback"
-_DEGRADED_STATUS_PREFIXES = ("policy_step_timeout_fallback", "policy_step_error_fallback")
+_DEGRADED_STATUS_PREFIXES = (
+    "policy_step_timeout_fallback",
+    "policy_step_error_fallback",
+    # Issue #6190: the foresight-model-load fallback in PredictionPlannerAdapter
+    # silently degrades to constant-velocity prediction when the predictive model
+    # cannot be loaded with ``allow_fallback=True``. The benchmark metadata layer
+    # surfaces this as a degraded ``status`` prefix so a foresight-degraded run is
+    # dispositioned (and excluded from the bitwise-identical determinism claim)
+    # before the determinism assertion fires, rather than failing with a cryptic
+    # trajectory-fingerprint mismatch.
+    "predictive_foresight_model_fallback",
+)
 
 # A target whose repeats could not be produced *natively* because the planner-step
 # isolation boundary itself failed (for example an xdist-forked pytest worker that
@@ -86,7 +97,11 @@ def _record_is_degraded(record: Any) -> bool:
 
     A target is degraded when the planner step fell back to a zero-velocity action
     inside the isolation worker. The runner reports that through the planner status
-    and the explicit ``policy_step_timeout.fallback_actions`` counter. Episode-level
+    and the explicit ``policy_step_timeout.fallback_actions`` counter. It is also
+    degraded when a predictive-foresight planner silently fell back to
+    constant-velocity prediction because its model could not be loaded
+    (issue #6190): ``enrich_algorithm_metadata`` surfaces that as a
+    ``predictive_foresight_model_fallback`` status prefix. Episode-level
     ``outcome.timeout_event`` is deliberately not used: it also represents a native
     episode reaching its configured horizon and is not planner-degradation evidence.
     """

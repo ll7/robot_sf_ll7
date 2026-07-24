@@ -221,6 +221,18 @@ def _validate_required_outputs(required_outputs: Any) -> None:
         "min_trace_verified_labeled_fraction must be in (0, 1] so an all-unknown "
         "re-run cannot pass successful outcome",
     )
+    # Issue #5779 structural denominator correction: the floor is measured over
+    # failure episodes (rows whose write-time ``success`` outcome is below 1.0),
+    # not all campaign rows. Only ``failure_episodes`` is a ratified denominator;
+    # declaring it explicitly here records the correction and prevents silent
+    # drift back to the unreachable all-rows denominator.
+    denominator = mechanism.get("min_trace_verified_labeled_fraction_denominator")
+    _require(
+        denominator == "failure_episodes",
+        "min_trace_verified_labeled_fraction_denominator must be 'failure_episodes' "
+        "(issue #5779 structural correction: success episodes carry no "
+        "failure-mechanism label, so the floor is measured over failure episodes)",
+    )
 
     exposure = required_outputs.get("interaction_exposure")
     _require(isinstance(exposure, dict), "required_outputs.interaction_exposure required")
@@ -350,6 +362,9 @@ def build_dry_run_manifest(payload: dict[str, Any]) -> dict[str, Any]:
                 "schema_version"
             ],
             "min_trace_verified_labeled_fraction": mechanism["min_trace_verified_labeled_fraction"],
+            "min_trace_verified_labeled_fraction_denominator": mechanism[
+                "min_trace_verified_labeled_fraction_denominator"
+            ],
         },
         "downstream_consumer": payload["provenance"]["downstream_consumer"].get("builder"),
     }

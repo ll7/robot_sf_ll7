@@ -145,6 +145,71 @@ def test_read_backlog_baseline_fails_closed_for_missing_or_invalid_files(tmp_pat
     assert "must contain a JSON object" in capsys.readouterr().err
 
 
+def test_read_backlog_baseline_for_ref_uses_the_ref_owned_blob(monkeypatch, tmp_path):
+    """The base snapshot must load its own baseline rather than the branch file."""
+    observed: dict[str, object] = {}
+
+    def fake_run(command, *, cwd=None):
+        observed["command"] = command
+        observed["cwd"] = cwd
+        return '{"files": {"scripts/tool.py": 2}}'
+
+    monkeypatch.setattr(check_docstring_todos, "_run", fake_run)
+
+    baseline = check_docstring_todos._read_backlog_baseline_for_ref(
+        tmp_path / "baseline.json",
+        tmp_path,
+        "origin/main",
+    )
+
+    assert baseline == {"files": {"scripts/tool.py": 2}}
+    assert observed == {
+        "command": ["git", "show", "origin/main:baseline.json"],
+        "cwd": tmp_path,
+    }
+
+
+def test_read_backlog_baseline_for_ref_fails_closed(monkeypatch, tmp_path, capsys):
+    """Missing, malformed, or non-object ref blobs must not pass freshness."""
+
+    def missing_ref(*_args, **_kwargs):
+        raise RuntimeError("missing ref blob")
+
+    monkeypatch.setattr(check_docstring_todos, "_run", missing_ref)
+    baseline_path = tmp_path / "baseline.json"
+    assert (
+        check_docstring_todos._read_backlog_baseline_for_ref(
+            baseline_path,
+            tmp_path,
+            "origin/main",
+        )
+        is None
+    )
+    assert "missing ref blob" in capsys.readouterr().err
+
+    monkeypatch.setattr(check_docstring_todos, "_run", lambda *_args, **_kwargs: "{bad json}")
+    assert (
+        check_docstring_todos._read_backlog_baseline_for_ref(
+            baseline_path,
+            tmp_path,
+            "origin/main",
+        )
+        is None
+    )
+    assert "Failed to read baseline file" in capsys.readouterr().err
+
+    monkeypatch.setattr(check_docstring_todos, "_run", lambda *_args, **_kwargs: "[]")
+    assert (
+        check_docstring_todos._read_backlog_baseline_for_ref(
+            baseline_path,
+            tmp_path,
+            "origin/main",
+        )
+        is None
+    )
+    assert "must contain a JSON object" in capsys.readouterr().err
+
+
 def test_count_from_source_matches_file_count(tmp_path):
     """Ref-based source counting must match the file-based counter (issue #5858)."""
     src = (

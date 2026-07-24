@@ -5,6 +5,7 @@ Reads campaign episode JSONL files and derives failure-mechanism labels from
 event_ledger, outcome, and safety predicates. Produces mechanism sidecars
 that can be consumed by the #4206 crosscut builder.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

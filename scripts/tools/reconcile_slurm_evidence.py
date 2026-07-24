@@ -5,6 +5,7 @@ The tool is intentionally metadata-only: it maps queue seed requests to manifest
 status and evidence-preservation status, then reports duplicates plus conservative
 warnings and errors.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

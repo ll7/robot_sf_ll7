@@ -4,6 +4,7 @@
 Generates one Markdown report per selected case with exact frame ranges, event IDs,
 internal-state summaries, planner-decision summaries, and observed-vs-hypothesized labels.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

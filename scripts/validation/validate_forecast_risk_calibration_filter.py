@@ -18,6 +18,7 @@ Usage::
     uv run python scripts/validation/validate_forecast_risk_calibration_filter.py \
         --out-dir docs/context/evidence/issue_2869_forecast_risk_calibration_filter_2026-06-15
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

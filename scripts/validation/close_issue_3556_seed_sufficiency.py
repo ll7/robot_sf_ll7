@@ -30,7 +30,6 @@ Example (point at a restored retained campaign root):
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,6 +44,7 @@ from robot_sf.benchmark.scenario_belief_screening import (  # noqa: E402
     REQUIRED_SEED_SUFFICIENCY_REPORTS,
     build_seed_sufficiency_closure_packet,
 )
+from robot_sf.evidence.writers import write_json, write_text  # noqa: E402
 from scripts.tools.analyze_seed_sufficiency import (  # noqa: E402
     analyze_seed_sufficiency,
     resolve_campaign_roots,
@@ -256,10 +256,8 @@ def run_closure(
     )
 
     evidence_dir.mkdir(parents=True, exist_ok=True)
-    (evidence_dir / "summary.json").write_text(
-        json.dumps(packet, indent=2) + "\n", encoding="utf-8"
-    )
-    (evidence_dir / "README.md").write_text(_render_readme(packet), encoding="utf-8")
+    write_json(evidence_dir / "summary.json", packet)
+    write_text(evidence_dir / "README.md", _render_readme(packet), issue_ref="robot_sf#4921")
     return packet
 
 

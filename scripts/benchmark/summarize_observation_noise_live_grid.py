@@ -5,6 +5,7 @@ This tool consumes compact summaries produced from native live step-diagnostics
 replays. It does not treat fallback, degraded, unavailable, trace-derived-only,
 or malformed summaries as successful evidence.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

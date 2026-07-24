@@ -30,7 +30,6 @@ Example (fail-closed candidate closure packet on a host without the roots):
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -46,6 +45,7 @@ from robot_sf.benchmark.scenario_belief_screening import (  # noqa: E402
     build_h600_candidate_closure_packet,
     evaluate_seed_sufficiency_candidate,
 )
+from robot_sf.evidence.writers import write_json, write_text  # noqa: E402
 from scripts.tools.analyze_seed_sufficiency import analyze_seed_sufficiency  # noqa: E402
 
 BLOCKED_EXIT_CODE = 3
@@ -277,10 +277,8 @@ def run_candidate_closure(
     )
 
     evidence_dir.mkdir(parents=True, exist_ok=True)
-    (evidence_dir / "summary.json").write_text(
-        json.dumps(packet, indent=2) + "\n", encoding="utf-8"
-    )
-    (evidence_dir / "README.md").write_text(_render_readme(packet), encoding="utf-8")
+    write_json(evidence_dir / "summary.json", packet)
+    write_text(evidence_dir / "README.md", _render_readme(packet), issue_ref="robot_sf#4921")
     return packet
 
 

@@ -42,6 +42,7 @@ Usage:
         docs/context/evidence/issue_4891_head_on_corridor_exemplars_2026-07/orca/classic_head_on_corridor_medium_seed24_best \\
         --out /tmp/headon_orca_seed24_sceneonly.mp4 --no-minimap
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

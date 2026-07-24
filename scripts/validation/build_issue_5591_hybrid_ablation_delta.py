@@ -20,6 +20,7 @@ Usage:
         --campaign-root output/benchmarks/issue5591-hybrid-ablation \
         --out docs/context/evidence/issue_5591_hybrid_ablation
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

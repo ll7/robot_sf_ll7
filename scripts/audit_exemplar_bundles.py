@@ -7,6 +7,7 @@ and checks metadata provenance for the issue_4848 and issue_4891 exemplar bundle
 Usage:
     uv run python scripts/audit_exemplar_bundles.py [--json]
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

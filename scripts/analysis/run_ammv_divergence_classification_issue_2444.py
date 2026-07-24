@@ -31,6 +31,7 @@ strictly positive AND its paired delta is strictly nonzero. This is the machine-
 that stops future #2159 / #2227 mechanism panels from treating an identical (zero-divergence)
 trace pair as behavioral evidence.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

@@ -5,6 +5,7 @@ The default mode is intentionally non-blocking so existing provenance gaps can b
 measured before this checker becomes a CI gate. Use ``--strict`` to make findings
 fail the command.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

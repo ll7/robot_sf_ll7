@@ -17,6 +17,7 @@ Example::
     uv run python scripts/validation/check_scenario_horizon_results_readiness.py \
         docs/context/evidence/issue_3203_scenario_horizon_reexport_2026-06-20/reports/campaign_table.md
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

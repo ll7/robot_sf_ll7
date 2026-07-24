@@ -36,6 +36,7 @@ Usage
     uv run python scripts/tools/catalog_evidence.py --json-output out.json
     uv run python scripts/tools/catalog_evidence.py --apply              # write entries
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

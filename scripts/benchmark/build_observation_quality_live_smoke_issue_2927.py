@@ -6,6 +6,7 @@ bounded ``observation_quality.v1`` metadata plus explicit false-negative and
 false-positive safety-effect interpretation.  It is diagnostic smoke evidence,
 not benchmark-strength or hardware-calibrated sensor evidence.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

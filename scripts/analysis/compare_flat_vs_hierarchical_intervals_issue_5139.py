@@ -25,6 +25,7 @@ Outputs (under ``--output-dir``):
   * ``synthetic_bundle.jsonl`` - the structured episode bundle used (for audit).
   * ``retained_comparison_report.{md,json}`` - real retained-bundle analysis.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

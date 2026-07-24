@@ -6,6 +6,7 @@ Every blocked / unavailable / missing-denominator / stale / diagnostic-only /
 proxy / fallback cell carries an explicit reason.  No benchmark or
 paper-facing overclaims are produced.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

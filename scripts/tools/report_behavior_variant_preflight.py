@@ -4,6 +4,7 @@ The report is intentionally conservative: it inventories implemented variants, c
 runtime prerequisites for adapter-backed variants, and records whether each row can support
 benchmark evidence or only diagnostic/unavailable evidence.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

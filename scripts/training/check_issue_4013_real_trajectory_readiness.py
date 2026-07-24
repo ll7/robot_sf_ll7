@@ -7,6 +7,7 @@ honest: diagnostic synthetic evidence remains useful, but real-trajectory
 training and representative evaluation stay blocked until a local dataset copy is
 checksum-validated.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

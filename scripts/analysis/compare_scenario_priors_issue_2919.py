@@ -4,6 +4,7 @@ The comparison is deliberately analysis-only. It uses the Issue #2917 prior-card
 source router, extracts compact numeric priors from machine-readable repository files, and emits
 gap proposals without making dataset-realism, planner-ranking, or benchmark-superiority claims.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

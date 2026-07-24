@@ -12,6 +12,7 @@ Usage::
     uv run python scripts/benchmark/build_horizon_timestep_ablation_report.py \
         --output-dir docs/context/evidence/issue_2837_horizon_timestep_ablation_2026-06-15
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

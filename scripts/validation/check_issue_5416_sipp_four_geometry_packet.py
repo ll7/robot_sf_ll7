@@ -11,6 +11,7 @@ short diagnostic instead of a deep parser or route-planning stack trace. Pass
 ``--metadata-only`` (or ``certify_geometry=False``) to validate packet structure
 and source-path existence without invoking map conversion or route planning.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

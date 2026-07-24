@@ -276,6 +276,9 @@ Caveat: Diagnostic only; no sim-to-real, perception, or paper-facing robustness 
 """
 
 
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
+
 def build_summary(*, generated_at: str, sources: SourceInputs) -> dict[str, Any]:
     """Build machine-readable summary metadata for the generated report."""
     return {

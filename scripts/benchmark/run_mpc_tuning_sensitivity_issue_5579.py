@@ -6,6 +6,7 @@ at the 20 pre-registered points and the four incumbent hybrid arms on the same f
 seed slice. Raw episode output stays under ``output/``; only compact derived reports should be
 promoted into ``docs/context/evidence/``.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

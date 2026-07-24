@@ -114,6 +114,7 @@ Usage::
         --episodes-jsonl output/benchmarks/doorway_butterfly_trace_reexport/job-13483/doorway_butterfly_ppo_a307/runs/ppo__differential_drive/episodes.jsonl \\
         --seed-b 114
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

@@ -11,6 +11,7 @@ Usage::
     uv run python scripts/validation/validate_forecast_risk_policy_stack.py \
         --out-dir docs/context/evidence/issue_2759_forecast_risk_policy_stack_2026-06-15
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

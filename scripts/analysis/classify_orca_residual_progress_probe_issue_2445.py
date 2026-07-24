@@ -21,6 +21,7 @@ Fail-closed posture (repository top value: honest, transparent, reproducible):
     explicitly. A failed-closed smoke is never readiness evidence and must not
     justify nominal or larger reruns.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

@@ -204,6 +204,9 @@ semantics. Excluded rows remain non-claim rows.
 """
 
 
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
+
+
 def _readme(source_command: str) -> str:
     return f"""# Issue #2799 Signalized Crossing Runtime Evidence (2026-06-13)
 

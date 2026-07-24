@@ -13,6 +13,7 @@ Usage::
     uv run python scripts/benchmark/run_dense_stress_observation_envelope.py \\
         --output-dir docs/context/evidence/issue_2765_dense_pedestrian_stress_2026-06-14
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

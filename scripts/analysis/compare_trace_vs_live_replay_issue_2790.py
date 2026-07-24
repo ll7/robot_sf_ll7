@@ -5,6 +5,7 @@ This script parses trace-derived diagnostic summaries and live replay summaries,
 compares them condition by condition, and reports agreement classification:
 confirmed, false_positive, false_negative, live_only_effect, and trace_only_effect.
 """
+# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

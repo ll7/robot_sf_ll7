@@ -423,19 +423,25 @@ def test_check_successor_discipline(mock_run: MagicMock) -> None:
     assert not warnings
 
 
-@patch("subprocess.run")
-def test_check_worker_lane_provenance(mock_run: MagicMock) -> None:
+@patch("scripts.ci.pr_contract_check.add_label")
+def test_check_worker_lane_provenance(mock_add_label: MagicMock) -> None:
     """Test check_worker_lane_provenance detects cheap lane and labels PR."""
     body_lane = "This PR was produced by the agy/Gemini-3.5-Flash cheap implementation lane"
     body_normal = "Some normal PR"
 
     # Lane provenance with PR number
-    mock_run.return_value = MagicMock(returncode=0)
+    mock_add_label.return_value = {
+        "status": "ok",
+        "number": 123,
+        "label": "cheap-lane",
+        "action": "add",
+    }
     info, labeled = pr_contract_check.check_worker_lane_provenance(
         body_lane, "123", "ll7/robot_sf_ll7"
     )
     assert labeled is True
     assert "Automatically added" in info
+    mock_add_label.assert_called_once_with(123, "cheap-lane", repo="ll7/robot_sf_ll7")
 
     info, labeled = pr_contract_check.check_worker_lane_provenance(
         body_normal, "123", "ll7/robot_sf_ll7"

@@ -261,7 +261,7 @@ def test_classify_held_out_evidence_fail_closed() -> None:
 
 
 def test_verify_same_planner_contract() -> None:
-    """Verify that contract verification helper validates archive hashes and fit/excluded entry isolation."""
+    """Provisional #3275 input validates hashes but cannot pose as a final contract."""
     import json
     from pathlib import Path
 
@@ -278,8 +278,15 @@ def test_verify_same_planner_contract() -> None:
     archive_data = json.loads(raw_bytes.decode("utf-8"))
 
     result = verify_same_planner_contract(contract_data, archive_data, raw_bytes)
-    assert result["checks_passed"] is True
-    assert result["status"] == "passed"
+    assert result["checks_passed"] is False
+    assert result["status"] == "failed"
     assert result["fit_entry_count"] == 12
     assert result["excluded_entry_count"] == 5
-    assert result["blocking_reasons"] == []
+    assert (
+        "external_prerequisite_unsatisfied:issue=6139:status=pending_corrected_recertification"
+        in (result["blocking_reasons"])
+    )
+    assert (
+        "candidate_manifest_not_frozen:not_materialized_pending_issue_6104"
+        in (result["blocking_reasons"])
+    )

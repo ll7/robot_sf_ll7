@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,19 @@ from robot_sf.adversarial.disjoint_evaluation import (
     ranking_permutation_test,
     shuffled_outcome_null_test,
 )
+
+_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class _FrozenOutcomeContract:
+    """Contract fields that every admitted v2 execution row must match."""
+
+    manifest_sha256: str
+    candidates: dict[str, dict[str, Any]]
+    target_planner: str
+    planner_config_sha256: str
+    scenario_family: str
 
 
 def payload_sha256(payload: dict[str, Any]) -> str:
@@ -53,20 +68,161 @@ def load_independent_outcomes(path: Path | None) -> tuple[str, str, dict[str, An
     return "active", "Independent planner-execution outcomes loaded successfully.", payload
 
 
-def _float_list(payload: dict[str, Any], key: str) -> list[float]:
-    """Return a list of numeric values from ``payload[key]``."""
-    values = payload.get(key)
-    if not isinstance(values, list):
-        raise ValueError(f"{key} must be a list")
-    return [float(value) for value in values]
+def _is_sha256(value: Any) -> bool:
+    """Return whether ``value`` is a non-placeholder SHA-256 digest."""
+    return isinstance(value, str) and _SHA256_PATTERN.fullmatch(value) is not None
 
 
-def _certification_available(payload: dict[str, Any], expected_count: int) -> bool:
-    """Return whether every expected row has passed certification."""
-    statuses = payload.get("certification_statuses")
-    if not isinstance(statuses, list) or len(statuses) < expected_count:
-        return False
-    return all(status == "passed" for status in statuses)
+def _validate_manifest_candidate(
+    candidate: Any, idx: int
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Validate one frozen candidate-manifest record."""
+    if not isinstance(candidate, dict):
+        return f"study contract candidate manifest row {idx} is not an object", None
+    candidate_id = candidate.get("candidate_id")
+    if not isinstance(candidate_id, str) or not candidate_id.strip():
+        return f"study contract candidate manifest row {idx} has invalid candidate_id", None
+    if candidate.get("selection_arm") not in {"proposal", "random"}:
+        return f"study contract candidate {candidate_id} has invalid selection_arm", None
+    if not isinstance(candidate.get("rank"), int) or candidate["rank"] < 0:
+        return f"study contract candidate {candidate_id} has invalid rank", None
+    if not isinstance(candidate.get("candidate_pool_seed"), int):
+        return f"study contract candidate {candidate_id} has invalid candidate_pool_seed", None
+    if not isinstance(candidate.get("scenario_seed"), int):
+        return f"study contract candidate {candidate_id} has invalid scenario_seed", None
+    execution_seeds = candidate.get("execution_seeds")
+    if not isinstance(execution_seeds, list) or not execution_seeds:
+        return f"study contract candidate {candidate_id} has invalid execution_seeds", None
+    if not all(isinstance(seed, int) for seed in execution_seeds):
+        return f"study contract candidate {candidate_id} has invalid execution_seeds", None
+    return None, candidate
+
+
+def _frozen_manifest_candidates(
+    manifest: Any,
+) -> tuple[str | None, str | None, dict[str, dict[str, Any]]]:
+    """Return a frozen manifest hash and indexed candidates, or a reason."""
+    if not isinstance(manifest, dict) or manifest.get("status") != "frozen":
+        return "study contract candidate manifest is not frozen", None, {}
+    manifest_hash = manifest.get("sha256")
+    if not _is_sha256(manifest_hash):
+        return "study contract candidate manifest sha256 is invalid", None, {}
+    candidates = manifest.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        return "study contract candidate manifest has no candidates", None, {}
+
+    expected: dict[str, dict[str, Any]] = {}
+    for idx, candidate in enumerate(candidates):
+        reason, parsed_candidate = _validate_manifest_candidate(candidate, idx)
+        if reason is not None or parsed_candidate is None:
+            return reason, None, {}
+        candidate_id = parsed_candidate["candidate_id"]
+        if candidate_id in expected:
+            return (
+                f"study contract candidate manifest repeats candidate_id:{candidate_id}",
+                None,
+                {},
+            )
+        expected[candidate_id] = parsed_candidate
+    return None, manifest_hash, expected
+
+
+def _outcome_contract_requirements(
+    outcome_contract: dict[str, Any] | None,
+) -> tuple[bool, str, _FrozenOutcomeContract | None]:
+    """Return frozen v2 requirements, or a fail-closed reason."""
+    if not isinstance(outcome_contract, dict):
+        return False, "v2 outcome rows require a frozen study contract", None
+
+    admission = outcome_contract.get("outcome_admission")
+    if not isinstance(admission, dict):
+        return False, "study contract is missing outcome_admission", None
+    if admission.get("schema_version") != "adversarial_independent_outcomes.v2":
+        return False, "study contract does not require adversarial_independent_outcomes.v2", None
+    if admission.get("execution_status") != "native":
+        return False, "study contract does not require native execution", None
+
+    reason, manifest_hash, candidates = _frozen_manifest_candidates(
+        admission.get("candidate_manifest")
+    )
+    if reason is not None or manifest_hash is None:
+        return False, reason or "study contract candidate manifest is invalid", None
+    planner = outcome_contract.get("target_planner")
+    planner_hash = outcome_contract.get("target_planner_config_sha256")
+    family = outcome_contract.get("eval_scenario_family")
+    if not isinstance(planner, str) or not planner.strip():
+        return False, "study contract target_planner is invalid", None
+    if not _is_sha256(planner_hash):
+        return False, "study contract target_planner_config_sha256 is invalid", None
+    if not isinstance(family, str) or not family.strip():
+        return False, "study contract eval_scenario_family is invalid", None
+    return (
+        True,
+        "ok",
+        _FrozenOutcomeContract(manifest_hash, candidates, planner, planner_hash, family),
+    )
+
+
+def _missing_row_fields(
+    row: dict[str, Any], required_keys: set[str], lineage_keys: set[str]
+) -> str | None:
+    """Return a missing-field reason for a v2 row, if any."""
+    missing = [key for key in required_keys if key not in row]
+    if missing:
+        return f"missing required keys: {missing}"
+    missing_lineage = [key for key in lineage_keys if key not in row]
+    if missing_lineage:
+        return f"missing lineage fields: {missing_lineage}"
+    return None
+
+
+def _row_matches_study_contract(
+    row: dict[str, Any], contract: _FrozenOutcomeContract
+) -> str | None:
+    """Return a reason when a row differs from planner/family/manifest contract fields."""
+    if row.get("manifest_sha256") != contract.manifest_sha256:
+        return "manifest_sha256 does not match frozen candidate manifest"
+    if row.get("target_planner_id") != contract.target_planner:
+        return "target_planner_id does not match frozen study contract"
+    if row.get("planner_config_sha256") != contract.planner_config_sha256:
+        return "planner_config_sha256 does not match frozen study contract"
+    if row.get("scenario_family") != contract.scenario_family:
+        return "scenario_family does not match frozen study contract"
+    return None
+
+
+def _row_matches_manifest_candidate(
+    row: dict[str, Any], candidates: dict[str, dict[str, Any]]
+) -> str | None:
+    """Return a reason when candidate, arm, rank, or seed differs from the manifest."""
+    candidate_id = row.get("candidate_id")
+    if not isinstance(candidate_id, str) or candidate_id not in candidates:
+        return "candidate_id is absent from frozen candidate manifest"
+    expected_candidate = candidates[candidate_id]
+    for key in ("selection_arm", "rank", "candidate_pool_seed", "scenario_seed"):
+        if row.get(key) != expected_candidate.get(key):
+            return f"{key} does not match frozen candidate manifest"
+    if row.get("execution_seed") not in expected_candidate.get("execution_seeds", []):
+        return "execution_seed does not match frozen candidate manifest"
+    return None
+
+
+def _row_has_valid_execution_lineage(row: dict[str, Any]) -> str | None:
+    """Return a reason when a row lacks structural native execution provenance."""
+    if not _is_sha256(row.get("record_hash")):
+        return "record_hash is not a SHA-256 digest"
+    execution_commit = row.get("execution_commit")
+    if not isinstance(execution_commit, str) or not re.fullmatch(
+        r"[0-9a-f]{7,64}", execution_commit
+    ):
+        return "execution_commit is invalid"
+    if not isinstance(row.get("command_lineage"), str) or not row["command_lineage"].strip():
+        return "command_lineage is invalid"
+    if not isinstance(row.get("replay_lineage"), str) or not row["replay_lineage"].strip():
+        return "replay_lineage is invalid"
+    if row.get("execution_status") != "native":
+        return f"has invalid execution_status: {row.get('execution_status')}"
+    return None
 
 
 def _validate_single_row_lineage(
@@ -74,22 +230,19 @@ def _validate_single_row_lineage(
     row: dict[str, Any],
     required_keys: set[str],
     lineage_keys: set[str],
-    bad_statuses: set[str],
+    contract: _FrozenOutcomeContract,
 ) -> tuple[bool, str, tuple[str, float, int] | None]:
     """Validate a single row for lineage, status, and certification."""
     if not isinstance(row, dict):
         return False, f"row {idx} is not an object", None
-    missing = [k for k in required_keys if k not in row]
-    if missing:
-        return False, f"row {idx} missing required keys: {missing}", None
-
-    missing_lineage = [k for k in lineage_keys if k not in row]
-    if missing_lineage:
-        return False, f"row {idx} missing lineage fields: {missing_lineage}", None
-
-    status = str(row.get("execution_status", "")).lower()
-    if status in bad_statuses or status not in {"native", "success"}:
-        return False, f"row {idx} has invalid execution_status: {status}", None
+    for reason in (
+        _missing_row_fields(row, required_keys, lineage_keys),
+        _row_matches_study_contract(row, contract),
+        _row_matches_manifest_candidate(row, contract.candidates),
+        _row_has_valid_execution_lineage(row),
+    ):
+        if reason is not None:
+            return False, f"row {idx} {reason}", None
 
     cert_scen = str(row.get("scenario_certification_status", "")).lower()
     cert_cand = str(row.get("candidate_certification_status", "")).lower()
@@ -105,20 +258,13 @@ def _validate_single_row_lineage(
     except (TypeError, ValueError):
         return False, f"row {idx} invalid independent_failure_outcome", None
 
-    arm = str(row["selection_arm"]).lower()
-    if arm not in {"proposal", "random"}:
-        return False, f"row {idx} unknown selection_arm: {arm}", None
-
-    try:
-        rank = int(row.get("rank", idx))
-    except (TypeError, ValueError):
-        rank = idx
-
-    return True, "ok", (arm, outcome, rank)
+    return True, "ok", (row["selection_arm"], outcome, row["rank"])
 
 
 def validate_row_lineage(
     rows: list[dict[str, Any]],
+    *,
+    outcome_contract: dict[str, Any] | None,
 ) -> tuple[bool, str, list[float], list[float], list[float]]:
     """Validate row-level outcome lineage for adversarial_independent_outcomes.v2.
 
@@ -127,6 +273,12 @@ def validate_row_lineage(
     """
     if not isinstance(rows, list) or not rows:
         return False, "rows must be a non-empty list", [], [], []
+
+    requirements_ok, requirements_reason, contract = _outcome_contract_requirements(
+        outcome_contract
+    )
+    if not requirements_ok or contract is None:
+        return False, requirements_reason, [], [], []
 
     required_keys = {
         "selection_arm",
@@ -140,6 +292,7 @@ def validate_row_lineage(
         "planner_config_sha256",
         "scenario_family",
         "scenario_seed",
+        "execution_seed",
         "execution_commit",
         "command_lineage",
         "termination_reason",
@@ -148,15 +301,17 @@ def validate_row_lineage(
         "replay_lineage",
         "record_hash",
     }
-    bad_statuses = {"fallback", "degraded", "not_available", "failed", "blocked"}
-
     proposal_outcomes: list[float] = []
     random_outcomes: list[float] = []
     all_rows_with_rank = []
 
     for idx, row in enumerate(rows):
         ok, reason, item = _validate_single_row_lineage(
-            idx, row, required_keys, lineage_keys, bad_statuses
+            idx,
+            row,
+            required_keys,
+            lineage_keys,
+            contract,
         )
         if not ok or item is None:
             return False, reason, [], [], []
@@ -206,6 +361,7 @@ def build_independent_outcome_evaluation(
     n_permutations: int,
     seed: int,
     expected_eval_archive_sha256: str | None = None,
+    outcome_contract: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Summarize an independent-outcome packet and its null-test readiness."""
     if payload is None:
@@ -241,10 +397,20 @@ def build_independent_outcome_evaluation(
                 "payload_sha256": payload_sha256(payload),
             }
 
+    if payload.get("schema_version") != "adversarial_independent_outcomes.v2":
+        return {
+            "status": "blocked_legacy_independent_outcomes",
+            "independent_outcomes_available": False,
+            "certification_available": False,
+            "null_tests_reject_null": False,
+            "reason": "legacy flat outcome arrays are not admissible; require v2 rows bound to a frozen contract",
+            "payload_sha256": payload_sha256(payload),
+        }
+
     rows = payload.get("rows")
     if isinstance(rows, list):
         rows_ok, rows_reason, proposal_outcomes, random_outcomes, ranked_outcomes = (
-            validate_row_lineage(rows)
+            validate_row_lineage(rows, outcome_contract=outcome_contract)
         )
         if not rows_ok:
             return {
@@ -255,23 +421,16 @@ def build_independent_outcome_evaluation(
                 "reason": f"invalid row lineage: {rows_reason}",
                 "payload_sha256": payload_sha256(payload),
             }
-        certification_available = True
     else:
-        try:
-            proposal_outcomes = _float_list(payload, "proposal_outcomes")
-            random_outcomes = _float_list(payload, "random_outcomes")
-            ranked_outcomes = _float_list(payload, "ranked_outcomes")
-        except (TypeError, ValueError) as exc:
-            return {
-                "status": "blocked_malformed_outcomes",
-                "independent_outcomes_available": False,
-                "certification_available": False,
-                "null_tests_reject_null": False,
-                "reason": str(exc),
-                "payload_sha256": payload_sha256(payload),
-            }
-        expected_count = len(proposal_outcomes) + len(random_outcomes)
-        certification_available = _certification_available(payload, expected_count)
+        return {
+            "status": "blocked_invalid_independent_outcomes",
+            "independent_outcomes_available": False,
+            "certification_available": False,
+            "null_tests_reject_null": False,
+            "reason": "v2 independent outcome payload must contain a non-empty rows list",
+            "payload_sha256": payload_sha256(payload),
+        }
+    certification_available = True
     independent_available = bool(proposal_outcomes and random_outcomes and ranked_outcomes)
     if not independent_available:
         return {

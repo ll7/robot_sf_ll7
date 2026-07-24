@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -50,14 +51,14 @@ def test_classify_issue_2921_stop_rule_stop_on_negative_deltas() -> None:
     assert decision["evidence_tier"] == "diagnostic_only"
 
 
-def test_classify_issue_2921_stop_rule_revise_on_neutral_deltas() -> None:
-    """Neutral (zero) held-out deltas classify as revise before another empirical batch."""
+def test_classify_issue_2921_stop_rule_is_inconclusive_on_neutral_deltas() -> None:
+    """Neutral (zero) held-out deltas classify as inconclusive without a new batch."""
     decision = classify_issue_2921_stop_rule(
         held_out_evidence=True,
         held_out_status="eligible_held_out_diagnostic",
         comparison=_held_out_comparison(mean_delta=0.0, failure_delta=0),
     )
-    assert decision["status"] == "revise"
+    assert decision["status"] == "inconclusive"
     assert decision["evidence_tier"] == "diagnostic_only"
 
 
@@ -320,7 +321,7 @@ def test_real_archive_without_search_space_fails_closed(tmp_path: Path, monkeypa
         ],
     )
 
-    assert script_main() == 0
+    assert script_main() == 1
     report = json.loads(output_json.read_text(encoding="utf-8"))
     assert report["state"] == "blocked"
     assert report["held_out_evidence"] is False
@@ -344,17 +345,27 @@ constraints:
   min_start_goal_distance_m: 2.0
 """
 
+_TEST_PLANNER_CONFIG_SHA256 = "b" * 64
+_TEST_MANIFEST_SHA256 = "a" * 64
+_TEST_RECORD_SHA256 = "c" * 64
+
 
 def _two_family_archive() -> dict:
     """Build a small two-family archive with disjoint families/ids/seeds."""
     entries = []
-    for family in ("goal_collision", "orca_collision"):
+    for family in ("classic_group_crossing_medium", "classic_cross_trap_medium"):
         for i in range(3):
-            seed = (100 if family == "goal_collision" else 200) + i
+            seed = (100 if family == "classic_group_crossing_medium" else 200) + i
             entries.append(
                 {
                     "archive_id": f"{family}_{i}",
                     "cluster_key": family,
+                    "scenario_family": family,
+                    "target_planner": "social_force",
+                    "provenance": {
+                        "target_planner": "social_force",
+                        "config_sha256": _TEST_PLANNER_CONFIG_SHA256,
+                    },
                     "candidate": {
                         "start": {"x": 2.0, "y": 3.0},
                         "goal": {"x": 8.0, "y": 3.0},
@@ -378,6 +389,142 @@ def _two_family_archive_with_seed_overlap() -> dict:
         suffix = int(entry["archive_id"].rsplit("_", maxsplit=1)[1])
         entry["candidate"]["scenario_seed"] = 100 + suffix
     return archive
+
+
+def _outcome_row(arm: str, rank: int, outcome: float) -> dict:
+    """Build one contract-bound v2 independent-outcome row for runner integration tests."""
+    return {
+        "candidate_id": f"{arm}_{rank}",
+        "manifest_sha256": _TEST_MANIFEST_SHA256,
+        "selection_arm": arm,
+        "rank": rank,
+        "candidate_pool_seed": 42,
+        "target_planner_id": "social_force",
+        "planner_config_sha256": _TEST_PLANNER_CONFIG_SHA256,
+        "scenario_family": "classic_cross_trap_medium",
+        "scenario_seed": 1000 + rank,
+        "execution_seed": 2000 + rank + (100 if arm == "random" else 0),
+        "execution_commit": "ecf997d",
+        "command_lineage": "uv run robot_sf_bench run --algo social_force",
+        "execution_status": "native",
+        "termination_reason": "collision" if outcome >= 8.0 else "goal_reached",
+        "independent_failure_outcome": outcome,
+        "scenario_certification_status": "passed",
+        "candidate_certification_status": "passed",
+        "replay_lineage": "replay.jsonl",
+        "record_hash": _TEST_RECORD_SHA256,
+        "exclusion_reason": None,
+    }
+
+
+def _write_frozen_contract_and_outcomes(
+    tmp_path: Path,
+    archive_path: Path,
+    search_space_path: Path,
+    proposal_outcomes: list[float],
+    random_outcomes: list[float],
+) -> tuple[Path, Path]:
+    """Write a complete local frozen contract and matching v2 outcomes for runner tests."""
+    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
+
+    archive = json.loads(archive_path.read_text(encoding="utf-8"))
+    split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
+    proposal_first = sum(proposal_outcomes) >= sum(random_outcomes)
+    proposal_rank_offset = 0 if proposal_first else len(random_outcomes)
+    random_rank_offset = len(proposal_outcomes) if proposal_first else 0
+    rows = [
+        _outcome_row("proposal", proposal_rank_offset + rank, outcome)
+        for rank, outcome in enumerate(proposal_outcomes)
+    ] + [
+        _outcome_row("random", random_rank_offset + rank, outcome)
+        for rank, outcome in enumerate(random_outcomes)
+    ]
+    candidates = [
+        {
+            "candidate_id": row["candidate_id"],
+            "selection_arm": row["selection_arm"],
+            "rank": row["rank"],
+            "candidate_pool_seed": row["candidate_pool_seed"],
+            "scenario_seed": row["scenario_seed"],
+            "execution_seeds": [row["execution_seed"]],
+        }
+        for row in rows
+    ]
+    fit_entries = [
+        entry
+        for entry in archive["entries"]
+        if entry["scenario_family"] == "classic_group_crossing_medium"
+    ]
+    contract = {
+        "study_id": "unit-test-same-planner-contract",
+        "contract_status": "frozen",
+        "external_prerequisites": [{"issue": 6139, "status": "satisfied"}],
+        "tracked_archive_path": archive_path.as_posix(),
+        "archive_raw_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+        "archive_payload_sha256": archive_sha256(archive),
+        "target_planner": "social_force",
+        "target_planner_config_sha256": _TEST_PLANNER_CONFIG_SHA256,
+        "fit_scenario_family": "classic_group_crossing_medium",
+        "fit_entry_count": len(fit_entries),
+        "fit_entry_ids": [entry["archive_id"] for entry in fit_entries],
+        "fit_entries_payload_sha256": archive_sha256(fit_entries),
+        "excluded_entry_count": 0,
+        "excluded_entry_ids": [],
+        "eval_scenario_family": "classic_cross_trap_medium",
+        "search_space_path": search_space_path.as_posix(),
+        "search_space_sha256": hashlib.sha256(search_space_path.read_bytes()).hexdigest(),
+        "study_parameters": {
+            "candidate_budget_per_arm": len(proposal_outcomes),
+            "candidate_pool_size": 2 * len(proposal_outcomes),
+            "confirmation_seeds_per_candidate": 1,
+            "minimally_important_effect_margin": 0.1,
+            "overlapping_candidate_policy": "deterministic_disjoint_assignment",
+        },
+        "power_sensitivity": {
+            "status": "computed",
+            "candidate_budget_per_arm": len(proposal_outcomes),
+            "minimum_effect_margin": 0.1,
+            "estimated_power": 0.8,
+        },
+        "outcome_admission": {
+            "schema_version": "adversarial_independent_outcomes.v2",
+            "execution_status": "native",
+            "candidate_aggregation": "candidate_level_binary_yield",
+            "fallback_degraded_policy": "exclude",
+            "stable_failure_attribution_required": True,
+            "deterministic_replay": {"exact_signature_match_required": True},
+            "independent_seed_confirmation": {"minimum_confirmed_count": 1},
+            "candidate_manifest": {
+                "status": "frozen",
+                "sha256": _TEST_MANIFEST_SHA256,
+                "candidates": candidates,
+            },
+        },
+        "decision_rule": {
+            "positive_outcome": "continue",
+            "negative_outcome": "stop",
+            "neutral_outcome": "inconclusive",
+            "invalid_or_fallback_outcome": "inconclusive",
+        },
+    }
+    contract_path = tmp_path / "contract.json"
+    outcomes_path = tmp_path / "outcomes.json"
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+    outcomes_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "adversarial_independent_outcomes.v2",
+                "source": "unit-test-fixture",
+                "artifact": "docs/context/evidence/unit-test.json",
+                "eval_archive_sha256": archive_sha256(split.eval_entries),
+                "outcome_source": "planner_execution",
+                "objective": "certified_failure_outcome",
+                "rows": rows,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return contract_path, outcomes_path
 
 
 def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(
@@ -438,31 +585,16 @@ def test_real_archive_with_independent_outcomes_becomes_diagnostic_only(
 
     archive_path = tmp_path / "archive.json"
     search_space_path = tmp_path / "search_space.yaml"
-    outcomes_path = tmp_path / "outcomes.json"
     output_json = tmp_path / "report.json"
     archive = _two_family_archive()
     archive_path.write_text(json.dumps(archive), encoding="utf-8")
     search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
-    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
-
-    split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
-    outcomes_path.write_text(
-        json.dumps(
-            {
-                "schema_version": "adversarial_independent_outcomes.v1",
-                "source": "unit-test-fixture",
-                "artifact": "docs/context/evidence/unit-test.json",
-                "eval_archive_sha256": archive_sha256(split.eval_entries),
-                "outcome_source": "planner_execution",
-                "objective": "certified_failure_outcome",
-                "proposal_outcomes": [10.0, 10.0, 10.0, 10.0],
-                "random_outcomes": [0.0, 0.0, 0.0, 0.0],
-                "ranked_outcomes": [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
-                "certification_statuses": ["passed"] * 8,
-                "row_statuses": ["success"] * 8,
-            }
-        ),
-        encoding="utf-8",
+    contract_path, outcomes_path = _write_frozen_contract_and_outcomes(
+        tmp_path,
+        archive_path,
+        search_space_path,
+        [10.0, 10.0, 10.0, 10.0],
+        [0.0, 0.0, 0.0, 0.0],
     )
 
     monkeypatch.setattr(
@@ -473,6 +605,8 @@ def test_real_archive_with_independent_outcomes_becomes_diagnostic_only(
             archive_path.as_posix(),
             "--search-space",
             search_space_path.as_posix(),
+            "--contract",
+            contract_path.as_posix(),
             "--evaluation-outcomes",
             outcomes_path.as_posix(),
             "--budget",
@@ -515,32 +649,16 @@ def test_real_archive_seed_overlap_cannot_be_held_out_evidence(tmp_path: Path, m
 
     archive_path = tmp_path / "archive.json"
     search_space_path = tmp_path / "search_space.yaml"
-    outcomes_path = tmp_path / "outcomes.json"
     output_json = tmp_path / "report.json"
     archive = _two_family_archive_with_seed_overlap()
     archive_path.write_text(json.dumps(archive), encoding="utf-8")
     search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
-
-    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
-
-    split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
-    outcomes_path.write_text(
-        json.dumps(
-            {
-                "schema_version": "adversarial_independent_outcomes.v1",
-                "source": "unit-test-fixture",
-                "artifact": "docs/context/evidence/unit-test.json",
-                "eval_archive_sha256": archive_sha256(split.eval_entries),
-                "outcome_source": "planner_execution",
-                "objective": "certified_failure_outcome",
-                "proposal_outcomes": [10.0, 10.0, 10.0, 10.0],
-                "random_outcomes": [0.0, 0.0, 0.0, 0.0],
-                "ranked_outcomes": [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
-                "certification_statuses": ["passed"] * 8,
-                "row_statuses": ["success"] * 8,
-            }
-        ),
-        encoding="utf-8",
+    contract_path, outcomes_path = _write_frozen_contract_and_outcomes(
+        tmp_path,
+        archive_path,
+        search_space_path,
+        [10.0, 10.0, 10.0, 10.0],
+        [0.0, 0.0, 0.0, 0.0],
     )
 
     monkeypatch.setattr(
@@ -551,6 +669,8 @@ def test_real_archive_seed_overlap_cannot_be_held_out_evidence(tmp_path: Path, m
             archive_path.as_posix(),
             "--search-space",
             search_space_path.as_posix(),
+            "--contract",
+            contract_path.as_posix(),
             "--evaluation-outcomes",
             outcomes_path.as_posix(),
             "--budget",
@@ -661,14 +781,44 @@ def test_contract_verification_cli(tmp_path: Path, monkeypatch) -> None:
         ],
     )
 
-    assert script_main() == 0
+    assert script_main() == 1
     assert output_json.exists()
     verif = json.loads(output_json.read_text(encoding="utf-8"))
-    assert verif["checks_passed"] is True
-    assert verif["status"] == "passed"
+    assert verif["checks_passed"] is False
+    assert verif["status"] == "failed"
     assert verif["fit_entry_count"] == 12
     assert verif["excluded_entry_count"] == 5
-    assert verif["feature_semantics_audit"]["passed"] is True
+    assert verif["feature_semantics_audit"]["passed"] is False
+    assert (
+        "external_prerequisite_unsatisfied:issue=6139:status=pending_corrected_recertification"
+        in (verif["blocking_reasons"])
+    )
+
+
+def test_normal_contract_run_refuses_provisional_contract_before_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Normal --contract runs stop before candidate selection when the contract is provisional."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    output_json = tmp_path / "blocked.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            "configs/adversarial/issue_3275_same_planner_contract.json",
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 1
+    report = json.loads(output_json.read_text(encoding="utf-8"))
+    assert report["state"] == "blocked"
+    assert "no candidates were selected" in report["reason"]
+    assert "proposal_metrics" not in report
+    assert report["contract_verification"]["checks_passed"] is False
 
 
 def test_train_only_ranking_isolation() -> None:
@@ -746,28 +896,13 @@ def test_opposite_sign_execution_favors_random_stops(
     archive_path.write_text(json.dumps(archive), encoding="utf-8")
     search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
 
-    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
-
-    split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
-
     # Independent planner execution outcome favors RANDOM (random=10.0, proposal=0.0)
-    outcomes_path.write_text(
-        json.dumps(
-            {
-                "schema_version": "adversarial_independent_outcomes.v1",
-                "source": "unit-test-fixture",
-                "artifact": "docs/context/evidence/unit-test.json",
-                "eval_archive_sha256": archive_sha256(split.eval_entries),
-                "outcome_source": "planner_execution",
-                "objective": "certified_failure_outcome",
-                "proposal_outcomes": [0.0, 0.0, 0.0, 0.0],
-                "random_outcomes": [10.0, 10.0, 10.0, 10.0],
-                "ranked_outcomes": [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
-                "certification_statuses": ["passed"] * 8,
-                "row_statuses": ["success"] * 8,
-            }
-        ),
-        encoding="utf-8",
+    contract_path, outcomes_path = _write_frozen_contract_and_outcomes(
+        tmp_path,
+        archive_path,
+        search_space_path,
+        [0.0, 0.0, 0.0, 0.0],
+        [10.0, 10.0, 10.0, 10.0],
     )
 
     monkeypatch.setattr(
@@ -778,6 +913,8 @@ def test_opposite_sign_execution_favors_random_stops(
             archive_path.as_posix(),
             "--search-space",
             search_space_path.as_posix(),
+            "--contract",
+            contract_path.as_posix(),
             "--evaluation-outcomes",
             outcomes_path.as_posix(),
             "--budget",
@@ -808,35 +945,19 @@ def test_opposite_sign_execution_favors_proposal_continues(
 
     archive_path = tmp_path / "archive.json"
     search_space_path = tmp_path / "search_space.yaml"
-    outcomes_path = tmp_path / "outcomes.json"
     output_json = tmp_path / "report.json"
 
     archive = _two_family_archive()
     archive_path.write_text(json.dumps(archive), encoding="utf-8")
     search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
 
-    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
-
-    split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
-
     # Independent planner execution outcome favors PROPOSAL (proposal=10.0, random=0.0)
-    outcomes_path.write_text(
-        json.dumps(
-            {
-                "schema_version": "adversarial_independent_outcomes.v1",
-                "source": "unit-test-fixture",
-                "artifact": "docs/context/evidence/unit-test.json",
-                "eval_archive_sha256": archive_sha256(split.eval_entries),
-                "outcome_source": "planner_execution",
-                "objective": "certified_failure_outcome",
-                "proposal_outcomes": [10.0, 10.0, 10.0, 10.0],
-                "random_outcomes": [0.0, 0.0, 0.0, 0.0],
-                "ranked_outcomes": [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
-                "certification_statuses": ["passed"] * 8,
-                "row_statuses": ["success"] * 8,
-            }
-        ),
-        encoding="utf-8",
+    contract_path, outcomes_path = _write_frozen_contract_and_outcomes(
+        tmp_path,
+        archive_path,
+        search_space_path,
+        [10.0, 10.0, 10.0, 10.0],
+        [0.0, 0.0, 0.0, 0.0],
     )
 
     monkeypatch.setattr(
@@ -847,6 +968,8 @@ def test_opposite_sign_execution_favors_proposal_continues(
             archive_path.as_posix(),
             "--search-space",
             search_space_path.as_posix(),
+            "--contract",
+            contract_path.as_posix(),
             "--evaluation-outcomes",
             outcomes_path.as_posix(),
             "--budget",

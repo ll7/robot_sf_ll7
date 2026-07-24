@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import random
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -35,7 +36,7 @@ def classify_issue_2921_stop_rule(
     held_out_status: str | None,
     comparison: dict[str, float | int | str],
 ) -> dict[str, Any]:
-    """Return the issue #2921 continue/revise/stop decision without promoting claims.
+    """Return the issue #2921 continue/stop/inconclusive decision without promoting claims.
 
     The issue #3275 rerun can only move into the #2921 stop-rule lane after the held-out
     diagnostic gate is open. Until then the stop rule is explicitly blocked so plumbing-only
@@ -58,8 +59,8 @@ def classify_issue_2921_stop_rule(
         status = "stop"
         reason = "diagnostic held-out deltas are negative; do not expand this proposal lane"
     else:
-        status = "revise"
-        reason = "diagnostic held-out deltas are neutral; revise before another empirical batch"
+        status = "inconclusive"
+        reason = "diagnostic held-out deltas are neutral; do not expand this proposal lane"
 
     return {
         "status": status,
@@ -395,7 +396,7 @@ def handle_check_contract(args: argparse.Namespace, contract_path: Path | None) 
         target_planner=contract_data.get("target_planner"),
     )
     feature_audit = fit_model.audit_feature_semantics(
-        target_family=contract_data.get("fit_scenario_family")
+        target_family=contract_data.get("eval_scenario_family")
     )
     verif["feature_semantics_audit"] = feature_audit
     if not feature_audit.get("passed", False):
@@ -477,6 +478,7 @@ def _assemble_comparison_report(ctx: dict[str, Any]) -> dict[str, Any]:
         "issue_2921_stop_rule": ctx["issue_2921_stop_rule"],
         "archive_evaluation_provenance": ctx["provenance"],
         "independent_outcome_evaluation": independent_evaluation,
+        "contract_verification": ctx.get("contract_verification"),
         "null_tests": independent_evaluation.get(
             "null_tests",
             {
@@ -488,29 +490,76 @@ def _assemble_comparison_report(ctx: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def main() -> int:
-    """Main execution function."""
-    args = parse_args()
+def _write_json(args: argparse.Namespace, payload: dict[str, Any]) -> None:
+    """Print a JSON payload and optionally persist it at the requested output path."""
+    rendered = json.dumps(payload, indent=2, sort_keys=True)
+    print(rendered)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(rendered + "\n", encoding="utf-8")
 
-    contract_path = args.contract
-    if isinstance(args.check_contract, (str, Path)):
-        contract_path = Path(args.check_contract)
 
-    if args.check_contract:
-        return handle_check_contract(args, contract_path)
+def _load_contract(path: Path | None) -> tuple[dict[str, Any] | None, str | None]:
+    """Load a normal-run contract without silently accepting malformed content."""
+    if path is None:
+        return None, None
+    if not path.exists():
+        return None, f"Contract file {path} not found."
+    try:
+        contract_data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return None, f"Failed to load contract: {exc}."
+    if not isinstance(contract_data, dict):
+        return None, "Contract payload must be a JSON object."
+    return contract_data, None
 
-    search_space_state, search_space_reason, search_space, synthetic_search_space = (
-        load_search_space(args.search_space)
-    )
-    archive_state, archive_reason, archive_data, synthetic_archive = load_archive(args.archive)
-    from robot_sf.adversarial.independent_outcomes import (
-        build_independent_outcome_evaluation,
-        load_independent_outcomes,
-    )
 
-    outcome_state, outcome_reason, outcome_data = load_independent_outcomes(
-        args.evaluation_outcomes
-    )
+def _contract_input_paths(
+    args: argparse.Namespace, contract_data: dict[str, Any] | None
+) -> tuple[Path | None, Path | None]:
+    """Choose explicit CLI inputs first, then the contract's frozen input paths."""
+    archive_path = args.archive
+    search_space_path = args.search_space
+    if contract_data is None:
+        return archive_path, search_space_path
+    if archive_path is None:
+        archive_path = Path(contract_data.get("tracked_archive_path", ""))
+    if search_space_path is None:
+        search_space_path = Path(contract_data.get("search_space_path", ""))
+    return archive_path, search_space_path
+
+
+def _verify_normal_contract(
+    contract_data: dict[str, Any] | None,
+    archive_data: dict[str, Any],
+    archive_path: Path | None,
+    synthetic_archive: bool,
+) -> dict[str, Any] | None:
+    """Verify a supplied normal-run contract before any candidate selection."""
+    if contract_data is None:
+        return None
+    if synthetic_archive or archive_path is None or not archive_path.is_file():
+        return {
+            "status": "failed",
+            "checks_passed": False,
+            "blocking_reasons": ["normal_contract_runs_require_a_real_readable_archive"],
+        }
+    from robot_sf.adversarial.disjoint_evaluation import verify_same_planner_contract
+
+    return verify_same_planner_contract(contract_data, archive_data, archive_path.read_bytes())
+
+
+def _resolve_run_state(
+    archive_state: str,
+    archive_reason: str,
+    search_space_state: str,
+    search_space_reason: str,
+    outcome_state: str,
+    outcome_reason: str,
+    synthetic_archive: bool,
+    synthetic_search_space: bool,
+) -> tuple[str, str]:
+    """Build an explicit blocked state whenever real inputs fall back to fixtures."""
     state = archive_state
     reason_parts = [archive_reason, search_space_reason, outcome_reason]
     if not synthetic_archive and synthetic_search_space:
@@ -520,35 +569,102 @@ def main() -> int:
         state = "blocked"
     if outcome_state == "blocked":
         state = "blocked"
-    reason = " ".join(reason_parts)
+    return state, " ".join(reason_parts)
 
-    contract_fit_ids = None
-    if contract_path and contract_path.exists():
-        contract_data = json.loads(contract_path.read_text(encoding="utf-8"))
-        contract_fit_ids = contract_data.get("fit_entry_ids")
+
+def _resolve_comparison_metrics(
+    held_out_evidence: bool,
+    independent_evaluation: dict[str, Any],
+    diag_proposal_metrics: dict[str, Any],
+    diag_random_metrics: dict[str, Any],
+) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    """Keep diagnostic archive-nearness metrics out of an open outcome gate."""
+    if held_out_evidence:
+        return (
+            "independent_planner_execution_outcomes",
+            independent_evaluation["proposal_metrics"],
+            independent_evaluation["random_metrics"],
+        )
+    if independent_evaluation.get("independent_outcomes_available"):
+        return (
+            "independent_outcomes_rejected_by_held_out_gate",
+            diag_proposal_metrics,
+            diag_random_metrics,
+        )
+    return (
+        "plumbing_only_circular_archive_nearness_objective",
+        diag_proposal_metrics,
+        diag_random_metrics,
+    )
+
+
+@dataclass(frozen=True)
+class _RunInputs:
+    """Validated inputs passed to the side-effect-free comparison path."""
+
+    contract_data: dict[str, Any] | None
+    archive_data: dict[str, Any]
+    archive_state: str
+    archive_reason: str
+    synthetic_archive: bool
+    search_space: Any
+    search_space_state: str
+    search_space_reason: str
+    synthetic_search_space: bool
+    contract_verification: dict[str, Any] | None
+
+
+def _run_comparison(
+    args: argparse.Namespace,
+    inputs: _RunInputs,
+) -> int:
+    """Run only the diagnostic comparison after contract verification has passed."""
+
+    from robot_sf.adversarial.independent_outcomes import (
+        build_independent_outcome_evaluation,
+        load_independent_outcomes,
+    )
+
+    outcome_state, outcome_reason, outcome_data = load_independent_outcomes(
+        args.evaluation_outcomes
+    )
+    state, reason = _resolve_run_state(
+        inputs.archive_state,
+        inputs.archive_reason,
+        inputs.search_space_state,
+        inputs.search_space_reason,
+        outcome_state,
+        outcome_reason,
+        inputs.synthetic_archive,
+        inputs.synthetic_search_space,
+    )
+
+    contract_fit_ids = (
+        inputs.contract_data.get("fit_entry_ids") if inputs.contract_data is not None else None
+    )
 
     from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel, isolate_fit_entries
 
     fit_archive_data = (
         isolate_fit_entries(
-            archive_data, allowed_fit_ids=contract_fit_ids, target_planner="social_force"
+            inputs.archive_data, allowed_fit_ids=contract_fit_ids, target_planner="social_force"
         )
-        if not synthetic_archive and isinstance(archive_data, dict)
-        else archive_data
+        if not inputs.synthetic_archive and isinstance(inputs.archive_data, dict)
+        else inputs.archive_data
     )
 
     model = FailureArchiveProposalModel(
-        fit_archive_data, search_space, target_planner="social_force"
+        fit_archive_data, inputs.search_space, target_planner="social_force"
     )
 
     diag_random_metrics, diag_proposal_metrics = _select_and_score_candidates(
-        model, search_space, args.budget, args.seed
+        model, inputs.search_space, args.budget, args.seed
     )
 
     provenance = build_archive_evaluation_provenance(
-        archive_data,
+        inputs.archive_data,
         state=state,
-        synthetic_archive=synthetic_archive,
+        synthetic_archive=inputs.synthetic_archive,
         split_seed=args.seed,
     )
     independent_evaluation = build_independent_outcome_evaluation(
@@ -557,29 +673,24 @@ def main() -> int:
         n_permutations=args.null_test_permutations,
         seed=args.seed,
         expected_eval_archive_sha256=provenance.get("eval_archive_sha256"),
+        outcome_contract=inputs.contract_data,
     )
     provenance = build_archive_evaluation_provenance(
-        archive_data,
+        inputs.archive_data,
         state=state,
-        synthetic_archive=synthetic_archive,
+        synthetic_archive=inputs.synthetic_archive,
         split_seed=args.seed,
         independent_evaluation=independent_evaluation,
     )
     held_out_status = provenance.get("held_out_evidence_status")
     held_out_evidence = held_out_status == "eligible_held_out_diagnostic"
 
-    if held_out_evidence:
-        comparison_interpretation = "independent_planner_execution_outcomes"
-        proposal_metrics = independent_evaluation["proposal_metrics"]
-        random_metrics = independent_evaluation["random_metrics"]
-    elif independent_evaluation.get("independent_outcomes_available"):
-        comparison_interpretation = "independent_outcomes_rejected_by_held_out_gate"
-        proposal_metrics = diag_proposal_metrics
-        random_metrics = diag_random_metrics
-    else:
-        comparison_interpretation = "plumbing_only_circular_archive_nearness_objective"
-        proposal_metrics = diag_proposal_metrics
-        random_metrics = diag_random_metrics
+    comparison_interpretation, proposal_metrics, random_metrics = _resolve_comparison_metrics(
+        held_out_evidence,
+        independent_evaluation,
+        diag_proposal_metrics,
+        diag_random_metrics,
+    )
 
     comparison = {
         "interpretation": comparison_interpretation,
@@ -603,9 +714,9 @@ def main() -> int:
         "state": state,
         "reason": reason,
         "held_out_evidence": held_out_evidence,
-        "synthetic_archive": synthetic_archive,
-        "synthetic_search_space": synthetic_search_space,
-        "search_space_state": search_space_state,
+        "synthetic_archive": inputs.synthetic_archive,
+        "synthetic_search_space": inputs.synthetic_search_space,
+        "search_space_state": inputs.search_space_state,
         "budget": args.budget,
         "seed": args.seed,
         "proposal_metrics": proposal_metrics,
@@ -618,17 +729,60 @@ def main() -> int:
         "issue_2921_stop_rule": issue_2921_stop_rule,
         "provenance": provenance,
         "independent_evaluation": independent_evaluation,
+        "contract_verification": inputs.contract_verification,
     }
     report = _assemble_comparison_report(ctx)
 
-    report_str = json.dumps(report, indent=2, sort_keys=True)
-    print(report_str)
+    _write_json(args, report)
+    return 1 if state == "blocked" else 0
 
-    if args.output:
-        args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(report_str + "\n", encoding="utf-8")
 
-    return 0
+def main() -> int:
+    """Main execution function."""
+    args = parse_args()
+    contract_path = (
+        Path(args.check_contract) if isinstance(args.check_contract, str) else args.contract
+    )
+    if args.check_contract:
+        return handle_check_contract(args, contract_path)
+
+    contract_data, contract_error = _load_contract(contract_path)
+    if contract_error is not None:
+        _write_json(args, {"state": "blocked", "reason": contract_error})
+        return 1
+    archive_path, search_space_path = _contract_input_paths(args, contract_data)
+    search_state, search_reason, search_space, synthetic_search = load_search_space(
+        search_space_path
+    )
+    archive_state, archive_reason, archive_data, synthetic_archive = load_archive(archive_path)
+    verification = _verify_normal_contract(
+        contract_data, archive_data, archive_path, synthetic_archive
+    )
+    if verification is not None and not verification["checks_passed"]:
+        _write_json(
+            args,
+            {
+                "state": "blocked",
+                "reason": "Frozen study contract failed verification; no candidates were selected.",
+                "contract_verification": verification,
+            },
+        )
+        return 1
+    return _run_comparison(
+        args,
+        _RunInputs(
+            contract_data,
+            archive_data,
+            archive_state,
+            archive_reason,
+            synthetic_archive,
+            search_space,
+            search_state,
+            search_reason,
+            synthetic_search,
+            verification,
+        ),
+    )
 
 
 if __name__ == "__main__":

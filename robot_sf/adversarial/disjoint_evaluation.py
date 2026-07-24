@@ -25,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -34,6 +35,7 @@ if TYPE_CHECKING:
 
 # Permutation-test float comparison tolerance.
 _EPS = 1e-12
+_SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 
 
 def scenario_family_key(entry: dict[str, Any]) -> str:
@@ -803,6 +805,210 @@ def _verify_contract_hashes(
     return reasons
 
 
+def _is_sha256(value: Any) -> bool:
+    """Return whether ``value`` is a non-placeholder SHA-256 digest."""
+    return isinstance(value, str) and _SHA256_PATTERN.fullmatch(value) is not None
+
+
+def _verify_contract_families_and_hashes(contract_data: dict[str, Any]) -> list[str]:
+    """Validate held-out family identity and planner/search-space provenance."""
+    reasons: list[str] = []
+    fit_family = contract_data.get("fit_scenario_family")
+    eval_family = contract_data.get("eval_scenario_family")
+    if eval_family != "classic_cross_trap_medium":
+        reasons.append(
+            f"eval_scenario_family_mismatch:expected=classic_cross_trap_medium:actual={eval_family}"
+        )
+    if not isinstance(fit_family, str) or not fit_family.strip():
+        reasons.append("fit_scenario_family_missing")
+    elif eval_family == fit_family:
+        reasons.append("held_out_scenario_family_not_distinct")
+
+    planner_hash = contract_data.get("target_planner_config_sha256")
+    if not _is_sha256(planner_hash):
+        reasons.append("target_planner_config_sha256_invalid")
+
+    search_space_path = contract_data.get("search_space_path")
+    search_space_hash = contract_data.get("search_space_sha256")
+    if not isinstance(search_space_path, str) or not search_space_path.strip():
+        reasons.append("search_space_path_missing")
+    elif not _is_sha256(search_space_hash):
+        reasons.append("search_space_sha256_invalid")
+    else:
+        path = Path(search_space_path)
+        if not path.is_file():
+            reasons.append(f"search_space_path_missing:{path}")
+        else:
+            observed_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+            if observed_hash != search_space_hash:
+                reasons.append(
+                    "search_space_hash_mismatch:"
+                    f"expected={search_space_hash}:actual={observed_hash}"
+                )
+
+    return reasons
+
+
+def _verify_power_sensitivity(power: Any, budget: Any, effect_margin: Any) -> list[str]:
+    """Validate a predeclared power/sensitivity calculation when available."""
+    if not isinstance(power, dict):
+        return ["power_sensitivity_missing"]
+    if power.get("status") != "computed":
+        return [f"power_sensitivity_not_computed:{power.get('status', 'missing')}"]
+
+    reasons: list[str] = []
+    if power.get("candidate_budget_per_arm") != budget:
+        reasons.append("power_sensitivity_budget_mismatch")
+    if power.get("minimum_effect_margin") != effect_margin:
+        reasons.append("power_sensitivity_effect_margin_mismatch")
+    estimated_power = power.get("estimated_power")
+    if not isinstance(estimated_power, (int, float)) or not 0.0 <= estimated_power <= 1.0:
+        reasons.append("power_sensitivity_estimated_power_invalid")
+    return reasons
+
+
+def _verify_study_parameters(contract_data: dict[str, Any]) -> list[str]:
+    """Validate budget, effect-size, overlap, and power contract fields."""
+    reasons: list[str] = []
+    parameters = contract_data.get("study_parameters")
+    if not isinstance(parameters, dict):
+        reasons.append("study_parameters_missing")
+        parameters = {}
+
+    budget = parameters.get("candidate_budget_per_arm")
+    pool_size = parameters.get("candidate_pool_size")
+    confirmations = parameters.get("confirmation_seeds_per_candidate")
+    effect_margin = parameters.get("minimally_important_effect_margin")
+    if not isinstance(budget, int) or budget < 1:
+        reasons.append("candidate_budget_per_arm_invalid")
+    if not isinstance(pool_size, int) or not isinstance(budget, int) or pool_size < 2 * budget:
+        reasons.append("candidate_pool_size_invalid")
+    if not isinstance(confirmations, int) or confirmations < 1:
+        reasons.append("confirmation_seeds_per_candidate_invalid")
+    if not isinstance(effect_margin, (int, float)) or not 0.0 < float(effect_margin) <= 1.0:
+        reasons.append("minimally_important_effect_margin_invalid")
+    if parameters.get("overlapping_candidate_policy") != "deterministic_disjoint_assignment":
+        reasons.append("overlapping_candidate_policy_not_deterministic_disjoint_assignment")
+
+    reasons.extend(
+        _verify_power_sensitivity(contract_data.get("power_sensitivity"), budget, effect_margin)
+    )
+    return reasons
+
+
+def _verify_admission_shape(admission: Any) -> tuple[list[str], dict[str, Any]]:
+    """Validate required outcome-admission fields and return a mapping."""
+    reasons: list[str] = []
+    if not isinstance(admission, dict):
+        reasons.append("outcome_admission_missing")
+        admission = {}
+    if admission.get("schema_version") != "adversarial_independent_outcomes.v2":
+        reasons.append("outcome_admission_schema_invalid")
+    if admission.get("execution_status") != "native":
+        reasons.append("outcome_admission_requires_native_execution")
+    if admission.get("candidate_aggregation") != "candidate_level_binary_yield":
+        reasons.append("outcome_admission_candidate_aggregation_invalid")
+    if admission.get("fallback_degraded_policy") != "exclude":
+        reasons.append("outcome_admission_fallback_policy_invalid")
+    if admission.get("stable_failure_attribution_required") is not True:
+        reasons.append("outcome_admission_stable_attribution_not_required")
+    return reasons, admission
+
+
+def _verify_admission_confirmation(admission: dict[str, Any], confirmations: Any) -> list[str]:
+    """Validate deterministic replay and the predeclared confirmation threshold."""
+    reasons: list[str] = []
+
+    replay = admission.get("deterministic_replay")
+    if not isinstance(replay, dict) or replay.get("exact_signature_match_required") is not True:
+        reasons.append("outcome_admission_deterministic_replay_invalid")
+    confirmation = admission.get("independent_seed_confirmation")
+    if not isinstance(confirmation, dict):
+        reasons.append("outcome_admission_independent_confirmation_missing")
+    else:
+        required_count = confirmation.get("minimum_confirmed_count")
+        if not isinstance(required_count, int) or not isinstance(confirmations, int):
+            reasons.append("outcome_admission_confirmation_threshold_invalid")
+        elif not 1 <= required_count <= confirmations:
+            reasons.append("outcome_admission_confirmation_threshold_invalid")
+    return reasons
+
+
+def _verify_outcome_admission(contract_data: dict[str, Any]) -> list[str]:
+    """Validate native, candidate-level admission and frozen-manifest requirements."""
+    parameters = contract_data.get("study_parameters")
+    confirmations = (
+        parameters.get("confirmation_seeds_per_candidate") if isinstance(parameters, dict) else None
+    )
+    reasons, admission = _verify_admission_shape(contract_data.get("outcome_admission"))
+    reasons.extend(_verify_admission_confirmation(admission, confirmations))
+
+    manifest = admission.get("candidate_manifest")
+    if not isinstance(manifest, dict) or manifest.get("status") != "frozen":
+        manifest_status = (
+            manifest.get("status", "missing") if isinstance(manifest, dict) else "missing"
+        )
+        reasons.append(f"candidate_manifest_not_frozen:{manifest_status}")
+    return reasons
+
+
+def _verify_decision_and_state(contract_data: dict[str, Any]) -> list[str]:
+    """Validate the exact decision vocabulary and external gate state."""
+    reasons: list[str] = []
+
+    decision_rule = contract_data.get("decision_rule")
+    expected_decisions = {
+        "positive_outcome": "continue",
+        "negative_outcome": "stop",
+        "neutral_outcome": "inconclusive",
+        "invalid_or_fallback_outcome": "inconclusive",
+    }
+    if not isinstance(decision_rule, dict):
+        reasons.append("decision_rule_missing")
+    else:
+        for key, expected in expected_decisions.items():
+            if decision_rule.get(key) != expected:
+                reasons.append(
+                    f"decision_rule_mismatch:{key}:expected={expected}:actual={decision_rule.get(key)}"
+                )
+
+    if contract_data.get("contract_status") != "frozen":
+        reasons.append(f"contract_not_frozen:{contract_data.get('contract_status', 'missing')}")
+    prerequisites = contract_data.get("external_prerequisites")
+    if not isinstance(prerequisites, list) or not prerequisites:
+        reasons.append("external_prerequisites_missing")
+    else:
+        for prerequisite in prerequisites:
+            if not isinstance(prerequisite, dict):
+                reasons.append("external_prerequisite_invalid")
+                continue
+            if prerequisite.get("status") != "satisfied":
+                reasons.append(
+                    "external_prerequisite_unsatisfied:"
+                    f"issue={prerequisite.get('issue', 'unknown')}:"
+                    f"status={prerequisite.get('status', 'missing')}"
+                )
+    return reasons
+
+
+def _verify_same_planner_design(contract_data: dict[str, Any]) -> list[str]:
+    """Validate the non-archive fields that define the #3275 study contract.
+
+    This check is deliberately strict: a contract may be used by the normal
+    runner only after it defines the held-out cross-trap arm, reproducible
+    planner/search-space provenance, deterministic arm handling, row admission,
+    and the predeclared decision vocabulary.  A provisional contract reports
+    its unmet external prerequisites rather than looking final merely because
+    its source archive still parses.
+    """
+    return (
+        _verify_contract_families_and_hashes(contract_data)
+        + _verify_study_parameters(contract_data)
+        + _verify_outcome_admission(contract_data)
+        + _verify_decision_and_state(contract_data)
+    )
+
+
 def _verify_contract_entries(
     contract_data: dict[str, Any],
     entries: list[dict[str, Any]],
@@ -810,6 +1016,7 @@ def _verify_contract_entries(
     """Check fit/excluded entry IDs, planners, and scenario families against contract."""
     reasons: list[str] = []
     expected_target_planner = contract_data.get("target_planner")
+    expected_planner_config_hash = contract_data.get("target_planner_config_sha256")
     expected_fit_family = contract_data.get("fit_scenario_family")
     expected_fit_ids = set(contract_data.get("fit_entry_ids", []))
     expected_excluded_ids = set(contract_data.get("excluded_entry_ids", []))
@@ -842,6 +1049,16 @@ def _verify_contract_entries(
             reasons.append(
                 f"fit_entry_planner_mismatch:{entry.get('archive_id')}:expected={expected_target_planner}:actual={planner}"
             )
+        provenance = entry.get("provenance")
+        observed_config_hash = (
+            provenance.get("config_sha256") if isinstance(provenance, dict) else None
+        )
+        if observed_config_hash != expected_planner_config_hash:
+            reasons.append(
+                "fit_entry_planner_config_hash_mismatch:"
+                f"{entry.get('archive_id')}:expected={expected_planner_config_hash}:"
+                f"actual={observed_config_hash}"
+            )
         fam = entry.get("scenario_family") or entry.get("cluster_key")
         if isinstance(fam, dict):
             fam = fam.get("scenario_family")
@@ -863,6 +1080,7 @@ def verify_same_planner_contract(
     blocking_reasons.extend(
         _verify_contract_hashes(contract_data, archive_data, archive_raw_content)
     )
+    blocking_reasons.extend(_verify_same_planner_design(contract_data))
 
     entries = archive_data.get("entries", []) if isinstance(archive_data, dict) else []
     if not isinstance(entries, list):
@@ -887,7 +1105,10 @@ def verify_same_planner_contract(
         "status": "passed" if passed else "failed",
         "contract_id": contract_data.get("study_id", "issue_3275_same_planner_contract"),
         "target_planner": contract_data.get("target_planner"),
+        "target_planner_config_sha256": contract_data.get("target_planner_config_sha256"),
         "fit_scenario_family": contract_data.get("fit_scenario_family"),
+        "eval_scenario_family": contract_data.get("eval_scenario_family"),
+        "search_space_sha256": contract_data.get("search_space_sha256"),
         "fit_entry_count": len(observed_fit_entries),
         "excluded_entry_count": contract_data.get("excluded_entry_count", 5),
         "fit_entries_payload_sha256": fit_payload_hash,

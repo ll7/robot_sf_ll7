@@ -49,6 +49,13 @@ RELEASE_GOAL_JSONL_SHA256 = "21702588cd197890fe2317f7214c71fc656a03009da7d2279df
 RELEASE_PPO_JSONL_SHA256 = "c7b776a236254365eb71174070b4299af959423135707229e1af90dbe6e5fec1"
 EXPECTED_OUTCOMES_SHA256 = "4d12c706c2475cc3adfd21f042d21a27afdb7833aeb387d430e0ae93a732a031"
 PPO_MODEL_ID = "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417"
+#: Frozen release tag the 0.0.3 publication bundle was published under.
+RELEASE_TAG = "0.0.3"
+#: Git commit the 0.0.3 release tag/report surface was built at (the publication commit,
+#: distinct from the pinned re-execution commit). Carried into resolver provenance.
+REPORT_COMMIT = "e2ac534c9d6bb750346b1e0724638c91306e410a"
+#: Schema the candidate-trace resolver (#5615) consumes for the #5756 episode mapping.
+RESOLVER_MAPPING_SCHEMA = "issue_5756_trace_mapping_receipt.v1"
 
 _CANONICAL_CONFIG = Path("configs/benchmarks/paper_experiment_matrix_v2_h600_s30_extended.yaml")
 _SCENARIO_MATRIX = Path("configs/scenarios/classic_interactions_francis2023.yaml")
@@ -996,12 +1003,181 @@ def package_trace_reexport(  # noqa: PLR0913, PLR0915
     return output_dir
 
 
+def _canonical_outcome_from_row(outcome_row: Mapping[str, Any]) -> str:
+    """Reduce four release-outcome booleans to one canonical resolver label.
+
+    Mirrors the resolver's outcome priority (collision > timeout > route > success)
+    so the emitted ``expected_release_outcome`` / ``rerun_outcome`` labels match the
+    labels the resolver itself derives.  The packager already proved the packaged row's
+    release and rerun outcomes are identical, so a single label is authoritative here.
+
+    Returns:
+        The canonical outcome label.
+    """
+    for key in ("collision_event", "timeout_event", "route_complete", "success"):
+        if outcome_row.get(key) is True:
+            return key
+    raise TraceReexportPackagingError(
+        f"expected-outcome row has no canonical true flag: {dict(outcome_row)!r}"
+    )
+
+
+def _index_outcome_rows(
+    outcomes_payload: Mapping[str, Any],
+) -> dict[tuple[str, str, int], str]:
+    """Index expected-outcome rows by ``(planner, scenario, seed)`` to canonical labels.
+
+    Returns:
+        Canonical outcome label per episode tuple.
+    """
+    outcome_by_key: dict[tuple[str, str, int], str] = {}
+    for row in outcomes_payload.get("rows", []):
+        if not isinstance(row, Mapping):
+            raise TraceReexportPackagingError("expected-outcome row must be an object")
+        key = (str(row["planner"]), str(row["scenario_id"]), int(row["seed"]))
+        outcome_by_key[key] = _canonical_outcome_from_row(row)
+    return outcome_by_key
+
+
+def default_resolver_mapping_path(package_dir: Path) -> Path:
+    """Return a resolver-receipt path beside, never inside, a complete package.
+
+    The completion marker covers every package file. Writing a derived receipt below
+    ``package_dir`` would therefore invalidate the package immediately after a
+    successful conversion.
+
+    Returns:
+        A sibling path named ``<package>.resolver_mapping_receipt.json``.
+    """
+    package_dir = package_dir.resolve()
+    return package_dir.with_name(f"{package_dir.name}.resolver_mapping_receipt.json")
+
+
+def _validate_resolver_output_path(package_dir: Path, output_path: Path | None) -> Path | None:
+    if output_path is None:
+        return None
+    resolved_output = output_path.resolve()
+    if resolved_output == package_dir or package_dir in resolved_output.parents:
+        raise TraceReexportPackagingError(
+            "resolver mapping receipt must be written outside the immutable complete package"
+        )
+    return resolved_output
+
+
+def build_resolver_mapping_receipt(
+    package_dir: Path, *, output_path: Path | None = None
+) -> dict[str, Any]:
+    """Convert a complete #5756 trace package into the resolver's mapping receipt.
+
+    The packager emits ``issue_5756_trace_reexport_mapping_receipt.v1`` (release/rerun
+    row digests and relative trace URIs).  The candidate-trace resolver (#5615) and the
+    worked-example renderer (#5756) consume ``issue_5756_trace_mapping_receipt.v1``
+    (canonical per-row outcomes, absolute trace artifact URIs, resolver provenance).
+    This fail-closed adapter joins the two: it requires a complete package, derives each
+    row's canonical release outcome from ``expected_outcomes.json`` (the packager
+    already verified release==rerun outcome for every packaged row), rewrites the
+    relative ``trace_uri`` to the absolute ``trace_artifact_uri`` the resolver opens,
+    and rebuilds the resolver-pinned provenance from the package's frozen provenance.
+
+    Args:
+        package_dir: A directory previously produced by :func:`package_trace_reexport`.
+        output_path: When given, write the JSON receipt here (canonical form). The
+            destination must be outside ``package_dir`` so the package completion
+            marker remains valid.
+
+    Returns:
+        The ``issue_5756_trace_mapping_receipt.v1`` payload.
+    """
+    package_dir = package_dir.resolve()
+    if _verify_complete_output(package_dir) is None:
+        raise TraceReexportPackagingError(f"package is not a complete trace package: {package_dir}")
+    output_path = _validate_resolver_output_path(package_dir, output_path)
+    receipt = _read_json_object(package_dir / "mapping_receipt.json")
+    if receipt.get("schema_version") != MAPPING_RECEIPT_SCHEMA:
+        raise TraceReexportPackagingError("package mapping receipt has an unexpected schema")
+    frozen = receipt.get("frozen_provenance")
+    if not isinstance(frozen, Mapping):
+        raise TraceReexportPackagingError("package mapping receipt has no frozen provenance")
+    outcomes_payload = _read_json_object(package_dir / "expected_outcomes.json")
+    if outcomes_payload.get("schema_version") != EXPECTED_OUTCOMES_SCHEMA:
+        raise TraceReexportPackagingError("package expected-outcomes schema mismatch")
+    outcome_by_key = _index_outcome_rows(outcomes_payload)
+    mapping_rows: list[dict[str, Any]] = []
+    for row in receipt.get("rows", []):
+        if not isinstance(row, Mapping):
+            raise TraceReexportPackagingError("mapping receipt row must be an object")
+        key = (str(row["planner"]), str(row["scenario_id"]), int(row["seed"]))
+        if key not in outcome_by_key:
+            raise TraceReexportPackagingError(
+                f"package receipt row {key!r} has no expected-outcome entry"
+            )
+        trace_uri = str(row.get("trace_uri") or "")
+        trace_path = package_dir / trace_uri
+        if not trace_path.is_file():
+            raise TraceReexportPackagingError(
+                f"package receipt row {key!r} trace artifact is missing: {trace_uri!r}"
+            )
+        outcome = outcome_by_key[key]
+        mapping_rows.append(
+            {
+                "scenario_id": key[1],
+                "planner": key[0],
+                "seed": key[2],
+                "episode_id": str(row["rerun_episode_id"]),
+                "release_episode_id": str(row["release_episode_id"]),
+                "expected_release_outcome": outcome,
+                "rerun_outcome": outcome,
+                "trace_artifact_uri": str(trace_path),
+                "trace_sha256": str(row["trace_sha256"]).lower(),
+            }
+        )
+    resolver_receipt: dict[str, Any] = {
+        "schema_version": RESOLVER_MAPPING_SCHEMA,
+        "n_rows": len(mapping_rows),
+        "provenance": {
+            "release_tag": RELEASE_TAG,
+            "release_bundle_sha256": str(frozen["release_bundle_sha256"]),
+            "report_commit": REPORT_COMMIT,
+            "execution_commit": str(frozen["execution_commit"]),
+            "canonical_campaign_config_sha256": str(frozen["canonical_campaign_config_sha256"]),
+            "scenario_matrix_sha256": str(frozen["scenario_matrix_sha256"]),
+            "checkpoint_sha256": str(frozen["ppo_checkpoint_sha256"]),
+            "request_manifest_sha256": str(frozen["request_manifest_sha256"]),
+        },
+        "rows": mapping_rows,
+    }
+    # Round-trip through the resolver loader to fail closed on any drift before
+    # emitting the canonical receipt bytes. The adapter validates the mapping against
+    # the provenance derived from the package, not the production pins, so synthetic
+    # fixtures (whose digests differ from the release pins) still exercise the path.
+    from robot_sf.benchmark.candidate_trace_resolution import (  # noqa: PLC0415
+        load_episode_mapping,
+    )
+
+    derived_provenance = dict(resolver_receipt["provenance"])
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_json(output_path, resolver_receipt)
+        load_episode_mapping(output_path, expected_provenance=derived_provenance)
+    else:
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=".json", delete=False) as handle:
+            handle.write(_canonical_bytes(resolver_receipt, newline=True))
+            temp_receipt = Path(handle.name)
+        try:
+            load_episode_mapping(temp_receipt, expected_provenance=derived_provenance)
+        finally:
+            temp_receipt.unlink(missing_ok=True)
+    return resolver_receipt
+
+
 __all__ = [
     "CampaignExpectation",
     "FrozenTraceReexportContract",
     "TraceReexportPackagingError",
+    "build_resolver_mapping_receipt",
     "campaign_expectations",
     "canonical_sha256",
+    "default_resolver_mapping_path",
     "expected_outcomes_payload_for_rows",
     "package_trace_reexport",
 ]

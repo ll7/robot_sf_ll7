@@ -120,6 +120,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -135,7 +136,6 @@ EXEC_COMMIT: str = "a307ef276d701f8d14dead1aa0513f44ee97c0b0"
 SLURM_JOB: str = "13483"
 CONFIG_PATH: str = "configs/benchmarks/doorway_butterfly_trace_reexport.yaml"
 SEED_SET_NAME: str = "paper_eval_s30"
-CAMPAIGN_ID: str = "doorway_butterfly_ppo_a307"
 
 #: Bounding statements, author-ruled 2026-07-16 (see
 #: output/benchmarks/doorway_butterfly_trace_reexport/job-13483/PER_SEED_DIFF.md,
@@ -166,8 +166,61 @@ RELEASE_SEED_114_NEAR_MISSES_SOURCE: str = (
 )
 FLIPPED_SEEDS: tuple[int, ...] = (128, 130)
 OUTCOME_FIDELITY: str = "28/30"
-EXPECTED_ALGO: str = "ppo"
-EXPECTED_SCENARIO_ID: str = "classic_doorway_medium"
+
+
+@dataclass(frozen=True)
+class ReexportArmSpec:
+    """Pinned provenance for one worked-example re-export arm.
+
+    Carries the fail-closed expectations ``build_bundle`` checks each episode row
+    against. Campaign/job labels are deliberately not stored here: those identifiers
+    must come from the source row's ``result_provenance`` rather than being invented by
+    the selected arm. Keeping the fail-closed identity pins here lets one adapter serve
+    both #5756 worked-example pairs from the same renderer.
+    """
+
+    key: str
+    planner: str
+    scenario_id: str
+    execution_commit: str
+
+
+#: The pinned doorway PPO butterfly arm (job 13483). Outcomes reproduce the release
+#: for 28/30 seeds; seeds 128/130 flipped and are excluded from any release claim.
+DOORWAY_ARM = ReexportArmSpec(
+    key="doorway_ppo",
+    planner="ppo",
+    scenario_id="classic_doorway_medium",
+    execution_commit=EXEC_COMMIT,
+)
+
+#: The pinned double-bottleneck goal arm (job 13487). 30/30 outcome-faithful vs release.
+BOTTLENECK_GOAL_ARM = ReexportArmSpec(
+    key="double_bottleneck_goal",
+    planner="goal",
+    scenario_id="classic_realworld_double_bottleneck_high",
+    execution_commit=EXEC_COMMIT,
+)
+
+#: The pinned double-bottleneck PPO arm (job 13488). 30/30 outcome-faithful vs release.
+BOTTLENECK_PPO_ARM = ReexportArmSpec(
+    key="double_bottleneck_ppo",
+    planner="ppo",
+    scenario_id="classic_realworld_double_bottleneck_high",
+    execution_commit=EXEC_COMMIT,
+)
+
+ARMS: dict[str, ReexportArmSpec] = {
+    DOORWAY_ARM.key: DOORWAY_ARM,
+    BOTTLENECK_GOAL_ARM.key: BOTTLENECK_GOAL_ARM,
+    BOTTLENECK_PPO_ARM.key: BOTTLENECK_PPO_ARM,
+}
+
+# Backward-compatible doorway aliases retained for existing callers and tests. New
+# multi-arm code should use ``DOORWAY_ARM`` directly.
+CAMPAIGN_ID: str = "doorway_butterfly_ppo_a307"
+EXPECTED_ALGO: str = DOORWAY_ARM.planner
+EXPECTED_SCENARIO_ID: str = DOORWAY_ARM.scenario_id
 
 
 # ---------------------------------------------------------------------------
@@ -198,12 +251,21 @@ def _load_row(episodes_jsonl: Path, seed: int) -> dict[str, Any]:
     return matches[0]
 
 
-def _validate_source_row(row: dict[str, Any]) -> None:
-    """Fail closed when an episode does not match the pinned re-export campaign."""
+def _validate_source_row(row: dict[str, Any], arm: ReexportArmSpec) -> dict[str, Any]:
+    """Fail closed when an episode does not match its pinned re-export arm.
+
+    Every arm must carry row-level provenance. This prevents a file containing an
+    arbitrary matching planner/scenario/seed row from inheriting a trusted-looking arm
+    identity. The validated source object is returned so the emitted bundle can carry
+    the actual provenance rather than hard-coded campaign or job labels.
+
+    Returns:
+        A copy of the validated ``result_provenance`` object.
+    """
     expected = {
-        "git_hash": EXEC_COMMIT,
-        "algo": EXPECTED_ALGO,
-        "scenario_id": EXPECTED_SCENARIO_ID,
+        "git_hash": arm.execution_commit,
+        "algo": arm.planner,
+        "scenario_id": arm.scenario_id,
     }
     mismatches = [
         f"{key}={row.get(key)!r} (expected {value!r})"
@@ -215,20 +277,24 @@ def _validate_source_row(row: dict[str, Any]) -> None:
         mismatches.append("result_provenance is missing or not an object")
     else:
         provenance_expectations = {
-            "repo_commit": EXEC_COMMIT,
-            "scenario_id": EXPECTED_SCENARIO_ID,
+            "repo_commit": arm.execution_commit,
+            "scenario_id": arm.scenario_id,
             "seed": row.get("seed"),
         }
+        if row.get("config_hash") is not None:
+            provenance_expectations["config_hash"] = row.get("config_hash")
         mismatches.extend(
             f"result_provenance.{key}={result_provenance.get(key)!r} (expected {value!r})"
             for key, value in provenance_expectations.items()
             if result_provenance.get(key) != value
         )
     if mismatches:
+        arm_label = "doorway" if arm == DOORWAY_ARM else arm.key
         raise ValueError(
-            "episode row does not match pinned doorway re-export provenance: "
+            f"episode row does not match pinned {arm_label} re-export provenance: "
             + "; ".join(mismatches)
         )
+    return dict(result_provenance)
 
 
 def _nearest_pedestrian(frame: dict[str, Any]) -> tuple[float, int | None]:
@@ -308,7 +374,12 @@ def _build_derived_rows(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
-def _build_metadata(row: dict[str, Any], derived_rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _build_metadata(
+    row: dict[str, Any],
+    derived_rows: list[dict[str, Any]],
+    arm: ReexportArmSpec,
+    result_provenance: dict[str, Any],
+) -> dict[str, Any]:
     """Build the ``metadata`` dict shared by ``trace_series.json["metadata"]`` and
     ``metadata.json`` (minus the ``review_marker`` key ``metadata.json`` adds on top --
     see the module docstring's field-omission notes for what is deliberately absent
@@ -319,9 +390,7 @@ def _build_metadata(row: dict[str, Any], derived_rows: list[dict[str, Any]]) -> 
     """
     dists = [r["min_robot_ped_distance_m"] for r in derived_rows]
     global_min_idx = min(range(len(dists)), key=lambda i: dists[i])
-    return {
-        "campaign_id": CAMPAIGN_ID,
-        "campaign_job": SLURM_JOB,
+    metadata = {
         "episode_id": row["episode_id"],
         # episode_status: row["status"] verbatim -- already one of
         # "success"/"collision"/"failure", the exact strings
@@ -330,9 +399,11 @@ def _build_metadata(row: dict[str, Any], derived_rows: list[dict[str, Any]]) -> 
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "git_commit": row["git_hash"],
         "planner": row["algo"],
+        "result_provenance": result_provenance,
         "scenario_id": row["scenario_id"],
         "schema_version": "butterfly-reexport-exemplar-trace.v1",
         "seed": row["seed"],
+        "source_arm": arm.key,
         "summary": {
             "episode_status": row["status"],
             "global_min_distance_step": derived_rows[global_min_idx]["step"],
@@ -344,16 +415,34 @@ def _build_metadata(row: dict[str, Any], derived_rows: list[dict[str, Any]]) -> 
             "termination_reason": row["termination_reason"],
         },
     }
+    # Preserve source-provided campaign/job locators when present, but never invent
+    # them from the selected arm. Older benchmark rows omit these fields, in which
+    # case the bundle remains honest and simply carries no unverified locator.
+    campaign_id = result_provenance.get("campaign_id")
+    if isinstance(campaign_id, str) and campaign_id.strip():
+        metadata["campaign_id"] = campaign_id
+    campaign_job = result_provenance.get("slurm_job_id", result_provenance.get("campaign_job"))
+    if isinstance(campaign_job, (str, int)) and not isinstance(campaign_job, bool):
+        metadata["campaign_job"] = str(campaign_job)
+    return metadata
 
 
-def build_bundle(episodes_jsonl: Path, seed: int, out_dir: Path) -> dict[str, Any]:
+def build_bundle(
+    episodes_jsonl: Path, seed: int, out_dir: Path, *, arm: ReexportArmSpec = DOORWAY_ARM
+) -> dict[str, Any]:
     """Convert one episode row into a ``trace_series.json`` + ``metadata.json`` bundle.
+
+    Args:
+        episodes_jsonl: One-row-per-episode rerun output for ``arm``.
+        seed: The episode seed to isolate.
+        out_dir: Destination bundle directory.
+        arm: The pinned re-export arm whose provenance the row must match.
 
     Returns:
         Small summary dict (paths written, step count, outcome) for CLI reporting.
     """
     row = _load_row(episodes_jsonl, seed)
-    _validate_source_row(row)
+    result_provenance = _validate_source_row(row, arm)
     sst = row["algorithm_metadata"]["simulation_step_trace"]
     if sst.get("schema_version") != "simulation-step-trace.v1":
         raise ValueError(
@@ -363,7 +452,7 @@ def build_bundle(episodes_jsonl: Path, seed: int, out_dir: Path) -> dict[str, An
     if not isinstance(frames, list) or not frames:
         raise ValueError("simulation_step_trace.steps must be a non-empty array")
     derived_rows = _build_derived_rows(frames)
-    metadata = _build_metadata(row, derived_rows)
+    metadata = _build_metadata(row, derived_rows, arm, result_provenance)
 
     trace_series = {
         "schema_version": "butterfly-reexport-trace-series.v1",
@@ -455,6 +544,12 @@ def _build_parser() -> argparse.ArgumentParser:
     build_p.add_argument("--episodes-jsonl", type=Path, required=True)
     build_p.add_argument("--seed", type=int, required=True)
     build_p.add_argument("--out-dir", type=Path, required=True)
+    build_p.add_argument(
+        "--arm",
+        choices=tuple(ARMS),
+        default=DOORWAY_ARM.key,
+        help="Pinned re-export arm whose provenance the row must match.",
+    )
 
     aug_p = sub.add_parser(
         "augment-sidecar",
@@ -476,7 +571,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     args = _build_parser().parse_args(argv)
     if args.command == "build-bundle":
-        summary = build_bundle(args.episodes_jsonl, args.seed, args.out_dir)
+        summary = build_bundle(args.episodes_jsonl, args.seed, args.out_dir, arm=ARMS[args.arm])
         print(json.dumps(summary, indent=2))
     elif args.command == "augment-sidecar":
         provenance = augment_provenance_sidecar(

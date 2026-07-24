@@ -610,3 +610,99 @@ def test_output_input_overlaps_are_rejected_without_mutation(
     assert _tree_digests(output) == before_output
     assert _input_digests(synthetic_inputs) == before_inputs
     assert not (synthetic_inputs.outputs["ppo"] / "nested").exists()
+
+
+def test_resolver_mapping_receipt_adapts_a_complete_package(
+    synthetic_inputs: SyntheticInputs,
+) -> None:
+    """The packager's complete package becomes a resolver-valid 90/90 mapping."""
+    from robot_sf.benchmark.candidate_trace_resolution import (
+        load_episode_mapping,
+        load_episode_requests,
+        resolve_episode_requests,
+        validate_candidate_trace_resolution,
+    )
+    from robot_sf.benchmark.trace_reexport_packaging import (
+        build_resolver_mapping_receipt,
+        default_resolver_mapping_path,
+    )
+
+    package = synthetic_inputs.root / "package"
+    package_trace_reexport(**synthetic_inputs.kwargs(package))
+    package_before = _tree_digests(package)
+
+    receipt_path = default_resolver_mapping_path(package)
+    payload = build_resolver_mapping_receipt(package, output_path=receipt_path)
+    assert payload["schema_version"] == "issue_5756_trace_mapping_receipt.v1"
+    assert payload["n_rows"] == 90
+    assert receipt_path.is_file()
+
+    request_manifest = load_episode_requests(
+        synthetic_inputs.request_manifest, expected_sha256=None
+    )
+    mapping = load_episode_mapping(receipt_path, expected_provenance=payload["provenance"])
+    assert mapping.provenance["release_tag"] == "0.0.3"
+    resolution = resolve_episode_requests(request_manifest, mapping)
+    assert resolution["summary"]["n_resolved"] == 90
+    assert validate_candidate_trace_resolution(resolution)["ok"]
+
+    # A derived resolver receipt is not a package member. Repeating the conversion
+    # leaves the complete marker/digests valid and produces identical canonical data.
+    assert _tree_digests(package) == package_before
+    assert build_resolver_mapping_receipt(package, output_path=receipt_path) == payload
+    assert _tree_digests(package) == package_before
+    # Callers may request a validated in-memory payload without writing any receipt.
+    assert build_resolver_mapping_receipt(package) == payload
+    assert _tree_digests(package) == package_before
+    package_trace_reexport(**synthetic_inputs.kwargs(package))
+    assert _tree_digests(package) == package_before
+
+
+def test_resolver_mapping_receipt_rejects_output_inside_complete_package(
+    synthetic_inputs: SyntheticInputs,
+) -> None:
+    """An explicit interior destination cannot invalidate a complete package."""
+    from robot_sf.benchmark.trace_reexport_packaging import build_resolver_mapping_receipt
+
+    package = synthetic_inputs.root / "package"
+    package_trace_reexport(**synthetic_inputs.kwargs(package))
+    package_before = _tree_digests(package)
+
+    with pytest.raises(TraceReexportPackagingError, match="outside the immutable complete package"):
+        build_resolver_mapping_receipt(
+            package,
+            output_path=package / "resolver_mapping_receipt.json",
+        )
+
+    assert _tree_digests(package) == package_before
+
+
+def test_resolver_cli_default_preserves_complete_package(
+    synthetic_inputs: SyntheticInputs,
+) -> None:
+    """The operator-facing default writes the derived receipt beside the package."""
+    from robot_sf.benchmark.trace_reexport_packaging import default_resolver_mapping_path
+    from scripts.tools.package_issue_5756_trace_reexport import main
+
+    package = synthetic_inputs.root / "package"
+    package_trace_reexport(**synthetic_inputs.kwargs(package))
+    package_before = _tree_digests(package)
+
+    assert main(["to-resolver-mapping", "--package-dir", str(package)]) == 0
+    assert default_resolver_mapping_path(package).is_file()
+    assert _tree_digests(package) == package_before
+
+    assert main(["to-resolver-mapping", "--package-dir", str(package)]) == 0
+    assert _tree_digests(package) == package_before
+
+
+def test_resolver_mapping_receipt_fails_closed_on_incomplete_package(
+    synthetic_inputs: SyntheticInputs,
+) -> None:
+    """An empty directory cannot be adapted into a resolver mapping."""
+    from robot_sf.benchmark.trace_reexport_packaging import build_resolver_mapping_receipt
+
+    incomplete = synthetic_inputs.root / "incomplete"
+    incomplete.mkdir()
+    with pytest.raises(TraceReexportPackagingError, match="complete trace package"):
+        build_resolver_mapping_receipt(incomplete)

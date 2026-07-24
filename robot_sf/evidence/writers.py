@@ -10,14 +10,34 @@ import csv
 import hashlib
 import json
 import subprocess
+import warnings
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from robot_sf.evidence.distance_convention import (
     DISTANCE_CONVENTION_FIELD,
     DistanceConvention,
     require_distance_convention,
 )
+
+# docs/context/catalog.yaml registration (issue #6116).
+#
+# `scripts/dev/check_docs_evidence_integrity.py` (the blocking `docs-evidence-integrity`
+# CI check) fails a PR whenever a changed `docs/context/evidence/**` file has no exact
+# or ancestor-directory entry in `docs/context/catalog.yaml`. The vocabulary below
+# mirrors that check's `_VALID_CATALOG_STATUSES` / `_VALID_CATALOG_FRESHNESS` (and the
+# equivalent `_CATALOG_STATUSES` / `_CATALOG_DEFAULT_FRESHNESS` in
+# `scripts/validation/check_docs_proof_consistency.py`). It is duplicated rather than
+# imported because those are standalone `scripts/` modules the lightweight
+# docs-evidence-integrity CI job installs without the `robot_sf` package (#4926/#4929
+# regression note in that script).
+_CATALOG_RELATIVE_PATH = Path("docs/context/catalog.yaml")
+_EVIDENCE_RELATIVE_DIR = Path("docs/context/evidence")
+_CATALOG_STATUSES = frozenset({"current", "historical", "superseded", "evidence", "proposal"})
+_CATALOG_FRESHNESS = frozenset({"maintained", "dated", "policy", "evidence"})
+_DEFAULT_EVIDENCE_CATALOG_AREA = "benchmark_evidence"
 
 
 def _repo_root() -> Path:
@@ -100,11 +120,31 @@ def review_marker_comment() -> str:
     return "# AI-GENERATED NEEDS-REVIEW"
 
 
-def write_json(path: Path, payload: dict[str, Any]) -> None:
-    """Write deterministic JSON with review marker."""
+def write_json(
+    path: Path,
+    payload: dict[str, Any],
+    *,
+    catalog_area: str | None = None,
+    catalog_status: str = "evidence",
+    catalog_freshness: str = "evidence",
+) -> None:
+    """Write deterministic JSON with review marker.
+
+    Paths written under ``docs/context/evidence/`` register their evidence
+    bundle automatically in ``docs/context/catalog.yaml`` via
+    :func:`register_evidence` (issue #6116), using ``benchmark_evidence``
+    unless ``catalog_area`` overrides it. Paths outside the evidence tree
+    remain unaffected.
+    """
     # Add review marker at top level
     marked_payload = {"review_marker": review_marker_json(), **payload}
     path.write_text(json.dumps(marked_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _maybe_register(
+        path,
+        catalog_area=catalog_area,
+        catalog_status=catalog_status,
+        catalog_freshness=catalog_freshness,
+    )
 
 
 REVIEW_SIDECAR_SCHEMA_VERSION = "evidence-review-marker.v1"
@@ -151,11 +191,193 @@ def write_review_sidecar(
         "preserved_exact_bytes": preserved_exact_bytes,
     }
     sidecar_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _maybe_register(artifact_path, repo_root=root)
+    _maybe_register(sidecar_path, repo_root=root)
     return sidecar_path
 
 
-def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
-    """Write CSV rows with review marker header."""
+def _load_catalog_entries(catalog_file: Path) -> list[dict[str, Any]]:
+    """Return the catalog's ``entries`` mappings, or ``[]`` if unparsable/empty."""
+    if not catalog_file.is_file():
+        return []
+    payload = yaml.safe_load(catalog_file.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return []
+    entries = payload.get("entries")
+    if not isinstance(entries, list):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)]
+
+
+def _catalog_registered_paths(entries: list[dict[str, Any]]) -> set[Path]:
+    """Return repo-relative paths already registered in a catalog's entries."""
+    paths: set[Path] = set()
+    for entry in entries:
+        value = entry.get("path")
+        if not isinstance(value, str) or not value.strip():
+            continue
+        candidate = Path(value.strip())
+        if not candidate.is_absolute() and ".." not in candidate.parts:
+            paths.add(candidate)
+    return paths
+
+
+def register_evidence(
+    path: Path,
+    *,
+    area: str,
+    status: str = "evidence",
+    freshness: str = "evidence",
+    repo_root: Path | None = None,
+    catalog_path: Path | None = None,
+) -> bool:
+    """Register an emitted evidence artifact in ``docs/context/catalog.yaml``.
+
+    Issue #6116: the ``docs-evidence-integrity`` CI check
+    (``scripts/dev/check_docs_evidence_integrity.py``) fails a PR whenever a changed
+    ``docs/context/evidence/**`` file has no exact-path or ancestor-directory entry in
+    ``docs/context/catalog.yaml``. The shared ``write_*`` helpers below register
+    evidence-tree output automatically; callers can invoke this directly when they
+    need a specific path or catalog area. This keeps future evidence-producing PRs
+    from requiring a follow-up catalog edit.
+
+    Idempotent and additive: if ``path`` (or an ancestor evidence-bundle directory) is
+    already registered, this is a no-op that returns ``False``. Otherwise it appends
+    one row to the end of the catalog's ``entries:`` list, preserving the file's
+    existing bytes exactly (matching the append-only contract already used by
+    ``scripts/tools/catalog_evidence.py``), so a diff shows only the new row.
+
+    Args:
+        path: The evidence artifact (file) or bundle directory to register. Must
+            resolve inside ``docs/context/evidence/``.
+        area: Catalog ``area`` tag (free-form; matches existing catalog usage).
+        status: Catalog ``status``; must be a canonical value.
+        freshness: Catalog ``freshness``; must be a canonical value.
+        repo_root: Optional repository root. Defaults to the current git worktree
+            root.
+        catalog_path: Optional override for the catalog file's repo-relative path.
+            Defaults to ``docs/context/catalog.yaml``.
+
+    Returns:
+        ``True`` if a new entry was appended, ``False`` if already covered.
+
+    Raises:
+        ValueError: ``path`` is outside the repository, outside
+            ``docs/context/evidence/``, or ``status``/``freshness`` is not a
+            canonical catalog value.
+        FileNotFoundError: The target catalog file does not exist.
+    """
+    root = (repo_root if repo_root is not None else _repo_root()).resolve()
+    try:
+        rel = path.resolve().relative_to(root)
+    except ValueError as exc:
+        raise ValueError(f"evidence path is not inside the repository root: {path}") from exc
+    if _EVIDENCE_RELATIVE_DIR not in rel.parents:
+        raise ValueError(f"refusing to register path outside {_EVIDENCE_RELATIVE_DIR}: {rel}")
+    if status not in _CATALOG_STATUSES:
+        raise ValueError(f"non-canonical catalog status {status!r} for {rel}")
+    if freshness not in _CATALOG_FRESHNESS:
+        raise ValueError(f"non-canonical catalog freshness {freshness!r} for {rel}")
+
+    catalog_file = root / (catalog_path if catalog_path is not None else _CATALOG_RELATIVE_PATH)
+    if not catalog_file.is_file():
+        raise FileNotFoundError(f"catalog file not found, cannot register evidence: {catalog_file}")
+
+    entries = _load_catalog_entries(catalog_file)
+    registered = _catalog_registered_paths(entries)
+    if rel in registered or any(parent in registered for parent in rel.parents):
+        return False
+
+    # Matches docs/context/catalog.yaml's actual convention: the sequence dash
+    # for `entries:` sits at column 0 (aligned with the `entries:` key), with
+    # sibling fields indented two spaces. Mixing indentation styles within one
+    # YAML block sequence is a parse error, so this must match every existing
+    # row exactly, not `scripts/tools/catalog_evidence.py`'s differently
+    # indented (`  - path:`) block, which does not match the committed file.
+    block = (
+        f"- path: {rel.as_posix()}\n  status: {status}\n  freshness: {freshness}\n  area: {area}\n"
+    )
+    text = catalog_file.read_text(encoding="utf-8")
+    if text and not text.endswith("\n"):
+        text += "\n"
+    catalog_file.write_text(text + block, encoding="utf-8")
+    return True
+
+
+def _maybe_register(
+    path: Path,
+    *,
+    catalog_area: str | None = None,
+    catalog_status: str = "evidence",
+    catalog_freshness: str = "evidence",
+    repo_root: Path | None = None,
+) -> None:
+    """Register emitted evidence paths while leaving non-evidence writes alone.
+
+    A shared writer has enough information to safely infer registration only
+    after it has written a path within the active worktree's evidence tree.
+    Automatic registration records the nearest bundle directory rather than
+    only the emitted file, so sibling artifacts written by the same production
+    exporter are covered as well. Those paths receive the generic
+    ``benchmark_evidence`` area by default; callers with a more specific
+    catalog classification can still pass ``catalog_area`` explicitly. This
+    deliberately avoids a git lookup or catalog mutation for ordinary outputs
+    outside ``docs/context/evidence``.
+
+    Catalog registration is best-effort here: it must never take down the
+    evidence-writing call that triggered it (#6198 regression). When the
+    catalog file does not exist yet, or ``path`` fails one of
+    :func:`register_evidence`'s safety checks (outside the repository,
+    outside ``docs/context/evidence/``, or a non-canonical status/freshness),
+    this warns and skips registration instead of propagating the exception.
+    Callers that need those checks enforced as hard errors should invoke
+    :func:`register_evidence` directly rather than going through a ``write_*``
+    helper.
+    """
+    root = repo_root.resolve() if repo_root is not None else None
+    if catalog_area is None:
+        try:
+            root = root if root is not None else _repo_root().resolve()
+            relative_path = path.resolve().relative_to(root)
+        except (OSError, subprocess.CalledProcessError, ValueError):
+            return
+        if _EVIDENCE_RELATIVE_DIR not in relative_path.parents:
+            return
+        catalog_area = _DEFAULT_EVIDENCE_CATALOG_AREA
+        registration_path = path if relative_path.parent == _EVIDENCE_RELATIVE_DIR else path.parent
+    else:
+        registration_path = path
+
+    try:
+        register_evidence(
+            registration_path,
+            area=catalog_area,
+            status=catalog_status,
+            freshness=catalog_freshness,
+            repo_root=root,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        warnings.warn(
+            f"skipping catalog.yaml registration for {registration_path}: {exc}",
+            stacklevel=2,
+        )
+
+
+def write_csv(
+    path: Path,
+    rows: list[dict[str, Any]],
+    *,
+    catalog_area: str | None = None,
+    catalog_status: str = "evidence",
+    catalog_freshness: str = "evidence",
+) -> None:
+    """Write CSV rows with review marker header.
+
+    Paths written under ``docs/context/evidence/`` register their bundle
+    automatically in ``docs/context/catalog.yaml`` (issue #6116).
+    ``catalog_area`` overrides the default ``benchmark_evidence``
+    classification when needed.
+    """
     if not rows:
         raise ValueError(f"cannot write empty CSV: {path}")
     with path.open("w", newline="", encoding="utf-8") as handle:
@@ -163,6 +385,12 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
+    _maybe_register(
+        path,
+        catalog_area=catalog_area,
+        catalog_status=catalog_status,
+        catalog_freshness=catalog_freshness,
+    )
 
 
 def write_text(
@@ -171,6 +399,9 @@ def write_text(
     *,
     issue_ref: str | None = None,
     marker_date: str | None = None,
+    catalog_area: str | None = None,
+    catalog_status: str = "evidence",
+    catalog_freshness: str = "evidence",
 ) -> None:
     """Write marked Markdown/text evidence.
 
@@ -179,6 +410,11 @@ def write_text(
     when it already starts with an AI-GENERATED / NEEDS-REVIEW marker. This
     keeps marker ownership in one module while preserving pinned marker dates
     and byte-stable reruns.
+
+    Paths written under ``docs/context/evidence/`` register their bundle
+    automatically in ``docs/context/catalog.yaml`` (issue #6116).
+    ``catalog_area`` overrides the default ``benchmark_evidence``
+    classification when needed.
     """
     if issue_ref is not None:
         marker = review_marker(issue_ref, marker_date=marker_date)
@@ -194,6 +430,12 @@ def write_text(
                 f"generated evidence text must start with an AI-GENERATED marker: {path}"
             )
     path.write_text(content, encoding="utf-8")
+    _maybe_register(
+        path,
+        catalog_area=catalog_area,
+        catalog_status=catalog_status,
+        catalog_freshness=catalog_freshness,
+    )
 
 
 def write_distance_series_csv(
@@ -202,6 +444,9 @@ def write_distance_series_csv(
     *,
     convention: DistanceConvention | str,
     series_name: str | None = None,
+    catalog_area: str | None = None,
+    catalog_status: str = "evidence",
+    catalog_freshness: str = "evidence",
 ) -> None:
     """Write a distance-like series CSV with an explicit convention annotation.
 
@@ -217,6 +462,14 @@ def write_distance_series_csv(
             (``center_center`` / ``surface_clearance`` / ``center_segment``).
         series_name: Optional series identifier for error messages; defaults
             to the file name.
+        catalog_area: Optional catalog-area override. Paths under
+            ``docs/context/evidence/`` otherwise register their evidence
+            bundle automatically with the default ``benchmark_evidence`` area
+            (issue #6116).
+        catalog_status: Catalog ``status`` used for automatic or explicit
+            registration.
+        catalog_freshness: Catalog ``freshness`` used for automatic or
+            explicit registration.
     """
     resolved = require_distance_convention(
         {DISTANCE_CONVENTION_FIELD: convention}, series_name or path.name
@@ -229,12 +482,32 @@ def write_distance_series_csv(
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
+    _maybe_register(
+        path,
+        catalog_area=catalog_area,
+        catalog_status=catalog_status,
+        catalog_freshness=catalog_freshness,
+    )
 
 
-def write_sha256sums(output_dir: Path) -> None:
+def write_sha256sums(
+    output_dir: Path,
+    *,
+    catalog_area: str | None = None,
+    catalog_status: str = "evidence",
+    catalog_freshness: str = "evidence",
+) -> None:
     """Write SHA256SUMS for all generated bundle files except itself.
 
     Computes hashes over the marked files (including markers).
+
+    ``write_sha256sums`` is typically the last step of finishing an evidence
+    bundle directory. When ``output_dir`` is under ``docs/context/evidence/``,
+    it therefore registers the whole bundle automatically in
+    ``docs/context/catalog.yaml`` (issue #6116). One directory-level entry
+    covers every file already written under it, including this ``SHA256SUMS``
+    file; ``catalog_area`` can override the default ``benchmark_evidence``
+    classification.
     """
     files = sorted(
         path for path in output_dir.iterdir() if path.is_file() and path.name != "SHA256SUMS"
@@ -249,3 +522,9 @@ def write_sha256sums(output_dir: Path) -> None:
 
     content = review_marker_comment() + "\n" + "\n".join(lines) + "\n"
     (output_dir / "SHA256SUMS").write_text(content, encoding="utf-8")
+    _maybe_register(
+        output_dir,
+        catalog_area=catalog_area,
+        catalog_status=catalog_status,
+        catalog_freshness=catalog_freshness,
+    )

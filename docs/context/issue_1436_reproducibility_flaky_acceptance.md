@@ -65,8 +65,12 @@ matrix YAML.
 `reproducibility-check` runs on `pull_request` and `workflow_dispatch`. It has
 no `continue-on-error`, so a failing check is a visible failure (red X) on
 every run. The job is intentionally excluded from the `ci` aggregate job's
-`needs` list, so its failure never blocks a PR merge. This provides visible
-diagnostic evidence without creating a pull-request gate.
+`needs` list, so its failure cannot make that aggregate job fail. On 2026-07-24,
+`main` has no GitHub branch-protection required-status-check configuration, so
+`reproducibility-check` is not presently merge-blocking. If branch protection
+is added or changed, maintainers must explicitly decide whether this standalone
+check becomes required and update this policy; do not infer that from the
+aggregate-job dependency list.
 
 The diagnostic still fails closed: `scripts/benchmark_repro_check.py` exits
 non-zero when the canonical `simple_policy` aggregate group or required

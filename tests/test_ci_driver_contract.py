@@ -19,6 +19,8 @@ CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CI_SETUP_ACTION = ROOT / ".github" / "actions" / "setup-ci-python" / "action.yml"
 CODEQL_WORKFLOW = ROOT / ".github" / "workflows" / "codeql.yml"
 WHEEL_INSTALL_SMOKE = ROOT / "scripts" / "validation" / "wheel_install_smoke.sh"
+ISSUE_1436_POLICY = ROOT / "docs" / "context" / "issue_1436_reproducibility_flaky_acceptance.md"
+QA_TEST_STRATEGY = ROOT / "docs" / "qa_test_strategy.md"
 PYPROJECT = ROOT / "pyproject.toml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 CI_JOB_TIMEOUTS = {
@@ -653,3 +655,13 @@ def test_reproducibility_check_job_contract() -> None:
 
     # Excluded from ci aggregate needs
     assert "reproducibility-check" not in ci_job["needs"]
+
+    policy_text = ISSUE_1436_POLICY.read_text(encoding="utf-8")
+    assert "cannot make that aggregate job fail" in policy_text
+    assert "no GitHub branch-protection required-status-check configuration" in policy_text
+    assert "reproducibility-check` is not presently merge-blocking" in policy_text
+    assert "If branch protection\nis added or changed" in policy_text
+
+    strategy_text = QA_TEST_STRATEGY.read_text(encoding="utf-8")
+    assert "no\nGitHub branch-protection required-status-check configuration" in strategy_text
+    assert "future branch-protection\nchange must explicitly decide" in strategy_text

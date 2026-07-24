@@ -30,7 +30,10 @@ trigger and gating behavior: it runs on `pull_request` and `workflow_dispatch`, 
 `continue-on-error`. The linked Issue #1436 policy note has been reconciled with the live workflow
 (see Issue #6249): it no longer describes an older `workflow_dispatch`-only or `continue-on-error`
 mapping. This runbook uses the live behavior while retaining Issue #1436 for failure classification,
-rerun boundaries, and diagnostic-only evidence status.
+rerun boundaries, and diagnostic-only evidence status. `main` currently has no
+GitHub branch-protection required-status-check configuration, so
+`reproducibility-check` is not presently merge-blocking; any future branch-protection
+change must explicitly decide whether the standalone job becomes required.
 
 ---
 

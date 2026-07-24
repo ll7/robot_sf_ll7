@@ -54,11 +54,16 @@ jobs:
       - name: Free runner disk space
         run: bash scripts/dev/free_github_runner_space.sh
 
-      - name: Build wheel
+      - name: Build Robot SF wheel
         run: uv build
+
+      - name: Build vendored ORCA companion wheel
+        if: matrix.extra == 'all'
+        run: python -m pip wheel --no-deps --wheel-dir dist third_party/python-rvo2
 
       - name: Install and probe isolated extra
         env:
+          PIP_FIND_LINKS: ${{ github.workspace }}/dist
           ROBOT_SF_WHEEL_INSTALL_SMOKE_EXTRAS: ${{ matrix.extra }}
         run: bash scripts/validation/wheel_install_smoke.sh
 

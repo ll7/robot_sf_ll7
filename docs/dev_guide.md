@@ -1150,6 +1150,8 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 
 ### Testing strategy (UNIFIED test suite)
 
+For the canonical contributor QA runbook, 12-class test taxonomy, command matrix, failure classification, and explicit CI rerun rules, see **[Contributor QA Runbook and Test Taxonomy](./qa_test_strategy.md)**.
+
 **The project now uses a unified test suite** running both robot_sf and fast-pysf tests via a single command.
 
 #### Unified Test Suite
@@ -1531,6 +1533,7 @@ Here’s a concise map of the docs folder to help you find the right guidance qu
 #### Top-level guides (entry points)
 - README.md — Main docs landing page.
 - dev_guide.md — Primary development reference (setup, workflow, testing, CI).
+- `qa_test_strategy.md` — Canonical contributor QA runbook and test taxonomy.
 - `ENVIRONMENT.md` — Environment overview and usage.
 - `SIM_VIEW.md` — Simulation view/UI notes.
 - `UV_MIGRATION.md` — Migration notes to uv.

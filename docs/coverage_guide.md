@@ -58,9 +58,15 @@ addopts = [
 testpaths = ["tests", "fast-pysf/tests"]
 ```
 
-**What gets measured**:
-- All code in `robot_sf/` package and `fast-pysf/pysocialforce` module (`source = ["robot_sf", "fast-pysf/pysocialforce"]`)
-- Excludes: test files (`*/tests/*`, `*/test_*`, `fast-pysf/tests/*`), `tests/pygame/*`, `examples/*` (`examples/*`, `fast-pysf/examples/*`), `scripts/*`, `*/conftest.py`, `*/__pycache__/*`
+**What gets measured by the canonical command and CI**:
+- Only the `robot_sf/` package. The wrapper and non-PR CI pass `--cov=robot_sf`; pytest-cov uses
+  that command-line source selection instead of the broader `source = ["robot_sf",
+  "fast-pysf/pysocialforce"]` value in `pyproject.toml`.
+- `fast-pysf/pysocialforce` is therefore not included in the local wrapper report, the non-PR CI
+  shards, or the 85.0% coverage gate.
+- The configured omit patterns still exclude test files (`*/tests/*`, `*/test_*`,
+  `fast-pysf/tests/*`), `tests/pygame/*`, examples (`examples/*`, `fast-pysf/examples/*`),
+  `scripts/*`, `*/conftest.py`, and `*/__pycache__/*` whenever their configured source list is used.
 
 **Output artifacts** (under the canonical `output/coverage/` root):
 - `output/coverage/.coverage` - SQLite database (raw data)
@@ -80,8 +86,8 @@ The baseline comparison system detects coverage regressions across commits/branc
 mkdir -p output/coverage
 cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
 
-# Make changes, run tests
-uv run pytest tests
+# Make changes, then collect the canonical coverage snapshot
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
 
 # Compare
 uv run python scripts/coverage/compare_coverage.py \
@@ -283,7 +289,9 @@ Machine-readable format for tooling:
 
 ## Configuration
 
-All coverage settings live in `pyproject.toml`:
+All coverage defaults live in `pyproject.toml`. The listed `source` array is a coverage.py default;
+the canonical local wrapper and non-PR CI override it with `--cov=robot_sf`, so their reports measure
+only `robot_sf`.
 
 ```toml
 [tool.coverage.run]
@@ -353,10 +361,10 @@ def debug_helper():  # pragma: no cover
 ### Coverage data not generated
 
 **Symptom**: No `output/coverage/coverage.json` or `output/coverage/htmlcov/` after tests
-**Solution**: Ensure pytest runs from repository root with coverage enabled
+**Solution**: Ensure the canonical wrapper runs from repository root with coverage enabled
 ```bash
 cd robot_sf_ll7
-uv run pytest tests  # Not: pytest tests (uses wrong Python)
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
 ```
 
 ### Baseline comparison fails
@@ -364,7 +372,7 @@ uv run pytest tests  # Not: pytest tests (uses wrong Python)
 **Symptom**: `FileNotFoundError: output/coverage/.coverage-baseline.json`
 **Solution**: Create baseline first
 ```bash
-uv run pytest tests
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
 mkdir -p output/coverage
 cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
 ```
@@ -372,7 +380,8 @@ cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
 ### Coverage percentage seems wrong
 
 **Symptom**: Very low coverage (< 5%) despite writing tests
-**Solution**: Check `[tool.coverage.run] source` matches your package name
+**Solution**: Check the command-line `--cov` source selection matches your package name. The
+canonical wrapper intentionally measures `robot_sf` only.
 ```toml
 source = ["robot_sf"]  # Must match actual package directory
 ```

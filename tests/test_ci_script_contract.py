@@ -2124,16 +2124,22 @@ def test_bootstrap_worktree_help_does_not_invoke_uv(tmp_path: Path) -> None:
     assert "uv should not be called" not in result.stderr
 
 
-def test_coverage_docs_match_pyproject_toml_configuration() -> None:
-    """Docs must accurately reflect actual coverage configuration in pyproject.toml."""
+def test_coverage_docs_match_effective_source_scope() -> None:
+    """Docs must distinguish coverage.py defaults from pytest-cov's effective source."""
     pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
     coverage_run = pyproject["tool"]["coverage"]["run"]
 
     cov_guide_text = COVERAGE_GUIDE.read_text(encoding="utf-8")
     dev_guide_text = DEV_GUIDE.read_text(encoding="utf-8")
+    wrapper_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
 
     assert 'source = ["robot_sf", "fast-pysf/pysocialforce"]' in cov_guide_text
     assert "fast-pysf/pysocialforce" in coverage_run["source"]
+    assert 'cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")' in wrapper_text
+    assert "Only the `robot_sf/` package" in cov_guide_text
+    assert "not included in the local wrapper report" in cov_guide_text
+    assert "measure only the `robot_sf/` package" in dev_guide_text
+    assert "not included in wrapper reports" in dev_guide_text
 
     assert '"fast-pysf/tests/*"' in cov_guide_text
     assert '"fast-pysf/examples/*"' in cov_guide_text
@@ -2146,7 +2152,6 @@ def test_coverage_docs_match_pyproject_toml_configuration() -> None:
     assert "skip_empty = false" in config_section
     assert '"raise NotImplementedError"' in config_section
 
-    assert "fast-pysf/pysocialforce" in dev_guide_text
     assert "fast-pysf/tests/*" in dev_guide_text
 
 

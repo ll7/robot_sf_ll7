@@ -1273,8 +1273,13 @@ open output/coverage/htmlcov/index.html
 
 #### What gets measured
 
-- **Included**: All code in `robot_sf/` package and `fast-pysf/pysocialforce` module
-- **Excluded**: Test files (`*/tests/*`, `*/test_*`, `fast-pysf/tests/*`), examples (`examples/*`, `fast-pysf/examples/*`), scripts (`scripts/*`), `tests/pygame/*`, `*/conftest.py`, `*/__pycache__/*`
+- **Included**: The canonical wrapper and non-PR CI measure only the `robot_sf/` package. Their
+  `--cov=robot_sf` argument overrides the broader `pyproject.toml` coverage.py source list.
+- **Not measured by this command**: `fast-pysf/pysocialforce`. It remains in the coverage.py
+  configuration but is not included in wrapper reports or the non-PR CI coverage gate.
+- **Excluded when the configured source list is used**: Test files (`*/tests/*`, `*/test_*`,
+  `fast-pysf/tests/*`), examples (`examples/*`, `fast-pysf/examples/*`), scripts (`scripts/*`),
+  `tests/pygame/*`, `*/conftest.py`, `*/__pycache__/*`
 - **Output formats**: 
   - Terminal summary (printed after test run)
   - HTML report (`output/coverage/htmlcov/index.html` - interactive, detailed)

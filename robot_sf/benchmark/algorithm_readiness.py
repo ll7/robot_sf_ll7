@@ -491,6 +491,17 @@ _ALGORITHMS: tuple[AlgorithmReadiness, ...] = (
         ),
         requires_explicit_opt_in=True,
     ),
+    AlgorithmReadiness(
+        canonical_name="topology_parallel_nmpc",
+        tier="experimental",
+        aliases=("topology_parallel_nmpc", "topology_nmpc"),
+        note=(
+            "Testing-only offline topology-parallel NMPC prototype (#6152 / #5310); evaluates "
+            "2-4 deterministic x-y-t maneuver hypotheses with identical NMPC solver, objective, "
+            "constraints, tolerances, horizon, and iteration cap. Not benchmark evidence."
+        ),
+        requires_explicit_opt_in=True,
+    ),
 )
 
 _ALIAS_INDEX: dict[str, AlgorithmReadiness] = {

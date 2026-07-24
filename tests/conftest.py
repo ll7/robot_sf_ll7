@@ -501,9 +501,12 @@ def _configured_test_lane() -> str:
 def _is_optional_readiness_test_path(path_str: str) -> bool:
     """Return whether a test path needs optional-extra readiness dependencies."""
     normalized = path_str.replace("\\", "/").split("::", maxsplit=1)[0]
-    repo_relative = normalized.rsplit("/tests/", maxsplit=1)
-    if len(repo_relative) == 2:
-        normalized = f"tests/{repo_relative[1]}"
+    if "/fast-pysf/tests/" in normalized:
+        rel = normalized.split("/fast-pysf/tests/", maxsplit=1)[1]
+        normalized = f"fast-pysf/tests/{rel}"
+    elif "/tests/" in normalized:
+        rel = normalized.rsplit("/tests/", maxsplit=1)[1]
+        normalized = f"tests/{rel}"
     return normalized in _OPTIONAL_TEST_FILES or any(
         fragment in normalized for fragment in _OPTIONAL_TEST_PATH_FRAGMENTS
     )

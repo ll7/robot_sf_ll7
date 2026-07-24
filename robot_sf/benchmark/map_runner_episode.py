@@ -2171,6 +2171,7 @@ def _run_episode_step_loop(  # noqa: C901,PLR0912,PLR0913,PLR0915
                     "feasible_score_max",
                     "dynamic_window",
                     "target_goal",
+                    "global_route_probe_activated",
                 ):
                     _value = planner_step_decision.get(_dwa_key)
                     if _value is not None:

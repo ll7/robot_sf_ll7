@@ -212,6 +212,14 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/evidence/issue_5443_covered_by_pr_revalidation_2026-07-24.md
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5443_covered_by_pr_revalidation_2026-07-24.md.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_5445_calibration_preregistration_2026-07-13.md
   status: evidence
   freshness: evidence
@@ -4677,6 +4685,10 @@ entries:
   freshness: evidence
   area: benchmark_evidence
 - path: docs/context/evidence/issue_5351_hierarchical_paired_release_analysis/successor_rows.jsonl.review.json
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_5302_oracle_gap
   status: evidence
   freshness: evidence
   area: benchmark_evidence

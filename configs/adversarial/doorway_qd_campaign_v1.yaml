@@ -1,0 +1,60 @@
+schema_version: adversarial-qd-campaign.v1
+description: >
+  Bounded MAP-Elites QD campaign on the classic_doorway scenario family
+  (issue #5308).  Behavior grid: (min_pedestrian_distance, time_to_collision).
+  Uses Random + CoordinateRefinement + CMaMeEmitter into the QD archive.
+  Equal-budget single-objective comparison.  Capability-not-evidence boundary;
+  archive artifact is an adversarial archive path, not a camera-ready finding.
+campaign:
+  objective: temporal_robustness
+  budget: 256
+  seed: 42
+  require_certification: false
+  behavior_grid:
+    x_min: 0.0
+    x_max: 4.0
+    y_min: 0.0
+    y_max: 6.0
+    bins: 6
+  emitters:
+    - random
+    - coordinate_refinement
+    - cma_me
+  cma_me:
+    sigma_fraction: 0.25
+    popsize: null
+search_space:
+  variables:
+    start_x:
+      min: 0.5
+      max: 1.5
+    start_y:
+      min: 5.0
+      max: 5.0
+    goal_x:
+      min: 8.0
+      max: 10.0
+    goal_y:
+      min: 5.0
+      max: 5.0
+    spawn_time_s:
+      min: 0.0
+      max: 3.0
+    pedestrian_speed_mps:
+      min: 0.6
+      max: 1.6
+    pedestrian_delay_s:
+      min: 0.0
+      max: 3.0
+    scenario_seed:
+      min: 100
+      max: 999
+  constraints:
+    min_start_goal_distance_m: 2.0
+production:
+  policy: social_force
+  scenario_template: configs/scenarios/archetypes/classic_doorway.yaml
+  workers: 4
+  horizon: 500
+  dt: 0.1
+  benchmark_profile: baseline-safe

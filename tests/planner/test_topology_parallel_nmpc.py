@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
+from robot_sf.planner.nmpc_social import NMPCSocialConfig, NMPCSolveResult
 from robot_sf.planner.topology_parallel_nmpc import (
     TopologyParallelNMPCConfig,
     TopologyParallelNMPCPlannerAdapter,
@@ -136,6 +138,56 @@ def test_build_topology_parallel_nmpc_config_overrides() -> None:
     assert cfg.hypothesis_labels == ("default", "pass_left")
     assert cfg.control_period_s == 1.5
     assert cfg.switch_hysteresis_ticks == 1
+
+
+def test_topology_parallel_config_rejects_unbounded_values() -> None:
+    """Hypothesis count and runtime settings must remain bounded."""
+    with pytest.raises(ValueError, match="between 1 and 4"):
+        TopologyParallelNMPCConfig(max_hypotheses=5)
+    with pytest.raises(ValueError, match="cannot exceed"):
+        TopologyParallelNMPCConfig(max_hypotheses=1, hypothesis_labels=("left", "right"))
+    with pytest.raises(ValueError, match="finite and positive"):
+        TopologyParallelNMPCConfig(max_runtime_s=0.0)
+
+
+def test_topology_parallel_reuses_selected_solve(monkeypatch) -> None:
+    """Each hypothesis is solved once and the selected result is reused."""
+    planner = TopologyParallelNMPCPlannerAdapter(
+        TopologyParallelNMPCConfig(
+            hypothesis_labels=("pass_left", "yield_straight", "pass_right"),
+            nmpc_config=NMPCSocialConfig(horizon_steps=2, warm_start=False),
+            switch_hysteresis_ticks=0,
+        )
+    )
+    calls: list[tuple[float, float | None]] = []
+
+    def _fake_solve(
+        _observation: dict[str, object],
+        preferred_turn: float = 0.0,
+        *,
+        objective_preferred_turn: float | None = None,
+    ) -> NMPCSolveResult:
+        calls.append((preferred_turn, objective_preferred_turn))
+        return NMPCSolveResult(
+            solve_id="fake",
+            feasible=True,
+            objective=abs(preferred_turn),
+            solver_status="ok",
+            solver_iterations=1,
+            solver_runtime=0.0,
+            solution=np.asarray([0.4, 0.0, 0.4, 0.0]),
+            controls=np.zeros((2, 2)),
+            rollout_states=np.zeros((2, 3)),
+            initialization_signature={"preferred_turn": preferred_turn},
+        )
+
+    monkeypatch.setattr(planner, "solve_initialization", _fake_solve)
+    command = planner.plan(_obs(goal=(3.0, 0.0)))
+
+    assert command == (0.4, 0.0)
+    assert len(calls) == 3
+    assert all(objective_turn == 0.0 for _seed_turn, objective_turn in calls)
+    assert set(planner._last_results) == {"pass_left", "yield_straight", "pass_right"}
 
 
 def test_planner_returns_command() -> None:

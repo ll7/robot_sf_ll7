@@ -771,19 +771,26 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         self,
         observation: dict[str, Any],
         preferred_turn: float = 0.0,
+        *,
+        objective_preferred_turn: float | None = None,
     ) -> NMPCSolveResult:
         """Run one NMPC solve and return the full deterministic result.
 
         This is the initialization seam used by the topology-parallel NMPC.
         It does NOT mutate planner warm-start state (``_last_solution``),
         enabling multiple hypothesis solves from the same planner instance.
+        ``objective_preferred_turn`` allows callers to vary only the initial
+        guess while keeping the objective identical across hypotheses.
 
         Returns:
             NMPCSolveResult: Full solve record with feasibility, objective,
             solver metadata, solution, controls, and rollout states.
         """
         t_start = time.perf_counter()
-        context = self._solve_context(observation, preferred_turn=preferred_turn)
+        objective_turn = (
+            preferred_turn if objective_preferred_turn is None else objective_preferred_turn
+        )
+        context = self._solve_context(observation, preferred_turn=objective_turn)
         goal_delta = context.goal - context.robot_pos
         goal_distance = float(np.linalg.norm(goal_delta))
         if goal_distance <= float(self.config.goal_tolerance):
@@ -804,6 +811,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
                     "goal_distance": float(goal_distance),
                     "goal_tolerance": float(self.config.goal_tolerance),
                     "preferred_turn": preferred_turn,
+                    "objective_preferred_turn": objective_turn,
                 },
             )
 
@@ -820,7 +828,7 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             goal_heading_error=goal_heading_error,
             current_speed=context.current_speed,
             goal_distance=goal_distance,
-            preferred_turn=context.preferred_turn,
+            preferred_turn=preferred_turn,
             speed_cap=context.speed_cap,
         )
         horizon = max(int(self.config.horizon_steps), 1)
@@ -864,7 +872,8 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
             initialization_signature={
                 "goal_distance": float(goal_distance),
                 "goal_heading_error": float(goal_heading_error),
-                "preferred_turn": float(context.preferred_turn),
+                "preferred_turn": float(preferred_turn),
+                "objective_preferred_turn": float(objective_turn),
                 "speed_cap": float(context.speed_cap),
                 "initial_guess_first_v": float(x0[0]) if x0.size > 0 else 0.0,
                 "initial_guess_first_w": float(x0[1]) if x0.size > 1 else 0.0,

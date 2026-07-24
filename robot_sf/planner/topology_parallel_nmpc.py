@@ -11,7 +11,16 @@ initializations and the selection/hysteresis mechanism may differ.
 
 from __future__ import annotations
 
+import math
 import time
+from concurrent.futures import (
+    Future,
+    ThreadPoolExecutor,
+    as_completed,
+)
+from concurrent.futures import (
+    TimeoutError as FuturesTimeoutError,
+)
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -47,7 +56,7 @@ class HypothesisDiagnostics:
 class TopologyParallelNMPCConfig:
     """Configuration for the topology-parallel NMPC planner.
 
-    max_hypotheses: Maximum number of hypotheses to evaluate in parallel (2-4).
+    max_hypotheses: Maximum number of hypotheses to evaluate in parallel (1-4).
     hypothesis_labels: Ordered tuple of hypothesis labels to evaluate.
     control_period_s: Nominal control period (wall-clock deadline for all solves).
     max_runtime_s: Hard runtime gate; fails closed on overrun.
@@ -61,6 +70,23 @@ class TopologyParallelNMPCConfig:
     max_runtime_s: float = 2.0
     switch_hysteresis_ticks: int = 2
     nmpc_config: NMPCSocialConfig | None = None
+
+    def __post_init__(self) -> None:
+        """Validate bounded hypothesis and deadline settings."""
+        if not 1 <= int(self.max_hypotheses) <= 4:
+            raise ValueError("max_hypotheses must be between 1 and 4")
+        if not self.hypothesis_labels:
+            raise ValueError("hypothesis_labels must not be empty")
+        if len(self.hypothesis_labels) > int(self.max_hypotheses):
+            raise ValueError("hypothesis_labels cannot exceed max_hypotheses")
+        if len(set(self.hypothesis_labels)) != len(self.hypothesis_labels):
+            raise ValueError("hypothesis_labels must be unique")
+        if not math.isfinite(float(self.control_period_s)) or self.control_period_s <= 0.0:
+            raise ValueError("control_period_s must be finite and positive")
+        if not math.isfinite(float(self.max_runtime_s)) or self.max_runtime_s <= 0.0:
+            raise ValueError("max_runtime_s must be finite and positive")
+        if int(self.switch_hysteresis_ticks) < 0:
+            raise ValueError("switch_hysteresis_ticks must be non-negative")
 
 
 _HYPOTHESIS_SIDES: dict[str, int] = {
@@ -144,6 +170,9 @@ class TopologyParallelNMPCPlannerAdapter(NMPCSocialPlannerAdapter):
             "all_failed_count": 0,
         }
         self._last_hypothesis_diagnostics: list[HypothesisDiagnostics] = []
+        self._last_result_states: dict[str, np.ndarray] = {}
+        self._last_results: dict[str, NMPCSolveResult] = {}
+        self._deadline_exceeded_this_call = False
 
     def reset(self) -> None:
         """Clear per-episode state including hypothesis selection history."""
@@ -151,8 +180,13 @@ class TopologyParallelNMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         self._current_hypothesis_index = 0
         self._ticks_at_hypothesis = 0
         self._last_hypothesis_diagnostics = []
+        self._last_result_states = {}
+        self._last_results = {}
+        self._deadline_exceeded_this_call = False
 
-    def _evaluate_hypotheses(self, observation: dict[str, Any]) -> list[HypothesisDiagnostics]:
+    def _evaluate_hypotheses(  # noqa: C901, PLR0912
+        self, observation: dict[str, Any]
+    ) -> list[HypothesisDiagnostics]:
         """Solve all topology hypotheses and return their diagnostics.
 
         Each hypothesis uses the identical NMPC solver, objective, constraints,
@@ -166,14 +200,60 @@ class TopologyParallelNMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         if not labels:
             return []
 
-        results: list[HypothesisDiagnostics] = []
-        deadline = time.perf_counter() + self.topo_config.max_runtime_s
+        self._last_result_states = {}
+        self._last_results = {}
+        self._deadline_exceeded_this_call = False
+        deadline = time.perf_counter() + min(
+            float(self.topo_config.max_runtime_s),
+            float(self.topo_config.control_period_s),
+        )
 
+        def _solve(label: str) -> NMPCSolveResult:
+            """Solve one hypothesis with a shared objective and distinct seed.
+
+            Returns:
+                NMPCSolveResult: Solve result for the hypothesis.
+            """
+            return self.solve_initialization(
+                observation,
+                preferred_turn=_preferred_turn_for_label(label),
+                objective_preferred_turn=0.0,
+            )
+
+        futures: dict[Future[NMPCSolveResult], tuple[str, float]] = {}
+        executor = ThreadPoolExecutor(max_workers=len(labels))
+        try:
+            for label in labels:
+                futures[executor.submit(_solve, label)] = (label, time.perf_counter())
+            try:
+                for future in as_completed(
+                    futures, timeout=max(deadline - time.perf_counter(), 0.0)
+                ):
+                    label, started = futures[future]
+                    result = future.result()
+                    finished = time.perf_counter()
+                    if finished > deadline:
+                        self._deadline_exceeded_this_call = True
+                        continue
+                    self._last_results[label] = result
+                    self._last_result_states[label] = np.asarray(result.rollout_states, dtype=float)
+                    futures[future] = (label, started)
+            except FuturesTimeoutError:
+                self._deadline_exceeded_this_call = True
+        finally:
+            for future in futures:
+                future.cancel()
+            executor.shutdown(wait=False, cancel_futures=True)
+
+        if self._deadline_exceeded_this_call:
+            self._topo_stats["runtime_overruns"] = (
+                int(self._topo_stats.get("runtime_overruns", 0)) + 1
+            )
+
+        results: list[HypothesisDiagnostics] = []
         for label in labels:
-            if time.perf_counter() > deadline:
-                self._topo_stats["runtime_overruns"] = (
-                    int(self._topo_stats.get("runtime_overruns", 0)) + 1
-                )
+            result = self._last_results.get(label)
+            if result is None:
                 results.append(
                     HypothesisDiagnostics(
                         label=label,
@@ -191,29 +271,23 @@ class TopologyParallelNMPCPlannerAdapter(NMPCSocialPlannerAdapter):
                     )
                 )
                 continue
-
-            preferred_turn = _preferred_turn_for_label(label)
-            t_hyp = time.perf_counter()
-            result: NMPCSolveResult = self.solve_initialization(
-                observation, preferred_turn=preferred_turn
-            )
-            t_hyp_elapsed = time.perf_counter() - t_hyp
             sig = _rollout_signature(result.rollout_states)
-            diag = HypothesisDiagnostics(
-                label=label,
-                feasible=result.feasible,
-                objective=result.objective,
-                solver_status=result.solver_status,
-                solver_iterations=result.solver_iterations,
-                solver_runtime=t_hyp_elapsed,
-                signed_side=_signed_side_for_label(label),
-                material_separation=0.0,
-                initialization_signature=dict(result.initialization_signature),
-                rollout_signature=sig,
-                selection_rank=-1,
-                switch_reason="",
+            results.append(
+                HypothesisDiagnostics(
+                    label=label,
+                    feasible=result.feasible,
+                    objective=result.objective,
+                    solver_status=result.solver_status,
+                    solver_iterations=result.solver_iterations,
+                    solver_runtime=result.solver_runtime,
+                    signed_side=_signed_side_for_label(label),
+                    material_separation=0.0,
+                    initialization_signature=dict(result.initialization_signature),
+                    rollout_signature=sig,
+                    selection_rank=-1,
+                    switch_reason="",
+                )
             )
-            results.append(diag)
 
         # Compute pairwise material separation where applicable
         n = len(results)
@@ -240,7 +314,6 @@ class TopologyParallelNMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         Switching: two-tick hysteresis to prevent oscillation.
         """
         self._topo_stats["calls"] = int(self._topo_stats.get("calls", 0)) + 1
-        self._last_result_states: dict[str, np.ndarray] = {}
 
         # Fast-path: at goal
         extracted_state = self._extract_state(observation)
@@ -259,19 +332,24 @@ class TopologyParallelNMPCPlannerAdapter(NMPCSocialPlannerAdapter):
         diagnostics = self._evaluate_hypotheses(observation)
         self._last_hypothesis_diagnostics = diagnostics
 
+        if self._deadline_exceeded_this_call:
+            self._record_command(0.0, 0.0)
+            return 0.0, 0.0
+
         # Select best hypothesis
         selected_idx = self._select_hypothesis(diagnostics)
+        labels = self.topo_config.hypothesis_labels
+        if selected_idx >= len(labels):
+            self._record_command(0.0, 0.0)
+            return 0.0, 0.0
+        selected_label = labels[selected_idx]
+        result = self._last_results.get(selected_label)
+        if result is None or not result.feasible:
+            self._record_command(0.0, 0.0)
+            return 0.0, 0.0
 
         # Build context for command extraction
-        preferred_turn = _preferred_turn_for_label(
-            self.topo_config.hypothesis_labels[selected_idx]
-            if selected_idx < len(self.topo_config.hypothesis_labels)
-            else ""
-        )
-        context = self._solve_context(observation, preferred_turn=preferred_turn)
-        result: NMPCSolveResult = self.solve_initialization(
-            observation, preferred_turn=preferred_turn
-        )
+        context = self._solve_context(observation)
         command = self._command_from_solution(result, context)
         self._record_command(*command)
         return command
@@ -308,12 +386,19 @@ class TopologyParallelNMPCPlannerAdapter(NMPCSocialPlannerAdapter):
 
         # Hysteresis: stay on current unless new best is significantly better
         # or we've accumulated enough ticks at the current hypothesis
+        current_is_feasible = (
+            0 <= self._current_hypothesis_index < n
+            and diagnostics[self._current_hypothesis_index].feasible
+        )
         if best_idx == self._current_hypothesis_index:
             self._ticks_at_hypothesis += 1
             diagnostics[self._current_hypothesis_index].switch_reason = "already_selected"
             return self._current_hypothesis_index
 
-        if self._ticks_at_hypothesis < self.topo_config.switch_hysteresis_ticks:
+        if (
+            current_is_feasible
+            and self._ticks_at_hypothesis < self.topo_config.switch_hysteresis_ticks
+        ):
             diagnostics[best_idx].switch_reason = "suppressed_by_hysteresis"
             diagnostics[self._current_hypothesis_index].switch_reason = "hysteresis_hold"
             return self._current_hypothesis_index

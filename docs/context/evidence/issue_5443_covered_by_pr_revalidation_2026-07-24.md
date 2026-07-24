@@ -1,4 +1,4 @@
-<!-- AI-GENERATED: independent re-validation evidence; reviewer inspection still required. -->
+<!-- AI-GENERATED NEEDS-REVIEW: independent re-validation evidence; reviewer inspection still required. -->
 # Issue #5443 — Covered-By-PR Re-Validation (2026-07-24)
 
 Issue: <https://github.com/ll7/robot_sf_ll7/issues/5443>

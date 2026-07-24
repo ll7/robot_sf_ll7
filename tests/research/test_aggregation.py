@@ -323,8 +323,15 @@ def test_export_metrics_csv_roundtrip(tmp_path: Path):
 
 
 def test_export_metrics_csv_creates_parent_dirs(tmp_path: Path):
-    """export_metrics_csv creates missing parent directories."""
-    out = tmp_path / "deep" / "metrics.csv"
+    """export_metrics_csv creates ALL missing parent directories, not just one level.
+
+    Uses a path with two nested missing directories so the ``parents=True`` flag is
+    actually exercised: ``mkdir(parents=False)`` (or its falsy ``None``/dropped
+    equivalents, which mutmut substitutes) raises ``FileNotFoundError`` when an
+    intermediate directory is absent. A single missing level survives those
+    mutants, so this must nest at least two levels deep.
+    """
+    out = tmp_path / "nested" / "subdir" / "metrics.csv"
     export_metrics_csv([], str(out))
     assert out.exists()
 

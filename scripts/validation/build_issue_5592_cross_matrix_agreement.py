@@ -163,9 +163,22 @@ def _read_ranking_csv(path: Path, *, expected_roster_signature: str) -> dict[str
             f"ranking input {path} must contain exactly the four structural classes; "
             f"missing={missing}, extra={extra}"
         )
-    if set(ranking.values()) != EXPECTED_RANKS:
-        raise BuildError(f"ranking input {path} must contain a unique rank permutation 1..4")
+    _reject_tied_or_incomplete_ranks(path, ranking)
     return ranking
+
+
+def _reject_tied_or_incomplete_ranks(path: Path, ranking: Mapping[str, int]) -> None:
+    """Fail closed on shared (tied) ranks or any non-``1..4`` rank permutation."""
+    rank_values = list(ranking.values())
+    if len(set(rank_values)) != len(rank_values):
+        tied_ranks = sorted(rank for rank in set(rank_values) if rank_values.count(rank) > 1)
+        raise BuildError(
+            f"ranking input {path} contains shared (tied) rank(s) {tied_ranks}: "
+            "tie_not_identifiable; the agreement builder requires a strict 1..4 ordering "
+            "and fails closed rather than inventing a tie-break"
+        )
+    if set(rank_values) != EXPECTED_RANKS:
+        raise BuildError(f"ranking input {path} must contain a unique rank permutation 1..4")
 
 
 def _load_packet(packet_path: Path) -> dict[str, Any]:
@@ -318,7 +331,9 @@ matrices are never merged into one ranking.
 
 Each supplied ranking CSV must include `structural_class`, `rank`, and a
 `roster_signature` matching the preregistered 12-planner roster. Ranks must be a complete
-`1..4` permutation; malformed or incomparable inputs fail closed.
+`1..4` permutation; malformed or incomparable inputs fail closed. Rankings that carry shared
+(tied) ranks from exact-equal score tuples fail closed as `tie_not_identifiable` rather than
+inventing a tie-break.
 
 `cross_matrix_agreement.csv` is the primary output. Each row carries the candidate
 (atomic-topology) rank, the reference (classic_interactions) rank, the rank delta, and an

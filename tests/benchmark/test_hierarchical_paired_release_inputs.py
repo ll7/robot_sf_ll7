@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from robot_sf.benchmark.hierarchical_paired_release_inputs import (
     BLOCKED_MISSING_SUCCESSOR_ROWS,
@@ -30,15 +31,49 @@ _SCRIPT_PATH = _REPO_ROOT / "scripts/benchmark/check_hierarchical_paired_release
 
 
 def _manifest() -> dict[str, object]:
-    """Load a fresh copy of the checked-in blocked manifest."""
+    """Load a fresh copy of the checked-in manifest."""
 
     return load_hierarchical_paired_release_input_manifest(_MANIFEST_PATH)
 
 
-def test_checked_in_manifest_reports_missing_successor_rows_fail_closed() -> None:
-    """The pre-release manifest cannot be mistaken for evidence or a completed analysis."""
+def _blocked_manifest() -> dict[str, object]:
+    """Load a copy of the manifest with empty/blocked successor release fields."""
+
+    manifest = _manifest()
+    manifest["successor_release"] = {
+        "release_tag": None,
+        "commit": None,
+        "typed_ledger_rows": None,
+        "typed_ledger_rows_sha256": None,
+    }
+    return manifest
+
+
+def test_checked_in_manifest_reports_inputs_ready_when_rows_present() -> None:
+    """The checked-in 0.0.3.post1 manifest and successor rows report inputs ready."""
 
     report = evaluate_hierarchical_paired_release_inputs(_manifest(), repo_root=_REPO_ROOT)
+
+    assert report["status"] == INPUTS_READY_ANALYSIS_NOT_RUN
+    assert report["evidence_status"] == "not_benchmark_evidence"
+    assert report["claim_gate"] == {
+        "status": "blocked_analysis_not_run",
+        "reason": "inputs are present but the hierarchical paired analysis has not run",
+    }
+    assert report["semantics"] == {
+        "benchmark_metrics_changed": False,
+        "analysis_executed": False,
+        "claim_promotion": "none",
+    }
+    assert {row["status"] for row in report["protocol_conformance"]} == {
+        "declared_pending_analysis"
+    }
+
+
+def test_unpopulated_manifest_reports_missing_successor_rows_fail_closed() -> None:
+    """An unpopulated manifest cannot be mistaken for evidence or a completed analysis."""
+
+    report = evaluate_hierarchical_paired_release_inputs(_blocked_manifest(), repo_root=_REPO_ROOT)
 
     assert report["status"] == BLOCKED_MISSING_SUCCESSOR_ROWS
     assert report["evidence_status"] == "not_benchmark_evidence"
@@ -160,13 +195,15 @@ def test_manifest_requires_every_predeclared_protocol_delivery() -> None:
 def test_cli_writes_blocked_machine_readable_report(tmp_path: Path) -> None:
     """The canonical checker exits nonzero while retaining a reviewable blocker report."""
 
+    blocked_manifest_path = tmp_path / "blocked_manifest.yaml"
+    blocked_manifest_path.write_text(yaml.safe_dump(_blocked_manifest()), encoding="utf-8")
     output = tmp_path / "input_report.json"
     result = subprocess.run(
         [
             sys.executable,
             str(_SCRIPT_PATH),
             "--manifest",
-            str(_MANIFEST_PATH),
+            str(blocked_manifest_path),
             "--repo-root",
             str(_REPO_ROOT),
             "--output",

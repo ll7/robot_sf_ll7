@@ -1,0 +1,50 @@
+agent_run:
+  schema_version: agent-run-manifest.v1
+  objective: >-
+    Execute the preregistered bounded CPU sensitivity for issue #5579 and promote only compact,
+    fail-closed diagnostic evidence.
+  tool: codex
+  model: "Codex strong lane (model identifier not exposed by runtime)"
+  tool_version: codex-cli 0.144.1
+  permission_mode: auto
+  worktree: .
+  workflow_run_id: ""
+  workflow_name: ""
+  declared_agent_count: 1
+  actual_agent_count: 1
+  commands_run:
+    - >-
+      uv run python scripts/benchmark/run_mpc_tuning_sensitivity_issue_5579.py --check
+    - >-
+      uv run python scripts/benchmark/run_mpc_tuning_sensitivity_issue_5579.py --config
+      configs/analysis/issue_5579_mpc_tuning_sensitivity.yaml --out-dir <external-private-run-dir>
+  tests_run:
+    - tests/benchmark/test_mpc_tuning_sensitivity_issue_5579.py (9 passed before execution)
+    - tests/docs/test_issue_5579_mpc_tuning_sensitivity_evidence.py (expected red before promotion)
+  external_pages_accessed:
+    - https://github.com/ll7/robot_sf_ll7/issues/5579
+    - https://github.com/ll7/robot_sf_ll7/pull/6175
+  trace_or_log_refs:
+    - "stored privately: ll7-factory/runs/codex-issue-5579-20260723T0142Z"
+  trace_redaction_checked: true
+  cost_or_credit_cap: "within the authorized banked Codex allowance"
+  stop_reason: completed
+  retries: 0
+  partial_failures:
+    - >-
+      diagnostic read blocked: 92 solver-failure rows and 9 fallback rows were excluded from the
+      396-row comparison; no scientific interpretation was promoted
+  evidence_produced:
+    - >-
+      machine-readable compact report:
+      docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/sensitivity_report.json
+    - >-
+      claim-boundary-first report:
+      docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/sensitivity_report.md
+    - >-
+      candidate summary table:
+      docs/context/evidence/issue_5579_mpc_tuning_budget_sensitivity_2026-07-14/sensitivity_candidate_rows.csv
+  human_validity_check: pending strong-model review and maintainer acceptance
+  remaining_risk: >-
+    The incomplete eligible denominator prevents distinguishing tuning-budget and structural
+    explanations. Raw execution artifacts are retained privately for seven days only.

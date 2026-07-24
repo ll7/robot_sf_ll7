@@ -32,6 +32,7 @@ import hashlib
 import json
 import os
 import platform
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -41,6 +42,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from scripts.repro.release_0_0_2_subset_comparison import (
+    compare_subset_results,
+    extract_subset_run_metrics,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -269,8 +275,10 @@ def _step_verify_checksums(
     return result
 
 
-def _step_run_subset(clone_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
-    """Run the pre-registered benchmark subset."""
+def _step_run_subset(  # noqa: C901, PLR0912, PLR0915
+    clone_dir: Path, manifest: dict[str, Any], output_dir: Path
+) -> dict[str, Any]:
+    """Run the pre-registered benchmark subset in run mode."""
     result: dict[str, Any] = {"step": "run_subset"}
     campaign = manifest.get("campaign", {})
     planners = manifest.get("planners", [])
@@ -280,51 +288,197 @@ def _step_run_subset(clone_dir: Path, manifest: dict[str, Any]) -> dict[str, Any
     result["seed_policy"] = seed_policy
     result["campaign_id"] = campaign.get("campaign_id")
 
-    release_tag = manifest["release_tag"]
-    tag_slug = release_tag.replace(".", "_")
-    release_config = Path(
-        "configs/benchmarks/releases/"
-        f"paper_experiment_matrix_7planners_v1_release_v{tag_slug}_scoped.yaml"
-    )
-    if not (clone_dir / release_config).exists():
-        result["status"] = "skip"
-        result["reason"] = f"Release config not found: {release_config}"
+    contract = manifest.get("subset_replay_contract")
+    smoke_manifest = contract.get("smoke_manifest") if isinstance(contract, dict) else None
+    if not isinstance(smoke_manifest, str) or not smoke_manifest:
+        result["status"] = "fail"
+        result["error"] = "Subset replay contract has no smoke_manifest"
+        return result
+    smoke_config = Path(smoke_manifest)
+    if not (clone_dir / smoke_config).exists():
+        result["status"] = "fail"
+        result["error"] = f"Smoke manifest not found: {smoke_config}"
         return result
 
+    # The benchmark child changes cwd to the release clone. Resolve here so a
+    # relative CLI default still names the tooling process' output tree.
+    subset_run_dir = (output_dir / "subset_run").resolve()
+    subset_run_dir.mkdir(parents=True, exist_ok=True)
+    existing_campaign_roots = {path.resolve() for path in subset_run_dir.iterdir()}
+
+    cmd = [
+        "uv",
+        "run",
+        "python",
+        "scripts/tools/run_benchmark_release.py",
+        "--manifest",
+        str(smoke_config),
+        "--mode",
+        "run",
+        "--output-root",
+        str(subset_run_dir),
+    ]
+    result["command"] = shlex.join(cmd)
     start = time.monotonic()
     try:
-        smoke_config = Path(
-            "configs/benchmarks/releases/paper_experiment_matrix_v1_release_smoke_v0_1.yaml"
+        proc_out = subprocess.check_output(
+            cmd,
+            cwd=clone_dir,
+            text=True,
+            stderr=subprocess.PIPE,
+            timeout=600,
+            env={**os.environ, "PYGAME_HIDE_SUPPORT_PROMPT": "1"},
         )
-        if (clone_dir / smoke_config).exists():
-            subprocess.check_call(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "scripts/tools/run_benchmark_release.py",
-                    "--manifest",
-                    str(smoke_config),
-                    "--mode",
-                    "preflight",
-                ],
-                cwd=clone_dir,
-                timeout=300,
-            )
-            result["preflight_status"] = "pass"
-        else:
-            result["preflight_status"] = "skip"
-            result["preflight_reason"] = "Smoke manifest not found"
-
         elapsed = time.monotonic() - start
         result["wall_time_sec"] = round(elapsed, 2)
+        try:
+            run_payload = _parse_child_json_stdout(proc_out)
+        except ValueError as exc:
+            result["status"] = "fail"
+            result["error"] = f"Could not parse subset run stdout: {exc}"
+            return result
+
+        result["run_payload"] = run_payload
+        if run_payload.get("mode") != "run":
+            result["status"] = "fail"
+            result["error"] = (
+                f"Subset replay executed in preflight mode instead of run mode "
+                f"(mode={run_payload.get('mode')})"
+            )
+            return result
+        campaign_execution_status = run_payload.get("campaign_execution_status")
+        if campaign_execution_status not in (None, "completed"):
+            result["status"] = "fail"
+            result["error"] = (
+                "Subset replay did not report completed campaign execution: "
+                f"{campaign_execution_status} "
+                f"({run_payload.get('status_reason')})"
+            )
+            return result
+        if run_payload.get("status") != "ok":
+            result["status"] = "fail"
+            result["error"] = f"Subset replay did not report status=ok: {run_payload.get('status')}"
+            return result
+        if run_payload.get("benchmark_success") is not True:
+            result["status"] = "fail"
+            result["error"] = "Subset replay did not report benchmark_success=true"
+            return result
+        release_success = run_payload.get("release_benchmark_success")
+        if release_success not in (None, True):
+            result["status"] = "fail"
+            result["error"] = "Subset replay did not report release_benchmark_success=true"
+            return result
+
+        campaign_root_value = run_payload.get("campaign_root")
+        if not isinstance(campaign_root_value, str) or not campaign_root_value:
+            result["status"] = "fail"
+            result["error"] = "Subset replay payload has no campaign_root"
+            return result
+        campaign_root = Path(campaign_root_value)
+        if not campaign_root.is_absolute():
+            campaign_root = clone_dir / campaign_root
+        campaign_root = campaign_root.resolve()
+        subset_run_root = subset_run_dir.resolve()
+        if campaign_root.parent != subset_run_root:
+            result["status"] = "fail"
+            result["error"] = (
+                "Subset replay campaign_root must be a new direct child of "
+                f"{subset_run_root}: {campaign_root}"
+            )
+            return result
+        if not campaign_root.is_dir():
+            result["status"] = "fail"
+            result["error"] = f"Subset replay campaign_root does not exist: {campaign_root}"
+            return result
+        if campaign_root in existing_campaign_roots:
+            result["status"] = "fail"
+            result["error"] = f"Subset replay reused a pre-existing campaign_root: {campaign_root}"
+            return result
+        result["campaign_root"] = str(campaign_root)
+
         result["status"] = "pass"
     except subprocess.CalledProcessError as exc:
         result["status"] = "fail"
-        result["error"] = str(exc)
+        result["error"] = f"Subset run command failed: {exc}"
+        if exc.stderr:
+            result["stderr_tail"] = exc.stderr[-4000:]
     except subprocess.TimeoutExpired:
         result["status"] = "fail"
-        result["error"] = "Subset run timed out"
+        result["error"] = "Subset run timed out after 600s"
+    return result
+
+
+def _parse_child_json_stdout(stdout: str) -> dict[str, Any]:
+    """Parse one JSON object, allowing only non-JSON launcher noise before it."""
+    stripped = stdout.strip()
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        decoder = json.JSONDecoder()
+        candidates: list[dict[str, Any]] = []
+        for index, character in enumerate(stdout):
+            if character != "{":
+                continue
+            try:
+                candidate, end = decoder.raw_decode(stdout, index)
+            except json.JSONDecodeError:
+                continue
+            if not stdout[end:].strip() and isinstance(candidate, dict):
+                candidates.append(candidate)
+        if len(candidates) != 1:
+            raise ValueError(
+                f"expected one terminal JSON object, found {len(candidates)}"
+            ) from None
+        payload = candidates[0]
+    if not isinstance(payload, dict):
+        raise ValueError("expected a JSON object")
+    return payload
+
+
+def _step_compare_subset(
+    clone_dir: Path,
+    manifest: dict[str, Any],
+    output_dir: Path,
+    run_subset_result: dict[str, Any],
+) -> dict[str, Any]:
+    """Compare numeric replay outcome against frozen release contract."""
+    result: dict[str, Any] = {"step": "compare_subset"}
+    if run_subset_result.get("status") != "pass":
+        result["status"] = "fail"
+        result["error"] = (
+            f"Cannot compare subset: run_subset step status is {run_subset_result.get('status')}"
+        )
+        return result
+
+    campaign_root_str = run_subset_result.get("campaign_root")
+    if not isinstance(campaign_root_str, str) or not campaign_root_str:
+        result["status"] = "fail"
+        result["error"] = "Cannot compare subset: run_subset has no explicit campaign_root"
+        return result
+    campaign_root = Path(campaign_root_str)
+    if not campaign_root.is_absolute():
+        campaign_root = clone_dir / campaign_root
+    campaign_root = campaign_root.resolve()
+    subset_run_root = (output_dir / "subset_run").resolve()
+    if campaign_root.parent != subset_run_root or not campaign_root.is_dir():
+        result["status"] = "fail"
+        result["error"] = (
+            f"Cannot compare subset: campaign_root is missing or not a direct output child: "
+            f"{campaign_root}"
+        )
+        return result
+
+    extracted = extract_subset_run_metrics(campaign_root, manifest)
+    if extracted.get("status") != "pass":
+        result["status"] = "fail"
+        result["error"] = extracted.get("error", "Failed to extract replay metrics")
+        return result
+
+    comp_res = compare_subset_results(extracted, manifest)
+    result["status"] = comp_res["status"]
+    result["overall_match"] = comp_res["overall_match"]
+    result["comparison_rows"] = comp_res["comparison_rows"]
+    result["global_deviations"] = comp_res["global_deviations"]
     return result
 
 
@@ -343,6 +497,7 @@ def generate_reproduction_report(
             makes the flow resilient to a previously downloaded artifact in the
             output directory and removes a redundant network call.
     """
+    output_dir = output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     start_time = time.monotonic()
 
@@ -362,9 +517,14 @@ def generate_reproduction_report(
         "release_tag": tag,
         "release_id": manifest.get("release_id"),
         "target_commit": manifest.get("target_commit"),
+        "tooling_commit": _git_commit_for_path(REPO_ROOT),
         "config_path": str(manifest_path),
         "config_sha256": _sha256_file(manifest_path),
         "config_commit": _git_commit_for_path(manifest_path),
+        "lockfile_sha256": "unknown",
+        "tooling_lockfile_sha256": (
+            _sha256_file(REPO_ROOT / "uv.lock") if (REPO_ROOT / "uv.lock").is_file() else "unknown"
+        ),
         "environment": env,
         "steps": {},
         "instruction_gaps": [],
@@ -378,7 +538,7 @@ def generate_reproduction_report(
     }
 
     if local_repo:
-        clone_dir = local_repo
+        clone_dir = local_repo.resolve()
         report["steps"]["clone"] = {
             "step": "clone",
             "status": "skip",
@@ -399,7 +559,12 @@ def generate_reproduction_report(
             report["overall_verdict"] = "fail"
             report["total_wall_time_sec"] = round(time.monotonic() - start_time, 2)
             return report
-        clone_dir = Path(clone_step["clone_dir"])
+        clone_dir = Path(clone_step["clone_dir"]).resolve()
+
+    release_lockfile = clone_dir / "uv.lock"
+    report["lockfile_sha256"] = (
+        _sha256_file(release_lockfile) if release_lockfile.is_file() else "unknown"
+    )
 
     report["steps"]["verify_checksums"] = _step_verify_checksums(
         clone_dir,
@@ -410,7 +575,11 @@ def generate_reproduction_report(
 
     if not checksums_only:
         report["steps"]["build"] = _step_build(clone_dir)
-        report["steps"]["run_subset"] = _step_run_subset(clone_dir, manifest)
+        run_step = _step_run_subset(clone_dir, manifest, output_dir)
+        report["steps"]["run_subset"] = run_step
+        report["steps"]["compare_subset"] = _step_compare_subset(
+            clone_dir, manifest, output_dir, run_step
+        )
 
     statuses = [s.get("status", "skip") for s in report["steps"].values()]
     if any(s == "fail" for s in statuses):

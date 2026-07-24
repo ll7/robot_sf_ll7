@@ -376,6 +376,71 @@ jobs:
       - name: Notebook smoke tests
         run: scripts/dev/ci_driver.sh notebooks-smoke
 
+  # --- Path-triggered exact-repeat determinism gate (Option B, issue #6191) ---
+  #
+  # Runs the full exact-repeat determinism test suite only when the PR diff
+  # touches paths that can affect determinism.  Most PRs pay zero overhead.
+  # When triggered the check is genuinely blocking (failing it fails CI).
+  #
+  # Determinism-relevant paths — update this list when code moves:
+  #   robot_sf/planner/        – planner implementations
+  #   robot_sf/models/registry.py – model registry
+  #   robot_sf/benchmark/      – benchmark runner / exact-repeat campaign
+  #   configs/baselines/       – baseline configs
+  determinism-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check determinism-relevant path changes
+        id: check-changes
+        shell: bash
+        run: |
+          # Determine the base ref for diffing
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_REF="${{ github.event.pull_request.base.sha }}"
+          elif [[ "${{ github.event_name }}" == "merge_group" ]]; then
+            BASE_REF="${{ github.event.merge_group.base_sha }}"
+          else
+            BASE_REF="origin/main"
+          fi
+
+          # Determinism-relevant paths — single source of truth for the
+          # path-triggered gate.  Keep in sync with the comment above.
+          DETERMINISM_PATHS=(
+            "robot_sf/planner/"
+            "robot_sf/models/registry.py"
+            "robot_sf/benchmark/"
+            "configs/baselines/"
+          )
+
+          CHANGED=$(git diff --name-only "$BASE_REF...HEAD" -- "${DETERMINISM_PATHS[@]}")
+          if [[ -n "$CHANGED" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changed determinism-relevant paths:"
+            echo "$CHANGED"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No determinism-relevant paths changed"
+          fi
+
+      - name: No determinism-relevant changes
+        if: steps.check-changes.outputs.changed == 'false'
+        run: echo "Skipping exact-repeat determinism check (no changes to determinism-relevant paths)"
+
+      - name: Set up CI Python environment
+        if: steps.check-changes.outputs.changed == 'true'
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Run exact-repeat determinism test
+        if: steps.check-changes.outputs.changed == 'true'
+        run: uv run pytest tests/benchmark/test_exact_repeat_executor.py -v
+
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -389,6 +454,7 @@ jobs:
       - wheel-smoke-install
       - examples-smoke
       - notebooks-smoke
+      - determinism-gate
     if: always()
     steps:
       - name: Check split job results
@@ -427,5 +493,9 @@ jobs:
           fi
           if [[ "${{ needs.notebooks-smoke.result }}" != "success" ]]; then
             echo "notebooks-smoke finished with ${{ needs.notebooks-smoke.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.determinism-gate.result }}" != "success" ]]; then
+            echo "determinism-gate finished with ${{ needs.determinism-gate.result }}" >&2
             exit 1
           fi

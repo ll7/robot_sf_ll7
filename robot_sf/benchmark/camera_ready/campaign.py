@@ -360,6 +360,28 @@ def _cleanup_gpu_memory_between_arms(
     return memory_metrics
 
 
+def _resolve_arm_safety_wrapper(
+    *, cfg: CampaignConfig, planner: PlannerSpec
+) -> dict[str, Any] | None:
+    """Resolve the effective safety-wrapper mapping for one campaign arm.
+
+    The per-arm ``PlannerSpec.safety_wrapper`` overrides the campaign-level
+    ``CampaignConfig.safety_wrapper`` default (issue #3501 / #4830). The factorial
+    ``planner x {wrapper_off, wrapper_on}`` design is encoded as distinct arms whose
+    per-arm value wins, while a campaign can still pin a default for arms that leave
+    the wrapper unset. ``None`` (the default) keeps the wrapper off at runtime.
+
+    Returns:
+        The resolved safety-wrapper mapping, or ``None`` when neither arm nor campaign
+        declares one (wrapper stays off).
+    """
+    if planner.safety_wrapper is not None:
+        return dict(planner.safety_wrapper)
+    if cfg.safety_wrapper is not None:
+        return dict(cfg.safety_wrapper)
+    return None
+
+
 def _execute_campaign_planner_batch(
     context: _CampaignPlannerMatrixContext,
     planner: PlannerSpec,
@@ -403,6 +425,7 @@ def _execute_campaign_planner_batch(
             ),
             workers=run.effective_workers,
             resume=cfg.resume,
+            safety_wrapper=_resolve_arm_safety_wrapper(cfg=cfg, planner=planner),
         )
         availability = summarize_benchmark_availability(summary)
         if availability.availability_status == "not_available":
@@ -832,6 +855,7 @@ def _run_campaign_planner_variant_subprocess(
         algo_config_path=planner.algo_config_path,
         resume=cfg.resume,
         scoped_scenarios_path=scoped_scenarios_path,
+        safety_wrapper=_resolve_arm_safety_wrapper(cfg=cfg, planner=planner),
     )
 
     # Serialize parameters for subprocess. The Path-typed fields on

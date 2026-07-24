@@ -50,12 +50,12 @@ def classify_issue_2921_stop_rule(
             "claim_boundary": "no #2921 stop-rule decision without held-out diagnostic evidence",
         }
 
-    mean_delta = float(comparison["mean_objective_improvement"])
-    failure_delta = int(comparison["failure_count_improvement"])
-    if mean_delta > 0.0 or failure_delta > 0:
+    yield_delta = float(comparison["certified_failure_yield_improvement"])
+    failure_delta = int(comparison["certified_failure_count_improvement"])
+    if yield_delta > 0.0 or failure_delta > 0:
         status = "continue"
         reason = "diagnostic held-out deltas are positive; run the next predeclared proof step"
-    elif mean_delta < 0.0 or failure_delta < 0:
+    elif yield_delta < 0.0 or failure_delta < 0:
         status = "stop"
         reason = "diagnostic held-out deltas are negative; do not expand this proposal lane"
     else:
@@ -363,7 +363,6 @@ def parse_args() -> argparse.Namespace:
 def handle_check_contract(args: argparse.Namespace, contract_path: Path | None) -> int:
     """Handle side-effect-free contract verification command."""
     from robot_sf.adversarial.disjoint_evaluation import verify_same_planner_contract
-    from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
 
     if contract_path is None:
         default_contract = Path("configs/adversarial/issue_3275_same_planner_contract.json")
@@ -389,19 +388,6 @@ def handle_check_contract(args: argparse.Namespace, contract_path: Path | None) 
     raw_bytes = archive_path.read_bytes()
     archive_data = json.loads(raw_bytes.decode("utf-8"))
     verif = verify_same_planner_contract(contract_data, archive_data, raw_bytes)
-
-    fit_model = FailureArchiveProposalModel(
-        archive_data,
-        allowed_fit_ids=contract_data.get("fit_entry_ids"),
-        target_planner=contract_data.get("target_planner"),
-    )
-    feature_audit = fit_model.audit_feature_semantics(
-        target_family=contract_data.get("eval_scenario_family")
-    )
-    verif["feature_semantics_audit"] = feature_audit
-    if not feature_audit.get("passed", False):
-        verif["checks_passed"] = False
-        verif.setdefault("blocking_reasons", []).append("feature_semantics_audit_failed")
 
     verif_str = json.dumps(verif, indent=2, sort_keys=True)
     print(verif_str)
@@ -692,18 +678,33 @@ def _run_comparison(
         diag_random_metrics,
     )
 
-    comparison = {
-        "interpretation": comparison_interpretation,
-        "mean_objective_improvement": round(
-            proposal_metrics["mean_objective"] - random_metrics["mean_objective"], 4
-        ),
-        "max_objective_improvement": round(
-            proposal_metrics["max_objective"] - random_metrics["max_objective"], 4
-        ),
-        "failure_count_improvement": (
-            proposal_metrics["failure_count"] - random_metrics["failure_count"]
-        ),
-    }
+    if held_out_evidence:
+        comparison = {
+            "interpretation": comparison_interpretation,
+            "estimand": "candidate_level_certified_failure_yield",
+            "certified_failure_yield_improvement": round(
+                proposal_metrics["certified_failure_yield"]
+                - random_metrics["certified_failure_yield"],
+                4,
+            ),
+            "certified_failure_count_improvement": (
+                proposal_metrics["certified_failure_count"]
+                - random_metrics["certified_failure_count"]
+            ),
+        }
+    else:
+        comparison = {
+            "interpretation": comparison_interpretation,
+            "mean_objective_improvement": round(
+                proposal_metrics["mean_objective"] - random_metrics["mean_objective"], 4
+            ),
+            "max_objective_improvement": round(
+                proposal_metrics["max_objective"] - random_metrics["max_objective"], 4
+            ),
+            "failure_count_improvement": (
+                proposal_metrics["failure_count"] - random_metrics["failure_count"]
+            ),
+        }
     issue_2921_stop_rule = classify_issue_2921_stop_rule(
         held_out_evidence=held_out_evidence,
         held_out_status=held_out_status,

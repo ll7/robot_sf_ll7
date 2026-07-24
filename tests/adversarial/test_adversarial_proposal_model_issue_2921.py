@@ -18,13 +18,13 @@ from scripts.adversarial.run_proposal_vs_random_issue_2921 import (
 )
 
 
-def _held_out_comparison(*, mean_delta: float, failure_delta: int) -> dict[str, float | int | str]:
+def _held_out_comparison(*, yield_delta: float, failure_delta: int) -> dict[str, float | int | str]:
     """Build a comparison payload for the #2921 stop-rule classifier."""
     return {
         "interpretation": "independent_planner_execution_outcomes",
-        "mean_objective_improvement": mean_delta,
-        "max_objective_improvement": mean_delta,
-        "failure_count_improvement": failure_delta,
+        "estimand": "candidate_level_certified_failure_yield",
+        "certified_failure_yield_improvement": yield_delta,
+        "certified_failure_count_improvement": failure_delta,
     }
 
 
@@ -33,7 +33,7 @@ def test_classify_issue_2921_stop_rule_blocks_without_held_out_evidence() -> Non
     decision = classify_issue_2921_stop_rule(
         held_out_evidence=False,
         held_out_status="not_available_no_disjoint_split",
-        comparison=_held_out_comparison(mean_delta=5.0, failure_delta=5),
+        comparison=_held_out_comparison(yield_delta=0.5, failure_delta=5),
     )
     assert decision["status"] == "blocked"
     assert decision["reason"] == "not_available_no_disjoint_split"
@@ -45,7 +45,7 @@ def test_classify_issue_2921_stop_rule_stop_on_negative_deltas() -> None:
     decision = classify_issue_2921_stop_rule(
         held_out_evidence=True,
         held_out_status="eligible_held_out_diagnostic",
-        comparison=_held_out_comparison(mean_delta=-0.5, failure_delta=-2),
+        comparison=_held_out_comparison(yield_delta=-0.5, failure_delta=-2),
     )
     assert decision["status"] == "stop"
     assert decision["evidence_tier"] == "diagnostic_only"
@@ -56,7 +56,7 @@ def test_classify_issue_2921_stop_rule_is_inconclusive_on_neutral_deltas() -> No
     decision = classify_issue_2921_stop_rule(
         held_out_evidence=True,
         held_out_status="eligible_held_out_diagnostic",
-        comparison=_held_out_comparison(mean_delta=0.0, failure_delta=0),
+        comparison=_held_out_comparison(yield_delta=0.0, failure_delta=0),
     )
     assert decision["status"] == "inconclusive"
     assert decision["evidence_tier"] == "diagnostic_only"
@@ -346,8 +346,8 @@ constraints:
 """
 
 _TEST_PLANNER_CONFIG_SHA256 = "b" * 64
-_TEST_MANIFEST_SHA256 = "a" * 64
 _TEST_RECORD_SHA256 = "c" * 64
+_TEST_REPLAY_SIGNATURE = "d" * 64
 
 
 def _two_family_archive() -> dict:
@@ -391,11 +391,11 @@ def _two_family_archive_with_seed_overlap() -> dict:
     return archive
 
 
-def _outcome_row(arm: str, rank: int, outcome: float) -> dict:
+def _outcome_row(arm: str, rank: int, outcome: float, confirmation_index: int) -> dict:
     """Build one contract-bound v2 independent-outcome row for runner integration tests."""
     return {
         "candidate_id": f"{arm}_{rank}",
-        "manifest_sha256": _TEST_MANIFEST_SHA256,
+        "manifest_sha256": "pending",
         "selection_arm": arm,
         "rank": rank,
         "candidate_pool_seed": 42,
@@ -403,7 +403,7 @@ def _outcome_row(arm: str, rank: int, outcome: float) -> dict:
         "planner_config_sha256": _TEST_PLANNER_CONFIG_SHA256,
         "scenario_family": "classic_cross_trap_medium",
         "scenario_seed": 1000 + rank,
-        "execution_seed": 2000 + rank + (100 if arm == "random" else 0),
+        "execution_seed": 20000 + rank * 10 + confirmation_index + (1000 if arm == "random" else 0),
         "execution_commit": "ecf997d",
         "command_lineage": "uv run robot_sf_bench run --algo social_force",
         "execution_status": "native",
@@ -412,6 +412,12 @@ def _outcome_row(arm: str, rank: int, outcome: float) -> dict:
         "scenario_certification_status": "passed",
         "candidate_certification_status": "passed",
         "replay_lineage": "replay.jsonl",
+        "replay_signature": _TEST_REPLAY_SIGNATURE,
+        "failure_attribution": {
+            "status": "attributed",
+            "primary_failure": "collision" if outcome >= 8.0 else "goal_reached",
+            "details": {"termination_reason": "collision" if outcome >= 8.0 else "goal_reached"},
+        },
         "record_hash": _TEST_RECORD_SHA256,
         "exclusion_reason": None,
     }
@@ -432,24 +438,38 @@ def _write_frozen_contract_and_outcomes(
     proposal_first = sum(proposal_outcomes) >= sum(random_outcomes)
     proposal_rank_offset = 0 if proposal_first else len(random_outcomes)
     random_rank_offset = len(proposal_outcomes) if proposal_first else 0
-    rows = [
-        _outcome_row("proposal", proposal_rank_offset + rank, outcome)
+    candidate_specs = [
+        ("proposal", proposal_rank_offset + rank, outcome)
         for rank, outcome in enumerate(proposal_outcomes)
     ] + [
-        _outcome_row("random", random_rank_offset + rank, outcome)
+        ("random", random_rank_offset + rank, outcome)
         for rank, outcome in enumerate(random_outcomes)
     ]
-    candidates = [
-        {
-            "candidate_id": row["candidate_id"],
-            "selection_arm": row["selection_arm"],
-            "rank": row["rank"],
-            "candidate_pool_seed": row["candidate_pool_seed"],
-            "scenario_seed": row["scenario_seed"],
-            "execution_seeds": [row["execution_seed"]],
-        }
-        for row in rows
+    rows = [
+        _outcome_row(arm, rank, outcome, confirmation_index)
+        for arm, rank, outcome in candidate_specs
+        for confirmation_index in range(5)
     ]
+    candidates = []
+    for arm, rank, _outcome in candidate_specs:
+        candidate_rows = [row for row in rows if row["candidate_id"] == f"{arm}_{rank}"]
+        candidates.append(
+            {
+                "candidate_id": f"{arm}_{rank}",
+                "selection_arm": arm,
+                "rank": rank,
+                "candidate_pool_seed": 42,
+                "scenario_seed": 1000 + rank,
+                "execution_seeds": [row["execution_seed"] for row in candidate_rows],
+            }
+        )
+    manifest_sha256 = hashlib.sha256(
+        json.dumps({"candidates": candidates}, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    for row in rows:
+        row["manifest_sha256"] = manifest_sha256
     fit_entries = [
         entry
         for entry in archive["entries"]
@@ -501,7 +521,7 @@ def _write_frozen_contract_and_outcomes(
         "study_parameters": {
             "candidate_budget_per_arm": len(proposal_outcomes),
             "candidate_pool_size": 2 * len(proposal_outcomes),
-            "confirmation_seeds_per_candidate": 1,
+            "confirmation_seeds_per_candidate": 5,
             "minimally_important_effect_margin": 0.1,
             "overlapping_candidate_policy": "deterministic_disjoint_assignment",
         },
@@ -518,10 +538,13 @@ def _write_frozen_contract_and_outcomes(
             "fallback_degraded_policy": "exclude",
             "stable_failure_attribution_required": True,
             "deterministic_replay": {"exact_signature_match_required": True},
-            "independent_seed_confirmation": {"minimum_confirmed_count": 1},
+            "independent_seed_confirmation": {
+                "minimum_confirmed_count": 4,
+                "confirmation_seeds_per_candidate": 5,
+            },
             "candidate_manifest": {
                 "status": "frozen",
-                "sha256": _TEST_MANIFEST_SHA256,
+                "sha256": manifest_sha256,
                 "candidates": candidates,
             },
         },
@@ -530,6 +553,11 @@ def _write_frozen_contract_and_outcomes(
             "negative_outcome": "stop",
             "neutral_outcome": "inconclusive",
             "invalid_or_fallback_outcome": "inconclusive",
+        },
+        "feature_semantics": {
+            "representation": "family_invariant_normalized_l1",
+            "cross_family_transfer_audited": True,
+            "cross_family_transfer_status": "approved",
         },
     }
     contract_path = tmp_path / "contract.json"
@@ -850,6 +878,48 @@ def test_normal_contract_run_refuses_provisional_contract_before_selection(
     assert report["contract_verification"]["checks_passed"] is False
 
 
+def test_normal_contract_uses_the_complete_feature_and_manifest_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Normal runs use the same full verifier as --check-contract before selection."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    archive_path = tmp_path / "archive.json"
+    search_space_path = tmp_path / "search_space.yaml"
+    output_json = tmp_path / "blocked.json"
+    archive_path.write_text(json.dumps(_two_family_archive()), encoding="utf-8")
+    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+    contract_path, _outcomes_path = _write_frozen_contract_and_outcomes(
+        tmp_path,
+        archive_path,
+        search_space_path,
+        [10.0],
+        [0.0],
+    )
+    contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    contract["feature_semantics"]["cross_family_transfer_audited"] = False
+    contract["outcome_admission"]["candidate_manifest"]["sha256"] = None
+    contract_path.write_text(json.dumps(contract), encoding="utf-8")
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            contract_path.as_posix(),
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 1
+    report = json.loads(output_json.read_text(encoding="utf-8"))
+    reasons = set(report["contract_verification"]["blocking_reasons"])
+    assert "feature_semantics_audit_failed" in reasons
+    assert "candidate_manifest_sha256_invalid" in reasons
+    assert "proposal_metrics" not in report
+
+
 def test_train_only_ranking_isolation() -> None:
     """Excluded goal/cross-trap entries cannot alter fit model entries or candidate scores."""
     from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel, isolate_fit_entries
@@ -961,8 +1031,8 @@ def test_opposite_sign_execution_favors_random_stops(
     report = json.loads(output_json.read_text(encoding="utf-8"))
     assert report["held_out_evidence"] is True
     assert report["comparison"]["interpretation"] == "independent_planner_execution_outcomes"
-    # Independent execution shows proposal mean = 0.0, random mean = 10.0 -> improvement = -10.0
-    assert report["comparison"]["mean_objective_improvement"] == -10.0
+    # Candidate-level execution yields proposal=0.0 and random=1.0.
+    assert report["comparison"]["certified_failure_yield_improvement"] == -1.0
     assert report["issue_2921_stop_rule"]["status"] == "stop"
 
 
@@ -1016,6 +1086,6 @@ def test_opposite_sign_execution_favors_proposal_continues(
     report = json.loads(output_json.read_text(encoding="utf-8"))
     assert report["held_out_evidence"] is True
     assert report["comparison"]["interpretation"] == "independent_planner_execution_outcomes"
-    # Independent execution shows proposal mean = 10.0, random mean = 0.0 -> improvement = +10.0
-    assert report["comparison"]["mean_objective_improvement"] == 10.0
+    # Candidate-level execution yields proposal=1.0 and random=0.0.
+    assert report["comparison"]["certified_failure_yield_improvement"] == 1.0
     assert report["issue_2921_stop_rule"]["status"] == "continue"

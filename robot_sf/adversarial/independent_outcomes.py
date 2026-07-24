@@ -31,6 +31,9 @@ class _FrozenOutcomeContract:
     target_planner: str
     planner_config_sha256: str
     scenario_family: str
+    candidate_budget_per_arm: int
+    confirmation_seeds_per_candidate: int
+    minimum_confirmed_count: int
 
 
 def payload_sha256(payload: dict[str, Any]) -> str:
@@ -73,8 +76,26 @@ def _is_sha256(value: Any) -> bool:
     return isinstance(value, str) and _SHA256_PATTERN.fullmatch(value) is not None
 
 
+def _validate_execution_seed_set(
+    candidate_id: str, execution_seeds: Any, confirmation_seeds_per_candidate: int
+) -> str | None:
+    """Validate the exact, non-repeating confirmation-seed plan for one candidate."""
+    if not isinstance(execution_seeds, list) or not execution_seeds:
+        return f"study contract candidate {candidate_id} has invalid execution_seeds"
+    if not all(isinstance(seed, int) for seed in execution_seeds):
+        return f"study contract candidate {candidate_id} has invalid execution_seeds"
+    if len(execution_seeds) != confirmation_seeds_per_candidate:
+        return (
+            f"study contract candidate {candidate_id} has an execution-seed count "
+            f"different from the configured {confirmation_seeds_per_candidate}"
+        )
+    if len(set(execution_seeds)) != len(execution_seeds):
+        return f"study contract candidate {candidate_id} repeats execution_seed"
+    return None
+
+
 def _validate_manifest_candidate(
-    candidate: Any, idx: int
+    candidate: Any, idx: int, *, confirmation_seeds_per_candidate: int
 ) -> tuple[str | None, dict[str, Any] | None]:
     """Validate one frozen candidate-manifest record."""
     if not isinstance(candidate, dict):
@@ -90,30 +111,62 @@ def _validate_manifest_candidate(
         return f"study contract candidate {candidate_id} has invalid candidate_pool_seed", None
     if not isinstance(candidate.get("scenario_seed"), int):
         return f"study contract candidate {candidate_id} has invalid scenario_seed", None
-    execution_seeds = candidate.get("execution_seeds")
-    if not isinstance(execution_seeds, list) or not execution_seeds:
-        return f"study contract candidate {candidate_id} has invalid execution_seeds", None
-    if not all(isinstance(seed, int) for seed in execution_seeds):
-        return f"study contract candidate {candidate_id} has invalid execution_seeds", None
+    seed_reason = _validate_execution_seed_set(
+        candidate_id,
+        candidate.get("execution_seeds"),
+        confirmation_seeds_per_candidate,
+    )
+    if seed_reason is not None:
+        return seed_reason, None
     return None, candidate
+
+
+def _frozen_manifest_header(
+    manifest: Any, candidate_budget_per_arm: int
+) -> tuple[str | None, str | None, list[Any] | None]:
+    """Validate immutable manifest identity and declared candidate count."""
+    if not isinstance(manifest, dict) or manifest.get("status") != "frozen":
+        return "study contract candidate manifest is not frozen", None, None
+    manifest_hash = manifest.get("sha256")
+    if not _is_sha256(manifest_hash):
+        return "study contract candidate manifest sha256 is invalid", None, None
+    candidates = manifest.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        return "study contract candidate manifest has no candidates", None, None
+    observed_hash = payload_sha256({"candidates": candidates})
+    if manifest_hash != observed_hash:
+        return "study contract candidate manifest sha256 does not match its content", None, None
+    if len(candidates) != 2 * candidate_budget_per_arm:
+        return (
+            "study contract candidate manifest count does not match the configured per-arm budget",
+            None,
+            None,
+        )
+    return None, manifest_hash, candidates
 
 
 def _frozen_manifest_candidates(
     manifest: Any,
+    *,
+    candidate_budget_per_arm: int,
+    confirmation_seeds_per_candidate: int,
 ) -> tuple[str | None, str | None, dict[str, dict[str, Any]]]:
     """Return a frozen manifest hash and indexed candidates, or a reason."""
-    if not isinstance(manifest, dict) or manifest.get("status") != "frozen":
-        return "study contract candidate manifest is not frozen", None, {}
-    manifest_hash = manifest.get("sha256")
-    if not _is_sha256(manifest_hash):
-        return "study contract candidate manifest sha256 is invalid", None, {}
-    candidates = manifest.get("candidates")
-    if not isinstance(candidates, list) or not candidates:
-        return "study contract candidate manifest has no candidates", None, {}
+    header_reason, manifest_hash, candidates = _frozen_manifest_header(
+        manifest, candidate_budget_per_arm
+    )
+    if header_reason is not None or manifest_hash is None or candidates is None:
+        return header_reason, None, {}
 
     expected: dict[str, dict[str, Any]] = {}
+    arm_counts = {"proposal": 0, "random": 0}
+    observed_execution_seeds: set[int] = set()
     for idx, candidate in enumerate(candidates):
-        reason, parsed_candidate = _validate_manifest_candidate(candidate, idx)
+        reason, parsed_candidate = _validate_manifest_candidate(
+            candidate,
+            idx,
+            confirmation_seeds_per_candidate=confirmation_seeds_per_candidate,
+        )
         if reason is not None or parsed_candidate is None:
             return reason, None, {}
         candidate_id = parsed_candidate["candidate_id"]
@@ -123,8 +176,50 @@ def _frozen_manifest_candidates(
                 None,
                 {},
             )
+        for execution_seed in parsed_candidate["execution_seeds"]:
+            if execution_seed in observed_execution_seeds:
+                return (
+                    "study contract candidate manifest repeats execution_seed across candidates",
+                    None,
+                    {},
+                )
+            observed_execution_seeds.add(execution_seed)
+        arm_counts[parsed_candidate["selection_arm"]] += 1
         expected[candidate_id] = parsed_candidate
+    if arm_counts != {"proposal": candidate_budget_per_arm, "random": candidate_budget_per_arm}:
+        return (
+            "study contract candidate manifest arm counts do not match the configured per-arm budget",
+            None,
+            {},
+        )
     return None, manifest_hash, expected
+
+
+def _outcome_confirmation_requirements(
+    outcome_contract: dict[str, Any], admission: dict[str, Any]
+) -> tuple[str | None, int | None, int | None]:
+    """Extract the #3275 fixed five-seed, four-confirmation protocol."""
+    parameters = outcome_contract.get("study_parameters")
+    if not isinstance(parameters, dict):
+        return "study contract is missing study_parameters", None, None
+    candidate_budget_per_arm = parameters.get("candidate_budget_per_arm")
+    if not isinstance(candidate_budget_per_arm, int) or candidate_budget_per_arm < 1:
+        return "study contract candidate_budget_per_arm is invalid", None, None
+    confirmation_seeds_per_candidate = parameters.get("confirmation_seeds_per_candidate")
+    if confirmation_seeds_per_candidate != 5:
+        return (
+            "study contract must require exactly five confirmation seeds per candidate",
+            None,
+            None,
+        )
+    confirmation = admission.get("independent_seed_confirmation")
+    if not isinstance(confirmation, dict):
+        return "study contract is missing independent seed confirmation", None, None
+    if confirmation.get("confirmation_seeds_per_candidate") != confirmation_seeds_per_candidate:
+        return "study contract confirmation seed count does not match study parameters", None, None
+    if confirmation.get("minimum_confirmed_count") != 4:
+        return "study contract must require a four-of-five confirmation threshold", None, None
+    return None, candidate_budget_per_arm, confirmation_seeds_per_candidate
 
 
 def _outcome_contract_requirements(
@@ -142,8 +237,20 @@ def _outcome_contract_requirements(
     if admission.get("execution_status") != "native":
         return False, "study contract does not require native execution", None
 
+    confirmation_reason, candidate_budget_per_arm, confirmation_seeds_per_candidate = (
+        _outcome_confirmation_requirements(outcome_contract, admission)
+    )
+    if (
+        confirmation_reason is not None
+        or candidate_budget_per_arm is None
+        or confirmation_seeds_per_candidate is None
+    ):
+        return False, confirmation_reason or "study contract confirmation protocol is invalid", None
+
     reason, manifest_hash, candidates = _frozen_manifest_candidates(
-        admission.get("candidate_manifest")
+        admission.get("candidate_manifest"),
+        candidate_budget_per_arm=candidate_budget_per_arm,
+        confirmation_seeds_per_candidate=confirmation_seeds_per_candidate,
     )
     if reason is not None or manifest_hash is None:
         return False, reason or "study contract candidate manifest is invalid", None
@@ -159,7 +266,16 @@ def _outcome_contract_requirements(
     return (
         True,
         "ok",
-        _FrozenOutcomeContract(manifest_hash, candidates, planner, planner_hash, family),
+        _FrozenOutcomeContract(
+            manifest_hash,
+            candidates,
+            planner,
+            planner_hash,
+            family,
+            candidate_budget_per_arm,
+            confirmation_seeds_per_candidate,
+            4,
+        ),
     )
 
 
@@ -220,6 +336,19 @@ def _row_has_valid_execution_lineage(row: dict[str, Any]) -> str | None:
         return "command_lineage is invalid"
     if not isinstance(row.get("replay_lineage"), str) or not row["replay_lineage"].strip():
         return "replay_lineage is invalid"
+    if not _is_sha256(row.get("replay_signature")):
+        return "replay_signature is not a SHA-256 digest"
+    attribution = row.get("failure_attribution")
+    if not isinstance(attribution, dict) or attribution.get("status") != "attributed":
+        return "failure_attribution is not attributed"
+    primary_failure = attribution.get("primary_failure")
+    if not isinstance(primary_failure, str) or not primary_failure.strip():
+        return "failure_attribution primary_failure is invalid"
+    details = attribution.get("details")
+    if not isinstance(details, dict) or details.get("termination_reason") != row.get(
+        "termination_reason"
+    ):
+        return "failure_attribution does not match termination_reason"
     if row.get("execution_status") != "native":
         return f"has invalid execution_status: {row.get('execution_status')}"
     return None
@@ -231,7 +360,7 @@ def _validate_single_row_lineage(
     required_keys: set[str],
     lineage_keys: set[str],
     contract: _FrozenOutcomeContract,
-) -> tuple[bool, str, tuple[str, float, int] | None]:
+) -> tuple[bool, str, tuple[str, str, int, float, int, str, str] | None]:
     """Validate a single row for lineage, status, and certification."""
     if not isinstance(row, dict):
         return False, f"row {idx} is not an object", None
@@ -258,7 +387,71 @@ def _validate_single_row_lineage(
     except (TypeError, ValueError):
         return False, f"row {idx} invalid independent_failure_outcome", None
 
-    return True, "ok", (row["selection_arm"], outcome, row["rank"])
+    attribution = row["failure_attribution"]
+    return (
+        True,
+        "ok",
+        (
+            row["candidate_id"],
+            row["selection_arm"],
+            row["execution_seed"],
+            outcome,
+            row["rank"],
+            row["replay_signature"],
+            attribution["primary_failure"],
+        ),
+    )
+
+
+def _aggregate_candidate_rows(
+    candidate_id: str,
+    expected_candidate: dict[str, Any],
+    candidate_rows: list[tuple[str, int, float, int, str, str]],
+    contract: _FrozenOutcomeContract,
+) -> tuple[str | None, str | None, float | None, int | None]:
+    """Reduce one candidate's exact confirmation rows to its binary certified yield."""
+    if len(candidate_rows) != contract.confirmation_seeds_per_candidate:
+        return (
+            f"candidate {candidate_id} does not have exactly the configured execution rows",
+            None,
+            None,
+            None,
+        )
+    observed_seeds = [row[1] for row in candidate_rows]
+    expected_seeds = expected_candidate["execution_seeds"]
+    if len(set(observed_seeds)) != len(observed_seeds) or set(observed_seeds) != set(
+        expected_seeds
+    ):
+        return (
+            f"candidate {candidate_id} does not execute each frozen seed exactly once",
+            None,
+            None,
+            None,
+        )
+    arms = {row[0] for row in candidate_rows}
+    ranks = {row[3] for row in candidate_rows}
+    if arms != {expected_candidate["selection_arm"]} or len(ranks) != 1:
+        return f"candidate {candidate_id} has inconsistent arm or rank", None, None, None
+    if len({row[4] for row in candidate_rows}) != 1:
+        return (
+            f"candidate {candidate_id} does not have an exact deterministic replay signature",
+            None,
+            None,
+            None,
+        )
+    failure_attributions = {row[5] for row in candidate_rows if row[2] >= 8.0}
+    if len(failure_attributions) > 1:
+        return (
+            f"candidate {candidate_id} has unstable failure attribution across confirmations",
+            None,
+            None,
+            None,
+        )
+    candidate_yield = float(
+        sum(row[2] >= 8.0 for row in candidate_rows) >= contract.minimum_confirmed_count
+        and bool(failure_attributions)
+    )
+    return None, expected_candidate["selection_arm"], candidate_yield, next(iter(ranks))
 
 
 def validate_row_lineage(
@@ -269,7 +462,8 @@ def validate_row_lineage(
     """Validate row-level outcome lineage for adversarial_independent_outcomes.v2.
 
     Returns:
-        (ok, reason, proposal_outcomes, random_outcomes, ranked_outcomes)
+        (ok, reason, proposal_candidate_yields, random_candidate_yields,
+        ranked_candidate_yields)
     """
     if not isinstance(rows, list) or not rows:
         return False, "rows must be a non-empty list", [], [], []
@@ -299,11 +493,13 @@ def validate_row_lineage(
         "scenario_certification_status",
         "candidate_certification_status",
         "replay_lineage",
+        "replay_signature",
+        "failure_attribution",
         "record_hash",
     }
     proposal_outcomes: list[float] = []
     random_outcomes: list[float] = []
-    all_rows_with_rank = []
+    rows_by_candidate: dict[str, list[tuple[str, int, float, int, str, str]]] = {}
 
     for idx, row in enumerate(rows):
         ok, reason, item = _validate_single_row_lineage(
@@ -316,15 +512,32 @@ def validate_row_lineage(
         if not ok or item is None:
             return False, reason, [], [], []
 
-        arm, outcome, rank = item
-        if arm == "proposal":
-            proposal_outcomes.append(outcome)
-        else:
-            random_outcomes.append(outcome)
-        all_rows_with_rank.append((rank, outcome))
+        candidate_id, arm, execution_seed, outcome, rank, replay_signature, primary_failure = item
+        rows_by_candidate.setdefault(candidate_id, []).append(
+            (arm, execution_seed, outcome, rank, replay_signature, primary_failure)
+        )
 
-    all_rows_with_rank.sort(key=lambda item: item[0])
-    ranked_outcomes = [item[1] for item in all_rows_with_rank]
+    if set(rows_by_candidate) != set(contract.candidates):
+        return False, "outcome rows do not cover exactly the frozen candidate manifest", [], [], []
+
+    all_candidates_with_rank: list[tuple[int, float]] = []
+    for candidate_id, expected_candidate in contract.candidates.items():
+        candidate_reason, arm, candidate_yield, rank = _aggregate_candidate_rows(
+            candidate_id,
+            expected_candidate,
+            rows_by_candidate.get(candidate_id, []),
+            contract,
+        )
+        if candidate_reason is not None or arm is None or candidate_yield is None or rank is None:
+            return False, candidate_reason or "candidate aggregation failed", [], [], []
+        if arm == "proposal":
+            proposal_outcomes.append(candidate_yield)
+        else:
+            random_outcomes.append(candidate_yield)
+        all_candidates_with_rank.append((rank, candidate_yield))
+
+    all_candidates_with_rank.sort(key=lambda item: item[0])
+    ranked_outcomes = [item[1] for item in all_candidates_with_rank]
 
     return True, "ok", proposal_outcomes, random_outcomes, ranked_outcomes
 
@@ -346,11 +559,11 @@ def _metadata_allows_independent_outcomes(payload: dict[str, Any]) -> tuple[bool
 
 
 def compute_metrics(values: list[float]) -> dict[str, Any]:
-    """Compute the small outcome summary used by the comparison report."""
+    """Compute candidate-level certified-failure-yield metrics."""
     return {
-        "mean_objective": round(sum(values) / len(values), 4) if values else 0.0,
-        "max_objective": round(max(values), 4) if values else 0.0,
-        "failure_count": sum(1 for value in values if value >= 8.0),
+        "candidate_count": len(values),
+        "certified_failure_yield": round(sum(values) / len(values), 4) if values else 0.0,
+        "certified_failure_count": sum(1 for value in values if value >= 1.0),
     }
 
 

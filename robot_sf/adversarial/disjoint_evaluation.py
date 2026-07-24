@@ -1014,10 +1014,120 @@ def _verify_admission_confirmation(admission: dict[str, Any], confirmations: Any
         reasons.append("outcome_admission_independent_confirmation_missing")
     else:
         required_count = confirmation.get("minimum_confirmed_count")
-        if not isinstance(required_count, int) or not isinstance(confirmations, int):
+        declared_seed_count = confirmation.get("confirmation_seeds_per_candidate")
+        if (
+            not isinstance(required_count, int)
+            or not isinstance(confirmations, int)
+            or declared_seed_count != confirmations
+        ):
             reasons.append("outcome_admission_confirmation_threshold_invalid")
-        elif not 1 <= required_count <= confirmations:
+        elif (required_count, confirmations) != (4, 5):
             reasons.append("outcome_admission_confirmation_threshold_invalid")
+    return reasons
+
+
+def _candidate_manifest_content_sha256(candidates: list[Any]) -> str:
+    """Return the canonical content hash for a frozen candidate-manifest payload."""
+    encoded = json.dumps({"candidates": candidates}, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _content_addressed_manifest_header(
+    manifest: Any, candidate_budget_per_arm: Any, confirmations: Any
+) -> tuple[list[Any] | None, list[str]]:
+    """Validate frozen manifest identity, exact content hash, and declared size."""
+    if not isinstance(manifest, dict) or manifest.get("status") != "frozen":
+        manifest_status = (
+            manifest.get("status", "missing") if isinstance(manifest, dict) else "missing"
+        )
+        return None, [f"candidate_manifest_not_frozen:{manifest_status}"]
+    if not isinstance(candidate_budget_per_arm, int) or candidate_budget_per_arm < 1:
+        return None, ["candidate_manifest_budget_unavailable"]
+    if confirmations != 5:
+        return None, ["candidate_manifest_confirmation_seed_count_invalid"]
+    candidates = manifest.get("candidates")
+    manifest_hash = manifest.get("sha256")
+    if not isinstance(candidates, list) or not candidates:
+        return None, ["candidate_manifest_candidates_missing"]
+    if not _is_sha256(manifest_hash):
+        return None, ["candidate_manifest_sha256_invalid"]
+    if manifest_hash != _candidate_manifest_content_sha256(candidates):
+        return None, ["candidate_manifest_content_hash_mismatch"]
+    if len(candidates) != 2 * candidate_budget_per_arm:
+        return None, ["candidate_manifest_budget_mismatch"]
+    return candidates, []
+
+
+def _candidate_manifest_row_values(
+    candidate: Any, idx: int, confirmations: int
+) -> tuple[list[str], str, str | None, list[int]]:
+    """Validate one manifest row and return its ID, arm, and execution seeds."""
+    if not isinstance(candidate, dict):
+        return [f"candidate_manifest_row_not_object:{idx}"], str(idx), None, []
+    candidate_id = candidate.get("candidate_id")
+    candidate_label = candidate_id if isinstance(candidate_id, str) else str(idx)
+    invalid_fields = [
+        name
+        for name, is_valid in (
+            ("candidate_id", isinstance(candidate_id, str) and bool(candidate_id.strip())),
+            ("rank", isinstance(candidate.get("rank"), int) and candidate["rank"] >= 0),
+            ("candidate_pool_seed", isinstance(candidate.get("candidate_pool_seed"), int)),
+            ("scenario_seed", isinstance(candidate.get("scenario_seed"), int)),
+        )
+        if not is_valid
+    ]
+    reasons = [f"candidate_manifest_{name}_invalid:{candidate_label}" for name in invalid_fields]
+    arm = candidate.get("selection_arm")
+    if arm not in {"proposal", "random"}:
+        reasons.append(f"candidate_manifest_selection_arm_invalid:{candidate_label}")
+        arm = None
+    seeds = candidate.get("execution_seeds")
+    if (
+        not isinstance(seeds, list)
+        or len(seeds) != confirmations
+        or not all(isinstance(seed, int) for seed in seeds)
+        or len(set(seeds)) != len(seeds)
+    ):
+        reasons.append(f"candidate_manifest_execution_seed_set_invalid:{candidate_label}")
+        return reasons, candidate_label, arm, []
+    return reasons, candidate_label, arm, seeds
+
+
+def _verify_content_addressed_candidate_manifest(
+    manifest: Any, *, candidate_budget_per_arm: Any, confirmations: Any
+) -> list[str]:
+    """Require the exact predeclared candidates and seed plan before a run can start."""
+    candidates, header_reasons = _content_addressed_manifest_header(
+        manifest, candidate_budget_per_arm, confirmations
+    )
+    if candidates is None:
+        return header_reasons
+
+    reasons: list[str] = []
+    candidate_ids: set[str] = set()
+    arm_counts = {"proposal": 0, "random": 0}
+    execution_seeds: set[int] = set()
+    for idx, candidate in enumerate(candidates):
+        row_reasons, candidate_id, arm, seeds = _candidate_manifest_row_values(
+            candidate, idx, confirmations
+        )
+        reasons.extend(row_reasons)
+        if row_reasons:
+            continue
+        if candidate_id in candidate_ids:
+            reasons.append(f"candidate_manifest_candidate_id_duplicate:{candidate_id}")
+        else:
+            candidate_ids.add(candidate_id)
+        if arm is not None:
+            arm_counts[arm] += 1
+        for seed in seeds:
+            if seed in execution_seeds:
+                reasons.append(f"candidate_manifest_execution_seed_duplicate:{seed}")
+            execution_seeds.add(seed)
+    if arm_counts != {"proposal": candidate_budget_per_arm, "random": candidate_budget_per_arm}:
+        reasons.append("candidate_manifest_arm_budget_mismatch")
     return reasons
 
 
@@ -1029,13 +1139,14 @@ def _verify_outcome_admission(contract_data: dict[str, Any]) -> list[str]:
     )
     reasons, admission = _verify_admission_shape(contract_data.get("outcome_admission"))
     reasons.extend(_verify_admission_confirmation(admission, confirmations))
-
-    manifest = admission.get("candidate_manifest")
-    if not isinstance(manifest, dict) or manifest.get("status") != "frozen":
-        manifest_status = (
-            manifest.get("status", "missing") if isinstance(manifest, dict) else "missing"
+    budget = parameters.get("candidate_budget_per_arm") if isinstance(parameters, dict) else None
+    reasons.extend(
+        _verify_content_addressed_candidate_manifest(
+            admission.get("candidate_manifest"),
+            candidate_budget_per_arm=budget,
+            confirmations=confirmations,
         )
-        reasons.append(f"candidate_manifest_not_frozen:{manifest_status}")
+    )
     return reasons
 
 
@@ -1157,6 +1268,43 @@ def _verify_contract_entries(
     return reasons, observed_fit_entries
 
 
+def _verify_feature_semantics(
+    contract_data: dict[str, Any], observed_fit_entries: list[dict[str, Any]]
+) -> tuple[dict[str, Any], list[str]]:
+    """Require an explicit cross-family feature audit for every contract consumer."""
+    families = {
+        str(entry.get("scenario_family") or entry.get("cluster_key") or "unknown_family")
+        for entry in observed_fit_entries
+    }
+    fit_audit = {
+        "families": sorted(families),
+        "reason": "ok" if len(families) == 1 else "cross_family_feature_transfer_unverified",
+        "passed": len(families) == 1,
+        "feature_representation": "normalized_l1_scalar_bounds",
+    }
+    feature_semantics = contract_data.get("feature_semantics")
+    if not isinstance(feature_semantics, dict):
+        feature_semantics = {}
+    representation = feature_semantics.get("representation")
+    transfer_audited = feature_semantics.get("cross_family_transfer_audited") is True
+    transfer_status = feature_semantics.get("cross_family_transfer_status")
+    passed = (
+        fit_audit.get("passed") is True
+        and isinstance(representation, str)
+        and bool(representation.strip())
+        and transfer_audited
+        and transfer_status == "approved"
+    )
+    audit = {
+        **fit_audit,
+        "representation": representation,
+        "cross_family_transfer_audited": transfer_audited,
+        "cross_family_transfer_status": transfer_status,
+        "passed": passed,
+    }
+    return audit, [] if passed else ["feature_semantics_audit_failed"]
+
+
 def verify_same_planner_contract(
     contract_data: dict[str, Any],
     archive_data: dict[str, Any],
@@ -1177,6 +1325,8 @@ def verify_same_planner_contract(
 
     entry_reasons, observed_fit_entries = _verify_contract_entries(contract_data, entries)
     blocking_reasons.extend(entry_reasons)
+    feature_audit, feature_reasons = _verify_feature_semantics(contract_data, observed_fit_entries)
+    blocking_reasons.extend(feature_reasons)
 
     fit_payload_hash = archive_sha256(observed_fit_entries)
     if (
@@ -1200,6 +1350,7 @@ def verify_same_planner_contract(
         "fit_entry_count": len(observed_fit_entries),
         "excluded_entry_count": contract_data.get("excluded_entry_count", 5),
         "fit_entries_payload_sha256": fit_payload_hash,
+        "feature_semantics_audit": feature_audit,
         "checks_passed": passed,
         "blocking_reasons": blocking_reasons,
     }

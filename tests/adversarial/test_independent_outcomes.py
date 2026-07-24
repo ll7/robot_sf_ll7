@@ -8,11 +8,12 @@ from pathlib import Path
 from robot_sf.adversarial.independent_outcomes import (
     build_independent_outcome_evaluation,
     load_independent_outcomes,
+    payload_sha256,
 )
 
-_MANIFEST_SHA256 = "a" * 64
 _PLANNER_CONFIG_SHA256 = "b" * 64
 _RECORD_SHA256 = "c" * 64
+_REPLAY_SIGNATURE = "d" * 64
 
 
 def _legacy_payload() -> dict:
@@ -77,8 +78,8 @@ def test_build_independent_outcome_evaluation_rejects_legacy_flat_packet() -> No
 
 def test_build_independent_outcome_evaluation_complete_packet_rejects_nulls() -> None:
     """A strong packet can satisfy independent outcome, certification, and null-test gates."""
-    rows = [_v2_row("proposal", rank, 10.0) for rank in range(4)] + [
-        _v2_row("random", rank + 4, 0.0) for rank in range(4)
+    rows = [row for rank in range(4) for row in _candidate_rows("proposal", rank, 10.0)] + [
+        row for rank in range(4) for row in _candidate_rows("random", rank + 4, 0.0)
     ]
     payload = _v2_payload(rows)
     result = build_independent_outcome_evaluation(
@@ -140,11 +141,13 @@ def test_load_independent_outcomes_reads_json_payload(tmp_path: Path) -> None:
     assert payload["outcome_source"] == "planner_execution"
 
 
-def _v2_row(arm: str, rank: int, outcome: float, status: str = "native") -> dict:
+def _v2_row(
+    arm: str, rank: int, outcome: float, *, confirmation_index: int, status: str = "native"
+) -> dict:
     """Build a valid v2 row with complete lineage metadata."""
     return {
         "candidate_id": f"{arm}_{rank}",
-        "manifest_sha256": _MANIFEST_SHA256,
+        "manifest_sha256": "pending",
         "selection_arm": arm,
         "rank": rank,
         "candidate_pool_seed": 42,
@@ -152,7 +155,7 @@ def _v2_row(arm: str, rank: int, outcome: float, status: str = "native") -> dict
         "planner_config_sha256": _PLANNER_CONFIG_SHA256,
         "scenario_family": "classic_cross_trap_medium",
         "scenario_seed": 100 + rank,
-        "execution_seed": 1000 + rank + (100 if arm == "random" else 0),
+        "execution_seed": 10000 + rank * 10 + confirmation_index + (1000 if arm == "random" else 0),
         "execution_commit": "ecf997d",
         "command_lineage": "robot_sf_bench ...",
         "execution_status": status,
@@ -161,34 +164,63 @@ def _v2_row(arm: str, rank: int, outcome: float, status: str = "native") -> dict
         "scenario_certification_status": "passed",
         "candidate_certification_status": "passed",
         "replay_lineage": "replay.jsonl",
+        "replay_signature": _REPLAY_SIGNATURE,
+        "failure_attribution": {
+            "status": "attributed",
+            "primary_failure": "collision" if outcome >= 8.0 else "goal_reached",
+            "details": {"termination_reason": "collision" if outcome >= 8.0 else "goal_reached"},
+        },
         "record_hash": _RECORD_SHA256,
         "exclusion_reason": None,
     }
 
 
+def _candidate_rows(arm: str, rank: int, outcome: float, status: str = "native") -> list[dict]:
+    """Build the exact five confirmation rows for one frozen candidate."""
+    return [
+        _v2_row(arm, rank, outcome, confirmation_index=index, status=status) for index in range(5)
+    ]
+
+
 def _frozen_outcome_contract(rows: list[dict]) -> dict:
     """Build the minimal frozen contract that binds the supplied v2 rows."""
+    candidates_by_id: dict[str, dict] = {}
+    for row in rows:
+        candidate = candidates_by_id.setdefault(
+            row["candidate_id"],
+            {
+                "candidate_id": row["candidate_id"],
+                "selection_arm": row["selection_arm"],
+                "rank": row["rank"],
+                "candidate_pool_seed": row["candidate_pool_seed"],
+                "scenario_seed": row["scenario_seed"],
+                "execution_seeds": [],
+            },
+        )
+        candidate["execution_seeds"].append(row["execution_seed"])
+    candidates = list(candidates_by_id.values())
+    manifest_sha256 = payload_sha256({"candidates": candidates})
+    for row in rows:
+        row["manifest_sha256"] = manifest_sha256
     return {
         "target_planner": "social_force",
         "target_planner_config_sha256": _PLANNER_CONFIG_SHA256,
         "eval_scenario_family": "classic_cross_trap_medium",
+        "study_parameters": {
+            "candidate_budget_per_arm": len(candidates) // 2,
+            "confirmation_seeds_per_candidate": 5,
+        },
         "outcome_admission": {
             "schema_version": "adversarial_independent_outcomes.v2",
             "execution_status": "native",
+            "independent_seed_confirmation": {
+                "minimum_confirmed_count": 4,
+                "confirmation_seeds_per_candidate": 5,
+            },
             "candidate_manifest": {
                 "status": "frozen",
-                "sha256": _MANIFEST_SHA256,
-                "candidates": [
-                    {
-                        "candidate_id": row["candidate_id"],
-                        "selection_arm": row["selection_arm"],
-                        "rank": row["rank"],
-                        "candidate_pool_seed": row["candidate_pool_seed"],
-                        "scenario_seed": row["scenario_seed"],
-                        "execution_seeds": [row["execution_seed"]],
-                    }
-                    for row in rows
-                ],
+                "sha256": manifest_sha256,
+                "candidates": candidates,
             },
         },
     }
@@ -208,14 +240,8 @@ def _v2_payload(rows: list[dict]) -> dict:
 def test_build_independent_outcome_evaluation_with_valid_v2_rows() -> None:
     """A valid v2 payload with complete row lineage is admitted and computes metrics."""
     rows = [
-        _v2_row("proposal", 0, 10.0),
-        _v2_row("proposal", 1, 10.0),
-        _v2_row("proposal", 2, 10.0),
-        _v2_row("proposal", 3, 10.0),
-        _v2_row("random", 4, 0.0),
-        _v2_row("random", 5, 0.0),
-        _v2_row("random", 6, 0.0),
-        _v2_row("random", 7, 0.0),
+        *[row for rank in range(4) for row in _candidate_rows("proposal", rank, 10.0)],
+        *[row for rank in range(4) for row in _candidate_rows("random", rank + 4, 0.0)],
     ]
     payload = _v2_payload(rows)
 
@@ -229,15 +255,88 @@ def test_build_independent_outcome_evaluation_with_valid_v2_rows() -> None:
     assert result["status"] == "complete"
     assert result["independent_outcomes_available"] is True
     assert result["certification_available"] is True
-    assert result["proposal_metrics"]["mean_objective"] == 10.0
-    assert result["random_metrics"]["mean_objective"] == 0.0
+    assert result["proposal_metrics"]["certified_failure_yield"] == 1.0
+    assert result["random_metrics"]["certified_failure_yield"] == 0.0
+
+
+def test_candidate_yield_uses_four_of_five_confirmations_once_per_candidate() -> None:
+    """Three failure rows cannot inflate one candidate's certified binary yield."""
+    proposal_rows = _candidate_rows("proposal", 0, 0.0)
+    for row in proposal_rows[:3]:
+        row["termination_reason"] = "collision"
+        row["independent_failure_outcome"] = 10.0
+        row["failure_attribution"] = {
+            "status": "attributed",
+            "primary_failure": "collision",
+            "details": {"termination_reason": "collision"},
+        }
+    rows = [*proposal_rows, *_candidate_rows("random", 0, 0.0)]
+    contract = _frozen_outcome_contract(rows)
+
+    result = build_independent_outcome_evaluation(
+        _v2_payload(rows), budget=1, n_permutations=20, seed=0, outcome_contract=contract
+    )
+
+    assert result["status"] == "complete"
+    assert result["proposal_metrics"] == {
+        "candidate_count": 1,
+        "certified_failure_yield": 0.0,
+        "certified_failure_count": 0,
+    }
+
+
+def test_candidate_outcomes_reject_duplicate_execution_rows() -> None:
+    """A duplicate seed cannot replace a missing confirmation execution for one candidate."""
+    rows = [*_candidate_rows("proposal", 0, 10.0), *_candidate_rows("random", 0, 0.0)]
+    contract = _frozen_outcome_contract(rows)
+    rows[1]["execution_seed"] = rows[0]["execution_seed"]
+
+    result = build_independent_outcome_evaluation(
+        _v2_payload(rows), budget=1, n_permutations=20, seed=0, outcome_contract=contract
+    )
+
+    assert result["status"] == "blocked_invalid_independent_outcomes"
+    assert "exactly once" in result["reason"]
+
+
+def test_candidate_outcomes_reject_manifest_content_or_replay_attribution_drift() -> None:
+    """Candidate content, deterministic replay, and failure mechanism evidence are contract-bound."""
+    rows = [*_candidate_rows("proposal", 0, 10.0), *_candidate_rows("random", 0, 0.0)]
+    contract = _frozen_outcome_contract(rows)
+    manifest = contract["outcome_admission"]["candidate_manifest"]
+    manifest["candidates"][0]["scenario_seed"] = 999
+
+    result = build_independent_outcome_evaluation(
+        _v2_payload(rows), budget=1, n_permutations=20, seed=0, outcome_contract=contract
+    )
+    assert result["status"] == "blocked_invalid_independent_outcomes"
+    assert "sha256 does not match its content" in result["reason"]
+
+    rows = [*_candidate_rows("proposal", 0, 10.0), *_candidate_rows("random", 0, 0.0)]
+    contract = _frozen_outcome_contract(rows)
+    rows[1]["replay_signature"] = "e" * 64
+
+    result = build_independent_outcome_evaluation(
+        _v2_payload(rows), budget=1, n_permutations=20, seed=0, outcome_contract=contract
+    )
+    assert result["status"] == "blocked_invalid_independent_outcomes"
+    assert "exact deterministic replay signature" in result["reason"]
+
+    rows = [*_candidate_rows("proposal", 0, 10.0), *_candidate_rows("random", 0, 0.0)]
+    contract = _frozen_outcome_contract(rows)
+    rows[2]["failure_attribution"]["primary_failure"] = "timeout"
+    result = build_independent_outcome_evaluation(
+        _v2_payload(rows), budget=1, n_permutations=20, seed=0, outcome_contract=contract
+    )
+    assert result["status"] == "blocked_invalid_independent_outcomes"
+    assert "unstable failure attribution" in result["reason"]
 
 
 def test_build_independent_outcome_evaluation_rejects_incomplete_v2_row_lineage() -> None:
     """Rows missing required lineage fields fail closed."""
     rows = [
-        _v2_row("proposal", 0, 10.0),
-        _v2_row("random", 0, 0.0),
+        *_candidate_rows("proposal", 0, 10.0),
+        *_candidate_rows("random", 0, 0.0),
     ]
     contract = _frozen_outcome_contract(rows)
     # Delete lineage field from row 0.
@@ -254,7 +353,7 @@ def test_build_independent_outcome_evaluation_rejects_incomplete_v2_row_lineage(
 
 def test_build_independent_outcome_evaluation_requires_a_frozen_v2_contract() -> None:
     """Even structurally valid v2 rows cannot bypass the frozen study contract."""
-    rows = [_v2_row("proposal", 0, 10.0), _v2_row("random", 0, 0.0)]
+    rows = [*_candidate_rows("proposal", 0, 10.0), *_candidate_rows("random", 0, 0.0)]
 
     result = build_independent_outcome_evaluation(
         _v2_payload(rows), budget=1, n_permutations=10, seed=0, outcome_contract=None
@@ -267,8 +366,8 @@ def test_build_independent_outcome_evaluation_requires_a_frozen_v2_contract() ->
 def test_build_independent_outcome_evaluation_rejects_degraded_v2_row() -> None:
     """Rows with fallback or degraded execution status fail closed."""
     rows = [
-        _v2_row("proposal", 0, 10.0, status="degraded"),
-        _v2_row("random", 0, 0.0),
+        *_candidate_rows("proposal", 0, 10.0, status="degraded"),
+        *_candidate_rows("random", 0, 0.0),
     ]
 
     payload = _v2_payload(rows)
@@ -286,7 +385,7 @@ def test_build_independent_outcome_evaluation_rejects_degraded_v2_row() -> None:
 
 def test_build_independent_outcome_evaluation_rejects_contract_drift() -> None:
     """Wrong planner, config, family, candidate, seed, or success status fail closed."""
-    rows = [_v2_row("proposal", 0, 10.0), _v2_row("random", 0, 0.0)]
+    rows = [*_candidate_rows("proposal", 0, 10.0), *_candidate_rows("random", 0, 0.0)]
     contract = _frozen_outcome_contract(rows)
     for key, value in (
         ("target_planner_id", "goal"),

@@ -247,6 +247,7 @@ def _empty_report(
     required_dimensions: tuple[str, ...],
     generated_at_utc: str | None,
 ) -> dict[str, Any]:
+    """Return a blocked stress-matrix report used when no metric reports are supplied."""
     return {
         "schema_version": FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION,
         "report_id": report_id,
@@ -279,6 +280,7 @@ def _empty_report(
 
 
 def _require_forecast_metrics_report(report: dict[str, Any]) -> None:
+    """Validate a ``ForecastMetrics.v1`` report's schema, provenance, and aggregate rows."""
     if not isinstance(report, dict):
         raise ValueError("metric report must be a mapping")
     if report.get("schema_version") != FORECAST_METRICS_SCHEMA_VERSION:
@@ -299,6 +301,7 @@ def _require_forecast_metrics_report(report: dict[str, Any]) -> None:
 
 
 def _require_transferability_report(report: dict[str, Any]) -> None:
+    """Validate ``report`` is a ``ForecastTransferabilityStressMatrix.v1`` mapping."""
     if not isinstance(report, dict):
         raise ValueError("report must be a mapping")
     if report.get("schema_version") != FORECAST_TRANSFERABILITY_STRESS_MATRIX_SCHEMA_VERSION:
@@ -310,6 +313,11 @@ def _transfer_dimensions(
     *,
     aggregate_row: dict[str, Any] | None = None,
 ) -> dict[str, str | None]:
+    """Extract per-dimension transfer values for a row from row/metadata/provenance.
+
+    Returns:
+        Per-dimension transfer values (``None`` when missing).
+    """
     provenance = report.get("provenance", {})
     if not isinstance(provenance, dict):
         provenance = {}
@@ -333,6 +341,11 @@ def _transfer_dimensions(
 
 
 def _normalize_semantic_metadata_present(value: Any) -> str | None:
+    """Normalize a truthy/flag value into a canonical ``'present'``/``'absent'`` label.
+
+    Returns:
+        The canonical ``'present'``/``'absent'`` label, or ``None``.
+    """
     if value is None:
         return None
     if isinstance(value, bool):
@@ -365,6 +378,7 @@ def _artifact_input(report: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _first_present(payload: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    """Return the first non-null value among ``keys`` in ``payload``, else ``None``."""
     for key in keys:
         if key in payload and payload[key] is not None:
             return payload[key]
@@ -372,6 +386,7 @@ def _first_present(payload: dict[str, Any], keys: tuple[str, ...]) -> Any:
 
 
 def _required_value(payload: dict[str, Any], key: str) -> Any:
+    """Return ``payload[key]``, raising ``ValueError`` when it is missing or null."""
     if key not in payload or payload[key] is None:
         raise ValueError(f"required metric report field is missing: {key}")
     return payload[key]
@@ -382,6 +397,11 @@ def _dimension_coverage(
     limitation_rows: list[dict[str, Any]],
     required_dimensions: tuple[str, ...],
 ) -> dict[str, dict[str, Any]]:
+    """Compute per-dimension observed values and full/partial/unavailable coverage.
+
+    Returns:
+        Per-dimension observed values and coverage status.
+    """
     values_by_dimension: dict[str, set[str]] = defaultdict(set)
     unavailable_counts: dict[str, int] = defaultdict(int)
     for row in rows:
@@ -410,6 +430,11 @@ def _recommendation(
     rows: list[dict[str, Any]],
     limitation_rows: list[dict[str, Any]],
 ) -> dict[str, str]:
+    """Derive the decision/claim_status/reason recommendation from the matrix rows.
+
+    Returns:
+        The decision/claim_status/reason recommendation.
+    """
     if not rows:
         return {
             "decision": "stop",
@@ -460,6 +485,11 @@ def _row_evidence_status(
     metric_status: str,
     denominator: int,
 ) -> str:
+    """Classify a matrix row's evidence status from its tier, dimensions, and metrics.
+
+    Returns:
+        The row's evidence-status label.
+    """
     if unavailable_dimensions:
         return "blocked"
     if metric_status != "ok" or denominator <= 0:
@@ -475,6 +505,7 @@ def _row_claim_boundary(
     unavailable_dimensions: list[str],
     denominator: int,
 ) -> str:
+    """Return the human-readable claim-boundary caveat for a matrix row."""
     if unavailable_dimensions:
         return "blocked transfer dimensions prevent benchmark-strength transfer claims"
     if denominator <= 0:
@@ -485,6 +516,7 @@ def _row_claim_boundary(
 
 
 def _is_oracle_tier(observation_tier: str) -> bool:
+    """Return ``True`` when the observation tier is oracle-prefixed (non-deployable)."""
     return observation_tier.strip().lower().startswith("oracle")
 
 

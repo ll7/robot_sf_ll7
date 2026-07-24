@@ -395,6 +395,7 @@ class _PlannerStepProcess:
         timeout_s: float,
         first_step_timeout_s: float | None = None,
     ) -> None:
+        """Initialize the fork-based planner-step worker process and its timeout state."""
         if "fork" not in mp.get_all_start_methods():
             raise RuntimeError(
                 "planner step timeout isolation requires multiprocessing fork support"
@@ -622,6 +623,7 @@ class _NativeCommandPolicy:
         timeout_s: float,
         persistent: bool,
     ) -> None:
+        """Initialize a native-command arm, validating argv/timeout and seeding diagnostics."""
         if not argv:
             raise ValueError("native_command requires a non-empty argv")
         self._argv = [str(item) for item in argv]
@@ -1079,6 +1081,11 @@ def _create_native_command_policy(
     }
 
     def render(value: Any) -> str:
+        """Substitute scenario tokens (``{scenario_id}``/``{seed}``/...) into a string value.
+
+        Returns:
+            The value with scenario tokens substituted in.
+        """
         rendered = str(value)
         for token, replacement in mapping.items():
             rendered = rendered.replace(token, replacement)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from jsonschema import ValidationError
+
 from robot_sf.benchmark.schema_loader import load_schema
 from robot_sf.benchmark.schema_validator import validate_episode
 
@@ -46,19 +48,20 @@ def given_invalid_episode() -> dict:
     "the record is validated against the episode schema",
     target_fixture="validation_error",
 )
-def when_validate(episode_record: dict) -> Exception | None:
+def when_validate(episode_record: dict) -> ValidationError | None:
     try:
         validate_episode(episode_record, SCHEMA)
         return None
-    except Exception as exc:
+    except ValidationError as exc:
         return exc
 
 
 @then("no validation error should be raised")
-def then_no_error(validation_error: Exception | None) -> None:
+def then_no_error(validation_error: ValidationError | None) -> None:
     assert validation_error is None
 
 
 @then("a validation error should be raised")
-def then_error_raised(validation_error: Exception | None) -> None:
-    assert validation_error is not None
+def then_error_raised(validation_error: ValidationError | None) -> None:
+    assert isinstance(validation_error, ValidationError)
+    assert "'termination_reason' is a required property" in str(validation_error)

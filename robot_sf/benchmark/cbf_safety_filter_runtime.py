@@ -201,6 +201,11 @@ def _xy_rows(value: Any) -> np.ndarray:
 
 
 def _robot_position(env: Any) -> np.ndarray:
+    """Extract the robot's finite xy position from ``env.simulator.robot_pos``.
+
+    Returns:
+        The robot's finite xy position array.
+    """
     simulator = getattr(env, "simulator", None)
     if simulator is None or not hasattr(simulator, "robot_pos"):
         raise ValueError("cbf_safety_filter requires simulator.robot_pos")
@@ -214,11 +219,20 @@ def _robot_position(env: Any) -> np.ndarray:
 
 
 def _pedestrian_positions(env: Any) -> np.ndarray:
+    """Return pedestrian positions as finite xy rows from ``env.simulator.ped_pos``."""
     simulator = getattr(env, "simulator", None)
     return _xy_rows(getattr(simulator, "ped_pos", np.empty((0, 2), dtype=float)))
 
 
 def _robot_heading(env: Any) -> float:
+    """Resolve the robot heading angle from the simulator, failing closed.
+
+    Tries ``robot_poses`` heading, then ``robots[0].theta``, then the third
+    component of ``robot_pos``; raises when none yields a finite angle.
+
+    Returns:
+        The resolved robot heading angle (radians).
+    """
     simulator = getattr(env, "simulator", None)
     robot_poses = getattr(simulator, "robot_poses", None)
     if isinstance(robot_poses, list) and robot_poses:
@@ -249,6 +263,14 @@ def _pedestrian_velocities(
     previous_positions: np.ndarray | None,
     dt: float,
 ) -> np.ndarray:
+    """Estimate pedestrian velocities by finite-differencing positions over ``dt``.
+
+    Returns zeros when no previous frame is available, and rows beyond the
+    overlapping count stay zero. Raises when ``dt`` is not positive.
+
+    Returns:
+        The estimated pedestrian velocity array.
+    """
     if not dt > 0.0:
         raise ValueError("cbf_safety_filter dt must be positive")
     if previous_positions is None:
@@ -302,6 +324,11 @@ def compute_cbf_observation_from_env(
 
 
 def _status_from_decision_label(label: str, *, intervened: bool) -> str:
+    """Map a CBF decision label and intervention flag to a readiness status string.
+
+    Returns:
+        The readiness status string.
+    """
     if label == "cbf_disabled":
         return "disabled"
     if intervened:

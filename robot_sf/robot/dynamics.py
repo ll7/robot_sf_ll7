@@ -56,6 +56,11 @@ class RobotDynamicsModel(Protocol):
 
 
 def _positive_dt(dt: float) -> float:
+    """Validate and return dt as a finite positive float.
+
+    Returns:
+        Validated positive dt value.
+    """
     value = float(dt)
     if not isfinite(value) or value <= 0:
         raise ValueError("dt must be finite and positive.")
@@ -63,6 +68,11 @@ def _positive_dt(dt: float) -> float:
 
 
 def _finite_positive(value: float, field_name: str) -> float:
+    """Validate and return value as a finite positive float for the named field.
+
+    Returns:
+        Validated positive value.
+    """
     normalized = float(value)
     if not isfinite(normalized) or normalized <= 0:
         raise ValueError(f"{field_name} must be finite and positive.")
@@ -70,6 +80,11 @@ def _finite_positive(value: float, field_name: str) -> float:
 
 
 def _control_pair(control: Sequence[float], model_name: str) -> tuple[float, float]:
+    """Validate and return a two-element control pair for the named model.
+
+    Returns:
+        Tuple of (first, second) control values.
+    """
     if len(control) != 2:
         raise ValueError(f"{model_name} control must contain exactly two values.")
     first, second = float(control[0]), float(control[1])

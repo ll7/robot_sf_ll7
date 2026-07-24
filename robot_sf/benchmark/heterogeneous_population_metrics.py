@@ -470,6 +470,15 @@ def summarize_distribution(name: str, values: Sequence[float]) -> dict[str, Any]
 def _coerce_distribution_specs(
     metric_specs: Sequence[RealizedDistributionSpec | Mapping[str, Any]],
 ) -> list[RealizedDistributionSpec]:
+    """Coerce a non-empty sequence of distribution specs into validated objects.
+
+    Accepts ``RealizedDistributionSpec`` instances or mappings; rejects a
+    non-sequence/empty input, blank or duplicate names, and blank configured
+    keys so the audit cannot run against an ambiguous spec set.
+
+    Returns:
+        The validated distribution spec list.
+    """
     if not isinstance(metric_specs, Sequence) or isinstance(metric_specs, str) or not metric_specs:
         raise ValueError("metric_specs must be a non-empty sequence")
     specs: list[RealizedDistributionSpec] = []
@@ -612,6 +621,15 @@ def _audit_one_distribution_spec(
     pedestrians: Sequence[Any],
     spec: RealizedDistributionSpec,
 ) -> dict[str, Any]:
+    """Audit one distribution spec over all pedestrians.
+
+    Summarizes the realized per-step values (and, when a configured label is
+    declared, the configured targets), computes the configured-to-realized shift,
+    and reports readiness plus the combined fail-closed blockers.
+
+    Returns:
+        The distribution audit payload.
+    """
     realized_overall, realized_by_archetype, realized_blockers = _collect_distribution_side(
         pedestrians,
         lambda pedestrian, index: _control_trace_metric_values(

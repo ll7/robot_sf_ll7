@@ -311,6 +311,14 @@ def _build_sort_key(
     """
 
     def _sort_key(item: tuple[float, dict[str, Any]]) -> tuple:
+        """Order scored episodes by primary metric value, then by the tie-breaker.
+
+        A missing tie-breaker metric sorts lowest (``-inf``) so it never wins a
+        primary-value tie.
+
+        Returns:
+            The sort key tuple for a scored episode.
+        """
         primary_val, ep = item
         if effective_tie_breaker:
             tb_val = _extract_metric(ep, effective_tie_breaker)

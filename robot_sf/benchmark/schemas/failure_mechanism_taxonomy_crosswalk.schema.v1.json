@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "failure_mechanism_taxonomy_crosswalk.schema.v1.json",
   "title": "Failure Mechanism Taxonomy Crosswalk v1",
-  "description": "Conservative mapping from classifier labels to canonical taxonomy labels, evidence modes, and non-causal caveats. Every crosswalk entry uses aggregate_summary evidence mode: the classifier operates on paired aggregate metrics, not trace-level data, so no entry should be mistaken for causal proof.",
+  "description": "Diagnostic crosswalk from classifier labels to explicitly unavailable canonical taxonomy attribution. The classifier operates on paired aggregate metrics without trace or provenance sidecar inputs, so every entry remains unknown and must not be mistaken for causal proof.",
   "type": "object",
   "required": [
     "crosswalk_schema_version",
@@ -26,6 +26,8 @@
           "taxonomy_label",
           "taxonomy_confidence",
           "evidence_mode",
+          "evidence_uri",
+          "unavailable_reason",
           "caveat"
         ],
         "properties": {
@@ -37,13 +39,19 @@
             "type": "string"
           },
           "taxonomy_label": {
-            "type": "string"
+            "const": "unknown"
           },
           "taxonomy_confidence": {
-            "type": "string"
+            "const": "unknown"
           },
           "evidence_mode": {
-            "const": "aggregate_summary"
+            "const": "unknown"
+          },
+          "evidence_uri": {
+            "const": ""
+          },
+          "unavailable_reason": {
+            "const": "not_derivable_missing_trace_or_provenance"
           },
           "caveat": {
             "type": "string"

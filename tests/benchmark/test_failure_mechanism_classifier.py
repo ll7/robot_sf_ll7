@@ -280,6 +280,10 @@ def test_cli_writes_json_csv_and_schema_valid_payload(tmp_path: Path) -> None:
     jsonschema.validate(instance=payload, schema=schema)
     assert payload["rows"][0]["label"] == "near_miss"
     assert payload["coverage_axes"]["failure_modes"]["near_miss"]["observed_episodes"] == 1
+    assert payload["taxonomy_crosswalk"]["entries"][0]["taxonomy_label"] == "unknown"
+    assert payload["taxonomy_crosswalk"]["entries"][0]["unavailable_reason"] == (
+        "not_derivable_missing_trace_or_provenance"
+    )
     csv_rows = list(csv.DictReader(out_csv.read_text(encoding="utf-8").splitlines()))
     assert csv_rows[0]["scenario_id"] == "near_miss_pair"
     assert csv_rows[0]["label"] == "near_miss"
@@ -367,15 +371,17 @@ class TestTaxonomyCrosswalk:
         assert entry["classifier_label"] == "collision"
         assert entry["taxonomy_label"] in MECHANISM_LABELS
         assert entry["taxonomy_confidence"] in MECHANISM_CONFIDENCES
-        assert entry["evidence_mode"] == "aggregate_summary"
+        assert entry["evidence_mode"] == "unknown"
+        assert entry["evidence_uri"] == ""
+        assert entry["unavailable_reason"] == "not_derivable_missing_trace_or_provenance"
         assert isinstance(entry["caveat"], str)
         assert len(entry["caveat"]) > 0
 
     def test_crosswalk_all_classifier_labels_mapped(self) -> None:
         """Every classifier FAILURE_MECHANISM_LABELS must have a crosswalk mapping.
 
-        This is a coverage gate: if a new classifier label is added, the crosswalk
-        must be updated with a conservative taxonomy mapping.
+        This is a coverage gate: every classifier row must receive the explicit unknown
+        taxonomy boundary until the selected report can carry trace/provenance evidence.
         """
         records = [
             _record("near_miss_pair", horizon=100, near_misses=1),
@@ -394,8 +400,8 @@ class TestTaxonomyCrosswalk:
                 f"is not in the crosswalk entries"
             )
 
-    def test_crosswalk_handles_multiple_labels(self) -> None:
-        """Crosswalk correctly maps various classifier labels."""
+    def test_crosswalk_keeps_aggregate_only_labels_unknown(self) -> None:
+        """Aggregate-only classifier rows must not infer canonical mechanisms."""
         records = [
             # time_budget_clean_relief: fixed timeout, long success clean
             _record("clean_relief", horizon=100, comfort_exposure=0.0, min_distance=1.5),
@@ -427,14 +433,13 @@ class TestTaxonomyCrosswalk:
         assert "time_budget_clean_relief" in label_map
         assert "collision" in label_map
         assert "unavailable" in label_map
-        # Verify taxonomy labels are valid
+        # None of these aggregate-only outcomes can establish a taxonomy mechanism.
         for entry in entries:
-            if entry["classifier_label"] == "time_budget_clean_relief":
-                assert entry["taxonomy_label"] == "time_budget_artifact"
-            elif entry["classifier_label"] == "collision":
-                assert entry["taxonomy_label"] == "proxemic_or_clearance_tradeoff"
-            elif entry["classifier_label"] == "unavailable":
-                assert entry["taxonomy_label"] == "unknown"
+            assert entry["taxonomy_label"] == "unknown"
+            assert entry["taxonomy_confidence"] == "unknown"
+            assert entry["evidence_mode"] == "unknown"
+            assert entry["evidence_uri"] == ""
+            assert entry["unavailable_reason"] == "not_derivable_missing_trace_or_provenance"
 
     def test_crosswalk_preserves_non_causal_caveats(self) -> None:
         """All crosswalk caveats must include a non-causal limitation statement."""
@@ -451,7 +456,7 @@ class TestTaxonomyCrosswalk:
         )
         for entry in payload["taxonomy_crosswalk"]["entries"]:
             caveat = entry["caveat"].lower()
-            assert "trace review" in caveat or "cannot" in caveat or "unsupported" in caveat, (
+            assert "trace-verified evidence" in caveat or "causality" in caveat, (
                 f"Caveat for {entry['classifier_label']!r} must include a non-causal "
                 f"limitation: {entry['caveat']}"
             )
@@ -482,7 +487,7 @@ class TestTaxonomyCrosswalk:
             build_taxonomy_crosswalk([])
 
     def test_crosswalk_preserves_unknown_for_unrecognised_label(self) -> None:
-        """Unrecognised classifier labels must produce unknown taxonomy mapping."""
+        """Unrecognised classifier labels remain unavailable without trace evidence."""
         rows = [
             {
                 "scenario_id": "unknown_label",
@@ -495,7 +500,7 @@ class TestTaxonomyCrosswalk:
         assert entry["classifier_label"] == "nonexistent_label"
         assert entry["taxonomy_label"] == "unknown"
         assert entry["taxonomy_confidence"] == "unknown"
-        assert "No crosswalk mapping defined" in entry["caveat"]
+        assert entry["unavailable_reason"] == "not_derivable_missing_trace_or_provenance"
 
     def test_crosswalk_from_jsonl_passthrough(self, tmp_path: Path) -> None:
         """classify_failure_mechanisms_from_jsonl must pass include_taxonomy_crosswalk."""

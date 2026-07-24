@@ -293,7 +293,7 @@ jobs:
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
 
-      - name: Run optional reproducibility diagnostic
+      - name: Run reproducibility diagnostic
         run: uv run python scripts/benchmark_repro_check.py
 
       - name: Upload reproducibility report
@@ -441,6 +441,55 @@ jobs:
         if: steps.check-changes.outputs.changed == 'true'
         run: uv run pytest tests/benchmark/test_exact_repeat_executor.py -v
 
+  exact-repeat-model-preflight:
+    # Issue #6189: prove the exact-repeat native-PPO path runs offline. The
+    # required model assets are staged (checksum-verified) in a SETUP step and
+    # cached via actions/cache keyed on their registry-pinned SHA-256, so the
+    # timed test never downloads a model inside its loop. The test itself
+    # monkeypatches the downloader to fail-closed if any in-loop fetch is
+    # attempted.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PPO_ALGO_CONFIG: configs/baselines/ppo_issue_791_eval_aligned_large_capacity_cpu.yaml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up CI Python environment
+        uses: ./.github/actions/setup-ci-python
+
+      - name: Derive model-cache key from registry-pinned digests
+        id: model-cache-key
+        run: |
+          KEY=$(uv run python -c "
+          import hashlib, yaml
+          from robot_sf.models.registry import get_registry_entry
+          from robot_sf.models.preflight import required_model_ids_for_config
+          cfg = yaml.safe_load(open('${PPO_ALGO_CONFIG}'))
+          ids = required_model_ids_for_config(cfg)
+          shas = [str(get_registry_entry(m).get('github_release', {}).get('sha256', '')) for m in ids]
+          print(hashlib.sha256('|'.join(shas).encode()).hexdigest()[:16])
+          ")
+          echo "key=$KEY" >> "$GITHUB_OUTPUT"
+
+      - name: Restore model cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: output/model_cache
+          key: model-cache-exact-repeat-ppo-${{ steps.model-cache-key.outputs.key }}
+
+      - name: Preflight required model assets (before the timed test)
+        run: uv run python scripts/models/preflight_models.py --config "${PPO_ALGO_CONFIG}"
+
+      - name: Run exact-repeat native-PPO determinism offline
+        run: |
+          uv run pytest -m slow -p no:cacheprovider \
+            tests/benchmark/test_exact_repeat_executor.py::test_native_ppo_runs_offline_after_model_preflight \
+            -q
+
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -455,6 +504,7 @@ jobs:
       - examples-smoke
       - notebooks-smoke
       - determinism-gate
+      - exact-repeat-model-preflight
     if: always()
     steps:
       - name: Check split job results
@@ -497,5 +547,9 @@ jobs:
           fi
           if [[ "${{ needs.determinism-gate.result }}" != "success" ]]; then
             echo "determinism-gate finished with ${{ needs.determinism-gate.result }}" >&2
+            exit 1
+          fi
+          if [[ "${{ needs.exact-repeat-model-preflight.result }}" != "success" ]]; then
+            echo "exact-repeat-model-preflight finished with ${{ needs.exact-repeat-model-preflight.result }}" >&2
             exit 1
           fi

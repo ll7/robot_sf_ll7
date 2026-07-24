@@ -1,7 +1,7 @@
 {
   "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json",
-  "artifact_sha256": "2dd5c409431bfa3afef2f62dc0e1d914c52be3510c9793b9b544de08af322b9c",
+  "artifact_sha256": "0d643f2c36d0f1f11e2be2351359567215d47ed216d156018fc6909a79a42cfe",
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "preserved_exact_bytes": true
 }

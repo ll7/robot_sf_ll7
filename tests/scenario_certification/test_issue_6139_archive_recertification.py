@@ -3,7 +3,7 @@
 Issue #6139 repairs the certifier to reject A* paths whose continuous swept envelope
 clips obstacle corners. The 17 records registered by PR #5905 were certified under the
 old occupancy-only semantics, so this test re-derives their eligibility under the
-corrected certifier and asserts the committed re-certification evidence is
+corrected certifier (including runtime collision verdicts) and asserts the committed re-certification evidence is
 reproducible, faithful, and never silently rewrites the accepted archive.
 
 These tests do not make a benchmark, transfer, or minimax claim.
@@ -64,6 +64,10 @@ def test_recertification_covers_all_17_records(committed_recert: dict) -> None:
         assert "validated" in swept
         assert "clips_obstacle" in swept
         assert "clearance_m" in swept
+        simulator = record["after"]["simulator_obstacle_collision"]
+        assert simulator["validated"] is True
+        assert simulator["collides_obstacle"] is False
+        assert simulator["runtime_component"] == "ContinuousOccupancy.is_obstacle_collision"
 
 
 def test_recertification_reconstruction_is_bit_for_bit_faithful(committed_recert: dict) -> None:

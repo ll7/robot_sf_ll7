@@ -10,11 +10,13 @@ from dataclasses import asdict, dataclass, field
 from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
+import numpy as np
 from shapely.geometry import GeometryCollection, LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
 from robot_sf.gym_env.unified_config import RobotSimulationConfig
 from robot_sf.nav.map_config import MapDefinitionPool
+from robot_sf.nav.occupancy import ContinuousOccupancy
 from robot_sf.planner.classic_global_planner import (
     ClassicGlobalPlanner,
     ClassicPlannerConfig,
@@ -348,9 +350,10 @@ def _certify_route(
             evidence=evidence,
         )
 
-    planned_line = _line_from_points(planned_path)
-    shortest_length = _polyline_length(planned_path)
-    path_length_ratio = _safe_ratio(shortest_length, direct_length)
+    planned_line, shortest_length, path_length_ratio = _planned_path_metrics(
+        planned_path,
+        direct_length,
+    )
 
     # Issue #6139: the A* occupancy-grid verdict is necessary but not sufficient.
     # Grid inflation approximates the robot disc by cells, so a diagonally adjacent
@@ -359,14 +362,23 @@ def _certify_route(
     # path continuously against the same parsed obstacle geometry and robot envelope
     # the simulator uses, and fail closed when the envelope collides or the geometry
     # cannot be verified.
-    swept_envelope = _validate_planned_path_swept_envelope(
+    collision_checks = _planned_path_collision_checks(
         planned_path,
+        map_def=map_def,
+        goal=goal,
         obstacle_union=obstacle_union,
         robot_radius=robot_radius,
     )
-    checks["swept_envelope"] = swept_envelope
-    if not swept_envelope["validated"]:
-        reasons.append(f"planned_path_swept_envelope_unverifiable: {swept_envelope['blocker']}")
+    checks.update(collision_checks)
+    swept_envelope = collision_checks["swept_envelope"]
+    simulator_collision = collision_checks["simulator_obstacle_collision"]
+    unverified = next(
+        ((name, verdict) for name, verdict in collision_checks.items() if not verdict["validated"]),
+        None,
+    )
+    if unverified is not None:
+        check_name, check_verdict = unverified
+        reasons.append(f"planned_path_{check_name}_unverifiable: {check_verdict['blocker']}")
         checks["inflated_collision_free_path"] = False
         return _route_certificate(
             route,
@@ -380,6 +392,29 @@ def _certify_route(
         reasons.append(
             "planned_path_swept_envelope_clips_obstacle: "
             f"full_polyline_clearance_m={swept_envelope['clearance_m']:.6g}"
+        )
+        checks["inflated_collision_free_path"] = False
+        checks.update(
+            {
+                "shortest_path_length_m": shortest_length,
+                "path_length_ratio": path_length_ratio,
+                "planner": planner_info,
+                "planned_waypoint_count": len(planned_path),
+                "planned_turn_count": _turn_count(planned_path),
+            }
+        )
+        return _route_certificate(
+            route,
+            route_id=route_id,
+            status=GEOMETRICALLY_INFEASIBLE,
+            reasons=reasons,
+            checks=checks,
+            evidence=evidence,
+        )
+    if simulator_collision["collides_obstacle"]:
+        reasons.append(
+            "planned_path_simulator_collision: "
+            f"first_collision_sample_index={simulator_collision['first_collision_sample_index']}"
         )
         checks["inflated_collision_free_path"] = False
         checks.update(
@@ -836,6 +871,161 @@ def _validate_planned_path_swept_envelope(
         "planned_waypoint_count": len(planned_path),
         "blocker": None,
     }
+
+
+def _planned_path_collision_checks(
+    planned_path: list[Vec2D],
+    *,
+    map_def: MapDefinition,
+    goal: Vec2D,
+    obstacle_union: Any,
+    robot_radius: float,
+) -> dict[str, dict[str, Any]]:
+    """Return all independent collision verdicts for one planned path."""
+    return {
+        "swept_envelope": _validate_planned_path_swept_envelope(
+            planned_path,
+            obstacle_union=obstacle_union,
+            robot_radius=robot_radius,
+        ),
+        "simulator_obstacle_collision": _validate_planned_path_simulator_collision(
+            planned_path,
+            map_def=map_def,
+            goal=goal,
+            robot_radius=robot_radius,
+        ),
+    }
+
+
+def _planned_path_metrics(
+    planned_path: list[Vec2D], direct_length: float
+) -> tuple[LineString | None, float, float | None]:
+    """Compute reusable planned-path geometry and length metrics.
+
+    Returns:
+        Planned line, its polyline length, and its ratio to direct start-goal length.
+    """
+    shortest_length = _polyline_length(planned_path)
+    return (
+        _line_from_points(planned_path),
+        shortest_length,
+        _safe_ratio(shortest_length, direct_length),
+    )
+
+
+def _validate_planned_path_simulator_collision(
+    planned_path: list[Vec2D],
+    *,
+    map_def: MapDefinition,
+    goal: Vec2D,
+    robot_radius: float,
+) -> dict[str, Any]:
+    """Replay a planned path through the runtime simulator obstacle-collision component.
+
+    ``ContinuousOccupancy.is_obstacle_collision`` is the collision verdict consumed by
+    the robot simulation state. Replaying conservative, evenly spaced path samples
+    through that component provides executable runtime collision evidence alongside
+    the planner's occupancy result and the exact swept-envelope geometry check.
+
+    Args:
+        planned_path: Planned polyline waypoints in world coordinates.
+        map_def: Parsed map whose runtime obstacle segments are checked.
+        goal: Route goal supplied to the occupancy component.
+        robot_radius: Runtime robot collision radius in meters.
+
+    Returns:
+        JSON-safe runtime collision verdict. A malformed path or obstacle payload is
+        marked unverifiable so the caller can fail closed.
+    """
+    base: dict[str, Any] = {
+        "validated": False,
+        "collides_obstacle": None,
+        "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+        "obstacle_source": "MapDefinition.obstacles_pysf_runtime_normalized",
+        "sample_spacing_m": None,
+        "checked_sample_count": 0,
+        "first_collision_sample_index": None,
+        "blocker": None,
+    }
+    if len(planned_path) < 2:
+        return {**base, "blocker": "planned_path_has_fewer_than_two_waypoints"}
+    if not math.isfinite(robot_radius) or robot_radius < 0.0:
+        return {**base, "blocker": "robot_radius_must_be_finite_and_non_negative"}
+    try:
+        samples, sample_spacing_m = _runtime_collision_samples(planned_path, robot_radius)
+        stored_lines = np.asarray(map_def.obstacles_pysf, dtype=float).reshape(-1, 4)
+        # ``MapDefinition.obstacles_pysf`` stores (start_x, end_x, start_y,
+        # end_y), whereas the runtime collision component receives the fast-pysf
+        # normalized (start_x, start_y, end_x, end_y) array via
+        # ``Simulator.get_obstacle_lines``.
+        obstacle_lines = stored_lines[:, [0, 2, 1, 3]]
+    except (TypeError, ValueError) as exc:
+        return {**base, "blocker": f"runtime_collision_input_invalid: {exc}"}
+    if obstacle_lines.size == 0:
+        return {**base, "blocker": "runtime_collision_obstacle_lines_empty"}
+
+    current_position = samples[0]
+    occupancy = ContinuousOccupancy(
+        width=float(map_def.width),
+        height=float(map_def.height),
+        get_agent_coords=lambda: current_position,
+        get_goal_coords=lambda: goal,
+        get_obstacle_coords=lambda: obstacle_lines,
+        get_pedestrian_coords=lambda: np.empty((0, 2), dtype=float),
+        agent_radius=robot_radius,
+    )
+    for sample_index, sample in enumerate(samples):
+        current_position = sample
+        if occupancy.is_obstacle_collision:
+            return {
+                **base,
+                "validated": True,
+                "collides_obstacle": True,
+                "sample_spacing_m": sample_spacing_m,
+                "checked_sample_count": sample_index + 1,
+                "first_collision_sample_index": sample_index,
+            }
+    return {
+        **base,
+        "validated": True,
+        "collides_obstacle": False,
+        "sample_spacing_m": sample_spacing_m,
+        "checked_sample_count": len(samples),
+    }
+
+
+def _runtime_collision_samples(
+    path: Sequence[Vec2D], robot_radius: float
+) -> tuple[list[Vec2D], float]:
+    """Return conservative samples for executable runtime collision replay.
+
+    The runtime collision component is point-in-time, whereas a certificate holds a
+    polyline. A 5 cm upper bound (and at most one quarter of the robot radius) avoids
+    treating waypoint-only checks as path-level evidence; the analytic swept-envelope
+    check remains the exact fail-closed authority for between-sample geometry.
+    """
+    sample_spacing_m = min(0.05, max(robot_radius / 4.0, 0.005))
+    samples: list[Vec2D] = []
+    for index, point in enumerate(path):
+        x, y = float(point[0]), float(point[1])
+        if not math.isfinite(x) or not math.isfinite(y):
+            raise ValueError(f"path waypoint {index} is non-finite")
+        if not samples:
+            samples.append((x, y))
+    for start, end in pairwise(path):
+        start_x, start_y = float(start[0]), float(start[1])
+        end_x, end_y = float(end[0]), float(end[1])
+        distance = math.hypot(end_x - start_x, end_y - start_y)
+        segment_samples = max(1, math.ceil(distance / sample_spacing_m))
+        for step in range(1, segment_samples + 1):
+            fraction = step / segment_samples
+            samples.append(
+                (
+                    start_x + (end_x - start_x) * fraction,
+                    start_y + (end_y - start_y) * fraction,
+                )
+            )
+    return samples, sample_spacing_m
 
 
 def _plan_inflated_shortest_path(

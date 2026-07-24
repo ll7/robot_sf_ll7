@@ -8,8 +8,8 @@ continuous robot disc cannot pass, so the certifier now:
 * re-validate the planned path's full-polyline (swept-disc) clearance after A*,
 * fail closed (``geometrically_infeasible`` / excluded) when the envelope clips a
   corner or the geometry cannot be verified,
-* record the occupancy/A* verdict together with the continuous swept-envelope
-  verdict for the discriminating check.
+* record the occupancy/A* verdict, continuous swept-envelope verdict, and
+  executable runtime collision verdict together for the discriminating check.
 
 These tests are certification-mechanism tests, not benchmark evidence. They assert
 the corrected fail-closed contract on deterministic, programmatic map fixtures.
@@ -233,8 +233,8 @@ def test_diagonal_corner_cutting_path_fails_closed() -> None:
     jsonschema.validate(certificate_to_dict(certificate), _load_schema())
 
 
-def test_occupancy_and_swept_envelope_verdicts_recorded_together() -> None:
-    """The discriminating check records occupancy/A* and swept-disc geometry together."""
+def test_discriminating_collision_verdicts_recorded_together() -> None:
+    """The discriminating check records A*, swept-disc, and runtime verdicts together."""
     blocked = _map(
         [(2.0, 2.0), (12.0, 8.0)],
         obstacles=[_obstacle(5.0, 3.0, 9.0, 7.0)],
@@ -242,9 +242,11 @@ def test_occupancy_and_swept_envelope_verdicts_recorded_together() -> None:
     _certificate, route_cert = _route_certificate(blocked, robot_radius=1.0)
 
     checks = route_cert.checks
-    # Occupancy-grid/A* verdict and continuous swept-disc geometry verdict coexist.
+    # Occupancy-grid/A*, continuous swept-disc geometry, and the executable runtime
+    # simulator collision verdict coexist on the same planned path.
     assert "inflated_collision_free_path" in checks
     assert "swept_envelope" in checks
+    assert "simulator_obstacle_collision" in checks
     swept = checks["swept_envelope"]
     for key in ("validated", "clips_obstacle", "clearance_m", "clipped_vertex_count"):
         assert key in swept
@@ -252,6 +254,12 @@ def test_occupancy_and_swept_envelope_verdicts_recorded_together() -> None:
     assert swept["validated"] is True
     assert isinstance(swept["clearance_m"], float)
     assert math.isfinite(swept["clearance_m"])
+    simulator = checks["simulator_obstacle_collision"]
+    assert simulator["validated"] is True
+    assert simulator["collides_obstacle"] is True
+    assert simulator["runtime_component"] == "ContinuousOccupancy.is_obstacle_collision"
+    assert simulator["checked_sample_count"] > 0
+    assert simulator["first_collision_sample_index"] is not None
 
 
 def test_valid_path_has_finite_nonnegative_full_polyline_clearance() -> None:
@@ -268,6 +276,9 @@ def test_valid_path_has_finite_nonnegative_full_polyline_clearance() -> None:
     assert math.isfinite(swept["clearance_m"])
     assert swept["clearance_m"] >= 0.0
     assert swept["clipped_vertex_count"] == 0
+    simulator = route_cert.checks["simulator_obstacle_collision"]
+    assert simulator["validated"] is True
+    assert simulator["collides_obstacle"] is False
 
 
 def test_clearance_is_computed_on_planned_path_not_authored_line() -> None:
@@ -349,6 +360,9 @@ def test_frozen_blind_corner_route_cannot_report_collision_free_when_clearance_n
     for route_cert in certificate.route_certificates:
         assert route_cert.checks["inflated_collision_free_path"] is False
         assert route_cert.checks["swept_envelope"]["clips_obstacle"] is True
+        simulator = route_cert.checks["simulator_obstacle_collision"]
+        assert simulator["validated"] is True
+        assert simulator["collides_obstacle"] is True
 
 
 # ---------------------------------------------------------------------------

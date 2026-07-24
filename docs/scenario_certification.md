@@ -57,9 +57,12 @@ Geometry checks:
   (negative clearance), when a planned vertex is clipped, or when the geometry is
   invalid, empty, or otherwise unverifiable. The occupancy-grid/A* verdict
   (``inflated_collision_free_path``) and the continuous swept-disc verdict
-  (``swept_envelope``) are recorded together for the discriminating check, and every
-  accepted path keeps finite non-negative full-polyline clearance for the declared
-  radius.
+  (``swept_envelope``), and an executable runtime collision verdict
+  (``simulator_obstacle_collision``) are recorded together for the discriminating
+  check. The runtime verdict replays conservative path samples through
+  ``ContinuousOccupancy.is_obstacle_collision`` using the parsed simulator obstacle
+  segments; it is distinct from the exact swept-envelope calculation. Every accepted
+  path keeps finite non-negative full-polyline clearance for the declared radius.
 - shortest inflated path length,
 - path length ratio against direct start-goal distance,
 - authored route static clearance against obstacles.

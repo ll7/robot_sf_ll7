@@ -8,8 +8,8 @@ cutting. Tracked archives registered before the repair were certified under the 
 (occupancy-only) semantics, so their eligibility must be re-derived transparently:
 this module reconstructs each archive record's scenario from its family map and
 candidate robot start/goal, re-runs the corrected certifier, and records before/after
-status, eligibility, swept-envelope verdicts, and stable hashes without modifying the
-accepted archive.
+status, eligibility, swept-envelope and runtime-collision verdicts, and stable hashes
+without modifying the accepted archive.
 
 Evidence boundary: this is corrected re-certification of existing certified inputs. It
 does not prove search superiority, cross-planner transfer, or minimax robustness, and
@@ -105,8 +105,8 @@ def recertify_tracked_archive(
     Reconstructs each record's scenario from its family map and candidate robot
     start/goal, re-runs ``scenario_cert.v1`` (now with continuous swept-envelope
     validation), and records before/after eligibility, classification, swept-envelope
-    verdict, and reconstruction fidelity. The accepted archive file is read-only and
-    never modified.
+    and runtime-collision verdicts, and reconstruction fidelity. The accepted archive
+    file is read-only and never modified.
 
     Args:
         archive_path: Path to the tracked ``archive.json`` projection.
@@ -253,12 +253,18 @@ def recertification_report_to_dict(
         "correction": {
             "summary": (
                 "Re-derive scenario_cert.v1 eligibility with continuous swept-envelope "
-                "validation of the planned A* path (issue #6139)."
+                "and runtime simulator-collision validation of the planned A* path "
+                "(issue #6139)."
             ),
             "accepted_archive_modified": False,
             "swept_envelope_check": (
                 "planned path full-polyline clearance against the parsed obstacle union "
                 "after robot-radius inflation; negative clearance fails closed"
+            ),
+            "simulator_collision_check": (
+                "planned path samples replayed through "
+                "ContinuousOccupancy.is_obstacle_collision using simulator-normalized "
+                "MapDefinition.obstacles_pysf segments; a runtime collision fails closed"
             ),
         },
         "counts": report.counts,
@@ -430,12 +436,13 @@ def _corrected_projection(certificate: Any) -> dict[str, Any]:
     """Build the corrected (post-#6139) certification projection.
 
     Returns:
-        Compact projection including the swept-envelope discriminating check.
+        Compact projection including the swept-envelope and runtime collision checks.
     """
     certificate_dict = certificate_to_dict(certificate)
     route_certs = certificate_dict.get("route_certificates", [])
     route_checks = route_certs[0].get("checks", {}) if route_certs else {}
     swept = route_checks.get("swept_envelope", {})
+    simulator_collision = route_checks.get("simulator_obstacle_collision", {})
     return {
         "classification": certificate_dict.get("classification"),
         "benchmark_eligibility": certificate_dict.get("benchmark_eligibility"),
@@ -449,6 +456,14 @@ def _corrected_projection(certificate: Any) -> dict[str, Any]:
             "vertex_clearance_m": swept.get("vertex_clearance_m"),
             "clipped_vertex_count": swept.get("clipped_vertex_count"),
             "planned_waypoint_count": swept.get("planned_waypoint_count"),
+        },
+        "simulator_obstacle_collision": {
+            "validated": simulator_collision.get("validated"),
+            "collides_obstacle": simulator_collision.get("collides_obstacle"),
+            "runtime_component": simulator_collision.get("runtime_component"),
+            "sample_spacing_m": simulator_collision.get("sample_spacing_m"),
+            "checked_sample_count": simulator_collision.get("checked_sample_count"),
+            "first_collision_sample_index": simulator_collision.get("first_collision_sample_index"),
         },
     }
 

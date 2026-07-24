@@ -4,7 +4,8 @@
   "claim_boundary": "corrected_recertification_not_benchmark_evidence",
   "correction": {
     "accepted_archive_modified": false,
-    "summary": "Re-derive scenario_cert.v1 eligibility with continuous swept-envelope validation of the planned A* path (issue #6139).",
+    "simulator_collision_check": "planned path samples replayed through ContinuousOccupancy.is_obstacle_collision using simulator-normalized MapDefinition.obstacles_pysf segments; a runtime collision fails closed",
+    "summary": "Re-derive scenario_cert.v1 eligibility with continuous swept-envelope and runtime simulator-collision validation of the planned A* path (issue #6139).",
     "swept_envelope_check": "planned path full-polyline clearance against the parsed obstacle union after robot-radius inflation; negative clearance fails closed"
   },
   "counts": {
@@ -23,7 +24,7 @@
     "record_count": 17
   },
   "issue": "6139",
-  "recertification_sha256": "1406ea545cd07b9e2d96154e3ce10d141c7a121e8c8bc1b736c802b99a796a00",
+  "recertification_sha256": "7bade1d5008d66eba9dfe6c9c72e72e5e6720e7acb96f17a90a61a4f0798f3d0",
   "reconstruction_fidelity": {
     "fidelity_basis": "reconstructed shortest_path_length_m and minimum_static_clearance_m match the embedded certificate bit-for-bit at cells_per_meter=2.0",
     "fidelity_mismatch_count": 0,
@@ -39,6 +40,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.08720912058007535,
         "shortest_path_length_m": 6.621320343559643,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 136,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -85,6 +94,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.059389014426533215,
         "shortest_path_length_m": 6.207106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 126,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -131,6 +148,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.14466628881143295,
         "shortest_path_length_m": 6.207106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 126,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -177,6 +202,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.27493966316004137,
         "shortest_path_length_m": 5.707106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 116,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -223,6 +256,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.840606632329165,
         "shortest_path_length_m": 5.0,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 101,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.75,
           "clipped_vertex_count": 0,
@@ -269,6 +310,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.24485091617336763,
         "shortest_path_length_m": 5.414213562373095,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 111,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -315,6 +364,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.3212957342563223,
         "shortest_path_length_m": 5.207106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 106,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -361,6 +418,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.0686558375253119,
         "shortest_path_length_m": 6.914213562373095,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 141,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -407,6 +472,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.09678231270025872,
         "shortest_path_length_m": 5.707106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 116,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -453,6 +526,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.09191515415932994,
         "shortest_path_length_m": 5.914213562373095,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 121,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -499,6 +580,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.10742221289619014,
         "shortest_path_length_m": 6.621320343559643,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 136,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -545,6 +634,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.1874712993367873,
         "shortest_path_length_m": 6.707106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 136,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -591,6 +688,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.769333883467695,
         "shortest_path_length_m": 6.0,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 121,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.75,
           "clipped_vertex_count": 0,
@@ -637,6 +742,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.5191150388984573,
         "shortest_path_length_m": 5.707106781186548,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 116,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.75,
           "clipped_vertex_count": 0,
@@ -683,6 +796,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.05622294126477012,
         "shortest_path_length_m": 7.121320343559643,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 146,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -729,6 +850,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.1050352966667889,
         "shortest_path_length_m": 6.914213562373095,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 141,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,
@@ -775,6 +904,14 @@
         "inflated_collision_free_path": true,
         "minimum_static_clearance_m": 0.35408940448534776,
         "shortest_path_length_m": 5.414213562373095,
+        "simulator_obstacle_collision": {
+          "checked_sample_count": 111,
+          "collides_obstacle": false,
+          "first_collision_sample_index": null,
+          "runtime_component": "ContinuousOccupancy.is_obstacle_collision",
+          "sample_spacing_m": 0.05,
+          "validated": true
+        },
         "swept_envelope": {
           "clearance_m": 0.25,
           "clipped_vertex_count": 0,

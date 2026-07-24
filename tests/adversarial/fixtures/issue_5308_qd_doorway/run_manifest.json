@@ -1,0 +1,26 @@
+{
+  "archive_artifact": "tests/adversarial/fixtures/issue_5308_qd_doorway/archive.json",
+  "archive_summary": {
+    "claim_boundary": "capability_not_evidence: archive.json and comparison.json for issue #5308 are archive artifact paths produced by the MAP-Elites + CMA-ME + production evaluator capability wiring. They are not camera-ready benchmark findings, planner-performance evidence, or a validated QD-superiority claim without the durable execution artifacts and a held-out comparator.",
+    "coverage_fraction": 0.32,
+    "distinct_failure_modes": [
+      "collision",
+      "timeout"
+    ],
+    "filled_cell_count": 8,
+    "num_admitted": 12,
+    "num_evaluated": 120,
+    "qd_score": 70.0,
+    "smoke": false,
+    "wall_clock_seconds": 63.372
+  },
+  "budget": 120,
+  "claim_boundary": "capability_not_evidence: archive.json and comparison.json for issue #5308 are archive artifact paths produced by the MAP-Elites + CMA-ME + production evaluator capability wiring. They are not camera-ready benchmark findings, planner-performance evidence, or a validated QD-superiority claim without the durable execution artifacts and a held-out comparator.",
+  "config": "configs/adversarial/issue_5308_qd_doorway.yaml",
+  "fixture_note": "Capability artifact from a bounded real-production doorway QD campaign (issue #5308). Archived as a test fixture; archive.json schema adversarial_qd_archive.v1.",
+  "git_head": "959e55d9b10895d961f9ff10cd4cab24f8b32a8a",
+  "issue": 5308,
+  "schema_version": "adversarial-qd-campaign-run.v1",
+  "smoke": false,
+  "wall_clock_seconds": 63.372
+}

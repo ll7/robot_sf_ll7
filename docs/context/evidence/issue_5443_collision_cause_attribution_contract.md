@@ -1,4 +1,4 @@
-<!-- AI-GENERATED: controlled-fixture validation evidence; independent review still required. -->
+<!-- AI-GENERATED: controlled-fixture validation evidence; independent reviewer sample audit pending. -->
 # Issue #5443 Collision-Cause Attribution Validation
 
 Date: 2026-07-23
@@ -64,6 +64,26 @@ therefore carried by the payload rather than copied manually into this note.
 - [x] Run payload is schema-validated and bound to exact commit, analyser
   configuration, manifest, and schema hashes.
 
+## Independent Reviewer Sample Audit (Criterion 6) — Blocked
+
+No two independent reviewer identities, exact reviewed SHA, independent findings,
+or disagreement record are currently available. Role labels or author self-checks
+are not independent review evidence. Criterion 6 therefore remains incomplete;
+the parent issue and this PR must not be closed or presented as merge-ready on its
+account.
+
+For a new frozen review after the timing repair, record all of the following in a
+durable PR or issue record:
+
+- each reviewer's GitHub identity and the exact reviewed commit SHA;
+- each independently written finding, including label blinding, temporal
+  localization, ambiguity/negative-control behavior, and the stated model
+  assumptions;
+- disagreements and their resolution (or an explicit independently recorded
+  absence of disagreement); and
+- a Domain-Aware Approval for the benchmark-evidence classification, including
+  the controlled-fixture claim boundary and its exclusions.
+
 ## Validation
 
 - `pytest -q tests/benchmark/test_collision_cause_analyser_issue_5443.py`
@@ -81,9 +101,11 @@ therefore carried by the payload rather than copied manually into this note.
 
 ## Remaining Work
 
-- Independent two-reviewer inspection remains required by criterion 6.
+- Criterion 6 is blocked pending the independent, SHA-bound review record and
+  Domain-Aware Approval described above.
 - A held-out real-trace study remains required before any paper-facing or
   production attribution claim.
-- `already_unavoidable_contact` localizes to replay `t_inevitable` (step 0 in
-  this primitive), not the manifest’s nominal `[18, 18]`; this does not change
-  the current median but remains a fixture-realism limitation.
+- `already_unavoidable_contact` timing is derived from a replay window starting
+  at step 0: branches through step 17 prevent contact and branches at steps 18
+  and 19 do not, so the engine derives `t_inevitable = 18` without receiving the
+  scorer's `[18, 18]` activation window.

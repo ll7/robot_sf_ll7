@@ -164,7 +164,7 @@ def _repulsion_direction(
     *,
     epsilon: float,
 ) -> np.ndarray:
-    """Return a unit repulsion vector away from a neighbor, falling back to anti-velocity."""
+    """Return normalized away/anti-velocity direction, or zero when both degenerate."""
     away = -relative_position
     norm = float(np.linalg.norm(away))
     if norm > epsilon:

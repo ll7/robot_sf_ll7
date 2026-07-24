@@ -258,3 +258,75 @@ def test_classify_held_out_evidence_fail_closed() -> None:
         )
         == "eligible_held_out_diagnostic"
     )
+
+
+def test_verify_same_planner_contract() -> None:
+    """Provisional #3275 input validates hashes but cannot pose as a final contract."""
+    import json
+    from pathlib import Path
+
+    from robot_sf.adversarial.disjoint_evaluation import verify_same_planner_contract
+
+    contract_path = Path("configs/adversarial/issue_3275_same_planner_contract.json")
+    archive_path = Path("docs/context/evidence/issue_5305_certified_archive/archive.json")
+
+    assert contract_path.exists()
+    assert archive_path.exists()
+
+    contract_data = json.loads(contract_path.read_text(encoding="utf-8"))
+    raw_bytes = archive_path.read_bytes()
+    archive_data = json.loads(raw_bytes.decode("utf-8"))
+
+    result = verify_same_planner_contract(contract_data, archive_data, raw_bytes)
+    assert result["checks_passed"] is False
+    assert result["status"] == "failed"
+    assert result["fit_entry_count"] == 12
+    assert result["excluded_entry_count"] == 5
+    assert not any(
+        reason.startswith("external_prerequisite_unsatisfied:issue=6139")
+        for reason in result["blocking_reasons"]
+    )
+    assert (
+        "fit_entry_not_benchmark_eligible:"
+        "issue5305_classic_group_crossing_medium_24f49e195565:stress_only"
+        in result["blocking_reasons"]
+    )
+    assert (
+        "candidate_manifest_not_frozen:not_materialized_pending_issue_6104"
+        in (result["blocking_reasons"])
+    )
+
+
+def test_verify_same_planner_contract_rejects_missing_design_and_archive_inputs() -> None:
+    """Every omitted contract dimension blocks before a held-out run can begin."""
+    from robot_sf.adversarial.disjoint_evaluation import verify_same_planner_contract
+
+    contract = {
+        "archive_raw_sha256": "a" * 64,
+        "archive_payload_sha256": "b" * 64,
+        "fit_entry_ids": ["fit-entry"],
+        "excluded_entry_ids": ["excluded-entry"],
+        "fit_entries_payload_sha256": "c" * 64,
+    }
+
+    result = verify_same_planner_contract(contract, {"entries": "not-a-list"}, b"wrong")
+
+    assert result["checks_passed"] is False
+    reasons = set(result["blocking_reasons"])
+    assert {
+        "eval_scenario_family_mismatch:expected=classic_cross_trap_medium:actual=None",
+        "fit_scenario_family_missing",
+        "target_planner_config_sha256_invalid",
+        "search_space_path_missing",
+        "study_parameters_missing",
+        "power_sensitivity_missing",
+        "outcome_admission_missing",
+        "decision_rule_missing",
+        "external_prerequisites_missing",
+        "recertification_lineage_missing",
+        "archive_entries_not_list",
+        "missing_fit_entries:['fit-entry']",
+        "missing_excluded_entries:['excluded-entry']",
+    } <= reasons
+    assert any(reason.startswith("raw_archive_hash_mismatch:expected=") for reason in reasons)
+    assert any(reason.startswith("archive_payload_hash_mismatch:expected=") for reason in reasons)

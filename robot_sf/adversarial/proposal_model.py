@@ -17,6 +17,87 @@ from robot_sf.adversarial.scenario_manifest import (
 )
 
 
+def isolate_fit_entries(
+    archive_data: dict[str, Any],
+    *,
+    allowed_fit_ids: set[str] | list[str] | None = None,
+    target_planner: str | None = None,
+) -> dict[str, Any]:
+    """Filter archive_data entries to isolate train-only fit records."""
+    if not isinstance(archive_data, dict):
+        return {"schema_version": "adversarial_failure_archive.v1", "entries": []}
+
+    entries = archive_data.get("entries", [])
+    if not isinstance(entries, list):
+        return {**archive_data, "entries": []}
+
+    allowed_set = set(allowed_fit_ids) if allowed_fit_ids is not None else None
+    fit_entries = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        archive_id = entry.get("archive_id")
+        planner = (
+            entry.get("target_planner")
+            or (entry.get("provenance") or {}).get("target_planner")
+            or (entry.get("mechanism_cluster_key") or {}).get("policy")
+        )
+        if allowed_set is not None and archive_id not in allowed_set:
+            continue
+        if target_planner is not None and planner != target_planner:
+            continue
+        fit_entries.append(entry)
+
+    res = dict(archive_data)
+    res["entries"] = fit_entries
+    return res
+
+
+def _parse_archive_payload(
+    archive_path_or_data: str | Path | dict[str, Any] | None,
+    allowed_fit_ids: set[str] | list[str] | None,
+    target_planner: str | None,
+) -> tuple[str, str, list[dict[str, Any]]]:
+    """Parse raw archive payload and return (state, state_reason, entries)."""
+    if archive_path_or_data is None:
+        return "blocked", "missing_archive", []
+
+    if isinstance(archive_path_or_data, (str, Path)):
+        path = Path(archive_path_or_data)
+        if not path.exists() or path.stat().st_size == 0:
+            return "blocked", "missing_or_empty_archive_file", []
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = archive_path_or_data
+
+    if not isinstance(data, dict) or "entries" not in data:
+        return "blocked", "malformed_archive_payload", []
+
+    if allowed_fit_ids is not None or target_planner is not None:
+        data = isolate_fit_entries(
+            data, allowed_fit_ids=allowed_fit_ids, target_planner=target_planner
+        )
+
+    try:
+        failure_archive_feature_rows(data)
+    except ValueError as exc:
+        return "blocked", f"invalid_failure_archive_schema: {exc}", []
+
+    raw_entries = data.get("entries", [])
+    if not isinstance(raw_entries, list):
+        return "blocked", "malformed_archive_entries", []
+    if not raw_entries:
+        return "blocked", "empty_archive_entries", []
+    if any(
+        not isinstance(entry, dict) or not isinstance(entry.get("candidate", {}), dict)
+        for entry in raw_entries
+    ):
+        return "blocked", "missing_candidate_metadata", []
+
+    return "active", "archive_loaded", raw_entries
+
+
 class FailureArchiveProposalModel:
     """A deterministic ranking and proposal model over failure archive metadata."""
 
@@ -24,70 +105,59 @@ class FailureArchiveProposalModel:
         self,
         archive_path_or_data: str | Path | dict[str, Any] | None = None,
         search_space: SearchSpaceConfig | None = None,
+        *,
+        allowed_fit_ids: set[str] | list[str] | None = None,
+        target_planner: str | None = None,
     ) -> None:
         """Initialize the FailureArchiveProposalModel.
 
         Args:
             archive_path_or_data: Filepath or parsed dictionary of archive entries.
             search_space: Search space bounds for normalizing distance metrics.
+            allowed_fit_ids: Optional set/list of exact entry archive_ids permitted for fitting.
+            target_planner: Optional target planner identifier to isolate fit entries.
         """
         self.archive_path_or_data = archive_path_or_data
         self.search_space = search_space
         self.entries: list[dict[str, Any]] = []
-        self.state = "active"
-        self.state_reason = "archive_loaded"
-
-        # Load archive data
-        if archive_path_or_data is None:
-            self.state = "blocked"
-            self.state_reason = "missing_archive"
-            return
 
         try:
-            if isinstance(archive_path_or_data, (str, Path)):
-                path = Path(archive_path_or_data)
-                if not path.exists() or path.stat().st_size == 0:
-                    self.state = "blocked"
-                    self.state_reason = "missing_or_empty_archive_file"
-                    return
-                with open(path, encoding="utf-8") as f:
-                    data = json.load(f)
-            else:
-                data = archive_path_or_data
-
-            if not isinstance(data, dict) or "entries" not in data:
-                self.state = "blocked"
-                self.state_reason = "malformed_archive_payload"
-                return
-
-            try:
-                failure_archive_feature_rows(data)
-            except ValueError as exc:
-                self.state = "blocked"
-                self.state_reason = f"invalid_failure_archive_schema: {exc}"
-                return
-
-            raw_entries = data.get("entries", [])
-            if not isinstance(raw_entries, list):
-                self.state = "blocked"
-                self.state_reason = "malformed_archive_entries"
-                return
-            if not raw_entries:
-                self.state = "blocked"
-                self.state_reason = "empty_archive_entries"
-                return
-            if any(
-                not isinstance(entry, dict) or not isinstance(entry.get("candidate", {}), dict)
-                for entry in raw_entries
-            ):
-                self.state = "blocked"
-                self.state_reason = "missing_candidate_metadata"
-                return
-            self.entries = raw_entries
-            self.state_reason = "archive_loaded"
+            self.state, self.state_reason, self.entries = _parse_archive_payload(
+                archive_path_or_data, allowed_fit_ids, target_planner
+            )
         except (ValueError, TypeError, json.JSONDecodeError, OSError):
             self.state = "blocked"
             self.state_reason = "archive_load_error"
+            self.entries = []
+
+    def audit_feature_semantics(
+        self,
+        target_family: str | None = None,
+        *,
+        require_same_family: bool = True,
+    ) -> dict[str, Any]:
+        """Audit feature representation semantics across archive entries."""
+        if not self.entries:
+            return {"passed": False, "reason": "empty_archive_entries", "families": []}
+        families = set()
+        for e in self.entries:
+            fam = e.get("scenario_family") or e.get("cluster_key")
+            if isinstance(fam, dict):
+                fam = fam.get("scenario_family", "unknown_family")
+            if not fam:
+                fam = "unknown_family"
+            families.add(str(fam))
+
+        is_single_family = len(families) <= 1
+        matches_target = target_family is None or (len(families) == 1 and target_family in families)
+        passed = is_single_family and matches_target
+        reason = "ok" if passed else "cross_family_feature_transfer_unverified"
+        return {
+            "passed": passed,
+            "reason": reason,
+            "families": sorted(families),
+            "feature_representation": "normalized_l1_scalar_bounds",
+        }
 
     def get_tabular_view(self) -> list[dict[str, Any]]:
         """Build a tabular feature view from archive entries."""

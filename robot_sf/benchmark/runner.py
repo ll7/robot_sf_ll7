@@ -315,21 +315,6 @@ NATIVE_COMMAND_RUNTIME_FIELD: str = "planner_step_runtime_seconds"
 _episode_identity_hash = episode_identity_hash
 
 
-def _config_torch_worker(planner: Any) -> None:
-    """Configure torch for deterministic single-threaded execution in a forked worker."""
-    torch = try_import("torch")
-    if torch is None:
-        return
-    torch.set_num_threads(1)
-    seed = getattr(planner, "_seed", 0)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    if hasattr(torch.backends, "cudnn"):
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-
-
 def _planner_foresight_diagnostics(planner: Any) -> dict[str, Any] | None:
     """Return serializable live foresight diagnostics from a planner, when available.
 
@@ -345,6 +330,23 @@ def _planner_foresight_diagnostics(planner: Any) -> dict[str, Any] | None:
     except Exception:  # pragma: no cover - diagnostics must not break policy execution
         return None
     return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
+
+
+def _config_torch_worker(planner: Any) -> None:
+    """Configure torch for deterministic single-threaded execution in a forked worker."""
+    torch = try_import("torch")
+    if torch is None:
+        return
+    torch.set_num_threads(1)
+    seed = getattr(planner, "_seed", 0)
+    if seed is None:
+        seed = 0
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 
 def _planner_step_worker(conn: Any, planner: Any) -> None:

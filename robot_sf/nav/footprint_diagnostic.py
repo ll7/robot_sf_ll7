@@ -569,7 +569,7 @@ def _validate_footprints(raw_footprints: Any) -> list[Mapping[str, Any]]:
 
 
 def _validate_footprint_entry(entry: Mapping[str, Any]) -> None:
-    """Validate a single footprint entry's kind, id, display_name, and dimension fields."""
+    """Validate a single footprint entry's kind, display_name, and dimension fields."""
     footprint_id = str(entry["id"])
     kind = entry.get("kind")
     if kind not in (FOOTPRINT_KIND_CIRCULAR, FOOTPRINT_KIND_RECTANGULAR):

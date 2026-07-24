@@ -47,6 +47,22 @@ Geometry checks:
 - finite start and goal coordinates within map bounds,
 - start/goal not inside static obstacles,
 - inflated global path existence using the classic A* planner with no inflation fallback,
+- **continuous swept-envelope validation of the planned A* path** (issue #6139): after A*
+  returns a collision-free grid path, the certifier re-validates the planned polyline
+  against the same parsed obstacle geometry and robot envelope the simulator uses. A
+  grid-inflated A* path can still cut a diagonal corner that the continuous robot disc
+  cannot pass, so the certifier measures the full-polyline clearance
+  (``LineString(path).distance(obstacles) - robot_radius``) and fails closed as
+  ``geometrically_infeasible`` when the swept envelope clips an obstacle corner
+  (negative clearance), when a planned vertex is clipped, or when the geometry is
+  invalid, empty, or otherwise unverifiable. The occupancy-grid/A* verdict
+  (``inflated_collision_free_path``) and the continuous swept-disc verdict
+  (``swept_envelope``), and an executable runtime collision verdict
+  (``simulator_obstacle_collision``) are recorded together for the discriminating
+  check. The runtime verdict replays conservative path samples through
+  ``ContinuousOccupancy.is_obstacle_collision`` using the parsed simulator obstacle
+  segments; it is distinct from the exact swept-envelope calculation. Every accepted
+  path keeps finite non-negative full-polyline clearance for the declared radius.
 - shortest inflated path length,
 - path length ratio against direct start-goal distance,
 - authored route static clearance against obstacles.

@@ -1,0 +1,76 @@
+{
+  "config": "configs/algos/dwa_global_route_probe.yaml",
+  "episodes": [
+    {
+      "collision_event": false,
+      "constraint_reason_counts": {
+        "best_feasible": 100
+      },
+      "episode_id": "bottleneck_timeout",
+      "first_all_infeasible_step": null,
+      "first_infeasible_candidate_step": null,
+      "global_route_probe_activated_any_step": true,
+      "global_route_probe_first_activation_step": 0,
+      "last_selected_command": {
+        "v_mps": 1.0,
+        "w_radps": -0.07500000000000001
+      },
+      "last_selected_score": 3.963602535486322,
+      "route_complete": false,
+      "route_progress": {
+        "final_distance_to_goal_m": 4.87536344379083,
+        "final_route_progress_from_start_m": -2.87536244379083,
+        "initial_distance_to_goal_m": 1.9992237537893667,
+        "max_route_progress_from_start_m": 1.5388868998358158,
+        "min_distance_to_goal_m": 0.46111410016418425,
+        "net_progress_m": -2.8761396900014633,
+        "progress_ratio_of_initial": -1.4386282098489345,
+        "skipped_non_finite_cells": 0,
+        "skipped_non_finite_rows": 0
+      },
+      "scenario_id": "classic_bottleneck_medium",
+      "seed": 131,
+      "steps": 100,
+      "termination_reason": "max_steps",
+      "timeout_event": true,
+      "trace_step_count": 100
+    },
+    {
+      "collision_event": false,
+      "constraint_reason_counts": {
+        "best_feasible": 100
+      },
+      "episode_id": "t_intersection_collision",
+      "first_all_infeasible_step": null,
+      "first_infeasible_candidate_step": null,
+      "global_route_probe_activated_any_step": true,
+      "global_route_probe_first_activation_step": 0,
+      "last_selected_command": {
+        "v_mps": 1.0,
+        "w_radps": 0.0
+      },
+      "last_selected_score": 3.3372504780535195,
+      "route_complete": false,
+      "route_progress": {
+        "final_distance_to_goal_m": 3.0517741135643845,
+        "final_route_progress_from_start_m": 1.337131535324871,
+        "initial_distance_to_goal_m": 4.388204777779539,
+        "max_route_progress_from_start_m": 3.406652901154344,
+        "min_distance_to_goal_m": 0.9822527477349118,
+        "net_progress_m": 1.3364306642151549,
+        "progress_ratio_of_initial": 0.3045506606670707,
+        "skipped_non_finite_cells": 0,
+        "skipped_non_finite_rows": 0
+      },
+      "scenario_id": "classic_t_intersection_low",
+      "seed": 161,
+      "steps": 100,
+      "termination_reason": "max_steps",
+      "timeout_event": true,
+      "trace_step_count": 100
+    }
+  ],
+  "issue": 5331,
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "schema_version": "dwa-global-route-probe-trace.v1"
+}

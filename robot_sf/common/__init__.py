@@ -59,6 +59,7 @@ from robot_sf.common.math_utils import (
 )
 from robot_sf.common.matplotlib_utils import ensure_interactive_backend, is_headless_environment
 from robot_sf.common.metrics_utils import metric_samples
+from robot_sf.common.optional_import import require_extra, try_import
 from robot_sf.common.seed import SeedReport, set_global_seed
 from robot_sf.common.types import (
     Circle2D,
@@ -114,6 +115,9 @@ __all__ = [  # noqa: RUF022 - Grouped by source module for clarity
     # Seed management (from .seed)
     "SeedReport",
     "set_global_seed",
+    # Optional import helpers (from .optional_import)
+    "try_import",
+    "require_extra",
     # Geometry
     "euclid_dist",
     # Hardware helpers (from .hardware)

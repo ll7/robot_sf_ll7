@@ -181,13 +181,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up matrixed core CI environment
+      - name: Set up matrixed compatibility CI environment
         uses: ./.github/actions/setup-ci-python
         with:
           python-version: ${{ matrix.python }}
-          sync-args: "--frozen"
+          sync-args: "--all-extras --frozen"
 
-      - name: Run core compatibility tests
+      - name: Run compatibility tests with full extras
         run: >-
           uv run pytest tests/common tests/contract tests/factories tests/gym_env tests/maps
           tests/nav tests/ped_npc tests/render tests/scenarios tests/sensor tests/sim tests/unit

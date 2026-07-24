@@ -569,7 +569,7 @@ def _validate_footprints(raw_footprints: Any) -> list[Mapping[str, Any]]:
 
 
 def _validate_footprint_entry(entry: Mapping[str, Any]) -> None:
-    """Validate a single footprint entry's kind, display_name, and dimension fields."""
+    """Validate an entry's kind, display name, status, notes, and kind-specific dimensions."""
     footprint_id = str(entry["id"])
     kind = entry.get("kind")
     if kind not in (FOOTPRINT_KIND_CIRCULAR, FOOTPRINT_KIND_RECTANGULAR):
@@ -680,7 +680,8 @@ def _result_to_row(result: FootprintClearanceResult) -> dict[str, Any]:
     """Serialize a FootprintClearanceResult to a JSON-compatible dictionary row.
 
     Returns:
-        Dictionary with footprint_id, kind, clearance values, status, and method.
+        Dictionary with footprint identity, kind, clearance values, status, collision flag,
+        sample count, and method.
     """
     return {
         "footprint_id": result.footprint_id,
@@ -787,7 +788,7 @@ def _is_nonnegative_finite(value: Any) -> bool:
 
 
 def _is_lowercase_snake_case(value: str) -> bool:
-    """Return True if value matches lowercase snake_case naming."""
+    """Return whether value starts lowercase and then uses lowercase characters, digits, or `_`."""
     if not value:
         return False
     return value[0].islower() and all(

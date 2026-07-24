@@ -117,17 +117,30 @@ def build_social_compliance_episode_block(
     try:
         timestep = float(dt)
         radius = float(comfort_radius_m)
+        robot_radius = float(getattr(data, "robot_radius", None))
+        ped_radius = float(getattr(data, "ped_radius", None))
     except (TypeError, ValueError):
         return unavailable_social_compliance_block()
-    if not math.isfinite(timestep) or timestep <= 0.0 or not math.isfinite(radius) or radius < 0.0:
+    if (
+        not math.isfinite(timestep)
+        or timestep <= 0.0
+        or not math.isfinite(radius)
+        or radius < 0.0
+        or not math.isfinite(robot_radius)
+        or robot_radius < 0.0
+        or not math.isfinite(ped_radius)
+        or ped_radius < 0.0
+    ):
         return unavailable_social_compliance_block()
 
     positions = peds_pos[..., :2]
     robot = robot_pos[:, None, :2]
-    finite = np.isfinite(positions).all(axis=2) & np.isfinite(robot).all(axis=2)
+    if not np.isfinite(positions).all() or not np.isfinite(robot).all():
+        return unavailable_social_compliance_block()
     distances = np.linalg.norm(positions - robot, axis=2)
-    exposed_steps = int(np.count_nonzero(finite & (distances <= radius)))
-    support_count = int(np.count_nonzero(finite))
+    surface_clearance = distances - robot_radius - ped_radius
+    exposed_steps = int(np.count_nonzero(surface_clearance <= radius))
+    support_count = int(positions.shape[0] * positions.shape[1])
     row = _metric_row(
         "comfort_exposure_person_s",
         status="available" if support_count else "unavailable",

@@ -57,6 +57,28 @@ def test_empty_crowd_is_not_applicable_not_zero() -> None:
     assert "value" not in block["metrics"]["comfort_exposure_person_s"]
 
 
+def test_comfort_exposure_uses_surface_clearance() -> None:
+    """Footprints count as exposed when their surfaces enter the comfort radius."""
+    block = build_social_compliance_episode_block(_episode(), comfort_radius_m=0.35)
+
+    comfort = block["metrics"]["comfort_exposure_person_s"]
+    assert comfort["status"] == "available"
+    assert comfort["value"] == 1.0
+
+
+def test_invalid_geometry_fails_closed() -> None:
+    """Invalid trajectory coordinates or radii cannot produce an available float."""
+    invalid_positions = _episode()
+    invalid_positions.peds_pos[1, 0, 0] = np.nan
+    invalid_position_block = build_social_compliance_episode_block(invalid_positions)
+    assert invalid_position_block["metrics"]["comfort_exposure_person_s"]["status"] == "unavailable"
+
+    invalid_radius = _episode()
+    invalid_radius.robot_radius = -0.1
+    invalid_radius_block = build_social_compliance_episode_block(invalid_radius)
+    assert invalid_radius_block["metrics"]["comfort_exposure_person_s"]["status"] == "unavailable"
+
+
 def test_compute_metrics_emits_block_without_changing_existing_scalars() -> None:
     """The block is additive and existing scalar metrics remain available."""
     metrics = compute_all_metrics(_episode(), horizon=3)
@@ -88,3 +110,30 @@ def test_flatten_and_aggregate_preserve_status_support_and_values() -> None:
     assert comfort["status_counts"] == {"available": 1}
     assert comfort["support_count"] == 3
     assert comfort["mean"] == 1.0
+
+
+def test_aggregate_normalizes_legacy_social_rows() -> None:
+    """Legacy rows without a social status remain unavailable with zero support."""
+    record = {
+        "episode_id": "legacy-social-1",
+        "scenario_id": "fixture",
+        "seed": 1,
+        "scenario_params": {"algo": "planner_a"},
+        "metrics": {
+            "social_compliance": {
+                "metrics": {
+                    "comfort_exposure_person_s": {
+                        "support_count": 4,
+                    }
+                }
+            }
+        },
+    }
+    aggregate = compute_aggregates(
+        [record],
+        group_by="scenario_params.algo",
+    )
+
+    comfort = aggregate["planner_a"]["social_compliance"]["metrics"]["comfort_exposure_person_s"]
+    assert comfort["status_counts"] == {"unavailable": 1}
+    assert comfort["support_count"] == 0

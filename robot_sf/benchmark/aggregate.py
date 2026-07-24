@@ -463,9 +463,12 @@ def _social_compliance_group_summary(rows: list[dict[str, Any]]) -> dict[str, An
         status_key = f"social_compliance.{metric_id}.status"
         support_key = f"social_compliance.{metric_id}.support_count"
         value_key = f"social_compliance.{metric_id}"
-        statuses = [row.get(status_key) for row in rows]
+        statuses = [row.get(status_key) or "unavailable" for row in rows]
         values = [row[value_key] for row in rows if isinstance(row.get(value_key), int | float)]
-        support = [row.get(support_key, 0) for row in rows]
+        support = [
+            row.get(support_key, 0) if status == "available" else 0
+            for row, status in zip(rows, statuses, strict=True)
+        ]
         metric_summary: dict[str, Any] = {
             "status_counts": dict(Counter(str(status) for status in statuses)),
             "support_count": int(sum(value for value in support if isinstance(value, int | float))),

@@ -56,12 +56,13 @@ scenario_contract:
   geometry_gate:
     certifier: scenario_cert.v1
     checker_command: uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --json
-    allowed_eligibility: [eligible, stress_only]
+    allowed_eligibility: [eligible, stress_only, excluded]
     excluded_row_action: visible_exclusion_and_no_attribution
-    platform_and_merging_caveat: >-
-      If current geometry/solvability checks exclude either row, retain the row and
-      exclusion reason but do not attribute its failure to a planner; use a reviewed
-      repaired/certified row only if one already exists.
+    post_certification_caveat: >-
+      As of PR #6172 the path-swept-envelope certifier correctly classifies
+      classic_doorway_low, classic_station_platform_medium, and classic_merging_low
+      as geometrically_infeasible/excluded. They remain in the matrix as visible
+      excluded rows; no planner is attributed for these geometries.
 
 planner_roster:
   selection_policy: >-

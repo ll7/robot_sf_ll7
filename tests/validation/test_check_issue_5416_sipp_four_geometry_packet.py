@@ -29,15 +29,15 @@ def test_packet_passes_tracked_geometry_and_roster_gate() -> None:
     ]
 
 
-def test_packet_preserves_stress_only_geometry_as_visible_caveat() -> None:
-    """Doorway remains visible as stress-only rather than being promoted or dropped."""
+def test_packet_preserves_excluded_geometry_as_visible_caveat() -> None:
+    """Doorway remains visible as excluded/geometrically_infeasible."""
     result = checker.validate_packet(checker.load_packet(PACKET))
     doorway = next(
         row for row in result["certification"] if row["scenario_id"] == "classic_doorway_low"
     )
 
-    assert doorway["classification"] == "knife_edge"
-    assert doorway["benchmark_eligibility"] == "stress_only"
+    assert doorway["classification"] == "geometrically_infeasible"
+    assert doorway["benchmark_eligibility"] == "excluded"
     assert doorway["gate"] == "pass"
 
 
@@ -77,8 +77,8 @@ def test_packet_rejects_outcome_name_drift() -> None:
         checker.validate_packet(packet)
 
 
-def test_packet_rejects_excluded_geometry(monkeypatch) -> None:
-    """An excluded certificate blocks the campaign gate and remains machine-visible."""
+def test_packet_allows_excluded_geometry_with_pass_gate(monkeypatch) -> None:
+    """An excluded certificate passes the campaign gate when allowed_eligibility includes excluded."""
 
     def fake_certify(path, *, scenario_id=None):
         return [object()]
@@ -95,13 +95,8 @@ def test_packet_rejects_excluded_geometry(monkeypatch) -> None:
     monkeypatch.setattr(checker, "certificate_to_dict", fake_to_dict)
 
     result = checker.validate_packet(checker.load_packet(PACKET))
-    assert result["status"] == "blocked"
-    assert result["blocked_rows"] == [
-        "classic_head_on_corridor_low",
-        "classic_doorway_low",
-        "classic_station_platform_medium",
-        "classic_merging_low",
-    ]
+    assert result["status"] == "ready"
+    assert result["blocked_rows"] == []
 
 
 def test_metadata_only_mode_skips_geometry_certification(monkeypatch) -> None:

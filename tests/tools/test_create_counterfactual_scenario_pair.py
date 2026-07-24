@@ -233,7 +233,7 @@ def test_create_supported_occluder_timing_pair(tmp_path: Path) -> None:
             "--seed",
             "111",
             "--scenario-config",
-            "configs/scenarios/single/issue_2756_occluded_emergence_live.yaml",
+            "configs/scenarios/single/issue_3323_occluded_emergence_near_field_live.yaml",
             "--output",
             str(output_path),
         ]
@@ -281,7 +281,7 @@ def test_occluder_timing_requires_pedestrian_id_without_output(tmp_path: Path, c
             "--seed",
             "111",
             "--scenario-config",
-            "configs/scenarios/single/issue_2756_occluded_emergence_live.yaml",
+            "configs/scenarios/single/issue_3323_occluded_emergence_near_field_live.yaml",
             "--output",
             str(output_path),
         ]

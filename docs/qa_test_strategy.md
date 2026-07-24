@@ -79,9 +79,9 @@ Contributors must run validation commands matching their change class. The repos
 | **Coverage Analysis** | `uv run pytest --cov=robot_sf tests` | Measures statement and branch coverage in `robot_sf/`. | Diagnostic coverage collection (see [Coverage Guide](./coverage_guide.md)). |
 | **Coverage Comparison** | `uv run python scripts/coverage/compare_coverage.py --current output/coverage/coverage.json --baseline output/coverage/.coverage-baseline.json --format terminal` | Compares current coverage against saved baseline. | Prevents silent coverage regressions. |
 | **Reproducibility Diagnostic** | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/benchmark_repro_check.py` | Diagnostic reproducibility check across canonical seeds and metrics. | Validates same-seed metric equivalence (`workflow_dispatch` or local). |
-| **Benchmark Campaign** | `uv run python scripts/tools/run_benchmark_release.py --config <config-path>` | Config-first benchmark release campaign runner. | Nominal or paper-grade benchmark evidence. |
+| **Benchmark Campaign** | `uv run python scripts/tools/run_benchmark_release.py --manifest <manifest-path>` | Manifest-driven benchmark release campaign runner. | Nominal or paper-grade benchmark evidence. |
 | **Documentation Integrity** | `uv run python scripts/dev/check_docs_evidence_integrity.py --files <file-list>` | Checks markdown links, evidence references, and cited command paths. | Documentation-only and instruction-only PR validation. |
-| **Mutation Diagnostics** | *(Diagnostic-only; future child issue)* | Sensitivity analysis testing test suite strength against artificial mutants. | Diagnostic probe for test quality (not a required CI gate). |
+| **Mutation Diagnostics** | `uv run python scripts/dev/mutation_ratchet.py --check` | Weekly or manually dispatched bounded mutation-strength ratchet; see [mutation-testing triage](../mutation_testing_triage.md). | Diagnostic probe for test quality (not a required PR gate). |
 
 ---
 

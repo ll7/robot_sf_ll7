@@ -20,7 +20,6 @@ from robot_sf.benchmark.failure_mechanism_classifier import (
 )
 from robot_sf.benchmark.failure_mechanism_taxonomy import (
     MECHANISM_CONFIDENCES,
-    MECHANISM_EVIDENCE_MODES,
     MECHANISM_LABELS,
 )
 

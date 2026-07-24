@@ -43,7 +43,6 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from shapely.geometry import LineString, Point
 
 from robot_sf.benchmark.map_runner_env import build_env_config
 from robot_sf.benchmark.utils import _git_hash_fallback
@@ -65,6 +64,7 @@ from robot_sf.scenario_certification.v1 import (
     _polyline_length,
     _route_start_goal,
     certify_scenario,
+    measure_planned_path_clearance,
 )
 from robot_sf.training.scenario_loader import build_robot_config_from_scenario, load_scenarios
 
@@ -1633,26 +1633,17 @@ def _measure_planned_path_clearance(
 ) -> tuple[int, float | None, float | None]:
     """Measure vertex and full-polyline clearance of a planned A* path.
 
+    Thin compatibility wrapper over the canonical
+    :func:`robot_sf.scenario_certification.v1.measure_planned_path_clearance` so the
+    certifier (issue #6139) and this diagnostic oracle share one continuous
+    swept-envelope implementation.
+
     Returns:
         Tuple of (clipped_vertex_count, minimum_vertex_clearance_m,
         minimum_path_clearance_m). Any non-finite measurement returns ``None``
         clearances so the caller can fail closed without emitting non-standard JSON.
     """
-    clipped = 0
-    min_vertex_clearance: float | None = None
-    for vertex in path:
-        vertex_clearance = float(Point(vertex).distance(obstacle_union) - robot_radius)
-        if not math.isfinite(vertex_clearance):
-            return clipped, None, None
-        if vertex_clearance < 0.0:
-            clipped += 1
-        if min_vertex_clearance is None or vertex_clearance < min_vertex_clearance:
-            min_vertex_clearance = vertex_clearance
-
-    path_clearance = float(LineString(path).distance(obstacle_union) - robot_radius)
-    if not math.isfinite(path_clearance):
-        return clipped, None, None
-    return clipped, min_vertex_clearance, path_clearance
+    return measure_planned_path_clearance(path, obstacle_union, robot_radius)
 
 
 def build_issue_5596_blind_corner_diagnostic(  # noqa: C901, PLR0912, PLR0915

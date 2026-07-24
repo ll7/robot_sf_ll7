@@ -2393,6 +2393,28 @@ def _finalize_episode_record(  # noqa: C901,PLR0912,PLR0913,PLR0915
     algo_meta["ammv_feasibility"] = evaluate_artifact_command_feasibility(ammv_command_actions)
     if isinstance(planner_runtime_snapshot, dict):
         algo_meta["planner_runtime"] = planner_runtime_snapshot
+        foresight = planner_runtime_snapshot.get("foresight_prediction")
+        if isinstance(foresight, Mapping):
+            # Issue #6190: policy builders expose live predictive-foresight
+            # diagnostics through the standard planner-runtime snapshot. Copy
+            # that episode-time provenance into the canonical metadata block
+            # before enrichment so a model-load fallback becomes structurally
+            # evidence-ineligible in map-runner records as well.
+            algo_meta["foresight_prediction"] = dict(foresight)
+            algo_meta = enrich_algorithm_metadata(
+                algo=algo,
+                metadata=algo_meta,
+                robot_kinematics=robot_kinematics,
+                observation_mode=active_observation_mode,
+                observation_level=active_observation_level,
+            )
+            attach_track_metadata(
+                algo_meta,
+                benchmark_track=benchmark_track,
+                track_schema_version=track_schema_version,
+                observation_level=active_observation_level,
+                observation_mode=active_observation_mode,
+            )
     if record_planner_decision_trace:
         algo_meta["planner_decision_trace"] = {
             "schema_version": "planner-decision-trace.v1",

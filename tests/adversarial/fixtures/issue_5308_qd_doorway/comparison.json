@@ -1,0 +1,40 @@
+{
+  "comparison_type": "equal_budget_qd_vs_single_objective",
+  "grid": {
+    "bins": 5,
+    "cell_count": 25,
+    "x_max": 5.0,
+    "x_min": 0.0,
+    "y_max": 5.0,
+    "y_min": 0.0
+  },
+  "rows": {
+    "map_elites": {
+      "budget": 120,
+      "coverage_fraction": 0.32,
+      "distinct_failure_modes": 2,
+      "filled_cells": 8,
+      "method": "map_elites",
+      "num_admitted_or_best": 12,
+      "num_evaluated": 120,
+      "qd_score": 70.0
+    },
+    "single_objective": {
+      "budget": 120,
+      "coverage_fraction": 0.36,
+      "distinct_failure_modes": 2,
+      "filled_cells": 9,
+      "method": "single_objective",
+      "num_admitted_or_best": 1,
+      "num_evaluated": 120,
+      "qd_score": 103.0
+    }
+  },
+  "schema_version": "adversarial_qd_archive.v1",
+  "summary": {
+    "distinct_mode_delta": 0,
+    "qd_distinct_failure_modes": 2,
+    "qd_filled_cells": 8,
+    "single_objective_unique_failure_modes": 2
+  }
+}

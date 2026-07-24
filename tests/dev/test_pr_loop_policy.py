@@ -73,6 +73,17 @@ def _pr(
     return result
 
 
+def _with_merge_base(
+    result: dict[str, object], *, base_sha: str = "", main_sha: str = ""
+) -> dict[str, object]:
+    """Attach optional merge-base metadata without widening the PR fixture helper."""
+    if base_sha:
+        result["base_sha"] = base_sha
+    if main_sha:
+        result["main_sha"] = main_sha
+    return result
+
+
 def _apply_gate_verdict(result: dict[str, object], gate_verdict: object) -> None:
     """Embed a gate-verdict trailer into a PR dict in-place."""
     if not gate_verdict:
@@ -197,6 +208,65 @@ def test_classify_ready_to_merge() -> None:
         gate_verdict=FULL_SHA,
     )
     assert classify_pr_state(pr) == "ready_to_merge"
+
+
+def test_classify_stale_merge_base() -> None:
+    """Stale merge base should fail closed and not reach ready_to_merge."""
+    pr = _with_merge_base(
+        _pr(
+            4000,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
+        base_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        main_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    )
+    assert classify_pr_state(pr) == "stale_merge_base"
+
+
+def test_classify_stale_merge_base_equal_shas_ok() -> None:
+    """Equal base_sha and main_sha should not trigger stale_merge_base."""
+    pr = _with_merge_base(
+        _pr(
+            4001,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
+        base_sha=FULL_SHA,
+        main_sha=FULL_SHA,
+    )
+    assert classify_pr_state(pr) == "ready_to_merge"
+
+
+def test_classify_stale_merge_base_missing_sha_ok() -> None:
+    """Missing base_sha or main_sha should not trigger stale_merge_base."""
+    pr = _with_merge_base(
+        _pr(
+            4002,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
+        base_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+    assert classify_pr_state(pr) == "ready_to_merge"
+
+    pr2 = _with_merge_base(
+        _pr(
+            4003,
+            overall="success",
+            labels=["merge-ready"],
+            head_sha=FULL_SHA,
+            gate_verdict=FULL_SHA,
+        ),
+        main_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    )
+    assert classify_pr_state(pr2) == "ready_to_merge"
 
 
 def test_classify_no_action_default() -> None:
@@ -539,6 +609,30 @@ def test_evaluate_queue_gate_verdict_missing_reroutes_to_await() -> None:
     assert decision["flow_decision"] == "continue"
 
 
+def test_evaluate_queue_stale_merge_base_rejected() -> None:
+    """A green merge-ready PR with stale merge base must be rejected."""
+    prs = [
+        _with_merge_base(
+            _pr(
+                4040,
+                overall="success",
+                labels=["merge-ready"],
+                head_sha=FULL_SHA,
+                gate_verdict=FULL_SHA,
+            ),
+            base_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            main_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        )
+    ]
+    result = evaluate_queue(prs, max_actions=3)
+    decision = result["decisions"][0]
+    assert decision["state"] == "stale_merge_base"
+    assert decision["action"] == "refresh_snapshot"
+    assert decision["flow_decision"] == "reroute"
+    assert "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" in decision["reason"]
+    assert "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" in decision["reason"]
+
+
 # ---------------------------------------------------------------------------
 # recommend_action
 # ---------------------------------------------------------------------------
@@ -580,6 +674,25 @@ def test_recommend_mark_ready_for_ready() -> None:
     """Ready-to-merge should recommend mark_ready_candidate."""
     decision = recommend_action("ready_to_merge", pr_number=204, actions_remaining=3)
     assert decision.action == "mark_ready_candidate"
+
+
+def test_recommend_stale_merge_base() -> None:
+    """Stale merge base should recommend refresh_snapshot with reroute and SHAs in reason."""
+    decision = recommend_action(
+        "stale_merge_base",
+        pr_number=4010,
+        actions_remaining=3,
+        stale_base_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        current_main_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    )
+    assert decision.action == "refresh_snapshot"
+    assert decision.flow_decision == "reroute"
+    assert decision.reason == (
+        "merge base SHA aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa does not match "
+        "current main SHA bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; "
+        "PR must be rebased onto main"
+    )
+    assert decision.actions_remaining == 2
 
 
 def test_recommend_no_action_for_default() -> None:
@@ -1052,6 +1165,12 @@ def test_flow_decision_failed_validation_reroutes() -> None:
 def test_flow_decision_stale_worktree_reroutes() -> None:
     """Stale worktree should yield reroute."""
     decision = recommend_action("stale_worktree", pr_number=9105, actions_remaining=3)
+    assert decision.flow_decision == "reroute"
+
+
+def test_flow_decision_stale_merge_base_reroutes() -> None:
+    """Stale merge base should yield reroute."""
+    decision = recommend_action("stale_merge_base", pr_number=4020, actions_remaining=3)
     assert decision.flow_decision == "reroute"
 
 

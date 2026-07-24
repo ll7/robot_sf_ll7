@@ -2,17 +2,26 @@
   "schema_version": "issue_3275_same_planner_contract.v2",
   "study_id": "issue_3275_same_planner_contract",
   "title": "Blocked same-planner held-out contract for Issue #3275",
-  "contract_status": "blocked_pending_issue_6139_and_manifest",
+  "contract_status": "blocked_pending_eligible_fit_reselection_and_manifest",
   "external_prerequisites": [
     {
       "issue": 6139,
-      "status": "pending_corrected_recertification",
-      "requirement": "Corrected archive eligibility, final fit IDs, and final archive hashes."
+      "status": "satisfied",
+      "requirement": "Merged #6139 recertification lineage is bound below; eligible-only fit selection remains unresolved.",
+      "merged_pr": 6172
     }
   ],
   "tracked_archive_path": "docs/context/evidence/issue_5305_certified_archive/archive.json",
   "archive_raw_sha256": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
   "archive_payload_sha256": "1d8db3638e3539dca2e06849c0727150aff41ea85a71ee2d22cb1a343bc6d57e",
+  "recertification": {
+    "path": "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json",
+    "file_sha256": "0d643f2c36d0f1f11e2be2351359567215d47ed216d156018fc6909a79a42cfe",
+    "payload_sha256": "7bade1d5008d66eba9dfe6c9c72e72e5e6720e7acb96f17a90a61a4f0798f3d0",
+    "archive_sha256": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
+    "issue": "6139",
+    "fit_entry_eligibility_policy": "eligible_only"
+  },
   "target_planner": "social_force",
   "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
   "fit_scenario_family": "classic_group_crossing_medium",

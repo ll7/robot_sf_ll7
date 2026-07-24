@@ -805,6 +805,93 @@ def _verify_contract_hashes(
     return reasons
 
 
+def _load_recertification_lineage(
+    lineage: Any,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Load a content-addressed recertification artifact, or return blockers."""
+    if not isinstance(lineage, dict):
+        return None, ["recertification_lineage_missing"]
+    path_value = lineage.get("path")
+    if not isinstance(path_value, str) or not path_value.strip():
+        return None, ["recertification_path_missing"]
+    path = Path(path_value)
+    if not path.is_file():
+        return None, [f"recertification_path_missing:{path}"]
+
+    raw_content = path.read_bytes()
+    reasons = []
+    if hashlib.sha256(raw_content).hexdigest() != lineage.get("file_sha256"):
+        reasons.append("recertification_file_hash_mismatch")
+    try:
+        recertification = json.loads(raw_content)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None, reasons + ["recertification_payload_unreadable"]
+    if not isinstance(recertification, dict):
+        return None, reasons + ["recertification_payload_not_object"]
+    return recertification, reasons
+
+
+def _verify_recertification_identity(
+    recertification: dict[str, Any], lineage: dict[str, Any], contract_data: dict[str, Any]
+) -> list[str]:
+    """Verify recertification identity, archive binding, and correction status."""
+    reasons: list[str] = []
+    if recertification.get("recertification_sha256") != lineage.get("payload_sha256"):
+        reasons.append("recertification_payload_hash_mismatch")
+    if recertification.get("archive_sha256") != lineage.get("archive_sha256"):
+        reasons.append("recertification_archive_hash_mismatch")
+    if recertification.get("archive_sha256") != contract_data.get("archive_raw_sha256"):
+        reasons.append("recertification_archive_not_bound_to_contract")
+    if recertification.get("issue") != lineage.get("issue"):
+        reasons.append("recertification_issue_mismatch")
+    if recertification.get("schema_version") != "issue_6139_recertification.v1":
+        reasons.append("recertification_schema_invalid")
+    correction = recertification.get("correction")
+    if not isinstance(correction, dict) or correction.get("accepted_archive_modified") is not False:
+        reasons.append("recertification_archive_modification_status_invalid")
+    return reasons
+
+
+def _verify_recertified_fit_eligibility(
+    recertification: dict[str, Any], lineage: dict[str, Any], contract_data: dict[str, Any]
+) -> list[str]:
+    """Require every fit ID to remain benchmark-eligible after recertification."""
+    reasons: list[str] = []
+    if lineage.get("fit_entry_eligibility_policy") != "eligible_only":
+        return ["fit_entry_eligibility_policy_invalid"]
+    records = recertification.get("records")
+    if not isinstance(records, list):
+        return ["recertification_records_missing"]
+    records_by_id = {
+        record.get("archive_id"): record for record in records if isinstance(record, dict)
+    }
+    for fit_entry_id in contract_data.get("fit_entry_ids", []):
+        record = records_by_id.get(fit_entry_id)
+        if not isinstance(record, dict):
+            reasons.append(f"recertification_fit_entry_missing:{fit_entry_id}")
+            continue
+        if record.get("status") != "unchanged":
+            reasons.append(f"recertification_fit_entry_status_invalid:{fit_entry_id}")
+        after = record.get("after")
+        eligibility = after.get("benchmark_eligibility") if isinstance(after, dict) else None
+        if eligibility != "eligible":
+            reasons.append(f"fit_entry_not_benchmark_eligible:{fit_entry_id}:{eligibility}")
+    return reasons
+
+
+def _verify_recertification_lineage(contract_data: dict[str, Any]) -> list[str]:
+    """Bind fit eligibility to the merged #6139 recertification artifact."""
+    lineage = contract_data.get("recertification")
+    recertification, reasons = _load_recertification_lineage(lineage)
+    if recertification is None or not isinstance(lineage, dict):
+        return reasons
+    return (
+        reasons
+        + _verify_recertification_identity(recertification, lineage, contract_data)
+        + _verify_recertified_fit_eligibility(recertification, lineage, contract_data)
+    )
+
+
 def _is_sha256(value: Any) -> bool:
     """Return whether ``value`` is a non-placeholder SHA-256 digest."""
     return isinstance(value, str) and _SHA256_PATTERN.fullmatch(value) is not None
@@ -1080,6 +1167,7 @@ def verify_same_planner_contract(
     blocking_reasons.extend(
         _verify_contract_hashes(contract_data, archive_data, archive_raw_content)
     )
+    blocking_reasons.extend(_verify_recertification_lineage(contract_data))
     blocking_reasons.extend(_verify_same_planner_design(contract_data))
 
     entries = archive_data.get("entries", []) if isinstance(archive_data, dict) else []

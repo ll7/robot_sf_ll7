@@ -282,9 +282,14 @@ def test_verify_same_planner_contract() -> None:
     assert result["status"] == "failed"
     assert result["fit_entry_count"] == 12
     assert result["excluded_entry_count"] == 5
+    assert not any(
+        reason.startswith("external_prerequisite_unsatisfied:issue=6139")
+        for reason in result["blocking_reasons"]
+    )
     assert (
-        "external_prerequisite_unsatisfied:issue=6139:status=pending_corrected_recertification"
-        in (result["blocking_reasons"])
+        "fit_entry_not_benchmark_eligible:"
+        "issue5305_classic_group_crossing_medium_24f49e195565:stress_only"
+        in result["blocking_reasons"]
     )
     assert (
         "candidate_manifest_not_frozen:not_materialized_pending_issue_6104"
@@ -318,6 +323,7 @@ def test_verify_same_planner_contract_rejects_missing_design_and_archive_inputs(
         "outcome_admission_missing",
         "decision_rule_missing",
         "external_prerequisites_missing",
+        "recertification_lineage_missing",
         "archive_entries_not_list",
         "missing_fit_entries:['fit-entry']",
         "missing_excluded_entries:['excluded-entry']",

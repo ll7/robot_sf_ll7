@@ -455,6 +455,23 @@ def _write_frozen_contract_and_outcomes(
         for entry in archive["entries"]
         if entry["scenario_family"] == "classic_group_crossing_medium"
     ]
+    recertification = {
+        "schema_version": "issue_6139_recertification.v1",
+        "issue": "6139",
+        "archive_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
+        "recertification_sha256": "d" * 64,
+        "correction": {"accepted_archive_modified": False},
+        "records": [
+            {
+                "archive_id": entry["archive_id"],
+                "status": "unchanged",
+                "after": {"benchmark_eligibility": "eligible"},
+            }
+            for entry in archive["entries"]
+        ],
+    }
+    recertification_path = tmp_path / "recertification.json"
+    recertification_path.write_text(json.dumps(recertification), encoding="utf-8")
     contract = {
         "study_id": "unit-test-same-planner-contract",
         "contract_status": "frozen",
@@ -462,6 +479,14 @@ def _write_frozen_contract_and_outcomes(
         "tracked_archive_path": archive_path.as_posix(),
         "archive_raw_sha256": hashlib.sha256(archive_path.read_bytes()).hexdigest(),
         "archive_payload_sha256": archive_sha256(archive),
+        "recertification": {
+            "path": recertification_path.as_posix(),
+            "file_sha256": hashlib.sha256(recertification_path.read_bytes()).hexdigest(),
+            "payload_sha256": recertification["recertification_sha256"],
+            "archive_sha256": recertification["archive_sha256"],
+            "issue": "6139",
+            "fit_entry_eligibility_policy": "eligible_only",
+        },
         "target_planner": "social_force",
         "target_planner_config_sha256": _TEST_PLANNER_CONFIG_SHA256,
         "fit_scenario_family": "classic_group_crossing_medium",
@@ -789,9 +814,13 @@ def test_contract_verification_cli(tmp_path: Path, monkeypatch) -> None:
     assert verif["fit_entry_count"] == 12
     assert verif["excluded_entry_count"] == 5
     assert verif["feature_semantics_audit"]["passed"] is False
-    assert (
-        "external_prerequisite_unsatisfied:issue=6139:status=pending_corrected_recertification"
-        in (verif["blocking_reasons"])
+    assert not any(
+        reason.startswith("external_prerequisite_unsatisfied:issue=6139")
+        for reason in verif["blocking_reasons"]
+    )
+    assert any(
+        reason.startswith("fit_entry_not_benchmark_eligible:")
+        for reason in verif["blocking_reasons"]
     )
 
 

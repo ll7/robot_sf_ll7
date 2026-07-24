@@ -252,6 +252,18 @@ def test_build_independent_outcome_evaluation_rejects_incomplete_v2_row_lineage(
     assert "missing lineage fields" in result["reason"]
 
 
+def test_build_independent_outcome_evaluation_requires_a_frozen_v2_contract() -> None:
+    """Even structurally valid v2 rows cannot bypass the frozen study contract."""
+    rows = [_v2_row("proposal", 0, 10.0), _v2_row("random", 0, 0.0)]
+
+    result = build_independent_outcome_evaluation(
+        _v2_payload(rows), budget=1, n_permutations=10, seed=0, outcome_contract=None
+    )
+
+    assert result["status"] == "blocked_invalid_independent_outcomes"
+    assert "require a frozen study contract" in result["reason"]
+
+
 def test_build_independent_outcome_evaluation_rejects_degraded_v2_row() -> None:
     """Rows with fallback or degraded execution status fail closed."""
     rows = [

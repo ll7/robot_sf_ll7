@@ -290,3 +290,37 @@ def test_verify_same_planner_contract() -> None:
         "candidate_manifest_not_frozen:not_materialized_pending_issue_6104"
         in (result["blocking_reasons"])
     )
+
+
+def test_verify_same_planner_contract_rejects_missing_design_and_archive_inputs() -> None:
+    """Every omitted contract dimension blocks before a held-out run can begin."""
+    from robot_sf.adversarial.disjoint_evaluation import verify_same_planner_contract
+
+    contract = {
+        "archive_raw_sha256": "a" * 64,
+        "archive_payload_sha256": "b" * 64,
+        "fit_entry_ids": ["fit-entry"],
+        "excluded_entry_ids": ["excluded-entry"],
+        "fit_entries_payload_sha256": "c" * 64,
+    }
+
+    result = verify_same_planner_contract(contract, {"entries": "not-a-list"}, b"wrong")
+
+    assert result["checks_passed"] is False
+    reasons = set(result["blocking_reasons"])
+    assert {
+        "eval_scenario_family_mismatch:expected=classic_cross_trap_medium:actual=None",
+        "fit_scenario_family_missing",
+        "target_planner_config_sha256_invalid",
+        "search_space_path_missing",
+        "study_parameters_missing",
+        "power_sensitivity_missing",
+        "outcome_admission_missing",
+        "decision_rule_missing",
+        "external_prerequisites_missing",
+        "archive_entries_not_list",
+        "missing_fit_entries:['fit-entry']",
+        "missing_excluded_entries:['excluded-entry']",
+    } <= reasons
+    assert any(reason.startswith("raw_archive_hash_mismatch:expected=") for reason in reasons)
+    assert any(reason.startswith("archive_payload_hash_mismatch:expected=") for reason in reasons)

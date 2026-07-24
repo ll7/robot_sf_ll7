@@ -3068,6 +3068,12 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     values["near_misses"] = robot_ped_summary["near_misses"]
     values["min_distance"] = robot_ped_summary["min_distance"]
     values["mean_distance"] = robot_ped_summary["mean_distance"]
+    # QD behavior-descriptor axes for the MAP-Elites archive (issue #5308):
+    # closest robot/pedestrian distance and minimum time-to-collision. Both are
+    # NaN when there are no pedestrians or no approaching pairs, so the archive
+    # descriptor drops non-finite values rather than admitting empty cells.
+    values["distance_to_human_min"] = distance_to_human_min(data)
+    values["time_to_collision_min"] = time_to_collision_min(data)
     values["min_clearance"] = robot_ped_summary["min_clearance"]
     values["mean_clearance"] = robot_ped_summary["mean_clearance"]
     values["robot_ped_within_5m_frac"] = robot_ped_summary["robot_ped_within_5m_frac"]

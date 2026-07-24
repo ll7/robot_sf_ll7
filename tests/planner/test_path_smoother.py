@@ -83,6 +83,12 @@ def test_degenerate_multi_repeated_point() -> None:
     assert len(result) >= 2
 
 
+def test_degenerate_zero_length_endpoint_segment_preserves_endpoints() -> None:
+    path = [(1.0, 1.0), (2.0, 3.0), (1.0, 1.0)]
+    result = douglas_peucker(path, epsilon=0.1)
+    assert result == [(1.0, 1.0), (1.0, 1.0)]
+
+
 def test_point_ordering() -> None:
     path = [(0.0, 0.0), (2.0, 1.0), (4.0, 0.0), (6.0, 1.0), (8.0, 0.0)]
     result = douglas_peucker(path, epsilon=0.5)

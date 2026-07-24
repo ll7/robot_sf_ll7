@@ -1,0 +1,71 @@
+name: Packaging Extras Matrix
+
+on:
+  pull_request:
+    paths:
+      - "pyproject.toml"
+      - "uv.lock"
+      - "robot_sf/common/optional_import.py"
+      - "robot_sf/common/__init__.py"
+      - "robot_sf/benchmark/doctor.py"
+      - "robot_sf/gym_env/crowd_sim_env.py"
+      - "robot_sf/nav/osm_map_builder.py"
+      - "robot_sf/render/**"
+      - "scripts/validation/wheel_install_smoke.sh"
+      - ".github/workflows/packaging-extras.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+  SDL_VIDEODRIVER: dummy
+  MPLBACKEND: Agg
+  PYGAME_HIDE_SUPPORT_PROMPT: "1"
+
+jobs:
+  clean-wheel-extra:
+    name: clean wheel [${{ matrix.extra }}]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        extra: [viz, maps, benchmark, training, all]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.21"
+          enable-cache: true
+          prune-cache: true
+
+      - name: Free runner disk space
+        run: bash scripts/dev/free_github_runner_space.sh
+
+      - name: Build wheel
+        run: uv build
+
+      - name: Install and probe isolated extra
+        env:
+          ROBOT_SF_WHEEL_INSTALL_SMOKE_EXTRAS: ${{ matrix.extra }}
+        run: bash scripts/validation/wheel_install_smoke.sh
+
+      - name: Upload extra-install report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wheel-extra-${{ matrix.extra }}
+          path: output/validation/wheel_install_smoke_report.json
+          if-no-files-found: warn

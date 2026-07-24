@@ -190,6 +190,12 @@ def _validate_source_paths(
     *,
     config_path: str | Path | None,
 ) -> None:
+    """Validate the ``source_contracts`` block and its referenced paths.
+
+    Requires non-empty ``ablation_design``/``runtime_validator``/``planner_source``
+    strings; when a ``config_path`` is given, checks that the design and planner
+    source paths exist on disk.
+    """
     source_contracts = config.get("source_contracts")
     if not isinstance(source_contracts, Mapping):
         raise ValueError("source_contracts must be mapping")
@@ -207,6 +213,7 @@ def _validate_source_paths(
 
 
 def _validate_scenario_family(value: Any, *, config_path: str | Path | None) -> None:
+    """Validate the scenario_family block (key, matrix path, scenario ids, unique seeds)."""
     if not isinstance(value, Mapping):
         raise ValueError("scenario_family must be mapping")
     for key in ("key", "scenario_matrix"):
@@ -242,6 +249,7 @@ def _validate_scenario_family(value: Any, *, config_path: str | Path | None) -> 
 
 
 def _validate_policy(value: Any, *, config_path: str | Path | None) -> None:
+    """Validate the policy block and cross-check its planner_key against planner_source."""
     if not isinstance(value, Mapping):
         raise ValueError("policy must be mapping")
     for key in ("planner_key", "planner_source", "policy_config"):
@@ -265,6 +273,7 @@ def _validate_policy(value: Any, *, config_path: str | Path | None) -> None:
 
 
 def _validate_wrapper_arms(value: Any) -> None:
+    """Validate wrapper_arms is the expected ordered pair with only wrapper_off as baseline."""
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError("wrapper_arms must be list")
     if not all(isinstance(arm, Mapping) for arm in value):
@@ -285,6 +294,11 @@ def _validate_wrapper_arms(value: Any) -> None:
 
 
 def _normalized_arms(arms: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize wrapper arms into a stable list of dicts with resolved runtime configs.
+
+    Returns:
+        The normalized arm dicts.
+    """
     normalized: list[dict[str, Any]] = []
     for arm in arms:
         runtime = runtime_config_from_mapping(arm["safety_wrapper"])
@@ -300,11 +314,20 @@ def _normalized_arms(arms: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _stable_hash(payload: Mapping[str, Any]) -> str:
+    """Return a deterministic SHA-256 over the sorted-keys JSON serialization of ``payload``."""
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
 
 def _resolve_existing_path(path_text: str, *, config_path: Path) -> Path:
+    """Resolve ``path_text`` against cwd or the config file's ancestor parents.
+
+    Absolute paths are returned unchanged; the first existing parent-relative
+    candidate wins, falling back to the cwd-relative path when none exists.
+
+    Returns:
+        The resolved path.
+    """
     candidate = Path(path_text)
     if candidate.is_absolute():
         return candidate
@@ -319,6 +342,11 @@ def _resolve_existing_path(path_text: str, *, config_path: Path) -> Path:
 
 
 def _load_declared_planner_keys(path_text: str, *, config_path: Path) -> set[str]:
+    """Load the declared planner keys from a ``planner_source`` YAML file.
+
+    Returns:
+        The declared planner keys.
+    """
     source_path = _resolve_existing_path(
         path_text.split("::", maxsplit=1)[0], config_path=config_path
     )
@@ -338,6 +366,7 @@ def _load_declared_planner_keys(path_text: str, *, config_path: Path) -> set[str
 
 
 def _reject_transient_routing_state(config: Mapping[str, Any]) -> None:
+    """Raise when a tracked config carries forbidden transient queue-routing keys."""
     forbidden_keys = {"target_host", "packet_lineage", "queue_route", "submit_host"}
     found = sorted(forbidden_keys & set(config))
     if found:

@@ -174,6 +174,12 @@ def build_sustained_flow_revival_gate_report(
 
 
 def _interaction_exposure_complete(report: Mapping[str, Any]) -> bool:
+    """Return whether a report has complete, derivable interaction exposure.
+
+    Fails closed: required fields must be positively listed (available/computed
+    columns at top level or per run), not merely status-asserted, so a degraded
+    upstream artifact cannot pass the gate.
+    """
     missing_fields = set(_string_sequence(report.get("missing_required_fields")))
     if missing_fields:
         return False
@@ -250,6 +256,7 @@ def _entity_not_derivable(entity: Mapping[str, Any]) -> bool:
 
 
 def _run_mappings(report: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...] | None:
+    """Return the report's ``runs`` as a tuple of mappings, or ``None`` when absent/invalid."""
     runs = report.get("runs")
     if not isinstance(runs, Sequence) or isinstance(runs, (str, bytes)):
         return None
@@ -257,6 +264,7 @@ def _run_mappings(report: Mapping[str, Any]) -> tuple[Mapping[str, Any], ...] | 
 
 
 def _runs_complete(runs: tuple[Mapping[str, Any], ...]) -> bool:
+    """Return whether every run has no missing required fields and a complete status."""
     if not runs:
         return False
     for run in runs:
@@ -272,6 +280,11 @@ def _affected_rows(
     interaction_exposure: Mapping[str, Any],
     claim_impact: Mapping[str, Any] | None,
 ) -> tuple[dict[str, Any], ...]:
+    """Collect affected row mappings from claim-impact then interaction-exposure sources.
+
+    Returns:
+        The affected row mappings.
+    """
     for source in (claim_impact, interaction_exposure):
         if source is None:
             continue
@@ -290,6 +303,7 @@ def _claim_decisions_changed(
     interaction_exposure: Mapping[str, Any],
     claim_impact: Mapping[str, Any] | None,
 ) -> bool | None:
+    """Return whether claim decisions changed per supplied evidence, or ``None`` when absent."""
     for source in (claim_impact, interaction_exposure):
         if source is None:
             continue
@@ -306,6 +320,7 @@ def _claim_decisions_changed(
 
 
 def _claim_impact_supplied(claim_impact: Mapping[str, Any] | None) -> bool:
+    """Return whether the supplied claim-impact object carries any recognized evidence key."""
     if not claim_impact:
         return False
     evidence_keys = (
@@ -319,6 +334,11 @@ def _claim_impact_supplied(claim_impact: Mapping[str, Any] | None) -> bool:
 
 
 def _string_sequence(value: Any) -> tuple[str, ...]:
+    """Coerce ``value`` to a tuple of strings; empty for non-sequences (incl. str/bytes).
+
+    Returns:
+        The coerced string tuple.
+    """
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         return ()
     return tuple(str(item) for item in value)

@@ -203,6 +203,11 @@ class CellSummary:
 
 
 def _as_float(value: Any, field_name: str) -> float:
+    """Coerce ``value`` to a finite float, raising on non-numeric or non-finite input.
+
+    Returns:
+        The coerced finite float.
+    """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field_name} must be a numeric value, got {value!r}")
     number = float(value)
@@ -212,12 +217,14 @@ def _as_float(value: Any, field_name: str) -> float:
 
 
 def _as_nonempty_string(value: Any, field_name: str) -> str:
+    """Return a stripped non-empty string, raising on blank or non-string input."""
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string, got {value!r}")
     return value.strip()
 
 
 def _as_int(value: Any, field_name: str, *, positive: bool = False) -> int:
+    """Return ``value`` as an int, raising on non-int (or non-positive when required)."""
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{field_name} must be an integer, got {value!r}")
     if positive and value <= 0:
@@ -226,6 +233,7 @@ def _as_int(value: Any, field_name: str, *, positive: bool = False) -> int:
 
 
 def _as_rate(value: Any, field_name: str) -> float:
+    """Return ``value`` as a rate in ``[0, 1]``, raising outside the range."""
     rate = _as_float(value, field_name)
     if not 0.0 <= rate <= 1.0:
         raise ValueError(f"{field_name} must be in [0, 1], got {value!r}")
@@ -233,6 +241,7 @@ def _as_rate(value: Any, field_name: str) -> float:
 
 
 def _as_nonnegative_float(value: Any, field_name: str) -> float:
+    """Return ``value`` as a non-negative finite float."""
     number = _as_float(value, field_name)
     if number < 0.0:
         raise ValueError(f"{field_name} must be non-negative, got {value!r}")
@@ -240,6 +249,14 @@ def _as_nonnegative_float(value: Any, field_name: str) -> float:
 
 
 def _parse_actuation_envelope(value: Any) -> dict[str, Any]:
+    """Validate and normalize a resolved actuation envelope mapping.
+
+    Requires the drive model, accel/decel, peak speed, and stopping-distance
+    keys and coerces them to typed non-negative values.
+
+    Returns:
+        The normalized actuation envelope dict.
+    """
     if not isinstance(value, Mapping):
         raise ValueError("resolved_actuation_envelope must be a mapping")
     required = {
@@ -470,10 +487,12 @@ class SynthesisResult:
 
 
 def _cell_identity(cell: CellSummary) -> tuple[str, str, str, int]:
+    """Return the unique (scenario, tier, planner, seed) identity tuple of a cell."""
     return (cell.scenario_id, cell.speed_tier_id, cell.planner_id, cell.seed)
 
 
 def _validate_actuation_contract(cell: CellSummary, expected_cap: float) -> None:
+    """Validate a cell's speeds and actuation envelope match its tier cap and envelope."""
     if cell.commanded_speed_mean_m_s > expected_cap + 1e-9:
         raise ValueError(
             f"commanded_speed_mean_m_s exceeds tier cap for {cell.speed_tier_id}: "
@@ -517,6 +536,7 @@ def _validate_declared_cell(
     declared_planners: set[str],
     declared_seeds: set[int],
 ) -> None:
+    """Validate a cell against the declared grid (scenario/planner/seed/tier/cap/horizon/dt/actuation)."""
     if cell.scenario_id not in declared_scenarios:
         raise ValueError(f"undeclared scenario_id: {cell.scenario_id!r}")
     if cell.planner_id not in declared_planners:
@@ -548,6 +568,14 @@ def _validate_declared_grid(
     declared_seeds: set[int],
     require_complete_grid: bool,
 ) -> bool:
+    """Validate declared cells for duplicates and declarations; return grid completeness.
+
+    Raises on duplicate identities or undeclared members; when
+    ``require_complete_grid`` is set, also raises on any missing expected cell.
+
+    Returns:
+        Whether the declared grid is complete.
+    """
     seen: set[tuple[str, str, str, int]] = set()
     for cell in parsed:
         identity = _cell_identity(cell)
@@ -665,6 +693,11 @@ def synthesize_speed_tier_sweep(
 def _partition_cells(
     parsed: list[CellSummary],
 ) -> tuple[list[dict[str, Any]], list[CellSummary], bool]:
+    """Split parsed cells into exclusions and native cells, reporting all-native status.
+
+    Returns:
+        ``(exclusions, native_cells, all_native)``.
+    """
     exclusions: list[dict[str, Any]] = []
     native: list[CellSummary] = []
     for cell in parsed:
@@ -695,6 +728,14 @@ def _build_paired_deltas(
     list[PairedDelta],
     list[dict[str, Any]],
 ]:
+    """Build paired (nominal vs treated) deltas per planner/tier/metric, grouped by scenario.
+
+    Returns grouped deltas, the flat delta list, and exclusions for treated cells
+    whose paired seed set is incomplete relative to ``declared_seeds``.
+
+    Returns:
+        ``(grouped_deltas, flat_deltas, exclusions)``.
+    """
     values: dict[tuple[str, str, str, str], dict[int, float]] = defaultdict(dict)
     for cell in native:
         for metric in PRIMARY_METRICS:
@@ -743,6 +784,11 @@ def _build_paired_deltas(
 def _emit_paired_deltas(
     deltas: Sequence[PairedDelta],
 ) -> list[dict[str, Any]]:
+    """Serialize paired deltas into sorted JSON rows.
+
+    Returns:
+        The sorted JSON delta rows.
+    """
     return [
         {
             "planner_id": delta.planner_id,
@@ -771,6 +817,11 @@ def _emit_paired_deltas(
 def _summarize_typed_collisions(
     native: Sequence[CellSummary],
 ) -> dict[tuple[str, str], dict[str, float]]:
+    """Average typed-collision breakdown metrics per (planner, tier).
+
+    Returns:
+        Typed-collision averages per ``(planner, tier)``.
+    """
     grouped: dict[tuple[str, str], list[CellSummary]] = defaultdict(list)
     for cell in native:
         grouped[(cell.planner_id, cell.speed_tier_id)].append(cell)
@@ -786,6 +837,11 @@ def _summarize_typed_collisions(
 def _summarize_activation_diagnostics(
     native: Sequence[CellSummary],
 ) -> dict[tuple[str, str], dict[str, Any]]:
+    """Average activation diagnostics and derive the intervention-activated flag per (planner, tier).
+
+    Returns:
+        Activation diagnostics per ``(planner, tier)``.
+    """
     grouped: dict[tuple[str, str], list[CellSummary]] = defaultdict(list)
     for cell in native:
         grouped[(cell.planner_id, cell.speed_tier_id)].append(cell)
@@ -818,6 +874,11 @@ def _summarize_activation_diagnostics(
 def _summarize_exposure_metrics(
     native: Sequence[CellSummary],
 ) -> dict[tuple[str, str], dict[str, float]]:
+    """Average exposure and clearance metrics per (planner, tier).
+
+    Returns:
+        Exposure/clearance averages per ``(planner, tier)``.
+    """
     grouped: dict[tuple[str, str], list[CellSummary]] = defaultdict(list)
     for cell in native:
         grouped[(cell.planner_id, cell.speed_tier_id)].append(cell)
@@ -834,6 +895,7 @@ def _summarize_exposure_metrics(
 
 
 def _stable_seed(test_id: str) -> int:
+    """Return a deterministic 64-bit seed derived from a test id's SHA-256."""
     return int.from_bytes(hashlib.sha256(test_id.encode()).digest()[:8], "big")
 
 
@@ -869,6 +931,7 @@ def _paired_seed_block_bootstrap(
 
 
 def _percentile(sorted_values: Sequence[float], probability: float) -> float:
+    """Return the linearly-interpolated percentile of sorted values at a probability in ``[0, 1]``."""
     if not sorted_values:
         raise ValueError("percentile requires at least one value")
     if not 0.0 <= probability <= 1.0:
@@ -927,6 +990,7 @@ def _margin_aligned_one_sided_p_values(
 
 
 def _bound_supports_claim(metric: str, claim: str, bound_type: str, bound: float) -> bool:
+    """Return whether a percentile bound supports the directional harm/noninferiority claim."""
     threshold = HARM_THRESHOLDS[metric]
     harmful_direction = HARM_DIRECTION[metric]
     if claim == "materially_harmful":
@@ -949,6 +1013,11 @@ def _aggregate_per_tier(
     activation_summary: Mapping[tuple[str, str], Mapping[str, Any]],
     exposure_summary: Mapping[tuple[str, str], Mapping[str, float]],
 ) -> list[dict[str, Any]]:
+    """Aggregate per-tier paired deltas with bootstrap distributions and one-sided bounds.
+
+    Returns:
+        The per-tier summary rows with bootstrap distributions.
+    """
     per_tier_summary: list[dict[str, Any]] = []
     for (planner_id, tier_id, metric), items in grouped.items():
         scenario_means = [item.delta_mean for item in items]
@@ -1009,6 +1078,14 @@ def _holm_adjust_by_planner(
     *,
     family_alpha: float = FAMILYWISE_ALPHA,
 ) -> tuple[dict[str, float], dict[str, float]]:
+    """Holm-adjust raw p-values within each planner family.
+
+    Returns adjusted p-values keyed by test id and per-test confidence levels
+    derived from each value's rank within its family.
+
+    Returns:
+        ``(adjusted_p_values, per_test_confidence)``.
+    """
     families: dict[str, list[tuple[str, float]]] = defaultdict(list)
     for planner_id, test_id, p_value in p_values:
         families[planner_id].append((test_id, p_value))
@@ -1030,6 +1107,14 @@ def _holm_adjust_by_planner(
 def _build_decision_table(
     per_tier_summary: Sequence[Mapping[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, float]]]:
+    """Build the decision table with Holm-adjusted directional bounds and classifications.
+
+    Returns the per-test decision rows and the harm/noninferiority Holm-adjusted
+    p-value families.
+
+    Returns:
+        ``(decision_rows, holm_adjusted_families)``.
+    """
     harm_p_values = [
         (entry["planner_id"], entry["test_id"], entry["p_value_harm_raw"])
         for entry in per_tier_summary
@@ -1178,6 +1263,11 @@ def _compute_descriptive_ranking_stability(
 
 
 def _build_cli_rows() -> list[dict[str, object]]:
+    """Build demo cell rows across three speed tiers for the synthesis smoke test.
+
+    Returns:
+        The demo cell rows.
+    """
     demo: list[dict[str, object]] = []
     for tier_id, cap in (("cap_2_0_nominal", 2.0), ("cap_3_0", 3.0), ("cap_4_0", 4.0)):
         demo.append(

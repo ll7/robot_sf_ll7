@@ -65,7 +65,7 @@ jobs:
         env:
           PIP_FIND_LINKS: ${{ github.workspace }}/dist
           ROBOT_SF_WHEEL_INSTALL_SMOKE_EXTRAS: ${{ matrix.extra }}
-        run: bash scripts/validation/wheel_install_smoke.sh
+        run: bash scripts/validation/wheel_install_smoke.sh 'dist/robot_sf-*.whl'
 
       - name: Upload extra-install diagnostics
         if: always()

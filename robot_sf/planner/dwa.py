@@ -515,15 +515,17 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
 
         Checks two observation layouts: the structured ``robot`` sub-dict
         (unit-test helper format) and the top-level ``route_waypoints`` key
-        (SocNav sensor padded-Box format). Zero-padded rows from the sensor
-        are stripped before scoring.
+        (SocNav sensor padded-Box format). Only the padded sensor layout has
+        its trailing zero suffix removed before scoring.
         """
         waypoints_raw = None
+        padded_sensor_layout = False
         robot_state = observation.get("robot")
         if isinstance(robot_state, dict):
             waypoints_raw = robot_state.get("route_waypoints")
         if waypoints_raw is None:
             waypoints_raw = observation.get("route_waypoints")
+            padded_sensor_layout = waypoints_raw is not None
         if waypoints_raw is None:
             return None
         waypoints = np.asarray(waypoints_raw, dtype=float)
@@ -531,11 +533,14 @@ class DWAPlannerAdapter(OccupancyAwarePlannerMixin):
             return None
         if not np.all(np.isfinite(waypoints)):
             return None
-        # Strip zero-padded rows from the sensor's fixed-size Box encoding.
-        nonzero_mask = np.any(waypoints != 0.0, axis=1)
-        waypoints = waypoints[nonzero_mask]
-        if waypoints.shape[0] == 0:
-            return None
+        if padded_sensor_layout:
+            # Only the top-level sensor field uses fixed-size zero padding. Keep
+            # valid zero-valued rows before the final non-zero route row; the
+            # all-zero representation remains ambiguous without a length mask.
+            nonzero_rows = np.flatnonzero(np.any(waypoints != 0.0, axis=1))
+            if nonzero_rows.size == 0:
+                return None
+            waypoints = waypoints[: int(nonzero_rows[-1]) + 1]
         waypoint_distances = np.linalg.norm(waypoints - robot_pos[None, :], axis=1)
         nearest_idx = int(np.argmin(waypoint_distances))
         nearest_distance = float(waypoint_distances[nearest_idx])

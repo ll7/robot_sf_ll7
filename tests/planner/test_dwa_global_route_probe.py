@@ -227,6 +227,39 @@ def test_global_route_probe_targets_next_waypoint_after_nearest() -> None:
     )
 
 
+def test_global_route_probe_preserves_origin_in_nested_route_layout() -> None:
+    """The unpadded structured route layout keeps a valid origin waypoint."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig(global_route_probe_enabled=True))
+    observation = _observation(
+        robot=(1.0, 0.0),
+        route_waypoints=[(1.0, 0.0), (0.0, 0.0), (2.0, 0.0)],
+    )
+
+    target = planner._route_waypoint_target(
+        robot_pos=np.asarray([1.0, 0.0]),
+        observation=observation,
+    )
+
+    np.testing.assert_allclose(target, [0.0, 0.0])
+
+
+def test_global_route_probe_preserves_origin_before_padded_suffix() -> None:
+    """The padded sensor layout trims only its trailing zero suffix."""
+    planner = DWAPlannerAdapter(DWAPlannerConfig(global_route_probe_enabled=True))
+    observation = _observation()
+    observation["route_waypoints"] = np.asarray(
+        [[0.0, 0.0], [0.0, 0.0], [1.0, 0.0], [2.0, 0.0], [0.0, 0.0]],
+        dtype=float,
+    )
+
+    target = planner._route_waypoint_target(
+        robot_pos=np.zeros(2),
+        observation=observation,
+    )
+
+    np.testing.assert_allclose(target, [0.0, 0.0])
+
+
 def test_global_route_probe_ignores_nan_waypoints() -> None:
     """Probe gracefully ignores NaN waypoint data and reports no activation."""
     config = DWAPlannerConfig(global_route_probe_enabled=True)

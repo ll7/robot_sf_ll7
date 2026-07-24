@@ -1,6 +1,12 @@
 {
   "_meta": {
     "effective_group_key": "scenario_params.algo | algo | algorithm_metadata.algorithm | scenario_id",
+    "evidence_eligibility": {
+      "eligible_record_count": 4,
+      "excluded_record_count": 0,
+      "input_record_count": 4,
+      "policy": "Rows with algorithm_metadata.foresight_prediction.evidence_eligible=false are excluded from benchmark evidence aggregation."
+    },
     "group_by": "scenario_params.algo",
     "metric_parameters": {
       "explicit_profile_records": 0,

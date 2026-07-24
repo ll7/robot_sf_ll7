@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from scripts.dev.check_pr_followups import (
+    _read_event_title,
     analyze_body,
     analyze_body_quality,
     analyze_domain_approval,
@@ -69,6 +70,30 @@ Adds a small workflow guard for PR body quality.
 - Deferred work: none
 - Issues opened for follow-up: none
 """
+
+
+def test_read_event_title_returns_title_for_valid_pull_request_event(tmp_path: Path) -> None:
+    """Valid GitHub event payloads still provide their pull-request title."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(json.dumps({"pull_request": {"title": "fix: guard event input"}}))
+
+    assert _read_event_title(event_path) == "fix: guard event input"
+
+
+@pytest.mark.parametrize("payload", ["not json", "[]", "null", "{}"])
+def test_read_event_title_fails_closed_for_unusable_event_payloads(
+    tmp_path: Path, payload: str
+) -> None:
+    """Missing title data must not crash PR-body validation."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text(payload)
+
+    assert _read_event_title(event_path) is None
+
+
+def test_read_event_title_fails_closed_for_missing_event_file(tmp_path: Path) -> None:
+    """A missing GitHub event file is treated as unavailable input."""
+    assert _read_event_title(tmp_path / "missing-event.json") is None
 
 
 def test_analyze_body_passes_when_no_deferred_work_is_declared() -> None:

@@ -838,7 +838,12 @@ def analyze_body_quality(
 
 def _read_event_title(path: Path) -> str | None:
     """Extract the PR title from a GitHub event payload, if available."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
     pull_request = payload.get("pull_request")
     if isinstance(pull_request, dict) and isinstance(pull_request.get("title"), str):
         return pull_request["title"]

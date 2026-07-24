@@ -37,7 +37,7 @@ def sample_free_points_in_bounds(
         num_samples: Number of points to sample.
         obstacle_polygons: Optional list of polygons (vertex lists or prepared) to avoid.
         max_attempts_per_point: Attempts per requested sample before giving up.
-        rng: Optional seedable RNG. Creates a new default Generator when None.
+        rng: Optional seedable RNG. When None, uses NumPy's legacy global random stream.
 
     Returns:
         List of sampled points as (x, y) tuples outside obstacles.
@@ -45,8 +45,7 @@ def sample_free_points_in_bounds(
     Raises:
         RuntimeError: If sampling fails to produce the requested number of points.
     """
-    if rng is None:
-        rng = np.random.default_rng()
+    random_uniform = np.random.uniform if rng is None else rng.uniform
 
     x_min, x_max, y_min, y_max = bounds
     prepared = prepare_obstacle_polygons(list(obstacle_polygons or []))
@@ -59,8 +58,8 @@ def sample_free_points_in_bounds(
     while len(samples) < num_samples and attempts < max_attempts:
         remaining = num_samples - len(samples)
         current_batch = max(batch_size, remaining)
-        xs = rng.uniform(x_min, x_max, current_batch)
-        ys = rng.uniform(y_min, y_max, current_batch)
+        xs = random_uniform(x_min, x_max, current_batch)
+        ys = random_uniform(y_min, y_max, current_batch)
         attempts += current_batch
         candidates = list(zip(xs, ys, strict=False))
 

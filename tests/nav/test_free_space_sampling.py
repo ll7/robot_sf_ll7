@@ -73,6 +73,14 @@ def test_backward_compatible_without_rng() -> None:
         assert 0.0 <= y <= 10.0
 
 
+def test_omitted_rng_preserves_global_numpy_seed_reproducibility() -> None:
+    np.random.seed(42)
+    result_a = sample_free_points_in_bounds(BOUNDS, 5)
+    np.random.seed(42)
+    result_b = sample_free_points_in_bounds(BOUNDS, 5)
+    assert result_a == result_b
+
+
 def test_backward_compatible_with_explicit_none_rng() -> None:
     result = sample_free_points_in_bounds(BOUNDS, 3, rng=None)
     assert len(result) == 3

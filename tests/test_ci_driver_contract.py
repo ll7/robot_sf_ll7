@@ -32,6 +32,7 @@ CI_JOB_TIMEOUTS = {
     "wheel-smoke-install": 20,
     "examples-smoke": 30,
     "notebooks-smoke": 30,
+    "determinism-gate": 30,
     "ci": 5,
 }
 PHASE_PATTERN = re.compile(

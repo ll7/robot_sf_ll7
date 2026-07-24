@@ -83,6 +83,7 @@ _GATE_VERDICT_RE = re.compile(
     r"gate-verdict\s*:\s*accepted\s*@\s*([0-9a-fA-F]{7,40})\b",
     re.IGNORECASE,
 )
+GATE_VERDICT_RE = _GATE_VERDICT_RE
 
 
 @dataclass(frozen=True, slots=True)

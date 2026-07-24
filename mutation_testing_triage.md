@@ -61,8 +61,8 @@ only stable `survived` mutants are tracked.
 
 | Classification | Count | Interpretation |
 | --- | ---: | --- |
-| Killed | 368 | Selected tests detected the mutation. |
-| Survived | 55 | Enumerated in the baseline; triaged below. |
+| Killed | 391 | Selected tests detected the mutation. |
+| Survived | 32 | Enumerated in the baseline; triaged below. |
 | No tests | 0 | All generated mutants are now exercised. |
 | Timeout / suspicious / skipped | 0 | No execution anomaly was observed. |
 | Total | 423 | All generated mutants in this run. |
@@ -71,8 +71,15 @@ PR #5513 (first slice) reported 200 killed / 5 survived / 218 no-test out of
 423 mutants. The second slice expanded `tests/research/test_aggregation.py`
 with targeted tests for the export, manifest, and extraction paths, moving the
 218 no-test mutants into the executable set. The current run therefore shows
-55 survivors across 7 functions (the 5 original equivalents plus 50 survivors
-in the newly-exercised paths); all are baselined and tolerated.
+32 survivors across 7 functions; all are baselined and tolerated.
+
+The third slice (issue #6122) strengthened assertions to kill 23 more survivors:
+the `metrics not found` reason was tightened from a substring to an exact-
+equality check, and per-alias / per-optional-field tests were added for the
+`extract_seed_metrics` fallback chain (`avg_timesteps`, `total_timesteps`,
+`final_reward_mean`, `run_duration_seconds`). The remaining 32 survivors are
+the genuinely equivalent mutants triaged below (encoding platform-default
+equivalence, logging-only kwargs, and `None`-for-default fallbacks).
 
 ## How to triage a survivor
 

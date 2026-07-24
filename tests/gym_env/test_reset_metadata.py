@@ -60,7 +60,9 @@ def test_resolve_map_id_handles_missing_map_id() -> None:
 
 
 def test_resolve_map_id_handles_type_error() -> None:
-    config = SimpleNamespace(map_pool=42, map_id="fallback")
+    config = SimpleNamespace(
+        map_pool=SimpleNamespace(map_defs=SimpleNamespace(items=None)), map_id="fallback"
+    )
     assert resolve_map_id(config, object()) == "fallback"
 
 

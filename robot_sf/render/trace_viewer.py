@@ -32,11 +32,23 @@ class TraceViewerResult:
     scene_path: Path
 
 
+_MAP_GEOMETRY_ZONE_KEYS = (
+    "robot_spawn_zones",
+    "robot_goal_zones",
+    "ped_spawn_zones",
+    "ped_goal_zones",
+    "ped_crowded_zones",
+)
+_MAP_GEOMETRY_OBSTACLE_KEY = "obstacles"
+_MAP_GEOMETRY_KNOWN_KEYS = {_MAP_GEOMETRY_OBSTACLE_KEY} | set(_MAP_GEOMETRY_ZONE_KEYS)
+
+
 def build_trace_scene(
     trace: SimulationTraceExport,
     *,
     source: str | None = None,
     annotations: list[dict[str, Any]] | None = None,
+    map_geometry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the renderer-neutral scene payload from a simulation trace export.
 
@@ -44,6 +56,10 @@ def build_trace_scene(
         trace: A loaded simulation trace export.
         source: Optional source identifier for the scene payload.
         annotations: Optional list of annotation dicts to embed in the scene.
+        map_geometry: Optional map geometry payload with ``obstacles`` and zone
+            lists.  When supplied the geometry is merged into the auto-computed
+            map; when ``None`` the auto-computed empty-layout map is used.
+            Raises ``ValueError`` for unrecognised keys or malformed entries.
 
     Returns:
         dict[str, Any]: JSON-safe scene payload with auto-computed map bounds,
@@ -54,6 +70,9 @@ def build_trace_scene(
         raise ValueError("Trace viewer export requires at least one trace frame")
 
     map_payload = _compute_trace_map(trace)
+    if map_geometry is not None:
+        _merge_map_geometry(map_payload, map_geometry)
+
     trajectory = [
         frame["robot"]["position"]
         for frame in frames
@@ -61,6 +80,21 @@ def build_trace_scene(
     ]
 
     diagnostic_only = True
+
+    limitations = [
+        "Trace viewer for qualitative review of simulation_trace_export.v1 fixtures.",
+    ]
+    if map_geometry is not None:
+        limitations.append(
+            "Map geometry overlaid from supplied metadata; not ground-truth map validation."
+        )
+    else:
+        limitations.append(
+            "Map bounds are auto-computed from trace positions; no SVG map geometry is available."
+        )
+    limitations.append(
+        "This viewer is diagnostic-only; not benchmark evidence.",
+    )
 
     scene: dict[str, Any] = {
         "schema_version": SCENE_SCHEMA_VERSION,
@@ -86,11 +120,7 @@ def build_trace_scene(
         "frames": frames,
         "trajectory": trajectory,
         "reset_points": [],
-        "limitations": [
-            "Trace viewer for qualitative review of simulation_trace_export.v1 fixtures.",
-            "Map bounds are auto-computed from trace positions; no SVG map geometry is available.",
-            "This viewer is diagnostic-only; not benchmark evidence.",
-        ],
+        "limitations": limitations,
     }
     if annotations:
         scene["annotations"] = list(annotations)
@@ -146,6 +176,66 @@ def _compute_trace_map(trace: SimulationTraceExport) -> dict[str, Any]:
         "ped_crowded_zones": [],
         "_padding": max(padding, 1.0) if all_x else 1.0,
     }
+
+
+def _validate_obstacles(obstacles: list[Any]) -> None:
+    """Validate obstacle list entries.
+
+    Raises:
+        ValueError: If any obstacle is malformed.
+    """
+    for i, obs in enumerate(obstacles):
+        if not isinstance(obs, dict):
+            raise ValueError(f"map_geometry.obstacles[{i}]: expected a dict")
+        for field in ("vertices", "lines"):
+            if field not in obs:
+                raise ValueError(f"map_geometry.obstacles[{i}]: missing '{field}'")
+            if not isinstance(obs[field], list):
+                raise ValueError(
+                    f"map_geometry.obstacles[{i}].{field}:"
+                    f" expected a list, got {type(obs[field]).__name__}"
+                )
+
+
+def _validate_zone_list(key: str, zones: list[Any]) -> None:
+    """Validate zone list entries are lists of [x, y] point pairs.
+
+    Raises:
+        ValueError: If any zone or point is malformed.
+    """
+    for i, zone in enumerate(zones):
+        if not isinstance(zone, list):
+            raise ValueError(f"map_geometry.{key}[{i}]: expected a list, got {type(zone).__name__}")
+        for j, point in enumerate(zone):
+            if not isinstance(point, (list, tuple)) or len(point) < 2:
+                raise ValueError(f"map_geometry.{key}[{i}][{j}]: expected [x, y] point pair")
+
+
+def _merge_map_geometry(map_payload: dict[str, Any], geometry: dict[str, Any]) -> None:
+    """Validate and merge optional map geometry into a computed map payload.
+
+    Args:
+        map_payload: Auto-computed map payload (mutated in place).
+        geometry: User-supplied geometry dict.
+
+    Raises:
+        ValueError: If geometry contains unrecognised keys or malformed entries.
+    """
+    for key in geometry:
+        if key not in _MAP_GEOMETRY_KNOWN_KEYS:
+            raise ValueError(f"map_geometry: unrecognised key '{key}'")
+        value = geometry[key]
+        if not isinstance(value, list):
+            raise ValueError(f"map_geometry.{key}: expected a list, got {type(value).__name__}")
+
+    if _MAP_GEOMETRY_OBSTACLE_KEY in geometry:
+        _validate_obstacles(geometry[_MAP_GEOMETRY_OBSTACLE_KEY])
+        map_payload[_MAP_GEOMETRY_OBSTACLE_KEY] = geometry[_MAP_GEOMETRY_OBSTACLE_KEY]
+
+    for key in _MAP_GEOMETRY_ZONE_KEYS:
+        if key in geometry:
+            _validate_zone_list(key, geometry[key])
+            map_payload[key] = geometry[key]
 
 
 def _trace_frame_to_scene_frame(frame: Any) -> dict[str, Any]:
@@ -212,6 +302,7 @@ def export_trace_viewer(
     *,
     source: str | None = None,
     annotations: list[dict[str, Any]] | None = None,
+    map_geometry: dict[str, Any] | None = None,
 ) -> TraceViewerResult:
     """Export a simulation trace export into static browser viewer files.
 
@@ -220,6 +311,8 @@ def export_trace_viewer(
         output_dir: Directory for the viewer files.
         source: Optional source identifier.
         annotations: Optional annotations to embed.
+        map_geometry: Optional map geometry payload forwarded to
+            :func:`build_trace_scene`.
 
     Returns:
         TraceViewerResult: Paths to the generated viewer directory, HTML file, and scene JSON.
@@ -227,7 +320,12 @@ def export_trace_viewer(
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    scene = build_trace_scene(trace, source=source, annotations=annotations)
+    scene = build_trace_scene(
+        trace,
+        source=source,
+        annotations=annotations,
+        map_geometry=map_geometry,
+    )
 
     scene_path = output_path / "scene.json"
     scene_path.write_text(json.dumps(scene, indent=2, sort_keys=True) + "\n", encoding="utf-8")

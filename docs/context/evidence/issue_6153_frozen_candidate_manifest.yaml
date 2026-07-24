@@ -86,7 +86,7 @@ candidates:
     owning_issue: 5416
     artifact_identifier: issue_5416_sipp_four_geometry_preregistration
     title: "SIPP four-geometry preregistration packet"
-    source_commit: "current_main"
+    source_commit: "13cb68de3798ac2db964f03740297d10e64e713c"
     config_identifier: "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
     campaign_identifier: "RSF-PLANNER-SIPP-SLICE3-20260712"
     durable_artifact_uri: "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
@@ -116,7 +116,7 @@ candidates:
     owning_issue: 5592
     artifact_identifier: issue_5592_cross_matrix_preregistration
     title: "cross-matrix preregistration packet"
-    source_commit: "current_main"
+    source_commit: "96776636e797b16baa2be833ad957dd071a3b815"
     config_identifier: "configs/benchmarks/issue_5592_cross_matrix_preregistration.yaml"
     campaign_identifier: "issue_5592_atomic_topology_second_matrix"
     durable_artifact_uri: "configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml"

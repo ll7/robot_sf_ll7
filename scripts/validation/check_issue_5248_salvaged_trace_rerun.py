@@ -326,9 +326,7 @@ def _compute_trace_coverage(
     all_labeled_without_sidecar = (
         sum(_trace_labeled(row, trace_modes=trace_modes) for row in rows) if trace_modes else 0
     )
-    all_labeled_with_sidecar = (
-        sum(_row_labeled(row) for row in rows) if trace_modes else 0
-    )
+    all_labeled_with_sidecar = sum(_row_labeled(row) for row in rows) if trace_modes else 0
     failure_rows = [row for row in rows if _is_failure_episode(row)]
     failure_labeled_with_sidecar = (
         sum(_row_labeled(row) for row in failure_rows) if trace_modes else 0

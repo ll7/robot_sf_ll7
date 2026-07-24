@@ -117,21 +117,7 @@ class MambaFeatureExtractor(BaseFeaturesExtractor):
         drive_hidden_dims: Sequence[int] | None = None,
         fail_if_exact_backend_missing: bool = False,
     ) -> None:
-        """Initialize Mamba/SSM and drive-state branches.
-
-        Args:
-            observation_space: Dict observation space with sequence and drive-state keys.
-            backend: SSM backend selection (auto, mamba_ssm, or torch_ssm_lite).
-            d_model: Token embedding dimension for the sequence encoder.
-            d_state: SSM state dimension.
-            d_conv: Local convolution width.
-            expand: SSM expand factor.
-            num_layers: Number of stacked SSM layers.
-            dropout_rate: Dropout probability applied after sequence and drive MLP.
-            sequence_source: Selects which observation key provides the sequence.
-            drive_hidden_dims: Hidden dimensions for the drive-state MLP.
-            fail_if_exact_backend_missing: Raise ImportError when mamba_ssm is unavailable.
-        """
+        """Initialize Mamba/SSM and drive-state branches."""
         if backend not in {"auto", "mamba_ssm", "torch_ssm_lite"}:
             msg = "backend must be one of: auto, mamba_ssm, torch_ssm_lite"
             raise ValueError(msg)

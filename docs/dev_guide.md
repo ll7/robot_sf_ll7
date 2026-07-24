@@ -349,6 +349,19 @@ uv run ruff check --fix . && uv run ruff format . && uvx ty check . --exit-zero 
 `ty` currently runs in advisory mode with `--exit-zero`: it reports findings, but the canonical
 typecheck phase is not a PR-readiness merge blocker by itself.
 
+### Acceptance tests (pytest-bdd pilot)
+
+Acceptance scenarios live in `tests/bdd/` as Gherkin `.feature` files with pytest-bdd step
+definitions. These tests describe deterministic, fixture-first repository workflows and must not
+require network, GUI, CARLA, GPU, or long benchmark execution. Run them with:
+
+```bash
+uv run pytest tests/bdd -q
+uv run pytest --collect-only tests/bdd -q
+```
+
+The pilot covers episode schema validation: a valid record passes, a malformed record is rejected.
+
 ### Merge-race prevention (ADR — issue #5389)
 
 **Problem.** Three main-red incidents in 36 hours (2026-07-11/12) had the same shape: two PRs, each
@@ -887,6 +900,11 @@ For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the sub
 wall time tracks the live partition and QoS maximum instead of an outdated hardcoded
 `#SBATCH --time` value. See `docs/dev/slurm_submission.md` for the workflow.
 
+After a job reaches a terminal state, use `scripts/tools/slurm_job_finalize.py` to record
+the observed state, required local artifacts, checksums, and issue-update summary. See the
+[SLURM post-run closeout guide](dev/slurm_submission.md#post-run-closeout); the finalizer is
+metadata-only and does not turn local files into durable benchmark evidence.
+
 For paper-facing benchmark release runs, use the dedicated release wrapper:
 
 ```bash
@@ -1151,6 +1169,8 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 ### Testing strategy (UNIFIED test suite)
 
 For the canonical contributor QA runbook, 12-class test taxonomy, command matrix, failure classification, and explicit CI rerun rules, see **[Contributor QA Runbook and Test Taxonomy](./qa_test_strategy.md)**.
+For the risk-based map of critical shared contracts to their direct tests and validation lanes, see
+**[Test Traceability Matrix](./test_traceability_matrix.md)**.
 
 **The project now uses a unified test suite** running both robot_sf and fast-pysf tests via a single command.
 

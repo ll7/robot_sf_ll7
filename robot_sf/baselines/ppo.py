@@ -913,6 +913,12 @@ class PPOPlanner:
         }
 
     # --- Metadata ------------------------------------------------------
+    def foresight_diagnostics(self) -> dict[str, Any]:
+        """Return live nested predictive-foresight provenance, when enabled."""
+        if self._predictive_foresight is None:
+            return {}
+        return self._predictive_foresight.foresight_diagnostics()
+
     def get_metadata(self) -> dict[str, Any]:
         """Return metadata describing the planner and load status.
 

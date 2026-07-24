@@ -269,8 +269,10 @@ def test_check_only_cli_without_manifest_out_emits_compact_summary(
 def test_full_run_cli_fails_closed(capsys: pytest.CaptureFixture[str]) -> None:
     """The documented full-run surface refuses to execute registered episodes here."""
     with pytest.raises(FullRunBlockedError):
-        main(["--full-run"])
-    assert "not authorized" in capsys.readouterr().out.lower()
+        main(["--full-run", "--cell-summaries-out", "/tmp/issue-5578-cells.jsonl"])
+    output = capsys.readouterr().out
+    assert "not authorized" in output.lower()
+    assert "--cell-summaries-out /tmp/issue-5578-cells.jsonl" in output
 
 
 def test_synthesize_adapter_connects_to_reviewed_synthesizer(tmp_path: Path) -> None:

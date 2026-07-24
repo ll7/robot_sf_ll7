@@ -1047,23 +1047,26 @@ def synthesize_from_cell_summaries(
     return report
 
 
-def _full_run_documentation() -> dict[str, Any]:
+def _full_run_documentation(
+    cell_summaries_path: str | pathlib.Path | None = None,
+) -> dict[str, Any]:
     """Document the full-run command and expected output/provenance locations.
 
     The full-run command is intentionally NOT executable here: registered execution
     belongs to the downstream campaign lane (#6102) and is not authorized in this
     issue. This documentation exists so the campaign lane has the exact surfaces.
     """
+    cell_summaries = pathlib.Path(cell_summaries_path or DEFAULT_CELL_SUMMARY_PATH)
     return {
         "full_run_status": "documented_not_authorized_in_this_issue",
         "blocked_reason": FULL_RUN_BLOCKED_REASON,
         "documented_command": (
             "uv run python scripts/benchmark/run_issue_5578_speed_tier_campaign.py --full-run "
-            "--cell-summaries-out output/issue_5578_robot_speed_tier_sweep/cell_summaries.jsonl"
+            f"--cell-summaries-out {cell_summaries}"
         ),
         "expected_output_locations": {
             "raw_episode_jsonl": DEFAULT_RAW_ROOT,
-            "cell_summaries": DEFAULT_CELL_SUMMARY_PATH,
+            "cell_summaries": str(cell_summaries),
             "synthesis": DEFAULT_SYNTHESIS_PATH,
         },
         "expected_output_contract": (
@@ -1160,7 +1163,7 @@ def _run_preflight(args: argparse.Namespace) -> int:
 
 def _run_full_run(args: argparse.Namespace) -> int:
     """Document the full-run surface and fail closed (not authorized here)."""
-    doc = _full_run_documentation()
+    doc = _full_run_documentation(args.cell_summaries_out)
     if args.json:
         print(json.dumps(doc, indent=2, sort_keys=True))
     else:
@@ -1232,6 +1235,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--full-run",
         action="store_true",
         help="Documented only; registered execution is not authorized in this issue.",
+    )
+    parser.add_argument(
+        "--cell-summaries-out",
+        type=pathlib.Path,
+        help="Cell-summary output path recorded by the documented full-run handoff.",
     )
     mode.add_argument(
         "--synthesize",

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from scripts.models import preflight_models as cli
 
 
@@ -18,13 +20,12 @@ def test_main_returns_config_error_for_missing_model_ids() -> None:
     assert cli.main([]) == cli.EXIT_CONFIG_ERROR
 
 
-def test_main_returns_config_error_when_config_loading_fails(monkeypatch) -> None:
-    """Unreadable config paths retain the distinct configuration exit code."""
-    monkeypatch.setattr(
-        cli, "_config_model_ids", lambda paths: (_ for _ in ()).throw(FileNotFoundError())
-    )
+@pytest.mark.parametrize("error", [OSError("unreadable"), UnicodeError("undecodable")])
+def test_main_returns_config_error_when_config_loading_fails(monkeypatch, error) -> None:
+    """Unreadable or undecodable configs retain the configuration exit code."""
+    monkeypatch.setattr(cli, "_config_model_ids", lambda paths: (_ for _ in ()).throw(error))
 
-    assert cli.main(["--config", "missing.yaml"]) == cli.EXIT_CONFIG_ERROR
+    assert cli.main(["--config", "invalid.yaml"]) == cli.EXIT_CONFIG_ERROR
 
 
 def test_main_returns_blocked_when_preflight_cannot_stage_assets(monkeypatch) -> None:

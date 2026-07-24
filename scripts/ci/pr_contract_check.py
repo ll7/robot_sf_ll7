@@ -34,6 +34,7 @@ from robot_sf.evidence.distance_convention import (  # noqa: E402
 from scripts.ci.check_evidence_writer_usage import (  # noqa: E402
     check_changed_files as check_evidence_writer_usage,
 )
+from scripts.dev.gh_pr_label_rest import add_label  # noqa: E402
 
 # Match keywords followed by #N or a GitHub issue URL
 CLOSING_PATTERN = re.compile(
@@ -633,26 +634,12 @@ def check_worker_lane_provenance(body: str, pr_number: str | None, repo: str) ->
     if "cheap implementation lane" in body.lower():
         if pr_number:
             try:
-                res = subprocess.run(
-                    [
-                        "gh",
-                        "pr",
-                        "edit",
-                        pr_number,
-                        "--add-label",
-                        "cheap-lane",
-                        "--repo",
-                        repo,
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if res.returncode == 0:
+                result = add_label(int(pr_number), "cheap-lane", repo=repo)
+                if result["status"] == "ok":
                     return "INFO: Automatically added 'cheap-lane' label to the PR.", True
                 else:
                     return (
-                        f"INFO: Detected cheap-lane provenance, but failed to add label: {res.stderr.strip()}",
+                        f"INFO: Detected cheap-lane provenance, but failed to add label: {result['error']}",
                         True,
                     )
             except _BEST_EFFORT_ERRORS as e:

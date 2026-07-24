@@ -27,6 +27,7 @@ from robot_sf.adversarial.qd import (
     GridSpec,
     QDArchive,
     QDSearchConfig,
+    run_map_elites,
     write_qd_archive,
 )
 from scripts.adversarial.run_doorway_qd_campaign import (
@@ -52,7 +53,6 @@ def _synthetic_evaluator():
         from robot_sf.adversarial.attribution import attribution_from_episode_record
 
         record = _synthetic_record(index)
-        episode_path = qd_config.search_space.to_json()  # placeholder
         candidate_dir = (
             qd_config.to_search_config(
                 policy="social_force",
@@ -204,10 +204,7 @@ def test_campaign_synthetic_wiring_produces_valid_archive(
     campaign_config: dict, tmp_path: Path
 ) -> None:
     """Campaign with synthetic evaluator produces a schema-valid archive."""
-    config_path = Path(_CAMPAIGN_CONFIG)
-    output_dir = tmp_path / "campaign_test"
 
-    from robot_sf.adversarial.cma_me import default_optimizer_factory
     from robot_sf.adversarial.qd import QDArchive, run_map_elites
 
     space = build_search_space(campaign_config)
@@ -247,11 +244,7 @@ def test_campaign_synthetic_full_pipeline(tmp_path: Path) -> None:
     config_path = Path(_CAMPAIGN_CONFIG)
     output_dir = tmp_path / "full_campaign"
 
-    from robot_sf.adversarial.qd import (
-        _default_emitters,
-        run_map_elites,
-        write_qd_archive,
-    )
+    from robot_sf.adversarial.qd import run_map_elites, write_qd_archive
 
     cfg = _load_campaign_config(config_path)
     space = build_search_space(cfg)
@@ -296,7 +289,7 @@ def test_campaign_synthetic_comparison(tmp_path: Path) -> None:
     archive = QDArchive(grid=grid)
     emitters = build_emitters(space, archive, cfg=cfg, seed=42)
 
-    from robot_sf.adversarial.qd import run_map_elites, compare_qd_vs_single_objective
+    from robot_sf.adversarial.qd import compare_qd_vs_single_objective
 
     qd_config = QDSearchConfig(
         search_space=space,

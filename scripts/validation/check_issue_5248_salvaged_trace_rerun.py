@@ -22,9 +22,10 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -33,6 +34,9 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
     REQUIRED_MECHANISM_FIELDS,
     TRACE_VERIFIED_EVIDENCE_MODES,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 SCHEMA_VERSION = "issue_5248_salvaged_trace_rerun_registration.v2"
 READY_STATUS = "ready_for_issue_4206_reanalysis"
@@ -261,7 +265,7 @@ def _load_sidecar_overlay(
     return rows, sha256, sidecar_public, None
 
 
-def _is_failure_episode(row: dict[str, str]) -> bool:
+def _is_failure_episode(row: Mapping[str, object]) -> bool:
     """Return whether an episode row is a failure (write-time outcome did not succeed).
 
     Uses the campaign's own ``success`` column (the write-time episode outcome
@@ -271,10 +275,22 @@ def _is_failure_episode(row: dict[str, str]) -> bool:
     than silently shrinking the failure-episode denominator.
     """
 
-    raw = str(row.get(SUCCESS_COLUMN) or "").strip()
+    raw_value = row.get(SUCCESS_COLUMN)
+    if raw_value is None:
+        return True
+
+    raw = str(raw_value).strip()
+    normalized = raw.casefold()
+    if normalized == "true":
+        return False
+    if normalized == "false":
+        return True
+
     try:
         value = float(raw)
     except ValueError:
+        return True
+    if not math.isfinite(value):
         return True
     return value < SUCCESS_THRESHOLD
 

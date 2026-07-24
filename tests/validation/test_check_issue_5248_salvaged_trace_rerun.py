@@ -14,6 +14,7 @@ from robot_sf.benchmark.failure_mechanism_taxonomy import (
 from scripts.validation.check_issue_5248_salvaged_trace_rerun import (
     BLOCKED_STATUS,
     READY_STATUS,
+    _is_failure_episode,
     _load_trace_contract,
     _public_path,
     build_registration_receipt,
@@ -542,6 +543,39 @@ def test_no_sidecar_omits_sidecar_block_and_keeps_legacy_fraction(tmp_path: Path
 # made the floor unreachable by construction for any campaign with a healthy
 # success rate. These tests pin the denominator logic on portable fixtures.
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw_success", "expected_failure"),
+    [
+        (0, True),
+        (0.0, True),
+        ("0", True),
+        ("0.0", True),
+        (1, False),
+        (1.0, False),
+        ("1", False),
+        ("1.0", False),
+        (True, False),
+        ("true", False),
+        (" TRUE ", False),
+        (False, True),
+        ("false", True),
+        (" FALSE ", True),
+        (None, True),
+        ("", True),
+        ("not-a-number", True),
+        ("nan", True),
+        ("inf", True),
+    ],
+)
+def test_failure_episode_parser_handles_boolean_and_numeric_values(
+    raw_success: object,
+    expected_failure: bool,
+) -> None:
+    """Boolean strings parse explicitly and malformed numeric values fail closed."""
+
+    assert _is_failure_episode({"success": raw_success}) is expected_failure
 
 
 def test_failure_episode_denominator_excludes_success_episodes(tmp_path: Path) -> None:

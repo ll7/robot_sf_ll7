@@ -308,10 +308,10 @@ def _run_scenario_diagnostics(
     episode_runner: EpisodeRunner,
     certifier: Certifier,
 ) -> ScenarioDiagnosticOutcome:
-    """Return the diagnostic outcome of running all lanes for one scenario.
+    """Return diagnostic results for all lanes of one scenario.
 
-    Each lane is run only when enabled and a seed is available; lanes without a seed are reported
-    as blocked. Returns the aggregated diagnostic outcome.
+    Route clearance always runs. Optional rollout lanes run only when their configuration enables
+    them and a seed is available; otherwise their results report why they did not run.
     """
     scenario_id = _scenario_id(scenario)
     family_id = _scenario_family_id(scenario)

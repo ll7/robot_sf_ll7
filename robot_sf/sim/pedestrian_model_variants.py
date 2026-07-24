@@ -66,6 +66,11 @@ def _validate_ttc_inputs(
     horizon_s: float,
     epsilon: float,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Validate and coerce TTC inputs; return validated arrays or raise.
+
+    Returns:
+        Tuple of validated (position_array, velocity_array, radius_array).
+    """
     position_array = np.asarray(positions, dtype=float)
     velocity_array = np.asarray(velocities, dtype=float)
     radius_array = np.asarray(radii, dtype=float)
@@ -159,6 +164,7 @@ def _repulsion_direction(
     *,
     epsilon: float,
 ) -> np.ndarray:
+    """Return a unit repulsion vector away from a neighbor, falling back to anti-velocity."""
     away = -relative_position
     norm = float(np.linalg.norm(away))
     if norm > epsilon:

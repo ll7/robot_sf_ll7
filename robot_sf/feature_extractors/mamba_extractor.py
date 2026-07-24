@@ -51,6 +51,7 @@ class _TorchSSMLiteBlock(nn.Module):
     """Small PyTorch-only sequence block used when exact Mamba is unavailable."""
 
     def __init__(self, d_model: int, d_conv: int, expand: int, dropout_rate: float) -> None:
+        """Initialize the SSM-lite block with depthwise conv and gated residual modules."""
         super().__init__()
         hidden_dim = d_model * expand
         self.depthwise_conv = nn.Conv1d(
@@ -116,7 +117,21 @@ class MambaFeatureExtractor(BaseFeaturesExtractor):
         drive_hidden_dims: Sequence[int] | None = None,
         fail_if_exact_backend_missing: bool = False,
     ) -> None:
-        """Initialize Mamba/SSM and drive-state branches."""
+        """Initialize Mamba/SSM and drive-state branches.
+
+        Args:
+            observation_space: Dict observation space with sequence and drive-state keys.
+            backend: SSM backend selection (auto, mamba_ssm, or torch_ssm_lite).
+            d_model: Token embedding dimension for the sequence encoder.
+            d_state: SSM state dimension.
+            d_conv: Local convolution width.
+            expand: SSM expand factor.
+            num_layers: Number of stacked SSM layers.
+            dropout_rate: Dropout probability applied after sequence and drive MLP.
+            sequence_source: Selects which observation key provides the sequence.
+            drive_hidden_dims: Hidden dimensions for the drive-state MLP.
+            fail_if_exact_backend_missing: Raise ImportError when mamba_ssm is unavailable.
+        """
         if backend not in {"auto", "mamba_ssm", "torch_ssm_lite"}:
             msg = "backend must be one of: auto, mamba_ssm, torch_ssm_lite"
             raise ValueError(msg)
@@ -183,6 +198,11 @@ class MambaFeatureExtractor(BaseFeaturesExtractor):
         dropout_rate: float,
         fail_if_exact_backend_missing: bool,
     ) -> tuple[nn.ModuleList, str, bool]:
+        """Build the sequence-processing layer stack using the selected backend.
+
+        Returns:
+            Tuple of (layer_list, backend_name, is_exact_backend).
+        """
         mamba_cls = _load_mamba_ssm_class() if backend in {"auto", "mamba_ssm"} else None
         if mamba_cls is not None:
             layers = nn.ModuleList(

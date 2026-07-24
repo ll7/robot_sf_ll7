@@ -434,7 +434,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Issue 495 Execution Notes](./context/issue_495_execution.md)** - Overall trend benchmark matrix, history comparison, and nightly cache-backed tracking
 * **[Warning Hygiene Sweep](./context/warning_hygiene_2026-02-13.md)** - Warning-noise root-cause fixes and dependency mitigation notes
 * **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
-* **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, CI integration
+* **[Coverage Guide](./coverage_guide.md)** - Code coverage collection, baseline tracking, absolute floor enforcement, and CI integration
 
 ### Hardware & Environment
 
@@ -454,7 +454,7 @@ thin: existing Markdown files remain the source of truth, and generated HTML und
 * **[Contributor QA Runbook & Test Taxonomy](./qa_test_strategy.md)** - Canonical QA runbook, 12-class test taxonomy, command matrix, failure classification, and CI rerun rules
 * **[Configuration Architecture](./architecture/configuration.md)** - Configuration hierarchy, precedence rules, and migration guide
 * **[Repository Structure Analysis](./dev/issues/repository-structure-analysis.md)** - Comprehensive assessment of codebase organization and improvement roadmap
-* **[Coverage Guide](./coverage_guide.md)** - Comprehensive guide to code coverage collection, baseline tracking, and CI integration
+* **[Coverage Guide](./coverage_guide.md)** - Comprehensive guide to code coverage collection, baseline tracking, absolute floor enforcement, and CI integration
 * **[Environment Refactoring](./refactoring/)** - **NEW**: Complete guide to the refactored environment architecture
   + [Deployment Status](./refactoring/DEPLOYMENT_READY.md) - Current implementation status
   + [Refactoring Plan](./refactoring/refactoring_plan.md) - Technical architecture details

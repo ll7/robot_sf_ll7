@@ -49,6 +49,9 @@ BOOTSTRAP_WORKTREE = ROOT / "scripts" / "dev" / "bootstrap_worktree.sh"
 CHECK_RUNTIME_REQUIREMENTS = ROOT / "scripts" / "dev" / "check_runtime_requirements.sh"
 CHECK_CARLA_RUNTIME = ROOT / "scripts" / "dev" / "check_carla_runtime.sh"
 EVIDENCE_REGISTRY_RATCHET = ROOT / "scripts" / "dev" / "evidence_registry_ratchet.py"
+COVERAGE_GUIDE = ROOT / "docs" / "coverage_guide.md"
+DEV_GUIDE = ROOT / "docs" / "dev_guide.md"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 
 def test_ci_driver_smoke_uses_runtime_schema_and_output_matrix_path() -> None:
@@ -2119,3 +2122,58 @@ def test_bootstrap_worktree_help_does_not_invoke_uv(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "Usage:" in result.stdout
     assert "uv should not be called" not in result.stderr
+
+
+def test_coverage_docs_match_effective_source_scope() -> None:
+    """Docs must distinguish coverage.py defaults from pytest-cov's effective source."""
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    coverage_run = pyproject["tool"]["coverage"]["run"]
+
+    cov_guide_text = COVERAGE_GUIDE.read_text(encoding="utf-8")
+    dev_guide_text = DEV_GUIDE.read_text(encoding="utf-8")
+    wrapper_text = RUN_TESTS_PARALLEL.read_text(encoding="utf-8")
+
+    assert 'source = ["robot_sf", "fast-pysf/pysocialforce"]' in cov_guide_text
+    assert "fast-pysf/pysocialforce" in coverage_run["source"]
+    assert 'cmd+=("--cov=robot_sf" "--cov-report=html" "--cov-report=json")' in wrapper_text
+    assert "Only the `robot_sf/` package" in cov_guide_text
+    assert "not included in the local wrapper report" in cov_guide_text
+    assert "measure only the `robot_sf/` package" in dev_guide_text
+    assert "not included in wrapper reports" in dev_guide_text
+
+    assert '"fast-pysf/tests/*"' in cov_guide_text
+    assert '"fast-pysf/examples/*"' in cov_guide_text
+    config_section = cov_guide_text.split("## Configuration")[1].split("### Customization")[0]
+    assert '"fast-pysf/*"' not in config_section
+
+    assert "branch = true" in config_section
+    assert 'data_file = "output/coverage/.coverage"' in config_section
+    assert "skip_covered = false" in config_section
+    assert "skip_empty = false" in config_section
+    assert '"raise NotImplementedError"' in config_section
+
+    assert "fast-pysf/tests/*" in dev_guide_text
+
+
+def test_coverage_docs_match_ci_workflow_contract() -> None:
+    """Docs must accurately reflect CI workflow coverage gate semantics."""
+    cov_guide_text = COVERAGE_GUIDE.read_text(encoding="utf-8")
+    dev_guide_text = DEV_GUIDE.read_text(encoding="utf-8")
+    ci_workflow_text = CI_WORKFLOW.read_text(encoding="utf-8")
+
+    assert "COVERAGE_CORE: sysmon" in ci_workflow_text
+    assert "--minimum-total 85.0" in ci_workflow_text
+    assert "coverage combine output/coverage" in ci_workflow_text
+    assert (
+        "ROBOT_SF_PYTEST_COVERAGE: ${{ github.event_name != 'pull_request' && '1' || '0' }}"
+        in ci_workflow_text
+    )
+
+    assert "sysmon" in cov_guide_text
+    assert "--minimum-total 85.0" in cov_guide_text
+    assert "coverage combine" in cov_guide_text
+    assert "pull request" in cov_guide_text.lower()
+    assert "coverage-gate" in cov_guide_text
+
+    assert "coverage-gate" in dev_guide_text
+    assert "85.0%" in dev_guide_text or "85.0" in dev_guide_text

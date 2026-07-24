@@ -16,10 +16,22 @@ Quality Assurance (QA) in `robot_sf_ll7` ensures that code changes preserve simu
 
 This QA runbook operates under the maintainer governance rules defined in:
 - **[Maintainer Values And Hard Contracts](./maintainer_values.md)** — Proof must be proportional to risk. Substantive or paper-facing claims require reproducible executable evidence. Fallback or degraded execution is never success evidence.
-- **[CI Reproducibility & Flaky Acceptance Policy](./context/issue_1436_reproducibility_flaky_acceptance.md)** — Canonical validation lane mappings, failure classification criteria, and explicit CI rerun boundaries.
+- **[CI Reproducibility & Flaky Acceptance Policy](./context/issue_1436_reproducibility_flaky_acceptance.md)** — Canonical failure-classification criteria and explicit CI rerun boundaries. Its reproducibility-job mapping is reconciled below against the live workflow.
 - **[Benchmark Fallback Policy](./context/issue_691_benchmark_fallback_policy.md)** — Fail-closed evaluation rules for `fallback`, `degraded`, and `not_available` execution modes.
 - **[Coverage Guide](./coverage_guide.md)** — Code coverage collection, baseline comparison, and reporting rules.
 - **[Code Review Guidelines](./code_review.md)** — Benchmark-facing review criteria, provenance checks, and regression traps.
+
+---
+
+### Reproducibility Job Policy Reconciliation
+
+The live [`reproducibility-check` job](../.github/workflows/ci.yml) is the source of truth for its
+trigger and gating behavior: it runs on pull requests and `workflow_dispatch`, and it is not marked
+`continue-on-error`. The linked Issue #1436 policy note still describes the older
+`workflow_dispatch`-only, `continue-on-error` mapping. This runbook uses the live behavior while
+retaining Issue #1436 for failure classification and rerun boundaries; an owned policy update must
+reconcile that note before it is again described as the canonical validation-lane mapping. This
+runbook does not change the workflow or adjudicate a new acceptance rule.
 
 ---
 
@@ -39,7 +51,7 @@ The repository classifies tests into 12 distinct categories. Understanding these
 | **Visual** | GUI playback, Pygame rendering, telemetry overlay, and video generation. | `tests/pygame/` | Headless execution required (`DISPLAY= MPLBACKEND=Agg SDL_VIDEODRIVER=dummy`). |
 | **Performance** | Measure step-throughput, JIT compilation latency, and execution timing against soft/hard budgets. | `scripts/validation/performance_smoke_test.py` | Advisory on PRs; strictly enforced on `main` branch pushes. |
 | **Compatibility** | Validate backwards compatibility for model checkpoints, configuration schemas, and dataset intake. | `tests/` | Deterministic contract. Prevents schema drift across releases. |
-| **Reproducibility** | Verify that identical seeds yield bitwise or statistical equivalence across environment instances. | `scripts/benchmark_repro_check.py` | Diagnostic/campaign evidence. The CI job runs for pull requests and `workflow_dispatch`; contributors can also run the targeted local check. |
+| **Reproducibility** | Verify that identical seeds yield bitwise or statistical equivalence across environment instances. | `scripts/benchmark_repro_check.py` | Diagnostic/campaign evidence. The CI job runs for pull requests and `workflow_dispatch`; contributors can also run the targeted local check. See the policy reconciliation above. |
 | **Acceptance** | End-to-end contributor workflow or feature verification using structured scenario specifications. | `tests/` | High-level user story verification. Follows the selective `pytest-bdd` policy when specified. |
 
 ---
@@ -78,7 +90,7 @@ Contributors must run validation commands matching their change class. The repos
 | **Compact Validation** | `uv run python scripts/dev/run_compact_validation.py -- <command>` | Wraps any validation command with compact summary output. | Efficient local validation without verbose log spam. |
 | **Coverage Analysis** | `uv run pytest --cov=robot_sf tests` | Measures statement and branch coverage in `robot_sf/`. | Diagnostic coverage collection (see [Coverage Guide](./coverage_guide.md)). |
 | **Coverage Comparison** | `uv run python scripts/coverage/compare_coverage.py --current output/coverage/coverage.json --baseline output/coverage/.coverage-baseline.json --format terminal` | Compares current coverage against saved baseline. | Prevents silent coverage regressions. |
-| **Reproducibility Diagnostic** | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/benchmark_repro_check.py` | Diagnostic reproducibility check across canonical seeds and metrics. | Validates same-seed metric equivalence (`workflow_dispatch` or local). |
+| **Reproducibility Diagnostic** | `scripts/dev/run_worktree_shared_venv.sh -- uv run python scripts/benchmark_repro_check.py` | Diagnostic reproducibility check across canonical seeds and metrics. | Validates same-seed metric equivalence (pull request, `workflow_dispatch`, or local); see the policy reconciliation above. |
 | **Benchmark Campaign** | `uv run python scripts/tools/run_benchmark_release.py --manifest <manifest-path>` | Manifest-driven benchmark release campaign runner. | Nominal or paper-grade benchmark evidence. |
 | **Documentation Integrity** | `uv run python scripts/dev/check_docs_evidence_integrity.py --files <file-list>` | Checks markdown links, evidence references, and cited command paths. | Documentation-only and instruction-only PR validation. |
 | **Mutation Diagnostics** | `uv run python scripts/dev/mutation_ratchet.py --check` | Weekly or manually dispatched bounded mutation-strength ratchet; see [mutation-testing triage](../mutation_testing_triage.md). | Diagnostic probe for test quality (not a required PR gate). |

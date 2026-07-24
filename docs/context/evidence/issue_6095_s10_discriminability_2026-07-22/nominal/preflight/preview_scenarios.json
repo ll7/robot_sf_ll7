@@ -1,0 +1,256 @@
+{
+  "schema_version": "benchmark-preflight-preview-scenarios.v1",
+  "campaign_id": "issue_6095_nominal_discriminability_v1_20260722_163913",
+  "generated_at_utc": "2026-07-22T14:39:13.843582Z",
+  "scenario_count": 4,
+  "preview_limit": 100,
+  "scenario_candidates": [],
+  "synthetic_actuation_profile": null,
+  "latency_stress_profile": null,
+  "latency_stress_metrics": null,
+  "route_clearance_warnings": [
+    {
+      "scenario": "classic_doorway_low",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.012233,
+      "min_clearance_margin_m": 0.012233,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "scenario"
+    },
+    {
+      "scenario": "empty_map_8_directions_east",
+      "map_file": "maps/svg_maps/atomic_empty_frame_test.svg",
+      "robot_radius_m": 1.0,
+      "min_center_distance_m": 1.333333,
+      "min_clearance_margin_m": 0.333333,
+      "warning_threshold_m": 0.5,
+      "warning_scope": "map"
+    }
+  ],
+  "route_clearance_warning_count": 2,
+  "route_clearance_warning_summary": {
+    "warning_count": 2,
+    "certified_warning_count": 0,
+    "unresolved_warning_count": 2,
+    "status_counts": {},
+    "unresolved_scenarios": [
+      "classic_doorway_low",
+      "empty_map_8_directions_east"
+    ]
+  },
+  "route_clearance_certifications_path": null,
+  "truncated": false,
+  "scenarios": [
+    {
+      "name": "empty_map_8_directions_east",
+      "map_id": "atomic_empty_frame_test",
+      "route_overrides_file": "/home/luttkule/git/robot_sf_ll7.worktrees/lease-6095-fbc202171b52/configs/scenarios/route_overrides/issue_596/empty_goal_east.yaml",
+      "simulation_config": {
+        "max_episode_steps": 250,
+        "ped_density": 0.0
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "empty_map_8_directions",
+        "label": "empty map east",
+        "flow": "none",
+        "behavior": "none",
+        "density_advisory": "zero_baseline_route_spawn",
+        "primary_capability": "frame_consistency",
+        "target_failure_mode": "coordinate_transform",
+        "purpose": "Verify straight-line motion and frame correctness for an eastward target on an empty map.",
+        "expected_behavior": "Move directly toward the east goal with no oscillation or spurious curvature.",
+        "expected_pass_criteria": "Reach the east goal without collision, timeout, or visible open-space oscillation.",
+        "failure_modes": [
+          "directional bias",
+          "oscillation in open space",
+          "incorrect frame transform"
+        ],
+        "determinism": "deterministic",
+        "variation_family": "goal_direction",
+        "variation_value": "east",
+        "variation_rationale": "East is the canonical forward-direction sanity case.",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics_updated_on": null,
+          "metrics": {
+            "min_distance": null,
+            "mean_distance": null,
+            "robot_ped_within_5m_frac": null,
+            "ped_force_mean": null,
+            "force_q95": null
+          }
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120
+      ],
+      "map_file": "maps/svg_maps/atomic_empty_frame_test.svg"
+    },
+    {
+      "name": "single_ped_crossing_orthogonal",
+      "map_id": "francis2023_intersection_no_gesture",
+      "simulation_config": {
+        "max_episode_steps": 400,
+        "ped_density": 0.0
+      },
+      "single_pedestrians": [
+        {
+          "id": "h1",
+          "goal_poi": "poi_h1_goal"
+        }
+      ],
+      "robot_config": {},
+      "metadata": {
+        "archetype": "single_ped_crossing_orthogonal",
+        "label": "single pedestrian crossing",
+        "source_archetype": "francis2023_intersection_no_gesture",
+        "flow": "perpendicular",
+        "behavior": "single_ped",
+        "density_advisory": "zero_baseline_route_spawn",
+        "primary_capability": "dynamic_interaction",
+        "target_failure_mode": "social_collision",
+        "purpose": "Test whether the planner negotiates an orthogonal crossing with one pedestrian without overreacting.",
+        "expected_behavior": "Yield or pass with clear timing, maintain safe spacing, and avoid stop-go thrashing.",
+        "expected_pass_criteria": "Reach the goal without contacting the pedestrian and without prolonged crossing hesitation.",
+        "failure_modes": [
+          "social collision",
+          "crossing deadlock",
+          "excessive hesitation"
+        ],
+        "determinism": "deterministic",
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics_updated_on": null,
+          "metrics": {
+            "min_distance": null,
+            "mean_distance": null,
+            "robot_ped_within_5m_frac": null,
+            "ped_force_mean": null,
+            "force_q95": null
+          }
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120
+      ],
+      "map_file": "maps/svg_maps/francis2023/francis2023_intersection_no_gesture.svg"
+    },
+    {
+      "name": "classic_doorway_low",
+      "map_file": "maps/svg_maps/classic_doorway.svg",
+      "simulation_config": {
+        "max_episode_steps": 500,
+        "ped_density": 0.02,
+        "route_spawn_distribution": "spread",
+        "route_spawn_jitter_frac": 0.2,
+        "max_peds_per_group": 1
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "doorway",
+        "density": "low",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "unverified",
+          "verified_on": null,
+          "verified_by": null,
+          "method": null,
+          "notes": null,
+          "metrics": {
+            "min_distance": 2.463720507545049,
+            "mean_distance": 4.816876019796456,
+            "robot_ped_within_5m_frac": 0.6435411099964484,
+            "ped_force_mean": 0.3415082177106482,
+            "force_q95": 1.2272777395106866
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120
+      ]
+    },
+    {
+      "name": "classic_bottleneck_low",
+      "map_file": "maps/svg_maps/classic_bottleneck.svg",
+      "simulation_config": {
+        "max_episode_steps": 500,
+        "ped_density": 0.0
+      },
+      "robot_config": {},
+      "metadata": {
+        "archetype": "bottleneck",
+        "density": "low",
+        "spawn_mode": "markers",
+        "density_advisory": "zero_baseline_route_spawn",
+        "flow": "bi",
+        "groups": 0.0,
+        "plausibility": {
+          "status": "verified",
+          "verified_on": "2026-01-29",
+          "verified_by": "ll7",
+          "method": null,
+          "notes": "ped_density=0.0; use map single_ped markers to control count.",
+          "metrics": {
+            "min_distance": null,
+            "mean_distance": null,
+            "robot_ped_within_5m_frac": null,
+            "ped_force_mean": null,
+            "force_q95": null
+          },
+          "metrics_updated_on": "2026-01-30T14:19:28.225110+01:00"
+        }
+      },
+      "seeds": [
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        118,
+        119,
+        120
+      ]
+    }
+  ]
+}

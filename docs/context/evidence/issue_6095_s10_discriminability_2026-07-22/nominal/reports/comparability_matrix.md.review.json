@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/reports/comparability_matrix.md",
+  "artifact_sha256": "3a93a74294fec2ade4d52701e51f0212805846cc870c3fb7a4c3085b1a260909",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

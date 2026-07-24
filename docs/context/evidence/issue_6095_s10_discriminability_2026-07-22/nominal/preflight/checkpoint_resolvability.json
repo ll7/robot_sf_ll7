@@ -1,0 +1,24 @@
+{
+  "mode": "metadata_only",
+  "stage": false,
+  "checked": 1,
+  "resolved": 1,
+  "submit_safe": false,
+  "arms": [
+    {
+      "planner_key": "ppo",
+      "algo": "ppo",
+      "kind": "model_id",
+      "value": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
+      "implicit": false,
+      "status": "stageable_remote",
+      "resolved_path": null,
+      "model_id": "ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417",
+      "checkpoint_sha256": "2b30df812bfcc737924b126b0763d69c567fe20716dc1c1eba8f56f926b49c1d",
+      "hash_source": "registry_declared",
+      "load_succeeded": null,
+      "fallback_triggered": null,
+      "load_status": "not_run"
+    }
+  ]
+}

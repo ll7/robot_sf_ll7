@@ -339,6 +339,8 @@ def _config_torch_worker(planner: Any) -> None:
         return
     torch.set_num_threads(1)
     seed = getattr(planner, "_seed", 0)
+    if seed is None:
+        seed = 0
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)

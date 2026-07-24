@@ -378,7 +378,7 @@ class PedestrianEnv(SingleAgentEnv):
             show_lidar=True,  # Enable lidar visualization in debug mode
         )
 
-    def step(self, action):
+    def step(self, action) -> tuple[dict[str, np.ndarray], float, bool, bool, dict[str, Any]]:
         """Execute one environment step.
 
         Returns:
@@ -432,7 +432,7 @@ class PedestrianEnv(SingleAgentEnv):
         info = _build_step_info(meta)
         return obs_ped, reward, terminated, False, info
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None) -> tuple[dict[str, np.ndarray], dict[str, Any]]:
         """Reset the environment.
 
         Returns:
@@ -461,7 +461,7 @@ class PedestrianEnv(SingleAgentEnv):
             seed=getattr(self, "applied_seed", None),
         )
 
-    def render(self, **kwargs):
+    def render(self, **kwargs) -> None:
         """Render the environment."""
         if not self.sim_ui:
             raise RuntimeError("Debug mode is not activated! Set debug=True!")
@@ -539,12 +539,12 @@ class PedestrianEnv(SingleAgentEnv):
 
         return state
 
-    def record(self):
+    def record(self) -> None:
         """Record current state for later playback."""
         state = self._prepare_visualizable_state()
         self.recorded_states.append(state)
 
-    def save_recording(self, filename: str | None = None):
+    def save_recording(self, filename: str | None = None) -> None:
         """Save recorded states to a pickle file.
 
         Args:

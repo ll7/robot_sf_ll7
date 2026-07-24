@@ -40,7 +40,7 @@ from robot_sf.render.playback_recording import load_states
 from robot_sf.render.sim_view import VisualizableAction, VisualizableSimState
 
 
-def save_to_json(filename_pkl: str, filename_json: str | None = None):
+def save_to_json(filename_pkl: str, filename_json: str | None = None) -> None:
     """
     Save simulation states from a pickle recording file to a JSON file.
 
@@ -77,7 +77,7 @@ def save_to_json(filename_pkl: str, filename_json: str | None = None):
     logger.info(f"Saved data to {filename_json}")
 
 
-def convert_to_serializable(obj):
+def convert_to_serializable(obj) -> dict | list | float | int | str | bool | None:
     """
     Recursively convert non-JSON-serializable objects into serializable ones.
 
@@ -132,7 +132,7 @@ def convert_to_serializable(obj):
         raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable!")
 
 
-def convert_map_def_to_serializable(obj):
+def convert_map_def_to_serializable(obj) -> dict | list:
     """
     Recursively convert non-JSON-serializable objects into serializable ones.
 
@@ -271,7 +271,7 @@ def plot_all_data_json(
     filename: str,
     unique_id: str | None = None,
     interactive: bool = True,
-):
+) -> None:
     """
     Plot all available data from a JSON file.
 
@@ -377,7 +377,7 @@ def plot_all_data_json(
     )
 
 
-def show_from_json(filename: str, unique_id: str):
+def show_from_json(filename: str, unique_id: str) -> None:
     """
     Convert recording file into json and plot the data.
 

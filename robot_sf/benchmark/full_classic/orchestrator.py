@@ -1397,7 +1397,9 @@ def run_episode_jobs(jobs: Iterable[object], cfg, manifest) -> Iterator[dict]:  
         yield from _execute_parallel(to_run, existing_ids, episodes_path, cfg, manifest, workers)
 
 
-def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T028
+def adaptive_sampling_iteration(
+    current_records, cfg, scenarios, manifest
+) -> tuple[bool, list]:  # T028
     """Decide whether additional episode jobs are required.
 
     Minimal implementation for contract phase:
@@ -1473,7 +1475,7 @@ def adaptive_sampling_iteration(current_records, cfg, scenarios, manifest):  # T
 
 def run_full_benchmark(  # noqa: C901,PLR0912,PLR0915
     cfg,
-):  # T029 + T034 integration (refactored in polish phase)
+) -> BenchmarkManifest:  # T029 + T034 integration (refactored in polish phase)
     """Execute classic benchmark with adaptive precision loop.
 
     Refactored to reduce cyclomatic complexity (extracting helpers for setup, manifest

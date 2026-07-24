@@ -49,7 +49,9 @@ def extract_pedestrian_positions(states: list[VisualizableSimState]) -> np.ndarr
     return np.array(pedestrian_positions)
 
 
-def kde_plot_grid_creation(x_min, x_max, y_min, y_max, number_of_grid_points: int = 100):
+def kde_plot_grid_creation(
+    x_min, x_max, y_min, y_max, number_of_grid_points: int = 100
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Create a grid of points for Kernel Density Estimation (KDE) plotting.
 
     Args:
@@ -85,7 +87,7 @@ def visualize_kde_of_pedestrians_on_map(
     pedestrian_positions: np.ndarray,
     map_def: MapDefinition,
     kde_bandwith_method: str = "scott",
-):
+) -> None:
     """Visualize KDE for pedestrian positions on a map"""
 
     # Get map dimensions

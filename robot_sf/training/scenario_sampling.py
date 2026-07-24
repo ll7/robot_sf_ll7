@@ -287,7 +287,9 @@ class ScenarioSwitchingEnv(Env):
         self.observation_space = env.observation_space
         self.action_space = env.action_space
 
-    def reset(self, *, seed: int | None = None, options: dict | None = None):
+    def reset(
+        self, *, seed: int | None = None, options: dict | None = None
+    ) -> tuple[Any, dict[str, Any]]:
         """Reset the current scenario environment, optionally switching scenarios.
 
         Returns:
@@ -336,7 +338,7 @@ class ScenarioSwitchingEnv(Env):
         self._has_reset = True
         return self._current_env.reset(seed=seed, options=options)
 
-    def step(self, action):
+    def step(self, action) -> tuple[Any, float, bool, bool, dict[str, Any]]:
         """Step the active scenario environment.
 
         Returns:
@@ -346,7 +348,7 @@ class ScenarioSwitchingEnv(Env):
             raise RuntimeError("ScenarioSwitchingEnv.step called before reset().")
         return self._current_env.step(action)
 
-    def render(self, *args, **kwargs):  # pragma: no cover - passthrough
+    def render(self, *args, **kwargs) -> Any:  # pragma: no cover - passthrough
         """Render the active environment when available.
 
         Returns:

@@ -152,7 +152,7 @@ def _bind_fast_in_collision(grid: Grid) -> None:
     free_vals = np.array([TYPES.FREE, TYPES.START, TYPES.GOAL], dtype=np.int64)
     if njit:
 
-        def fast_in_collision(self, p1, p2):
+        def fast_in_collision(self, p1, p2) -> bool:
             """Run Numba-backed line-of-sight collision checking.
 
             Returns:
@@ -164,7 +164,7 @@ def _bind_fast_in_collision(grid: Grid) -> None:
 
     else:
 
-        def fast_in_collision(self, p1, p2):
+        def fast_in_collision(self, p1, p2) -> bool:
             """Run Python fallback line-of-sight collision checking.
 
             Returns:
@@ -184,7 +184,7 @@ class HighPerformanceThetaStar(ThetaStar):
     a faster implementation before delegating to the parent plan().
     """
 
-    def plan(self):
+    def plan(self) -> tuple:
         """Run planning with a fast in-collision check bound to the grid.
 
         Returns:

@@ -1,6 +1,7 @@
 """env_util."""
 
 import random
+from collections.abc import Iterator
 from contextlib import contextmanager
 from enum import Enum
 from typing import Any
@@ -8,6 +9,7 @@ from typing import Any
 import numpy as np
 from gymnasium import spaces
 
+from robot_sf.common.types import PolarVec2D
 from robot_sf.gym_env.env_config import EnvSettings, PedEnvSettings, RobotEnvSettings
 from robot_sf.gym_env.observation_config import get_observation_stack_steps
 from robot_sf.gym_env.unified_config import PedestrianSimulationConfig, RobotSimulationConfig
@@ -42,7 +44,7 @@ class AgentType(Enum):
 
 
 @contextmanager
-def global_reset_seed(seed: int | None):
+def global_reset_seed(seed: int | None) -> Iterator[None]:
     """Seed legacy global RNGs so same-seed resets produce deterministic episodes.
 
     Some simulator paths still consume Python ``random`` and NumPy's module-level
@@ -157,7 +159,7 @@ def init_collision_and_sensors(
     sim: Simulator,
     env_config: EnvSettings | RobotSimulationConfig,
     orig_obs_space: spaces.Dict,
-):
+) -> tuple[list[ContinuousOccupancy], list[SensorFusion]]:
     """Initialize collision detection and sensor fusion for each robot.
 
     Args:
@@ -208,7 +210,7 @@ def init_collision_and_sensors(
     sensor_fusions: list[SensorFusion] = []
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
-        def ray_sensor(r_id=r_id):
+        def ray_sensor(r_id=r_id) -> np.ndarray:
             """Capture lidar ray scan for the specified robot.
 
             Args:
@@ -221,7 +223,7 @@ def init_collision_and_sensors(
                 sim.robots[r_id].pose, occupancies[r_id], lidar_config
             )
 
-        def target_sensor(r_id=r_id):
+        def target_sensor(r_id=r_id) -> tuple[float, float, float]:
             """Capture target/goal sensor observations for the specified robot.
 
             Args:
@@ -236,7 +238,7 @@ def init_collision_and_sensors(
                 sim.next_goal_pos[r_id],
             )
 
-        def speed_sensor(r_id=r_id):
+        def speed_sensor(r_id=r_id) -> PolarVec2D:
             """Capture current speed for the specified robot.
 
             Args:
@@ -277,7 +279,9 @@ def init_collision_and_sensors(
     return occupancies, sensor_fusions
 
 
-def init_spaces(env_config: EnvSettings | RobotSimulationConfig, map_def: MapDefinition):
+def init_spaces(
+    env_config: EnvSettings | RobotSimulationConfig, map_def: MapDefinition
+) -> tuple[spaces.Space, spaces.Dict, spaces.Dict]:
     """
     Initialize the action and observation spaces for the environment.
 
@@ -315,7 +319,7 @@ def create_spaces(  # noqa: C901
     env_config: EnvSettings | PedEnvSettings | RobotSimulationConfig,
     map_def: MapDefinition,
     agent_type: AgentType = AgentType.ROBOT,
-):
+) -> tuple[spaces.Space, spaces.Dict, spaces.Dict]:
     # Create a agent using the factory method in the environment configuration
     """Create observation and action spaces for the specified agent type.
 
@@ -410,7 +414,7 @@ def create_spaces(  # noqa: C901
 def init_ped_spaces(
     env_config: PedEnvSettings | PedestrianSimulationConfig,
     map_def: MapDefinition,
-):
+) -> tuple[list[spaces.Space], list[spaces.Dict], list[spaces.Dict]]:
     """
     Initialize the action and observation spaces for the environment.
 
@@ -457,7 +461,7 @@ def init_ped_collision_and_sensors(
     sim: PedSimulator,
     env_config: PedEnvSettings | PedestrianSimulationConfig,
     orig_obs_space: list[spaces.Dict],
-):
+) -> tuple[list[ContinuousOccupancy | EgoPedContinuousOccupancy], list[SensorFusion]]:
     """Initialize collision detection and sensor fusion for robot + ego pedestrian.
 
     Args:
@@ -503,7 +507,7 @@ def init_ped_collision_and_sensors(
     )
 
     # Define the ray sensor, target sensor, and speed sensor for the robot
-    def ray_sensor(r_id=0):
+    def ray_sensor(r_id=0) -> np.ndarray:
         """Capture lidar ray scan for the robot.
 
         Args:
@@ -514,7 +518,7 @@ def init_ped_collision_and_sensors(
         """
         return lidar_ray_scan_ranges_only(sim.robots[r_id].pose, occupancies[r_id], lidar_config)
 
-    def target_sensor(r_id=0):
+    def target_sensor(r_id=0) -> tuple[float, float, float]:
         """Capture target/goal sensor observations for the robot.
 
         Args:
@@ -525,7 +529,7 @@ def init_ped_collision_and_sensors(
         """
         return target_sensor_obs(sim.robots[r_id].pose, sim.goal_pos[r_id], sim.next_goal_pos[r_id])
 
-    def speed_sensor(r_id=0):
+    def speed_sensor(r_id=0) -> PolarVec2D:
         """Capture current speed for the robot.
 
         Args:
@@ -564,7 +568,7 @@ def init_ped_collision_and_sensors(
         ),
     )
 
-    def ray_sensor_ego_ped():
+    def ray_sensor_ego_ped() -> np.ndarray:
         """Capture lidar ray scan for the ego pedestrian.
 
         Returns:
@@ -572,7 +576,7 @@ def init_ped_collision_and_sensors(
         """
         return lidar_ray_scan_ranges_only(sim.ego_ped.pose, occupancies[1], ego_ped_lidar_config)
 
-    def target_sensor_ego_ped():
+    def target_sensor_ego_ped() -> tuple[float, float, float]:
         """Capture target/goal sensor observations for the ego pedestrian.
 
         Returns:
@@ -585,7 +589,7 @@ def init_ped_collision_and_sensors(
             next_goal_pos,
         )
 
-    def speed_sensor_ego_ped():
+    def speed_sensor_ego_ped() -> PolarVec2D:
         """Capture current speed for the ego pedestrian.
 
         Returns:
@@ -611,7 +615,7 @@ def create_spaces_with_image(
     env_config: EnvSettings | PedEnvSettings | RobotEnvSettings,
     map_def: MapDefinition,
     agent_type: AgentType = AgentType.ROBOT,
-):
+) -> tuple[spaces.Space, spaces.Dict, spaces.Dict]:
     """
     Create observation and action spaces including optional image observations.
 
@@ -701,7 +705,7 @@ def init_collision_and_sensors_with_image(
     env_config: EnvSettings | RobotEnvSettings,
     orig_obs_space: spaces.Dict,
     sim_view=None,
-):
+) -> tuple[list[ContinuousOccupancy], list[SensorFusion | ImageSensorFusion]]:
     """Initialize collision detection and sensor fusion with optional image sensors.
 
     Args:
@@ -755,7 +759,7 @@ def init_collision_and_sensors_with_image(
     sensor_fusions = []
     for r_id in range(num_robots):
         # Define the ray sensor, target sensor, and speed sensor for each robot
-        def ray_sensor(r_id=r_id):
+        def ray_sensor(r_id=r_id) -> np.ndarray:
             """Capture lidar ray scan for the specified robot.
 
             Args:
@@ -768,7 +772,7 @@ def init_collision_and_sensors_with_image(
                 sim.robots[r_id].pose, occupancies[r_id], lidar_config
             )
 
-        def target_sensor(r_id=r_id):
+        def target_sensor(r_id=r_id) -> tuple[float, float, float]:
             """Capture target/goal sensor observations for the specified robot.
 
             Args:
@@ -783,7 +787,7 @@ def init_collision_and_sensors_with_image(
                 sim.next_goal_pos[r_id],
             )
 
-        def speed_sensor(r_id=r_id):
+        def speed_sensor(r_id=r_id) -> PolarVec2D:
             """Capture current speed for the specified robot.
 
             Args:

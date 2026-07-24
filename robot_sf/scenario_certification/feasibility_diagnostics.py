@@ -308,6 +308,11 @@ def _run_scenario_diagnostics(
     episode_runner: EpisodeRunner,
     certifier: Certifier,
 ) -> ScenarioDiagnosticOutcome:
+    """Return the diagnostic outcome of running all lanes for one scenario.
+
+    Each lane is run only when enabled and a seed is available; lanes without a seed are reported
+    as blocked. Returns the aggregated diagnostic outcome.
+    """
     scenario_id = _scenario_id(scenario)
     family_id = _scenario_family_id(scenario)
     seed = _first_seed(scenario, limit=config.seeds_per_scenario)
@@ -374,6 +379,10 @@ def _build_report(
     scenario_count: int,
     outcomes: Sequence[ScenarioDiagnosticOutcome],
 ) -> dict[str, Any]:
+    """Return the assembled feasibility-diagnostics report dict from config and outcomes.
+
+    Includes scenario rows, per-lane evidence rows, family verdicts, and a difficulty-ramp summary.
+    """
     lane_rows: list[dict[str, Any]] = []
     for outcome in outcomes:
         lane_rows.extend(_scenario_lane_rows(outcome, source=config.scenario_path.as_posix()))
@@ -396,6 +405,7 @@ def _build_report(
 
 
 def _unsupported_report_reason(report: Mapping[str, Any]) -> str | None:
+    """Return a reason string when ``report`` has an unsupported schema or claim boundary, else ``None``."""
     if report.get("schema_version") != FEASIBILITY_DIAGNOSTICS_SCHEMA:
         return "unsupported_source_report_schema"
     if report.get("claim_boundary") != DIAGNOSTIC_CLAIM_BOUNDARY:
@@ -404,6 +414,7 @@ def _unsupported_report_reason(report: Mapping[str, Any]) -> str | None:
 
 
 def _family_verdicts_by_id(report: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    """Return the report's ``family_verdicts`` rows indexed by their ``family_id``."""
     rows = report.get("family_verdicts") or []
     if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
         return {}
@@ -415,6 +426,7 @@ def _family_verdicts_by_id(report: Mapping[str, Any]) -> dict[str, Mapping[str, 
 
 
 def _difficulty_ramps_by_id(report: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    """Return the report's ``difficulty_ramp`` rows indexed by their ``family_id``."""
     rows = report.get("difficulty_ramp") or []
     if not isinstance(rows, Sequence) or isinstance(rows, (str, bytes)):
         return {}
@@ -431,6 +443,11 @@ def _synthesize_family_claim_boundary(
     verdict: Mapping[str, Any] | None,
     difficulty_ramp: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
+    """Return the synthesized per-family claim state derived from a verdict and difficulty ramp.
+
+    Maps the verdict cause to a supported claim category when evidence is complete and a non-empty
+    difficulty ramp exists; otherwise returns an unsupported synthesis row.
+    """
     if verdict is None:
         return _unsupported_synthesis_row(family_id, "missing_family_verdict")
     if difficulty_ramp is None:
@@ -486,6 +503,7 @@ def _synthesize_family_claim_boundary(
 
 
 def _unsupported_synthesis_row(family_id: str, reason: str) -> dict[str, Any]:
+    """Return a ``still_unsupported`` synthesis row carrying ``reason`` and null evidence."""
     return {
         "family_id": family_id,
         "claim_state": "still_unsupported",
@@ -502,6 +520,7 @@ def _unsupported_synthesis_row(family_id: str, reason: str) -> dict[str, Any]:
 
 
 def _families_in_category(rows: Sequence[Mapping[str, Any]], category: str) -> list[str]:
+    """Return the family ids of synthesis rows whose ``claim_state`` equals ``category``."""
     return [str(row["family_id"]) for row in rows if row.get("claim_state") == category]
 
 
@@ -509,6 +528,10 @@ def _family_verdict(
     family_id: str,
     outcomes: Sequence[ScenarioDiagnosticOutcome],
 ) -> dict[str, Any]:
+    """Return the aggregated family verdict with a classified failure cause.
+
+    Lane passed flags are aggregated across the family's outcomes before classification.
+    """
     diagnostics = FamilyDiagnostics(
         route_feasible=_aggregate_lane([row.route_clearance.passed for row in outcomes]),
         actor_free_solved=_aggregate_lane([row.actor_free.passed for row in outcomes]),
@@ -531,6 +554,7 @@ def _family_verdict(
 
 
 def _scenario_lane_rows(outcome: ScenarioDiagnosticOutcome, *, source: str) -> list[dict[str, Any]]:
+    """Return the per-lane diagnostic evidence rows expanded from one scenario outcome."""
     rows = []
     for lane, result in (
         ("route_clearance", outcome.route_clearance),
@@ -555,6 +579,7 @@ def _scenario_lane_rows(outcome: ScenarioDiagnosticOutcome, *, source: str) -> l
 
 
 def _scenario_row_to_dict(outcome: ScenarioDiagnosticOutcome) -> dict[str, Any]:
+    """Return a :class:`ScenarioDiagnosticOutcome` serialized into a report scenario row."""
     return {
         "scenario_id": outcome.scenario_id,
         "family_id": outcome.family_id,
@@ -570,6 +595,7 @@ def _scenario_row_to_dict(outcome: ScenarioDiagnosticOutcome) -> dict[str, Any]:
 def _difficulty_ramp_summary(
     outcomes: Sequence[ScenarioDiagnosticOutcome],
 ) -> list[dict[str, Any]]:
+    """Return per-family difficulty-ramp summaries ordered by ascending difficulty level."""
     summaries: list[dict[str, Any]] = []
     for family_id in sorted({row.family_id for row in outcomes}):
         family_rows = sorted(
@@ -610,6 +636,7 @@ def _first_failure_level(
     *,
     lane: str,
 ) -> str | None:
+    """Return the first difficulty level (or scenario id) at which ``lane`` fails, else ``None``."""
     for row in rows:
         result = row.actor_free if lane == "actor_free" else row.oracle_trajectory
         if result.passed is False:
@@ -618,6 +645,7 @@ def _first_failure_level(
 
 
 def _lane_to_dict(result: LaneResult) -> dict[str, Any]:
+    """Return a :class:`LaneResult` serialized into a JSON-ready dict."""
     return {
         "passed": result.passed,
         "status": result.status,
@@ -627,6 +655,7 @@ def _lane_to_dict(result: LaneResult) -> dict[str, Any]:
 
 
 def _aggregate_lane(values: Iterable[bool | None]) -> bool | None:
+    """Return the aggregated lane passed flags: ``False`` if any observed false, ``True`` if all true, ``None`` if unobserved."""
     observed = [value for value in values if value is not None]
     if not observed:
         return None
@@ -658,6 +687,7 @@ def _default_episode_runner(config: FeasibilityDiagnosticConfig) -> EpisodeRunne
         horizon: int | None,
         algo: str,
     ) -> Mapping[str, Any]:
+        """Return the result of one diagnostic rollout run for a scenario/seed/algo via ``_run_map_episode``."""
         scenario_payload = deepcopy(dict(scenario))
         scenario_payload["seeds"] = [int(seed)]
         return _run_map_episode(
@@ -677,6 +707,11 @@ def _default_episode_runner(config: FeasibilityDiagnosticConfig) -> EpisodeRunne
 
 
 def _episode_success(record: Mapping[str, Any]) -> tuple[bool | None, str]:
+    """Return an episode record classified as success or failure with a short reason.
+
+    Inspects success/route/goal fields, the ``metrics`` block, and the termination reason;
+    returns ``(None, "unknown_episode_outcome")`` when the outcome is undetermined.
+    """
     success_fields = (
         record.get("success"),
         record.get("route_complete"),
@@ -707,6 +742,7 @@ def _episode_success(record: Mapping[str, Any]) -> tuple[bool | None, str]:
 
 
 def _record_excerpt(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a small diagnostic subset of outcome fields extracted from an episode record."""
     keys = (
         "scenario_id",
         "seed",
@@ -722,6 +758,7 @@ def _record_excerpt(record: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _status_from_passed(passed: bool | None) -> str:
+    """Return a ``passed``/``failed``/``not_run`` status string for a tri-state ``passed`` flag."""
     if passed is True:
         return "passed"
     if passed is False:
@@ -730,6 +767,7 @@ def _status_from_passed(passed: bool | None) -> str:
 
 
 def _scenario_family_id(scenario: Mapping[str, Any]) -> str:
+    """Return the scenario family id resolved from metadata or top-level fields, defaulting to ``"unknown"``."""
     metadata = scenario.get("metadata")
     metadata_map = metadata if isinstance(metadata, Mapping) else {}
     for value in (
@@ -745,6 +783,7 @@ def _scenario_family_id(scenario: Mapping[str, Any]) -> str:
 
 
 def _scenario_difficulty_level(scenario: Mapping[str, Any]) -> str | None:
+    """Return the difficulty level resolved from metadata or a ``low``/``medium``/``high`` name suffix."""
     metadata = scenario.get("metadata")
     metadata_map = metadata if isinstance(metadata, Mapping) else {}
     for key in ("difficulty", "difficulty_level", "density_tier"):
@@ -759,6 +798,7 @@ def _scenario_difficulty_level(scenario: Mapping[str, Any]) -> str | None:
 
 
 def _difficulty_sort_key(level: str | None) -> tuple[int, str]:
+    """Return a sort key ordering ``low`` < ``medium`` < ``high`` with unknown levels last."""
     order = {"low": 0, "medium": 1, "high": 2}
     if level is None:
         return (99, "")
@@ -766,6 +806,7 @@ def _difficulty_sort_key(level: str | None) -> tuple[int, str]:
 
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str:
+    """Return the scenario id resolved from ``scenario_id``/``name``/``id``, defaulting to ``"unknown"``."""
     for key in ("scenario_id", "name", "id"):
         value = scenario.get(key)
         if isinstance(value, str) and value.strip():
@@ -774,6 +815,7 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
 
 
 def _first_seed(scenario: Mapping[str, Any], *, limit: int | None) -> int | None:
+    """Return the single diagnostic seed for a scenario (supports only 0, 1, or ``None``)."""
     if limit is not None and limit > 1:
         raise ValueError("seeds_per_scenario currently supports only 0, 1, or None")
     seeds = _first_seeds(scenario, 1 if limit is None else min(limit, 1))
@@ -781,6 +823,7 @@ def _first_seed(scenario: Mapping[str, Any], *, limit: int | None) -> int | None
 
 
 def _first_seeds(scenario: Mapping[str, Any], count: int | None) -> list[int]:
+    """Return up to ``count`` seeds from the scenario's ``seeds`` list or single ``seed`` field."""
     raw = scenario.get("seeds")
     if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes)):
         seeds = [int(seed) for seed in raw]
@@ -793,6 +836,7 @@ def _first_seeds(scenario: Mapping[str, Any], count: int | None) -> list[int]:
 
 
 def _scenario_horizon(scenario: Mapping[str, Any]) -> int | None:
+    """Return ``simulation_config.max_episode_steps`` as an int, or ``None`` if unset."""
     sim_cfg = scenario.get("simulation_config")
     if not isinstance(sim_cfg, Mapping):
         return None

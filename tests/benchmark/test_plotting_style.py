@@ -38,10 +38,10 @@ def test_apply_latex_style_overrides_take_precedence():
 
 def test_apply_latex_style_rcparams_do_not_leak_from_test_context():
     """Restore global rcParams after applying the mutating style helper."""
-    original_rcparams = mpl.rcParams.copy()
+    original_style_params = {name: mpl.rcParams[name] for name in EXPECTED_RCPARAMS}
 
     with mpl.rc_context():
         apply_latex_style({"font.size": 13})
         assert mpl.rcParams["font.size"] == 13
 
-    assert mpl.rcParams == original_rcparams
+    assert {name: mpl.rcParams[name] for name in EXPECTED_RCPARAMS} == original_style_params

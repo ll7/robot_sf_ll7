@@ -29,8 +29,8 @@ from run_qd_campaign_issue_5308 import (  # noqa: E402
     run_campaign,
 )
 
-CONFIG_PATH = Path(__file__).resolve().parents[2] / "configs" / "adversarial" / (
-    "issue_5308_qd_doorway.yaml"
+CONFIG_PATH = (
+    Path(__file__).resolve().parents[2] / "configs" / "adversarial" / ("issue_5308_qd_doorway.yaml")
 )
 
 
@@ -124,9 +124,7 @@ def test_build_emitters_rejects_unknown_emitter() -> None:
     space = _build_search_space(payload)
     archive = QDArchive(grid=GridSpec(x_min=0.0, x_max=1.0, y_min=0.0, y_max=1.0, bins=2))
     with pytest.raises(ValueError, match="unknown emitter"):
-        _build_emitters(
-            {"emitters": ["totally_bogus"]}, space, archive, warm_starts=(), seed=0
-        )
+        _build_emitters({"emitters": ["totally_bogus"]}, space, archive, warm_starts=(), seed=0)
 
 
 def test_campaign_smoke_is_reproducible(tmp_path: Path) -> None:

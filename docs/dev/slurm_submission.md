@@ -23,6 +23,36 @@ The wrapper:
 This keeps new submissions aligned with the live cluster policy even if the script still
 contains an older fallback value.
 
+## Post-run closeout
+
+After a job reaches a terminal state, create the compact local closeout manifest with the
+checked-in finalizer:
+
+```bash
+uv run python scripts/tools/slurm_job_finalize.py \
+  --issue <issue-number> \
+  --job-id <slurm-job-id> \
+  --job-state <observed-state> \
+  --control-plane-run-root <run-root> \
+  --output <run-root>/slurm_finalization.json \
+  --markdown-output <run-root>/slurm_finalization.md
+```
+
+Use `--expected-artifact <path>` repeatedly instead of `--control-plane-run-root` when the
+run does not use the research-control-plane artifact set. Add `--optional-artifact <path>`
+for non-required files, and pass `--post-campaign-stage-status <path>` only when the launcher
+has emitted the validated `robot-sf-post-campaign-stage-status.v1` envelope. The finalizer
+records the observed job state, artifact presence, checksums, and an issue-update summary; it
+does not submit or poll jobs, upload files, or copy raw `output/` trees.
+
+Interpret the result conservatively: `success` means the observed terminal state and required
+local artifacts passed the helper's checks, while `missing_artifacts`, `failed`, `incomplete`,
+`not_available`, or `manual_decision_required` require the corresponding follow-up rather than
+being treated as benchmark success. A successful local closeout remains `pending_durable`
+until a retrievable durable artifact URI is recorded with `--durable-uri`; local paths alone
+are not durable evidence. Keep the issue/PR traceability checklist below in the public handoff,
+and keep private host, account, QoS, and scratch details out of public comments.
+
 ## Training submission queue
 
 Use `experiments/submission_queue.yaml` for reviewable planned training submissions that should be

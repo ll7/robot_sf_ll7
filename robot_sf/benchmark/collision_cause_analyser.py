@@ -347,7 +347,7 @@ def _verdict_from_evidence(evidence: AnalyserEvidence) -> AttributionVerdict:
             abstained=True,
         )
 
-    if evidence.replay.verdict == VERDICT_ALREADY_UNAVOIDABLE:
+    if not evidence.present_faults and evidence.replay.t_inevitable is not None:
         activation_step = evidence.replay.t_inevitable
         if activation_step is None:
             activation_step = evidence.replay.config.t_contact

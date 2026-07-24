@@ -145,6 +145,71 @@ def test_read_backlog_baseline_fails_closed_for_missing_or_invalid_files(tmp_pat
     assert "must contain a JSON object" in capsys.readouterr().err
 
 
+def test_read_backlog_baseline_for_ref_uses_the_ref_owned_blob(monkeypatch, tmp_path):
+    """The base snapshot must load its own baseline rather than the branch file."""
+    observed: dict[str, object] = {}
+
+    def fake_run(command, *, cwd=None):
+        observed["command"] = command
+        observed["cwd"] = cwd
+        return '{"files": {"scripts/tool.py": 2}}'
+
+    monkeypatch.setattr(check_docstring_todos, "_run", fake_run)
+
+    baseline = check_docstring_todos._read_backlog_baseline_for_ref(
+        tmp_path / "baseline.json",
+        tmp_path,
+        "origin/main",
+    )
+
+    assert baseline == {"files": {"scripts/tool.py": 2}}
+    assert observed == {
+        "command": ["git", "show", "origin/main:baseline.json"],
+        "cwd": tmp_path,
+    }
+
+
+def test_read_backlog_baseline_for_ref_fails_closed(monkeypatch, tmp_path, capsys):
+    """Missing, malformed, or non-object ref blobs must not pass freshness."""
+
+    def missing_ref(*_args, **_kwargs):
+        raise RuntimeError("missing ref blob")
+
+    monkeypatch.setattr(check_docstring_todos, "_run", missing_ref)
+    baseline_path = tmp_path / "baseline.json"
+    assert (
+        check_docstring_todos._read_backlog_baseline_for_ref(
+            baseline_path,
+            tmp_path,
+            "origin/main",
+        )
+        is None
+    )
+    assert "missing ref blob" in capsys.readouterr().err
+
+    monkeypatch.setattr(check_docstring_todos, "_run", lambda *_args, **_kwargs: "{bad json}")
+    assert (
+        check_docstring_todos._read_backlog_baseline_for_ref(
+            baseline_path,
+            tmp_path,
+            "origin/main",
+        )
+        is None
+    )
+    assert "Failed to read baseline file" in capsys.readouterr().err
+
+    monkeypatch.setattr(check_docstring_todos, "_run", lambda *_args, **_kwargs: "[]")
+    assert (
+        check_docstring_todos._read_backlog_baseline_for_ref(
+            baseline_path,
+            tmp_path,
+            "origin/main",
+        )
+        is None
+    )
+    assert "must contain a JSON object" in capsys.readouterr().err
+
+
 def test_count_from_source_matches_file_count(tmp_path):
     """Ref-based source counting must match the file-based counter (issue #5858)."""
     src = (
@@ -207,18 +272,20 @@ def test_verify_baseline_docs_only_branch_does_not_fail():
 
 
 def test_committed_baseline_matches_base_ref_no_phantom_keys():
-    """The tracked baseline must not over-count files the base ref has already cleaned.
+    """The base ref's own baseline must not over-count files it has already cleaned.
 
     Regression for issue #5908: the baseline recorded a stale phantom key for
     ``tests/validation/test_pr_contract_check.py`` (baseline 1, base 0) after the
-    placeholder cleanup in #5897, which made ``verify-baseline`` fail unrelated
-    docs-only PRs. The committed baseline must agree with the base ref so no
-    reverse-drift (baseline exceeds base) lines remain.
+    placeholder cleanup in #5897. Read the baseline from the same ref as the
+    report so an intentional branch baseline update does not create false drift.
     """
     repo_root = check_docstring_todos._repo_root()
-    baseline = check_docstring_todos._read_backlog_baseline(
-        repo_root / check_docstring_todos.DEFAULT_BASELINE_PATH, repo_root
+    baseline = check_docstring_todos._read_backlog_baseline_for_ref(
+        repo_root / check_docstring_todos.DEFAULT_BASELINE_PATH,
+        repo_root,
+        "origin/main",
     )
+    assert baseline is not None
     ref_report = check_docstring_todos.build_backlog_report_for_ref(repo_root, "origin/main")
 
     drift, reverse = check_docstring_todos.compare_baseline_drift(ref_report, baseline)
@@ -312,6 +379,11 @@ def test_run_verify_baseline_check_working_tree_fails_on_stale_baseline(monkeypa
         "build_backlog_report_for_ref",
         lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
     )
+    monkeypatch.setattr(
+        check_docstring_todos,
+        "_read_backlog_baseline_for_ref",
+        lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
+    )
 
     namespace = _verify_namespace(baseline=Path("baseline.json"), check_working_tree=True)
 
@@ -340,7 +412,45 @@ def test_run_verify_baseline_check_working_tree_passes_when_clean(monkeypatch, t
         "build_backlog_report_for_ref",
         lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
     )
+    monkeypatch.setattr(
+        check_docstring_todos,
+        "_read_backlog_baseline_for_ref",
+        lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
+    )
 
+    namespace = _verify_namespace(baseline=Path("baseline.json"), check_working_tree=True)
+
+    rc = check_docstring_todos._run_verify_baseline(namespace, tmp_path)
+
+    assert rc == 0
+
+
+def test_run_verify_baseline_check_working_tree_passes_regenerated_cleanup(
+    monkeypatch,
+    tmp_path,
+):
+    """A cleanup branch may replace its baseline independently of the base snapshot."""
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "tool.py").write_text(
+        'def stays():\n    """Real docstring."""\n',
+        encoding="utf-8",
+    )
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text('{"files": {}}\n', encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(check_docstring_todos, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        check_docstring_todos,
+        "build_backlog_report_for_ref",
+        lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
+    )
+    monkeypatch.setattr(
+        check_docstring_todos,
+        "_read_backlog_baseline_for_ref",
+        lambda *_args, **_kw: _ref_report({"scripts/tool.py": 1}),
+    )
     namespace = _verify_namespace(baseline=Path("baseline.json"), check_working_tree=True)
 
     rc = check_docstring_todos._run_verify_baseline(namespace, tmp_path)

@@ -425,6 +425,7 @@ def _iter_model_ids(algo_config: dict[str, Any]) -> list[str]:
     found: list[str] = []
 
     def _walk(node: Any) -> None:
+        """Recursively collect non-empty model-id references under the id keys."""
         if isinstance(node, dict):
             for key in id_keys:
                 value = node.get(key)
@@ -758,6 +759,7 @@ def _walk_enabled_fallback_flags(node: Any) -> list[tuple[str, str]]:
     enabled: list[tuple[str, str]] = []
 
     def _walk(value: Any, trail: str) -> None:
+        """Recursively record enabled fallback flags with their dotted locations."""
         if isinstance(value, dict):
             for key, child in value.items():
                 if key in _FALLBACK_FLAG_KEYS and child is not False and bool(child):

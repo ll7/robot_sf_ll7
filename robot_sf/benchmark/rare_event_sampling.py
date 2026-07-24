@@ -505,6 +505,12 @@ def build_sampling_summary(
 
 
 def _apply_speed_multiplier(scenario: dict[str, Any], multiplier: float) -> None:
+    """Scale each pedestrian's speed fields by ``multiplier`` in place.
+
+    When the scenario has no pedestrian list, the multiplier is instead recorded
+    under ``metadata.pedestrian_speed_multiplier`` so the mutation is still
+    observable downstream.
+    """
     pedestrians = scenario.get("single_pedestrians")
     if not isinstance(pedestrians, list):
         _ensure_mapping_child(scenario, "metadata")["pedestrian_speed_multiplier"] = multiplier
@@ -518,6 +524,10 @@ def _apply_speed_multiplier(scenario: dict[str, Any], multiplier: float) -> None
 
 
 def _ensure_mapping_child(parent: dict[str, Any], key: str) -> dict[str, Any]:
+    """Return ``parent[key]`` as a mapping, creating an empty one when missing.
+
+    Raises when the value exists but is not a mapping.
+    """
     child = parent.get(key)
     if child is None:
         child = {}
@@ -528,12 +538,18 @@ def _ensure_mapping_child(parent: dict[str, Any], key: str) -> dict[str, Any]:
 
 
 def _optional_float(value: Any) -> float | None:
+    """Coerce ``value`` to float, returning ``None`` when it is ``None``.
+
+    Returns:
+        The coerced float, or ``None``.
+    """
     if value is None:
         return None
     return float(value)
 
 
 def _normal_pdf(value: float, mean: float, std: float) -> float:
+    """Return the normal distribution density at ``value`` for the given mean/std."""
     exponent = -0.5 * ((value - mean) / std) ** 2
     return math.exp(exponent) / (std * math.sqrt(2.0 * math.pi))
 

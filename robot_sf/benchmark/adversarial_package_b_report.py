@@ -488,6 +488,16 @@ def _parse_inventory_entry(
     line: str,
     seen_paths: set[str],
 ) -> tuple[tuple[str, Path] | None, str | None]:
+    """Parse one checksums line into ``(digest, path)``.
+
+    Validates the SHA-256 digest and separator, enforces a portable relative
+    path under ``worst_case_snqi/`` (rejecting ``output/`` paths), and deduplicates
+    against ``seen_paths``. Returns ``(entry, None)`` on success or
+    ``(None, error)`` on a malformed/duplicate line.
+
+    Returns:
+        ``(entry, None)`` on success or ``(None, error)`` on a malformed line.
+    """
     digest, sep, name = line.partition("  ")
     name = name.strip()
     if not sep or not _is_sha256_digest(digest):
@@ -510,6 +520,15 @@ def _verify_raw_tree_bytes(
     parsed_entries: list[tuple[str, Path]],
     raw_root: Path,
 ) -> tuple[int, int, int, list[str]]:
+    """Re-verify each parsed entry's SHA-256 against its file under ``raw_root``.
+
+    Returns ``(verified, missing, mismatched, errors)``; entries that escape the
+    raw root, are unreadable, or fail the stored digest are counted as missing or
+    mismatched rather than silently dropped.
+
+    Returns:
+        ``(verified, missing, mismatched, errors)``.
+    """
     errors: list[str] = []
     verified_entries = 0
     missing_entries = 0

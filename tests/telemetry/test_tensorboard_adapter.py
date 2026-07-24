@@ -98,6 +98,16 @@ def test_iter_telemetry_snapshots_extra_fields_ignored(tmp_path):
     assert snapshots[0].frame_idx is None
 
 
+def test_iter_telemetry_snapshots_missing_timestamp_is_none(tmp_path):
+    path = tmp_path / "missing_timestamp.jsonl"
+    _write_jsonl(path, [json.dumps({"frame_idx": 1})])
+
+    snapshots = list(iter_telemetry_snapshots(path))
+    assert len(snapshots) == 1
+    assert snapshots[0].timestamp_ms is None
+    assert snapshots[0].frame_idx == 1
+
+
 def test_iter_telemetry_snapshots_blank_lines(tmp_path):
     path = tmp_path / "blank.jsonl"
     path.write_text('\n\n{"timestamp_ms": 1}\n\n', encoding="utf-8")

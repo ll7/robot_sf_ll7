@@ -34,17 +34,17 @@ scenario_contract:
       family: doorway
       geometry_role: doorway
       source_path: configs/scenarios/archetypes/classic_doorway.yaml
-      certification_caveat: stress_only_knife_edge
+      certification_caveat: excluded_geometrically_infeasible_post_pr_6172
     - scenario_id: classic_station_platform_medium
       family: platform
       geometry_role: station_platform
       source_path: configs/scenarios/archetypes/classic_station_platform.yaml
-      certification_caveat: eligible_dynamic_interaction
+      certification_caveat: excluded_geometrically_infeasible_post_pr_6172
     - scenario_id: classic_merging_low
       family: merging
       geometry_role: merging
       source_path: configs/scenarios/archetypes/classic_merging.yaml
-      certification_caveat: eligible_long_detour
+      certification_caveat: excluded_geometrically_infeasible_post_pr_6172
   smoke_seed: 111
   result_producing_seeds: [111, 112, 113, 114, 115]
   horizon_steps: 500

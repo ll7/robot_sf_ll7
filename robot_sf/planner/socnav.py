@@ -45,7 +45,7 @@ try:  # pragma: no cover - optional dependency
 except ImportError:  # pragma: no cover - optional dependency
     sf_forces = None  # type: ignore[assignment]
 
-from robot_sf.models import resolve_model_path
+from robot_sf.models import get_registry_entry, resolve_model_path
 from robot_sf.nav.occupancy_grid_utils import world_to_ego
 from robot_sf.planner.obstacle_features import (
     PREDICTIVE_OBSTACLE_FEATURE_SCHEMA,
@@ -2680,6 +2680,12 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._obstacle_feature_extractor = LocalObstacleFeatureExtractor()
         self._baseline_predictor: Any | None = None
         self._forecast_variant_execution_mode = self._init_forecast_variant()
+        # Issue #6190: structured foresight-model-load provenance so a silent
+        # constant-velocity fallback is observable and checker-actionable. The
+        # benchmark metadata layer derives ``evidence_eligible`` and a degraded
+        # ``status`` from this block; without it the fallback is invisible and a
+        # degraded run can be promoted to a determinism verdict.
+        self._foresight_provenance = self._init_foresight_provenance()
 
     def _init_forecast_variant(self) -> str:
         """Initialize baseline predictor when forecast_variant is configured.
@@ -2752,6 +2758,117 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         """
         return self._forecast_variant_execution_mode
 
+    def _init_foresight_provenance(self) -> dict[str, Any]:
+        """Initialize structured foresight-model-load provenance (issue #6190).
+
+        Records the requested model asset plus its load outcome so a silent
+        constant-velocity fallback is observable. The benchmark metadata layer
+        derives ``evidence_eligible`` and a degraded ``status`` from this block.
+
+        Returns:
+            dict[str, Any]: Initial provenance block with a ``not_attempted`` load status.
+        """
+        model_id = getattr(self.config, "predictive_model_id", None)
+        checkpoint_path = getattr(self.config, "predictive_checkpoint_path", None)
+        requested_checkpoint = (
+            str(checkpoint_path) if checkpoint_path else (str(model_id) if model_id else None)
+        )
+        return {
+            "requested_model_id": model_id,
+            "requested_checkpoint_path": requested_checkpoint,
+            # This is the registry's expected digest, not a digest computed from
+            # a locally resolved file. A missing/unloadable asset must retain the
+            # requested provenance even when no local bytes exist to hash.
+            "requested_checkpoint_sha256": self._expected_checkpoint_sha256(),
+            "observed_checkpoint_sha256": None,
+            "load_status": "not_attempted",
+            "effective_prediction_mode": "not_attempted",
+            "fallback_used": False,
+            "fallback_reason": None,
+            "load_error": None,
+        }
+
+    def _expected_checkpoint_sha256(self) -> str | None:
+        """Return the configured model asset's expected registry digest, if declared."""
+        model_id = getattr(self.config, "predictive_model_id", None)
+        if not isinstance(model_id, str) or not model_id.strip():
+            return None
+        try:
+            entry = get_registry_entry(model_id)
+        except (FileNotFoundError, KeyError, TypeError, ValueError):
+            return None
+        release = entry.get("github_release")
+        if not isinstance(release, dict):
+            return None
+        digest = release.get("sha256")
+        if not isinstance(digest, str) or not digest.strip():
+            return None
+        return digest.strip().lower()
+
+    def _record_foresight_load_success(self, checkpoint_sha256: str | None) -> None:
+        """Record a successful predictive-model load in foresight provenance."""
+        self._foresight_provenance.update(
+            {
+                "load_status": "loaded",
+                "effective_prediction_mode": "predictive_foresight",
+                "fallback_used": False,
+                "fallback_reason": None,
+                "load_error": None,
+                "observed_checkpoint_sha256": checkpoint_sha256,
+            }
+        )
+
+    def _record_foresight_load_failure(
+        self,
+        exc: Exception,
+        checkpoint_sha256: str | None,
+    ) -> None:
+        """Record a predictive-model load failure in foresight provenance."""
+        self._foresight_provenance.update(
+            {
+                "load_status": "failed",
+                "effective_prediction_mode": "constant_velocity",
+                "fallback_used": bool(self._allow_fallback),
+                "fallback_reason": "predictive_model_load_failed",
+                "load_error": f"{type(exc).__name__}: {exc}",
+                "observed_checkpoint_sha256": checkpoint_sha256,
+            }
+        )
+
+    def _record_foresight_constant_velocity_used(self) -> None:
+        """Mark that a prediction step actually used the constant-velocity fallback."""
+        provenance = self._foresight_provenance
+        # Only transition from ``not_attempted`` to a degraded effective mode; a
+        # recorded load failure already carries the constant-velocity mode.
+        if provenance.get("load_status") == "not_attempted":
+            provenance.update(
+                {
+                    "load_status": "not_attempted",
+                    "effective_prediction_mode": "constant_velocity",
+                    "fallback_used": bool(self._allow_fallback),
+                    "fallback_reason": "predictive_model_not_loaded",
+                }
+            )
+        else:
+            provenance["effective_prediction_mode"] = "constant_velocity"
+
+    def foresight_diagnostics(self) -> dict[str, Any]:
+        """Return structured foresight-model-load provenance for benchmark metadata.
+
+        The block is the structured source for ``evidence_eligible`` and the
+        degraded ``status`` derivation in ``enrich_algorithm_metadata``.
+        """
+        return {"foresight_prediction": dict(self._foresight_provenance)}
+
+    def foresight_degraded(self) -> bool:
+        """Return True when the adapter fell back to constant-velocity prediction."""
+        provenance = self._foresight_provenance
+        if provenance.get("fallback_used") is True:
+            return True
+        return provenance.get("effective_prediction_mode") == "constant_velocity" and (
+            provenance.get("load_status") in {"failed", "not_attempted"}
+        )
+
     def configure(self, config: SocNavPlannerConfig | None = None) -> None:
         """Replace configuration and refresh forecast-variant runtime state."""
         self.config = config or SocNavPlannerConfig()
@@ -2760,6 +2877,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
         self._load_error = None
         self._fallback_warned = False
         self._forecast_variant_execution_mode = self._init_forecast_variant()
+        self._foresight_provenance = self._init_foresight_provenance()
 
     def bind_obstacle_lines(self, obstacle_lines: Any) -> None:
         """Bind explicit runtime obstacle-line geometry for obstacle-feature inputs."""
@@ -2806,9 +2924,14 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
             return self._model
         if self._load_error is not None:
             return None if self._allow_fallback else self._raise_cached_error()
+        # Hash a readable requested checkpoint before deserializing it. A corrupt
+        # or schema-incompatible artifact still needs provenance in the fallback
+        # record even though model construction will fail.
+        checkpoint_sha256 = self._compute_checkpoint_sha256()
         try:
             self._model = self._build_model()
         except Exception as exc:
+            self._record_foresight_load_failure(exc, checkpoint_sha256)
             if self._allow_fallback:
                 self._load_error = exc
                 if not self._fallback_warned:
@@ -2820,7 +2943,30 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
                     self._fallback_warned = True
                 return None
             raise
+        self._record_foresight_load_success(checkpoint_sha256)
         return self._model
+
+    def _compute_checkpoint_sha256(self) -> str | None:
+        """Return the SHA-256 digest of the resolved predictive checkpoint, if available.
+
+        Returns:
+            str | None: Lowercase-hex SHA-256 digest, or ``None`` when the
+            checkpoint cannot be resolved or read.
+        """
+        try:
+            checkpoint = self._resolve_checkpoint_path()
+        except (FileNotFoundError, KeyError, OSError, ValueError, RuntimeError):
+            return None
+        try:
+            import hashlib  # noqa: PLC0415
+
+            digest = hashlib.sha256()
+            with checkpoint.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1 << 20), b""):
+                    digest.update(chunk)
+            return digest.hexdigest()
+        except OSError:
+            return None
 
     def _raise_cached_error(self) -> None:
         """Re-raise cached predictive-model initialization error."""
@@ -3025,6 +3171,7 @@ class PredictionPlannerAdapter(SamplingPlannerAdapter):
 
         model = self._ensure_model()
         if model is None:
+            self._record_foresight_constant_velocity_used()
             return self._constant_velocity_prediction(state, mask)
         assert torch is not None
         with torch.no_grad():

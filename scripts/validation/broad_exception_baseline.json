@@ -11,7 +11,7 @@
       "robot_sf/benchmark/map_runner.py": 2,
       "robot_sf/benchmark/map_runner_batch_runner.py": 3,
       "robot_sf/benchmark/map_runner_env.py": 1,
-      "robot_sf/benchmark/runner.py": 8,
+      "robot_sf/benchmark/runner.py": 9,
       "robot_sf/benchmark/scenario_generation/portfolio_selector.py": 1,
       "robot_sf/benchmark/snqi/cli.py": 3,
       "robot_sf/benchmark/snqi/compute.py": 1,
@@ -104,7 +104,7 @@
       "scripts/validation/verify_maps.py": 1,
       "scripts/validation/verify_sf_implementation.py": 4
     },
-    "total": 176
+    "total": 177
   },
   "description": "Broad exception handler baseline for benchmark/script surfaces. Run scripts/validation/check_broad_exceptions.py --write-baseline to refresh after intentionally removing or approving entries.",
   "entries": [
@@ -251,6 +251,15 @@
       "lineno": 84,
       "path": "robot_sf/benchmark/map_runner_env.py",
       "source": "except Exception as exc:  # noqa: BLE001 - provenance must never break a benchmark run."
+    },
+    {
+      "col_offset": 4,
+      "context": "_planner_foresight_diagnostics",
+      "fingerprint": "47f4987d201584a7",
+      "handler": "Exception",
+      "lineno": 329,
+      "path": "robot_sf/benchmark/runner.py",
+      "source": "except Exception:  # pragma: no cover - diagnostics must not break policy execution"
     },
     {
       "col_offset": 4,

@@ -1168,7 +1168,13 @@ def _attach_checkpoint_runtime_stats(
 
     def _planner_stats() -> dict[str, Any]:
         """Return checkpoint state after the latest planner step."""
-        return {"checkpoint_provenance": _checkpoint_runtime_metadata(planner, algo_config)}
+        runtime = {"checkpoint_provenance": _checkpoint_runtime_metadata(planner, algo_config)}
+        foresight_diagnostics = getattr(planner, "foresight_diagnostics", None)
+        if callable(foresight_diagnostics):
+            foresight = foresight_diagnostics()
+            if isinstance(foresight, dict):
+                runtime.update(foresight)
+        return runtime
 
     policy._planner_stats = _planner_stats
 
@@ -2171,7 +2177,9 @@ def _build_common_adapter_policy(  # noqa: C901
     _policy._planner_adapter = adapter
     if planner_bind_env is not None:
         _policy._planner_bind_env = planner_bind_env
-    if hasattr(adapter, "diagnostics"):
+    adapter_diagnostics = getattr(adapter, "diagnostics", None)
+    foresight_diagnostics = getattr(adapter, "foresight_diagnostics", None)
+    if callable(adapter_diagnostics) or callable(foresight_diagnostics):
 
         def _planner_stats() -> dict[str, Any]:
             """Expose generic adapter diagnostics for episode metadata.
@@ -2179,7 +2187,12 @@ def _build_common_adapter_policy(  # noqa: C901
             Returns:
                 dict[str, Any]: Adapter diagnostic payload.
             """
-            return adapter.diagnostics()
+            diagnostics = adapter_diagnostics() if callable(adapter_diagnostics) else {}
+            runtime = dict(diagnostics) if isinstance(diagnostics, dict) else {}
+            foresight = foresight_diagnostics() if callable(foresight_diagnostics) else {}
+            if isinstance(foresight, dict):
+                runtime.update(foresight)
+            return runtime
 
         _policy._planner_stats = _planner_stats
     return _policy, meta

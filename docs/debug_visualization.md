@@ -128,8 +128,22 @@ uv run python -m robot_sf.render.trace_viewer \
 ```
 
 The viewer reuses the same `robot_sf/render/web_assets/` static assets (Three.js CDN, dark theme)
-as the JSONL-playback viewer. Map bounds are auto-computed from trace positions; no SVG map
-geometry is available in this mode.
+as the JSONL-playback viewer. By default, map bounds are auto-computed from trace positions. To
+overlay known diagnostic map context, pass a JSON object with the supported obstacle and zone lists:
+
+```bash
+uv run python -m robot_sf.render.trace_viewer \
+  tests/fixtures/analysis_workbench/simulation_trace_export_v1/minimal_trace.json \
+  --map-geometry path/to/map_geometry.json \
+  --output-dir output/trace_viewer
+```
+
+`map_geometry.json` may contain `obstacles` entries with `vertices` (`[x, y]` pairs) and `lines`
+(`[x_start, x_end, y_start, y_end]`), plus any of `robot_spawn_zones`, `robot_goal_zones`,
+`ped_spawn_zones`, `ped_goal_zones`, and `ped_crowded_zones` as polygons with at least three
+point pairs. Coordinates must be finite numbers and zone points must be exact pairs. Supplied
+geometry participates in the camera bounds and remains diagnostic-only metadata; it is not an SVG
+parser or a ground-truth map validation path.
 
 ### Annotation Span Markers
 

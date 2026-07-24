@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         model_ids = list(args.model_ids) + _config_model_ids(args.config)
-    except (FileNotFoundError, yaml.YAMLError) as exc:
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
         print(f"[preflight] config error: {exc}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
 

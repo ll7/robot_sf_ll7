@@ -484,12 +484,17 @@ EXPERIMENT_PREREQUISITES: tuple[PrerequisiteSpec, ...] = (
         description=(
             "A versioned, split-disjoint forecast dataset (with manifest) recorded via "
             "forecast_dataset_recorder, durable enough to score a heavy model against the "
-            "baseline ladder. Not staged in-repo today."
+            "baseline ladder. The planning config is not sufficient; a validated manifest "
+            "and durable examples are still absent."
         ),
         blocks=("Definition of Done: minimum viable offline experiment on durable data",),
         probe_paths=(
-            "configs/forecast/heavy_model_holdout*.yaml",
-            "configs/forecast/heavy_model_holdout*.yml",
+            "configs/forecast/heavy_model_holdout*.manifest.json",
+            "configs/forecast/heavy_model_holdout*.manifest.yaml",
+            "configs/forecast/heavy_model_holdout*.manifest.yml",
+            "data/forecast/heavy_model_holdout*.manifest.json",
+            "data/forecast/heavy_model_holdout*.manifest.yaml",
+            "data/forecast/heavy_model_holdout*.manifest.yml",
         ),
         related_issues=(2844, 3065),
     ),

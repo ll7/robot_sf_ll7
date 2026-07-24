@@ -1,20 +1,21 @@
-# Heavy forecast-model holdout dataset manifest (issue #2845).
+# Heavy forecast-model holdout dataset plan (issue #2845).
 #
-# Declares the bounded, versioned, split-disjoint held-out forecast dataset
-# that the minimum viable offline experiment scores the heavy model against.
-# The dataset is produced by forecast_dataset_recorder and validated through
-# the dataset-manifest contract.
+# This is a planning config for the bounded, versioned, split-disjoint
+# held-out forecast dataset that the minimum viable offline experiment will
+# score. It is not a durable forecast_dataset.v1 manifest: no examples are
+# committed here, and the inventory must remain blocked until recording and
+# manifest validation produce that artifact.
 #
-# schema: heavy_model_holdout_manifest.v1
+# schema: heavy_model_holdout_plan.v1
 
-dataset_id: "heavy_model_holdout_v1"
-schema_version: "forecast_dataset.v1"
+plan_id: "heavy_model_holdout_v1"
+schema: "heavy_model_holdout_plan.v1"
 
 description: >
-  Bounded held-out forecast dataset for the offline transformer/diffusion
-  benchmark study (#2845). Recorded from simulation trace exports, split into
-  train/validation/test by scenario seed so no scenario seed appears in more
-  than one split.
+  Proposed bounded held-out forecast dataset for the offline
+  transformer/diffusion study (#2845). It will be recorded from simulation
+  trace exports and split into train/validation/test by scenario seed so no
+  scenario seed appears in more than one split.
 
 recording:
   adapter: "oracle_full_state"

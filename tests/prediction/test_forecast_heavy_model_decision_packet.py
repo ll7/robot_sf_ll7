@@ -24,21 +24,21 @@ def _write(root, relpath: str) -> None:
     path.write_text("# test fixture\n", encoding="utf-8")
 
 
-def test_revival_decision_packet_is_external_blocked_on_real_checkout():
-    """After local prerequisites are staged, external decisions still gate runs."""
+def test_revival_decision_packet_is_fail_closed_on_real_checkout():
+    """The live checkout remains deferred until a durable holdout dataset exists."""
     packet = build_revival_decision_packet(build_inventory_report(root=repo_root()))
 
     assert isinstance(packet, HeavyModelRevivalDecisionPacket)
     assert packet.issue == inv.ISSUE
     assert packet.evidence_status == "analysis_only"
-    assert packet.revival_status == "local_ready_external_blocked"
-    assert "dependency/checkpoint decision" in packet.recommendation
+    assert packet.revival_status == "deferred_blocked"
+    assert "do not implement or train" in packet.recommendation
     assert packet.blockers
-    assert not any("staged_holdout_dataset" in blocker for blocker in packet.blockers)
+    assert any("staged_holdout_dataset" in blocker for blocker in packet.blockers)
     assert "Slurm/GPU submission" in packet.forbidden_actions
     assert "heavy model training" in packet.forbidden_actions
     payload = packet.to_dict()
-    assert payload["inventory"]["minimum_experiment_status"] == "ready"
+    assert payload["inventory"]["minimum_experiment_status"] == "blocked"
 
 
 def test_revival_decision_packet_reports_surface_contract_blocker(tmp_path):
@@ -94,5 +94,5 @@ def test_cli_decision_packet_modes_emit_guardrails(capsys):
     payload = json.loads(capsys.readouterr().out)
     assert code == 0
     assert payload["issue"] == inv.ISSUE
-    assert payload["revival_status"] == "local_ready_external_blocked"
+    assert payload["revival_status"] == "deferred_blocked"
     assert "full benchmark campaign" in payload["forbidden_actions"]

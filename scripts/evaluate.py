@@ -1,4 +1,10 @@
-"""TODO docstring. Document this module."""
+"""Evaluate a trained driving policy in the robot_sf Gymnasium environment.
+
+Loads a stable-baselines3 model (PPO or A2C), wraps the :class:`RobotEnv` with
+an observation/action adapter, runs rollouts across configured pedestrian-density
+difficulties, and writes per-difficulty collision/route-completion metrics to
+``results.json``.
+"""
 
 import json
 from dataclasses import dataclass
@@ -28,7 +34,16 @@ VehicleConfig = Union[DifferentialDriveSettings, BicycleDriveSettings]
 
 @dataclass
 class GymAdapterSettings:
-    """TODO docstring. Document this class."""
+    """Configuration for adapting :class:`RobotEnv` observations to a model.
+
+    Attributes:
+        obs_space: Target observation space exposed to the model.
+        action_space: Target action space exposed to the model.
+        obs_timesteps: Number of stacked observation timesteps expected by the model.
+        squeeze_obs: When true, drop singleton dimensions from observation arrays.
+        cut_2nd_target_angle: When true, drop the second target angle component.
+        return_dict: When true, pass the raw dict observation through unchanged.
+    """
 
     obs_space: spaces.Space
     action_space: spaces.Space
@@ -38,10 +53,17 @@ class GymAdapterSettings:
     return_dict: bool
 
     def obs_adapter(self, obs):
-        """TODO docstring. Document this function.
+        """Adapt a raw :class:`RobotEnv` observation for the model.
+
+        When ``return_dict`` is set the observation is returned unchanged.
+        Otherwise the drive-state and ray components are optionally trimmed and
+        squeezed, then concatenated into a single array along the time axis.
 
         Args:
-            obs: TODO docstring.
+            obs: Raw observation dict produced by :class:`RobotEnv`.
+
+        Returns:
+            Observation in the layout expected by the model.
         """
         if self.return_dict:
             return obs
@@ -62,7 +84,15 @@ class GymAdapterSettings:
 
 @dataclass
 class EvalSettings:
-    """TODO docstring. Document this class."""
+    """Top-level configuration for a policy evaluation run.
+
+    Attributes:
+        num_episodes: Number of episodes to roll out per difficulty.
+        ped_densities: Pedestrian density applied at each difficulty index.
+        vehicle_config: Drive-model vehicle settings (differential or bicycle).
+        prf_config: Pedestrian-robot-force configuration.
+        gym_config: Observation/action adapter configuration.
+    """
 
     num_episodes: int
     ped_densities: list[float]
@@ -73,47 +103,68 @@ class EvalSettings:
 
 @dataclass
 class AdaptedEnv(gymnasium.Env):
-    """TODO docstring. Document this class."""
+    """Gymnasium wrapper that exposes an adapted :class:`RobotEnv`.
+
+    Delegates stepping and reset to the wrapped environment while rewriting the
+    observation through :meth:`GymAdapterSettings.obs_adapter` and projecting
+    the configured observation/action spaces.
+
+    Attributes:
+        orig_env: Underlying :class:`RobotEnv` being adapted.
+        config: Adapter settings controlling observation transforms and spaces.
+    """
 
     orig_env: RobotEnv
     config: GymAdapterSettings
 
     @property
     def observation_space(self):
-        """TODO docstring. Document this function."""
+        """Return the configured observation space."""
         return self.config.obs_space
 
     @property
     def action_space(self):
-        """TODO docstring. Document this function."""
+        """Return the configured action space."""
         return self.config.action_space
 
     def step(self, action):
-        """TODO docstring. Document this function.
+        """Apply an action to the wrapped environment and adapt the result.
 
         Args:
-            action: TODO docstring.
+            action: Action to apply in the wrapped environment's action space.
+
+        Returns:
+            Adapted observation, reward, termination flag, and metadata tuple.
         """
         obs, reward, done, meta = self.orig_env.step(action)
         obs = self.config.obs_adapter(obs)
         return obs, reward, done, meta
 
     def reset(self):
-        """TODO docstring. Document this function."""
+        """Reset the wrapped environment and adapt the initial observation.
+
+        Returns:
+            Adapted initial observation.
+        """
         obs = self.orig_env.reset()
         return self.config.obs_adapter(obs)
 
 
 def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMetrics:
-    """TODO docstring. Document this function.
+    """Roll out a policy and collect aggregate evaluation metrics.
+
+    Runs ``num_episodes`` episodes using deterministic model predictions,
+    resetting the environment at each route end, and accumulates per-episode
+    metadata (collisions, route completion, timeouts) into an
+    :class:`EnvMetrics` instance.
 
     Args:
-        env: TODO docstring.
-        model: TODO docstring.
-        num_episodes: TODO docstring.
+        env: Gymnasium environment to evaluate in.
+        model: Trained stable-baselines3 policy (PPO or A2C).
+        num_episodes: Number of episodes to roll out.
 
     Returns:
-        TODO docstring.
+        Aggregated evaluation metrics across all rolled-out episodes.
     """
     eval_metrics = EnvMetrics(cache_size=num_episodes)
 
@@ -161,24 +212,28 @@ def prepare_env(settings: EvalSettings, difficulty: int) -> gymnasium.Env:
 
 
 def prepare_model(model_path: str, env: gymnasium.Env) -> DriveModel:
-    """TODO docstring. Document this function.
+    """Load a trained A2C policy bound to the given environment.
 
     Args:
-        model_path: TODO docstring.
-        env: TODO docstring.
+        model_path: Filesystem path to the saved A2C model.
+        env: Gymnasium environment the model will interact with.
 
     Returns:
-        TODO docstring.
+        Loaded stable-baselines3 model ready for prediction.
     """
     return A2C.load(model_path, env=env)
 
 
 def evaluation_series(model_path: str, settings: EvalSettings):
-    """TODO docstring. Document this function.
+    """Run evaluation across all configured difficulties.
+
+    For each pedestrian-density difficulty, builds an environment, loads the
+    model, evaluates it, prints the metrics, and writes the accumulated
+    per-difficulty results to ``results.json``.
 
     Args:
-        model_path: TODO docstring.
-        settings: TODO docstring.
+        model_path: Filesystem path to the saved model to evaluate.
+        settings: Evaluation settings describing episodes, densities, and adapters.
     """
     all_metrics = {}
 
@@ -201,7 +256,7 @@ def evaluation_series(model_path: str, settings: EvalSettings):
 
 
 def main():
-    """TODO docstring. Document this function."""
+    """Configure and run a default evaluation series for the bundled A2C model."""
     model_path = "./model/a2c_model"
     obs_space, action_space = prepare_gym_spaces()
 
@@ -241,7 +296,11 @@ def main():
 
 
 def prepare_gym_spaces():
-    """TODO docstring. Document this function."""
+    """Build empty placeholder observation and action Gymnasium spaces.
+
+    Returns:
+        A ``(obs_space, action_space)`` pair of empty unbounded ``Box`` spaces.
+    """
     obs_low = np.array([])
     obs_high = np.array([])
     action_low = np.array([])

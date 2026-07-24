@@ -9,8 +9,8 @@
       "occurrences": 0
     },
     "scripts": {
-      "files": 24,
-      "occurrences": 587
+      "files": 20,
+      "occurrences": 462
     },
     "tests": {
       "files": 181,
@@ -19,14 +19,10 @@
   },
   "files": {
     "scripts/PPO_training/train_ppo_punish_action.py": 2,
-    "scripts/compare_slow_tests.py": 10,
     "scripts/debug_trained_policy.py": 1,
-    "scripts/evaluate.py": 24,
-    "scripts/generate_figures.py": 51,
     "scripts/multi_extractor_training.py": 75,
     "scripts/perf/baseline_factory_creation.py": 11,
     "scripts/ranking_table.py": 8,
-    "scripts/recompute_snqi_weights.py": 40,
     "scripts/research/compare_ablations.py": 3,
     "scripts/research/generate_extractor_report.py": 6,
     "scripts/run_social_navigation_benchmark.py": 8,
@@ -232,7 +228,7 @@
   ],
   "schema_version": "docstring-todo-backlog.v1",
   "totals": {
-    "files": 205,
-    "total_occurrences": 1841
+    "files": 201,
+    "total_occurrences": 1716
   }
 }

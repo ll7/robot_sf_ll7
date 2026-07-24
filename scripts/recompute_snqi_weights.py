@@ -93,11 +93,13 @@ class SNQIWeightRecomputer:
     """
 
     def __init__(self, episodes_data: list[dict], baseline_stats: dict[str, dict[str, float]]):
-        """TODO docstring. Document this function.
+        """Initialize the recomputer with episodes and normalization statistics.
 
         Args:
-            episodes_data: TODO docstring.
-            baseline_stats: TODO docstring.
+            episodes_data: Episode dictionaries, each expected to carry a
+                ``metrics`` mapping and optional ``scenario_params``.
+            baseline_stats: Mapping of metric name to ``{"med", "p95"}``
+                normalization statistics.
         """
         self.episodes = episodes_data
         self.baseline_stats = baseline_stats
@@ -107,14 +109,18 @@ class SNQIWeightRecomputer:
         self.pareto_frontier_samples = 600
 
     def _maybe_simplex(self, weights: dict[str, float], total: float = 10.0) -> dict[str, float]:
-        """TODO docstring. Document this function.
+        """Optionally project a weight vector onto a constant-sum simplex.
+
+        When simplex projection is disabled the weights are returned unchanged.
+        Otherwise they are rescaled so their sum equals ``total``; weights
+        summing to zero or less are returned unchanged as a defensive no-op.
 
         Args:
-            weights: TODO docstring.
-            total: TODO docstring.
+            weights: Weight mapping to (optionally) rescale.
+            total: Target sum for the rescaled weights.
 
         Returns:
-            TODO docstring.
+            The (possibly rescaled) weight mapping.
         """
         if not self.simplex:
             return weights
@@ -424,13 +430,16 @@ def load_episodes_data(path: Path) -> tuple[list[dict[str, Any]], int]:
 
 
 def load_baseline_stats(path: Path) -> dict[str, dict[str, float]]:
-    """TODO docstring. Document this function.
+    """Load baseline normalization statistics from a JSON file.
 
     Args:
-        path: TODO docstring.
+        path: Path to a JSON file mapping metric names to ``{"med", "p95"}``.
 
     Returns:
-        TODO docstring.
+        Parsed baseline statistics mapping.
+
+    Raises:
+        ValueError: If the JSON content is not an object.
     """
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
@@ -443,14 +452,17 @@ def _compute_strategy_set(
     recomputer: SNQIWeightRecomputer,
     strategies: list[str],
 ) -> dict[str, Any]:
-    """TODO docstring. Document this function.
+    """Run several recomputation strategies on a recomputer instance.
+
+    Each strategy is run independently; failures are logged and skipped rather
+    than aborting the set.
 
     Args:
-        recomputer: TODO docstring.
-        strategies: TODO docstring.
+        recomputer: Recomputer used to run each strategy.
+        strategies: Strategy names to run (e.g. ``default``, ``pareto``).
 
     Returns:
-        TODO docstring.
+        Mapping of strategy name to its recomputation result.
     """
     out: dict[str, Any] = {}
     for name in strategies:
@@ -462,13 +474,17 @@ def _compute_strategy_set(
 
 
 def _select_recommended(strategy_results: dict[str, Any]) -> tuple[str, dict[str, float]]:
-    """TODO docstring. Document this function.
+    """Pick the recommended strategy by a discriminative-power heuristic.
+
+    Scores each strategy from its overall score range and standard deviation
+    (favoring high range and low variance) and returns the best.
 
     Args:
-        strategy_results: TODO docstring.
+        strategy_results: Mapping of strategy name to its recomputation result.
 
     Returns:
-        TODO docstring.
+        A ``(strategy_name, weights)`` pair; when no strategy succeeded, the
+        name is empty and unit weights are returned.
     """
     best_name: str | None = None
     best_score = -float("inf")
@@ -494,24 +510,26 @@ def _augment_metadata(
     original_episode_count: int | None = None,
     used_episode_count: int | None = None,
 ) -> None:
-    """TODO docstring. Document this function.
+    """Attach run provenance and timing metadata to the results document.
+
+    Records generation timestamps, runtime, git commit, seed, invocation, and
+    optional phase timings and episode counts under ``results["_metadata"]``.
 
     Args:
-        results: TODO docstring.
-        args: TODO docstring.
-        start_iso: TODO docstring.
-        start_perf: TODO docstring.
-        phase_timings: TODO docstring.
-        original_episode_count: TODO docstring.
-        used_episode_count: TODO docstring.
+        results: Results document to annotate in place.
+        args: Parsed CLI namespace used to record inputs and invocation.
+        start_iso: ISO timestamp captured at the start of the run.
+        start_perf: ``perf_counter`` value captured at the start of the run.
+        phase_timings: Optional mapping of phase name to elapsed seconds.
+        original_episode_count: Optional count of episodes before sampling.
+        used_episode_count: Optional count of episodes actually analyzed.
     """
 
     def _git_commit() -> str:
-        """TODO docstring. Document this function.
-
+        """Return the short hash of the current git ``HEAD`` commit.
 
         Returns:
-            TODO docstring.
+            The abbreviated commit hash, or ``"UNKNOWN"`` when git is unavailable.
         """
         try:
             return (
@@ -556,11 +574,14 @@ def _augment_metadata(
 
 
 def _finalize_summary(results: dict[str, Any], args: argparse.Namespace) -> None:
-    """TODO docstring. Document this function.
+    """Populate the compact human-readable ``summary`` block of the results.
+
+    Summarizes the chosen method, recommended weights, active comparison flags,
+    provenance timestamps/runtime, and baseline/parse diagnostics.
 
     Args:
-        results: TODO docstring.
-        args: TODO docstring.
+        results: Results document to annotate in place.
+        args: Parsed CLI namespace describing the requested run.
     """
     if args.compare_strategies:
         method_descriptor = results.get("recommended_strategy")
@@ -585,12 +606,15 @@ def _finalize_summary(results: dict[str, Any], args: argparse.Namespace) -> None
 
 
 def _print_summary(results: dict[str, Any], args: argparse.Namespace, episodes_count: int) -> None:
-    """TODO docstring. Document this function.
+    """Log a human-readable summary of the recomputation results.
+
+    Reports the number of episodes analyzed, the recommended strategy and
+    weights, optional strategy correlations, and normalization-strategy impact.
 
     Args:
-        results: TODO docstring.
-        args: TODO docstring.
-        episodes_count: TODO docstring.
+        results: Results document containing recommended weights and comparisons.
+        args: Parsed CLI namespace controlling which sections are printed.
+        episodes_count: Number of episodes analyzed in this run.
     """
     lines: list[str] = []
     lines.append("Weight Recomputation Summary:")
@@ -623,13 +647,13 @@ def _print_summary(results: dict[str, Any], args: argparse.Namespace, episodes_c
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """TODO docstring. Document this function.
+    """Parse the SNQI weight recomputation CLI arguments.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional argument vector (defaults to ``sys.argv[1:]``).
 
     Returns:
-        TODO docstring.
+        Parsed CLI namespace for the recomputation run.
     """
     parser = argparse.ArgumentParser(description="SNQI Weight Recomputation")
     parser.add_argument(
@@ -1172,13 +1196,13 @@ def run(args: argparse.Namespace) -> int:  # noqa: C901,PLR0912,PLR0915
 
 
 def main(argv: list[str] | None = None) -> int:  # pragma: no cover
-    """TODO docstring. Document this function.
+    """Parse CLI arguments, apply logging, and run the recomputation.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional argument vector (defaults to ``sys.argv[1:]``).
 
     Returns:
-        TODO docstring.
+        Process exit code from :func:`run`.
     """
     args = parse_args(argv)
     _apply_log_level(getattr(args, "log_level", None))

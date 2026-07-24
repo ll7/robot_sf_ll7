@@ -297,6 +297,7 @@ def _build_pilot_row(
 
 
 def _conformal_radius(scores: list[float], *, coverage_target: float) -> float | None:
+    """Return the split-conformal radius at the coverage-target quantile of finite scores."""
     finite_scores = sorted(score for score in scores if np.isfinite(score))
     if not finite_scores:
         return None
@@ -313,6 +314,11 @@ def _coverage_status(
     evaluation_count: int,
     coverage_gap: float | None,
 ) -> str:
+    """Classify held-out coverage from calibration/evaluation denominators and the coverage gap.
+
+    Returns:
+        The coverage status string.
+    """
     if calibration_count <= 0:
         return "unavailable_no_calibration_denominator"
     if evaluation_count <= 0 or coverage_gap is None:
@@ -323,6 +329,11 @@ def _coverage_status(
 
 
 def _limitation_rows(pilot_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collect per-row limitation records for unavailable or under-covered pilot groups.
+
+    Returns:
+        The collected limitation records.
+    """
     limitations = []
     for row in pilot_rows:
         if row["coverage_status"].startswith("unavailable"):
@@ -348,6 +359,7 @@ def _recommendation(
     pilot_rows: list[dict[str, Any]],
     limitation_rows: list[dict[str, Any]],
 ) -> dict[str, str]:
+    """Return the overall decision/claim_status/reason from pilot and limitation rows."""
     if not pilot_rows:
         return {
             "decision": "wait",
@@ -374,6 +386,11 @@ def _recommendation(
 
 
 def _row_recommendation(status: str) -> str:
+    """Map a single coverage status to a continue/wait/revise recommendation.
+
+    Returns:
+        The recommendation string.
+    """
     if status == "covered_heldout_smoke":
         return "continue"
     if status.startswith("unavailable"):
@@ -382,6 +399,11 @@ def _row_recommendation(status: str) -> str:
 
 
 def _case_batch(case: dict[str, Any], *, case_index: int, split_name: str) -> ForecastBatch:
+    """Extract and coerce a case's batch into a ForecastBatch, failing closed on bad input.
+
+    Returns:
+        The coerced ``ForecastBatch``.
+    """
     if not isinstance(case, dict):
         raise ValueError(f"{split_name}_cases[{case_index}] must be a mapping")
     if "batch" not in case:
@@ -400,6 +422,11 @@ def _case_ground_truth(
     case_index: int,
     split_name: str,
 ) -> GroundTruthPositions:
+    """Extract a case's ground_truth mapping, failing closed when absent or not a mapping.
+
+    Returns:
+        The ground-truth mapping.
+    """
     ground_truth = case.get("ground_truth")
     if not isinstance(ground_truth, dict):
         raise ValueError(f"{split_name}_cases[{case_index}].ground_truth must be a mapping")
@@ -412,6 +439,11 @@ def _truth_array(
     actor_id: str,
     expected_steps: int,
 ) -> np.ndarray | None:
+    """Return the finite ``(T, 2)`` ground-truth array for an actor.
+
+    Returns ``None`` when the actor is absent; raises on a wrong-shaped or
+    non-finite trajectory.
+    """
     if actor_id not in ground_truth:
         return None
     array = np.asarray(ground_truth[actor_id], dtype=float)
@@ -423,6 +455,7 @@ def _truth_array(
 
 
 def _scenario_family(batch: ForecastBatch) -> str:
+    """Return a batch's scenario_family metadata, falling back to the seed-stripped scenario id."""
     family = batch.metadata.get("scenario_family")
     if family is not None:
         return str(family)
@@ -430,6 +463,7 @@ def _scenario_family(batch: ForecastBatch) -> str:
 
 
 def _collision_relevance(metadata: dict[str, Any] | None) -> float | None:
+    """Return the finite collision_relevance value from metadata, or ``None``."""
     if not isinstance(metadata, dict):
         return None
     value = metadata.get("collision_relevance")
@@ -443,12 +477,14 @@ def _collision_relevance(metadata: dict[str, Any] | None) -> float | None:
 
 
 def _split_ids(cases: list[dict[str, Any]], *, default: str) -> list[str]:
+    """Return sorted unique split ids across cases, defaulting blanks."""
     return sorted(
         {_case_split_id(case, default=default) for case in cases if isinstance(case, dict)}
     )
 
 
 def _case_split_id(case: dict[str, Any], *, default: str) -> str:
+    """Return a case's split_id or ``default`` when absent."""
     value = case.get("split_id")
     return default if value is None else str(value)
 
@@ -462,6 +498,11 @@ def _empty_report(
     calibration_cases: list[dict[str, Any]],
     evaluation_cases: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """Build a fail-closed empty pilot report citing the blocking reason.
+
+    Returns:
+        The empty fail-closed pilot report dict.
+    """
     return {
         "schema_version": FORECAST_CONFORMAL_PILOT_SCHEMA_VERSION,
         "report_id": report_id,
@@ -503,6 +544,7 @@ def _empty_report(
 
 
 def _require_conformal_pilot_report(report: dict[str, Any]) -> None:
+    """Validate a report is a mapping carrying the conformal-pilot schema version."""
     if not isinstance(report, dict):
         raise ValueError("report must be a mapping")
     if report.get("schema_version") != FORECAST_CONFORMAL_PILOT_SCHEMA_VERSION:
@@ -510,6 +552,11 @@ def _require_conformal_pilot_report(report: dict[str, Any]) -> None:
 
 
 def _format_optional_float(value: float | None) -> str:
+    """Format an optional float to 6 significant figures, or ``"NA"`` when ``None``.
+
+    Returns:
+        The formatted float string.
+    """
     return "NA" if value is None else f"{float(value):.6g}"
 
 

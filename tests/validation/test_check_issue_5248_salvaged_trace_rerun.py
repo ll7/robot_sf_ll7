@@ -556,6 +556,11 @@ def test_no_sidecar_omits_sidecar_block_and_keeps_legacy_fraction(tmp_path: Path
         (1.0, False),
         ("1", False),
         ("1.0", False),
+        (-1, True),
+        (0.5, True),
+        (1.5, True),
+        (2, True),
+        ("2.0", True),
         (True, False),
         ("true", False),
         (" TRUE ", False),
@@ -615,6 +620,32 @@ def test_failure_episode_denominator_excludes_success_episodes(tmp_path: Path) -
     assert trace_labels["trace_labeled_fraction"] == 0.5
     # The all-rows ratio is still reported for transparency.
     assert trace_labels["trace_labeled_fraction_all_rows"] == 0.2
+
+
+def test_failure_episode_numerator_excludes_labeled_successes(tmp_path: Path) -> None:
+    """A labeled success cannot satisfy coverage for an unlabeled failure."""
+    campaign = _write_campaign(
+        tmp_path / "campaign",
+        episode_count=2,
+        trace_labeled_rows=1,
+        success_values=["1.0", "0.0"],
+    )
+
+    receipt = build_registration_receipt(
+        campaign_root=campaign,
+        job_id="fixture-job",
+        expected_total_episodes=2,
+        preregistration_config=PREREGISTRATION_CONFIG,
+        generated_at="2026-07-20T000000Z",
+    )
+
+    trace_labels = receipt["trace_labels"]
+    assert trace_labels["failure_episode_count"] == 1
+    assert trace_labels["trace_labeled_rows"] == 0
+    assert trace_labels["trace_labeled_rows_all_rows"] == 1
+    assert trace_labels["trace_labeled_fraction"] == 0.0
+    assert trace_labels["trace_labeled_fraction_all_rows"] == 0.5
+    assert receipt["status"] == BLOCKED_STATUS
 
 
 def test_all_rows_denominator_would_block_but_failure_denominator_passes(

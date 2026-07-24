@@ -292,7 +292,12 @@ def _is_failure_episode(row: Mapping[str, object]) -> bool:
         return True
     if not math.isfinite(value):
         return True
-    return value < SUCCESS_THRESHOLD
+    # The write-time success contract is boolean/0-or-1. Treat every finite
+    # numeric outside that strict domain as a failure episode so malformed
+    # values cannot silently shrink the gated denominator.
+    if value not in {0.0, SUCCESS_THRESHOLD}:
+        return True
+    return value == 0.0
 
 
 def _compute_trace_coverage(
@@ -300,12 +305,13 @@ def _compute_trace_coverage(
     *,
     trace_modes: set[str],
     sidecar_by_episode: dict[str, dict[str, str]],
-) -> tuple[int, int, int, int]:
+) -> tuple[int, int, int, int, int]:
     """Return trace-labeled counts plus the failure-episode denominator size.
 
     Counts trace-labeled rows (with and without the sidecar overlay) and the
     number of failure episodes. Returns
-    ``(with_sidecar, without_sidecar, matched, failure_episode_count)``. The
+    ``(failure_labeled_with_sidecar, all_labeled_without_sidecar,
+    all_labeled_with_sidecar, matched, failure_episode_count)``. The
     caller computes both the all-rows and failure-episode fractions from these
     counts so the receipt can report both while gating on one.
     """
@@ -317,17 +323,28 @@ def _compute_trace_coverage(
         sidecar_row = sidecar_by_episode.get(episode_id)
         return sidecar_row is not None and _trace_labeled(sidecar_row, trace_modes=trace_modes)
 
-    without = (
+    all_labeled_without_sidecar = (
         sum(_trace_labeled(row, trace_modes=trace_modes) for row in rows) if trace_modes else 0
     )
-    with_sidecar = sum(_row_labeled(row) for row in rows) if trace_modes else 0
+    all_labeled_with_sidecar = (
+        sum(_row_labeled(row) for row in rows) if trace_modes else 0
+    )
+    failure_rows = [row for row in rows if _is_failure_episode(row)]
+    failure_labeled_with_sidecar = (
+        sum(_row_labeled(row) for row in failure_rows) if trace_modes else 0
+    )
     matched = (
         sum(1 for row in rows if str(row.get("episode_id") or "").strip() in sidecar_by_episode)
         if rows and sidecar_by_episode
         else 0
     )
-    failure_episode_count = sum(_is_failure_episode(row) for row in rows) if rows else 0
-    return with_sidecar, without, matched, failure_episode_count
+    return (
+        failure_labeled_with_sidecar,
+        all_labeled_without_sidecar,
+        all_labeled_with_sidecar,
+        matched,
+        len(failure_rows),
+    )
 
 
 def _validate_campaign_summary(
@@ -468,6 +485,7 @@ def build_registration_receipt(
     (
         trace_labeled_rows,
         trace_labeled_rows_without_sidecar,
+        trace_labeled_rows_all_rows,
         sidecar_matched_rows,
         failure_episode_count,
     ) = _compute_trace_coverage(
@@ -477,7 +495,7 @@ def build_registration_receipt(
     # Issue #5779 denominator correction: the gate measures coverage over
     # failure episodes, but the receipt reports both ratios for transparency.
     trace_labeled_fraction_all_rows = (
-        trace_labeled_rows / total_row_count if total_row_count else 0.0
+        trace_labeled_rows_all_rows / total_row_count if total_row_count else 0.0
     )
     trace_labeled_fraction = (
         trace_labeled_rows / failure_episode_count if failure_episode_count else 0.0
@@ -527,6 +545,7 @@ def build_registration_receipt(
             "failure_episode_count": failure_episode_count,
             "trace_labeled_rows": trace_labeled_rows,
             "trace_labeled_fraction": trace_labeled_fraction,
+            "trace_labeled_rows_all_rows": trace_labeled_rows_all_rows,
             "trace_labeled_fraction_all_rows": trace_labeled_fraction_all_rows,
             "trace_labeled_rows_without_sidecar": trace_labeled_rows_without_sidecar,
             "trace_labeled_fraction_without_sidecar": trace_labeled_fraction_without_sidecar,

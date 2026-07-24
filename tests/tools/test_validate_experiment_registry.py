@@ -9,7 +9,6 @@ from types import SimpleNamespace
 
 from scripts.tools import validate_experiment_registry as registry_validator
 from scripts.tools.validate_experiment_registry import (
-    _issue_label_edit_commands,
     _load_issue_state_snapshot,
     apply_derived_issue_label_updates,
     build_control_plane_report,

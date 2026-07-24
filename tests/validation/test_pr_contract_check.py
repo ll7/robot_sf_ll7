@@ -430,7 +430,12 @@ def test_check_worker_lane_provenance(mock_add_label: MagicMock) -> None:
     body_normal = "Some normal PR"
 
     # Lane provenance with PR number
-    mock_add_label.return_value = {"status": "ok", "number": 123, "label": "cheap-lane", "action": "add"}
+    mock_add_label.return_value = {
+        "status": "ok",
+        "number": 123,
+        "label": "cheap-lane",
+        "action": "add",
+    }
     info, labeled = pr_contract_check.check_worker_lane_provenance(
         body_lane, "123", "ll7/robot_sf_ll7"
     )

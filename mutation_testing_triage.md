@@ -61,8 +61,8 @@ only stable `survived` mutants are tracked.
 
 | Classification | Count | Interpretation |
 | --- | ---: | --- |
-| Killed | 391 | Selected tests detected the mutation. |
-| Survived | 32 | Enumerated in the baseline; triaged below. |
+| Killed | 394 | Selected tests detected the mutation. |
+| Survived | 29 | Enumerated in the baseline; triaged below. |
 | No tests | 0 | All generated mutants are now exercised. |
 | Timeout / suspicious / skipped | 0 | No execution anomaly was observed. |
 | Total | 423 | All generated mutants in this run. |
@@ -70,16 +70,24 @@ only stable `survived` mutants are tracked.
 PR #5513 (first slice) reported 200 killed / 5 survived / 218 no-test out of
 423 mutants. The second slice expanded `tests/research/test_aggregation.py`
 with targeted tests for the export, manifest, and extraction paths, moving the
-218 no-test mutants into the executable set. The current run therefore shows
-32 survivors across 7 functions; all are baselined and tolerated.
+218 no-test mutants into the executable set, which left 55 baselined survivors
+across 7 functions; all were baselined and tolerated.
 
 The third slice (issue #6122) strengthened assertions to kill 23 more survivors:
 the `metrics not found` reason was tightened from a substring to an exact-
 equality check, and per-alias / per-optional-field tests were added for the
 `extract_seed_metrics` fallback chain (`avg_timesteps`, `total_timesteps`,
-`final_reward_mean`, `run_duration_seconds`). The remaining 32 survivors are
-the genuinely equivalent mutants triaged below (encoding platform-default
-equivalence, logging-only kwargs, and `None`-for-default fallbacks).
+`final_reward_mean`, `run_duration_seconds`).
+
+The fourth slice (issue #6122 follow-up) killed 3 more survivors in
+`export_metrics_csv` by strengthening `test_export_metrics_csv_creates_parent_dirs`
+to write into a path with two nested missing directories. A single missing
+level survives the `parents=True -> parents=None/False/dropped` mutants because
+`mkdir(parents=False)` still creates one immediate directory; two or more levels
+exercises the flag and turns those mutants into `FileNotFoundError` failures.
+The remaining 29 survivors are the genuinely equivalent mutants triaged below
+(encoding platform-default equivalence, logging-only kwargs, and
+`None`-for-default fallbacks).
 
 ## How to triage a survivor
 
@@ -116,12 +124,17 @@ argument's value with `None`:
 | --- | --- | --- |
 | `x_export_metrics_json__mutmut_10` | `encoding="utf-8"` -> `encoding=None` | `open(..., encoding=None)` uses the platform default, which is UTF-8 on the CI runner and on most dev machines; the JSON round-trip test does not distinguish. |
 | `x__load_manifest_payload__mutmut_2` | `encoding="utf-8"` -> `encoding=None` | Same platform-default equivalence for `read_text`. |
-| `x_export_metrics_csv__mutmut_1` | `parents=True` -> `parents=None` | `parents=None` is falsy; the affected paths resolve because of where the temp-dir tests sit. |
+| `x_export_metrics_csv__mutmut_1` | `parents=True` -> `parents=None` | Killed in the fourth slice: `test_export_metrics_csv_creates_parent_dirs` now nests two missing directories, so a falsy `parents` raises `FileNotFoundError`. (Sister mutants `__mutmut_3` and `__mutmut_6`, which drop `parents` or set `parents=False`, were killed by the same test.) |
 | `x_extract_seed_metrics__mutmut_77` | `metrics.get("avg_timesteps")` -> `metrics.get(None)` | `metrics.get(None)` returns `None`, which the `timesteps = timesteps or ...` fallback chain tolerates. |
 
-**Triage:** predominantly equivalent mutants. Optionally harden the `encoding`
-cases by asserting the byte content (an explicit UTF-8 multi-byte round-trip);
-otherwise keep baselined.
+**Triage:** predominantly equivalent mutants. The `encoding` cases were
+tested and confirmed **equivalent on UTF-8-default platforms**: on the dev host
+and the CI runner `locale.getpreferredencoding()` is `UTF-8`, so
+`open(..., encoding=None)` / `read_text(encoding=None)` decode a UTF-8
+multi-byte payload byte-for-byte identically to `encoding="utf-8"`. A UTF-8
+round-trip assertion therefore cannot kill these mutants here; they can only be
+killed on a non-UTF-8 platform default (e.g. a POSIX `C` locale), which is not
+the contract environment. Keep them baselined.
 
 ### String-constant content mutation (weak assertion)
 

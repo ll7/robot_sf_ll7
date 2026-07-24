@@ -1,0 +1,87 @@
+schema_version: release-checksum-manifest.v1
+release_id: benchmark_release_0_0_5
+release_tag: "0.0.5"
+release_url: "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.5"
+doi_url: "https://doi.org/10.5281/zenodo.19482025"
+target_commit: adadabacabfa663d6ace7eac10e23c67e6a18da7
+source_branch: orchestrator/ll7-lease-6154-0ca26983e5b6
+generated_at_utc: "2026-07-24T20:30:00Z"
+generated_by: scripts/repro/verify_release_checksums.py
+
+artifact_set:
+  bundle_evidence:
+    files:
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md
+        sha256: 22d0aa84f54116836eec6a2746ec60475946c78cd364cf58979683c85593a4b4
+        description: Release 0.0.5 evidence bundle README with plain-language summary and caveats.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml
+        sha256: b4a3f32505afcd90fba7fbb4edcbfb1bcd3dadedb1f2a64525db6a6c64d8fa84
+        description: Release evidence bundle manifest with per-candidate metadata, checksums, and residual risks.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/SHA256SUMS
+        sha256: 4caf2bb4624871388c5d39e633f76f5bf64241ed4603fc0949a47955301075af
+        description: SHA-256 checksums for the bundle directory files.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml
+        sha256: fd9ad236bddc9f019e6bd0fab9a7b7e168ca38578ddb0e62c08303c45c5c98a8
+        description: Reference manifest for candidate #5034 control-action-latency evidence.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml
+        sha256: df92e9f7c739cc630f5dc271a8dd8a7205441e49ab988e75079e7458ad82be6c
+        description: Reference manifest for candidate #5305 certified adversarial archive.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5416_reference.yaml
+        sha256: 9d5779ae6179727d3a020fea6b9b6cc55d54d7533b157c0701f44ff4fcb0c799
+        description: Reference manifest for candidate #5416 SIPP four-geometry preregistration.
+      - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml
+        sha256: 4c2f97a4439fd5337eab25a0cf9c552165e5d675b5e16e89f058af891e341bd7
+        description: Reference manifest for candidate #5592 cross-matrix preregistration.
+
+embedded_artifacts:
+  frozen_candidate_manifest:
+    path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml
+    sha256: 89520a1dc5b875386693a2c54829a621c8ad18d814f63b34d737844b658f24fb
+    description: Frozen 0.0.5 release candidate manifest (issue #6153).
+  frozen_candidate_manifest_sha256:
+    path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml.sha256
+    sha256: dfcb8d844115bca338abf2c00ad0e59bc63dbec6c36326644e4baf4c891f6a79
+    description: SHA-256 checksum file for the frozen candidate manifest.
+
+candidates:
+  - candidate_id: candidate_5034
+    owning_issue: 5034
+    source_commit: 484d3fd05a0e29da9e267fa18f817a1fe101de70
+    evidence_summary_json_sha256: caa5355200b19ec78adb87b261806d3e4a4f13bc56fd30423b6c1b3d66eb27ba
+    evidence_manifest_sha256: 7394e4348f72dca7e00e95e1ef6644a705bc9adfd699523af27260e0a133f0ae
+  - candidate_id: candidate_5305
+    owning_issue: 5305
+    source_commit: ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f
+    evidence_archive_sha256: 79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445
+    evidence_SHA256SUMS_sha256: b5bcbd13fc596208c49cce5f53d7e84403780f3121cfe31d6bc6aa6c5d9ae014
+  - candidate_id: candidate_5416
+    owning_issue: 5416
+    source_commit: 13cb68de3798ac2db964f03740297d10e64e713c
+    preregistration_config_sha256: 0899e774da82d48a9054513d5b194c6cb2838a7124f004f89516daf1d0646d85
+  - candidate_id: candidate_5592
+    owning_issue: 5592
+    source_commit: 96776636e797b16baa2be833ad957dd071a3b815
+    scenario_set_config_sha256: 6172370196b54fb5dcd2b9cab8954b86b3231560520f16a1eab036b3ee803f07
+    preregistration_config_sha256: 04032c5d8a06e31487821ac7c9c563cea326b6c015ad50ab049faac5b9f051d4
+
+entries:
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md
+    sha256: 22d0aa84f54116836eec6a2746ec60475946c78cd364cf58979683c85593a4b4
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml
+    sha256: b4a3f32505afcd90fba7fbb4edcbfb1bcd3dadedb1f2a64525db6a6c64d8fa84
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/SHA256SUMS
+    sha256: 4caf2bb4624871388c5d39e633f76f5bf64241ed4603fc0949a47955301075af
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml
+    sha256: fd9ad236bddc9f019e6bd0fab9a7b7e168ca38578ddb0e62c08303c45c5c98a8
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml
+    sha256: df92e9f7c739cc630f5dc271a8dd8a7205441e49ab988e75079e7458ad82be6c
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5416_reference.yaml
+    sha256: 9d5779ae6179727d3a020fea6b9b6cc55d54d7533b157c0701f44ff4fcb0c799
+  - path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml
+    sha256: 4c2f97a4439fd5337eab25a0cf9c552165e5d675b5e16e89f058af891e341bd7
+  - path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml
+    sha256: 89520a1dc5b875386693a2c54829a621c8ad18d814f63b34d737844b658f24fb
+  - path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml.sha256
+    sha256: dfcb8d844115bca338abf2c00ad0e59bc63dbec6c36326644e4baf4c891f6a79
+  - path: configs/benchmarks/releases/release_0_0_5_preflight_checklist.yaml
+    sha256: 74daf29c66fd44c187454fde1261b9d55d079968c0adfec9ca76b6fb9d889179

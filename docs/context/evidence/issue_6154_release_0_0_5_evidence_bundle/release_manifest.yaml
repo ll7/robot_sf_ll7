@@ -1,0 +1,116 @@
+# Release 0.0.5 Evidence Bundle Manifest
+# Issue: #6154
+# Parent Issue: #6149
+# Release Target: 0.0.5
+# Date: 2026-07-24
+
+schema_version: release_0_0_5_evidence_bundle.v1
+issue: 6154
+parent_issue: 6149
+target_release: "0.0.5"
+date: "2026-07-24"
+zenodo_concept_doi: "10.5281/zenodo.19482025"
+
+summary:
+  included_candidates: 4
+  excluded_candidates: 2
+  disposition_status: evidence_bundle_assembled
+  bundle_owner_commit: adadabacabfa663d6ace7eac10e23c67e6a18da7
+
+candidates:
+  - candidate_id: candidate_5034
+    owning_issue: 5034
+    title: "control-action latency metric-evidence promotion"
+    source_commit: "484d3fd05a0e29da9e267fa18f817a1fe101de70"
+    durable_artifact_uri: "docs/context/evidence/issue_5034_control_action_latency_sweep"
+    evidence_classification: metric_evidence_promotion
+    allowed_claim: "control-action-latency metric-evidence promotion only: action latency metadata plus success / collision / minimum-clearance metrics per eligible native/adapter latency cell"
+    fallback_degraded_excluded: true
+    acceptance_checker_status: verified
+    acceptance_checker_detail: "fixed_scope_coverage.status=verified (1296 result rows across 48 scenarios, 3 latency variants, 3 planners)"
+    sha256_coverage:
+      summary_json: caa5355200b19ec78adb87b261806d3e4a4f13bc56fd30423b6c1b3d66eb27ba
+      manifest: 7394e4348f72dca7e00e95e1ef6644a705bc9adfd699523af27260e0a133f0ae
+      snqi_analysis: 5ba2974cd8f300e61153e9e5d25ffe737dadbfb5efc62fc2659b19f9f9ec3949
+
+  - candidate_id: candidate_5305
+    owning_issue: 5305
+    title: "certified adversarial archive"
+    source_commit: "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f"
+    durable_artifact_uri: "docs/context/evidence/issue_5305_certified_archive"
+    evidence_classification: certified_adversarial_archive
+    allowed_claim: "certified adversarial archive of 17 certified episode entries with stable failure mechanism attributions and disjoint scenario splits"
+    fallback_degraded_excluded: true
+    acceptance_checker_status: passed
+    acceptance_checker_detail: "status=passed, repository_readiness.ready=true (17 certified entries across 2 scenario families)"
+    sha256_coverage:
+      archive_json: 79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445
+      acceptance_report: d297f759e5cb91d7c18a964c09162fd98091f8c38f9c30756431260a2dbb587c
+      SHA256SUMS: b5bcbd13fc596208c49cce5f53d7e84403780f3121cfe31d6bc6aa6c5d9ae014
+
+  - candidate_id: candidate_5416
+    owning_issue: 5416
+    title: "SIPP four-geometry preregistration packet"
+    source_commit: "13cb68de3798ac2db964f03740297d10e64e713c"
+    durable_artifact_uri: "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
+    evidence_classification: preregistration_packet
+    allowed_claim: "Preregistration and CPU contract evidence only. Does not run full benchmark campaign or edit paper claims."
+    fallback_degraded_excluded: true
+    acceptance_checker_status: blocked
+    acceptance_checker_detail: "status=blocked post-PR #6172: classic_doorway_low, classic_station_platform_medium, classic_merging_low correctly classified as geometrically_infeasible. Per preregistration contract these are documented exclusions (certification_caveat: excluded_geometrically_infeasible_post_pr_6172). Frozen manifest recorded status=ready before PR #6172 changed the geometry certifier. Gap routed to owning issue #5416."
+    sha256_coverage:
+      preregistration_config: 0899e774da82d48a9054513d5b194c6cb2838a7124f004f89516daf1d0646d85
+
+  - candidate_id: candidate_5592
+    owning_issue: 5592
+    title: "cross-matrix preregistration packet"
+    source_commit: "96776636e797b16baa2be833ad957dd071a3b815"
+    durable_artifact_uri: "configs/scenarios/sets/issue_5592_atomic_topology_second_matrix.yaml"
+    evidence_classification: preregistration_packet
+    allowed_claim: "Generalization check contract across two scenario matrices only. Does not establish paper/dissertation ranking."
+    fallback_degraded_excluded: true
+    acceptance_checker_status: ready
+    acceptance_checker_detail: "status=ready (reference_scenario_count=23, candidate_scenario_count=3, planner_count=12, seed_count=5)"
+    sha256_coverage:
+      scenario_set_config: 6172370196b54fb5dcd2b9cab8954b86b3231560520f16a1eab036b3ee803f07
+      preregistration_config: 04032c5d8a06e31487821ac7c9c563cea326b6c015ad50ab049faac5b9f051d4
+
+excluded_reference:
+  - candidate_id: candidate_5756
+    owning_issue: 5756
+    disposition: exclude
+    rationale: "Campaign in progress; issue #5756 labeled state:running with no completed evidence directory"
+    gate_status: failed
+  - candidate_id: candidate_4977
+    owning_issue: 4977
+    disposition: exclude
+    rationale: "Campaign not executed; issue #4977 CLOSED with blocked:needs-campaign label. Metric evidence promoted under child issue #5034."
+    gate_status: failed
+
+claims:
+  - claim_id: clm_5034_control_action_latency
+    description: "Control-action latency metric-evidence promotion per frozen manifest: action latency metadata plus success/collision/minimum-clearance metrics per eligible native/adapter latency cell."
+    promoted: true
+    planner_mode: native
+    row_status: completed
+  - claim_id: clm_5305_certified_adversarial_archive
+    description: "Certified adversarial archive of 17 certified episode entries with stable failure mechanism attributions and disjoint scenario splits."
+    promoted: true
+    planner_mode: native
+    row_status: completed
+  - claim_id: clm_5416_sipp_four_geometry_preregistration
+    description: "SIPP four-geometry preregistration and CPU contract only. Does not run full benchmark campaign or edit paper claims. Bound by caveat: acceptance checker regressed post-PR #6172."
+    promoted: true
+    planner_mode: native
+    row_status: completed
+  - claim_id: clm_5592_cross_matrix_preregistration
+    description: "Generalization check contract across two scenario matrices only. Does not establish paper/dissertation ranking."
+    promoted: true
+    planner_mode: native
+    row_status: completed
+
+residual_risks:
+  - risk_id: rsk_5416_acceptance_checker_regression
+    description: "check_issue_5416_sipp_four_geometry_packet.py now reports status=blocked due to PR #6172 geometry certifier changes. The preregistration packet itself documents these exclusions; the checker semantics changed after freezing. Recorded checksums still match."
+    impact: "Candidate #5416 acceptance checker does not match frozen manifest. Bundle includes the candidate with caveat; correction routed to owning issue #5416."
+    severity: medium

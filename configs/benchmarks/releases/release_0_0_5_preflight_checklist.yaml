@@ -1,0 +1,125 @@
+# Release-readiness preflight checklist for the 0.0.5 evidence bundle (issue #6154).
+#
+# This is a FAIL-CLOSED checklist, not a publication step. Each item maps one
+# of the release requirements to a concrete, mechanically checkable
+# prerequisite. The evaluator reports each item as `complete` only when its
+# declared durable artifact / manifest is present and valid; any missing or
+# invalid prerequisite resolves to `blocked`.
+
+schema_version: release_preflight_checklist.v1
+release_id: benchmark_release_0_0_5
+description: >-
+  Release-readiness preflight for the 0.0.5 evidence bundle (issue #6154).
+  Checks frozen manifest integrity, per-candidate evidence presence and checksum
+  coverage, bundle checksum manifest validity, and claim-boundary audit.
+
+items:
+  - item_id: frozen_manifest_integrity
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Frozen candidate manifest (issue #6153) is present and its SHA-256 matches
+      the recorded digest 89520a1dc5b875386693a2c54829a621c8ad18d814f63b34d737844b658f24fb.
+    path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml
+
+  - item_id: frozen_manifest_sha256_file
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      SHA-256 checksum file for the frozen candidate manifest is present.
+    path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml.sha256
+
+  - item_id: bundle_readme
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Release 0.0.5 evidence bundle README is present.
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/README.md
+
+  - item_id: bundle_release_manifest
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Release evidence bundle manifest is present with Zenodo DOI, candidate
+      metadata, checksums, and residual risks.
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml
+
+  - item_id: bundle_sha256sums
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      SHA-256 checksums file for the evidence bundle directory is present.
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/SHA256SUMS
+
+  - item_id: candidate_5034_reference
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Candidate #5034 reference manifest is present with checksum verification.
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5034_reference.yaml
+
+  - item_id: candidate_5305_reference
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Candidate #5305 reference manifest is present with checksum verification.
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5305_reference.yaml
+
+  - item_id: candidate_5416_reference
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Candidate #5416 reference manifest is present with checksum verification
+      and caveat documentation.
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5416_reference.yaml
+
+  - item_id: candidate_5592_reference
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Candidate #5592 reference manifest is present with checksum verification.
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/candidates/candidate_5592_reference.yaml
+
+  - item_id: checksum_manifest
+    criterion: tables_figures
+    check: checksum_manifest
+    description: >-
+      Release checksum manifest covers every bundle evidence file with matching
+      SHA-256 digests.
+    path: configs/releases/release_0_0_5_checksum_manifest.yaml
+
+  - item_id: candidate_5034_evidence_present
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Candidate #5034 original evidence summary.json is present and checksummed.
+    path: docs/context/evidence/issue_5034_control_action_latency_sweep/summary.json
+
+  - item_id: candidate_5305_evidence_present
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Candidate #5305 original acceptance report is present and checksummed.
+    path: docs/context/evidence/issue_5305_certified_archive/acceptance_report.json
+
+  - item_id: candidate_5416_packet_present
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Candidate #5416 preregistration config is present and checksummed.
+    path: configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml
+
+  - item_id: candidate_5592_packet_present
+    criterion: reproduction
+    check: artifact_present
+    description: >-
+      Candidate #5592 preregistration config is present and checksummed.
+    path: configs/benchmarks/issue_5592_cross_matrix_preregistration.yaml
+
+  - item_id: claim_boundary_audit
+    criterion: claim_audit
+    check: claim_audit
+    description: >-
+      Promoted claim cards for the release; every promoted claim must rely on
+      native/adapter execution mode (no fallback/degraded rows).
+    path: docs/context/evidence/issue_6154_release_0_0_5_evidence_bundle/release_manifest.yaml

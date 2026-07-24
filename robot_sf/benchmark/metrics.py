@@ -63,6 +63,7 @@ from robot_sf.benchmark.constants import (
 )
 from robot_sf.benchmark.group_space_metrics import compute_group_space_metrics
 from robot_sf.benchmark.signal_metrics import calculate_signal_metrics
+from robot_sf.benchmark.social_compliance import build_social_compliance_episode_block
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -2940,6 +2941,7 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
     near_miss_ttc_threshold_s: float | None = None,
     social_proxemic_radius_m: float = 1.2,
     human_proxy_yield_speed_mps: float = 0.15,
+    social_compliance_comfort_radius_m: float = 1.2,
     control_data: EpisodeData | None = None,
 ) -> dict[str, Any]:
     """Compute all defined metrics for an episode and return them as a mapping.
@@ -2973,6 +2975,8 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
         social_proxemic_radius_m: Personal-space radius used by exploratory social acceptability
             metrics when ``experimental_ped_impact`` is enabled.
         human_proxy_yield_speed_mps: Robot speed threshold used to detect proxy yielding.
+        social_compliance_comfort_radius_m: Diagnostic comfort radius used by the native
+            social-compliance episode block.
         control_data: Optional robot-absent/control trajectory used to compute the schema-backed
             ``distributional_disruption`` block.
 
@@ -3116,6 +3120,10 @@ def compute_all_metrics(  # noqa: PLR0913, PLR0915
             )
         )
     values["distributional_disruption"] = build_distributional_disruption_block(data, control_data)
+    values["social_compliance"] = build_social_compliance_episode_block(
+        data,
+        comfort_radius_m=social_compliance_comfort_radius_m,
+    )
     return values
 
 

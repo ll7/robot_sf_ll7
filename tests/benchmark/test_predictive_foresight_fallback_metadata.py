@@ -19,7 +19,7 @@ import pytest
 
 from robot_sf.baselines.ppo import PPOPlanner, PPOPlannerConfig
 from robot_sf.benchmark import runner as runner_module
-from robot_sf.benchmark.aggregate import compute_aggregates
+from robot_sf.benchmark.aggregate import compute_aggregates, compute_aggregates_with_ci
 from robot_sf.benchmark.algorithm_metadata import (
     PREDICTIVE_FORESIGHT_MODEL_FALLBACK_STATUS,
     enrich_algorithm_metadata,
@@ -280,6 +280,42 @@ def test_aggregate_analyzer_excludes_foresight_fallback_from_evidence() -> None:
             "are excluded from benchmark evidence aggregation."
         ),
     }
+
+
+def test_ci_analyzer_preserves_foresight_exclusion_audit_counts() -> None:
+    """Bootstrap aggregation reports the original and excluded record counts."""
+    records = [
+        {
+            "episode_id": "eligible",
+            "scenario_id": "scenario",
+            "algo": "prediction_planner",
+            "metrics": {"success": 1.0},
+            "algorithm_metadata": {
+                "foresight_prediction": {"evidence_eligible": True},
+            },
+        },
+        {
+            "episode_id": "fallback",
+            "scenario_id": "scenario",
+            "algo": "prediction_planner",
+            "metrics": {"success": 0.0},
+            "algorithm_metadata": {
+                "foresight_prediction": {"evidence_eligible": False},
+            },
+        },
+    ]
+
+    summary = compute_aggregates_with_ci(
+        records,
+        group_by="algo",
+        bootstrap_samples=10,
+        bootstrap_seed=1,
+    )
+
+    assert summary["prediction_planner"]["success"]["mean"] == 1.0
+    assert summary["_meta"]["evidence_eligibility"]["input_record_count"] == 2
+    assert summary["_meta"]["evidence_eligibility"]["eligible_record_count"] == 1
+    assert summary["_meta"]["evidence_eligibility"]["excluded_record_count"] == 1
 
 
 def test_foresight_adapter_fail_closed_when_fallback_disabled():

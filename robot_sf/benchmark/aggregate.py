@@ -1055,9 +1055,6 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
     Returns:
         Nested dictionary mapping group names to metric names to aggregate statistics.
     """
-    # Apply the same evidence gate as the base analyzer before bootstrap
-    # resampling; otherwise an ineligible row could re-enter through CI groups.
-    records, _ = filter_evidence_eligible_records(records)
     # Start from base aggregates (no CI) for consistency
     base = compute_aggregates(
         records,
@@ -1070,6 +1067,11 @@ def compute_aggregates_with_ci(  # noqa: PLR0913
         observation_track_mode=observation_track_mode,
         logger_ctx=logger_ctx,
     )
+    # Apply the same evidence gate before bootstrap resampling; otherwise an
+    # ineligible row could re-enter through CI groups. Keep the base call above
+    # on the original input so its audit metadata retains the true input and
+    # excluded-record counts.
+    records, _ = filter_evidence_eligible_records(records)
     if not return_ci or bootstrap_samples <= 0:
         # Upcast type to Any container for compatibility, but keep content unchanged
         return cast("dict[str, dict[str, dict[str, Any]]]", base)

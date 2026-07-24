@@ -374,8 +374,8 @@ def _dump_json(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, indent=2, sort_keys=True))
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entrypoint."""
+def main(argv: list[str] | None = None, *, now: datetime | None = None) -> int:
+    """CLI entrypoint with an injectable clock for deterministic callers."""
     args = _build_parser().parse_args(argv)
 
     try:
@@ -410,6 +410,7 @@ def main(argv: list[str] | None = None) -> int:
         comments,
         expected_repo=args.repo,
         recent_comment_hours=args.recent_comment_hours,
+        now=now,
     )
     report = _build_report(
         issue=issue,

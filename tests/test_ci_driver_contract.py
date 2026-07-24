@@ -626,3 +626,28 @@ def test_ci_driver_lint_passes_when_all_checks_pass(tmp_path: Path) -> None:
         env=env,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_reproducibility_check_job_contract() -> None:
+    """Verify reproducibility-check trigger, fail-closed, and ci-aggregate exclusion.
+
+    The reproducibility-check job runs on pull_request and workflow_dispatch,
+    has no continue-on-error, and is intentionally excluded from the ci
+    aggregate's needs list so it provides visible diagnostic evidence without
+    blocking PR merges.
+    """
+    workflow = yaml.safe_load(_workflow_text())
+    repro_job = workflow["jobs"]["reproducibility-check"]
+    ci_job = workflow["jobs"]["ci"]
+
+    # Trigger is pull_request OR workflow_dispatch
+    assert "pull_request" in repro_job["if"]
+    assert "workflow_dispatch" in repro_job["if"]
+
+    # No continue-on-error on the job or any step
+    assert "continue-on-error" not in repro_job
+    for step in repro_job.get("steps", []):
+        assert "continue-on-error" not in step
+
+    # Excluded from ci aggregate needs
+    assert "reproducibility-check" not in ci_job["needs"]

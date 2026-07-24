@@ -26,12 +26,11 @@ This QA runbook operates under the maintainer governance rules defined in:
 ### Reproducibility Job Policy Reconciliation
 
 The live [`reproducibility-check` job](../.github/workflows/ci.yml) is the source of truth for its
-trigger and gating behavior: it runs on pull requests and `workflow_dispatch`, and it is not marked
-`continue-on-error`. The linked Issue #1436 policy note still describes the older
-`workflow_dispatch`-only, `continue-on-error` mapping. This runbook uses the live behavior while
-retaining Issue #1436 for failure classification and rerun boundaries; an owned policy update must
-reconcile that note before it is again described as the canonical validation-lane mapping. This
-runbook does not change the workflow or adjudicate a new acceptance rule.
+trigger and gating behavior: it runs on `pull_request` and `workflow_dispatch`, and it is not marked
+`continue-on-error`. The linked Issue #1436 policy note has been reconciled with the live workflow
+(see Issue #6249): it no longer describes an older `workflow_dispatch`-only or `continue-on-error`
+mapping. This runbook uses the live behavior while retaining Issue #1436 for failure classification,
+rerun boundaries, and diagnostic-only evidence status.
 
 ---
 

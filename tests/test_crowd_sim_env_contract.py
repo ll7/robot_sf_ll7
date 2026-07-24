@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 from types import SimpleNamespace
 
@@ -198,7 +199,15 @@ def test_crowd_sim_env_render_rgb_array_uses_lazy_view(monkeypatch):
             """Close fake renderer."""
             self.closed = True
 
-    monkeypatch.setattr(crowd_sim_env, "SimulationView", FakeView)
+    monkeypatch.setattr(
+        crowd_sim_env.importlib,
+        "import_module",
+        lambda name: (
+            SimpleNamespace(SimulationView=FakeView)
+            if name == "robot_sf.render.sim_view"
+            else importlib.import_module(name)
+        ),
+    )
 
     env = CrowdSimEnv(_config(render_mode="rgb_array", video_fps=12.0))
     rendered = env.render()
@@ -358,7 +367,15 @@ def test_crowd_sim_env_screen_fallback_and_existing_view_reset(monkeypatch):
             """Mark renderer closure."""
             self.closed = True
 
-    monkeypatch.setattr(crowd_sim_env, "SimulationView", FakeView)
+    monkeypatch.setattr(
+        crowd_sim_env.importlib,
+        "import_module",
+        lambda name: (
+            SimpleNamespace(SimulationView=FakeView)
+            if name == "robot_sf.render.sim_view"
+            else importlib.import_module(name)
+        ),
+    )
 
     env = CrowdSimEnv(
         _config(

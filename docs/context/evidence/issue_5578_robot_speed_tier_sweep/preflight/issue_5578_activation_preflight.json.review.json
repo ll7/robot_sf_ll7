@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/issue_5578_activation_preflight.json",
+  "artifact_sha256": "bebe0a7512b8bc4d925a2433606bb5b49e7cb24b992957ba3c171c25db075770",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

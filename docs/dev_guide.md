@@ -887,6 +887,11 @@ For new SLURM batch jobs, prefer `scripts/dev/sbatch_use_max_time.sh` so the sub
 wall time tracks the live partition and QoS maximum instead of an outdated hardcoded
 `#SBATCH --time` value. See `docs/dev/slurm_submission.md` for the workflow.
 
+After a job reaches a terminal state, use `scripts/tools/slurm_job_finalize.py` to record
+the observed state, required local artifacts, checksums, and issue-update summary. See the
+[SLURM post-run closeout guide](dev/slurm_submission.md#post-run-closeout); the finalizer is
+metadata-only and does not turn local files into durable benchmark evidence.
+
 For paper-facing benchmark release runs, use the dedicated release wrapper:
 
 ```bash

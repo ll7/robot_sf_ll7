@@ -1151,6 +1151,8 @@ from robot_sf.common import Vec2D, RobotPose, set_global_seed
 ### Testing strategy (UNIFIED test suite)
 
 For the canonical contributor QA runbook, 12-class test taxonomy, command matrix, failure classification, and explicit CI rerun rules, see **[Contributor QA Runbook and Test Taxonomy](./qa_test_strategy.md)**.
+For the risk-based map of critical shared contracts to their direct tests and validation lanes, see
+**[Test Traceability Matrix](./test_traceability_matrix.md)**.
 
 **The project now uses a unified test suite** running both robot_sf and fast-pysf tests via a single command.
 

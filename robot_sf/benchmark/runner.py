@@ -95,6 +95,7 @@ from robot_sf.benchmark.utils import (
     validate_episode_success_integrity,
 )
 from robot_sf.common.optional_import import try_import
+from robot_sf.common.seed import set_global_seed
 from robot_sf.sim.fast_pysf_wrapper import FastPysfWrapper
 from robot_sf.training.scenario_loader import load_scenarios
 from robot_sf.training.task_bundles import is_task_bundle_reference
@@ -314,12 +315,25 @@ NATIVE_COMMAND_RUNTIME_FIELD: str = "planner_step_runtime_seconds"
 _episode_identity_hash = episode_identity_hash
 
 
+def _config_torch_worker(planner: Any) -> None:
+    """Configure torch for deterministic single-threaded execution in a forked worker."""
+    torch = try_import("torch")
+    if torch is None:
+        return
+    torch.set_num_threads(1)
+    seed = getattr(planner, "_seed", 0)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
 def _planner_step_worker(conn: Any, planner: Any) -> None:
     """Run planner steps in an isolated child process."""
     try:
-        torch = try_import("torch")
-        if torch is not None:
-            torch.set_num_threads(1)
+        _config_torch_worker(planner)
         ensure_load = getattr(planner, "_ensure_model_loaded", None)
         if callable(ensure_load):
             ensure_load()
@@ -1912,6 +1926,13 @@ def run_episode(  # noqa: PLR0913
     # Wall-clock start time for timestamps and perf accounting
     perf_start = time.perf_counter()
     ts_start = datetime.now(UTC).isoformat()
+
+    # Global seed reset: ensure deterministic RNG state across repeats.
+    # Without this, the global numpy/torch/random state drifts between
+    # execute_campaign repeats, which can cause identical scenario+seed
+    # pairs to produce divergent trajectories (#6183).
+    set_global_seed(seed)
+
     robot_radius = _scenario_robot_radius_m(scenario_params)
     ped_radius = _scenario_ped_radius_m(scenario_params)
     # Create robot policy based on algorithm

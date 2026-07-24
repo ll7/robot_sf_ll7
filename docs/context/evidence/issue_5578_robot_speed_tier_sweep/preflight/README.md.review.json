@@ -1,0 +1,7 @@
+{
+  "schema_version": "evidence-review-marker.v1",
+  "artifact_path": "docs/context/evidence/issue_5578_robot_speed_tier_sweep/preflight/README.md",
+  "artifact_sha256": "3ed583959811b9046fec73b50418be885883b00fb47af90e2b6b2e2b6fea1c87",
+  "review_marker": "AI-GENERATED NEEDS-REVIEW",
+  "preserved_exact_bytes": true
+}

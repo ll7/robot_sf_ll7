@@ -102,7 +102,7 @@ def test_run_tests_parallel_exposes_xdist_distribution_mode() -> None:
     assert 'pytest_args+=("$optional_test_path")' in script_text
     assert 'append_unique_pytest_arg "$core_test_path"' in script_text
     assert "changed_top_level_core_test_paths=()" in script_text
-    assert ":(top,glob)tests/test_*.py" in script_text
+    assert "-- tests fast-pysf/tests" in script_text
     assert 'append_unique_pytest_arg "$changed_test_path"' in script_text
     assert "Core pytest lane cannot run optional-extra path" in script_text
 
@@ -234,7 +234,15 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
     ped_npc_test = repo / "tests" / "ped_npc" / "test_population.py"
     ped_npc_test.parent.mkdir(parents=True)
     ped_npc_test.write_text("def test_population(): pass\n", encoding="utf-8")
-    subprocess.run(["git", "add", "tests"], cwd=repo, check=True, capture_output=True, text=True)
+    nested_core_test = repo / "tests" / "new_nested" / "test_nested.py"
+    nested_core_test.parent.mkdir(parents=True)
+    nested_core_test.write_text("def test_nested(): pass\n", encoding="utf-8")
+    fast_pysf_test = repo / "fast-pysf" / "tests" / "test_forces.py"
+    fast_pysf_test.parent.mkdir(parents=True)
+    fast_pysf_test.write_text("def test_fast(): pass\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "tests", "fast-pysf"], cwd=repo, check=True, capture_output=True, text=True
+    )
     subprocess.run(
         ["git", "commit", "-m", "add top-level tests"],
         cwd=repo,
@@ -265,6 +273,8 @@ def test_run_tests_parallel_core_lane_includes_changed_top_level_core_tests(tmp_
     assert "tests/test_new_top_level.py" in pytest_args
     assert "tests/test_optional_top_level.py" not in pytest_args
     assert "tests/ped_npc" in pytest_args
+    assert "tests/new_nested/test_nested.py" in pytest_args
+    assert "fast-pysf/tests" in pytest_args
 
 
 def test_run_tests_parallel_keeps_ped_npc_in_core_lane() -> None:

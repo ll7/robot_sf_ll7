@@ -293,7 +293,7 @@ jobs:
       - name: Set up CI Python environment
         uses: ./.github/actions/setup-ci-python
 
-      - name: Run optional reproducibility diagnostic
+      - name: Run reproducibility diagnostic
         run: uv run python scripts/benchmark_repro_check.py
 
       - name: Upload reproducibility report

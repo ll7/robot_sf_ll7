@@ -6,7 +6,7 @@
     "ModuleNotFoundError"
   ],
   "spelling_key": "Caught exception type names, sorted and joined by '+'. The 'as <alias>' name is intentionally NOT part of the key.",
-  "total_guards": 116,
+  "total_guards": 117,
   "spellings": {
     "AttributeError+ImportError": {
       "count_ceiling": 3,
@@ -102,8 +102,8 @@
       ]
     },
     "ImportError": {
-      "count_ceiling": 81,
-      "has_as_count": 19,
+      "count_ceiling": 82,
+      "has_as_count": 20,
       "pragma_no_cover_count": 26,
       "blessed": true,
       "note": "Pure optional-import. Prefer robot_sf.common.optional_import.try_import for new plain cases.",
@@ -162,14 +162,15 @@
         "robot_sf/common/seed.py:50",
         "robot_sf/common/seed.py:80",
         "robot_sf/feature_extractors/mamba_extractor.py:98",
+        "robot_sf/gym_env/crowd_sim_env.py:352",
         "robot_sf/gym_env/env_config.py:302",
         "robot_sf/gym_env/environment_factory.py:56",
         "robot_sf/gym_env/environment_factory.py:174",
         "robot_sf/maps/osm_zones_editor.py:72",
         "robot_sf/models/registry.py:19",
         "robot_sf/nav/occupancy_grid.py:107",
-        "robot_sf/nav/osm_map_builder.py:29",
-        "robot_sf/nav/osm_map_builder.py:35",
+        "robot_sf/nav/osm_map_builder.py:31",
+        "robot_sf/nav/osm_map_builder.py:37",
         "robot_sf/planner/classic_global_planner.py:47",
         "robot_sf/planner/diffusion_policy.py:20",
         "robot_sf/planner/ompl_geometric_adapter.py:193",

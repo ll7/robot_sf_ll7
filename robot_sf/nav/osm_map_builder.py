@@ -21,6 +21,8 @@ Design decisions:
 - Deterministic output (same PBF → same MapDefinition)
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -42,7 +44,18 @@ from shapely.errors import TopologicalError
 from shapely.geometry import LineString, MultiPolygon, Polygon, box
 from shapely.ops import triangulate, unary_union
 
+from robot_sf.common.optional_import import require_extra
 from robot_sf.nav.map_config import MapDefinition, Obstacle
+
+
+def _require_maps_dependencies() -> None:
+    """Raise an actionable error when the optional map-authoring stack is absent."""
+    if geopandas is not None and pd is not None:
+        return
+    if geopandas is None:
+        require_extra("maps", "geopandas", feature_name="OSM map authoring")
+    if pd is None:
+        require_extra("maps", "pandas", feature_name="OSM map authoring")
 
 
 @dataclass
@@ -131,6 +144,7 @@ def load_pbf(pbf_file: str, bbox: tuple | None = None) -> geopandas.GeoDataFrame
     pbf_path = Path(pbf_file)
     if not pbf_path.exists():
         raise FileNotFoundError(f"PBF file not found: {pbf_file}")
+    _require_maps_dependencies()
 
     try:
         # Load all relevant layers from PBF using GeoPandas
@@ -175,6 +189,7 @@ def filter_driveable_ways(
     Returns:
         Filtered GeoDataFrame containing only driveable ways
     """
+    _require_maps_dependencies()
     if tag_filters is None:
         tag_filters = OSMTagFilters()
 
@@ -214,6 +229,7 @@ def extract_obstacles(
     Returns:
         GeoDataFrame containing only obstacle features
     """
+    _require_maps_dependencies()
     if tag_filters is None:
         tag_filters = OSMTagFilters()
 
@@ -263,6 +279,7 @@ def project_to_utm(gdf: geopandas.GeoDataFrame) -> tuple[geopandas.GeoDataFrame,
     Raises:
         ValueError: If centroid cannot be determined
     """
+    _require_maps_dependencies()
     if gdf.empty:
         raise ValueError("Cannot project empty GeoDataFrame")
 

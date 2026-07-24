@@ -578,29 +578,39 @@ def _validate_training_ready_gate(
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
+    """Resolve ``path`` against the repo root, resolving absolute paths as-is.
+
+    Returns:
+        The resolved absolute path.
+    """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
 
 def _require_non_empty_string(registry: dict[str, Any], key: str, errors: list[str]) -> None:
+    """Record an error unless ``registry[key]`` is a non-empty string."""
     value = registry.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty string")
 
 
 def _is_durable_uri(uri: str) -> bool:
+    """Return whether the URI uses a durable artifact scheme."""
     return uri.startswith(_DURABLE_URI_PREFIXES)
 
 
 def _is_pending_durable_uri(uri: str) -> bool:
+    """Return whether the URI is a durable but unresolved ``:pending`` pointer."""
     return _is_durable_uri(uri) and uri.rstrip().endswith(":pending")
 
 
 def _is_concrete_durable_uri(uri: str) -> bool:
+    """Return whether the URI is a durable, resolved (non-pending) pointer."""
     return _is_durable_uri(uri) and not _is_pending_durable_uri(uri)
 
 
 def _is_sha256(raw_sha: str) -> bool:
+    """Return whether the string is a 64-character lowercase hex SHA-256 digest."""
     digest = raw_sha.strip().lower()
     return len(digest) == _HEX_SHA256_LENGTH and all(ch in _HEX_DIGITS for ch in digest)
 

@@ -89,11 +89,17 @@ def validate_launch_packet(
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
+    """Resolve ``path`` against the repo root, resolving absolute paths as-is.
+
+    Returns:
+        The resolved absolute path.
+    """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
 
 def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[str]) -> None:
+    """Record an error unless ``mapping[key]`` is a non-empty string."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty string")
@@ -105,6 +111,7 @@ def _require_existing_path(
     repo_root: Path,
     errors: list[str],
 ) -> None:
+    """Require ``mapping[key]`` to be an existing on-disk path, recording an error otherwise."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty path string")
@@ -114,6 +121,7 @@ def _require_existing_path(
 
 
 def _validate_generating_commit(packet: dict[str, Any], errors: list[str]) -> None:
+    """Validate that ``generating_commit`` is a 40-character git SHA."""
     commit = packet.get("generating_commit")
     if not isinstance(commit, str) or not _GIT_SHA_RE.match(commit.strip()):
         errors.append("generating_commit must be a 40-character git SHA")
@@ -123,6 +131,11 @@ def _validate_repair_hypothesis(
     packet: dict[str, Any],
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate the repair hypothesis's single enabled delta and return a summary.
+
+    Returns:
+        Summary of the repair hypothesis id and enabled delta.
+    """
     hypothesis = packet.get("repair_hypothesis")
     if not isinstance(hypothesis, dict):
         errors.append("repair_hypothesis must be a mapping")
@@ -149,6 +162,11 @@ def _validate_starting_points(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate the guarded training starting-point config paths and return a summary.
+
+    Returns:
+        Summary of the guarded starting-point config paths.
+    """
     points = packet.get("training_starting_points")
     if not isinstance(points, dict):
         errors.append("training_starting_points must be a mapping")
@@ -168,6 +186,11 @@ def _validate_runtime_guard(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate the runtime guard config and return an active/diagnostics summary.
+
+    Returns:
+        Summary of the guard's active state and required diagnostics.
+    """
     guard = packet.get("runtime_guard")
     if not isinstance(guard, dict):
         errors.append("runtime_guard must be a mapping")
@@ -187,6 +210,11 @@ def _validate_comparison_references(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate comparison references and return their reference ids.
+
+    Returns:
+        Summary containing the sorted reference ids.
+    """
     references = packet.get("comparison_references")
     if not isinstance(references, dict):
         errors.append("comparison_references must be a mapping")
@@ -207,6 +235,11 @@ def _validate_comparison_references(
 
 
 def _validate_stop_gates(packet: dict[str, Any], errors: list[str]) -> dict[str, Any]:
+    """Validate the stop-gate thresholds and return the declared stage names.
+
+    Returns:
+        Summary containing the sorted stop-gate stage names.
+    """
     gates = packet.get("stop_gates")
     if not isinstance(gates, dict):
         errors.append("stop_gates must be a mapping")
@@ -227,6 +260,7 @@ def _validate_stop_gates(packet: dict[str, Any], errors: list[str]) -> dict[str,
 
 
 def _validate_execution_boundary(packet: dict[str, Any], errors: list[str]) -> None:
+    """Validate the execution boundary forbids SLURM submission and full training here."""
     execution = packet.get("execution_boundary")
     if not isinstance(execution, dict):
         errors.append("execution_boundary must be a mapping")
@@ -245,6 +279,7 @@ def _validate_required_list(
     required_values: tuple[str, ...],
     errors: list[str],
 ) -> None:
+    """Require ``mapping[key]`` to be a non-empty list containing all required values."""
     values = mapping.get(key)
     if not isinstance(values, list) or not values:
         errors.append(f"{key} must be a non-empty list")
@@ -256,6 +291,7 @@ def _validate_required_list(
 
 
 def _validate_seed_list(mapping: dict[str, Any], label: str, errors: list[str]) -> None:
+    """Validate that a ``seeds`` list is a non-empty list of integer seeds."""
     seeds = mapping.get("seeds")
     if not isinstance(seeds, list) or not seeds:
         errors.append(f"{label} must be a non-empty list")
@@ -271,6 +307,7 @@ def _validate_artifact_checksums(
     repo_root: Path,
     errors: list[str],
 ) -> None:
+    """Validate recorded SHA-256 checksums for the starting-point config files."""
     checksums = mapping.get("checksums", {})
     if not isinstance(checksums, dict):
         errors.append("checksums must be a mapping")
@@ -287,6 +324,7 @@ def _validate_artifact_list(
     repo_root: Path,
     errors: list[str],
 ) -> None:
+    """Validate a local+durable artifact list with checksums, requiring a durable URI."""
     paths = mapping.get(key)
     checksums = mapping.get("checksums", {})
     if not isinstance(paths, list) or not paths:
@@ -319,6 +357,7 @@ def _validate_checksum(
     checksums: dict[str, Any],
     errors: list[str],
 ) -> None:
+    """Verify a local artifact exists and matches its recorded SHA-256 checksum."""
     if not local_path.is_file():
         errors.append(f"local artifact is missing: {path_text}")
         return

@@ -34,6 +34,7 @@ class BalancedDatasetCollectionError(RobotSfError, ValueError):
 
 
 def _git_sha(repo_root: Path) -> str | None:
+    """Return the current HEAD git SHA of the repo, or None when git is unavailable."""
     try:
         res = subprocess.run(
             ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
@@ -47,6 +48,11 @@ def _git_sha(repo_root: Path) -> str | None:
 
 
 def _jsonable(value: Any) -> Any:
+    """Recursively convert numpy values into JSON-serializable Python types.
+
+    Returns:
+        The value with numpy arrays/scalars converted to native Python types.
+    """
     if isinstance(value, np.ndarray):
         return value.tolist()
     if isinstance(value, np.generic):
@@ -59,6 +65,7 @@ def _jsonable(value: Any) -> Any:
 
 
 def _canonical_sha256(payload: Any) -> str:
+    """Return a stable SHA-256 over the canonical JSON encoding of ``payload``."""
     encoded = json.dumps(_jsonable(payload), sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()
 
@@ -89,6 +96,7 @@ def _contains_degraded_marker(value: Any) -> bool:
 
 
 def _file_sha256(path: Path) -> str:
+    """Return the lowercase hex SHA-256 digest of a file's bytes."""
     h = hashlib.sha256()
     with path.open("rb") as f:
         while chunk := f.read(65536):
@@ -168,20 +176,36 @@ class _CaptureEnv:
     """Transparent environment proxy that records the exact policy I/O trajectory."""
 
     def __init__(self, env: Any, sink: dict[str, Any]) -> None:
+        """Wire the proxy to the real environment and the recording sink."""
         self._env = env
         self._sink = sink
         self._pending_observation: Any | None = None
 
     def __getattr__(self, name: str) -> Any:
+        """Delegate unknown attributes to the wrapped environment.
+
+        Returns:
+            The attribute fetched from the wrapped environment.
+        """
         return getattr(self._env, name)
 
     def reset(self, *args: Any, **kwargs: Any) -> Any:
+        """Forward reset to the environment and record the initial observation.
+
+        Returns:
+            The ``(observation, info)`` tuple returned by the environment.
+        """
         observation, info = self._env.reset(*args, **kwargs)
         self._sink["initial_observation"] = copy.deepcopy(observation)
         self._pending_observation = copy.deepcopy(observation)
         return observation, info
 
     def step(self, action: Any) -> Any:
+        """Forward step to the environment and record the transition into the sink.
+
+        Returns:
+            The ``(observation, reward, terminated, truncated, info)`` step tuple.
+        """
         if self._pending_observation is None:
             raise BalancedDatasetCollectionError("CaptureEnv.step called before reset")
         policy_observation = copy.deepcopy(self._pending_observation)
@@ -252,6 +276,7 @@ class BalancedOracleCollector:
         self.seeds_by_split = dict(self.packet.get("seeds_by_split", {}))
 
     def _public_git_sha(self) -> str:
+        """Return the resolved public git SHA, enforcing the packet's ``generating_commit``."""
         current_sha = _git_sha(self.repo_root)
         if current_sha is None:
             raise BalancedDatasetCollectionError("Cannot resolve the current public Git SHA")
@@ -267,6 +292,7 @@ class BalancedOracleCollector:
         return current_sha
 
     def _repo_relative(self, path: Path) -> str:
+        """Return ``path`` relative to the repo root, or as-is when it lies outside."""
         try:
             return path.relative_to(self.repo_root).as_posix()
         except ValueError:
@@ -377,6 +403,11 @@ class BalancedOracleCollector:
         original_episode_factory = episode_module.make_robot_env
 
         def capture_factory(*args: Any, **kwargs: Any) -> _CaptureEnv:
+            """Wrap the original robot-env factory to return a recording proxy.
+
+            Returns:
+                A :class:`_CaptureEnv` wrapping the constructed environment.
+            """
             return _CaptureEnv(original_factory(*args, **kwargs), sink)
 
         map_runner.make_robot_env = capture_factory
@@ -577,6 +608,11 @@ class BalancedOracleCollector:
     def _filter_episodes(
         self, raw_episodes: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Split raw episodes into usable and excluded sets by leakage/gate reasons.
+
+        Returns:
+            Tuple of (usable episodes, exclusion records).
+        """
         usable: list[dict[str, Any]] = []
         exclusions: list[dict[str, Any]] = []
 
@@ -614,6 +650,11 @@ class BalancedOracleCollector:
         return usable, exclusions
 
     def _validate_collected_identities(self, raw_episodes: list[dict[str, Any]]) -> list[str]:
+        """Verify collected episodes match predeclared packet identities; return missing ids.
+
+        Returns:
+            Sorted list of predeclared episode ids absent from the collection.
+        """
         expected: dict[str, tuple[str, str, int]] = {}
         for split in _SPLITS:
             for episode_id in self.episodes_by_split[split]:
@@ -653,6 +694,11 @@ class BalancedOracleCollector:
         return sorted(set(expected) - seen)
 
     def _write_raw_provenance(self, raw_episodes: list[dict[str, Any]]) -> Path:
+        """Write raw per-episode provenance as JSONL and return its path.
+
+        Returns:
+            Path to the written JSONL provenance file.
+        """
         path = self.output_root / "raw_episode_provenance.jsonl"
         with path.open("w", encoding="utf-8") as handle:
             for episode in raw_episodes:
@@ -898,6 +944,7 @@ def _write_expert_traj_npz(
     *,
     action_weights: dict[str, np.ndarray],
 ) -> None:
+    """Materialize the expert-trajectory NPZ with per-step arrays and split metadata."""
     episode_count = len(episodes)
     per_episode: dict[str, list[np.ndarray]] = {
         name: []
@@ -969,6 +1016,11 @@ def _write_expert_traj_npz(
         split_tags.append(np.asarray([split], dtype=object))
 
     def ragged(values: list[np.ndarray]) -> np.ndarray:
+        """Pack a list of per-episode arrays into a single object-dtype ndarray.
+
+        Returns:
+            Object-dtype ndarray holding the per-episode arrays.
+        """
         array = np.empty(len(values), dtype=object)
         array[:] = values
         return array

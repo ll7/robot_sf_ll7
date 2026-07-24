@@ -212,8 +212,14 @@ def test_run_canary_robot_sf_suite_records_executed_scenario_id(tmp_path: Path) 
     receipt = run_canary(out_dir=tmp_path, allow_synthetic_traversible=True)
     robot_sf_suite = next(s for s in receipt["suites"] if s["suite"] == "Robot SF")
     assert "executed_scenario_id" in robot_sf_suite
-    assert robot_sf_suite["executed_scenario_id"] == receipt["scenario_mapping"]["robot_sf_scenario_id"]
-    assert robot_sf_suite["executed_scenario_id"] != receipt["scenario_mapping"]["socnavbench_scenario_id"]
+    assert (
+        robot_sf_suite["executed_scenario_id"]
+        == receipt["scenario_mapping"]["robot_sf_scenario_id"]
+    )
+    assert (
+        robot_sf_suite["executed_scenario_id"]
+        != receipt["scenario_mapping"]["socnavbench_scenario_id"]
+    )
 
 
 def test_socnavbench_receipt_runs_without_licensed_data_via_test_flag(tmp_path: Path) -> None:

@@ -1,0 +1,278 @@
+{
+  "behavior_axes": [
+    "distance_to_human_min",
+    "time_to_collision_min"
+  ],
+  "cells": [
+    {
+      "bundle_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0042",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 18.390949703133227,
+          "y": 12.8714219741263
+        },
+        "pedestrian_delay_s": 0.0,
+        "pedestrian_speed_mps": 1.1796749603797323,
+        "scenario_seed": 9,
+        "spawn_time_s": 0.0,
+        "start": {
+          "theta": 0.0,
+          "x": 26.129340222018683,
+          "y": 15.247614833696915
+        }
+      },
+      "cell": [
+        1,
+        1
+      ],
+      "certification_status": "passed",
+      "descriptor": [
+        1.3952022160408442,
+        1.1387795396734468
+      ],
+      "objective_value": 34.0,
+      "primary_failure": "collision",
+      "scenario_yaml_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0042/scenario.yaml"
+    },
+    {
+      "bundle_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0098",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 18.494093232873254,
+          "y": 12.021557608358492
+        },
+        "pedestrian_delay_s": 0.0,
+        "pedestrian_speed_mps": 1.3678658256094478,
+        "scenario_seed": 49,
+        "spawn_time_s": 0.0,
+        "start": {
+          "theta": 0.0,
+          "x": 26.361435294056744,
+          "y": 15.310525368093549
+        }
+      },
+      "cell": [
+        1,
+        2
+      ],
+      "certification_status": "passed",
+      "descriptor": [
+        1.7208012977333835,
+        2.227487092220216
+      ],
+      "objective_value": 8.0,
+      "primary_failure": "timeout",
+      "scenario_yaml_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0098/scenario.yaml"
+    },
+    {
+      "bundle_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0003",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 18.4,
+          "y": 12.7
+        },
+        "pedestrian_delay_s": 0.0,
+        "pedestrian_speed_mps": 1.3,
+        "scenario_seed": 19,
+        "spawn_time_s": 0.0,
+        "start": {
+          "theta": 0.0,
+          "x": 26.8,
+          "y": 15.2
+        }
+      },
+      "cell": [
+        2,
+        1
+      ],
+      "certification_status": "passed",
+      "descriptor": [
+        2.3903641014157935,
+        1.786285749222851
+      ],
+      "objective_value": 3.0,
+      "primary_failure": "timeout",
+      "scenario_yaml_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0003/scenario.yaml"
+    },
+    {
+      "bundle_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0030",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 18.488963100475807,
+          "y": 12.039207257047437
+        },
+        "pedestrian_delay_s": 0.0,
+        "pedestrian_speed_mps": 1.3058283464851252,
+        "scenario_seed": 21,
+        "spawn_time_s": 0.0,
+        "start": {
+          "theta": 0.0,
+          "x": 26.75714092956525,
+          "y": 15.151984534660505
+        }
+      },
+      "cell": [
+        2,
+        2
+      ],
+      "certification_status": "passed",
+      "descriptor": [
+        2.848850047130086,
+        2.08017627153601
+      ],
+      "objective_value": 3.0,
+      "primary_failure": "timeout",
+      "scenario_yaml_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0030/scenario.yaml"
+    },
+    {
+      "bundle_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0048",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 18.65851667697233,
+          "y": 12.012063059843799
+        },
+        "pedestrian_delay_s": 0.0,
+        "pedestrian_speed_mps": 1.0729371495924789,
+        "scenario_seed": 10,
+        "spawn_time_s": 0.0,
+        "start": {
+          "theta": 0.0,
+          "x": 26.08298469466133,
+          "y": 15.151298383116401
+        }
+      },
+      "cell": [
+        2,
+        3
+      ],
+      "certification_status": "passed",
+      "descriptor": [
+        2.198797715283007,
+        3.2486861165225682
+      ],
+      "objective_value": 13.0,
+      "primary_failure": "collision",
+      "scenario_yaml_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0048/scenario.yaml"
+    },
+    {
+      "bundle_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0024",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 18.453184376370775,
+          "y": 12.299766996863683
+        },
+        "pedestrian_delay_s": 0.0,
+        "pedestrian_speed_mps": 1.2795977734918285,
+        "scenario_seed": 37,
+        "spawn_time_s": 0.0,
+        "start": {
+          "theta": 0.0,
+          "x": 26.314147170376792,
+          "y": 15.585561863507639
+        }
+      },
+      "cell": [
+        3,
+        3
+      ],
+      "certification_status": "passed",
+      "descriptor": [
+        3.6802380188881356,
+        3.2329882997833415
+      ],
+      "objective_value": 3.0,
+      "primary_failure": "timeout",
+      "scenario_yaml_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0024/scenario.yaml"
+    },
+    {
+      "bundle_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0038",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 18.736912206661625,
+          "y": 12.507685454437395
+        },
+        "pedestrian_delay_s": 0.0,
+        "pedestrian_speed_mps": 1.2905780128478057,
+        "scenario_seed": 12,
+        "spawn_time_s": 0.0,
+        "start": {
+          "theta": 0.0,
+          "x": 26.767655278395786,
+          "y": 15.704081307660323
+        }
+      },
+      "cell": [
+        4,
+        3
+      ],
+      "certification_status": "passed",
+      "descriptor": [
+        4.255181953446092,
+        3.396466768758812
+      ],
+      "objective_value": 3.0,
+      "primary_failure": "timeout",
+      "scenario_yaml_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0038/scenario.yaml"
+    },
+    {
+      "bundle_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0051",
+      "candidate": {
+        "goal": {
+          "theta": 0.0,
+          "x": 18.56634122370639,
+          "y": 12.953097925525096
+        },
+        "pedestrian_delay_s": 0.0,
+        "pedestrian_speed_mps": 1.2061965732283113,
+        "scenario_seed": 44,
+        "spawn_time_s": 0.0,
+        "start": {
+          "theta": 0.0,
+          "x": 26.418946501125326,
+          "y": 15.369253572894726
+        }
+      },
+      "cell": [
+        4,
+        4
+      ],
+      "certification_status": "passed",
+      "descriptor": [
+        4.8313777520325845,
+        4.564131361274118
+      ],
+      "objective_value": 3.0,
+      "primary_failure": "timeout",
+      "scenario_yaml_path": "/tmp/qd_campaign_real/qd_candidates/candidate_0051/scenario.yaml"
+    }
+  ],
+  "grid": {
+    "bins": 5,
+    "cell_count": 25,
+    "x_max": 5.0,
+    "x_min": 0.0,
+    "y_max": 5.0,
+    "y_min": 0.0
+  },
+  "schema_version": "adversarial_qd_archive.v1",
+  "search_summary": {
+    "num_admitted": 12,
+    "num_evaluated": 120
+  },
+  "summary": {
+    "coverage_fraction": 0.32,
+    "distinct_failure_modes": [
+      "collision",
+      "timeout"
+    ],
+    "filled_cell_count": 8,
+    "qd_score": 70.0
+  }
+}

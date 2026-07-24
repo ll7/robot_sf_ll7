@@ -5,9 +5,19 @@ Plain-language summary: this tracked bundle preserves a self-consistent summary 
 CPU diagnostic associated with Issue #3079 and PR #5710. The committed report contains 27 cells
 (3 samplers x 3 budgets x 3 seeds) and records 42 certified/replayable failure counts
 (random=24, optuna=18, coordinate=0). The focused test regenerates those counts from the committed
-report only. The 4,761 candidate/replay files and execution logs are unavailable, so this bundle
-does not prove raw-artifact conservation, independent replay, or exact reproduction and is not
-paper-facing evidence. Residual artifact work is tracked in Issue #6131.
+report only. The 4,761 candidate/replay file inventory is registered in `candidate_replay_SHA256SUMS.txt`
+as portable names and producer-recorded digest assertions only; the referenced bytes and execution
+logs are unavailable. This bundle maintains the diagnostic-only claim boundary and is not
+paper-facing evidence. Issue #6131 remains blocked on a durable raw-artifact archive.
+
+## PR #6185 Scope and Residual Ownership
+
+PR #6185 is a partial preparatory change. It adds a fail-closed retrieval and
+verification helper, but it does not complete or close Issue #6131.
+
+Issue #6131 remains open and owns publication of the original raw-tree archive
+and stdout/stderr logs, committed portable retrieval metadata, and clean-checkout
+verification of all 4,761 inventory entries against the retrieved bytes.
 
 - Schema (report): `adversarial-sampler-comparison.v3`
 - Schema (confirmation): `adversarial-package-b-confirmation.v1`
@@ -72,12 +82,32 @@ metrics above. No fallback or degraded candidate execution occurred in this repl
 
 ## Recorded execution lineage
 
-- The producer recorded CPU execution commit `7ec582b81...`, manifest SHA-256 `9f174f06...`,
+- The producer recorded CPU execution commit `7ec582b81cdcb871fb4fcb47700338194e7617d5`, manifest SHA-256 `9f174f067d23efd374c019702168213a27085dfffa1b0b5bc10adafaa9614e04`,
   and runtime 198s. The tracked config still matches that manifest digest.
 - The committed summary agrees with the historical `42 failures (random 24, optuna 18,
   coordinate 0)` count.
-- The raw candidate/replay tree and stdout/stderr are not present or retrievable from this bundle;
-  therefore the producer-reported execution cannot be independently replayed from this PR.
+- The 4,761 candidate/replay file inventory is registered in `candidate_replay_SHA256SUMS.txt` as
+  portable names and producer-recorded digests. It is not a byte-verification result.
+
+## Raw Artifact Retrieval Status (Issue #6131)
+
+- Status: `blocked`; no durable archive URI/content address contains the original raw tree and
+  stdout/stderr logs.
+- Producer public commit head: `7ec582b81cdcb871fb4fcb47700338194e7617d5`
+- Manifest SHA-256: `9f174f067d23efd374c019702168213a27085dfffa1b0b5bc10adafaa9614e04`
+- Total candidate/replay inventory entries: `4761`
+- Inventory status: `unavailable_raw_bytes`; syntax, uniqueness, and portable-name checks alone
+  are not raw-byte verification.
+- Bounded recovery command attempted:
+  `python scripts/tools/run_adversarial_package_b.py --manifest configs/adversarial/issue_3079_package_b_budget_matched.yaml --repo-root . --empirical`
+- Recovery result: `96` matching files, `4,594` missing files, and `71` changed files; the attempt
+  did not reproduce the producer archive and its captured stdout/stderr are local-only diagnostics.
+- Fail-closed verification command (returns non-zero until a pinned archive is committed):
+  `python scripts/tools/verify_package_b_raw_artifacts.py --bundle docs/context/evidence/issue_5785_package_b_27cell_replication_2026-07-15`
+- Unblock condition: publish an HTTPS archive with its SHA-256, archive layout, and SHA-256 entries
+  for both logs in `raw_artifact_bundle.json`; then retrieve and byte-verify all 4,761 entries.
+- Preservation boundary: diagnostic-only summary (27 cells, 42 certified/replayable valid failures:
+  random=24, optuna=18, coordinate=0). Not paper-facing.
 
 ## Files
 
@@ -86,10 +116,10 @@ metrics above. No fallback or degraded candidate execution occurred in this repl
 - `comparison_table.md`: diagnostic rendering of the committed report fields.
 - `replication_summary.json`: pipeline summary payload.
 - `SHA256SUMS`: checksums for the four committed summary artifacts.
-- `candidate_replay_SHA256SUMS.txt`: producer-recorded digest inventory for 4,761 unavailable
-  candidate/replay files. Its relative names are stable identifiers, but the manifest alone is not
-  a retrievable-artifact pointer and does not verify the missing bytes.
-- `provenance.md`: recorded execution lineage and the explicit preservation boundary.
+- `candidate_replay_SHA256SUMS.txt`: producer-recorded digest inventory for 4,761 candidate/replay
+  files. Its relative names are portable identifiers, not retrievable bytes.
+- `provenance.md`: recorded execution lineage, blocked retrieval status, and the explicit
+  preservation boundary.
 - `README.md`: this human-readable summary.
 
-Related work: Refs #5785 and #6095. The raw-artifact remainder is Issue #6131.
+Related work: Refs #5785, #6095, and #6131.

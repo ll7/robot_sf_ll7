@@ -1,6 +1,12 @@
 """Helpers for managing trained policy artifacts."""
 
 from robot_sf.common.seed import _TORCH_213_RUNTIME_GUARD_APPLIED
+from robot_sf.models.preflight import (
+    ModelPreflightError,
+    preflight_model,
+    preflight_models,
+    required_model_ids_for_config,
+)
 from robot_sf.models.registry import (
     RegistryIssue,
     find_latest_wandb_model,
@@ -20,10 +26,14 @@ from robot_sf.models.registry import (
 _ = _TORCH_213_RUNTIME_GUARD_APPLIED
 
 __all__ = [
+    "ModelPreflightError",
     "RegistryIssue",
     "find_latest_wandb_model",
     "get_registry_entry",
     "load_registry",
+    "preflight_model",
+    "preflight_models",
+    "required_model_ids_for_config",
     "resolve_latest_wandb_model",
     "resolve_model_path",
     "sha256_of_file",

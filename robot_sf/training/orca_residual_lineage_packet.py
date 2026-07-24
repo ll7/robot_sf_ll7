@@ -480,7 +480,7 @@ def _validate_comparison_references(
     """Validate residual-lineage comparison entries, including required names, candidate IDs, and sources.
 
     Returns:
-        Sorted comparison reference names.
+        Mapping whose ``reference_ids`` key contains sorted comparison names, or an empty mapping.
     """
     references = packet.get("comparison_references")
     if not isinstance(references, dict):

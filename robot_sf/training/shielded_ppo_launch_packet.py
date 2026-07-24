@@ -213,7 +213,7 @@ def _validate_comparison_references(
     """Validate shielded-PPO comparison evidence, including configs, reports, seeds, and artifacts.
 
     Returns:
-        Sorted names of declared comparison references.
+        Mapping whose ``reference_ids`` key contains sorted comparison names, or an empty mapping.
     """
     references = packet.get("comparison_references")
     if not isinstance(references, dict):

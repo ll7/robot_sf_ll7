@@ -376,7 +376,7 @@ def _readme(report: dict[str, Any]) -> str:
 
 
 def _issue_ref() -> str:
-    return "robot_sf#4921"
+    return "robot_sf#2557"
 
 
 def write_artifact(report: dict[str, Any], output_dir: Path | None = None) -> None:

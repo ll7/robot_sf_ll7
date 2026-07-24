@@ -12,7 +12,6 @@ Exit codes:
 - 1: ``blocked`` — packet is well-formed but a contract requirement is unmet.
 - 2: ``malformed`` — packet is missing or not a YAML mapping.
 """
-# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

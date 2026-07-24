@@ -278,7 +278,7 @@ def run_candidate_closure(
 
     evidence_dir.mkdir(parents=True, exist_ok=True)
     write_json(evidence_dir / "summary.json", packet)
-    write_text(evidence_dir / "README.md", _render_readme(packet), issue_ref="robot_sf#4921")
+    write_text(evidence_dir / "README.md", _render_readme(packet), issue_ref="robot_sf#4328")
     return packet
 
 

@@ -61,7 +61,6 @@ Usage::
         --label-b "social_force -- non-completion (timeout)" \\
         --out-dir output/butterfly_hinge_proto
 """
-# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

@@ -384,5 +384,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis

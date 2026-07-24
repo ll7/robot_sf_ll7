@@ -25,7 +25,6 @@ Examples
         --candidates candidates.json --causal causal.json --risk risk.json \
         --json out/ch7_capsules.json --validate
 """
-# evidence-writer-exempt: references evidence paths but does not write to evidence tree; guarded by AST analysis
 
 from __future__ import annotations
 

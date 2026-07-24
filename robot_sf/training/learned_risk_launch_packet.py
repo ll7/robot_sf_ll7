@@ -119,17 +119,17 @@ def validate_launch_packet(
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
-    """Resolve ``path`` against the repo root, resolving absolute paths as-is.
+    """Resolve a learned-risk packet path from ``repo_root`` or directly when it is absolute.
 
     Returns:
-        The resolved absolute path.
+        Normalized absolute path for the packet value.
     """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
 
 def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[str]) -> None:
-    """Record an error unless ``mapping[key]`` is a non-empty string."""
+    """Add a learned-risk validation error when a requested mapping value is not usable text."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty string")
@@ -141,7 +141,7 @@ def _require_existing_path(
     repo_root: Path,
     errors: list[str],
 ) -> None:
-    """Require ``mapping[key]`` to be an existing on-disk path, recording an error otherwise."""
+    """Report a learned-risk path field when it is blank or resolves to a missing target."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty path string")
@@ -151,7 +151,7 @@ def _require_existing_path(
 
 
 def _validate_generating_commit(packet: dict[str, Any], errors: list[str]) -> None:
-    """Validate that ``generating_commit`` is a 40-character git SHA."""
+    """Require learned-risk provenance to declare a full 40-character Git SHA."""
     commit = packet.get("generating_commit")
     if not isinstance(commit, str) or not _GIT_SHA_RE.match(commit.strip()):
         errors.append("generating_commit must be a 40-character git SHA")
@@ -241,7 +241,7 @@ def _validate_safety_policy(packet: dict[str, Any], errors: list[str]) -> dict[s
 
 
 def _validate_execution_boundary(packet: dict[str, Any], errors: list[str]) -> None:
-    """Validate the execution boundary forbids SLURM submission and full training here."""
+    """Require the learned-risk packet to defer SLURM and full training while naming both commands."""
     execution = packet.get("execution_boundary")
     if not isinstance(execution, dict):
         errors.append("execution_boundary must be a mapping")
@@ -302,7 +302,7 @@ def _validate_required_list(
     required_values: tuple[str, ...],
     errors: list[str],
 ) -> None:
-    """Require ``mapping[key]`` to be a non-empty list containing all required values."""
+    """Check that a learned-risk list is non-empty and covers every caller-supplied requirement."""
     values = mapping.get(key)
     if not isinstance(values, list) or not values:
         errors.append(f"{key} must be a non-empty list")
@@ -371,7 +371,7 @@ def _validate_checksum(
     checksums: dict[str, Any],
     errors: list[str],
 ) -> None:
-    """Verify a local artifact exists and matches its recorded SHA-256 checksum."""
+    """Record learned-risk artifact errors for a missing file, checksum entry, or SHA-256 mismatch."""
     if not local_path.is_file():
         errors.append(f"local artifact is missing: {path_text}")
         return

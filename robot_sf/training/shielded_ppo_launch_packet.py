@@ -89,17 +89,17 @@ def validate_launch_packet(
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
-    """Resolve ``path`` against the repo root, resolving absolute paths as-is.
+    """Resolve shielded-PPO packet references from ``repo_root`` unless callers supply absolute paths.
 
     Returns:
-        The resolved absolute path.
+        Normalized absolute packet path.
     """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
 
 def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[str]) -> None:
-    """Record an error unless ``mapping[key]`` is a non-empty string."""
+    """Append a shielded-PPO error for mapping fields that are missing, non-textual, or whitespace-only."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty string")
@@ -111,7 +111,7 @@ def _require_existing_path(
     repo_root: Path,
     errors: list[str],
 ) -> None:
-    """Require ``mapping[key]`` to be an existing on-disk path, recording an error otherwise."""
+    """Report a shielded-PPO path field whose value is blank or whose resolved target is absent."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty path string")
@@ -121,7 +121,7 @@ def _require_existing_path(
 
 
 def _validate_generating_commit(packet: dict[str, Any], errors: list[str]) -> None:
-    """Validate that ``generating_commit`` is a 40-character git SHA."""
+    """Check shielded-PPO provenance by requiring a full 40-character Git SHA."""
     commit = packet.get("generating_commit")
     if not isinstance(commit, str) or not _GIT_SHA_RE.match(commit.strip()):
         errors.append("generating_commit must be a 40-character git SHA")
@@ -210,10 +210,10 @@ def _validate_comparison_references(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
-    """Validate comparison references and return their reference ids.
+    """Validate shielded-PPO comparison evidence, including configs, reports, seeds, and artifacts.
 
     Returns:
-        Summary containing the sorted reference ids.
+        Sorted names of declared comparison references.
     """
     references = packet.get("comparison_references")
     if not isinstance(references, dict):
@@ -260,7 +260,7 @@ def _validate_stop_gates(packet: dict[str, Any], errors: list[str]) -> dict[str,
 
 
 def _validate_execution_boundary(packet: dict[str, Any], errors: list[str]) -> None:
-    """Validate the execution boundary forbids SLURM submission and full training here."""
+    """Keep shielded-PPO execution local by rejecting in-issue SLURM or full-training permission."""
     execution = packet.get("execution_boundary")
     if not isinstance(execution, dict):
         errors.append("execution_boundary must be a mapping")
@@ -279,7 +279,7 @@ def _validate_required_list(
     required_values: tuple[str, ...],
     errors: list[str],
 ) -> None:
-    """Require ``mapping[key]`` to be a non-empty list containing all required values."""
+    """Require a non-empty shielded-PPO list that contains every mandatory item for its caller."""
     values = mapping.get(key)
     if not isinstance(values, list) or not values:
         errors.append(f"{key} must be a non-empty list")
@@ -357,7 +357,7 @@ def _validate_checksum(
     checksums: dict[str, Any],
     errors: list[str],
 ) -> None:
-    """Verify a local artifact exists and matches its recorded SHA-256 checksum."""
+    """Compare a shielded-PPO local artifact with the checksum listed for its packet path."""
     if not local_path.is_file():
         errors.append(f"local artifact is missing: {path_text}")
         return

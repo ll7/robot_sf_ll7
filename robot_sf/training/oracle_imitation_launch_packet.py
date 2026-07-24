@@ -126,10 +126,10 @@ def validate_launch_packet(
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
-    """Resolve ``path`` against the repo root, resolving absolute paths as-is.
+    """Turn an oracle-imitation launch-packet reference into a resolved local filesystem path.
 
     Returns:
-        The resolved absolute path.
+        Absolute path rooted at ``repo_root`` when the reference is relative.
     """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
@@ -620,7 +620,7 @@ def _validate_local_artifact(
     repo_root: Path,
     errors: list[str],
 ) -> None:
-    """Verify a local artifact exists and matches its recorded SHA-256 checksum."""
+    """Validate an oracle-imitation local artifact's presence and declared SHA-256 checksum."""
     local_path = _resolve_path(path_text, repo_root)
     if not local_path.is_file():
         errors.append(f"artifact_paths.{name} local artifact is missing: {path_text}")

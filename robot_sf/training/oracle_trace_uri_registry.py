@@ -578,10 +578,10 @@ def _validate_training_ready_gate(
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
-    """Resolve ``path`` against the repo root, resolving absolute paths as-is.
+    """Resolve local trace-registry references from ``repo_root`` and handle absolute inputs directly.
 
     Returns:
-        The resolved absolute path.
+        Normalized absolute path for the registry or mirror.
     """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
@@ -610,7 +610,7 @@ def _is_concrete_durable_uri(uri: str) -> bool:
 
 
 def _is_sha256(raw_sha: str) -> bool:
-    """Return whether the string is a 64-character lowercase hex SHA-256 digest."""
+    """Return whether trimmed input is a 64-character hexadecimal SHA-256 digest, case-insensitively."""
     digest = raw_sha.strip().lower()
     return len(digest) == _HEX_SHA256_LENGTH and all(ch in _HEX_DIGITS for ch in digest)
 

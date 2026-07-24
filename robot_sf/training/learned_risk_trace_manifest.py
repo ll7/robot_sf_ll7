@@ -230,10 +230,10 @@ def _validate_structure(
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
-    """Resolve ``path`` against the repo root, resolving absolute paths as-is.
+    """Resolve relative trace-manifest paths from ``repo_root`` and normalize absolute paths directly.
 
     Returns:
-        The resolved absolute path.
+        Resolved absolute trace-manifest path.
     """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()

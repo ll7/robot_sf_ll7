@@ -249,17 +249,17 @@ def _coerce_rate(value: Any, label: str, errors: list[str]) -> float | None:
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
-    """Resolve ``path`` against the repo root, resolving absolute paths as-is.
+    """Resolve ORCA-residual lineage paths from ``repo_root`` and handle absolute pointers directly.
 
     Returns:
-        The resolved absolute path.
+        Normalized absolute lineage pointer path.
     """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
 
 def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[str]) -> None:
-    """Record an error unless ``mapping[key]`` is a non-empty string."""
+    """Append a residual-lineage error when a requested mapping field lacks nonblank text."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty string")
@@ -271,7 +271,7 @@ def _require_existing_path(
     repo_root: Path,
     errors: list[str],
 ) -> None:
-    """Require ``mapping[key]`` to be an existing on-disk path, recording an error otherwise."""
+    """Check a residual-lineage path after repository-aware resolution and report a missing target."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty path string")
@@ -281,7 +281,7 @@ def _require_existing_path(
 
 
 def _validate_generating_commit(packet: dict[str, Any], errors: list[str]) -> None:
-    """Validate that ``generating_commit`` is a 40-character git SHA."""
+    """Verify that the residual-lineage packet records a 40-character Git SHA for provenance."""
     commit = packet.get("generating_commit")
     if not isinstance(commit, str) or not _GIT_SHA_RE.match(commit.strip()):
         errors.append("generating_commit must be a 40-character git SHA")
@@ -477,10 +477,10 @@ def _validate_comparison_references(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
-    """Validate comparison references and return their reference ids.
+    """Validate residual-lineage comparison entries, including required names, candidate IDs, and sources.
 
     Returns:
-        Summary containing the sorted reference ids.
+        Sorted comparison reference names.
     """
     references = packet.get("comparison_references")
     if not isinstance(references, dict):
@@ -548,7 +548,7 @@ def _validate_required_list(
     required_values: tuple[str, ...],
     errors: list[str],
 ) -> None:
-    """Require ``mapping[key]`` to be a non-empty list containing all required values."""
+    """Normalize a residual-lineage list field and report required values that are absent."""
     values = mapping.get(key)
     if not isinstance(values, list) or not values:
         errors.append(f"{key} must be a non-empty list")
@@ -607,7 +607,11 @@ def _validate_artifact_pointer(
 
 
 def _sha256_matches(pointer: str, expected: str, repo_root: Path) -> bool:
-    """Return whether a local file's digest matches an expected SHA-256."""
+    """Accept durable URIs without a digest check; otherwise compare a local file with ``expected``.
+
+    Returns:
+        ``True`` for durable URIs or when the resolved local file matches ``expected``.
+    """
     if pointer.startswith(_DURABLE_URI_PREFIXES):
         return True
     path = _resolve_path(pointer, repo_root)

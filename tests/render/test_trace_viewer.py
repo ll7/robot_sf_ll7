@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from PIL import Image, ImageChops
 
 from robot_sf.analysis_workbench.simulation_trace_export import (
     load_simulation_trace_export,
@@ -15,6 +16,7 @@ from robot_sf.render.trace_viewer import (
     build_trace_scene,
     export_trace_viewer,
 )
+from scripts.validation import smoke_threejs_viewer_browser as browser_smoke
 
 FIXTURE_DIR = (
     Path(__file__).resolve().parents[1]
@@ -321,6 +323,31 @@ def test_build_trace_scene_with_map_geometry_merges_zones_and_obstacles() -> Non
     assert auto_map["robot_spawn_zones"] == []
 
 
+def test_build_trace_scene_map_geometry_expands_camera_bounds() -> None:
+    """Geometry outside the trace envelope should be included in map origin and bounds."""
+    trace = load_simulation_trace_export(MINIMAL_TRACE_PATH)
+    geometry = {
+        "obstacles": [
+            {
+                "vertices": [[-20.0, -10.0], [-10.0, -10.0]],
+                "lines": [[-20.0, -10.0, -10.0, -10.0]],
+            },
+        ],
+        "ped_crowded_zones": [[[15.0, 20.0], [20.0, 20.0], [20.0, 25.0], [15.0, 25.0]]],
+    }
+
+    map_data = build_trace_scene(trace, map_geometry=geometry)["map"]
+    max_x = map_data["origin"][0] + map_data["width"]
+    max_y = map_data["origin"][1] + map_data["height"]
+
+    assert map_data["origin"][0] < -20.0
+    assert map_data["origin"][1] < -10.0
+    assert max_x > 20.0
+    assert max_y > 25.0
+    assert all(line[0] >= map_data["origin"][0] for line in map_data["bounds"])
+    assert all(line[2] >= map_data["origin"][1] for line in map_data["bounds"])
+
+
 def test_build_trace_scene_map_geometry_updates_limitations() -> None:
     """Limitations should mention geometry overlay when map_geometry is supplied."""
     trace = load_simulation_trace_export(MINIMAL_TRACE_PATH)
@@ -398,8 +425,33 @@ def test_build_trace_scene_map_geometry_rejects_bad_point_in_zone() -> None:
     with pytest.raises(ValueError, match="expected \\[x, y\\] point pair"):
         build_trace_scene(
             trace,
-            map_geometry={"robot_spawn_zones": [[[1.0]]]},
+            map_geometry={"robot_spawn_zones": [[[1.0], [2.0, 2.0], [3.0, 3.0]]]},
         )
+
+
+@pytest.mark.parametrize(
+    ("geometry", "message"),
+    [
+        ({"obstacles": [{"vertices": [[0.0, 1.0, 2.0]], "lines": []}]}, "point pair"),
+        ({"obstacles": [{"vertices": [[0.0, "west"]], "lines": []}]}, "finite number"),
+        ({"obstacles": [{"vertices": [], "lines": [[0.0, 1.0, 2.0]]}]}, "line segment"),
+        (
+            {"obstacles": [{"vertices": [], "lines": [[0.0, 1.0, 2.0, float("inf")]]}]},
+            "finite number",
+        ),
+        ({"ped_goal_zones": [[[0.0, 1.0, 2.0], [1.0, 1.0], [1.0, 0.0]]]}, "point pair"),
+        ({"ped_goal_zones": [[[0.0, 1.0], [1.0, float("nan")], [1.0, 0.0]]]}, "finite number"),
+    ],
+)
+def test_build_trace_scene_map_geometry_rejects_renderer_invalid_coordinates(
+    geometry: dict[str, object],
+    message: str,
+) -> None:
+    """Malformed geometry should fail before it is serialized for Three.js."""
+    trace = load_simulation_trace_export(MINIMAL_TRACE_PATH)
+
+    with pytest.raises(ValueError, match=message):
+        build_trace_scene(trace, map_geometry=geometry)
 
 
 def test_export_trace_viewer_with_map_geometry(tmp_path: Path) -> None:
@@ -420,6 +472,86 @@ def test_export_trace_viewer_with_map_geometry(tmp_path: Path) -> None:
 
     assert len(scene["map"]["obstacles"]) == 1
     assert scene["map"]["obstacles"][0]["vertices"] == geometry["obstacles"][0]["vertices"]
+
+
+def test_trace_viewer_cli_loads_map_geometry(tmp_path: Path) -> None:
+    """The canonical module CLI should load and export supplied map geometry."""
+    from robot_sf.render.trace_viewer import main
+
+    geometry_path = tmp_path / "map_geometry.json"
+    geometry_path.write_text(
+        json.dumps(
+            {
+                "ped_crowded_zones": [
+                    [[5.0, 5.0], [6.0, 5.0], [6.0, 6.0], [5.0, 6.0]],
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "viewer"
+
+    exit_code = main(
+        [
+            str(MINIMAL_TRACE_PATH),
+            "--map-geometry",
+            str(geometry_path),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    assert exit_code == 0
+    scene = json.loads((output_dir / "scene.json").read_text(encoding="utf-8"))
+    assert scene["map"]["ped_crowded_zones"] == [
+        [[5.0, 5.0], [6.0, 5.0], [6.0, 6.0], [5.0, 6.0]],
+    ]
+
+
+def test_trace_viewer_browser_renders_ped_crowded_zone(tmp_path: Path, monkeypatch) -> None:
+    """A browser render should add crowded-zone pixels beyond the same geometry without that zone."""
+    pytest.importorskip("playwright.sync_api")
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    trace = load_simulation_trace_export(MINIMAL_TRACE_PATH)
+    base_geometry = {
+        "obstacles": [
+            {
+                "vertices": [[-10.0, -10.0], [10.0, -10.0], [10.0, 10.0], [-10.0, 10.0]],
+                "lines": [
+                    [-10.0, 10.0, -10.0, -10.0],
+                    [-10.0, 10.0, 10.0, 10.0],
+                    [-10.0, -10.0, -10.0, 10.0],
+                    [10.0, 10.0, -10.0, 10.0],
+                ],
+            },
+        ],
+    }
+    crowded_geometry = {
+        **base_geometry,
+        "ped_crowded_zones": [[[-8.0, -8.0], [8.0, -8.0], [8.0, 8.0], [-8.0, 8.0]]],
+    }
+
+    base_result = export_trace_viewer(trace, tmp_path / "base", map_geometry=base_geometry)
+    crowded_result = export_trace_viewer(
+        trace,
+        tmp_path / "crowded",
+        map_geometry=crowded_geometry,
+    )
+    base_screenshot = tmp_path / "base.png"
+    crowded_screenshot = tmp_path / "crowded.png"
+    try:
+        browser_smoke.run_browser_smoke(base_result.output_dir, base_screenshot)
+        browser_smoke.run_browser_smoke(crowded_result.output_dir, crowded_screenshot)
+    except Exception as exc:
+        if browser_smoke._is_browser_dependency_error(exc):
+            pytest.skip("Chromium is unavailable for the optional browser rendering check")
+        raise
+
+    with Image.open(base_screenshot) as base_image, Image.open(crowded_screenshot) as crowded_image:
+        base_crop = base_image.convert("RGB").crop((580, 280, 620, 320))
+        crowded_crop = crowded_image.convert("RGB").crop((580, 280, 620, 320))
+
+    assert ImageChops.difference(base_crop, crowded_crop).getbbox() is not None
 
 
 def test_export_trace_viewer_without_map_geometry_preserves_empty_zones(

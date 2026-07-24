@@ -802,7 +802,13 @@ def test_pr_ready_check_fails_closed_when_changed_optional_test_omitted_from_all
     preflight_repo: Path,
 ) -> None:
     """Issue #6208: PR readiness must fail closed when a changed optional test is omitted from allowlist."""
-    changed_file = preflight_repo / "robot_sf" / "benchmark" / "test_unlisted_opt.py"
+    # Omit tests/planner/ from allowlist file
+    allowlist = preflight_repo / "tests" / "support" / "optional_test_allowlist.txt"
+    allowlist.write_text("tests/benchmark/\n", encoding="utf-8")
+    _git(preflight_repo, "add", "-A")
+    _git(preflight_repo, "commit", "-q", "-m", "update allowlist fixture")
+
+    changed_file = preflight_repo / "tests" / "planner" / "test_unlisted_opt.py"
     changed_file.parent.mkdir(parents=True, exist_ok=True)
     changed_file.write_text("def test_unlisted(): pass\n", encoding="utf-8")
     _git(preflight_repo, "add", "-A")

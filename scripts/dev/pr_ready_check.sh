@@ -162,7 +162,7 @@ resolve_base_ref() {
 }
 
 is_optional_readiness_path() {
-  # Code paths that require optional extras (hardcoded for readiness scope)
+  # Code paths and test directory patterns that require optional extras
   case "$1" in
     robot_sf/benchmark/*|\
     robot_sf/baselines/drl_vo.py|\
@@ -175,7 +175,15 @@ is_optional_readiness_path() {
     scripts/tools/benchmark_feature_extractors.py|\
     scripts/tools/probe_social_navigation_pyenvs_socialforce_runtime.py|\
     scripts/tools/probe_sonic_model_inference.py|\
-    scripts/training/*)
+    scripts/training/*|\
+    tests/benchmark/*|\
+    tests/benchmark_full/*|\
+    tests/carla_bridge/*|\
+    tests/integration/*|\
+    tests/planner/*|\
+    tests/render/*|\
+    tests/training/*|\
+    tests/visuals/*)
       return 0
       ;;
   esac

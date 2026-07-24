@@ -14,24 +14,27 @@
 
 ## Overview
 
-The robot_sf_ll7 project uses `pytest-cov` for automatic code coverage measurement. Coverage is collected during every test run and reported in multiple formats (terminal, HTML, JSON).
+The robot_sf_ll7 project uses `pytest-cov` and Python's `coverage` library for code coverage measurement. Coverage collection is opt-in for local test runs and runs automatically on non-PR CI events (main branch, merge queue, manual dispatch).
 
 **Design Principles**:
-- **Non-intrusive**: Coverage collection is automatic, no extra commands needed
-- **Informative**: Multiple report formats for different use cases
-- **CI-friendly**: Non-blocking baseline warnings prevent coverage regressions
-- **Developer-focused**: VS Code tasks and HTML reports for local workflow
+- **Explicit opt-in**: Default local pytest runs skip coverage collection for maximum speed; explicit wrapper opt-in (`ROBOT_SF_PYTEST_COVERAGE=1`) or non-PR CI runs collect coverage data.
+- **Informative**: Multiple report formats for different use cases (terminal, HTML, JSON).
+- **CI-friendly**: Non-PR CI runs enforce an absolute 85.0% coverage floor and report advisory baseline warnings.
+- **Developer-focused**: Cross-platform HTML report helper and VS Code tasks for local workflow.
 
 ## Quick Start
 
 ```bash
-# Run tests (coverage collected automatically)
+# Run tests normally (no coverage by default for fast execution)
 uv run pytest tests
 
 # View HTML report (cross-platform)
 uv run python scripts/coverage/open_coverage_report.py
 
 # Or use VS Code task: "Open Coverage Report"
+
+# Run tests with coverage collection (local opt-in)
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
 
 # Compare with baseline (local)
 uv run python scripts/coverage/compare_coverage.py \
@@ -44,7 +47,7 @@ uv run python scripts/coverage/compare_coverage.py \
 
 Coverage tooling is configured in `pyproject.toml`, and `pytest-cov` ships in the `dev`
 dependency group. The default pytest invocation does not collect coverage — pass `--cov`
-explicitly (see examples below). The base pytest options are:
+explicitly or set `ROBOT_SF_PYTEST_COVERAGE=1` with `scripts/dev/run_tests_parallel.sh`. The base pytest options are:
 
 ```toml
 [tool.pytest.ini_options]
@@ -52,11 +55,18 @@ addopts = [
     "--import-mode=importlib",
     "--durations=10",
 ]
+testpaths = ["tests", "fast-pysf/tests"]
 ```
 
-**What gets measured**:
-- All code in `robot_sf/` package
-- Excludes: tests, examples, scripts, fast-pysf submodule
+**What gets measured by the canonical command and CI**:
+- Only the `robot_sf/` package. The wrapper and non-PR CI pass `--cov=robot_sf`; pytest-cov uses
+  that command-line source selection instead of the broader `source = ["robot_sf",
+  "fast-pysf/pysocialforce"]` value in `pyproject.toml`.
+- `fast-pysf/pysocialforce` is therefore not included in the local wrapper report, the non-PR CI
+  shards, or the 85.0% coverage gate.
+- The configured omit patterns still exclude test files (`*/tests/*`, `*/test_*`,
+  `fast-pysf/tests/*`), `tests/pygame/*`, examples (`examples/*`, `fast-pysf/examples/*`),
+  `scripts/*`, `*/conftest.py`, and `*/__pycache__/*` whenever their configured source list is used.
 
 **Output artifacts** (under the canonical `output/coverage/` root):
 - `output/coverage/.coverage` - SQLite database (raw data)
@@ -76,8 +86,8 @@ The baseline comparison system detects coverage regressions across commits/branc
 mkdir -p output/coverage
 cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
 
-# Make changes, run tests
-uv run pytest tests
+# Make changes, then collect the canonical coverage snapshot
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
 
 # Compare
 uv run python scripts/coverage/compare_coverage.py \
@@ -130,52 +140,94 @@ Files with decreased coverage:
 
 ## CI/CD Integration
 
-Coverage comparison and publishing run automatically in CI using a reusable sequence of steps:
+Coverage collection and enforcement run automatically in CI (`.github/workflows/ci.yml`) with the following architecture:
+
+1. **Fast-feedback sharding**: The `fast-feedback` job distributes pytest execution across four runners (`PYTEST_SHARD_COUNT: 4`, `PYTEST_SHARD_INDEX: 1..4`).
+   - On **pull request** events, coverage collection is disabled (`ROBOT_SF_PYTEST_COVERAGE: 0`) to keep PR feedback fast.
+   - On **non-PR** events (`main`, `merge_group`, `workflow_dispatch`), coverage is enabled (`ROBOT_SF_PYTEST_COVERAGE: 1`, `ROBOT_SF_SHARD_INCLUDE_SLOW: 1`) using the high-performance CPython 3.12+ `sys.monitoring` backend (`COVERAGE_CORE: sysmon`). Each shard writes to its own database (`output/coverage/.coverage.<shard>`) and uploads an artifact (`coverage-shard-<shard>`).
+2. **Coverage Gate**: On non-PR events, after all `fast-feedback` shards pass, the `coverage-gate` job executes:
+   - Downloads all shard databases (`coverage-shard-*`).
+   - Combines them: `uv run coverage combine output/coverage`.
+   - Exports JSON and HTML reports: `uv run coverage json` and `uv run coverage html`.
+   - Enforces the **absolute coverage floor** (fails CI if overall coverage drops below 85.0%):
+     ```bash
+     uv run python scripts/coverage/compare_coverage.py \
+       --current output/coverage/coverage.json \
+       --absolute-only \
+       --format github \
+       --minimum-total 85.0
+     ```
+   - Compares with the main baseline if available (`--threshold 1.0`, non-blocking advisory warnings).
+   - Updates and caches `output/coverage/.coverage-baseline.json` on `main` branch pushes.
+   - Uploads combined coverage artifacts (`coverage.json`, `htmlcov/`, `.coverage`).
 
 ```yaml
-# 1. The fast-feedback job runs tests through the canonical CI driver
-- name: Unit tests
-  run: scripts/dev/ci_driver.sh test
+# Reusable pipeline summary for non-PR coverage execution in .github/workflows/ci.yml:
+coverage-gate:
+  runs-on: ubuntu-latest
+  needs: fast-feedback
+  if: ${{ github.event_name != 'pull_request' && needs.fast-feedback.result == 'success' }}
+  steps:
+    - name: Download coverage shards
+      uses: actions/download-artifact@v4
+      with:
+        pattern: coverage-shard-*
+        path: output/coverage
+        merge-multiple: true
 
-# 2. Restore baseline from cache
-- name: Restore coverage baseline
-  uses: actions/cache@v4
-  with:
-    path: output/coverage/.coverage-baseline.json
-    key: coverage-baseline-${{ github.ref_name }}
+    - name: Combine coverage shards
+      run: |
+        uv run coverage combine output/coverage
+        uv run coverage json
+        uv run coverage html
 
-# 3. Compare (non-blocking)
-- name: Compare coverage
-  continue-on-error: true  # Warning only, doesn't fail CI
-  run: |
-    uv run python scripts/coverage/compare_coverage.py \
-      --current output/coverage/coverage.json \
-      --baseline output/coverage/.coverage-baseline.json \
-      --format github
+    - name: Enforce absolute coverage floor
+      run: >-
+        uv run python scripts/coverage/compare_coverage.py
+        --current output/coverage/coverage.json
+        --absolute-only
+        --format github
+        --minimum-total 85.0
 
-# 4. Update baseline on main
-- name: Update baseline
-  if: github.ref == 'refs/heads/main'
-  run: |
-    mkdir -p output/coverage
-    cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
+    - name: Restore coverage baseline
+      uses: actions/cache@v4
+      with:
+        path: output/coverage/.coverage-baseline.json
+        key: coverage-baseline-${{ github.ref_name }}
+        restore-keys: |
+          coverage-baseline-main
 
-# 5. Upload artifacts
-- name: Upload coverage
-  uses: actions/upload-artifact@v4
-  with:
-    path: |
-      output/coverage/coverage.json
-      output/coverage/htmlcov/
-      output/coverage/.coverage
+    - name: Compare coverage with baseline
+      continue-on-error: true
+      run: |
+        if [ -f output/coverage/.coverage-baseline.json ]; then
+          uv run python scripts/coverage/compare_coverage.py \
+            --current output/coverage/coverage.json \
+            --baseline output/coverage/.coverage-baseline.json \
+            --format github \
+            --threshold 1.0
+        fi
+
+    - name: Update coverage baseline (main branch only)
+      if: github.ref == 'refs/heads/main' && success()
+      run: |
+        mkdir -p output/coverage
+        cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
+
+    - name: Save coverage baseline (main branch only)
+      if: github.ref == 'refs/heads/main' && success()
+      uses: actions/cache/save@v4
+      with:
+        path: output/coverage/.coverage-baseline.json
+        key: coverage-baseline-${{ github.ref_name }}-${{ github.sha }}
 ```
 
 ### Cache Strategy
 
-- **Key**: `coverage-baseline-{branch}-{sha}` for main, `coverage-baseline-{branch}` for PRs
-- **Restore keys**: Falls back to main branch baseline if PR baseline missing
-- **Update**: Only main branch pushes update the baseline
-- **Retention**: GitHub Actions default (90 days)
+- **Key**: `coverage-baseline-{branch_name}-{sha}` for main branch pushes.
+- **Restore keys**: `coverage-baseline-main` fallback if branch baseline is missing.
+- **Update**: Only main branch pushes update the baseline.
+- **Retention**: GitHub Actions default (90 days).
 
 ## Coverage Reports
 
@@ -237,35 +289,53 @@ Machine-readable format for tooling:
 
 ## Configuration
 
-All coverage settings live in `pyproject.toml`:
+All coverage defaults live in `pyproject.toml`. The listed `source` array is a coverage.py default;
+the canonical local wrapper and non-PR CI override it with `--cov=robot_sf`, so their reports measure
+only `robot_sf`.
 
 ```toml
 [tool.coverage.run]
-source = ["robot_sf", "fast-pysf/pysocialforce"]  # Packages to measure
+source = ["robot_sf", "fast-pysf/pysocialforce"]
+
+# Omit test files and non-library code from coverage measurement
 omit = [
-    "tests/*",                     # Exclude test code
-    "examples/*",                  # Exclude demos
-    "scripts/*",                   # Exclude CLI tools
-    "fast-pysf/*",                 # Exclude submodule
+    "*/tests/*",
+    "*/test_*",
+    "tests/pygame/*",
+    "examples/*",
+    "scripts/*",
+    "fast-pysf/tests/*",
+    "fast-pysf/examples/*",
+    "*/conftest.py",
+    "*/__pycache__/*",
 ]
-parallel = true                    # Support pytest-xdist
+parallel = true
+branch = true
+data_file = "output/coverage/.coverage"
 
 [tool.coverage.report]
-precision = 2                      # Decimal places (91.73%)
-show_missing = true                # Show missing line numbers
+precision = 2
+show_missing = true
+skip_covered = false
+skip_empty = false
 exclude_lines = [
-    "pragma: no cover",            # Exclude marked lines
-    "def __repr__",                # Exclude __repr__ methods
-    "raise AssertionError",        # Exclude defensive assertions
-    "if __name__ == .__main__.:",  # Exclude script entry points
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
 ]
 
 [tool.coverage.html]
-directory = "output/coverage/htmlcov"  # HTML output directory
+directory = "output/coverage/htmlcov"
+show_contexts = false
 
 [tool.coverage.json]
-output = "output/coverage/coverage.json"  # JSON output file
-show_contexts = false                   # Don't include test names
+output = "output/coverage/coverage.json"
+show_contexts = false
 ```
 
 ### Customization
@@ -291,10 +361,10 @@ def debug_helper():  # pragma: no cover
 ### Coverage data not generated
 
 **Symptom**: No `output/coverage/coverage.json` or `output/coverage/htmlcov/` after tests
-**Solution**: Ensure pytest runs from repository root with coverage enabled
+**Solution**: Ensure the canonical wrapper runs from repository root with coverage enabled
 ```bash
 cd robot_sf_ll7
-uv run pytest tests  # Not: pytest tests (uses wrong Python)
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
 ```
 
 ### Baseline comparison fails
@@ -302,7 +372,7 @@ uv run pytest tests  # Not: pytest tests (uses wrong Python)
 **Symptom**: `FileNotFoundError: output/coverage/.coverage-baseline.json`
 **Solution**: Create baseline first
 ```bash
-uv run pytest tests
+ROBOT_SF_PYTEST_COVERAGE=1 scripts/dev/run_tests_parallel.sh tests
 mkdir -p output/coverage
 cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
 ```
@@ -310,7 +380,8 @@ cp output/coverage/coverage.json output/coverage/.coverage-baseline.json
 ### Coverage percentage seems wrong
 
 **Symptom**: Very low coverage (< 5%) despite writing tests
-**Solution**: Check `[tool.coverage.run] source` matches your package name
+**Solution**: Check the command-line `--cov` source selection matches your package name. The
+canonical wrapper intentionally measures `robot_sf` only.
 ```toml
 source = ["robot_sf"]  # Must match actual package directory
 ```

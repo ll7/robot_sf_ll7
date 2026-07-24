@@ -175,6 +175,15 @@ def _actor_metric_rows(
     scenario_family: str | None,
     miss_threshold_m: float,
 ) -> list[ForecastMetricRow]:
+    """Build per-actor metric rows across all forecast horizons.
+
+    Emits ade/fde/minade@k/minfde@k/expected_* errors, the miss rate, and the
+    hook-metric rows for each horizon, reporting unavailable rows when ground
+    truth is missing.
+
+    Returns:
+        The per-horizon metric rows.
+    """
     rows: list[ForecastMetricRow] = []
     horizons_s = batch.provenance.horizons_s
 
@@ -328,6 +337,11 @@ def _unavailable_rows(
     scenario_family: str | None,
     note: str,
 ) -> list[ForecastMetricRow]:
+    """Emit unavailable rows for all core metrics at one horizon with ``note``.
+
+    Returns:
+        The unavailable core metric rows.
+    """
     return [
         _row(
             forecast=forecast,
@@ -362,6 +376,11 @@ def _unavailable_hook_rows(
     batch: ForecastBatch,
     scenario_family: str | None,
 ) -> list[ForecastMetricRow]:
+    """Emit unavailable rows for the likelihood/coverage/collision_relevance hook metrics.
+
+    Returns:
+        The unavailable hook-metric rows.
+    """
     return [
         _row(
             forecast=forecast,
@@ -392,6 +411,11 @@ def _row(
     scenario_family: str | None,
     note: str | None,
 ) -> ForecastMetricRow:
+    """Build a single metric row, marking status/denominator unavailable when ``value`` is None.
+
+    Returns:
+        The constructed ``ForecastMetricRow``.
+    """
     return ForecastMetricRow(
         metric=metric,
         horizon_s=float(horizon_s),
@@ -414,6 +438,11 @@ def _final_horizon_note(
     value: float | None,
     missing_note: str,
 ) -> str | None:
+    """Return the note for final-horizon-only metrics.
+
+    Non-final horizons are flagged final-only; a missing value on the final
+    horizon returns the supplied reason.
+    """
     if not final_horizon:
         return "final horizon only"
     if value is None:
@@ -422,6 +451,11 @@ def _final_horizon_note(
 
 
 def _aggregate_rows(rows: list[ForecastMetricRow]) -> list[ForecastMetricRow]:
+    """Aggregate ok rows into ``mean_*`` rows keyed by metric/horizon/class/scenario/tier/dt/family.
+
+    Returns:
+        The aggregated ``mean_*`` rows.
+    """
     grouped: dict[tuple[str, float, str, str, str, float, str | None], list[float]] = defaultdict(
         list
     )
@@ -474,6 +508,11 @@ def _aggregate_rows(rows: list[ForecastMetricRow]) -> list[ForecastMetricRow]:
 
 
 def _aggregate_sort_key(key: tuple[str, float, str, str, str, float, str | None]) -> tuple:
+    """Stable sort key over an aggregate-row tuple (mapping None family to empty string).
+
+    Returns:
+        The stable sort key tuple.
+    """
     metric, horizon_s, actor_class, scenario_id, observation_tier, dt_s, scenario_family = key
     return (
         metric,
@@ -491,6 +530,11 @@ def _ground_truth_array(
     ground_truth: GroundTruthPositions,
     expected_steps: int,
 ) -> np.ndarray | None:
+    """Return the finite ``(T, 2)`` ground-truth trajectory for an actor.
+
+    Returns ``None`` when the actor is absent; raises on a wrong-shaped or
+    non-finite trajectory.
+    """
     if actor_id not in ground_truth:
         return None
     array = np.asarray(ground_truth[actor_id], dtype=float)
@@ -506,6 +550,7 @@ def _ground_truth_array(
 def _point_error(
     trajectory: np.ndarray | None, horizon_index: int, target: np.ndarray
 ) -> float | None:
+    """Return the Euclidean error of a trajectory point at a horizon index vs ``target``."""
     if trajectory is None:
         return None
     return float(np.linalg.norm(trajectory[horizon_index] - target))
@@ -514,6 +559,7 @@ def _point_error(
 def _min_sample_error(
     samples: np.ndarray | None, horizon_index: int, target: np.ndarray
 ) -> float | None:
+    """Return the minimum Euclidean error over sampled trajectories at a horizon index."""
     if samples is None:
         return None
     errors = np.linalg.norm(samples[:, horizon_index, :] - target, axis=1)
@@ -527,6 +573,7 @@ def _miss_rate_value(
     final_horizon: bool,
     threshold_m: float,
 ) -> float | None:
+    """Return the final-horizon miss rate (1.0 when the best error exceeds the threshold)."""
     if not final_horizon:
         return None
     error = min_sample_error if min_sample_error is not None else deterministic_error
@@ -540,6 +587,7 @@ def _expected_sample_error(
     horizon_index: int,
     target: np.ndarray,
 ) -> float | None:
+    """Return the mode-probability-weighted expected error over samples at a horizon index."""
     if forecast.samples is None or forecast.mode_probabilities is None:
         return None
     errors = np.linalg.norm(forecast.samples[:, horizon_index, :] - target, axis=1)
@@ -548,6 +596,11 @@ def _expected_sample_error(
 
 
 def _actor_class(forecast: ActorForecast, batch: ForecastBatch) -> str:
+    """Resolve an actor's class from provenance then metadata sources, defaulting to pedestrian.
+
+    Returns:
+        The resolved actor class string.
+    """
     provenance_actor_class = batch.provenance.actor_classes.get(forecast.actor_id)
     if provenance_actor_class is not None:
         return provenance_actor_class
@@ -637,6 +690,7 @@ def _actor_class_caveat(actor_class: str) -> str:
 
 
 def _scenario_family(batch: ForecastBatch) -> str | None:
+    """Return the batch's ``scenario_family`` metadata as a string, or ``None`` when absent."""
     value = batch.metadata.get("scenario_family")
     return str(value) if value is not None else None
 

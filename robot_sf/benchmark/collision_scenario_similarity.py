@@ -135,6 +135,11 @@ class ScenarioDescriptor:
 
 
 def _nested(record: dict[str, Any], path: str) -> Any:
+    """Resolve a dotted path within nested dicts, returning ``None`` on any missing segment.
+
+    Returns:
+        The resolved value, or ``None`` when any segment is missing.
+    """
     current: Any = record
     for part in path.split("."):
         if not isinstance(current, dict) or part not in current:
@@ -144,6 +149,7 @@ def _nested(record: dict[str, Any], path: str) -> Any:
 
 
 def _first_present(record: dict[str, Any], paths: Sequence[str]) -> Any:
+    """Return the first non-None value resolved across candidate dotted paths."""
     for path in paths:
         value = _nested(record, path)
         if value is not None:
@@ -152,6 +158,11 @@ def _first_present(record: dict[str, Any], paths: Sequence[str]) -> Any:
 
 
 def _finite_float(value: Any) -> float | None:
+    """Coerce ``value`` to a finite float, returning ``None`` on failure.
+
+    Returns:
+        The finite float, or ``None`` on failure.
+    """
     try:
         candidate = float(value)
     except (TypeError, ValueError):
@@ -162,6 +173,11 @@ def _finite_float(value: Any) -> float | None:
 
 
 def _position(value: Any) -> tuple[float, float] | None:
+    """Parse an xy position from a dict or 2-element sequence, or ``None`` when unparseable.
+
+    Returns:
+        The ``(x, y)`` position, or ``None`` when unparseable.
+    """
     if isinstance(value, dict):
         nested_position = value.get("position", value.get("pos"))
         if nested_position is not None:
@@ -177,6 +193,11 @@ def _position(value: Any) -> tuple[float, float] | None:
 
 
 def _position_series(value: Any) -> list[tuple[float, float]]:
+    """Parse a list of positions into xy tuples, or ``[]`` when any item is unparseable.
+
+    Returns:
+        The list of xy positions, or ``[]`` when any is unparseable.
+    """
     if not isinstance(value, list):
         return []
     positions = [_position(item) for item in value]
@@ -186,6 +207,11 @@ def _position_series(value: Any) -> list[tuple[float, float]]:
 
 
 def _pedestrian_trajectories(value: Any) -> list[list[tuple[float, float]]]:
+    """Extract pedestrian tracks (each a position series) from dict values or a list.
+
+    Returns:
+        The list of pedestrian position tracks.
+    """
     candidates: Iterable[Any]
     if isinstance(value, dict):
         candidates = value.values()
@@ -197,6 +223,11 @@ def _pedestrian_trajectories(value: Any) -> list[list[tuple[float, float]]]:
 
 
 def _actions(value: Any) -> list[tuple[float, float]]:
+    """Parse a list of ``(linear, angular)`` actions from dicts or 2-element sequences.
+
+    Returns:
+        The list of ``(linear, angular)`` actions.
+    """
     if not isinstance(value, list):
         return []
     actions: list[tuple[float, float]] = []
@@ -215,6 +246,7 @@ def _actions(value: Any) -> list[tuple[float, float]]:
 
 
 def _path_length(positions: Sequence[tuple[float, float]]) -> float:
+    """Return the summed Euclidean distance between consecutive positions."""
     return sum(math.dist(left, right) for left, right in pairwise(positions))
 
 
@@ -223,6 +255,11 @@ def _trajectory_geometry_features(
     pedestrian_tracks: Sequence[Sequence[tuple[float, float]]],
     dt: float | None,
 ) -> dict[str, float]:
+    """Compute robot/pedestrian path and closest-approach geometry features.
+
+    Returns:
+        The geometry feature dict.
+    """
     features: dict[str, float] = {}
     if robot_positions:
         robot_path_length = _path_length(robot_positions)
@@ -256,6 +293,11 @@ def _trajectory_geometry_features(
 
 
 def _action_features(actions: Sequence[tuple[float, float]]) -> dict[str, float]:
+    """Compute summary statistics (count, means, absolute deltas) over an action sequence.
+
+    Returns:
+        The action summary feature dict.
+    """
     if not actions:
         return {}
     return {
@@ -276,6 +318,11 @@ def _action_features(actions: Sequence[tuple[float, float]]) -> dict[str, float]
 
 
 def _trajectory_action_features(record: dict[str, Any]) -> tuple[dict[str, float], dict[str, Any]]:
+    """Extract trajectory geometry and action features plus a raw-trajectory availability context.
+
+    Returns:
+        ``(features, availability_context)``.
+    """
     robot_positions = _position_series(_first_present(record, _ROBOT_TRAJECTORY_PATHS))
     pedestrian_tracks = _pedestrian_trajectories(
         _first_present(record, _PEDESTRIAN_TRAJECTORY_PATHS)
@@ -304,6 +351,7 @@ def _trajectory_action_features(record: dict[str, Any]) -> tuple[dict[str, float
 
 
 def _record_id(record: dict[str, Any], index: int) -> str:
+    """Return a stable record id from common id fields, falling back to scenario/seed/row."""
     for key in ("episode_id", "record_id", "run_id"):
         value = record.get(key)
         if isinstance(value, str) and value.strip():
@@ -318,6 +366,11 @@ def _record_id(record: dict[str, Any], index: int) -> str:
 
 
 def _event_summary(record: dict[str, Any]) -> dict[str, Any]:
+    """Extract a compact event summary (scenario, seed, collisions, separation, termination).
+
+    Returns:
+        The compact event summary dict.
+    """
     metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
     return {
         "scenario_id": record.get("scenario_id"),
@@ -390,6 +443,11 @@ def describe_collision_scenarios(
 
 
 def _numeric_ranges(descriptors: Sequence[ScenarioDescriptor]) -> dict[str, tuple[float, float]]:
+    """Compute min/max ranges per numeric feature across descriptors.
+
+    Returns:
+        The min/max range per numeric feature.
+    """
     ranges: dict[str, tuple[float, float]] = {}
     for name, _paths in _NUMERIC_FEATURES:
         values = [
@@ -406,6 +464,7 @@ def _feature_distance(
     *,
     numeric_ranges: dict[str, tuple[float, float]],
 ) -> tuple[float, list[str]]:
+    """Return the normalized mean feature distance and shared feature names between two descriptors."""
     components: list[float] = []
     shared_features: list[str] = []
 
@@ -433,6 +492,11 @@ def _nearest_neighbors(
     *,
     nearest_k: int,
 ) -> tuple[list[dict[str, Any]], dict[tuple[int, int], float]]:
+    """Compute per-descriptor nearest neighbors under ``nearest_k`` via the legacy summary features.
+
+    Returns:
+        ``(per-descriptor neighbor rows, pair_distances)``.
+    """
     ranges = _numeric_ranges(descriptors)
     pair_distances: dict[tuple[int, int], float] = {}
     rows: list[dict[str, Any]] = []
@@ -459,6 +523,7 @@ def _feature_set_values(
     descriptor: ScenarioDescriptor,
     feature_set_id: str,
 ) -> tuple[dict[str, float], dict[str, str]]:
+    """Return the ``(numeric, categorical)`` feature values for a descriptor under a named feature set."""
     if feature_set_id == "legacy_summary_v1":
         return descriptor.numeric, descriptor.categorical
     if feature_set_id == "trajectory_action_v1":
@@ -472,6 +537,11 @@ def _feature_set_values(
 
 
 def _mapping_ranges(rows: Sequence[dict[str, float]]) -> dict[str, tuple[float, float]]:
+    """Compute min/max ranges per feature across numeric mapping rows.
+
+    Returns:
+        The min/max range per feature.
+    """
     feature_names = sorted({name for row in rows for name in row})
     return {
         name: (
@@ -490,6 +560,7 @@ def _mapping_distance(
     *,
     numeric_ranges: dict[str, tuple[float, float]],
 ) -> tuple[float, list[str]]:
+    """Return the normalized mean distance and shared features between two numeric/categorical mappings."""
     components: list[float] = []
     shared_features: list[str] = []
     for name, (minimum, maximum) in numeric_ranges.items():
@@ -514,6 +585,11 @@ def _feature_set_neighbors(
     feature_set_id: str,
     nearest_k: int,
 ) -> tuple[list[dict[str, Any]], dict[tuple[int, int], float], list[str]]:
+    """Compute per-descriptor nearest neighbors under ``nearest_k`` for a named feature set.
+
+    Returns:
+        ``(neighbor rows, pair_distances, observed_features)``.
+    """
     views = [_feature_set_values(descriptor, feature_set_id) for descriptor in descriptors]
     ranges = _mapping_ranges([numeric for numeric, _categorical in views])
     pair_distances: dict[tuple[int, int], float] = {}
@@ -553,6 +629,14 @@ def _feature_set_comparison(
     nearest_k: int,
     group_threshold: float,
 ) -> dict[str, Any]:
+    """Compare all feature sets on the raw-trajectory cohort.
+
+    Returns per-feature-set reports with nearest neighbors and groups, plus the
+    excluded records and a diagnostic-only interpretation note.
+
+    Returns:
+        The feature-set comparison report dict.
+    """
     cohort = [
         descriptor
         for descriptor in descriptors
@@ -627,15 +711,22 @@ def _group_descriptors(
     *,
     threshold: float,
 ) -> list[dict[str, Any]]:
+    """Union-find group descriptors whose pair distance is within ``threshold`` into sorted groups.
+
+    Returns:
+        The sorted group records.
+    """
     parent = list(range(len(descriptors)))
 
     def find(index: int) -> int:
+        """Return the union-find root of ``index`` with path halving."""
         while parent[index] != index:
             parent[index] = parent[parent[index]]
             index = parent[index]
         return index
 
     def union(left: int, right: int) -> None:
+        """Merge the union-find sets of ``left`` and ``right``."""
         left_root = find(left)
         right_root = find(right)
         if left_root != right_root:
@@ -672,6 +763,7 @@ def _representative(
     member_indexes: Sequence[int],
     pair_distances: dict[tuple[int, int], float],
 ) -> int:
+    """Return the index of the member with the lowest mean distance to the others (the medoid)."""
     if len(member_indexes) == 1:
         return member_indexes[0]
     scored: list[tuple[float, int]] = []
@@ -687,6 +779,11 @@ def _representative(
 
 
 def _record_labels(record: dict[str, Any]) -> dict[str, Any]:
+    """Collect label fields from external_labels/labels/outcome sources into one mapping.
+
+    Returns:
+        The collected label mapping.
+    """
     labels = record.get("external_labels")
     if not isinstance(labels, dict):
         labels = record.get("labels")
@@ -699,10 +796,12 @@ def _record_labels(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _label_is_positive(labels: dict[str, Any]) -> bool:
+    """Return whether any positive-label key is truthy in ``labels``."""
     return any(bool(labels.get(key)) for key in _LABEL_POSITIVE_KEYS)
 
 
 def _trajectory_fields(record: dict[str, Any]) -> set[str]:
+    """Return the set of trajectory feature and ``trajectory.*`` field names present in a record."""
     fields: set[str] = set()
     trajectory_features = record.get("trajectory_features")
     if isinstance(trajectory_features, dict):
@@ -714,6 +813,7 @@ def _trajectory_fields(record: dict[str, Any]) -> set[str]:
 
 
 def _raw_trajectory_array_fields(record: dict[str, Any]) -> set[str]:
+    """Return the set of raw trajectory array fields available in a record."""
     _features, context = _trajectory_action_features(record)
     if not context["raw_actor_trajectories_available"]:
         return set()
@@ -726,6 +826,7 @@ def _raw_trajectory_array_fields(record: dict[str, Any]) -> set[str]:
 
 
 def _trajectory_metric_fields(record: dict[str, Any]) -> set[str]:
+    """Return the set of trajectory metric fields present in a record's ``metrics`` block."""
     metrics = record.get("metrics")
     if not isinstance(metrics, dict):
         return set()
@@ -737,6 +838,11 @@ def _field_availability_summary(
     selected_ids: set[str],
     extractor: Callable[[dict[str, Any]], set[str]],
 ) -> tuple[int, int, set[str]]:
+    """Summarize how many records and selected records expose fields via ``extractor``.
+
+    Returns:
+        ``(records_with_fields, selected_with_fields, selected_fields)``.
+    """
     records_with_fields = 0
     selected_records_with_fields = 0
     selected_fields: set[str] = set()
@@ -755,6 +861,11 @@ def _validation_summary(
     records: Sequence[dict[str, Any]],
     descriptors: Sequence[ScenarioDescriptor],
 ) -> dict[str, Any]:
+    """Build a label/trajectory-field availability and conflict summary across records and descriptors.
+
+    Returns:
+        The label/trajectory-field availability summary dict.
+    """
     selected_ids = {descriptor.record_id for descriptor in descriptors}
     records_by_id = {_record_id(record, index): record for index, record in enumerate(records)}
 

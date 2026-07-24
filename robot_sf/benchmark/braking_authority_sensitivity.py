@@ -409,6 +409,14 @@ def git_head(repo_root: Path) -> str:
 
 
 def _episode_metric_row(record: Mapping[str, Any]) -> dict[str, Any]:
+    """Build a per-episode braking-sensitivity metric row.
+
+    Extracts seed, status, near-miss and clearance counts, and the trace-derived
+    minimum time-to-collision (with its availability status).
+
+    Returns:
+        The per-episode metric row dict.
+    """
     metrics = _mapping(record, "metrics")
     ttc, ttc_status = _ttc_from_record(record)
     return {
@@ -457,6 +465,14 @@ def _ttc_from_record(record: Mapping[str, Any]) -> tuple[float | None, str]:
 
 
 def _validated_availability(summary: Mapping[str, Any], *, arm_key: str) -> dict[str, Any]:
+    """Validate and return an arm's runtime availability classification.
+
+    Fails closed on non-evidence readiness/availability, missing benchmark-success
+    integrity, or execution modes outside the evidence set.
+
+    Returns:
+        The validated availability classification dict.
+    """
     availability = _mapping(summary, "benchmark_availability")
     execution_mode = str(availability.get("execution_mode", "unknown"))
     readiness = str(availability.get("readiness_status", "unknown"))
@@ -511,6 +527,7 @@ def _stopping_distance_from_summary(
 
 
 def _mapping(payload: Mapping[str, Any], key: str) -> dict[str, Any]:
+    """Return ``payload[key]`` coerced to a mapping, raising when absent or not a mapping."""
     value = payload.get(key)
     if not isinstance(value, Mapping):
         raise ValueError(f"{key} must be a mapping")
@@ -518,6 +535,11 @@ def _mapping(payload: Mapping[str, Any], key: str) -> dict[str, Any]:
 
 
 def _positive_finite(value: Any, *, field: str) -> float:
+    """Parse ``value`` as a finite float and assert it is strictly positive.
+
+    Returns:
+        The positive finite float.
+    """
     parsed = _finite_float(value, field=field)
     if parsed <= 0.0:
         raise ValueError(f"{field} must be positive")
@@ -525,6 +547,11 @@ def _positive_finite(value: Any, *, field: str) -> float:
 
 
 def _finite_float(value: Any, *, field: str) -> float:
+    """Parse ``value`` as a finite float, raising on non-numeric or non-finite input.
+
+    Returns:
+        The parsed finite float.
+    """
     try:
         parsed = float(value)
     except (TypeError, ValueError) as exc:
@@ -535,12 +562,14 @@ def _finite_float(value: Any, *, field: str) -> float:
 
 
 def _finite_mean(values: Sequence[float], *, field: str) -> float:
+    """Return the finite mean of ``values``, failing on an empty sequence."""
     if not values:
         raise ValueError(f"{field} has no values")
     return _finite_float(sum(values) / len(values), field=field)
 
 
 def _sha256(path: Path) -> str:
+    """Return the hex SHA-256 digest of a file's bytes."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 

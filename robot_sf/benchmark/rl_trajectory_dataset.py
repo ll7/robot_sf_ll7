@@ -352,6 +352,14 @@ def validate_rl_trajectory_manifest_semantics(manifest: Mapping[str, Any]) -> No
 def _split_summaries(
     episodes: Sequence[RLTrajectoryEpisode],
 ) -> dict[str, dict[str, Any]]:
+    """Aggregate validated episodes into per-split summaries.
+
+    Returns a mapping of split name to episode count, step total, and sorted
+    scenario, scenario-seed, and episode identifiers for each split.
+
+    Returns:
+        The per-split summaries mapping.
+    """
     summaries = {
         name: {
             "episode_count": 0,
@@ -381,6 +389,11 @@ def _split_summaries(
 
 
 def _parse_seed(value: Any) -> int:
+    """Coerce a seed value to ``int``, rejecting booleans and non-integers.
+
+    Returns:
+        The coerced seed integer.
+    """
     if isinstance(value, bool):
         raise ValueError("seed must be an integer")
     try:
@@ -390,6 +403,10 @@ def _parse_seed(value: Any) -> int:
 
 
 def _mapping_or_empty(value: Any) -> Mapping[str, Any]:
+    """Return ``value`` as a mapping, treating ``None`` as empty.
+
+    Raises when ``value`` is present but not a mapping (e.g. malformed provenance).
+    """
     if value is None:
         return {}
     if not isinstance(value, Mapping):

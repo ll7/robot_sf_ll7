@@ -1,11 +1,11 @@
 """Unit tests for the real ``validate_visual_manifests`` implementation.
 
 Covers ``robot_sf/benchmark/full_classic/validation.py`` across its branches:
- - valid manifests (all three present, and a partial subset)
+ - valid manifests (all three present, and a partial subset) -> no errors
  - empty directories (no manifests present)
  - missing schema files (manifest present, schema absent)
- - invalid manifests (JSON Schema validation failure -> ValueError)
- - malformed JSON (manifest load failure -> ValueError)
+ - invalid manifests (JSON Schema validation failure -> descriptive error)
+ - malformed JSON (manifest load failure -> descriptive error)
  - missing ``jsonschema`` module (ImportError -> empty list, no error)
 
 Schemas and manifests are written inline into ``tmp_path`` so the tests are
@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from robot_sf.benchmark.full_classic import validation as validation_mod
-from robot_sf.benchmark.full_classic.validation import MANIFEST_FILES, validate_visual_manifests
+from robot_sf.benchmark.full_classic.validation import validate_visual_manifests
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -77,19 +77,19 @@ def _write_manifest(base_dir: Path, name: str, payload: dict) -> None:
     (base_dir / name).write_text(json.dumps(payload), encoding="utf-8")
 
 
-def test_valid_all_manifests_returns_validated(base_dir: Path, contracts_dir: Path) -> None:
-    """All three valid manifests validate, returned in MANIFEST_FILES order."""
+def test_valid_all_manifests_return_no_errors(base_dir: Path, contracts_dir: Path) -> None:
+    """Valid manifests return no errors, which is the caller's success signal."""
     for name, payload in _VALID_MANIFESTS.items():
         _write_manifest(base_dir, name, payload)
-    result = validate_visual_manifests(base_dir, contracts_dir)
-    assert result == list(MANIFEST_FILES.keys())
+    errors = validate_visual_manifests(base_dir, contracts_dir)
+    assert isinstance(errors, list)
+    assert errors == []
 
 
-def test_valid_partial_manifests_return_only_present(base_dir: Path, contracts_dir: Path) -> None:
-    """Only present manifests are validated; absent ones are skipped silently."""
+def test_valid_partial_manifests_return_no_errors(base_dir: Path, contracts_dir: Path) -> None:
+    """Absent manifests are skipped and valid present ones return no errors."""
     _write_manifest(base_dir, "plot_artifacts.json", {"plots": []})
-    result = validate_visual_manifests(base_dir, contracts_dir)
-    assert result == ["plot_artifacts.json"]
+    assert validate_visual_manifests(base_dir, contracts_dir) == []
 
 
 def test_empty_directory_returns_empty(base_dir: Path, contracts_dir: Path) -> None:
@@ -105,19 +105,34 @@ def test_missing_schema_file_skips_manifest(base_dir: Path, contracts_dir: Path)
     assert result == []
 
 
-def test_invalid_manifest_raises_value_error(base_dir: Path, contracts_dir: Path) -> None:
-    """A manifest failing schema validation raises ValueError with context."""
+def test_invalid_manifest_returns_descriptive_error(base_dir: Path, contracts_dir: Path) -> None:
+    """Schema-invalid input is reported without raising so all errors can be inspected."""
     # Missing the required "plots" key -> jsonschema.ValidationError.
     _write_manifest(base_dir, "plot_artifacts.json", {"not_plots": True})
-    with pytest.raises(ValueError, match="Validation failed for plot_artifacts.json"):
-        validate_visual_manifests(base_dir, contracts_dir)
+    errors = validate_visual_manifests(base_dir, contracts_dir)
+    assert len(errors) == 1
+    assert "Validation failed for plot_artifacts.json at <root>" in errors[0]
+    assert "'plots' is a required property" in errors[0]
 
 
-def test_malformed_json_raises_value_error(base_dir: Path, contracts_dir: Path) -> None:
-    """A manifest with malformed JSON raises ValueError with a load-error context."""
+def test_malformed_json_returns_descriptive_error(base_dir: Path, contracts_dir: Path) -> None:
+    """Malformed JSON is returned as an error instead of aborting validation."""
     (base_dir / "plot_artifacts.json").write_text("{not valid json", encoding="utf-8")
-    with pytest.raises(ValueError, match="Error validating plot_artifacts.json"):
-        validate_visual_manifests(base_dir, contracts_dir)
+    errors = validate_visual_manifests(base_dir, contracts_dir)
+    assert len(errors) == 1
+    assert "Error validating plot_artifacts.json: JSONDecodeError" in errors[0]
+
+
+def test_invalid_and_malformed_manifests_collect_all_errors(
+    base_dir: Path, contracts_dir: Path
+) -> None:
+    """Each present bad manifest contributes an error instead of stopping the scan."""
+    _write_manifest(base_dir, "plot_artifacts.json", {"not_plots": True})
+    (base_dir / "video_artifacts.json").write_text("{not valid json", encoding="utf-8")
+    errors = validate_visual_manifests(base_dir, contracts_dir)
+    assert len(errors) == 2
+    assert "plot_artifacts.json" in errors[0]
+    assert "video_artifacts.json" in errors[1]
 
 
 def test_missing_jsonschema_module_returns_empty(

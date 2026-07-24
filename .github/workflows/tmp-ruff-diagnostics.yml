@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - orchestrator/ll7-lease-5308-7ece80aae4e1
+  pull_request:
 
 permissions:
   contents: read

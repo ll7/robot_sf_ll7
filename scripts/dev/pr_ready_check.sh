@@ -299,6 +299,38 @@ while IFS= read -r changed_file; do
   fi
 done < <(git diff --name-only --diff-filter=ACMRT "$BASE_REF...HEAD")
 
+# Validate that every changed test file under tests/ or fast-pysf/tests/ is classified
+# and covered by the optional test allowlist if classified as optional.
+for changed_file in "${changed_files[@]}"; do
+  if [[ "$changed_file" == tests/*.py || "$changed_file" == fast-pysf/tests/*.py ]]; then
+    test_basename="$(basename "$changed_file")"
+    if [[ "$test_basename" == test_*.py || "$test_basename" == *_test.py ]]; then
+      if is_optional_readiness_path "$changed_file"; then
+        allowlist_file="${SCRIPT_DIR}/../../tests/support/optional_test_allowlist.txt"
+        is_in_allowlist=0
+        if [[ -f "$allowlist_file" ]]; then
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+            line="${line%/}"
+            if [[ "$changed_file" == "$line" || "$changed_file" == "$line"/* ]]; then
+              is_in_allowlist=1
+              break
+            fi
+          done < "$allowlist_file"
+        fi
+        if [[ "$is_in_allowlist" -eq 0 ]]; then
+          printf 'Error: Changed test path %q is classified for lane %q but is omitted from optional test allowlist.\n' \
+            "$changed_file" "optional" >&2
+          printf 'Expected lane: optional\n' >&2
+          printf 'Actual collection decision: omitted\n' >&2
+          printf 'Remediation: Add %q to tests/support/optional_test_allowlist.txt.\n' "$changed_file" >&2
+          exit 2
+        fi
+      fi
+    fi
+  fi
+done
+
 # The existing readiness lanes intentionally exclude deleted paths from their
 # optional-test classification.  The base-drift guard has a stronger contract:
 # every path changed by the PR must participate in the intersection, including a

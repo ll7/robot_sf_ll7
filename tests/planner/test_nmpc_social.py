@@ -10,6 +10,7 @@ import numpy as np
 from robot_sf.planner.nmpc_social import (
     NMPCSocialConfig,
     NMPCSocialPlannerAdapter,
+    NMPCSolveResult,
     _RolloutContext,
     build_nmpc_social_config,
 )
@@ -435,3 +436,52 @@ def test_nmpc_social_clips_solver_action_to_control_bounds(monkeypatch) -> None:
 
     assert linear == planner.config.max_linear_speed
     assert angular == planner.config.max_angular_speed
+
+
+def test_nmpc_social_solve_initialization_returns_result() -> None:
+    """solve_initialization should return a structured NMPCSolveResult."""
+    planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(horizon_steps=4, solver_max_iterations=12))
+    result = planner.solve_initialization(_obs(goal=(3.0, 0.0)))
+    assert isinstance(result, NMPCSolveResult)
+    assert result.solve_id is not None
+    assert result.solution is not None
+    assert result.solution.size > 0
+    assert result.controls.shape == (4, 2)
+    assert result.rollout_states.shape[0] == 4
+    assert result.rollout_states.shape[1] == 3
+
+
+def test_nmpc_social_solve_initialization_with_preferred_turn() -> None:
+    """A non-zero preferred_turn should propagate to the solve result signature."""
+    planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(horizon_steps=4, solver_max_iterations=12))
+    result = planner.solve_initialization(_obs(goal=(3.0, 0.0)), preferred_turn=0.5)
+    assert result.initialization_signature.get("preferred_turn") == 0.5
+
+
+def test_nmpc_social_solve_initialization_at_goal() -> None:
+    """At-goal observations should produce a zero-solution result."""
+    planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(horizon_steps=4))
+    obs = _obs(robot=(2.0, 0.0), goal=(2.0, 0.0))
+    result = planner.solve_initialization(obs)
+    assert result.solve_id == "at_goal"
+    assert result.feasible is True
+    assert float(np.max(np.abs(result.solution))) == 0.0
+
+
+def test_nmpc_social_command_from_solution() -> None:
+    """_command_from_solution should extract clipped commands from a result."""
+    planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(max_linear_speed=0.5, horizon_steps=1))
+    obs = _obs(goal=(3.0, 0.0))
+    result = planner.solve_initialization(obs)
+    context = planner._build_context(obs)
+    v, w = planner._command_from_solution(result, context)
+    assert 0.0 <= v <= planner.config.max_linear_speed
+    assert abs(w) <= planner.config.max_angular_speed
+
+
+def test_nmpc_social_solve_context_sets_preferred_turn() -> None:
+    """_solve_context should apply the overridden preferred_turn."""
+    planner = NMPCSocialPlannerAdapter(NMPCSocialConfig(horizon_steps=4))
+    obs = _obs(goal=(3.0, 0.0))
+    context = planner._solve_context(obs, preferred_turn=-0.5)
+    assert context.preferred_turn == -0.5

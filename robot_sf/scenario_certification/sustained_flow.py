@@ -217,6 +217,10 @@ class SustainedFlowPreflightReport:
 
 
 def _repo_relative(path: Path) -> str:
+    """Return ``path`` as a repository-relative POSIX string.
+
+    Falls back to the path as-is if it cannot be resolved under the repository root.
+    """
     repo_root = Path(__file__).resolve().parents[2]
     try:
         return path.resolve().relative_to(repo_root).as_posix()
@@ -225,6 +229,7 @@ def _repo_relative(path: Path) -> str:
 
 
 def _load_raw_yaml(path: Path) -> dict[str, Any]:
+    """Return a YAML file loaded as a mapping, raising ``ValueError`` if it is not a dict."""
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise ValueError(f"Scenario set must be a mapping: {path}")
@@ -232,6 +237,7 @@ def _load_raw_yaml(path: Path) -> dict[str, Any]:
 
 
 def _require_equal(errors: list[str], name: str, field: str, actual: Any, expected: Any) -> None:
+    """Append a fail-closed error to ``errors`` when ``actual`` differs from ``expected``."""
     if actual != expected:
         errors.append(f"{name}: {field} must be {expected}")
 
@@ -242,6 +248,7 @@ def _check_basic_metadata(
     name: str,
     expected_tier: str,
 ) -> list[str]:
+    """Return validation errors for the base pack metadata (pack id, status, density tier, evidence flags)."""
     errors: list[str] = []
     _require_equal(
         errors,
@@ -275,6 +282,10 @@ def _check_continuous_spawn(
     expected_spawn_rate: float,
     expected_runtime_support: str,
 ) -> list[str]:
+    """Return validation errors for the ``continuous_spawn`` metadata block against the scaffold contract.
+
+    Checks intent, runtime-support staging, target density tier, and spawn rate.
+    """
     continuous_spawn = metadata.get("continuous_spawn")
     if not isinstance(continuous_spawn, dict):
         return [f"{name}: metadata.continuous_spawn block is required"]
@@ -348,6 +359,7 @@ def _check_termination_and_metric(
     *,
     name: str,
 ) -> list[str]:
+    """Return validation errors for the termination, success-metric, and required-blockers metadata blocks."""
     errors: list[str] = []
     termination = metadata.get("termination")
     if not isinstance(termination, dict):
@@ -418,6 +430,7 @@ def _check_metadata_fail_closed(
     expected_spawn_rate: float,
     expected_runtime_support: str,
 ) -> list[str]:
+    """Return all fail-closed metadata-check errors for a sustained-flow scenario variant."""
     name = str(scenario.get("name", "<unnamed>"))
     metadata = scenario.get("metadata")
     if not isinstance(metadata, dict):

@@ -98,15 +98,17 @@ SHA, scenario family + seed, **execution seed**, execution commit + command/conf
 native/fallback/degraded status, termination reason + independent failure
 outcome, scenario and candidate certification status, replay/confirmation
 lineage + record hash, and exclusion reason when inadmissible. Each admitted
-manifest SHA must match a separate, frozen binding from the arm manifests. That
-binding also declares the exact proposal and random manifest-ID sets (twelve per
-arm) and the allowed execution-seed set for every manifest; an outcome packet
-cannot self-attest any of those values. A candidate manifest ID may appear in
-one arm only. Aggregate arrays derive from admitted rows only, and can become
-complete only when every predeclared manifest and every predeclared execution
-seed is present exactly once. Missing, malformed, mismatched, fallback,
-degraded, cross-arm-overlapping, over-budget, under-budget, or
-lineage-incomplete rows fail closed (block the evaluation).
+manifest SHA, candidate-pool index, and record SHA must match a separate,
+frozen binding from the arm manifests. That binding also declares the exact
+proposal and random manifest-ID sets (twelve per arm) and the allowed
+execution-seed set for every manifest; an outcome packet cannot self-attest any
+of those values. Its per-manifest pool-index and record-hash maps are
+`candidate_pool_index_by_manifest_id` and `record_sha256_by_manifest_id`.
+A candidate manifest ID may appear in one arm only. Aggregate arrays derive
+from admitted rows only, and can become complete only when every predeclared
+manifest and every predeclared execution seed is present exactly once. Missing,
+malformed, mismatched, fallback, degraded, cross-arm-overlapping, over-budget,
+under-budget, or lineage-incomplete rows fail closed (block the evaluation).
 
 ## Estimand, power/sensitivity, and decision rule (issue #6103 gaps 4–5)
 

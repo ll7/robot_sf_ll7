@@ -537,13 +537,21 @@ def _v2_outcome_packet(
     }
 
 
-def _manifest_hash_binding(packet: dict[str, Any]) -> dict[str, Any]:
+def _manifest_hash_binding(
+    packet: dict[str, Any], *, candidate_pool_seed: int = 7
+) -> dict[str, Any]:
     """Build the separately supplied frozen arm-manifest binding fixture."""
     rows = packet["rows"]
     return {
         "schema_version": "adversarial_candidate_manifest_bindings.v2",
         "candidate_manifest_sha256_by_id": {
             row["candidate_manifest_id"]: row["candidate_manifest_sha256"] for row in rows
+        },
+        "candidate_pool_index_by_manifest_id": {
+            row["candidate_manifest_id"]: row["candidate_pool_index"] for row in rows
+        },
+        "record_sha256_by_manifest_id": {
+            row["candidate_manifest_id"]: row["record_sha256"] for row in rows
         },
         "candidate_manifest_ids_by_arm": {
             arm: [row["candidate_manifest_id"] for row in rows if row["selection_arm"] == arm]
@@ -552,7 +560,7 @@ def _manifest_hash_binding(packet: dict[str, Any]) -> dict[str, Any]:
         "execution_seeds_by_manifest_id": {
             row["candidate_manifest_id"]: [row["execution_seed"]] for row in rows
         },
-        "candidate_pool_seed": 7,
+        "candidate_pool_seed": candidate_pool_seed,
     }
 
 
@@ -565,7 +573,7 @@ def _v2_row(row_id: str, manifest_id: str, arm: str, rank: int, failure: bool) -
         "selection_arm": arm,
         "selection_rank": rank + 1,
         "candidate_pool_seed": 7,
-        "candidate_pool_index": rank,
+        "candidate_pool_index": rank if arm == "proposal" else 10_000 + rank,
         "target_planner_id": "social_force",
         "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
         "scenario_family": "classic_cross_trap_medium",
@@ -593,6 +601,70 @@ def _v2_row(row_id: str, manifest_id: str, arm: str, rank: int, failure: bool) -
         "admission_status": "admitted",
         "exclusion_reason": None,
     }
+
+
+def _contract_v2_outcome_packet(report: dict[str, Any]) -> dict[str, Any]:
+    """Build outcomes whose frozen IDs and pool indexes match a contract-run report."""
+    rows: list[dict[str, Any]] = []
+    for arm in ("proposal", "random"):
+        manifest_ids = report["arm_manifest_ids_by_arm"][arm]
+        for rank, manifest_id in enumerate(manifest_ids):
+            row = _v2_row(
+                row_id=f"{arm}_{rank}",
+                manifest_id=manifest_id,
+                arm=arm,
+                rank=rank,
+                failure=arm == "proposal",
+            )
+            row["candidate_pool_seed"] = 42
+            row["candidate_pool_index"] = int(manifest_id.removeprefix("pool_"))
+            rows.append(row)
+    return {
+        "schema_version": "adversarial_independent_outcomes.v2",
+        "source": "unit-test-fixture",
+        "artifact": "docs/context/evidence/unit-test.json",
+        "outcome_source": "planner_execution",
+        "objective": "certified_failure_outcome",
+        "target_planner_id": "social_force",
+        "target_planner_config_sha256": (
+            "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735"
+        ),
+        "eval_archive_sha256": report["archive_evaluation_provenance"]["eval_archive_sha256"],
+        "rows": rows,
+    }
+
+
+def test_external_manifest_binding_requires_pool_index_and_record_hash(tmp_path: Path) -> None:
+    """The v2 binding parser rejects incomplete pool-index or record-hash lineage."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import (
+        load_expected_candidate_manifest_binding,
+    )
+
+    packet = _contract_v2_outcome_packet(
+        {
+            "arm_manifest_ids_by_arm": {
+                "proposal": ["pool_0"],
+                "random": ["pool_1"],
+            },
+            "archive_evaluation_provenance": {"eval_archive_sha256": "eval-hash"},
+        }
+    )
+    binding = _manifest_hash_binding(packet, candidate_pool_seed=42)
+    binding_path = tmp_path / "binding.json"
+
+    missing_pool_index = dict(binding)
+    missing_pool_index.pop("candidate_pool_index_by_manifest_id")
+    binding_path.write_text(json.dumps(missing_pool_index), encoding="utf-8")
+    loaded, reason = load_expected_candidate_manifest_binding(binding_path)
+    assert loaded is None
+    assert "candidate_pool_index_by_manifest_id" in reason
+
+    missing_record_hash = dict(binding)
+    missing_record_hash.pop("record_sha256_by_manifest_id")
+    binding_path.write_text(json.dumps(missing_record_hash), encoding="utf-8")
+    loaded, reason = load_expected_candidate_manifest_binding(binding_path)
+    assert loaded is None
+    assert "record_sha256_by_manifest_id" in reason
 
 
 def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(
@@ -690,6 +762,91 @@ def test_normal_contract_runner_uses_frozen_fit_factory_and_held_out_split(
         "override_matches_frozen": None,
     }
     assert report["issue_2921_stop_rule"]["status"] == "inconclusive"
+
+
+def test_contract_runner_binds_pool_index_and_record_hash_from_external_manifest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The normal contract path rejects outcome rows that drift from external lineage."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    initial_output = tmp_path / "initial_contract_report.json"
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            _CONTRACT.as_posix(),
+            "--seed",
+            "42",
+            "--output",
+            initial_output.as_posix(),
+        ],
+    )
+    assert script_main() == 0
+    initial_report = json.loads(initial_output.read_text("utf-8"))
+
+    packet = _contract_v2_outcome_packet(initial_report)
+    binding = _manifest_hash_binding(packet, candidate_pool_seed=42)
+    outcomes_path = tmp_path / "outcomes.json"
+    binding_path = tmp_path / "binding.json"
+    outcomes_path.write_text(json.dumps(packet), encoding="utf-8")
+    binding_path.write_text(json.dumps(binding), encoding="utf-8")
+
+    def run_with_outcomes(output_path: Path) -> dict[str, Any]:
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "run_proposal_vs_random_issue_2921.py",
+                "--contract",
+                _CONTRACT.as_posix(),
+                "--seed",
+                "42",
+                "--evaluation-outcomes",
+                outcomes_path.as_posix(),
+                "--expected-candidate-manifest-hashes",
+                binding_path.as_posix(),
+                "--output",
+                output_path.as_posix(),
+            ],
+        )
+        assert script_main() == 0
+        return json.loads(output_path.read_text("utf-8"))
+
+    valid_report = run_with_outcomes(tmp_path / "valid_report.json")
+    evaluation = valid_report["independent_outcome_evaluation"]
+    assert evaluation["status"] == "complete"
+    assert evaluation["independent_outcomes_available"] is True
+    assert evaluation["candidate_manifest_binding"] == {
+        "required": True,
+        "available": True,
+        "provided": True,
+        "schema_version": "adversarial_candidate_manifest_bindings.v2",
+        "exact_arm_membership_required": True,
+        "candidate_pool_index_lineage_required": True,
+        "record_sha256_lineage_required": True,
+        "execution_seed_lineage_required": True,
+        "reason": "ok",
+    }
+
+    pool_index_drift = json.loads(json.dumps(packet))
+    pool_index_drift["rows"][0]["candidate_pool_index"] = 99_999
+    outcomes_path.write_text(json.dumps(pool_index_drift), encoding="utf-8")
+    index_drift_report = run_with_outcomes(tmp_path / "index_drift_report.json")
+    assert index_drift_report["independent_outcome_evaluation"]["status"] == "blocked"
+    assert (
+        "candidate_pool_index mismatch"
+        in index_drift_report["independent_outcome_evaluation"]["reason"]
+    )
+
+    record_hash_drift = json.loads(json.dumps(packet))
+    record_hash_drift["rows"][0]["record_sha256"] = "wrong-record-hash"
+    outcomes_path.write_text(json.dumps(record_hash_drift), encoding="utf-8")
+    record_drift_report = run_with_outcomes(tmp_path / "record_drift_report.json")
+    assert record_drift_report["independent_outcome_evaluation"]["status"] == "blocked"
+    assert (
+        "record_sha256 mismatch" in record_drift_report["independent_outcome_evaluation"]["reason"]
+    )
 
 
 def test_contract_runner_rejects_a_budget_outside_the_frozen_contract(

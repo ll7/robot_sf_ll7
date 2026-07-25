@@ -623,8 +623,8 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Frozen external v2 arm-manifest binding (exact arm IDs, SHA-256 values, "
-            "execution-seed lineage, and pool seed); required before supplied independent "
-            "outcomes can drive a decision."
+            "candidate-pool indexes, record SHA-256 values, execution-seed lineage, and "
+            "pool seed); required before supplied independent outcomes can drive a decision."
         ),
     )
     parser.add_argument(
@@ -651,10 +651,10 @@ def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
 
     The outcome packet cannot establish its own manifest lineage. This separate
     input must use ``adversarial_candidate_manifest_bindings.v2`` and bind
-    exact proposal/random membership, every candidate's SHA-256, every
-    candidate's execution-seed lineage, and the shared candidate-pool seed.
-    The v1 hash-only format cannot establish a frozen denominator and is
-    intentionally rejected.
+    exact proposal/random membership, every candidate's manifest SHA-256,
+    candidate-pool index, expected record SHA-256, execution-seed lineage, and
+    the shared candidate-pool seed. The v1 hash-only format cannot establish a
+    frozen denominator or complete record lineage and is intentionally rejected.
     """
     if path is None:
         return None, "expected candidate-manifest hash binding was not provided"
@@ -699,6 +699,37 @@ def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
         return None, "candidate_manifest_ids_by_arm proposal/random sets must be disjoint"
     if set(bindings) != expected_ids:
         return None, "candidate_manifest_sha256_by_id must cover exactly the predeclared arm IDs"
+    candidate_pool_indices = payload.get("candidate_pool_index_by_manifest_id")
+    if not isinstance(candidate_pool_indices, dict) or set(candidate_pool_indices) != expected_ids:
+        return (
+            None,
+            "candidate_pool_index_by_manifest_id must cover exactly the predeclared arm IDs",
+        )
+    if any(
+        not isinstance(manifest_id, str)
+        or not manifest_id
+        or not isinstance(pool_index, int)
+        or isinstance(pool_index, bool)
+        or pool_index < 0
+        for manifest_id, pool_index in candidate_pool_indices.items()
+    ):
+        return (
+            None,
+            "candidate_pool_index_by_manifest_id values must be non-negative integers",
+        )
+    if len(set(candidate_pool_indices.values())) != len(expected_ids):
+        return None, "candidate_pool_index_by_manifest_id must assign unique indices"
+    record_hashes = payload.get("record_sha256_by_manifest_id")
+    if not isinstance(record_hashes, dict) or set(record_hashes) != expected_ids:
+        return None, "record_sha256_by_manifest_id must cover exactly the predeclared arm IDs"
+    if any(
+        not isinstance(manifest_id, str)
+        or not manifest_id
+        or not isinstance(digest, str)
+        or not digest
+        for manifest_id, digest in record_hashes.items()
+    ):
+        return None, "record_sha256_by_manifest_id keys and values must be non-empty strings"
     execution_seeds = payload.get("execution_seeds_by_manifest_id")
     if not isinstance(execution_seeds, dict) or set(execution_seeds) != expected_ids:
         return None, "execution_seeds_by_manifest_id must cover exactly the predeclared arm IDs"
@@ -718,6 +749,13 @@ def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
         "schema_version": payload["schema_version"],
         "candidate_manifest_sha256_by_id": {
             str(manifest_id): str(digest) for manifest_id, digest in bindings.items()
+        },
+        "candidate_pool_index_by_manifest_id": {
+            str(manifest_id): int(pool_index)
+            for manifest_id, pool_index in candidate_pool_indices.items()
+        },
+        "record_sha256_by_manifest_id": {
+            str(manifest_id): str(digest) for manifest_id, digest in record_hashes.items()
         },
         "candidate_manifest_ids_by_arm": normalized_ids_by_arm,
         "execution_seeds_by_manifest_id": normalized_execution_seeds,
@@ -906,6 +944,7 @@ def _frozen_binding_matches_generated_arms(
     *,
     proposal_ids: list[str],
     random_ids: list[str],
+    candidate_pool_indices_by_id: dict[str, int],
     candidate_pool_seed: int,
     budget_per_arm: int,
 ) -> str | None:
@@ -922,9 +961,56 @@ def _frozen_binding_matches_generated_arms(
             )
         if bound_ids != generated_ids:
             return f"external {arm} manifest IDs do not match this frozen candidate draw"
+        expected_pool_indices = binding["candidate_pool_index_by_manifest_id"]
+        for manifest_id in generated_ids:
+            if expected_pool_indices[manifest_id] != candidate_pool_indices_by_id[manifest_id]:
+                return "external candidate_pool_index does not match this frozen candidate draw"
     if binding["candidate_pool_seed"] != candidate_pool_seed:
         return "external candidate_pool_seed does not match this frozen candidate draw"
     return None
+
+
+def _admission_spec_from_binding(frozen: dict[str, Any], binding: dict[str, Any] | None) -> Any:
+    """Convert a parser-validated external binding into fail-closed admission inputs."""
+    from robot_sf.adversarial.independent_outcomes import AdmissionSpec
+
+    return AdmissionSpec(
+        expected_target_planner_id=frozen["expected_target_planner_id"],
+        expected_eval_family=frozen["expected_eval_family"],
+        confirmation_threshold=frozen["confirmation_threshold"],
+        expected_target_planner_config_sha256=frozen["expected_target_planner_config_sha256"],
+        expected_candidate_manifest_sha256_by_id=(
+            dict(binding["candidate_manifest_sha256_by_id"]) if binding is not None else None
+        ),
+        expected_candidate_pool_index_by_manifest_id=(
+            dict(binding["candidate_pool_index_by_manifest_id"]) if binding is not None else None
+        ),
+        expected_record_sha256_by_manifest=(
+            dict(binding["record_sha256_by_manifest_id"]) if binding is not None else None
+        ),
+        expected_candidate_manifest_ids_by_arm=(
+            {
+                arm: tuple(binding["candidate_manifest_ids_by_arm"][arm])
+                for arm in ("proposal", "random")
+            }
+            if binding is not None
+            else None
+        ),
+        expected_execution_seeds_by_manifest_id=(
+            {
+                manifest_id: tuple(execution_seeds)
+                for manifest_id, execution_seeds in binding[
+                    "execution_seeds_by_manifest_id"
+                ].items()
+            }
+            if binding is not None
+            else None
+        ),
+        expected_candidate_pool_seed=binding["candidate_pool_seed"]
+        if binding is not None
+        else None,
+        expected_execution_commit=frozen["expected_execution_commit"],
+    )
 
 
 def _contract_configuration_error(reason: str) -> int:
@@ -1119,7 +1205,6 @@ def main() -> int:
         )
 
     from robot_sf.adversarial.independent_outcomes import (
-        AdmissionSpec,
         build_independent_outcome_evaluation,
         load_independent_outcomes,
     )
@@ -1182,6 +1267,9 @@ def main() -> int:
     rng = random.Random(args.seed)
     pool = [search_space.sample_candidate(rng) for _ in range(candidate_pool_size)]
     pool_ids = [f"pool_{i}" for i in range(len(pool))]
+    candidate_pool_indices_by_id = {
+        pool_id: pool_index for pool_index, pool_id in enumerate(pool_ids)
+    }
     ranked_ids = _rank_pool_ids_by_candidate_identity(model, pool, pool_ids)
 
     from robot_sf.adversarial.disjoint_evaluation import assign_arms_disjoint_by_candidate
@@ -1211,52 +1299,16 @@ def main() -> int:
             manifest_binding,
             proposal_ids=arms.proposal_ids,
             random_ids=arms.random_ids,
+            candidate_pool_indices_by_id=candidate_pool_indices_by_id,
             candidate_pool_seed=args.seed,
             budget_per_arm=run_budget,
         )
     binding_for_admission = manifest_binding if frozen_binding_reason is None else None
-    expected_manifest_hashes = (
-        binding_for_admission["candidate_manifest_sha256_by_id"]
-        if binding_for_admission is not None
-        else None
-    )
-    expected_manifest_ids_by_arm = (
-        {
-            arm: tuple(binding_for_admission["candidate_manifest_ids_by_arm"][arm])
-            for arm in ("proposal", "random")
-        }
-        if binding_for_admission is not None
-        else None
-    )
-    expected_execution_seeds_by_manifest_id = (
-        {
-            manifest_id: tuple(execution_seeds)
-            for manifest_id, execution_seeds in binding_for_admission[
-                "execution_seeds_by_manifest_id"
-            ].items()
-        }
-        if binding_for_admission is not None
-        else None
-    )
     independent_evaluation = build_independent_outcome_evaluation(
         outcome_data,
         budget_per_arm=run_budget,
         minimally_important=frozen["minimally_important"],
-        admission_spec=AdmissionSpec(
-            expected_target_planner_id=frozen["expected_target_planner_id"],
-            expected_eval_family=frozen["expected_eval_family"],
-            confirmation_threshold=frozen["confirmation_threshold"],
-            expected_target_planner_config_sha256=frozen["expected_target_planner_config_sha256"],
-            expected_candidate_manifest_sha256_by_id=expected_manifest_hashes,
-            expected_candidate_manifest_ids_by_arm=expected_manifest_ids_by_arm,
-            expected_execution_seeds_by_manifest_id=expected_execution_seeds_by_manifest_id,
-            expected_candidate_pool_seed=(
-                binding_for_admission["candidate_pool_seed"]
-                if binding_for_admission is not None
-                else None
-            ),
-            expected_execution_commit=frozen["expected_execution_commit"],
-        ),
+        admission_spec=_admission_spec_from_binding(frozen, binding_for_admission),
         expected_eval_archive_sha256=provenance.get("eval_archive_sha256"),
         n_permutations=args.null_test_permutations,
         seed=args.seed,
@@ -1271,6 +1323,8 @@ def main() -> int:
             manifest_binding["schema_version"] if manifest_binding is not None else None
         ),
         "exact_arm_membership_required": True,
+        "candidate_pool_index_lineage_required": True,
+        "record_sha256_lineage_required": True,
         "execution_seed_lineage_required": True,
         "reason": frozen_binding_reason or manifest_binding_reason,
     }

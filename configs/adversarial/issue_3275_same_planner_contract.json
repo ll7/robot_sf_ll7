@@ -206,8 +206,8 @@
     "fail_closed_conditions": [
       "missing required field",
       "malformed row",
-      "candidate_manifest_sha256 or record_sha256 mismatch",
-      "missing external frozen candidate-manifest binding (ID-to-SHA-256, exact arm membership, and execution seeds)",
+      "candidate_manifest_sha256, candidate_pool_index, or record_sha256 mismatch against the external binding",
+      "missing external frozen candidate-manifest binding (ID-to-manifest-SHA-256, exact arm membership, candidate-pool indexes, ID-to-record-SHA-256, execution seeds, and pool seed)",
       "arm membership or frozen per-arm candidate count differs from the predeclared manifest binding",
       "execution_seed differs from the predeclared manifest seed lineage",
       "candidate_manifest_id appears in both arms",

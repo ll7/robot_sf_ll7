@@ -46,6 +46,7 @@ def _row(  # noqa: PLR0913
     arm: str,
     rank: int,
     failure: bool,
+    candidate_pool_index: int | None = None,
     scenario_seed: int = 99001,
     execution_seed: int = 70001,
     record_sha256: str = "rec-hash",
@@ -57,6 +58,7 @@ def _row(  # noqa: PLR0913
     replay: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one v2 outcome row with overridable admission-relevant fields."""
+    default_pool_index = rank - 1 if arm == "proposal" else 10_000 + rank - 1
     return {
         "row_id": row_id,
         "candidate_manifest_id": manifest_id,
@@ -64,7 +66,9 @@ def _row(  # noqa: PLR0913
         "selection_arm": arm,
         "selection_rank": rank,
         "candidate_pool_seed": 42,
-        "candidate_pool_index": rank,
+        "candidate_pool_index": (
+            default_pool_index if candidate_pool_index is None else candidate_pool_index
+        ),
         "target_planner_id": _PLANNER,
         "target_planner_config_sha256": _PLANNER_CFG,
         "scenario_family": _EVAL_FAMILY,
@@ -129,7 +133,9 @@ def _balanced_packet(*, proposal_failures: int, random_failures: int, per_arm: i
     return _packet(rows)
 
 
-def _spec_for_packet(packet: dict[str, Any], *, budget_per_arm: int) -> AdmissionSpec:
+def _spec_for_packet(  # noqa: C901
+    packet: dict[str, Any], *, budget_per_arm: int
+) -> AdmissionSpec:
     """Build an external frozen manifest binding for a test packet.
 
     The helper treats every row's selected manifest as predeclared, padding a
@@ -140,6 +146,9 @@ def _spec_for_packet(packet: dict[str, Any], *, budget_per_arm: int) -> Admissio
     """
     ids_by_arm: dict[str, list[str]] = {"proposal": [], "random": []}
     execution_seeds: dict[str, list[int]] = {}
+    candidate_pool_indices: dict[str, int] = {}
+    record_hashes: dict[str, str] = {}
+    next_padding_pool_index = 100_000
     for row in packet.get("rows", []):
         if not isinstance(row, dict) or row.get("selection_arm") not in ids_by_arm:
             continue
@@ -150,6 +159,24 @@ def _spec_for_packet(packet: dict[str, Any], *, budget_per_arm: int) -> Admissio
         execution_seed = row.get("execution_seed")
         if manifest_id and isinstance(execution_seed, int) and not isinstance(execution_seed, bool):
             execution_seeds.setdefault(manifest_id, []).append(execution_seed)
+        candidate_pool_index = row.get("candidate_pool_index")
+        if manifest_id and manifest_id not in candidate_pool_indices:
+            if (
+                isinstance(candidate_pool_index, int)
+                and not isinstance(candidate_pool_index, bool)
+                and candidate_pool_index >= 0
+            ):
+                candidate_pool_indices[manifest_id] = candidate_pool_index
+            else:
+                candidate_pool_indices[manifest_id] = next_padding_pool_index
+                next_padding_pool_index += 1
+        record_sha256 = row.get("record_sha256")
+        if manifest_id and manifest_id not in record_hashes:
+            record_hashes[manifest_id] = (
+                record_sha256
+                if isinstance(record_sha256, str) and record_sha256
+                else f"record-{manifest_id}"
+            )
     for arm in ("proposal", "random"):
         padding_index = 0
         while len(ids_by_arm[arm]) < budget_per_arm:
@@ -159,6 +186,9 @@ def _spec_for_packet(packet: dict[str, Any], *, budget_per_arm: int) -> Admissio
                 continue
             ids_by_arm[arm].append(manifest_id)
             execution_seeds[manifest_id] = [80000 + padding_index]
+            candidate_pool_indices[manifest_id] = next_padding_pool_index
+            next_padding_pool_index += 1
+            record_hashes[manifest_id] = f"record-{manifest_id}"
     expected_ids = ids_by_arm["proposal"] + ids_by_arm["random"]
     return AdmissionSpec(
         expected_target_planner_id=_PLANNER,
@@ -167,6 +197,12 @@ def _spec_for_packet(packet: dict[str, Any], *, budget_per_arm: int) -> Admissio
         expected_target_planner_config_sha256=_PLANNER_CFG,
         expected_candidate_manifest_sha256_by_id={
             manifest_id: f"manifest-{manifest_id}" for manifest_id in expected_ids
+        },
+        expected_candidate_pool_index_by_manifest_id={
+            manifest_id: candidate_pool_indices[manifest_id] for manifest_id in expected_ids
+        },
+        expected_record_sha256_by_manifest={
+            manifest_id: record_hashes[manifest_id] for manifest_id in expected_ids
         },
         expected_candidate_manifest_ids_by_arm={
             arm: tuple(manifest_ids) for arm, manifest_ids in ids_by_arm.items()
@@ -302,6 +338,69 @@ def test_candidate_manifest_hash_mismatch_fails_closed() -> None:
 
     assert result["status"] == "blocked"
     assert "candidate_manifest_sha256 mismatch" in result["reason"]
+
+
+def test_candidate_pool_index_requires_external_binding() -> None:
+    """Rows cannot self-attest their shared-pool position without a frozen binding."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    unbound_spec = replace(
+        _spec_for_packet(packet, budget_per_arm=1),
+        expected_candidate_pool_index_by_manifest_id=None,
+    )
+
+    result = build_independent_outcome_evaluation(
+        packet, budget_per_arm=1, minimally_important=0.20, admission_spec=unbound_spec
+    )
+
+    assert result["status"] == "blocked"
+    assert "candidate-pool index binding" in result["reason"]
+
+
+def test_candidate_pool_index_mismatch_fails_closed() -> None:
+    """A row cannot substitute a different shared-pool index after manifest freeze."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    spec = _spec_for_packet(packet, budget_per_arm=1)
+    proposal_id = packet["rows"][0]["candidate_manifest_id"]
+    expected_indices = dict(spec.expected_candidate_pool_index_by_manifest_id or {})
+    expected_indices[proposal_id] = 99
+    drifted_spec = replace(spec, expected_candidate_pool_index_by_manifest_id=expected_indices)
+
+    result = build_independent_outcome_evaluation(
+        packet, budget_per_arm=1, minimally_important=0.20, admission_spec=drifted_spec
+    )
+
+    assert result["status"] == "blocked"
+    assert "candidate_pool_index mismatch" in result["reason"]
+
+
+def test_record_hash_requires_external_binding() -> None:
+    """Rows cannot self-attest record lineage without a frozen record-hash binding."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    unbound_spec = replace(
+        _spec_for_packet(packet, budget_per_arm=1),
+        expected_record_sha256_by_manifest=None,
+    )
+
+    result = build_independent_outcome_evaluation(
+        packet, budget_per_arm=1, minimally_important=0.20, admission_spec=unbound_spec
+    )
+
+    assert result["status"] == "blocked"
+    assert "record SHA-256 binding" in result["reason"]
+
+
+def test_record_hash_mismatch_fails_closed() -> None:
+    """A row record hash must match its separate frozen external binding."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    spec = _spec_for_packet(packet, budget_per_arm=1)
+    packet["rows"][0]["record_sha256"] = "wrong-record-hash"
+
+    result = build_independent_outcome_evaluation(
+        packet, budget_per_arm=1, minimally_important=0.20, admission_spec=spec
+    )
+
+    assert result["status"] == "blocked"
+    assert "record_sha256 mismatch" in result["reason"]
 
 
 def test_replay_signature_mismatch_fails_closed() -> None:

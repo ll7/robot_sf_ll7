@@ -12,9 +12,10 @@ The v2 contract replaces the deprecated flat-array v1 contract. Aggregate
 arrays (proposal/random/ranked outcomes) are DERIVED from admitted rows only and
 are never supplied independently of them. Rows that are missing, malformed,
 mismatched, fallback, degraded, or lineage-incomplete fail closed: they can never
-open the held-out gate or drive a verdict. The candidate manifest hash must also
-match an external, frozen ID-to-hash binding; the packet cannot self-attest that
-lineage. A candidate manifest ID may appear in one arm only.
+open the held-out gate or drive a verdict. The candidate manifest hash,
+candidate-pool index, and outcome record hash must also match an external,
+frozen per-manifest binding; the packet cannot self-attest that lineage. A
+candidate manifest ID may appear in one arm only.
 
 When valid v2 rows are available, the top-level proposal/random metrics, the
 comparison, and the issue #2921 stop rule are computed EXCLUSIVELY from those
@@ -92,6 +93,7 @@ class AdmissionSpec:
     confirmation_threshold: str = "3_of_5"
     expected_target_planner_config_sha256: str | None = None
     expected_candidate_manifest_sha256_by_id: dict[str, str] | None = None
+    expected_candidate_pool_index_by_manifest_id: dict[str, int] | None = None
     expected_record_sha256_by_manifest: dict[str, str] | None = None
     expected_candidate_manifest_ids_by_arm: dict[str, tuple[str, ...]] | None = None
     expected_execution_seeds_by_manifest_id: dict[str, tuple[int, ...]] | None = None
@@ -225,6 +227,33 @@ def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
         for manifest_id, digest in expected_hashes.items()
     ):
         return "manifest SHA-256 binding keys and values must be non-empty strings"
+
+    expected_pool_indices = spec.expected_candidate_pool_index_by_manifest_id
+    if not isinstance(expected_pool_indices, dict) or set(expected_pool_indices) != expected_ids:
+        return "candidate-pool index binding must cover exactly the predeclared arm manifest IDs"
+    if any(
+        not isinstance(manifest_id, str)
+        or not manifest_id
+        or not isinstance(pool_index, int)
+        or isinstance(pool_index, bool)
+        or pool_index < 0
+        for manifest_id, pool_index in expected_pool_indices.items()
+    ):
+        return "candidate-pool index binding keys must be strings and values non-negative integers"
+    if len(set(expected_pool_indices.values())) != len(expected_ids):
+        return "candidate-pool index binding must assign unique indices to manifest IDs"
+
+    expected_record_hashes = spec.expected_record_sha256_by_manifest
+    if not isinstance(expected_record_hashes, dict) or set(expected_record_hashes) != expected_ids:
+        return "record SHA-256 binding must cover exactly the predeclared arm manifest IDs"
+    if any(
+        not isinstance(manifest_id, str)
+        or not manifest_id
+        or not isinstance(digest, str)
+        or not digest
+        for manifest_id, digest in expected_record_hashes.items()
+    ):
+        return "record SHA-256 binding keys and values must be non-empty strings"
 
     expected_seeds = spec.expected_execution_seeds_by_manifest_id
     if not isinstance(expected_seeds, dict) or set(expected_seeds) != expected_ids:
@@ -380,13 +409,39 @@ def _row_candidate_manifest_hash_drift(
 
 
 def _row_record_hash_drift(row: dict[str, Any], _row_id: Any, spec: AdmissionSpec) -> str | None:
-    """Validate per-manifest record-hash binding when expected hashes are supplied."""
-    if not spec.expected_record_sha256_by_manifest:
-        return None
+    """Require each row's record hash to match a frozen external binding."""
+    expected_hashes = spec.expected_record_sha256_by_manifest
+    if not expected_hashes:
+        return "expected record_sha256 binding is unavailable"
     manifest_id = str(row["candidate_manifest_id"])
-    expected = spec.expected_record_sha256_by_manifest.get(manifest_id)
-    if expected is not None and row["record_sha256"] != expected:
+    expected = expected_hashes.get(manifest_id)
+    if expected is None:
+        return "candidate_manifest_id is absent from the expected record-hash binding"
+    if row["record_sha256"] != expected:
         return "record_sha256 mismatch for manifest"
+    return None
+
+
+def _row_candidate_pool_index_drift(
+    row: dict[str, Any], _row_id: Any, spec: AdmissionSpec
+) -> str | None:
+    """Require each row's pool index to match the frozen external binding."""
+    expected_indices = spec.expected_candidate_pool_index_by_manifest_id
+    if not expected_indices:
+        return "expected candidate_pool_index binding is unavailable"
+    candidate_pool_index = row["candidate_pool_index"]
+    if (
+        not isinstance(candidate_pool_index, int)
+        or isinstance(candidate_pool_index, bool)
+        or candidate_pool_index < 0
+    ):
+        return "candidate_pool_index must be a non-negative integer"
+    manifest_id = str(row["candidate_manifest_id"])
+    expected = expected_indices.get(manifest_id)
+    if expected is None:
+        return "candidate_manifest_id is absent from the expected candidate-pool index binding"
+    if candidate_pool_index != expected:
+        return "candidate_pool_index mismatch for manifest"
     return None
 
 
@@ -428,6 +483,7 @@ _ROW_CHECKERS = (
     _row_certification_drift,
     _row_lineage_drift,
     _row_candidate_manifest_hash_drift,
+    _row_candidate_pool_index_drift,
     _row_record_hash_drift,
     _row_predeclared_selection_drift,
 )

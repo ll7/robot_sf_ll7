@@ -119,6 +119,9 @@ def test_run_closure_fails_closed_without_retained_reports(tmp_path: Path) -> No
     # Durable artifacts must be written even in the blocked case.
     assert (evidence_dir / "summary.json").is_file()
     assert (evidence_dir / "README.md").is_file()
+    assert (evidence_dir / "README.md").read_text(encoding="utf-8").splitlines()[0] == (
+        "<!-- AI-GENERATED (robot_sf#3556) - NEEDS-REVIEW -->"
+    )
     on_disk = json.loads((evidence_dir / "summary.json").read_text(encoding="utf-8"))
     assert on_disk["schema_version"] == "issue_3556_seed_sufficiency_closure.v1"
     # The analyzer output dir must not exist because analysis never ran.

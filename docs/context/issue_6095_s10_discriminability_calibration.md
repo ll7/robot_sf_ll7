@@ -27,8 +27,9 @@ the campaign preflight rather than creating a fallback result row.
 
 ## Preflight Results
 
-Both configs passed metadata-only preflight on source revision
-`c24325e76a7c831941e0efe7ac8b25e231b9574b`. The packet records each
+The nominal config passed metadata-only preflight on source revision
+`83b9de4284ab49a6338116fdc5f13ebc5e34f40b`; the unchanged stress packet is
+from `c24325e76a7c831941e0efe7ac8b25e231b9574b`. The packet records each
 repository-relative source config and its full SHA-256:
 
 | Property | Nominal | Stress |
@@ -37,7 +38,8 @@ repository-relative source config and its full SHA-256:
 | Planners | orca, ppo | orca, ppo |
 | Seeds | 111-120 (10) | 111-120 (10) |
 | Expected rows | 80 | 960 |
-| Config hash | `47d684f55e8c1377` | `0375e182d186a8bc` |
+| Config hash | `60448a7228d1a450` | `0375e182d186a8bc` |
+| Scenario matrix hash | `e5fc81d3eef3` | `6b1f3a702703` |
 | Source config SHA-256 | `3bf27cc362055e6874125f93b793c70f099ce6049641b60c1cb69974b3a55df7` | `e8f8b56097964568da4784054d23e1c590c14d32634c8ec6d465f735d1208dc6` |
 | Route-clearance warnings | 2: 1 certified, 1 unresolved | 15: 15 certified, 0 unresolved |
 | Native ORCA prerequisite | `rvo2` import passed | `rvo2` import passed |
@@ -65,7 +67,8 @@ effect from it.
 - Expected row counts: 80 (nominal), 960 (stress)
 - Configs reference different scenario matrices
 - Route-clearance certification provenance, fail-fast ORCA prerequisite policy,
-  and repository-relative route-override preview provenance
+  repository-relative route-override preview provenance, and a worktree-independent
+  nominal scenario matrix hash
 
 ## Evidence
 

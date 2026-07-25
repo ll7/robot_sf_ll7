@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/reports/matrix_summary.csv",
-  "artifact_sha256": "6ea44a021f9f8823ba55cd68f1dc9c06c1fcc9a022c0d79cc42b75f8b3bfb297",
+  "artifact_sha256": "f6155f7eb011eafacdd16b42c811643b30475da9ede0863a1b53c407053cad27",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

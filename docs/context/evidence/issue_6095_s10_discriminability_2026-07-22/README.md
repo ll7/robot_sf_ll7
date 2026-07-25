@@ -32,15 +32,19 @@ Preflight outputs generated via `scripts/tools/run_camera_ready_benchmark.py --m
 
 ## Exact Preflight Provenance
 
-The packet was regenerated from source revision
-`c24325e76a7c831941e0efe7ac8b25e231b9574b` with the canonical
-metadata-only preflight command. Each preflight artifact records the
+The nominal packet was regenerated from source revision
+`83b9de4284ab49a6338116fdc5f13ebc5e34f40b` with the canonical
+metadata-only preflight command after normalizing repository-resident scenario
+file references for its matrix hash. The stress packet remains from
+`c24325e76a7c831941e0efe7ac8b25e231b9574b`; it contains no route override
+and its matrix hash is unchanged. Each preflight artifact records the
 repository-relative source config and its full source-file SHA-256.
 
 | Property | Nominal | Stress |
 |---|---|---|
 | Campaign ID | `issue_6095_nominal_discriminability_v1_20260725_final` | `issue_6095_stress_discriminability_v1_20260725_final` |
-| Config hash | `47d684f55e8c1377` | `0375e182d186a8bc` |
+| Config hash | `60448a7228d1a450` | `0375e182d186a8bc` |
+| Scenario matrix hash | `e5fc81d3eef3` | `6b1f3a702703` |
 | Source config SHA-256 | `3bf27cc362055e6874125f93b793c70f099ce6049641b60c1cb69974b3a55df7` | `e8f8b56097964568da4784054d23e1c590c14d32634c8ec6d465f735d1208dc6` |
 | Clearance warnings | 2 total; 1 certified, 1 unresolved | 15 total; all 15 certified |
 | ORCA native prerequisite | `rvo2` import passed | `rvo2` import passed |
@@ -62,6 +66,7 @@ manifest references.
 
 ## Portability
 
-Provenance paths in the tracked preflight packet are repository-relative. CSV
-artifacts use LF line endings so their checksums and review sidecars are stable
-across repository checks.
+Provenance paths in the tracked preflight packet are repository-relative, and
+the nominal scenario-matrix hash normalizes repository-resident scenario file
+references before hashing. CSV artifacts use LF line endings so their checksums
+and review sidecars are stable across repository checks.

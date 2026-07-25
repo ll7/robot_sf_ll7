@@ -1,6 +1,6 @@
 {
   "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/nominal/reports/amv_coverage_summary.json",
-  "artifact_sha256": "538723ce5a22b087d20577182d6ccfb2b257231ee956df596f721049a4cdeeb6",
+  "artifact_sha256": "a45318a2f43d8c57811e89dc9263f583b58269fa0ea5e26368563b9e4de7f4df",
   "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
   "schema_version": "evidence-review-marker.v1"

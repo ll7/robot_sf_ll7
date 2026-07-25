@@ -76,6 +76,7 @@ _CHECKPOINT_PREFLIGHT_REPORT_NAME: dict[str, str] = {
 # distinct from a declared ``backfilled`` source: it makes the cross-arm asymmetry visible in the
 # manifest without inventing tuning parameters the author never recorded (issue #5143).
 _TUNING_BACKFILL_PENDING = "backfill_pending"
+_SCENARIO_FILE_REFERENCE_FIELDS = ("map_file", "route_overrides_file")
 
 
 def _campaign_config_provenance(cfg: CampaignConfig) -> dict[str, str]:
@@ -242,12 +243,17 @@ def _scenario_display_name(scenario: dict[str, Any]) -> str:
     return str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "")
 
 
-def _portable_preview_route_override(value: str | Path) -> str:
-    """Return portable route-override provenance without leaking a worktree path."""
+def _portable_scenario_file_reference(value: str | Path) -> str:
+    """Return a repository-portable representation of a scenario file reference."""
     path = Path(value)
     if not path.is_absolute():
         return path.as_posix()
-    normalized = _repo_relative(path)
+    return _repo_relative(path)
+
+
+def _portable_preview_route_override(value: str | Path) -> str:
+    """Return portable route-override provenance without leaking a worktree path."""
+    normalized = _portable_scenario_file_reference(value)
     return Path(normalized).name if Path(normalized).is_absolute() else normalized
 
 
@@ -258,6 +264,28 @@ def _preview_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
     if isinstance(route_override, (str, Path)):
         preview["route_overrides_file"] = _portable_preview_route_override(route_override)
     return preview
+
+
+def _scenario_hash_payload(scenarios: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize resolved scenario file references before deriving matrix identity.
+
+    Returns:
+        JSON-serializable scenarios with repository-portable file references.
+    """
+    payload: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        normalized = dict(_jsonable_repo_relative(scenario))
+        for field_name in _SCENARIO_FILE_REFERENCE_FIELDS:
+            value = scenario.get(field_name)
+            if isinstance(value, (str, Path)):
+                normalized[field_name] = _portable_scenario_file_reference(value)
+        payload.append(normalized)
+    return payload
+
+
+def _scenario_matrix_hash(scenarios: list[dict[str, Any]]) -> str:
+    """Return the stable hash for resolved scenarios independent of their worktree path."""
+    return _hash_payload(_scenario_hash_payload(scenarios))
 
 
 def _build_preflight_validate_payload(  # noqa: PLR0913
@@ -571,7 +599,7 @@ def _compute_campaign_metadata(
         ``git_meta``, ``config_hash``, ``noise_spec``, and ``noise_hash``.
     """
     resolved_seeds = _resolved_seed_inventory(scenarios)
-    scenario_hash = _hash_payload(scenarios)
+    scenario_hash = _scenario_matrix_hash(scenarios)
     scenario_horizons_summary = _scenario_horizon_summary(
         scenarios,
         schedule_path=cfg.scenario_horizons_path,

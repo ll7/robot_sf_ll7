@@ -1,6 +1,6 @@
 # Context Retrieval Index
 
-Issue #5303 step 2 frozen TPE-versus-random search-promotion preregistration (proposal/preflight only): the side-effect-free frozen contract, hash manifest, and check command for the adversarial v1 Optuna/TPE-vs-random promotion study on `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`; the run is pre-declared diagnostic/inconclusive because three search seeds cannot test the promote gate at p<=0.05:
+Issue #5303 step 2 frozen TPE-versus-random search-promotion preregistration (proposal/preflight only): the side-effect-free frozen contract, hash manifest, and check command for the adversarial v1 Optuna/TPE-vs-random promotion study on `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`; the evidence-grade promotion campaign is stopped because three search seeds cannot test the promote gate at p<=0.05, while a separately justified native diagnostic handoff has a fixed inconclusive-only outcome:
 [README.md](evidence/issue_5303_search_promotion_preregistration/README.md).
 
 Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch

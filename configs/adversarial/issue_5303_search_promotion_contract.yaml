@@ -70,6 +70,49 @@ neutral_reference_planner:
   role: solvable_reference_proving_target_specificity
 
 # ---------------------------------------------------------------------------
+# Input provenance. These raw-file SHA-256 values are checked before any future
+# diagnostic execution. The list includes the target/reference configs, both
+# family sources, search space, certifier/objective, runner, and accounting
+# analysis surfaces needed to make the handoff executable and auditable.
+# ---------------------------------------------------------------------------
+input_provenance:
+  algorithm: sha256_raw_file_bytes
+  required_inputs:
+    - id: target_planner_config
+      path: configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+      sha256: d7cb7eef4d3a02a06bb283f870e1279152058c9b91dd3774d029f1a37f0c2afe
+    - id: neutral_reference_planner_config
+      path: configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml
+      sha256: 2a130d331df6778f73d13d5cb12c811e8b6290fbba1fbc8595e019cbcd500401
+    - id: fit_family_config
+      path: configs/scenarios/archetypes/classic_cross_trap.yaml
+      sha256: 2a49503a93741009dc2a1462b7641c77ec1128420cacd8861cf64b0e44a6d060
+    - id: fresh_family_config
+      path: configs/scenarios/archetypes/classic_group_crossing.yaml
+      sha256: 370cd23bad5e4e5644c60ebb7bf9b4c3554bc3bbc15f380f7517a13cdcd154f8
+    - id: diagnostic_scenario_template
+      path: configs/adversarial/issue_5303_classic_group_crossing_medium.yaml
+      sha256: 22eee6b350a9314db73514fc871fee66a97d2695811cbfadd87b4484155d32e3
+    - id: search_space
+      path: configs/adversarial/crossing_ttc_space.yaml
+      sha256: e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34
+    - id: certification_runner
+      path: robot_sf/adversarial/certification.py
+      sha256: e335b00366db1066ae751e6c437bde3700488aa5680fcbed05a5b614b005cf97
+    - id: objective_registry
+      path: robot_sf/adversarial/objectives.py
+      sha256: a9d06feec11347ac1470401171da1998ed3635026798716be36e1c03616ceefa
+    - id: diagnostic_runner
+      path: scripts/tools/compare_adversarial_samplers.py
+      sha256: 9e8d2cb2a2821b09e61e92ce6d7e6052078c8fcfd42867c1fb41a9ab6efc1f99
+    - id: promotion_analysis_module
+      path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
+      sha256: 5f794ea69aea14cebfeca85a003e29ddf16c4c05e24ef0903c6d2745437e9a47
+    - id: promotion_analysis_cli
+      path: scripts/tools/analyze_issue_5303_search_promotion.py
+      sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e
+
+# ---------------------------------------------------------------------------
 # Family split: fit/tuning disjoint from fresh outcomes. Eligible archive IDs are
 # read from the #6139 receipt and must match exactly.
 # ---------------------------------------------------------------------------
@@ -159,8 +202,13 @@ candidate_space_and_feasibility:
     - search_space_validation
   require_certification: true
   certifier: corrected_scenario_cert_v1_from_merged_issue_6139
-  normalization: per_candidate_normalized_config_hash_before_deduplication
-  duplicate_handling: identical_normalized_config_collapsed_and_counted_once_per_method_per_seed
+  normalization: canonical_json_sorted_key_sha256_per_candidate_before_accounting
+  duplicate_handling: global_within_arm_normalized_config_hash_for_unique_candidate_endpoint
+  duplicate_accounting: >
+    Every scheduled attempt remains in its method's intention-to-search denominator.
+    Identical normalized configurations are collapsed only for the secondary
+    unique-candidate endpoint, globally within an arm across all three search seeds;
+    they are never silently removed from the primary denominator.
   identical_candidate_space_feasibility_and_simulator_time_cap_for_both_methods: true
 
 # ---------------------------------------------------------------------------
@@ -221,7 +269,7 @@ counted_weak_point_gates:
     - id: 7
       name: no_excluded_row_class
       rule: no fallback, degraded, unavailable, geometry_artifact, knife_edge, stress_only, or duplicate classification
-  excluded_row_classes_never_discoveries_or_denominator:
+  excluded_row_classes_never_discoveries_but_remain_primary_denominator:
     - fallback
     - degraded
     - unavailable
@@ -236,7 +284,9 @@ counted_weak_point_gates:
 estimand:
   primary: tpe_minus_random_difference_in_unique_fully_admitted_weak_points
   unit: unique_fully_admitted_weak_point
-  denominator: per_method_matched_candidate_and_simulator_time_budget
+  denominator: intention_to_search_192_scheduled_attempts_per_method
+  primary_denominator_policy: all_scheduled_attempts_including_missing_invalid_and_attrition
+  unique_endpoint_deduplication: global_within_arm_normalized_config_hash_across_all_search_seeds
   clustering: candidate_level_clustering_across_search_seeds
   independent_unit: search_seed
   counted_only_when_all_seven_gates_pass: true
@@ -261,10 +311,59 @@ null_tests:
 
 missing_invalid_attrition:
   handling: fail_closed
-  excluded_from_denominator: true
+  included_in_primary_denominator: true
+  excluded_from_primary_denominator: false
   reason_recorded: true
   no_optional_seeds: true
   no_outcome_dependent_replacement_or_exclusion: true
+  complete_case_analysis: secondary_sensitivity_only_never_primary
+
+# ---------------------------------------------------------------------------
+# Complete per-attempt record emitted by the executable diagnostic runner.
+# The primary evidence-grade endpoint remains stopped, but a diagnostic row must
+# still carry enough provenance and exclusion state to make missingness visible.
+# ---------------------------------------------------------------------------
+outcome_row_schema:
+  schema_version: issue_5303_search_promotion_outcome_row.v1
+  required_fields:
+    - schema_version
+    - row_id
+    - arm
+    - method
+    - search_seed
+    - candidate_index
+    - normalized_candidate_config_sha256
+    - candidate
+    - scenario_family
+    - scenario_config_path
+    - scenario_config_sha256
+    - search_space_path
+    - search_space_sha256
+    - target_planner_config_path
+    - target_planner_config_sha256
+    - neutral_reference_planner_config_path
+    - neutral_reference_planner_config_sha256
+    - execution_stage
+    - execution_seed
+    - seed_lineage
+    - execution_mode
+    - readiness_status
+    - availability_status
+    - constraints_first_outcome
+    - objective_value
+    - primary_failure_mechanism
+    - stable_attribution_evidence
+    - certification
+    - recertification_lineage
+    - deterministic_replay
+    - confirmation_target
+    - confirmation_reference
+    - second_execution_context
+    - execution_commit
+    - execution_context_label
+    - admission_decision
+    - exclusion_reason
+    - immutable_record_sha256
 
 minimally_important_improvement:
   unit: additional_unique_fully_admitted_weak_point
@@ -320,7 +419,20 @@ future_run_declaration:
   status: diagnostic_inconclusive
   reason: positive_gate_not_robustly_testable_under_exactly_three_search_seeds
   thresholds_not_weakened: true
-  step3_may_record: diagnostic_or_inconclusive_outcome_only
+  promotion_sequence_status: stopped_before_evidence_grade_promotion_campaign
+  evidence_grade_step3_authorized: false
+  separately_justified_diagnostic_search_run:
+    authorized: true
+    purpose: >
+      Validate the frozen native search-stage handoff, input provenance, and complete
+      intention-to-search accounting without treating it as a promotion campaign.
+    fixed_decision: inconclusive
+    never_authorizes: [promote, transfer_claim, evidence_grade_comparison]
+    required_exclusion_reason: diagnostic_only_no_replay_reference_or_second_context
+    stop_rule: >
+      Any missing, invalid, fallback, degraded, unavailable, or provenance-mismatched
+      attempt remains recorded in the 192-attempt arm denominator and yields an
+      inconclusive diagnostic result; it is not retried, replaced, or excluded.
   re_preregistration_required_to_claim_promote: true
   declare_before_outcomes: true
 
@@ -338,21 +450,45 @@ forbidden_in_this_step:
 step3_execution:
   campaign_issue: 6145
   runner_ref: scripts/tools/compare_adversarial_samplers.py
+  analysis_ref: scripts/tools/analyze_issue_5303_search_promotion.py
+  execution_kind: separately_justified_diagnostic_search_stage_only
+  promotion_campaign_status: stopped
   runner_note: >
-    Step 3 (#6145) must register the constraints_first_lexicographic_v1 objective,
-    use the corrected certifier from merged #6139, pin the held-out
-    classic_group_crossing_medium search space, and run both samplers at budget 64
-    across the three frozen search seeds under the matched simulator-time cap.
-  example_command: >
+    This command is executable only as a diagnostic search-stage handoff. It registers
+    constraints_first_lexicographic_v1, uses the corrected certifier from merged #6139,
+    pins the held-out classic_group_crossing_medium template and target planner config,
+    and records every scheduled attempt. It does not execute replay, target/reference
+    confirmation, or a second execution context and therefore cannot promote.
+  diagnostic_search_command: >
     uv run python scripts/tools/compare_adversarial_samplers.py
-    --policy scenario_adaptive_hybrid_orca_v2_collision_guard
+    --policy hybrid_rule_local_planner
+    --algo-config configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml
+    --reference-algo-config configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml
+    --scenario-template configs/adversarial/issue_5303_classic_group_crossing_medium.yaml
+    --scenario-family classic_group_crossing_medium
+    --search-space configs/adversarial/crossing_ttc_space.yaml
     --sampler random --sampler optuna
     --budget 64
     --seed 530301 --seed 530302 --seed 530303
     --objective constraints_first_lexicographic_v1
+    --horizon 100 --dt 0.1
+    --require-certification
+    --benchmark-profile experimental
+    --issue-5303-diagnostic-only
+    --execution-context-label diagnostic_native_context_a
     --output-dir output/adversarial/issue_5303_search_promotion
+    --out-json output/adversarial/issue_5303_search_promotion/report.json
+    --out-md output/adversarial/issue_5303_search_promotion/comparison_table.md
+    --outcomes-jsonl output/adversarial/issue_5303_search_promotion/outcomes.jsonl
+  analysis_command: >
+    uv run python scripts/tools/analyze_issue_5303_search_promotion.py
+    --contract configs/adversarial/issue_5303_search_promotion_contract.yaml
+    --outcomes output/adversarial/issue_5303_search_promotion/outcomes.jsonl
+    --output output/adversarial/issue_5303_search_promotion/analysis.json
   expected_artifacts:
     output_dir: output/adversarial/issue_5303_search_promotion
     report_json: output/adversarial/issue_5303_search_promotion/report.json
     comparison_table_md: output/adversarial/issue_5303_search_promotion/comparison_table.md
-  outcome_classification_by_preregistration: diagnostic_or_inconclusive
+    outcomes_jsonl: output/adversarial/issue_5303_search_promotion/outcomes.jsonl
+    analysis_json: output/adversarial/issue_5303_search_promotion/analysis.json
+  outcome_classification_by_preregistration: diagnostic_inconclusive_only

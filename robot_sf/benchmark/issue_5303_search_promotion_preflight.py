@@ -11,8 +11,9 @@ submits Slurm jobs, and never reads evaluation outcomes. Concretely it does not 
 or call any of ``robot_sf.adversarial`` execution surfaces (``samplers``, ``search``,
 ``runtime``, ``qd``, ``warm_start``, ``transfer_matrix``, or any campaign/replay/
 benchmark-runner module). It only reads the frozen contract config, the issue #6139
-recertification receipt, and the preregistration manifest, recomputes SHA-256 hashes,
-and asserts the frozen fields and the power analysis.
+recertification receipt, preregistration manifest, and statically parsed handoff source
+files. It recomputes SHA-256 hashes and asserts the frozen fields, outcome schema,
+runner/objective support, and power analysis.
 
 The companion test ``tests/adversarial/test_issue_5303_search_promotion_preflight.py``
 AST-scans this module's source to prove the side-effect-free contract holds.
@@ -20,9 +21,11 @@ AST-scans this module's source to prove the side-effect-free contract holds.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import math
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -62,6 +65,106 @@ EXPECTED_NULL_TEST_COUNT = 2
 EXPECTED_COUNTED_GATE_COUNT = 7
 NULL_THRESHOLD = 0.05
 DIAGNOSTIC_DECLARATION = "diagnostic_inconclusive"
+OUTCOME_ROW_SCHEMA_VERSION = "issue_5303_search_promotion_outcome_row.v1"
+
+EXPECTED_PROVENANCE_INPUT_IDS = frozenset(
+    {
+        "target_planner_config",
+        "neutral_reference_planner_config",
+        "fit_family_config",
+        "fresh_family_config",
+        "diagnostic_scenario_template",
+        "search_space",
+        "certification_runner",
+        "objective_registry",
+        "diagnostic_runner",
+        "promotion_analysis_module",
+        "promotion_analysis_cli",
+    }
+)
+EXPECTED_PROVENANCE_PATHS = {
+    "target_planner_config": (
+        "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml"
+    ),
+    "neutral_reference_planner_config": "configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml",
+    "fit_family_config": "configs/scenarios/archetypes/classic_cross_trap.yaml",
+    "fresh_family_config": "configs/scenarios/archetypes/classic_group_crossing.yaml",
+    "diagnostic_scenario_template": (
+        "configs/adversarial/issue_5303_classic_group_crossing_medium.yaml"
+    ),
+    "search_space": "configs/adversarial/crossing_ttc_space.yaml",
+    "certification_runner": "robot_sf/adversarial/certification.py",
+    "objective_registry": "robot_sf/adversarial/objectives.py",
+    "diagnostic_runner": "scripts/tools/compare_adversarial_samplers.py",
+    "promotion_analysis_module": "robot_sf/benchmark/issue_5303_search_promotion_analysis.py",
+    "promotion_analysis_cli": "scripts/tools/analyze_issue_5303_search_promotion.py",
+}
+EXPECTED_OUTCOME_ROW_FIELDS = frozenset(
+    {
+        "schema_version",
+        "row_id",
+        "arm",
+        "method",
+        "search_seed",
+        "candidate_index",
+        "normalized_candidate_config_sha256",
+        "candidate",
+        "scenario_family",
+        "scenario_config_path",
+        "scenario_config_sha256",
+        "search_space_path",
+        "search_space_sha256",
+        "target_planner_config_path",
+        "target_planner_config_sha256",
+        "neutral_reference_planner_config_path",
+        "neutral_reference_planner_config_sha256",
+        "execution_stage",
+        "execution_seed",
+        "seed_lineage",
+        "execution_mode",
+        "readiness_status",
+        "availability_status",
+        "constraints_first_outcome",
+        "objective_value",
+        "primary_failure_mechanism",
+        "stable_attribution_evidence",
+        "certification",
+        "recertification_lineage",
+        "deterministic_replay",
+        "confirmation_target",
+        "confirmation_reference",
+        "second_execution_context",
+        "execution_commit",
+        "execution_context_label",
+        "admission_decision",
+        "exclusion_reason",
+        "immutable_record_sha256",
+    }
+)
+REQUIRED_DIAGNOSTIC_RUNNER_OPTIONS = frozenset(
+    {
+        "--scenario-template",
+        "--scenario-family",
+        "--search-space",
+        "--policy",
+        "--algo-config",
+        "--reference-algo-config",
+        "--objective",
+        "--output-dir",
+        "--budget",
+        "--seed",
+        "--horizon",
+        "--dt",
+        "--require-certification",
+        "--benchmark-profile",
+        "--sampler",
+        "--out-json",
+        "--out-md",
+        "--outcomes-jsonl",
+        "--issue-5303-diagnostic-only",
+        "--execution-context-label",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -107,6 +210,196 @@ def _resolve(repo_root: Path, value: Any) -> Path | None:
         return None
     candidate = Path(value)
     return candidate if candidate.is_absolute() else repo_root / candidate
+
+
+def _read_python_ast(path: Path) -> ast.Module | None:
+    """Parse a source file statically, returning ``None`` for unreadable syntax.
+
+    Returns:
+        Parsed module, or ``None`` if the path cannot be parsed without importing it.
+    """
+    try:
+        return ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return None
+
+
+def _static_dict_keys(path: Path, *, assignment_name: str) -> set[str]:
+    """Return literal string keys from a module-level mapping assignment."""
+    tree = _read_python_ast(path)
+    if tree is None:
+        return set()
+    for node in tree.body:
+        value: ast.expr | None = None
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == assignment_name for target in node.targets
+        ):
+            value = node.value
+        elif (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == assignment_name
+        ):
+            value = node.value
+        if isinstance(value, ast.Dict):
+            return {
+                key.value
+                for key in value.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            }
+    return set()
+
+
+def _function_names(path: Path) -> set[str]:
+    """Return top-level function names without importing the target module."""
+    tree = _read_python_ast(path)
+    if tree is None:
+        return set()
+    return {
+        node.name for node in tree.body if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    }
+
+
+def _parser_options(path: Path) -> set[str]:
+    """Return literal ``add_argument`` options from a runner source file."""
+    tree = _read_python_ast(path)
+    if tree is None:
+        return set()
+    options: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "add_argument":
+            continue
+        for arg in node.args:
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                options.add(arg.value)
+    return options
+
+
+def _function_row_keys(path: Path, *, function_name: str) -> set[str]:
+    """Return literal keys assigned to the ``row`` mapping in one function."""
+    tree = _read_python_ast(path)
+    if tree is None:
+        return set()
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef) or node.name != function_name:
+            continue
+        keys: set[str] = set()
+        for nested in ast.walk(node):
+            if isinstance(nested, ast.Assign):
+                if any(
+                    isinstance(target, ast.Name) and target.id == "row" for target in nested.targets
+                ) and isinstance(nested.value, ast.Dict):
+                    keys.update(
+                        key.value
+                        for key in nested.value.keys
+                        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+                    )
+                for target in nested.targets:
+                    if (
+                        isinstance(target, ast.Subscript)
+                        and isinstance(target.value, ast.Name)
+                        and target.value.id == "row"
+                        and isinstance(target.slice, ast.Constant)
+                        and isinstance(target.slice.value, str)
+                    ):
+                        keys.add(target.slice.value)
+        return keys
+    return set()
+
+
+def _command_options(command: Any) -> tuple[dict[str, list[str | None]], str | None]:
+    """Parse a frozen command without executing it, preserving repeated options.
+
+    Returns:
+        Parsed option occurrences and an error string when static parsing fails.
+    """
+    if not isinstance(command, str) or not command.strip():
+        return {}, "command must be a non-empty string"
+    try:
+        tokens = shlex.split(command)
+    except ValueError as exc:
+        return {}, f"command cannot be parsed: {exc}"
+    if not tokens:
+        return {}, "command must not be empty"
+    options: dict[str, list[str | None]] = {}
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if not token.startswith("--"):
+            index += 1
+            continue
+        if token in {"--require-certification", "--issue-5303-diagnostic-only"}:
+            options.setdefault(token, []).append(None)
+            index += 1
+            continue
+        if index + 1 >= len(tokens) or tokens[index + 1].startswith("--"):
+            return options, f"{token} requires a value"
+        options.setdefault(token, []).append(tokens[index + 1])
+        index += 2
+    return options, None
+
+
+def _single_command_value(options: dict[str, list[str | None]], option: str) -> str | None:
+    """Return a single required command value, or ``None`` when ambiguous/missing."""
+    values = options.get(option, [])
+    if len(values) != 1 or values[0] is None:
+        return None
+    return values[0]
+
+
+def _check_input_provenance(
+    provenance: Any,
+    *,
+    repo_root: Path,
+    checks: dict[str, bool],
+    blockers: list[str],
+    metadata: dict[str, Any],
+) -> None:
+    """Check every executable handoff input exists and matches its frozen raw hash."""
+    entries = provenance.get("required_inputs") if isinstance(provenance, dict) else None
+    if not isinstance(entries, list):
+        checks["input_provenance_complete"] = False
+        checks["input_provenance_hashes"] = False
+        blockers.append("input_provenance.required_inputs must be a list")
+        return
+    indexed = {
+        entry.get("id"): entry
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+    }
+    checks["input_provenance_complete"] = set(indexed) == EXPECTED_PROVENANCE_INPUT_IDS and len(
+        indexed
+    ) == len(entries)
+    if not checks["input_provenance_complete"]:
+        blockers.append(
+            "input provenance IDs must exactly cover the target/reference/family/search/runner/"
+            "analysis handoff inputs"
+        )
+    observed_hashes: dict[str, str] = {}
+    all_hashes_match = True
+    for input_id, expected_path in EXPECTED_PROVENANCE_PATHS.items():
+        entry = indexed.get(input_id)
+        raw_path = entry.get("path") if isinstance(entry, dict) else None
+        expected_hash = entry.get("sha256") if isinstance(entry, dict) else None
+        path = _resolve(repo_root, raw_path)
+        if raw_path != expected_path or path is None or not path.is_file():
+            all_hashes_match = False
+            blockers.append(
+                f"input provenance {input_id!r} must reference existing {expected_path!r}"
+            )
+            continue
+        actual_hash = sha256_file(path)
+        observed_hashes[input_id] = actual_hash
+        if not isinstance(expected_hash, str) or actual_hash != expected_hash:
+            all_hashes_match = False
+            blockers.append(
+                f"input provenance SHA-256 mismatch for {input_id!r} "
+                f"(contract={expected_hash!r}, recomputed={actual_hash!r})"
+            )
+    checks["input_provenance_hashes"] = all_hashes_match
+    metadata["input_provenance_sha256"] = observed_hashes
 
 
 def _eligible_records_by_family(receipt: dict[str, Any]) -> dict[str, list[str]]:
@@ -426,6 +719,15 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             f"excluded_records_count must be {EXPECTED_RECORD_COUNT - EXPECTED_ELIGIBLE_COUNT}"
         )
 
+    # ---- Executable input provenance ---------------------------------------------
+    _check_input_provenance(
+        contract.get("input_provenance"),
+        repo_root=root,
+        checks=checks,
+        blockers=blockers,
+        metadata=metadata,
+    )
+
     # ---- Controls ----------------------------------------------------------------
     controls = contract.get("controls") if isinstance(contract.get("controls"), dict) else {}
     rejection_controls = controls.get("rejection_controls", [])
@@ -514,6 +816,17 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     ) and bool(tier_names)
     if not checks["objective_hard_constraint_veto"]:
         blockers.append("objective.ordering must be constraints_first_lexicographic")
+    objective_registry_path = root / EXPECTED_PROVENANCE_PATHS["objective_registry"]
+    checks["objective_runner_registered"] = (
+        objective.get("name") == "constraints_first_lexicographic_v1"
+        and "constraints_first_lexicographic_v1"
+        in _static_dict_keys(objective_registry_path, assignment_name="_OBJECTIVES")
+    )
+    if not checks["objective_runner_registered"]:
+        blockers.append(
+            "constraints_first_lexicographic_v1 must be statically registered in "
+            "robot_sf/adversarial/objectives.py"
+        )
 
     # ---- Counted weak-point gates -------------------------------------------------
     gates_block = (
@@ -554,6 +867,18 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         blockers.append(
             "estimand must cluster candidates across seeds (independent unit = search seed)"
         )
+    checks["intention_to_search_primary_denominator"] = (
+        estimand.get("denominator") == "intention_to_search_192_scheduled_attempts_per_method"
+        and estimand.get("primary_denominator_policy")
+        == "all_scheduled_attempts_including_missing_invalid_and_attrition"
+        and estimand.get("unique_endpoint_deduplication")
+        == "global_within_arm_normalized_config_hash_across_all_search_seeds"
+    )
+    if not checks["intention_to_search_primary_denominator"]:
+        blockers.append(
+            "the primary estimand must retain all 192 scheduled attempts per arm and deduplicate "
+            "normalized candidates globally within an arm only for the unique endpoint"
+        )
 
     uncertainty = (
         contract.get("uncertainty") if isinstance(contract.get("uncertainty"), dict) else {}
@@ -586,6 +911,41 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     ) == "two_sided" and _approx_equal(null_tests.get("threshold_p"), NULL_THRESHOLD)
     if not checks["null_tests_two_sided_threshold"]:
         blockers.append("null_tests must be two-sided at p <= 0.05")
+
+    attrition = (
+        contract.get("missing_invalid_attrition")
+        if isinstance(contract.get("missing_invalid_attrition"), dict)
+        else {}
+    )
+    checks["missing_invalid_stay_primary_denominator"] = (
+        attrition.get("handling") == "fail_closed"
+        and attrition.get("included_in_primary_denominator") is True
+        and attrition.get("excluded_from_primary_denominator") is False
+        and attrition.get("complete_case_analysis") == "secondary_sensitivity_only_never_primary"
+    )
+    if not checks["missing_invalid_stay_primary_denominator"]:
+        blockers.append(
+            "missing/invalid/attrition rows must remain in the primary intention-to-search "
+            "denominator; complete-case analysis is sensitivity-only"
+        )
+
+    outcome_schema = (
+        contract.get("outcome_row_schema")
+        if isinstance(contract.get("outcome_row_schema"), dict)
+        else {}
+    )
+    schema_fields = outcome_schema.get("required_fields")
+    checks["outcome_row_schema_complete"] = (
+        outcome_schema.get("schema_version") == OUTCOME_ROW_SCHEMA_VERSION
+        and isinstance(schema_fields, list)
+        and all(isinstance(field, str) for field in schema_fields)
+        and len(schema_fields) == len(set(schema_fields))
+        and set(schema_fields) == EXPECTED_OUTCOME_ROW_FIELDS
+    )
+    if not checks["outcome_row_schema_complete"]:
+        blockers.append(
+            "outcome_row_schema must exactly declare the complete frozen per-attempt record fields"
+        )
 
     mii = (
         contract.get("minimally_important_improvement")
@@ -708,6 +1068,154 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     )
     if not checks["re_preregistration_required_for_promote"]:
         blockers.append("claiming promote later requires re-preregistration with more seeds")
+    diagnostic_run = future_run.get("separately_justified_diagnostic_search_run")
+    checks["promotion_campaign_stopped"] = (
+        future_run.get("promotion_sequence_status")
+        == "stopped_before_evidence_grade_promotion_campaign"
+        and future_run.get("evidence_grade_step3_authorized") is False
+    )
+    if not checks["promotion_campaign_stopped"]:
+        blockers.append(
+            "the evidence-grade promotion campaign must be explicitly stopped before a "
+            "three-seed diagnostic run is authorized"
+        )
+    checks["diagnostic_run_separately_justified"] = (
+        isinstance(diagnostic_run, dict)
+        and diagnostic_run.get("authorized") is True
+        and diagnostic_run.get("fixed_decision") == "inconclusive"
+        and diagnostic_run.get("required_exclusion_reason")
+        == "diagnostic_only_no_replay_reference_or_second_context"
+        and isinstance(diagnostic_run.get("never_authorizes"), list)
+        and set(diagnostic_run["never_authorizes"])
+        == {"promote", "transfer_claim", "evidence_grade_comparison"}
+        and isinstance(diagnostic_run.get("stop_rule"), str)
+        and bool(diagnostic_run["stop_rule"].strip())
+    )
+    if not checks["diagnostic_run_separately_justified"]:
+        blockers.append(
+            "a separately justified diagnostic run must have an explicit inconclusive-only "
+            "decision, exclusion reason, non-promotion boundary, and stop rule"
+        )
+
+    # ---- Static executable diagnostic handoff ------------------------------------
+    step3 = (
+        contract.get("step3_execution") if isinstance(contract.get("step3_execution"), dict) else {}
+    )
+    runner_path = _resolve(root, step3.get("runner_ref"))
+    analysis_path = _resolve(root, step3.get("analysis_ref"))
+    checks["step3_execution_declared_diagnostic_only"] = (
+        step3.get("execution_kind") == "separately_justified_diagnostic_search_stage_only"
+        and step3.get("promotion_campaign_status") == "stopped"
+        and runner_path == root / EXPECTED_PROVENANCE_PATHS["diagnostic_runner"]
+        and analysis_path == root / EXPECTED_PROVENANCE_PATHS["promotion_analysis_cli"]
+    )
+    if not checks["step3_execution_declared_diagnostic_only"]:
+        blockers.append(
+            "step3_execution must identify the runner and analysis CLI as a stopped-promotion, "
+            "diagnostic-only handoff"
+        )
+    checks["step3_runner_static_support"] = bool(runner_path and runner_path.is_file()) and (
+        REQUIRED_DIAGNOSTIC_RUNNER_OPTIONS <= _parser_options(runner_path)
+    )
+    if not checks["step3_runner_static_support"]:
+        blockers.append(
+            "the frozen runner must statically support every required diagnostic command option"
+        )
+    runner_functions = _function_names(runner_path) if runner_path else set()
+    checks["step3_runner_outcome_writer_support"] = {
+        "build_issue_5303_search_outcome_rows",
+        "write_issue_5303_search_outcome_rows",
+    } <= runner_functions
+    if not checks["step3_runner_outcome_writer_support"]:
+        blockers.append(
+            "the frozen runner must provide the issue #5303 complete outcome-row writer"
+        )
+    checks["step3_runner_row_schema_matches_contract"] = (
+        _function_row_keys(runner_path, function_name="build_issue_5303_search_outcome_rows")
+        == EXPECTED_OUTCOME_ROW_FIELDS
+        if runner_path
+        else False
+    )
+    if not checks["step3_runner_row_schema_matches_contract"]:
+        blockers.append(
+            "the frozen runner's static outcome-row keys must exactly match outcome_row_schema"
+        )
+    checks["step3_analysis_static_support"] = bool(analysis_path and analysis_path.is_file()) and (
+        "analyze_issue_5303_search_promotion"
+        in _function_names(root / EXPECTED_PROVENANCE_PATHS["promotion_analysis_module"])
+    )
+    if not checks["step3_analysis_static_support"]:
+        blockers.append("the frozen analysis module must expose the diagnostic accounting analyzer")
+
+    command_options, command_error = _command_options(step3.get("diagnostic_search_command"))
+    expected_artifacts = (
+        step3.get("expected_artifacts") if isinstance(step3.get("expected_artifacts"), dict) else {}
+    )
+    required_command_values = {
+        "--policy": "hybrid_rule_local_planner",
+        "--algo-config": EXPECTED_PROVENANCE_PATHS["target_planner_config"],
+        "--reference-algo-config": EXPECTED_PROVENANCE_PATHS["neutral_reference_planner_config"],
+        "--scenario-template": EXPECTED_PROVENANCE_PATHS["diagnostic_scenario_template"],
+        "--scenario-family": EXPECTED_FRESH_FAMILY,
+        "--search-space": EXPECTED_PROVENANCE_PATHS["search_space"],
+        "--budget": str(EXPECTED_CANDIDATE_BUDGET),
+        "--objective": "constraints_first_lexicographic_v1",
+        "--horizon": str(EXPECTED_HORIZON_STEPS),
+        "--dt": str(EXPECTED_DT_S),
+        "--benchmark-profile": "experimental",
+        "--execution-context-label": "diagnostic_native_context_a",
+        "--output-dir": "output/adversarial/issue_5303_search_promotion",
+        "--out-json": "output/adversarial/issue_5303_search_promotion/report.json",
+        "--out-md": "output/adversarial/issue_5303_search_promotion/comparison_table.md",
+        "--outcomes-jsonl": "output/adversarial/issue_5303_search_promotion/outcomes.jsonl",
+    }
+    command_values_match = all(
+        _single_command_value(command_options, option) == value
+        for option, value in required_command_values.items()
+    )
+    command_matrix_match = (
+        command_options.get("--sampler") == ["random", "optuna"]
+        and command_options.get("--seed") == ["530301", "530302", "530303"]
+        and "--require-certification" in command_options
+        and "--issue-5303-diagnostic-only" in command_options
+        and "--synthetic" not in command_options
+        and "--empirical" not in command_options
+    )
+    artifact_paths_match = expected_artifacts == {
+        "output_dir": "output/adversarial/issue_5303_search_promotion",
+        "report_json": "output/adversarial/issue_5303_search_promotion/report.json",
+        "comparison_table_md": "output/adversarial/issue_5303_search_promotion/comparison_table.md",
+        "outcomes_jsonl": "output/adversarial/issue_5303_search_promotion/outcomes.jsonl",
+        "analysis_json": "output/adversarial/issue_5303_search_promotion/analysis.json",
+    }
+    checks["step3_command_parses"] = command_error is None
+    checks["step3_execution_command_complete"] = (
+        command_error is None
+        and command_values_match
+        and command_matrix_match
+        and artifact_paths_match
+    )
+    if not checks["step3_execution_command_complete"]:
+        blockers.append(
+            "the frozen diagnostic command must bind target/reference/configuration/certification "
+            "inputs, all seeds/arms, and report/outcome artifact paths"
+        )
+
+    analysis_options, analysis_error = _command_options(step3.get("analysis_command"))
+    checks["step3_analysis_command_complete"] = (
+        analysis_error is None
+        and _single_command_value(analysis_options, "--contract")
+        == DEFAULT_CONTRACT_PATH.as_posix()
+        and _single_command_value(analysis_options, "--outcomes")
+        == expected_artifacts.get("outcomes_jsonl")
+        and _single_command_value(analysis_options, "--output")
+        == expected_artifacts.get("analysis_json")
+    )
+    if not checks["step3_analysis_command_complete"]:
+        blockers.append(
+            "the frozen analysis command must bind the contract, complete outcomes JSONL, and "
+            "analysis artifact path"
+        )
 
     # ---- Forbidden actions declared ----------------------------------------------
     forbidden = contract.get("forbidden_in_this_step", [])

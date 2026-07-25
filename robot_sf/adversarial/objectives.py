@@ -48,7 +48,54 @@ def worst_case_snqi(evaluation: CandidateEvaluation) -> float | None:
     return float(collision * 10.0 + timeout * 3.0 + near - success)
 
 
+def constraints_first_lexicographic_v1(evaluation: CandidateEvaluation) -> float | None:
+    """Score adversarial outcomes with bounded, constraints-first tiers.
+
+    The search API accepts a scalar objective, so this encodes the frozen
+    lexicographic ordering in disjoint score bands: collision/severe intrusion
+    (``[4, 5)``), liveness failure (``[2, 3)``), then bounded
+    comfort/efficiency degradation (``[0, 1)``).  A lower tier can therefore
+    never compensate for a failed higher-priority safety or liveness condition.
+    """
+    record = read_first_jsonl_record(evaluation.episode_record_path)
+    if record is None:
+        return None
+
+    metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
+    outcome = record.get("outcome") if isinstance(record.get("outcome"), dict) else {}
+
+    collision_or_intrusion = bool(
+        outcome.get("collision")
+        or outcome.get("collision_event")
+        or outcome.get("severe_intrusion")
+        or metrics.get("severe_intrusion")
+        or metrics.get("severe_intrusion_event")
+        or _metric(metrics, "collisions") > 0.0
+    )
+    goal_complete = bool(outcome.get("route_complete")) or _metric(metrics, "success") >= 1.0
+    liveness_failure = (
+        bool(outcome.get("timeout") or outcome.get("timeout_event")) or not goal_complete
+    )
+
+    near_miss_count = max(0.0, _metric(metrics, "near_misses"))
+    near_miss_component = near_miss_count / (1.0 + near_miss_count)
+    snqi = metrics.get("snqi")
+    try:
+        parsed_snqi = float(snqi)
+    except (TypeError, ValueError):
+        parsed_snqi = math.nan
+    snqi_component = 1.0 / (1.0 + max(0.0, parsed_snqi)) if math.isfinite(parsed_snqi) else 0.0
+    soft_component = min(0.999, max(near_miss_component, snqi_component))
+
+    if collision_or_intrusion:
+        return float(4.0 + soft_component)
+    if liveness_failure:
+        return float(2.0 + soft_component)
+    return float(soft_component)
+
+
 _OBJECTIVES: dict[str, ObjectiveFn] = {
+    "constraints_first_lexicographic_v1": constraints_first_lexicographic_v1,
     "worst_case_snqi": worst_case_snqi,
     "temporal_robustness": temporal_robustness_objective,
 }

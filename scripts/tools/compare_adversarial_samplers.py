@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
+import subprocess
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -49,6 +52,17 @@ class SamplerComparisonRow:
     held_out_family_yield: float | None
     held_out_family_status: str
     caveats: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Issue5303DiagnosticContext:
+    """Pinned provenance needed for the issue #5303 diagnostic search-stage rows."""
+
+    scenario_family: str
+    target_planner_config: Path
+    neutral_reference_planner_config: Path
+    execution_context_label: str
+    execution_commit: str
 
 
 def run_sampler_comparison(
@@ -270,6 +284,223 @@ def _candidate_mode(item: Any) -> str | None:
     return None
 
 
+def _sha256_file(path: Path) -> str:
+    """Return a SHA-256 digest for one file's bytes."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _canonical_sha256(payload: Any) -> str:
+    """Return a stable SHA-256 digest for JSON-compatible provenance data."""
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _first_jsonl_record(path: Path | None, *, manifest_path: Path) -> dict[str, Any]:
+    """Read one candidate episode record when its path resolves locally."""
+    if path is None:
+        return {}
+    candidates = (path,) if path.is_absolute() else (manifest_path.parent / path, Path.cwd() / path)
+    for candidate in candidates:
+        try:
+            with candidate.open(encoding="utf-8") as handle:
+                first_line = handle.readline()
+        except OSError:
+            continue
+        try:
+            parsed = json.loads(first_line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            return parsed
+    return {}
+
+
+def _episode_execution_status(
+    record: dict[str, Any], attribution: dict[str, Any]
+) -> tuple[str, str, str]:
+    """Extract conservative execution status fields from an episode or attribution payload."""
+    details = attribution.get("details") if isinstance(attribution.get("details"), dict) else {}
+    algorithm = record.get("algorithm") if isinstance(record.get("algorithm"), dict) else {}
+    execution_mode = str(
+        details.get("execution_mode")
+        or record.get("execution_mode")
+        or algorithm.get("execution_mode")
+        or "unknown"
+    )
+    readiness_status = str(
+        details.get("readiness_status")
+        or record.get("readiness_status")
+        or algorithm.get("readiness_status")
+        or "unknown"
+    )
+    availability_status = str(
+        details.get("availability_status")
+        or record.get("availability_status")
+        or algorithm.get("availability_status")
+        or "unknown"
+    )
+    return execution_mode, readiness_status, availability_status
+
+
+def _metric_float(metrics: dict[str, Any], name: str) -> float:
+    """Return a finite metric scalar, preserving unavailable values as zero."""
+    try:
+        value = float(metrics.get(name, 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return value if math.isfinite(value) else 0.0
+
+
+def _constraints_first_outcome(record: dict[str, Any]) -> dict[str, Any]:
+    """Project one search-stage episode into the frozen constraints-first outcome vector."""
+    outcome = record.get("outcome") if isinstance(record.get("outcome"), dict) else {}
+    metrics = record.get("metrics") if isinstance(record.get("metrics"), dict) else {}
+    if not record:
+        return {
+            "status": "not_available",
+            "collision_or_severe_intrusion": None,
+            "liveness_or_goal_completion": None,
+            "comfort_and_efficiency": None,
+        }
+    collision_or_intrusion = bool(
+        outcome.get("collision")
+        or outcome.get("collision_event")
+        or outcome.get("severe_intrusion")
+        or metrics.get("severe_intrusion")
+        or metrics.get("severe_intrusion_event")
+        or _metric_float(metrics, "collisions") > 0.0
+    )
+    route_complete = bool(outcome.get("route_complete")) or _metric_float(metrics, "success") >= 1.0
+    return {
+        "status": "observed",
+        "collision_or_severe_intrusion": collision_or_intrusion,
+        "liveness_or_goal_completion": not route_complete,
+        "comfort_and_efficiency": {
+            "snqi": metrics.get("snqi"),
+            "near_misses": metrics.get("near_misses"),
+            "path_efficiency": metrics.get("path_efficiency"),
+        },
+    }
+
+
+def _git_head() -> str:
+    """Return the checked-out commit, or a fail-closed unavailable marker."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return "unavailable"
+    commit = result.stdout.strip()
+    return commit if commit else "unavailable"
+
+
+def build_issue_5303_search_outcome_rows(
+    *,
+    rows: Sequence[SamplerComparisonRow],
+    context: Issue5303DiagnosticContext,
+) -> list[dict[str, Any]]:
+    """Build complete, non-admitted search-stage rows for the #5303 diagnostic handoff.
+
+    The diagnostic command records every scheduled search attempt and intentionally
+    marks all rows as not admitted: it does not substitute for deterministic replay,
+    five-seed target/reference confirmation, or a second execution context.  Those
+    omissions are represented explicitly instead of being silently dropped from an
+    estimand denominator.
+    """
+    target_hash = _sha256_file(context.target_planner_config)
+    reference_hash = _sha256_file(context.neutral_reference_planner_config)
+    outcome_rows: list[dict[str, Any]] = []
+    for comparison_row in rows:
+        manifest_path = Path(comparison_row.manifest_path)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_config = manifest.get("config") if isinstance(manifest, dict) else {}
+        candidates = manifest.get("candidates") if isinstance(manifest, dict) else []
+        if not isinstance(manifest_config, dict) or not isinstance(candidates, list):
+            raise ValueError(f"search manifest is missing config/candidates: {manifest_path}")
+        scenario_template = Path(str(manifest_config.get("scenario_template", "")))
+        search_space = Path(str(manifest_config.get("search_space_path", "")))
+        if not scenario_template.is_file() or not search_space.is_file():
+            raise ValueError(f"search manifest has unresolved frozen inputs: {manifest_path}")
+        for candidate_index, raw_candidate in enumerate(candidates):
+            item = raw_candidate if isinstance(raw_candidate, dict) else {}
+            candidate = item.get("candidate") if isinstance(item.get("candidate"), dict) else {}
+            attribution = (
+                item.get("failure_attribution")
+                if isinstance(item.get("failure_attribution"), dict)
+                else {}
+            )
+            episode_path_raw = item.get("episode_record_path")
+            episode_path = Path(str(episode_path_raw)) if episode_path_raw else None
+            record = _first_jsonl_record(episode_path, manifest_path=manifest_path)
+            execution_mode, readiness_status, availability_status = _episode_execution_status(
+                record, attribution
+            )
+            row = {
+                "schema_version": "issue_5303_search_promotion_outcome_row.v1",
+                "row_id": (
+                    f"{comparison_row.sampler}:{comparison_row.seed}:{candidate_index:04d}:search"
+                ),
+                "arm": comparison_row.sampler,
+                "method": comparison_row.sampler,
+                "search_seed": int(comparison_row.seed),
+                "candidate_index": candidate_index,
+                "normalized_candidate_config_sha256": _canonical_sha256(candidate),
+                "candidate": candidate,
+                "scenario_family": context.scenario_family,
+                "scenario_config_path": scenario_template.as_posix(),
+                "scenario_config_sha256": _sha256_file(scenario_template),
+                "search_space_path": search_space.as_posix(),
+                "search_space_sha256": _sha256_file(search_space),
+                "target_planner_config_path": context.target_planner_config.as_posix(),
+                "target_planner_config_sha256": target_hash,
+                "neutral_reference_planner_config_path": (
+                    context.neutral_reference_planner_config.as_posix()
+                ),
+                "neutral_reference_planner_config_sha256": reference_hash,
+                "execution_stage": "search",
+                "execution_seed": candidate.get("scenario_seed"),
+                "seed_lineage": {
+                    "search_seed": int(comparison_row.seed),
+                    "candidate_scenario_seed": candidate.get("scenario_seed"),
+                    "deterministic_replay_seed": None,
+                    "confirmation_seeds": [],
+                    "second_context_seed": None,
+                },
+                "execution_mode": execution_mode,
+                "readiness_status": readiness_status,
+                "availability_status": availability_status,
+                "constraints_first_outcome": _constraints_first_outcome(record),
+                "objective_value": item.get("objective_value"),
+                "primary_failure_mechanism": attribution.get("primary_failure"),
+                "stable_attribution_evidence": "not_collected_diagnostic_only",
+                "certification": item.get("certification_status"),
+                "recertification_lineage": "issue_6139_frozen_input",
+                "deterministic_replay": "not_run_diagnostic_only",
+                "confirmation_target": "not_run_diagnostic_only",
+                "confirmation_reference": "not_run_diagnostic_only",
+                "second_execution_context": "not_run_diagnostic_only",
+                "execution_commit": context.execution_commit,
+                "execution_context_label": context.execution_context_label,
+                "admission_decision": "not_admitted_diagnostic_only",
+                "exclusion_reason": "diagnostic_only_no_replay_reference_or_second_context",
+            }
+            row["immutable_record_sha256"] = _canonical_sha256(row)
+            outcome_rows.append(row)
+    return outcome_rows
+
+
+def write_issue_5303_search_outcome_rows(rows: Sequence[dict[str, Any]], output: Path) -> None:
+    """Write the #5303 search-stage outcome rows as JSON Lines."""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8"
+    )
+
+
 def build_comparison_payload(
     *,
     rows: Sequence[SamplerComparisonRow],
@@ -279,6 +510,7 @@ def build_comparison_payload(
     claim_scope: str = "not_paper_facing_benchmark_evidence",
     report_status: str = "diagnostic_local_nominal",
     held_out_status: str = "not_evaluated_narrow_archive",
+    issue_5303_diagnostic: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the durable Package-B comparison report payload from result rows.
 
@@ -287,7 +519,7 @@ def build_comparison_payload(
     diagnostic. The resulting mapping can be written directly and validated by
     ``validate_package_b_report``.
     """
-    return {
+    payload: dict[str, Any] = {
         "schema_version": "adversarial-sampler-comparison.v3",
         "report_status": report_status,
         "claim_scope": claim_scope,
@@ -300,6 +532,9 @@ def build_comparison_payload(
         },
         "rows": [asdict(r) for r in rows],
     }
+    if issue_5303_diagnostic is not None:
+        payload["issue_5303_diagnostic"] = issue_5303_diagnostic
+    return payload
 
 
 def _resolve_manifest_path(value: Any, *, repo_root: Path, field: str) -> Path:
@@ -435,6 +670,7 @@ def render_durable_comparison_table(
     objectives: Sequence[str],
     budget_grid: Sequence[int],
     seeds: Sequence[int],
+    issue_5303_diagnostic: bool = False,
 ) -> str:
     """Render the issue #5326 durable comparison table (exclusions, failures, stop-rule).
 
@@ -468,14 +704,22 @@ def render_durable_comparison_table(
         "fallback/degraded",
     ]
     lines: list[str] = []
-    lines.append("## Issue #5326 durable objective-comparison table (diagnostic tier)\n")
-    lines.append(
-        "> Claim scope: not paper-facing benchmark evidence. The `--synthetic` CPU path"
-        " is reproducible by construction; the `--empirical` CPU path runs the real"
-        " `pysocialforce` evaluator and produces certified/replayable failures without"
-        " Slurm/GPU. Matched-budget confirmation at paper tier still requires artifact-level"
-        " review of certification/replay/independent-seed evidence.\n"
-    )
+    if issue_5303_diagnostic:
+        lines.append("## Issue #5303 diagnostic search-stage comparison table\n")
+        lines.append(
+            "> Claim boundary: diagnostic-only execution/accounting probe. It is not a"
+            " promotion result: deterministic replay, five-seed target/reference confirmation,"
+            " and second-context confirmation are intentionally not collected here.\n"
+        )
+    else:
+        lines.append("## Issue #5326 durable objective-comparison table (diagnostic tier)\n")
+        lines.append(
+            "> Claim scope: not paper-facing benchmark evidence. The `--synthetic` CPU path"
+            " is reproducible by construction; the `--empirical` CPU path runs the real"
+            " `pysocialforce` evaluator and produces certified/replayable failures without"
+            " Slurm/GPU. Matched-budget confirmation at paper tier still requires artifact-level"
+            " review of certification/replay/independent-seed evidence.\n"
+        )
     lines.append("| " + " | ".join(header_cols) + " |")
     lines.append("| " + " | ".join("---" for _ in header_cols) + " |")
     for row in rows:
@@ -511,7 +755,14 @@ def render_durable_comparison_table(
     lines.append("")
     lines.append("### Stop-rule decision")
     lines.append("")
-    if any_degraded:
+    if issue_5303_diagnostic:
+        decision = (
+            "**INCONCLUSIVE (predeclared diagnostic-only).** This output checks the frozen"
+            " search-stage command and complete attempt accounting only. It cannot satisfy"
+            " the promotion endpoint or authorize transfer; a larger re-preregistration is"
+            " required before any `promote` decision."
+        )
+    elif any_degraded:
         decision = (
             "**STOP / fail closed.** One or more comparison rows report"
             " fallback/degraded candidate execution; those rows are excluded from any"
@@ -618,11 +869,31 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=Path("configs/scenarios/templates/crossing_ttc.yaml"),
     )
     parser.add_argument(
+        "--scenario-family",
+        default=None,
+        help="Optional frozen scenario-family label recorded in issue-specific outcome rows.",
+    )
+    parser.add_argument(
         "--search-space",
         type=Path,
         default=Path("configs/adversarial/crossing_ttc_space.yaml"),
     )
     parser.add_argument("--policy", default="goal")
+    parser.add_argument(
+        "--algo-config",
+        type=Path,
+        default=None,
+        help="Optional target planner configuration passed through to the benchmark runner.",
+    )
+    parser.add_argument(
+        "--reference-algo-config",
+        type=Path,
+        default=None,
+        help=(
+            "Frozen neutral-reference planner configuration recorded in issue-specific outcome "
+            "rows; the generic search stage does not execute it."
+        ),
+    )
     parser.add_argument(
         "--objective",
         action="append",
@@ -677,6 +948,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Base seed to run; repeat for repeated-seed budget matching. Defaults to 123.",
     )
+    parser.add_argument("--horizon", type=int, default=None)
+    parser.add_argument("--dt", type=float, default=None)
+    parser.add_argument(
+        "--require-certification",
+        action="store_true",
+        help="Fail closed when a candidate lacks required scenario certification.",
+    )
+    parser.add_argument(
+        "--benchmark-profile",
+        default="baseline-safe",
+        help="Benchmark readiness profile forwarded to candidate execution.",
+    )
     parser.add_argument(
         "--sampler",
         action="append",
@@ -709,19 +992,55 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             " failures, and the stop-rule decision."
         ),
     )
+    parser.add_argument(
+        "--outcomes-jsonl",
+        type=Path,
+        default=None,
+        help="Optional complete per-attempt outcome rows for the issue #5303 diagnostic handoff.",
+    )
+    parser.add_argument(
+        "--issue-5303-diagnostic-only",
+        action="store_true",
+        help=(
+            "Run the frozen #5303 search-stage diagnostic only. This mode records every "
+            "attempt as not admitted and can never return a promotion result."
+        ),
+    )
+    parser.add_argument(
+        "--execution-context-label",
+        default=None,
+        help="Non-sensitive label for the recorded execution context in issue #5303 rows.",
+    )
     args = parser.parse_args(argv)
     if args.manifest is None and args.output_dir is None:
         parser.error("--output-dir is required unless --manifest is supplied")
     if args.empirical and args.synthetic:
         parser.error("--empirical and --synthetic are mutually exclusive")
+    if args.issue_5303_diagnostic_only:
+        if args.manifest is not None:
+            parser.error("--issue-5303-diagnostic-only cannot be combined with --manifest")
+        if args.synthetic:
+            parser.error("--issue-5303-diagnostic-only requires native, not --synthetic, execution")
+        required = {
+            "--algo-config": args.algo_config,
+            "--reference-algo-config": args.reference_algo_config,
+            "--scenario-family": args.scenario_family,
+            "--out-json": args.out_json,
+            "--out-md": args.out_md,
+            "--outcomes-jsonl": args.outcomes_jsonl,
+            "--execution-context-label": args.execution_context_label,
+        }
+        missing = [flag for flag, value in required.items() if value is None or value == ""]
+        if missing:
+            parser.error("--issue-5303-diagnostic-only requires " + ", ".join(sorted(missing)))
     return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the sampler comparison CLI."""
     args = parse_args(argv)
+    repo_root = args.repo_root.resolve()
     if args.manifest is not None:
-        repo_root = args.repo_root.resolve()
         config, objectives, samplers, budgets, seeds = load_package_b_manifest(
             args.manifest,
             repo_root=repo_root,
@@ -743,6 +1062,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=output_dir,
             budget=(args.budget or [8])[0],
             seed=(args.seed or [123])[0],
+            algo_config_path=args.algo_config,
+            horizon=args.horizon,
+            dt=args.dt,
+            require_certification=bool(args.require_certification),
+            benchmark_profile=str(args.benchmark_profile),
         )
         budgets = (
             (16, 32, 64) if args.package_b_budget_grid and args.budget is None else args.budget
@@ -759,17 +1083,76 @@ def main(argv: Sequence[str] | None = None) -> int:
         budgets=budgets,
         seeds=seeds,
     )
+    outcomes_jsonl = (
+        args.outcomes_jsonl
+        if args.outcomes_jsonl is None or args.outcomes_jsonl.is_absolute()
+        else repo_root / args.outcomes_jsonl
+    )
+    diagnostic_context: Issue5303DiagnosticContext | None = None
+    diagnostic_payload: dict[str, Any] | None = None
+    if args.issue_5303_diagnostic_only:
+        assert args.algo_config is not None
+        assert args.reference_algo_config is not None
+        assert args.scenario_family is not None
+        assert args.execution_context_label is not None
+        assert outcomes_jsonl is not None
+        if not args.algo_config.is_file() or not args.reference_algo_config.is_file():
+            raise FileNotFoundError("issue #5303 planner configuration path does not exist")
+        execution_commit = _git_head()
+        if execution_commit == "unavailable":
+            raise RuntimeError("issue #5303 diagnostic execution requires a resolvable git HEAD")
+        diagnostic_context = Issue5303DiagnosticContext(
+            scenario_family=str(args.scenario_family),
+            target_planner_config=args.algo_config,
+            neutral_reference_planner_config=args.reference_algo_config,
+            execution_context_label=str(args.execution_context_label),
+            execution_commit=execution_commit,
+        )
+        diagnostic_payload = {
+            "mode": "search_stage_diagnostic_only",
+            "predeclared_decision": "inconclusive",
+            "promotion_eligible": False,
+            "outcomes_jsonl": outcomes_jsonl.as_posix(),
+            "reason": (
+                "three search seeds cannot test the frozen two-sided p<=0.05 promotion gate; "
+                "replay, target/reference confirmation, and second-context evidence are not "
+                "substituted by this diagnostic command"
+            ),
+        }
+
     payload = build_comparison_payload(
         rows=rows,
         objectives=objectives,
         budgets=budgets,
         seeds=seeds,
+        claim_scope=(
+            "issue_5303_diagnostic_execution_only"
+            if diagnostic_payload is not None
+            else "not_paper_facing_benchmark_evidence"
+        ),
+        report_status=(
+            "diagnostic_inconclusive"
+            if diagnostic_payload is not None
+            else "diagnostic_local_nominal"
+        ),
+        held_out_status=(
+            "not_admitted_diagnostic_only"
+            if diagnostic_payload is not None
+            else "not_evaluated_narrow_archive"
+        ),
+        issue_5303_diagnostic=diagnostic_payload,
     )
     if out_json is not None:
         out_json.parent.mkdir(parents=True, exist_ok=True)
         out_json.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+        )
+    if diagnostic_context is not None:
+        assert outcomes_jsonl is not None
+        write_issue_5303_search_outcome_rows(
+            build_issue_5303_search_outcome_rows(rows=rows, context=diagnostic_context),
+            outcomes_jsonl,
         )
     if args.out_md is not None:
         out_md = (
@@ -782,6 +1165,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             objectives=objectives,
             budget_grid=budgets,
             seeds=seeds,
+            issue_5303_diagnostic=diagnostic_context is not None,
         )
         out_md.write_text(table_md, encoding="utf-8")
     print(json.dumps(payload, sort_keys=True))

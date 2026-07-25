@@ -160,8 +160,23 @@ def test_frozen_design_fields() -> None:
         "methods_exactly_optuna_and_random",
         "simulator_time_cap_frozen",
         "objective_constraints_first",
+        "objective_runner_registered",
         "counted_weak_point_gates_all_seven",
         "gates_fail_closed",
+        "input_provenance_complete",
+        "input_provenance_hashes",
+        "intention_to_search_primary_denominator",
+        "missing_invalid_stay_primary_denominator",
+        "outcome_row_schema_complete",
+        "promotion_campaign_stopped",
+        "diagnostic_run_separately_justified",
+        "step3_execution_declared_diagnostic_only",
+        "step3_runner_static_support",
+        "step3_runner_outcome_writer_support",
+        "step3_runner_row_schema_matches_contract",
+        "step3_analysis_static_support",
+        "step3_execution_command_complete",
+        "step3_analysis_command_complete",
     ):
         assert result.checks[check_name], check_name
 
@@ -271,6 +286,55 @@ def test_preflight_detects_threshold_weakening(tmp_path: Path) -> None:
     assert result.checks["positive_gate_thresholds_kept"] is False
     assert result.checks["positive_gate_not_robustly_testable"] is False
     assert result.checks["future_run_diagnostic_inconclusive"] is False
+
+
+def test_preflight_detects_handoff_input_hash_tampering(tmp_path: Path) -> None:
+    """A stale runner/input hash cannot pass the side-effect-free readiness gate."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    contract["input_provenance"]["required_inputs"][0]["sha256"] = "0" * 64
+    tampered_contract = tmp_path / "stale_input_hash.yaml"
+    tampered_contract.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest["contract_sha256"] = hashlib.sha256(tampered_contract.read_bytes()).hexdigest()
+    tampered_manifest = tmp_path / "contract_frozen.json"
+    tampered_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = preflight_issue_5303_contract(
+        tampered_contract,
+        receipt_path=RECEIPT_PATH,
+        manifest_path=tampered_manifest,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert result.checks["contract_hash_matches_manifest"] is True
+    assert result.checks["input_provenance_hashes"] is False
+
+
+def test_preflight_detects_incomplete_diagnostic_command(tmp_path: Path) -> None:
+    """The preflight rejects a handoff that omits a declared output artifact flag."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    command = contract["step3_execution"]["diagnostic_search_command"]
+    contract["step3_execution"]["diagnostic_search_command"] = command.replace(
+        " --out-json output/adversarial/issue_5303_search_promotion/report.json", ""
+    )
+    tampered_contract = tmp_path / "incomplete_command.yaml"
+    tampered_contract.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest["contract_sha256"] = hashlib.sha256(tampered_contract.read_bytes()).hexdigest()
+    tampered_manifest = tmp_path / "contract_frozen.json"
+    tampered_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = preflight_issue_5303_contract(
+        tampered_contract,
+        receipt_path=RECEIPT_PATH,
+        manifest_path=tampered_manifest,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert result.checks["contract_hash_matches_manifest"] is True
+    assert result.checks["step3_execution_command_complete"] is False
 
 
 # ---------------------------------------------------------------------------

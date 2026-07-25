@@ -14,6 +14,11 @@ held-out-family records cannot influence scores or ranks. It executes no planner
 and produces no new empirical outcome; its exact invocation is a required input
 to the next sub-issue.
 
+Supplying ``--contract`` to the normal comparison path applies that same frozen
+contract: it reads the canonical source archive, constructs the fit-only,
+family-invariant model with the map-backed evaluation geometry, uses the
+explicit held-out-family split, and rejects a non-frozen budget or archive.
+
 The comparison run keeps archive-nearness under an explicitly diagnostic
 namespace. When valid independent native planner-execution outcomes (the frozen
 ``adversarial_independent_outcomes.v2`` row contract) are supplied, the
@@ -245,6 +250,8 @@ def build_archive_evaluation_provenance(
     synthetic_archive: bool,
     split_seed: int,
     independent_evaluation: dict[str, Any] | None = None,
+    frozen_contract: dict[str, Any] | None = None,
+    model_provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build archive-evaluation provenance for the comparison report.
 
@@ -273,12 +280,35 @@ def build_archive_evaluation_provenance(
         classify_held_out_evidence,
         compute_overlap_provenance,
         disjoint_family_split,
+        frozen_held_out_family_split,
     )
 
     entries = archive_data.get("entries", [])
-    split = disjoint_family_split(entries, eval_fraction=0.5, seed=split_seed)
+    if frozen_contract is None:
+        split = disjoint_family_split(entries, eval_fraction=0.5, seed=split_seed)
+    else:
+        fit_cfg = frozen_contract["fit"]
+        evaluation_cfg = frozen_contract["evaluation"]
+        split = frozen_held_out_family_split(
+            entries,
+            fit_family=fit_cfg["scenario_family"],
+            eval_family=evaluation_cfg["scenario_family"],
+            fit_entry_ids=fit_cfg["entry_ids"],
+        )
     overlap = compute_overlap_provenance(split.fit_entries, split.eval_entries)
     provenance.update(overlap)
+    if frozen_contract is not None:
+        provenance["split_policy"] = "frozen_same_planner_held_out_family"
+        provenance["frozen_contract"] = {
+            "schema_version": frozen_contract["schema_version"],
+            "fit_family": frozen_contract["fit"]["scenario_family"],
+            "eval_family": frozen_contract["evaluation"]["scenario_family"],
+            "fit_entry_count": frozen_contract["fit"]["count"],
+            "fit_entry_ids_sha256": frozen_contract["fit"]["entry_ids_sha256"],
+            "candidate_budget_per_arm": frozen_contract["budget"]["candidate_budget_per_arm"],
+            "candidate_pool_size": frozen_contract["budget"]["candidate_pool_size"],
+            "model": model_provenance or {},
+        }
     provenance["fit_archive_sha256"] = archive_sha256(split.fit_entries)
     provenance["eval_archive_sha256"] = archive_sha256(split.eval_entries)
     provenance["independent_outcome_evaluation"] = independent_evaluation.get(
@@ -567,8 +597,9 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help=(
-            "Frozen external JSON binding of candidate manifest IDs to SHA-256 values; required "
-            "before supplied independent outcomes can drive a decision."
+            "Frozen external v2 arm-manifest binding (exact arm IDs, SHA-256 values, "
+            "execution-seed lineage, and pool seed); required before supplied independent "
+            "outcomes can drive a decision."
         ),
     )
     parser.add_argument(
@@ -588,16 +619,17 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def load_expected_candidate_manifest_hashes(
+def load_expected_candidate_manifest_binding(  # noqa: C901, PLR0912
     path: Path | None,
-) -> tuple[dict[str, str] | None, str]:
-    """Load an external candidate-manifest hash binding fail-closed.
+) -> tuple[dict[str, Any] | None, str]:
+    """Load an external frozen arm-manifest binding fail-closed.
 
     The outcome packet cannot establish its own manifest lineage. This separate
-    input must be a frozen arm-manifest binding with schema
-    ``adversarial_candidate_manifest_hash_bindings.v1`` and a non-empty
-    ``candidate_manifest_sha256_by_id`` object. Its values are compared against
-    every admitted outcome row by :class:`AdmissionSpec`.
+    input must use ``adversarial_candidate_manifest_bindings.v2`` and bind
+    exact proposal/random membership, every candidate's SHA-256, every
+    candidate's execution-seed lineage, and the shared candidate-pool seed.
+    The v1 hash-only format cannot establish a frozen denominator and is
+    intentionally rejected.
     """
     if path is None:
         return None, "expected candidate-manifest hash binding was not provided"
@@ -611,8 +643,8 @@ def load_expected_candidate_manifest_hashes(
         return None, f"failed to load expected candidate-manifest hash binding: {exc}"
     if not isinstance(payload, dict):
         return None, "expected candidate-manifest hash binding must be a JSON object"
-    if payload.get("schema_version") != "adversarial_candidate_manifest_hash_bindings.v1":
-        return None, "unexpected candidate-manifest hash binding schema_version"
+    if payload.get("schema_version") != "adversarial_candidate_manifest_bindings.v2":
+        return None, "unexpected candidate-manifest binding schema_version; v2 is required"
     bindings = payload.get("candidate_manifest_sha256_by_id")
     if not isinstance(bindings, dict) or not bindings:
         return None, "candidate_manifest_sha256_by_id must be a non-empty object"
@@ -624,7 +656,48 @@ def load_expected_candidate_manifest_hashes(
         for manifest_id, digest in bindings.items()
     ):
         return None, "candidate-manifest hash binding keys and values must be non-empty strings"
-    return {str(manifest_id): str(digest) for manifest_id, digest in bindings.items()}, "ok"
+    ids_by_arm = payload.get("candidate_manifest_ids_by_arm")
+    if not isinstance(ids_by_arm, dict) or set(ids_by_arm) != {"proposal", "random"}:
+        return None, "candidate_manifest_ids_by_arm must define exactly proposal and random arms"
+    normalized_ids_by_arm: dict[str, list[str]] = {}
+    for arm in ("proposal", "random"):
+        raw_ids = ids_by_arm[arm]
+        if not isinstance(raw_ids, list) or not raw_ids:
+            return None, f"candidate_manifest_ids_by_arm.{arm} must be a non-empty list"
+        if any(not isinstance(manifest_id, str) or not manifest_id for manifest_id in raw_ids):
+            return None, f"candidate_manifest_ids_by_arm.{arm} must contain non-empty strings"
+        if len(set(raw_ids)) != len(raw_ids):
+            return None, f"candidate_manifest_ids_by_arm.{arm} must be unique"
+        normalized_ids_by_arm[arm] = list(raw_ids)
+    expected_ids = set(normalized_ids_by_arm["proposal"]) | set(normalized_ids_by_arm["random"])
+    if set(normalized_ids_by_arm["proposal"]) & set(normalized_ids_by_arm["random"]):
+        return None, "candidate_manifest_ids_by_arm proposal/random sets must be disjoint"
+    if set(bindings) != expected_ids:
+        return None, "candidate_manifest_sha256_by_id must cover exactly the predeclared arm IDs"
+    execution_seeds = payload.get("execution_seeds_by_manifest_id")
+    if not isinstance(execution_seeds, dict) or set(execution_seeds) != expected_ids:
+        return None, "execution_seeds_by_manifest_id must cover exactly the predeclared arm IDs"
+    normalized_execution_seeds: dict[str, list[int]] = {}
+    for manifest_id, raw_seeds in execution_seeds.items():
+        if not isinstance(raw_seeds, list) or not raw_seeds:
+            return None, f"execution seeds for {manifest_id} must be a non-empty list"
+        if any(not isinstance(seed, int) or isinstance(seed, bool) for seed in raw_seeds):
+            return None, f"execution seeds for {manifest_id} must be integers"
+        if len(set(raw_seeds)) != len(raw_seeds):
+            return None, f"execution seeds for {manifest_id} must be unique"
+        normalized_execution_seeds[manifest_id] = list(raw_seeds)
+    candidate_pool_seed = payload.get("candidate_pool_seed")
+    if not isinstance(candidate_pool_seed, int) or isinstance(candidate_pool_seed, bool):
+        return None, "candidate_pool_seed must be an integer"
+    return {
+        "schema_version": payload["schema_version"],
+        "candidate_manifest_sha256_by_id": {
+            str(manifest_id): str(digest) for manifest_id, digest in bindings.items()
+        },
+        "candidate_manifest_ids_by_arm": normalized_ids_by_arm,
+        "execution_seeds_by_manifest_id": normalized_execution_seeds,
+        "candidate_pool_seed": candidate_pool_seed,
+    }, "ok"
 
 
 def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
@@ -636,6 +709,10 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
             "expected_eval_family": "classic_cross_trap_medium",
             "minimally_important": args.minimally_important,
             "confirmation_threshold": "3_of_5",
+            "contract": None,
+            "candidate_budget_per_arm": args.budget,
+            "candidate_pool_size": max(args.budget * 5, 50),
+            "expected_execution_commit": None,
         }
     from robot_sf.adversarial.proposal_model import load_issue_3275_contract
 
@@ -650,7 +727,96 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
         "confirmation_threshold": (
             "3_of_5" if not contract["failure_admission"]["four_of_five_required"] else "4_of_5"
         ),
+        "contract": contract,
+        "candidate_budget_per_arm": contract["budget"]["candidate_budget_per_arm"],
+        "candidate_pool_size": contract["budget"]["candidate_pool_size"],
+        "expected_execution_commit": contract["target_planner"]["execution_commit"],
     }
+
+
+def _load_frozen_contract_archive(
+    contract: dict[str, Any],
+    *,
+    repo_root: Path,
+    requested_archive: Path | None,
+) -> tuple[dict[str, Any], str]:
+    """Load the contract's canonical archive and reject divergent overrides.
+
+    ``--contract`` is a frozen experiment path, not a convenience setting for a
+    generic archive. A caller may name an archive only when its raw SHA-256
+    exactly matches the contract source; ranking still reads the canonical
+    repository copy so the report has one auditable input location.
+    """
+    source = contract["source_lineage"]
+    expected_sha256 = source["pre_correction_archive_sha256"]
+    canonical_path = repo_root / source["pre_correction_archive_path"]
+    if not canonical_path.is_file():
+        raise ValueError(f"frozen contract archive is missing: {canonical_path}")
+    observed_sha256 = hashlib.sha256(canonical_path.read_bytes()).hexdigest()
+    if observed_sha256 != expected_sha256:
+        raise ValueError(
+            "frozen contract archive SHA-256 mismatch: "
+            f"observed={observed_sha256} expected={expected_sha256}"
+        )
+    if requested_archive is not None:
+        if not requested_archive.is_file():
+            raise ValueError(f"--archive override is missing: {requested_archive}")
+        requested_sha256 = hashlib.sha256(requested_archive.read_bytes()).hexdigest()
+        if requested_sha256 != expected_sha256:
+            raise ValueError(
+                "--archive override does not match the frozen contract archive SHA-256: "
+                f"observed={requested_sha256} expected={expected_sha256}"
+            )
+    try:
+        archive_data = json.loads(canonical_path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise ValueError(f"failed to load frozen contract archive: {exc}") from exc
+    if not isinstance(archive_data, dict) or not isinstance(archive_data.get("entries"), list):
+        raise ValueError("frozen contract archive must be a JSON object with an entries list")
+    return archive_data, canonical_path.as_posix()
+
+
+def _frozen_binding_matches_generated_arms(
+    binding: dict[str, Any] | None,
+    *,
+    proposal_ids: list[str],
+    random_ids: list[str],
+    candidate_pool_seed: int,
+    budget_per_arm: int,
+) -> str | None:
+    """Return a reason when a supplied binding drifts from this frozen draw."""
+    if binding is None:
+        return "external frozen arm-manifest binding is unavailable"
+    expected_ids_by_arm = binding["candidate_manifest_ids_by_arm"]
+    for arm, generated_ids in (("proposal", proposal_ids), ("random", random_ids)):
+        bound_ids = expected_ids_by_arm[arm]
+        if len(bound_ids) != budget_per_arm:
+            return (
+                f"external {arm} manifest count {len(bound_ids)} != frozen candidate budget "
+                f"{budget_per_arm}"
+            )
+        if bound_ids != generated_ids:
+            return f"external {arm} manifest IDs do not match this frozen candidate draw"
+    if binding["candidate_pool_seed"] != candidate_pool_seed:
+        return "external candidate_pool_seed does not match this frozen candidate draw"
+    return None
+
+
+def _contract_configuration_error(reason: str) -> int:
+    """Emit a compact fail-closed result for an invalid ``--contract`` invocation."""
+    print(
+        json.dumps(
+            {
+                "schema_version": "adversarial_proposal_comparison.v1",
+                "state": "blocked",
+                "result_classification": "contract_configuration_blocked",
+                "reason": reason,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 2
 
 
 def _resolve_run_state(
@@ -744,6 +910,7 @@ def _assemble_report(  # noqa: PLR0913
     synthetic_search_space: bool,
     search_space_state: str,
     args: argparse.Namespace,
+    budget_per_arm: int,
     arms: Any,
     diagnostic_random_metrics: dict[str, Any],
     diagnostic_proposal_metrics: dict[str, Any],
@@ -780,9 +947,13 @@ def _assemble_report(  # noqa: PLR0913
         "synthetic_archive": synthetic_archive,
         "synthetic_search_space": synthetic_search_space,
         "search_space_state": search_space_state,
-        "budget_per_arm": args.budget,
+        "budget_per_arm": budget_per_arm,
         "arm_overlap_policy": arms.policy,
         "arm_overlap_ids": arms.overlap_ids,
+        "arm_manifest_ids_by_arm": {
+            "proposal": list(arms.proposal_ids),
+            "random": list(arms.random_ids),
+        },
         "seed": args.seed,
         "diagnostic_archive_nearness": {
             "random_metrics": diagnostic_random_metrics,
@@ -809,10 +980,22 @@ def main() -> int:
         return exit_code
 
     frozen = _contract_frozen_params(args)
+    contract = frozen["contract"]
+    run_budget = frozen["candidate_budget_per_arm"]
+    candidate_pool_size = frozen["candidate_pool_size"]
+    if contract is not None and args.budget != run_budget:
+        return _contract_configuration_error(
+            f"--budget {args.budget} does not match frozen candidate_budget_per_arm {run_budget}"
+        )
+    if candidate_pool_size < 2 * run_budget:
+        return _contract_configuration_error(
+            "candidate pool is too small for two disjoint frozen arms: "
+            f"pool={candidate_pool_size} budget_per_arm={run_budget}"
+        )
+
     search_space_state, search_space_reason, search_space, synthetic_search_space = (
         load_search_space(args.search_space)
     )
-    archive_state, archive_reason, archive_data, synthetic_archive = load_archive(args.archive)
     from robot_sf.adversarial.independent_outcomes import (
         AdmissionSpec,
         build_independent_outcome_evaluation,
@@ -820,10 +1003,32 @@ def main() -> int:
     )
     from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
 
+    model_provenance: dict[str, Any] | None = None
+    if contract is None:
+        archive_state, archive_reason, archive_data, synthetic_archive = load_archive(args.archive)
+        model = FailureArchiveProposalModel(archive_data, search_space)
+    else:
+        repo_root = Path(__file__).resolve().parents[2]
+        try:
+            archive_data, canonical_archive_path = _load_frozen_contract_archive(
+                contract, repo_root=repo_root, requested_archive=args.archive
+            )
+            model, model_provenance = FailureArchiveProposalModel.from_frozen_contract(
+                contract, repo_root=repo_root
+            )
+        except ValueError as exc:
+            return _contract_configuration_error(str(exc))
+        archive_state = "active"
+        archive_reason = (
+            "Frozen contract archive loaded from "
+            f"{canonical_archive_path}; fit-only model factory initialized."
+        )
+        synthetic_archive = False
+
     outcome_state, outcome_reason, outcome_data = load_independent_outcomes(
         args.evaluation_outcomes
     )
-    expected_manifest_hashes, manifest_binding_reason = load_expected_candidate_manifest_hashes(
+    manifest_binding, manifest_binding_reason = load_expected_candidate_manifest_binding(
         args.expected_candidate_manifest_hashes
     )
     state, reason = _resolve_run_state(
@@ -837,16 +1042,15 @@ def main() -> int:
         synthetic_search_space=synthetic_search_space,
     )
 
-    model = FailureArchiveProposalModel(archive_data, search_space)
     rng = random.Random(args.seed)
-    pool = [search_space.sample_candidate(rng) for _ in range(max(args.budget * 5, 50))]
+    pool = [search_space.sample_candidate(rng) for _ in range(candidate_pool_size)]
     pool_ids = [f"pool_{i}" for i in range(len(pool))]
     ranked_ids = _rank_pool_ids_by_candidate_identity(model, pool, pool_ids)
 
     from robot_sf.adversarial.disjoint_evaluation import assign_arms_disjoint_by_candidate
 
     arms = assign_arms_disjoint_by_candidate(
-        ranked_ids, pool_ids, budget_per_arm=args.budget, rng_seed=args.seed
+        ranked_ids, pool_ids, budget_per_arm=run_budget, rng_seed=args.seed
     )
     pool_by_id = dict(zip(pool_ids, pool, strict=True))
     proposal_selection = [pool_by_id[candidate_id] for candidate_id in arms.proposal_ids]
@@ -856,11 +1060,49 @@ def main() -> int:
         _diagnostic_archive_nearness(model, proposal_selection, random_selection)
     )
     provenance = build_archive_evaluation_provenance(
-        archive_data, state=state, synthetic_archive=synthetic_archive, split_seed=args.seed
+        archive_data,
+        state=state,
+        synthetic_archive=synthetic_archive,
+        split_seed=args.seed,
+        frozen_contract=contract,
+        model_provenance=model_provenance,
+    )
+    frozen_binding_reason = None
+    if contract is not None and manifest_binding is not None:
+        frozen_binding_reason = _frozen_binding_matches_generated_arms(
+            manifest_binding,
+            proposal_ids=arms.proposal_ids,
+            random_ids=arms.random_ids,
+            candidate_pool_seed=args.seed,
+            budget_per_arm=run_budget,
+        )
+    binding_for_admission = manifest_binding if frozen_binding_reason is None else None
+    expected_manifest_hashes = (
+        binding_for_admission["candidate_manifest_sha256_by_id"]
+        if binding_for_admission is not None
+        else None
+    )
+    expected_manifest_ids_by_arm = (
+        {
+            arm: tuple(binding_for_admission["candidate_manifest_ids_by_arm"][arm])
+            for arm in ("proposal", "random")
+        }
+        if binding_for_admission is not None
+        else None
+    )
+    expected_execution_seeds_by_manifest_id = (
+        {
+            manifest_id: tuple(execution_seeds)
+            for manifest_id, execution_seeds in binding_for_admission[
+                "execution_seeds_by_manifest_id"
+            ].items()
+        }
+        if binding_for_admission is not None
+        else None
     )
     independent_evaluation = build_independent_outcome_evaluation(
         outcome_data,
-        budget_per_arm=args.budget,
+        budget_per_arm=run_budget,
         minimally_important=frozen["minimally_important"],
         admission_spec=AdmissionSpec(
             expected_target_planner_id=frozen["expected_target_planner_id"],
@@ -868,15 +1110,31 @@ def main() -> int:
             confirmation_threshold=frozen["confirmation_threshold"],
             expected_target_planner_config_sha256=frozen["expected_target_planner_config_sha256"],
             expected_candidate_manifest_sha256_by_id=expected_manifest_hashes,
+            expected_candidate_manifest_ids_by_arm=expected_manifest_ids_by_arm,
+            expected_execution_seeds_by_manifest_id=expected_execution_seeds_by_manifest_id,
+            expected_candidate_pool_seed=(
+                binding_for_admission["candidate_pool_seed"]
+                if binding_for_admission is not None
+                else None
+            ),
+            expected_execution_commit=frozen["expected_execution_commit"],
         ),
         expected_eval_archive_sha256=provenance.get("eval_archive_sha256"),
         n_permutations=args.null_test_permutations,
         seed=args.seed,
     )
-    independent_evaluation["candidate_manifest_hash_binding"] = {
+    if frozen_binding_reason is not None and outcome_data is not None:
+        independent_evaluation["reason"] = frozen_binding_reason
+    independent_evaluation["candidate_manifest_binding"] = {
         "required": True,
-        "available": expected_manifest_hashes is not None,
-        "reason": manifest_binding_reason,
+        "available": binding_for_admission is not None,
+        "provided": manifest_binding is not None,
+        "schema_version": (
+            manifest_binding["schema_version"] if manifest_binding is not None else None
+        ),
+        "exact_arm_membership_required": True,
+        "execution_seed_lineage_required": True,
+        "reason": frozen_binding_reason or manifest_binding_reason,
     }
     provenance = build_archive_evaluation_provenance(
         archive_data,
@@ -884,6 +1142,8 @@ def main() -> int:
         synthetic_archive=synthetic_archive,
         split_seed=args.seed,
         independent_evaluation=independent_evaluation,
+        frozen_contract=contract,
+        model_provenance=model_provenance,
     )
     report = _assemble_report(
         state=state,
@@ -892,6 +1152,7 @@ def main() -> int:
         synthetic_search_space=synthetic_search_space,
         search_space_state=search_space_state,
         args=args,
+        budget_per_arm=run_budget,
         arms=arms,
         diagnostic_random_metrics=diagnostic_random_metrics,
         diagnostic_proposal_metrics=diagnostic_proposal_metrics,

@@ -958,6 +958,7 @@ def frozen_held_out_family_split(
     *,
     fit_family: str,
     eval_family: str,
+    fit_entry_ids: Sequence[str] | None = None,
 ) -> DisjointSplit:
     """Deterministic held-out-family split frozen by the #3275 contract.
 
@@ -986,7 +987,23 @@ def frozen_held_out_family_split(
                 return fam
         return scenario_family_key(entry)
 
-    fit_entries = [e for e in entries if _family(e) == fit_family]
+    expected_fit_ids = {str(entry_id) for entry_id in fit_entry_ids} if fit_entry_ids else None
+    if expected_fit_ids is not None and len(expected_fit_ids) != len(fit_entry_ids or ()):
+        raise ValueError("fit_entry_ids must be unique for a frozen held-out split")
+    fit_entries = [
+        entry
+        for entry in entries
+        if _family(entry) == fit_family
+        and (expected_fit_ids is None or str(entry.get("archive_id")) in expected_fit_ids)
+    ]
+    if expected_fit_ids is not None:
+        observed_fit_ids = {str(entry.get("archive_id")) for entry in fit_entries}
+        missing_fit_ids = sorted(expected_fit_ids - observed_fit_ids)
+        if missing_fit_ids:
+            raise ValueError(
+                "frozen fit_entry_ids missing from held-out split source: "
+                f"{', '.join(missing_fit_ids)}"
+            )
     eval_entries = [e for e in entries if _family(e) == eval_family]
     other = [e for e in entries if _family(e) not in {fit_family, eval_family}]
     # Entries outside the two frozen families cannot be silently assigned; they

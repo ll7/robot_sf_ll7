@@ -62,6 +62,7 @@ REQUIRED_ADMITTED_ROW_FIELDS = (
     "target_planner_config_sha256",
     "scenario_family",
     "scenario_seed",
+    "execution_seed",
     "execution_commit",
     "execution_command",
     "execution_config_lineage",
@@ -92,6 +93,10 @@ class AdmissionSpec:
     expected_target_planner_config_sha256: str | None = None
     expected_candidate_manifest_sha256_by_id: dict[str, str] | None = None
     expected_record_sha256_by_manifest: dict[str, str] | None = None
+    expected_candidate_manifest_ids_by_arm: dict[str, tuple[str, ...]] | None = None
+    expected_execution_seeds_by_manifest_id: dict[str, tuple[int, ...]] | None = None
+    expected_candidate_pool_seed: int | None = None
+    expected_execution_commit: str | None = None
 
 
 def payload_sha256(payload: dict[str, Any]) -> str:
@@ -164,6 +169,83 @@ def _validate_packet_metadata(payload: dict[str, Any], spec: AdmissionSpec) -> s
     return None
 
 
+def _expected_ids_for_arm(spec: AdmissionSpec, arm: str) -> tuple[str, ...]:
+    """Return the normalized predeclared manifest IDs for one selection arm."""
+    expected = spec.expected_candidate_manifest_ids_by_arm or {}
+    raw_ids = expected.get(arm, ())
+    return tuple(str(manifest_id) for manifest_id in raw_ids)
+
+
+def _validate_frozen_admission_spec(  # noqa: C901, PLR0912
+    spec: AdmissionSpec, *, budget_per_arm: int
+) -> str | None:
+    """Validate all externally predeclared membership and execution lineage.
+
+    An outcome packet is not allowed to choose its own denominator. Before any
+    row can be admitted, the caller must supply exact per-arm manifest sets,
+    their external SHA-256 binding, execution-seed lineage, and the shared pool
+    seed. This prevents a larger post-hoc packet from manufacturing power.
+    """
+    if not isinstance(budget_per_arm, int) or isinstance(budget_per_arm, bool):
+        return "budget_per_arm must be an integer"
+    if budget_per_arm <= 0:
+        return "budget_per_arm must be positive for a complete outcome evaluation"
+    expected_by_arm = spec.expected_candidate_manifest_ids_by_arm
+    if not isinstance(expected_by_arm, dict) or set(expected_by_arm) != set(_ARMS):
+        return "expected candidate manifest IDs must define exactly proposal and random arms"
+    normalized_by_arm: dict[str, tuple[str, ...]] = {}
+    for arm in _ARMS:
+        raw_ids = expected_by_arm.get(arm)
+        if not isinstance(raw_ids, (list, tuple)):
+            return f"expected {arm} manifest IDs must be a list or tuple"
+        if any(not isinstance(manifest_id, str) or not manifest_id for manifest_id in raw_ids):
+            return f"expected {arm} manifest IDs must be non-empty strings"
+        ids = tuple(raw_ids)
+        if len(ids) != budget_per_arm:
+            return (
+                f"predeclared {arm} manifest count {len(ids)} != frozen candidate budget "
+                f"{budget_per_arm}"
+            )
+        if len(set(ids)) != len(ids):
+            return f"predeclared {arm} manifest IDs are not unique"
+        normalized_by_arm[arm] = ids
+    overlap = sorted(set(normalized_by_arm["proposal"]) & set(normalized_by_arm["random"]))
+    if overlap:
+        return "predeclared manifest IDs overlap across arms: " + ", ".join(overlap)
+
+    expected_ids = set(normalized_by_arm["proposal"]) | set(normalized_by_arm["random"])
+    expected_hashes = spec.expected_candidate_manifest_sha256_by_id
+    if not isinstance(expected_hashes, dict) or set(expected_hashes) != expected_ids:
+        return "manifest SHA-256 binding must cover exactly the predeclared arm manifest IDs"
+    if any(
+        not isinstance(manifest_id, str)
+        or not manifest_id
+        or not isinstance(digest, str)
+        or not digest
+        for manifest_id, digest in expected_hashes.items()
+    ):
+        return "manifest SHA-256 binding keys and values must be non-empty strings"
+
+    expected_seeds = spec.expected_execution_seeds_by_manifest_id
+    if not isinstance(expected_seeds, dict) or set(expected_seeds) != expected_ids:
+        return "execution-seed lineage must cover exactly the predeclared arm manifest IDs"
+    for manifest_id, raw_seeds in expected_seeds.items():
+        if not isinstance(raw_seeds, (list, tuple)) or not raw_seeds:
+            return f"execution-seed lineage for {manifest_id} must be a non-empty list or tuple"
+        if any(not isinstance(seed, int) or isinstance(seed, bool) for seed in raw_seeds):
+            return f"execution-seed lineage for {manifest_id} must contain integers"
+        if len(set(raw_seeds)) != len(raw_seeds):
+            return f"execution-seed lineage for {manifest_id} contains duplicate seeds"
+    pool_seed = spec.expected_candidate_pool_seed
+    if not isinstance(pool_seed, int) or isinstance(pool_seed, bool):
+        return "expected candidate_pool_seed must be an integer"
+    if spec.expected_execution_commit is not None and (
+        not isinstance(spec.expected_execution_commit, str) or not spec.expected_execution_commit
+    ):
+        return "expected execution_commit must be a non-empty string when supplied"
+    return None
+
+
 def _confirmation_ok(confirmation_lineage: Any, *, threshold: str) -> tuple[bool, str]:
     """Validate independent-seed confirmation lineage against the frozen threshold."""
     if not isinstance(confirmation_lineage, dict):
@@ -222,6 +304,9 @@ def _row_missing_fields(row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec)
         return "execution_command must be a non-empty list"
     if not isinstance(row.get("execution_config_lineage"), dict):
         return "execution_config_lineage must be an object"
+    execution_seed = row.get("execution_seed")
+    if not isinstance(execution_seed, int) or isinstance(execution_seed, bool):
+        return "execution_seed must be an integer"
     if not isinstance(row.get("record_sha256"), str) or not row.get("record_sha256"):
         return "record_sha256 missing"
     return None
@@ -305,6 +390,37 @@ def _row_record_hash_drift(row: dict[str, Any], _row_id: Any, spec: AdmissionSpe
     return None
 
 
+def _row_predeclared_selection_drift(
+    row: dict[str, Any], _row_id: Any, spec: AdmissionSpec
+) -> str | None:
+    """Require each row to match its frozen arm, rank, pool, and execution seed."""
+    arm = str(row["selection_arm"])
+    manifest_id = str(row["candidate_manifest_id"])
+    expected_ids = _expected_ids_for_arm(spec, arm)
+    if manifest_id not in expected_ids:
+        opposite_arm = "random" if arm == "proposal" else "proposal"
+        if manifest_id in _expected_ids_for_arm(spec, opposite_arm):
+            return f"candidate_manifest_id is predeclared for {opposite_arm}, not {arm}"
+        return f"candidate_manifest_id is not in the predeclared {arm} arm"
+    expected_rank = expected_ids.index(manifest_id) + 1
+    if row.get("selection_rank") != expected_rank:
+        return (
+            f"selection_rank {row.get('selection_rank')!r} != predeclared rank {expected_rank} "
+            f"for manifest {manifest_id}"
+        )
+    if row.get("candidate_pool_seed") != spec.expected_candidate_pool_seed:
+        return "candidate_pool_seed does not match the frozen manifest binding"
+    expected_seeds = spec.expected_execution_seeds_by_manifest_id or {}
+    if row["execution_seed"] not in expected_seeds.get(manifest_id, ()):
+        return f"execution_seed is not predeclared for manifest {manifest_id}"
+    if (
+        spec.expected_execution_commit is not None
+        and row.get("execution_commit") != spec.expected_execution_commit
+    ):
+        return "execution_commit does not match the frozen contract"
+    return None
+
+
 _ROW_CHECKERS = (
     _row_missing_fields,
     _row_planner_family_drift,
@@ -313,6 +429,7 @@ _ROW_CHECKERS = (
     _row_lineage_drift,
     _row_candidate_manifest_hash_drift,
     _row_record_hash_drift,
+    _row_predeclared_selection_drift,
 )
 
 
@@ -346,6 +463,8 @@ def _admit_row(
 
 def _candidate_level_outcomes(
     admitted_rows: list[dict[str, Any]],
+    *,
+    admission_spec: AdmissionSpec,
 ) -> tuple[dict[str, dict[str, Any]] | None, str | None]:
     """Cluster admitted rows by (arm, candidate) and return candidate outcomes.
 
@@ -354,13 +473,18 @@ def _candidate_level_outcomes(
     with ``{"count": n, "failures": k, "outcomes": [...], "ids": [...]}`` or
     ``(None, reason)`` to block.
     """
-    by_arm_candidate: dict[str, dict[str, list[bool]]] = {"proposal": {}, "random": {}}
+    by_arm_candidate: dict[str, dict[str, dict[int, bool]]] = {"proposal": {}, "random": {}}
     for row in admitted_rows:
         arm = row["selection_arm"]
         manifest_id = str(row["candidate_manifest_id"])
-        by_arm_candidate[arm].setdefault(manifest_id, []).append(
-            bool(row["independent_failure_outcome"])
-        )
+        execution_seed = int(row["execution_seed"])
+        seed_outcomes = by_arm_candidate[arm].setdefault(manifest_id, {})
+        if execution_seed in seed_outcomes:
+            return None, (
+                f"duplicate execution_seed {execution_seed} for candidate {manifest_id} "
+                f"in arm {arm}"
+            )
+        seed_outcomes[execution_seed] = bool(row["independent_failure_outcome"])
 
     overlap_ids = sorted(set(by_arm_candidate["proposal"]) & set(by_arm_candidate["random"]))
     if overlap_ids:
@@ -374,7 +498,17 @@ def _candidate_level_outcomes(
         candidate_map = by_arm_candidate[arm]
         outcomes: list[bool] = []
         ids: list[str] = []
-        for manifest_id, seed_outcomes in sorted(candidate_map.items()):
+        for manifest_id, seed_outcomes_by_id in sorted(candidate_map.items()):
+            expected_seeds = set(
+                (admission_spec.expected_execution_seeds_by_manifest_id or {}).get(manifest_id, ())
+            )
+            observed_seeds = set(seed_outcomes_by_id)
+            if observed_seeds != expected_seeds:
+                return None, (
+                    f"execution-seed lineage mismatch for candidate {manifest_id} in arm {arm}: "
+                    f"observed={sorted(observed_seeds)} expected={sorted(expected_seeds)}"
+                )
+            seed_outcomes = list(seed_outcomes_by_id.values())
             if any(outcome != seed_outcomes[0] for outcome in seed_outcomes):
                 return None, (
                     f"unstable attribution: candidate {manifest_id} in arm {arm} has "
@@ -387,26 +521,65 @@ def _candidate_level_outcomes(
             "failures": int(sum(1 for o in outcomes if o)),
             "outcomes": outcomes,
             "ids": ids,
+            "execution_seeds_by_manifest_id": {
+                manifest_id: sorted(seed_outcomes_by_id)
+                for manifest_id, seed_outcomes_by_id in sorted(candidate_map.items())
+            },
         }
     return result, None
 
 
-def _summarize_admitted_rows(
+def _complete_predeclared_arm_reason(
+    candidate_outcomes: dict[str, dict[str, Any]],
+    *,
+    budget_per_arm: int,
+    admission_spec: AdmissionSpec,
+) -> str | None:
+    """Return a fail-closed reason unless both exact frozen arms are present."""
+    for arm in _ARMS:
+        expected_ids = set(_expected_ids_for_arm(admission_spec, arm))
+        observed_ids = set(candidate_outcomes[arm]["ids"])
+        if observed_ids != expected_ids:
+            missing = sorted(expected_ids - observed_ids)
+            unexpected = sorted(observed_ids - expected_ids)
+            return (
+                f"{arm} arm does not match the complete predeclared manifest set: "
+                f"missing={missing} unexpected={unexpected}"
+            )
+        if candidate_outcomes[arm]["count"] != budget_per_arm:
+            return (
+                f"{arm} candidate count {candidate_outcomes[arm]['count']} != frozen candidate budget "
+                f"{budget_per_arm}"
+            )
+    return None
+
+
+def _summarize_admitted_rows(  # noqa: PLR0913
     admitted_rows: list[dict[str, Any]],
     excluded_count: int,
     payload: dict[str, Any],
     *,
+    budget_per_arm: int,
+    admission_spec: AdmissionSpec,
     minimally_important: float,
     alpha: float,
     n_permutations: int,
     seed: int,
 ) -> dict[str, Any]:
     """Compute candidate-level yields, comparison, null tests, and the decision."""
-    candidate_outcomes, cluster_reason = _candidate_level_outcomes(admitted_rows)
+    candidate_outcomes, cluster_reason = _candidate_level_outcomes(
+        admitted_rows, admission_spec=admission_spec
+    )
     if candidate_outcomes is None:
         return _blocked(
             cluster_reason or "clustering_failed", payload_sha256=payload_sha256(payload)
         )
+
+    complete_arm_reason = _complete_predeclared_arm_reason(
+        candidate_outcomes, budget_per_arm=budget_per_arm, admission_spec=admission_spec
+    )
+    if complete_arm_reason is not None:
+        return _blocked(complete_arm_reason, payload_sha256=payload_sha256(payload))
 
     proposal = candidate_outcomes["proposal"]
     random_arm = candidate_outcomes["random"]
@@ -434,7 +607,7 @@ def _summarize_admitted_rows(
         random_arm["count"] - random_arm["failures"],
     )
     null_rejected = bool(fisher_p <= alpha)
-    binding_k = min(proposal["count"], random_arm["count"])
+    binding_k = budget_per_arm
     min_detectable = binary_yield_min_detectable_difference(binding_k, alpha=alpha)
     powered = bool(min_detectable <= float(minimally_important))
     shuffled_null = shuffled_outcome_null_test(
@@ -464,6 +637,10 @@ def _summarize_admitted_rows(
         "certification_available": True,
         "admitted_row_count": len(admitted_rows),
         "excluded_row_count": excluded_count,
+        "frozen_candidate_budget_per_arm": budget_per_arm,
+        "predeclared_manifest_ids_by_arm": {
+            arm: list(_expected_ids_for_arm(admission_spec, arm)) for arm in _ARMS
+        },
         "proposal": proposal,
         "random": random_arm,
         "proposal_failure_yield": round(proposal_yield, 6),
@@ -499,7 +676,7 @@ def _summarize_admitted_rows(
     }
 
 
-def build_independent_outcome_evaluation(
+def build_independent_outcome_evaluation(  # noqa: C901
     payload: dict[str, Any] | None,
     *,
     budget_per_arm: int,
@@ -520,7 +697,9 @@ def build_independent_outcome_evaluation(
 
     Args:
         payload: Parsed v2 outcome packet (or ``None``).
-        budget_per_arm: Frozen candidate budget per arm (used for provenance).
+        budget_per_arm: Frozen candidate budget per arm. A packet is complete
+            only when it contains exactly this many predeclared candidates in
+            each arm.
         minimally_important: Frozen minimally important absolute yield improvement.
         admission_spec: Frozen admission parameters (planner, family, threshold...).
         alpha: Two-sided alpha for the Fisher-exact null.
@@ -533,9 +712,6 @@ def build_independent_outcome_evaluation(
         admitted rows from both arms produce candidate-level yields; otherwise it
         is ``not_available_*`` or ``blocked_*``.
     """
-    del (
-        budget_per_arm
-    )  # reserved for future per-arm budget provenance; min-detectable uses realized arm sizes
     if payload is None:
         return {
             "schema_version": OUTCOME_SCHEMA_VERSION,
@@ -560,6 +736,12 @@ def build_independent_outcome_evaluation(
     metadata_reason = _validate_packet_metadata(payload, admission_spec)
     if metadata_reason is not None:
         return _blocked(metadata_reason, payload_sha256=payload_sha256(payload))
+
+    admission_spec_reason = _validate_frozen_admission_spec(
+        admission_spec, budget_per_arm=budget_per_arm
+    )
+    if admission_spec_reason is not None:
+        return _blocked(admission_spec_reason, payload_sha256=payload_sha256(payload))
     if expected_eval_archive_sha256 is not None:
         observed = payload.get("eval_archive_sha256")
         if observed != expected_eval_archive_sha256:
@@ -591,6 +773,8 @@ def build_independent_outcome_evaluation(
         admitted_rows,
         excluded_count,
         payload,
+        budget_per_arm=budget_per_arm,
+        admission_spec=admission_spec,
         minimally_important=minimally_important,
         alpha=alpha,
         n_permutations=n_permutations,

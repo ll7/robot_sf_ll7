@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -17,22 +18,7 @@ from robot_sf.adversarial.independent_outcomes import (
 _PLANNER = "social_force"
 _PLANNER_CFG = "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735"
 _EVAL_FAMILY = "classic_cross_trap_medium"
-_EXPECTED_MANIFEST_HASHES = {
-    "c0": "manifest-c0",
-    "cp0": "manifest-cp0",
-    "cp1": "manifest-cp1",
-    "cr0": "manifest-cr0",
-    "shared": "manifest-shared",
-    **{f"prop_cand_{index}": f"manifest-prop_cand_{index}" for index in range(64)},
-    **{f"rand_cand_{index}": f"manifest-rand_cand_{index}" for index in range(64)},
-}
-_SPEC = AdmissionSpec(
-    expected_target_planner_id=_PLANNER,
-    expected_eval_family=_EVAL_FAMILY,
-    confirmation_threshold="3_of_5",
-    expected_target_planner_config_sha256=_PLANNER_CFG,
-    expected_candidate_manifest_sha256_by_id=_EXPECTED_MANIFEST_HASHES,
-)
+_EXECUTION_COMMIT = "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f"
 
 
 def _replay() -> dict[str, Any]:
@@ -61,6 +47,7 @@ def _row(  # noqa: PLR0913
     rank: int,
     failure: bool,
     scenario_seed: int = 99001,
+    execution_seed: int = 70001,
     record_sha256: str = "rec-hash",
     admission_status: str = "admitted",
     exclusion_reason: str | None = None,
@@ -82,7 +69,8 @@ def _row(  # noqa: PLR0913
         "target_planner_config_sha256": _PLANNER_CFG,
         "scenario_family": _EVAL_FAMILY,
         "scenario_seed": scenario_seed,
-        "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+        "execution_seed": execution_seed,
+        "execution_commit": _EXECUTION_COMMIT,
         "execution_command": ["python", "-m", "robot_sf.run_eval"],
         "execution_config_lineage": {"config": "eval.yaml", "sha256": "cfg-hash"},
         "execution_mode": execution_mode,
@@ -141,6 +129,74 @@ def _balanced_packet(*, proposal_failures: int, random_failures: int, per_arm: i
     return _packet(rows)
 
 
+def _spec_for_packet(packet: dict[str, Any], *, budget_per_arm: int) -> AdmissionSpec:
+    """Build an external frozen manifest binding for a test packet.
+
+    The helper treats every row's selected manifest as predeclared, padding a
+    short arm with unexecuted IDs so the production evaluator must reject an
+    incomplete packet after checking row-level failures. A deliberately
+    over-budget packet remains over-budget in the binding and therefore fails
+    before it can produce a decision.
+    """
+    ids_by_arm: dict[str, list[str]] = {"proposal": [], "random": []}
+    execution_seeds: dict[str, list[int]] = {}
+    for row in packet.get("rows", []):
+        if not isinstance(row, dict) or row.get("selection_arm") not in ids_by_arm:
+            continue
+        arm = str(row["selection_arm"])
+        manifest_id = str(row.get("candidate_manifest_id", ""))
+        if manifest_id and manifest_id not in ids_by_arm[arm]:
+            ids_by_arm[arm].append(manifest_id)
+        execution_seed = row.get("execution_seed")
+        if manifest_id and isinstance(execution_seed, int) and not isinstance(execution_seed, bool):
+            execution_seeds.setdefault(manifest_id, []).append(execution_seed)
+    for arm in ("proposal", "random"):
+        padding_index = 0
+        while len(ids_by_arm[arm]) < budget_per_arm:
+            manifest_id = f"unexecuted_{arm}_{padding_index}"
+            padding_index += 1
+            if manifest_id in ids_by_arm[arm]:
+                continue
+            ids_by_arm[arm].append(manifest_id)
+            execution_seeds[manifest_id] = [80000 + padding_index]
+    expected_ids = ids_by_arm["proposal"] + ids_by_arm["random"]
+    return AdmissionSpec(
+        expected_target_planner_id=_PLANNER,
+        expected_eval_family=_EVAL_FAMILY,
+        confirmation_threshold="3_of_5",
+        expected_target_planner_config_sha256=_PLANNER_CFG,
+        expected_candidate_manifest_sha256_by_id={
+            manifest_id: f"manifest-{manifest_id}" for manifest_id in expected_ids
+        },
+        expected_candidate_manifest_ids_by_arm={
+            arm: tuple(manifest_ids) for arm, manifest_ids in ids_by_arm.items()
+        },
+        expected_execution_seeds_by_manifest_id={
+            manifest_id: tuple(seed_values) for manifest_id, seed_values in execution_seeds.items()
+        },
+        expected_candidate_pool_seed=42,
+        expected_execution_commit=_EXECUTION_COMMIT,
+    )
+
+
+def _evaluate(
+    packet: dict[str, Any] | None,
+    *,
+    budget_per_arm: int,
+    minimally_important: float = 0.20,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Evaluate a packet against an exact test-only external binding."""
+    spec_packet = packet if packet is not None else _packet([])
+    return build_independent_outcome_evaluation(
+        packet,
+        budget_per_arm=budget_per_arm,
+        minimally_important=minimally_important,
+        admission_spec=_spec_for_packet(spec_packet, budget_per_arm=budget_per_arm),
+        **kwargs,
+    )
+
+
 def test_load_independent_outcomes_missing_is_not_available() -> None:
     """Absence of a packet is a fail-closed not-available state."""
     state, reason, payload = load_independent_outcomes(None)
@@ -170,9 +226,7 @@ def test_v1_flat_array_packet_is_rejected_as_deprecated() -> None:
         "proposal_outcomes": [10.0],
         "random_outcomes": [0.0],
     }
-    result = build_independent_outcome_evaluation(
-        legacy, budget_per_arm=4, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(legacy, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "deprecated" in result["reason"]
     assert result["independent_outcomes_available"] is False
@@ -181,9 +235,7 @@ def test_v1_flat_array_packet_is_rejected_as_deprecated() -> None:
 def test_archive_nearness_objective_is_circular_and_blocked() -> None:
     """Archive-nearness objective cannot open the claim gate."""
     packet = _packet([], objective="archive_nearness")
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=4, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "circular" in result["reason"]
 
@@ -191,9 +243,7 @@ def test_archive_nearness_objective_is_circular_and_blocked() -> None:
 def test_target_planner_mismatch_blocks() -> None:
     """A packet for the wrong target planner fails closed."""
     packet = _packet([], target_planner_id="goal")
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=4, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "target_planner_id mismatch" in result["reason"]
 
@@ -212,9 +262,7 @@ def test_fallback_execution_mode_row_fails_closed() -> None:
             )
         ]
     )
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=4, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "execution_mode" in result["reason"]
     assert "native" in result["reason"]
@@ -225,9 +273,7 @@ def test_missing_required_field_fails_closed() -> None:
     row = _row(row_id="r0", manifest_id="c0", arm="proposal", rank=1, failure=True)
     del row["record_sha256"]
     packet = _packet([row])
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=4, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "record_sha256" in result["reason"]
 
@@ -235,10 +281,9 @@ def test_missing_required_field_fails_closed() -> None:
 def test_candidate_manifest_hash_requires_external_binding() -> None:
     """Rows cannot self-attest manifest lineage when no frozen binding is supplied."""
     packet = _packet([_row(row_id="r0", manifest_id="c0", arm="proposal", rank=1, failure=True)])
-    unbound_spec = AdmissionSpec(
-        expected_target_planner_id=_PLANNER,
-        expected_eval_family=_EVAL_FAMILY,
-        expected_target_planner_config_sha256=_PLANNER_CFG,
+    unbound_spec = replace(
+        _spec_for_packet(packet, budget_per_arm=1),
+        expected_candidate_manifest_sha256_by_id=None,
     )
 
     result = build_independent_outcome_evaluation(
@@ -246,16 +291,14 @@ def test_candidate_manifest_hash_requires_external_binding() -> None:
     )
 
     assert result["status"] == "blocked"
-    assert "manifest_sha256 binding is unavailable" in result["reason"]
+    assert "manifest SHA-256 binding" in result["reason"]
 
 
 def test_candidate_manifest_hash_mismatch_fails_closed() -> None:
     """A row hash must match the separate frozen manifest-hash binding."""
     row = _row(row_id="r0", manifest_id="c0", arm="proposal", rank=1, failure=True)
     row["candidate_manifest_sha256"] = "wrong-manifest-hash"
-    result = build_independent_outcome_evaluation(
-        _packet([row]), budget_per_arm=1, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(_packet([row]), budget_per_arm=1)
 
     assert result["status"] == "blocked"
     assert "candidate_manifest_sha256 mismatch" in result["reason"]
@@ -276,9 +319,7 @@ def test_replay_signature_mismatch_fails_closed() -> None:
         },
     )
     packet = _packet([row])
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=4, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "signature" in result["reason"]
 
@@ -288,9 +329,7 @@ def test_confirmation_below_threshold_fails_closed() -> None:
     row = _row(row_id="r0", manifest_id="c0", arm="proposal", rank=1, failure=True)
     row["confirmation_lineage"] = _confirmation(confirmed=2, attempts=5)
     packet = _packet([row])
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=4, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "confirmation" in result["reason"]
 
@@ -306,9 +345,7 @@ def test_scenario_certification_not_passed_fails_closed() -> None:
         scenario_cert="stress_only",
     )
     packet = _packet([row])
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=4, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "scenario_certification_status" in result["reason"]
 
@@ -324,15 +361,13 @@ def test_wrong_eval_family_fails_closed() -> None:
     )
     row["scenario_family"] = "classic_group_crossing_medium"
     packet = _packet([row])
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=4, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "blocked"
     assert "scenario_family" in result["reason"]
 
 
-def test_excluded_row_with_reason_is_dropped_not_aggregated() -> None:
-    """A predeclared excluded candidate (with a reason) is dropped, not aggregated."""
+def test_excluded_row_with_reason_blocks_an_incomplete_predeclared_arm() -> None:
+    """An excluded candidate cannot silently shrink the frozen arm denominator."""
     rows = [
         _row(row_id="p0", manifest_id="cp0", arm="proposal", rank=1, failure=True),
         _row(
@@ -347,30 +382,36 @@ def test_excluded_row_with_reason_is_dropped_not_aggregated() -> None:
         _row(row_id="r0", manifest_id="cr0", arm="random", rank=1, failure=False),
     ]
     packet = _packet(rows)
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=2, minimally_important=0.20, admission_spec=_SPEC
-    )
-    assert result["status"] == "complete"
-    assert result["excluded_row_count"] == 1
-    assert result["proposal"]["count"] == 1
-    assert result["proposal"]["failures"] == 1
+    result = _evaluate(packet, budget_per_arm=2)
+    assert result["status"] == "blocked"
+    assert "complete predeclared manifest set" in result["reason"]
 
 
 def test_unstable_attribution_across_seeds_fails_closed() -> None:
     """A candidate whose seeds disagree on the failure outcome fails closed."""
     rows = [
         _row(
-            row_id="p0a", manifest_id="cp0", arm="proposal", rank=1, failure=True, scenario_seed=1
+            row_id="p0a",
+            manifest_id="cp0",
+            arm="proposal",
+            rank=1,
+            failure=True,
+            scenario_seed=1,
+            execution_seed=1,
         ),
         _row(
-            row_id="p0b", manifest_id="cp0", arm="proposal", rank=1, failure=False, scenario_seed=2
+            row_id="p0b",
+            manifest_id="cp0",
+            arm="proposal",
+            rank=1,
+            failure=False,
+            scenario_seed=2,
+            execution_seed=2,
         ),
         _row(row_id="r0", manifest_id="cr0", arm="random", rank=1, failure=False),
     ]
     packet = _packet(rows)
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=2, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=2)
     assert result["status"] == "blocked"
     assert "unstable attribution" in result["reason"]
 
@@ -383,12 +424,10 @@ def test_candidate_manifest_id_in_both_arms_fails_closed() -> None:
             _row(row_id="r0", manifest_id="shared", arm="random", rank=1, failure=False),
         ]
     )
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=1, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=1)
 
     assert result["status"] == "blocked"
-    assert "both proposal and random arms" in result["reason"]
+    assert "overlap" in result["reason"]
 
 
 def test_complete_packet_decision_follows_execution() -> None:
@@ -396,9 +435,7 @@ def test_complete_packet_decision_follows_execution() -> None:
     # 4/4 proposal failures vs 0/4 random: large effect, but k=4 is underpowered
     # for delta=0.20 (min detectable at k=4 is 0.75), so the decision is inconclusive.
     packet = _balanced_packet(proposal_failures=4, random_failures=0, per_arm=4)
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=4, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=4)
     assert result["status"] == "complete"
     assert result["independent_outcomes_available"] is True
     assert result["proposal_failure_yield"] == 1.0
@@ -414,13 +451,45 @@ def test_underpowered_random_better_than_proposal_is_inconclusive() -> None:
     """An underpowered random-favoring result cannot produce a stop decision."""
     # 0/6 proposal vs 6/6 random is still underpowered for the frozen 0.20 effect.
     packet = _balanced_packet(proposal_failures=0, random_failures=6, per_arm=6)
-    result = build_independent_outcome_evaluation(
-        packet, budget_per_arm=6, minimally_important=0.20, admission_spec=_SPEC
-    )
+    result = _evaluate(packet, budget_per_arm=6)
     assert result["status"] == "complete"
     assert result["comparison"]["powered"] is False
     assert result["decision"]["status"] == "inconclusive"
     assert result["decision"]["reason"] == "underpowered_for_minimally_important_effect"
+
+
+def test_over_budget_packet_cannot_be_complete_or_drive_a_decision() -> None:
+    """A 30-per-arm packet cannot manufacture power for a frozen 12-arm study."""
+    packet = _balanced_packet(proposal_failures=30, random_failures=0, per_arm=30)
+
+    result = _evaluate(packet, budget_per_arm=12, n_permutations=10)
+
+    assert result["status"] == "blocked"
+    assert result["independent_outcomes_available"] is False
+    assert (
+        "predeclared proposal manifest count 30 != frozen candidate budget 12" in result["reason"]
+    )
+    assert "comparison" not in result
+
+
+def test_execution_seed_must_match_the_external_manifest_lineage() -> None:
+    """A row cannot substitute a different execution seed after manifest freeze."""
+    packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=1)
+    spec = _spec_for_packet(packet, budget_per_arm=1)
+    proposal_id = packet["rows"][0]["candidate_manifest_id"]
+    expected_seeds = dict(spec.expected_execution_seeds_by_manifest_id or {})
+    expected_seeds[proposal_id] = (999999,)
+    drifted_spec = replace(spec, expected_execution_seeds_by_manifest_id=expected_seeds)
+
+    result = build_independent_outcome_evaluation(
+        packet,
+        budget_per_arm=1,
+        minimally_important=0.20,
+        admission_spec=drifted_spec,
+    )
+
+    assert result["status"] == "blocked"
+    assert "execution_seed is not predeclared" in result["reason"]
 
 
 def test_opposite_sign_regressions_decision_follows_execution() -> None:
@@ -434,22 +503,18 @@ def test_opposite_sign_regressions_decision_follows_execution() -> None:
     # k=30 is the smallest frozen-effect budget whose Fisher boundary is <= 0.20.
     # Case A: execution favors proposal.
     exec_proposal_better = _balanced_packet(proposal_failures=30, random_failures=0, per_arm=30)
-    res_a = build_independent_outcome_evaluation(
+    res_a = _evaluate(
         exec_proposal_better,
         budget_per_arm=30,
-        minimally_important=0.20,
-        admission_spec=_SPEC,
         n_permutations=10,
     )
     assert res_a["comparison"]["yield_improvement"] > 0.0
 
     # Case B: execution favors random (opposite sign).
     exec_random_better = _balanced_packet(proposal_failures=0, random_failures=30, per_arm=30)
-    res_b = build_independent_outcome_evaluation(
+    res_b = _evaluate(
         exec_random_better,
         budget_per_arm=30,
-        minimally_important=0.20,
-        admission_spec=_SPEC,
         n_permutations=10,
     )
     assert res_b["comparison"]["yield_improvement"] < 0.0
@@ -461,11 +526,9 @@ def test_opposite_sign_regressions_decision_follows_execution() -> None:
 def test_eval_archive_hash_mismatch_fails_closed() -> None:
     """Outcome packets must match the held-out eval split they claim to score."""
     packet = _balanced_packet(proposal_failures=1, random_failures=0, per_arm=2)
-    result = build_independent_outcome_evaluation(
+    result = _evaluate(
         packet,
         budget_per_arm=2,
-        minimally_important=0.20,
-        admission_spec=_SPEC,
         expected_eval_archive_sha256="expected-eval-hash",
     )
     assert result["status"] == "blocked"

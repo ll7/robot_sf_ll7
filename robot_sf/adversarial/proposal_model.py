@@ -689,6 +689,8 @@ class FailureArchiveProposalModel:
         payload with the family-invariant feature view. Returns the model and a
         JSON-safe provenance dict for the contract checker.
         """
+        if feature_view != "family_invariant":
+            raise ValueError("the frozen #3275 contract requires the family_invariant feature view")
         contract = load_issue_3275_contract(contract_path_or_data)
         root = Path(repo_root) if repo_root is not None else Path.cwd()
         source = contract["source_lineage"]
@@ -703,6 +705,34 @@ class FailureArchiveProposalModel:
         fit_cfg = contract["fit"]
         excl_cfg = contract["exclusions"]
         planner_cfg = contract["target_planner"]
+        evaluation_cfg = contract["evaluation"]
+        frozen_start = evaluation_cfg.get("robot_start")
+        frozen_goal = evaluation_cfg.get("robot_goal")
+        if candidate_robot_start is None:
+            candidate_robot_start = frozen_start
+        if candidate_robot_goal is None:
+            candidate_robot_goal = frozen_goal
+        if candidate_robot_start is None or candidate_robot_goal is None:
+            raise ValueError(
+                "frozen contract evaluation geometry must define robot_start and robot_goal"
+            )
+        map_file = evaluation_cfg.get("map_file")
+        expected_map_sha256 = evaluation_cfg.get("map_file_sha256")
+        if not isinstance(map_file, str) or not map_file:
+            raise ValueError("frozen contract evaluation.map_file must be a non-empty string")
+        if not isinstance(expected_map_sha256, str) or not expected_map_sha256:
+            raise ValueError(
+                "frozen contract evaluation.map_file_sha256 must be a non-empty string"
+            )
+        map_path = root / map_file
+        if not map_path.is_file():
+            raise ValueError(f"frozen contract evaluation map is missing: {map_file}")
+        observed_map_sha256 = hashlib.sha256(map_path.read_bytes()).hexdigest()
+        if observed_map_sha256 != expected_map_sha256:
+            raise ValueError(
+                "frozen contract evaluation map SHA-256 mismatch: "
+                f"observed={observed_map_sha256} expected={expected_map_sha256}"
+            )
         payload = derive_fit_payload_from_recertification(
             recert,
             archive,
@@ -743,5 +773,9 @@ class FailureArchiveProposalModel:
             "excluded_entry_ids_dropped": model.excluded_entry_ids,
             "planner_drift": planner_drift,
             "feature_view": feature_view,
+            "evaluation_robot_start": candidate_robot_start,
+            "evaluation_robot_goal": candidate_robot_goal,
+            "evaluation_map_file": map_file,
+            "evaluation_map_sha256": observed_map_sha256,
         }
         return model, provenance

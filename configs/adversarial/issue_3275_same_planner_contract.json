@@ -89,6 +89,16 @@
     "same_planner_both_arms": true,
     "held_out_family_disjoint_from_fit_family": true,
     "map_file": "maps/svg_maps/classic_crossing.svg",
+    "map_file_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "robot_start": [
+      3.0,
+      3.0
+    ],
+    "robot_goal": [
+      17.0,
+      17.0
+    ],
+    "robot_geometry_source": "Frozen centres (in metres at cells_per_meter=2.0) of classic_crossing.svg's explicit robot_spawn_zone and robot_goal_zone; this geometry is a scenario-definition input, not inferred from excluded held-out failures or outcomes.",
     "note": "Restores the parent #3275 held-out design: evaluate on classic_cross_trap_medium with social_force in both arms. This is NOT classic_group_crossing_medium for both fit and evaluation."
   },
   "feature_representation": {
@@ -173,6 +183,7 @@
       "target_planner_config_sha256",
       "scenario_family",
       "scenario_seed",
+      "execution_seed",
       "execution_commit",
       "execution_command",
       "execution_config_lineage",
@@ -192,7 +203,9 @@
       "missing required field",
       "malformed row",
       "candidate_manifest_sha256 or record_sha256 mismatch",
-      "missing external frozen candidate-manifest ID-to-SHA-256 binding",
+      "missing external frozen candidate-manifest binding (ID-to-SHA-256, exact arm membership, and execution seeds)",
+      "arm membership or frozen per-arm candidate count differs from the predeclared manifest binding",
+      "execution_seed differs from the predeclared manifest seed lineage",
       "candidate_manifest_id appears in both arms",
       "execution_mode is fallback or degraded (or not native)",
       "target_planner_id != social_force",
@@ -208,7 +221,11 @@
     "rule": "Archive-nearness is the ranking signal only. It is recorded under an explicitly diagnostic namespace and can never drive the top-level comparison, the #2921 stop rule, or the continue/stop/inconclusive decision. Only independent native planner-execution outcomes admitted under the v2 row contract can drive a verdict."
   },
   "decision_rule": {
-    "vocabulary": ["continue", "stop", "inconclusive"],
+    "vocabulary": [
+      "continue",
+      "stop",
+      "inconclusive"
+    ],
     "no_revise": true,
     "no_generic_blocked": true,
     "continue": "independent outcomes valid AND powered for the minimally important effect AND (proposal_yield - random_yield) >= minimally_important_absolute_yield_improvement AND Fisher-exact two-sided null rejected at alpha=0.05.",

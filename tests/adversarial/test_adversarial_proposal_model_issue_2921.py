@@ -509,12 +509,21 @@ def _v2_outcome_packet(
 
 
 def _manifest_hash_binding(packet: dict[str, Any]) -> dict[str, Any]:
-    """Build the separately supplied frozen manifest-hash binding test fixture."""
+    """Build the separately supplied frozen arm-manifest binding fixture."""
+    rows = packet["rows"]
     return {
-        "schema_version": "adversarial_candidate_manifest_hash_bindings.v1",
+        "schema_version": "adversarial_candidate_manifest_bindings.v2",
         "candidate_manifest_sha256_by_id": {
-            row["candidate_manifest_id"]: row["candidate_manifest_sha256"] for row in packet["rows"]
+            row["candidate_manifest_id"]: row["candidate_manifest_sha256"] for row in rows
         },
+        "candidate_manifest_ids_by_arm": {
+            arm: [row["candidate_manifest_id"] for row in rows if row["selection_arm"] == arm]
+            for arm in ("proposal", "random")
+        },
+        "execution_seeds_by_manifest_id": {
+            row["candidate_manifest_id"]: [row["execution_seed"]] for row in rows
+        },
+        "candidate_pool_seed": 7,
     }
 
 
@@ -532,6 +541,7 @@ def _v2_row(row_id: str, manifest_id: str, arm: str, rank: int, failure: bool) -
         "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
         "scenario_family": "classic_cross_trap_medium",
         "scenario_seed": 99001 + rank,
+        "execution_seed": 70001 + rank,
         "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
         "execution_command": ["python", "-m", "robot_sf.run_eval"],
         "execution_config_lineage": {"config": "eval.yaml"},
@@ -598,6 +608,82 @@ def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(
     assert report["issue_2921_stop_rule"]["status"] == "inconclusive"
 
 
+def test_normal_contract_runner_uses_frozen_fit_factory_and_held_out_split(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The normal --contract path cannot use the generic archive or random split."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    search_space_path = tmp_path / "search_space.yaml"
+    output_json = tmp_path / "contract_report.json"
+    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            _CONTRACT.as_posix(),
+            "--search-space",
+            search_space_path.as_posix(),
+            "--seed",
+            "42",
+            "--output",
+            output_json.as_posix(),
+        ],
+    )
+
+    assert script_main() == 0
+
+    report = json.loads(output_json.read_text("utf-8"))
+    assert report["state"] == "active"
+    assert report["synthetic_archive"] is False
+    assert report["budget_per_arm"] == 12
+    assert len(report["arm_manifest_ids_by_arm"]["proposal"]) == 12
+    assert len(report["arm_manifest_ids_by_arm"]["random"]) == 12
+    assert set(report["arm_manifest_ids_by_arm"]["proposal"]).isdisjoint(
+        report["arm_manifest_ids_by_arm"]["random"]
+    )
+    provenance = report["archive_evaluation_provenance"]
+    assert provenance["split_policy"] == "frozen_same_planner_held_out_family"
+    assert provenance["fit_size"] == 6
+    assert provenance["eval_size"] == 5
+    frozen_contract = provenance["frozen_contract"]
+    assert frozen_contract["fit_entry_count"] == 6
+    assert (
+        frozen_contract["fit_entry_ids_sha256"]
+        == load_issue_3275_contract(_CONTRACT)["fit"]["entry_ids_sha256"]
+    )
+    assert frozen_contract["model"]["model_entry_count"] == 6
+    assert frozen_contract["model"]["feature_view"] == "family_invariant"
+    assert frozen_contract["model"]["evaluation_robot_start"] == [3.0, 3.0]
+    assert frozen_contract["model"]["evaluation_robot_goal"] == [17.0, 17.0]
+    assert report["issue_2921_stop_rule"]["status"] == "inconclusive"
+
+
+def test_contract_runner_rejects_a_budget_outside_the_frozen_contract(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A larger packet budget cannot be requested through the --contract path."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    search_space_path = tmp_path / "search_space.yaml"
+    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            _CONTRACT.as_posix(),
+            "--search-space",
+            search_space_path.as_posix(),
+            "--budget",
+            "30",
+        ],
+    )
+
+    assert script_main() == 2
+
+
 def test_real_archive_with_independent_outcomes_follows_execution(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -649,11 +735,12 @@ def test_real_archive_with_independent_outcomes_follows_execution(
     assert report["independent_outcome_evaluation"]["independent_outcomes_available"] is True
     assert report["independent_outcome_evaluation"]["proposal_failure_yield"] == 1.0
     assert report["independent_outcome_evaluation"]["random_failure_yield"] == 0.0
-    assert report["independent_outcome_evaluation"]["candidate_manifest_hash_binding"] == {
-        "required": True,
-        "available": True,
-        "reason": "ok",
-    }
+    manifest_binding = report["independent_outcome_evaluation"]["candidate_manifest_binding"]
+    assert manifest_binding["required"] is True
+    assert manifest_binding["available"] is True
+    assert manifest_binding["exact_arm_membership_required"] is True
+    assert manifest_binding["execution_seed_lineage_required"] is True
+    assert manifest_binding["reason"] == "ok"
     # k=4 is underpowered for delta=0.20 -> inconclusive (honest, not continue).
     assert report["issue_2921_stop_rule"]["status"] == "inconclusive"
     assert report["issue_2921_stop_rule"]["vocabulary"] == list(ISSUE_3275_DECISION_VOCABULARY)

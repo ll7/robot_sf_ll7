@@ -86,14 +86,18 @@ verdict. Both opposite-sign regressions are required tests:
 
 One row per candidate x execution seed binds: candidate/manifest ID + manifest
 SHA, selection arm + rank, candidate-pool seed/index, target planner ID + config
-SHA, scenario family + seed, execution commit + command/config lineage +
+SHA, scenario family + seed, **execution seed**, execution commit + command/config lineage +
 native/fallback/degraded status, termination reason + independent failure
 outcome, scenario and candidate certification status, replay/confirmation
 lineage + record hash, and exclusion reason when inadmissible. Each admitted
-manifest SHA must match a separate, frozen ID-to-hash binding from the arm
-manifests; an outcome packet cannot self-attest it. A candidate manifest ID may
-appear in one arm only. Aggregate arrays derive from admitted rows only.
-Missing, malformed, mismatched, fallback, degraded, cross-arm-overlapping, or
+manifest SHA must match a separate, frozen binding from the arm manifests. That
+binding also declares the exact proposal and random manifest-ID sets (twelve per
+arm) and the allowed execution-seed set for every manifest; an outcome packet
+cannot self-attest any of those values. A candidate manifest ID may appear in
+one arm only. Aggregate arrays derive from admitted rows only, and can become
+complete only when every predeclared manifest and every predeclared execution
+seed is present exactly once. Missing, malformed, mismatched, fallback,
+degraded, cross-arm-overlapping, over-budget, under-budget, or
 lineage-incomplete rows fail closed (block the evaluation).
 
 ## Estimand, power/sensitivity, and decision rule (issue #6103 gaps 4–5)
@@ -145,6 +149,12 @@ robot corridor the pedestrian appears, and where along the route"). The transfor
 is deterministic geometry, frozen against outcomes, and does not use the excluded
 cross-trap/goal failures for tuning.
 
+For the normal `--contract` path, the evaluation geometry is itself frozen in
+the contract: the explicit `classic_crossing.svg` robot-zone centres at
+`[3.0, 3.0]` to `[17.0, 17.0]` metres (`cells_per_meter=2.0`). The runner
+records this map-backed geometry in its provenance and does not substitute a
+geometry derived from the excluded held-out failures.
+
 ## Side-effect-free contract check (required input to the next sub-issue)
 
 ```bash
@@ -162,8 +172,10 @@ checks pass. It executes no planner and writes nothing.
 Issue #6103's acceptance criterion "Review explicitly covers experimental
 validity and result interpretation" is a **human gate** the autonomous worker
 cannot satisfy. This contract is frozen and posted for human research-contract
-review; the implementing PR is left in draft. The worker does not self-close
-#6103 and does not mark the PR ready-for-review/merge.
+review; PR #6315 is open (not draft) and awaiting that review, but remains
+**not merge-ready** until the Domain-Aware Approval records that the
+six-anchor, underpowered design is acceptable. The worker does not self-close
+#6103 or claim merge readiness.
 
 ## Risks and residual conditions
 

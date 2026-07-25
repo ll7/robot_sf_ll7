@@ -222,6 +222,66 @@ def test_diagnostic_analysis_keeps_attrition_in_denominator_and_fails_closed(
     assert any("remains in the primary denominator" in blocker for blocker in result.blockers)
 
 
+def test_diagnostic_analysis_fails_closed_on_malformed_outcome_lines(tmp_path: Path) -> None:
+    """Blank, non-JSON, and non-object lines cannot disappear from accounting diagnostics."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    outcomes.write_text("\nnot-json\n[]\n", encoding="utf-8")
+
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=CONTRACT_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert result.accounting["observed_attempts_per_arm"] == {"optuna": 0, "random": 0}
+    assert any("blank line" in blocker for blocker in result.blockers)
+    assert any("not JSON" in blocker for blocker in result.blockers)
+    assert any("must be an object" in blocker for blocker in result.blockers)
+
+
+def test_diagnostic_analysis_fails_closed_on_invalid_record_content(tmp_path: Path) -> None:
+    """Invalid records stay counted but prevent an apparently complete diagnostic result."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
+
+    rows[0]["schema_version"] = "unsupported"
+    rows[0]["execution_stage"] = "replay"
+    rows[0]["method"] = "random"
+    rows[0]["immutable_record_sha256"] = _immutable_sha256(rows[0])
+
+    rows[1]["immutable_record_sha256"] = "not-the-row-hash"
+
+    rows[2]["normalized_candidate_config_sha256"] = ""
+    rows[2]["immutable_record_sha256"] = _immutable_sha256(rows[2])
+
+    rows[3]["admission_decision"] = "admitted"
+    rows[3]["exclusion_reason"] = "not-diagnostic"
+    rows[3]["certification"] = {"status": "failed"}
+    rows[3]["immutable_record_sha256"] = _immutable_sha256(rows[3])
+
+    outcomes.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=CONTRACT_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert result.accounting["observed_attempts_per_arm"]["optuna"] == 192
+    assert result.accounting["immutable_hash_failure_count"] == 1
+    assert result.accounting["recorded_invalid_or_unevaluable_rows"]["optuna"] == 1
+    assert any("unsupported schema_version" in blocker for blocker in result.blockers)
+    assert any("method must match" in blocker for blocker in result.blockers)
+    assert any("lacks a normalized candidate hash" in blocker for blocker in result.blockers)
+    assert any("must remain not admitted" in blocker for blocker in result.blockers)
+    assert any("invalid or unevaluable" in blocker for blocker in result.blockers)
+
+
 def test_contract_schema_matches_diagnostic_record_fixture() -> None:
     """The committed schema explicitly covers each per-attempt field emitted in tests."""
     contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))

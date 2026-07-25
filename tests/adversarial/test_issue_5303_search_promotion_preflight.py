@@ -33,6 +33,7 @@ from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
     DEFAULT_RECEIPT_PATH,
     SCHEMA_VERSION,
     _min_permutation_p_values,
+    dump_preflight_payload,
     preflight_issue_5303_contract,
 )
 
@@ -335,6 +336,29 @@ def test_preflight_detects_incomplete_diagnostic_command(tmp_path: Path) -> None
     assert result.ready is False
     assert result.checks["contract_hash_matches_manifest"] is True
     assert result.checks["step3_execution_command_complete"] is False
+
+
+def test_preflight_fails_closed_for_missing_contract_and_writes_requested_payload(
+    tmp_path: Path,
+) -> None:
+    """Missing contracts block before parsing, while explicit output remains machine-readable."""
+    missing_result = preflight_issue_5303_contract(
+        tmp_path / "missing_contract.yaml",
+        receipt_path=RECEIPT_PATH,
+        manifest_path=MANIFEST_PATH,
+        repo_root=REPO_ROOT,
+    )
+
+    assert missing_result.ready is False
+    assert missing_result.checks == {"contract_exists": False}
+    assert any("contract not found" in blocker for blocker in missing_result.blockers)
+
+    output = tmp_path / "preflight" / "payload.json"
+    result = preflight_issue_5303_contract(repo_root=REPO_ROOT)
+    dump_preflight_payload(result, output)
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["ready"] is True
+    assert payload["metadata"]["contract_file_sha256"] == _sha256_file(CONTRACT_PATH)
 
 
 # ---------------------------------------------------------------------------

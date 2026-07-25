@@ -8,7 +8,7 @@ evidence.
 Two issue-specific benchmark configs compare ORCA and PPO across the nominal
 `nominal_v1.yaml` matrix (4 scenarios) and the stress
 `classic_interactions_francis2023.yaml` matrix (48 scenarios). Both use
-seeds 111-120 (`paper_eval_s10`), horizon 100, dt=0.1, differential-drive
+the frozen S10 (ten-seed) schedule 111-120 (`paper_eval_s10`), horizon 100, dt=0.1, differential-drive
 kinematics.
 
 ## Configs
@@ -27,7 +27,9 @@ the campaign preflight rather than creating a fallback result row.
 
 ## Preflight Results
 
-Both configs passed preflight validation:
+Both configs passed metadata-only preflight on source revision
+`c24325e76a7c831941e0efe7ac8b25e231b9574b`. The packet records each
+repository-relative source config and its full SHA-256:
 
 | Property | Nominal | Stress |
 |---|---|---|
@@ -35,9 +37,20 @@ Both configs passed preflight validation:
 | Planners | orca, ppo | orca, ppo |
 | Seeds | 111-120 (10) | 111-120 (10) |
 | Expected rows | 80 | 960 |
+| Config hash | `47d684f55e8c1377` | `0375e182d186a8bc` |
+| Source config SHA-256 | `3bf27cc362055e6874125f93b793c70f099ce6049641b60c1cb69974b3a55df7` | `e8f8b56097964568da4784054d23e1c590c14d32634c8ec6d465f735d1208dc6` |
+| Route-clearance warnings | 2: 1 certified, 1 unresolved | 15: 15 certified, 0 unresolved |
+| Native ORCA prerequisite | `rvo2` import passed | `rvo2` import passed |
 | PPO checkpoint resolved | yes | yes |
 | PPO checkpoint status | stageable_remote | stageable_remote |
+| Submit safe | no (metadata-only) | no (metadata-only) |
 | PPO checkpoint SHA256 | `2b30df81...` | `2b30df81...` |
+
+The 15 stress warnings carry the reviewed Issue #1105 geometry caveats; they
+are not uncaveated planner-attribution evidence. The nominal
+`empty_map_8_directions_east` warning remains an unresolved map-level warning,
+so a later campaign must preserve that caveat rather than infer a planner
+effect from it.
 
 ## Tests
 
@@ -51,6 +64,8 @@ Both configs passed preflight validation:
 - Both configs share same planner rows, seed policy, horizon/dt/kinematics
 - Expected row counts: 80 (nominal), 960 (stress)
 - Configs reference different scenario matrices
+- Route-clearance certification provenance, fail-fast ORCA prerequisite policy,
+  and repository-relative route-override preview provenance
 
 ## Evidence
 

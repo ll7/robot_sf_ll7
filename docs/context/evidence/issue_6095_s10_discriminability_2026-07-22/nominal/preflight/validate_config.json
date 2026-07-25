@@ -1,7 +1,9 @@
 {
   "schema_version": "benchmark-preflight-validate-config.v1",
-  "campaign_id": "issue_6095_nominal_discriminability_v1_20260722_163913",
-  "generated_at_utc": "2026-07-22T14:39:13.843582Z",
+  "campaign_id": "issue_6095_nominal_discriminability_v1_20260725_final",
+  "generated_at_utc": "2026-07-25T05:05:37.225928Z",
+  "config_path": "configs/benchmarks/issue_6095_nominal_discriminability_v1.yaml",
+  "config_sha256": "3bf27cc362055e6874125f93b793c70f099ce6049641b60c1cb69974b3a55df7",
   "scenario_matrix": "configs/scenarios/nominal_v1.yaml",
   "scenario_count": 4,
   "scenario_candidates": {
@@ -98,7 +100,13 @@
       "min_center_distance_m": 1.012233,
       "min_clearance_margin_m": 0.012233,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready bottleneck stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Doorway route intentionally leaves only near-zero positive robot-radius clearance.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "empty_map_8_directions_east",
@@ -113,15 +121,16 @@
   "route_clearance_warning_count": 2,
   "route_clearance_warning_summary": {
     "warning_count": 2,
-    "certified_warning_count": 0,
-    "unresolved_warning_count": 2,
-    "status_counts": {},
+    "certified_warning_count": 1,
+    "unresolved_warning_count": 1,
+    "status_counts": {
+      "certified_stress_geometry": 1
+    },
     "unresolved_scenarios": [
-      "classic_doorway_low",
       "empty_map_8_directions_east"
     ]
   },
-  "route_clearance_certifications_path": null,
+  "route_clearance_certifications_path": "configs/benchmarks/route_clearance_certifications_v1.yaml",
   "observation_noise": {
     "enabled": false,
     "profile": "none",

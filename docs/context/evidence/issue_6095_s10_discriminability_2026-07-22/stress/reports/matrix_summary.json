@@ -39,10 +39,10 @@
       "observation_noise.profile": "none",
       "observation_noise.enabled": false,
       "observation_noise_hash": "0a5609f0b2b1",
-      "config_hash": "21388260cdfa47a2",
-      "git_commit": "301edc874eeb693aae21a83da8b25c71a8bb8fef",
-      "campaign_id": "issue_6095_stress_discriminability_v1_20260722_163914",
-      "created_at_utc": "2026-07-22T14:39:14.348377Z"
+      "config_hash": "0375e182d186a8bc",
+      "git_commit": "c24325e76a7c831941e0efe7ac8b25e231b9574b",
+      "campaign_id": "issue_6095_stress_discriminability_v1_20260725_final",
+      "created_at_utc": "2026-07-25T05:05:53.339378Z"
     },
     {
       "scenario_matrix": "configs/scenarios/classic_interactions_francis2023.yaml",
@@ -82,10 +82,10 @@
       "observation_noise.profile": "none",
       "observation_noise.enabled": false,
       "observation_noise_hash": "0a5609f0b2b1",
-      "config_hash": "21388260cdfa47a2",
-      "git_commit": "301edc874eeb693aae21a83da8b25c71a8bb8fef",
-      "campaign_id": "issue_6095_stress_discriminability_v1_20260722_163914",
-      "created_at_utc": "2026-07-22T14:39:14.348377Z"
+      "config_hash": "0375e182d186a8bc",
+      "git_commit": "c24325e76a7c831941e0efe7ac8b25e231b9574b",
+      "campaign_id": "issue_6095_stress_discriminability_v1_20260725_final",
+      "created_at_utc": "2026-07-25T05:05:53.339378Z"
     }
   ]
 }

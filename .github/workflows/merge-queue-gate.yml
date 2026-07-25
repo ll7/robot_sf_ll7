@@ -2,9 +2,9 @@ name: Merge Queue Gate
 
 # Required status check for the GitHub native merge queue (issue #6274).
 #
-# The native merge queue (and any external/parallel auto-merge dispatcher that
-# routes through it) must not auto-merge a PR until this gate passes. It enforces
-# the same fail-closed preflight as the in-repository `gh-pr-merger` skill:
+# After a maintainer activates this required check, the native merge queue must
+# not auto-merge a PR until this gate passes. It enforces the same fail-closed
+# preflight as the in-repository `gh-pr-merger` skill:
 # non-draft state, current `merge-ready` label, a current exact-head
 # `gate-verdict: accepted @ <head_sha>` trailer, and no unresolved actionable
 # review threads. The audit record (evaluated head/base SHAs, label set,
@@ -13,8 +13,10 @@ name: Merge Queue Gate
 #
 # To activate fail-closed behavior, add this job's status check
 # ("Merge Queue Gate / merge-queue-gate") to the merge queue's required status
-# checks in the branch protection rules for `main`. See docs/dev_guide.md
-# ("Merge queue gate") for the exact configuration and the maintainer toggle.
+# checks in the branch protection rules for `main`. This workflow gates only
+# `merge_group` events; it does not locate or control direct merge dispatchers.
+# See docs/dev_guide.md ("Merge queue gate") for the exact configuration and
+# residual issue #6274 acceptance proof.
 
 on:
   merge_group:

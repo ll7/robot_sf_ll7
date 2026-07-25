@@ -11,6 +11,7 @@ from scripts.dev.merge_queue_gate import (
     evaluate_merge_gate,
     fetch_pr_snapshot,
     fetch_threads_resolved,
+    main,
 )
 
 FULL_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9001020304"
@@ -121,3 +122,68 @@ def test_fetch_threads_resolved_accepts_complete_resolved_connection() -> None:
 
     assert resolved_state is True
     assert error is None
+
+
+def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> None:
+    """The live merge_group path uses its encoded PR and matching source SHA."""
+    event_path = tmp_path / "merge_group.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "event_name": "merge_group",
+                "merge_group": {
+                    "head_ref": (f"refs/heads/gh-readonly-queue/main/pr-42-{FULL_SHA[:12]}"),
+                    "base_sha": "queue_base_sha",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    threads = _review_threads_payload(nodes=[], total_count=0, has_next_page=False)
+
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
+            _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _gh_response(stdout=json.dumps(threads)),
+        ]
+        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+
+    assert exit_code == 0
+    calls = [call.args[0] for call in mock_gh.call_args_list]
+    assert calls[0][:3] == ["pr", "view", "42"]
+    assert ["pr", "list"] not in [call[:2] for call in calls]
+
+
+def test_from_event_fails_closed_when_encoded_head_differs_from_pr(tmp_path, capsys) -> None:
+    """A queue ref cannot be rebound to a newer or unrelated PR head."""
+    encoded_sha = "deadbeefcafe"
+    event_path = tmp_path / "merge_group.json"
+    event_path.write_text(
+        json.dumps(
+            {
+                "merge_group": {
+                    "head_ref": f"refs/heads/gh-readonly-queue/main/pr-42-{encoded_sha}",
+                    "base_sha": "queue_base_sha",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    threads = _review_threads_payload(nodes=[], total_count=0, has_next_page=False)
+
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
+            _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _gh_response(stdout=json.dumps(threads)),
+        ]
+        exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
+
+    audit = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert audit["merge_group_head_sha"] == encoded_sha
+    assert audit["merge_group_head_binding"] == "mismatch"
+    assert "merge_group_head_sha_mismatch" in audit["reasons"]

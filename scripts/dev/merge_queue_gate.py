@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Merge-queue status-check gate enforcing the gh-pr-merger fail-closed preflight.
 
-This module backs the ``Merge Queue Gate`` required status check (issue #6274).
-The GitHub native merge queue must not auto-merge a PR until this gate passes.
-The gate enforces the same fail-closed preflight as ``gh-pr-merger``:
+This module backs the ``Merge Queue Gate`` status check (issue #6274). Once a
+maintainer makes that check required for GitHub's native merge queue, the queue
+must not auto-merge a PR until this gate passes. The gate enforces the same
+fail-closed preflight as ``gh-pr-merger``:
 
   - non-draft state,
   - current ``merge-ready`` label,
@@ -25,10 +26,10 @@ pass / 1 on fail (fail closed).
 
 Why a separate gate instead of relying on labels alone: issue #6274 observed an
 external/parallel auto-merge path merging PRs without ``merge-ready`` or without
-a current exact-head gate verdict. A required status check that runs inside the
-merge queue is the only GitHub-native surface that can fail-closed the queue
-itself, because branch-protection required checks gate the merge event
-regardless of which dispatcher requested the merge.
+a current exact-head gate verdict. This gate covers only native ``merge_group``
+events after the required-check configuration is active. It does not locate,
+alter, or prove coverage of a direct merge dispatcher; that remaining #6274
+work needs separate evidence before the issue can close.
 """
 
 from __future__ import annotations
@@ -70,10 +71,16 @@ FAILURE_CONCLUSIONS = {
 }
 PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested", "waiting"}
 
-# GitHub merge-queue readonly ref: ``gh-readonly-queue/<base>/<srcbranch>-<sha>``.
-_MERGE_QUEUE_REF_RE = re.compile(r"^refs/heads/gh-readonly-queue/(?P<base>[^/]+)/(?P<rest>.+)$")
-# Trailing abbreviated commit SHA appended to the source branch in the queue ref.
-_QUEUE_REF_SHA_SUFFIX_RE = re.compile(r"-(?P<sha>[0-9a-f]{7,40})$")
+# GitHub's documented native merge-queue ref is
+# ``refs/heads/gh-readonly-queue/<base>/pr-<number>-<source-sha>``.  The
+# ``pr-<number>`` component identifies the source pull request; it is not the
+# source branch name.  Keep this strict so a changed queue-ref format fails
+# closed rather than selecting an unrelated PR.
+_MERGE_QUEUE_REF_RE = re.compile(
+    r"^refs/heads/gh-readonly-queue/(?P<base>.+)/pr-"
+    r"(?P<number>[1-9][0-9]*)-(?P<head_sha>[0-9a-f]{7,40})$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +90,8 @@ class MergeGateAudit:
     schema: str
     pr: int | None
     head_sha: str
+    merge_group_head_sha: str
+    merge_group_head_binding: str
     base_sha: str
     main_sha: str
     labels: list[str]
@@ -98,6 +107,14 @@ class MergeGateAudit:
     def to_dict(self) -> dict[str, Any]:
         """Serialize the audit as a plain JSON-able dict."""
         return asdict(self)
+
+
+@dataclass(frozen=True, slots=True)
+class MergeGroupPR:
+    """Source PR identity encoded by a canonical GitHub merge-queue ref."""
+
+    number: int
+    head_sha: str
 
 
 def _label_names(pr: dict[str, Any]) -> list[str]:
@@ -142,6 +159,7 @@ def _fail_closed_reasons(
     staleness_verdict: str,
     gate_verdict_status: str,
     thread_resolution: str,
+    merge_group_head_binding: str,
 ) -> list[str]:
     """Collect fail-closed reasons for one gate evaluation.
 
@@ -161,6 +179,8 @@ def _fail_closed_reasons(
         reasons.append("stale_merge_base")
     if gate_verdict_status != "accepted":
         reasons.append("missing_exact_head_gate_verdict")
+    if merge_group_head_binding == "mismatch":
+        reasons.append("merge_group_head_sha_mismatch")
     if thread_resolution == "unresolved":
         reasons.append("unresolved_review_threads")
     return reasons
@@ -172,6 +192,7 @@ def evaluate_merge_gate(
     main_sha: str = "",
     ci_overall: str | None = None,
     threads_resolved: bool | None = None,
+    merge_group_head_sha: str = "",
 ) -> MergeGateAudit:
     """Evaluate the merge-queue gate for one PR snapshot.
 
@@ -198,6 +219,10 @@ def evaluate_merge_gate(
         ``False`` when at least one remains unresolved, ``None`` when not
         evaluated (does not block; the runtime CLI always supplies a definitive
         value and fails closed on a query error).
+      merge_group_head_sha: source-head SHA encoded in a canonical
+        ``merge_group.head_ref``. When provided, it must prefix-match the live
+        PR head SHA; any mismatch fails closed so a queue ref cannot be rebound
+        to a newer or unrelated PR head.
 
     Returns a ``MergeGateAudit`` with ``passed`` and a list of fail-closed
     ``reasons``. The audit always records the evaluated head SHA, base SHA, label
@@ -215,6 +240,14 @@ def evaluate_merge_gate(
     ci_overall = str(ci_overall).lower()
 
     gate_verdict_status = _gate_verdict_status(pr, head_sha)
+
+    merge_group_head_sha = str(merge_group_head_sha or "").lower()
+    if merge_group_head_sha:
+        merge_group_head_binding = (
+            "match" if _merge_group_head_matches(merge_group_head_sha, head_sha) else "mismatch"
+        )
+    else:
+        merge_group_head_binding = "not_applicable"
 
     if base_sha and main_sha:
         staleness_verdict = "fresh" if base_sha == main_sha else "stale"
@@ -236,6 +269,7 @@ def evaluate_merge_gate(
         staleness_verdict=staleness_verdict,
         gate_verdict_status=gate_verdict_status,
         thread_resolution=thread_resolution,
+        merge_group_head_binding=merge_group_head_binding,
     )
 
     passed = not reasons
@@ -244,6 +278,8 @@ def evaluate_merge_gate(
         schema=AUDIT_SCHEMA,
         pr=_safe_int(pr.get("number")),
         head_sha=head_sha,
+        merge_group_head_sha=merge_group_head_sha,
+        merge_group_head_binding=merge_group_head_binding,
         base_sha=base_sha,
         main_sha=str(main_sha or ""),
         labels=labels,
@@ -321,60 +357,31 @@ def _resolve_owner_repo(explicit: str) -> str | None:
     return repo if repo else None
 
 
-def _source_branch_from_merge_group(head_ref: str) -> str | None:
-    """Extract the source PR branch from a merge-queue readonly ref.
-
-    The native merge-queue ref has the shape
-    ``refs/heads/gh-readonly-queue/<base>/<srcbranch>-<abbrevsha>``. The source
-    branch may itself contain hyphens, so only a trailing 7-40 hex suffix is
-    stripped. Returns ``None`` when the ref does not match the queue shape.
-    """
-    if not head_ref:
-        return None
-    match = _MERGE_QUEUE_REF_RE.match(head_ref)
-    if not match:
-        return None
-    rest = match.group("rest")
-    return _QUEUE_REF_SHA_SUFFIX_RE.sub("", rest, count=1)
+def _merge_group_head_matches(encoded_sha: str, current_head_sha: str) -> bool:
+    """Return whether an encoded queue-ref SHA identifies the current PR head."""
+    if not encoded_sha or not current_head_sha:
+        return False
+    return current_head_sha.lower().startswith(encoded_sha.lower())
 
 
-def resolve_pr_from_merge_group(event: dict[str, Any], *, repo: str) -> int | None:
-    """Resolve the source PR number for a ``merge_group`` event.
+def resolve_pr_from_merge_group(event: dict[str, Any]) -> MergeGroupPR | None:
+    """Resolve the PR identity encoded by a canonical ``merge_group`` event.
 
-    Uses the readonly-queue ref to recover the source branch, then lists open PRs
-    on that head targeting ``main``. Returns the PR number, or ``None`` when no
-    unique source PR is found (the caller fails closed).
+    GitHub uses ``pr-<number>-<source-sha>`` in its readonly queue ref. Parse
+    the PR number directly rather than querying a fictitious ``pr-<number>``
+    source branch. The caller binds ``head_sha`` to the current PR head before
+    evaluating the gate, and fails closed on a mismatch.
     """
     merge_group = event.get("merge_group") or {}
     head_ref = str(merge_group.get("head_ref") or "")
-    source_branch = _source_branch_from_merge_group(head_ref)
-    if not source_branch:
+    match = _MERGE_QUEUE_REF_RE.match(head_ref)
+    if not match:
         return None
-    result = _gh(
-        [
-            "pr",
-            "list",
-            "--repo",
-            repo,
-            "--head",
-            source_branch,
-            "--state",
-            "open",
-            "--json",
-            "number",
-            "--limit",
-            "5",
-        ]
-    )
-    if result.returncode != 0:
+    number = _safe_int(match.group("number"))
+    head_sha = str(match.group("head_sha") or "").lower()
+    if number is None or not head_sha:
         return None
-    payload, err = _parse_json(result.stdout)
-    if err or not isinstance(payload, list) or not payload:
-        return None
-    numbers = [p.get("number") for p in payload if isinstance(p, dict) and p.get("number")]
-    if len(numbers) != 1:
-        return None
-    return _safe_int(numbers[0])
+    return MergeGroupPR(number=number, head_sha=head_sha)
 
 
 def _normalize_labels(raw: Any) -> list[str]:
@@ -580,6 +587,8 @@ def _format_summary(audit: MergeGateAudit) -> str:
         "",
         f"- PR: #{audit.pr if audit.pr is not None else '?'}",
         f"- evaluated head SHA: `{audit.head_sha or '?'}`",
+        f"- merge-group source head SHA: `{audit.merge_group_head_sha or 'n/a'}`",
+        f"- merge-group source-head binding: `{audit.merge_group_head_binding}`",
         f"- base SHA: `{audit.base_sha or '?'}`",
         f"- main SHA: `{audit.main_sha or 'n/a'}`",
         f"- labels: `{', '.join(audit.labels) if audit.labels else '(none)'}`",
@@ -621,6 +630,7 @@ def _evaluate_live(
     *,
     repo: str,
     merge_group_base_sha: str = "",
+    merge_group_head_sha: str = "",
 ) -> tuple[MergeGateAudit, str | None]:
     """Fetch live PR state, evaluate the gate, and return ``(audit, error)``."""
     snapshot, err = fetch_pr_snapshot(pr_number, repo=repo)
@@ -631,6 +641,7 @@ def _evaluate_live(
                 main_sha="",
                 ci_overall="unknown",
                 threads_resolved=None,
+                merge_group_head_sha=merge_group_head_sha,
             ),
             err,
         )
@@ -652,6 +663,7 @@ def _evaluate_live(
                 snapshot,
                 main_sha=main_sha,
                 threads_resolved=False,
+                merge_group_head_sha=merge_group_head_sha,
             ),
             f"thread resolution query failed: {thread_err}",
         )
@@ -660,6 +672,7 @@ def _evaluate_live(
         snapshot,
         main_sha=main_sha,
         threads_resolved=threads_resolved,
+        merge_group_head_sha=merge_group_head_sha,
     )
     return audit, None
 
@@ -798,6 +811,8 @@ def _self_test() -> int:
         "schema",
         "pr",
         "head_sha",
+        "merge_group_head_sha",
+        "merge_group_head_binding",
         "base_sha",
         "main_sha",
         "labels",
@@ -901,14 +916,16 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        pr_number = resolve_pr_from_merge_group(event, repo=repo)
-        if pr_number is None:
+        merge_group_pr = resolve_pr_from_merge_group(event)
+        if merge_group_pr is None:
             print(
-                "Could not resolve a unique source PR from the merge_group payload; "
+                "Could not parse a canonical source PR from the merge_group payload; "
                 "failing closed.",
                 file=sys.stderr,
             )
             return 1
+        pr_number = merge_group_pr.number
+        merge_group_head_sha = merge_group_pr.head_sha
         merge_group_base_sha = str((event.get("merge_group") or {}).get("base_sha") or "")
     else:
         pr_number = _safe_int(args.pr)
@@ -916,11 +933,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Invalid PR number: {args.pr!r}", file=sys.stderr)
             return 1
         merge_group_base_sha = ""
+        merge_group_head_sha = ""
 
     audit, error = _evaluate_live(
         pr_number,
         repo=repo,
         merge_group_base_sha=merge_group_base_sha,
+        merge_group_head_sha=merge_group_head_sha,
     )
 
     _append_step_summary(_format_summary(audit))

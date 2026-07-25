@@ -418,6 +418,11 @@ label and without a current exact-head `gate-verdict: accepted` trailer (issue #
 dispatcher that routes through the GitHub native merge queue (or auto-merge) bypassed those gates,
 so review notes could not fail closed.
 
+**Scope: a native-queue gate, not a complete #6274 closure.** This workflow can protect only native
+`merge_group` events after a maintainer activates it as a required check. It does not locate, change,
+or prove coverage of the direct/parallel merge dispatcher observed in #6274. Keep #6274 open until
+that dispatcher and the active `main` protection configuration have both been verified.
+
 **Decision: required merge-queue status-check gate.** We add a dedicated status-check workflow that
 runs inside the native merge queue and enforces the same fail-closed preflight as `gh-pr-merger`
 before the queue auto-merges a PR:
@@ -431,9 +436,10 @@ before the queue auto-merges a PR:
   review threads. CI-green-on-head is subsumed by the gate-verdict trailer (the trailer is only
   posted after CI went green on that head); staleness is fresh by construction inside the queue
   (the queue base SHA equals current `main`).
-- **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, base
-  SHA, label set, gate-verdict status, staleness verdict, CI conclusion, and reviewer-thread
-  resolution, so every merge decision is inspectable and reproducible.
+- **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, the
+  source-head SHA encoded in the queue ref and its binding verdict, base SHA, label set,
+  gate-verdict status, staleness verdict, CI conclusion, and reviewer-thread resolution, so every
+  merge decision is inspectable and reproducible.
 - **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
   fail-closed contract deterministically (the issue #6274 validation scenarios).
 

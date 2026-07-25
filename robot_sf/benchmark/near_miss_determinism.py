@@ -154,6 +154,14 @@ def metric_path_is_deterministic(
         __slots__ = ("ped_radius", "peds_pos", "robot_pos", "robot_radius")
 
     def _build() -> _EpisodeData:
+        """Construct a fresh episode container with copied input trajectories.
+
+        Copying the arrays per invocation guards the determinism proof against a
+        caller mutating the shared input arrays mid-loop.
+
+        Returns:
+            The fresh ``_EpisodeData`` with copied trajectories.
+        """
         d = _EpisodeData()
         # Copy so callers cannot mutate the input mid-loop and corrupt the proof.
         d.robot_pos = robot_arr.copy()

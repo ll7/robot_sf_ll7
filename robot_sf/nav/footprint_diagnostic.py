@@ -494,6 +494,11 @@ def build_diagnostic_scenarios() -> list[FootprintDiagnosticScenario]:
 
 
 def _parse_footprint(entry: Mapping[str, Any]) -> FootprintModel:
+    """Parse a single YAML footprint entry into a typed dataclass model.
+
+    Returns:
+        CircularFootprint or RectangularFootprint.
+    """
     kind = entry.get("kind")
     footprint_id = entry.get("id")
     if not isinstance(footprint_id, str) or not _is_lowercase_snake_case(footprint_id):
@@ -519,6 +524,7 @@ def _parse_footprint(entry: Mapping[str, Any]) -> FootprintModel:
 
 
 def _validate_top_level_contract(payload: Mapping[str, Any]) -> None:
+    """Validate top-level schema version, claim_boundary, and source_literature fields."""
     if payload.get("schema_version") != FOOTPRINT_ORIENTATION_SCHEMA_VERSION:
         raise FootprintOrientationConfigError(
             f"schema_version must be {FOOTPRINT_ORIENTATION_SCHEMA_VERSION}"
@@ -531,6 +537,11 @@ def _validate_top_level_contract(payload: Mapping[str, Any]) -> None:
 
 
 def _validate_footprints(raw_footprints: Any) -> list[Mapping[str, Any]]:
+    """Validate the footprints list, requiring at least one circular and one rectangular kind.
+
+    Returns:
+        The validated list of footprint mappings.
+    """
     if not isinstance(raw_footprints, list) or not raw_footprints:
         raise FootprintOrientationConfigError("footprints must be a non-empty list")
     kinds: set[str] = set()
@@ -558,6 +569,7 @@ def _validate_footprints(raw_footprints: Any) -> list[Mapping[str, Any]]:
 
 
 def _validate_footprint_entry(entry: Mapping[str, Any]) -> None:
+    """Validate an entry's kind, display name, status, notes, and kind-specific dimensions."""
     footprint_id = str(entry["id"])
     kind = entry.get("kind")
     if kind not in (FOOTPRINT_KIND_CIRCULAR, FOOTPRINT_KIND_RECTANGULAR):
@@ -584,6 +596,11 @@ def _validate_footprint_entry(entry: Mapping[str, Any]) -> None:
 
 
 def _validate_scenario_families(raw_families: Any) -> list[Mapping[str, Any]]:
+    """Validate scenario_families list, IDs, and required family presence.
+
+    Returns:
+        The validated list of scenario family mappings.
+    """
     if not isinstance(raw_families, list) or not raw_families:
         raise FootprintOrientationConfigError("scenario_families must be a non-empty list")
     ids: list[str] = []
@@ -616,6 +633,7 @@ def _validate_scenario_families(raw_families: Any) -> list[Mapping[str, Any]]:
 
 
 def _validate_diagnostic_parameters(raw_params: Any) -> None:
+    """Validate diagnostic_parameters fields."""
     if not isinstance(raw_params, Mapping):
         raise FootprintOrientationConfigError("diagnostic_parameters must be a mapping")
     sample_step = raw_params.get("sample_step_m")
@@ -632,6 +650,7 @@ def _validate_diagnostic_parameters(raw_params: Any) -> None:
 
 
 def _validate_source_literature(source_literature: Any) -> None:
+    """Validate source_literature entries for role and url fields."""
     if not isinstance(source_literature, list) or not source_literature:
         raise FootprintOrientationConfigError("source_literature must be a non-empty list")
     for entry in source_literature:
@@ -646,6 +665,7 @@ def _validate_source_literature(source_literature: Any) -> None:
 
 
 def _require_boundary_language(claim_boundary: str) -> None:
+    """Require diagnostic, not-a-full-SE2-planner, and not-calibrated phrases."""
     normalized = claim_boundary.casefold()
     required_phrases = ("diagnostic", "not a full se(2) planner", "not calibrated")
     missing = [phrase for phrase in required_phrases if phrase not in normalized]
@@ -657,6 +677,12 @@ def _require_boundary_language(claim_boundary: str) -> None:
 
 
 def _result_to_row(result: FootprintClearanceResult) -> dict[str, Any]:
+    """Serialize a FootprintClearanceResult to a JSON-compatible dictionary row.
+
+    Returns:
+        Dictionary with footprint identity, kind, clearance values, status, collision flag,
+        sample count, and method.
+    """
     return {
         "footprint_id": result.footprint_id,
         "kind": result.kind,
@@ -670,6 +696,11 @@ def _result_to_row(result: FootprintClearanceResult) -> dict[str, Any]:
 
 
 def _round_or_none(value: float | None) -> float | None:
+    """Round a float to 6 decimal places, preserving None.
+
+    Returns:
+        Rounded float or None when input is None.
+    """
     if value is None:
         return None
     return round(float(value), 6)
@@ -747,14 +778,17 @@ def _route_tangent(line: LineString, distance: float, length: float, eps: float)
 
 
 def _is_positive_finite(value: Any) -> bool:
+    """Return True if value is a finite positive int or float."""
     return isinstance(value, int | float) and math.isfinite(float(value)) and float(value) > 0.0
 
 
 def _is_nonnegative_finite(value: Any) -> bool:
+    """Return True if value is a finite non-negative int or float."""
     return isinstance(value, int | float) and math.isfinite(float(value)) and float(value) >= 0.0
 
 
 def _is_lowercase_snake_case(value: str) -> bool:
+    """Return whether value starts lowercase and then uses lowercase characters, digits, or `_`."""
     if not value:
         return False
     return value[0].islower() and all(

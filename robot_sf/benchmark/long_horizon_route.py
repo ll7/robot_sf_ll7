@@ -248,6 +248,7 @@ _PLANNED_DISTANCE_ALIASES = (
 
 
 def _metrics(record: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return a record's ``metrics`` mapping, or empty when absent or not a mapping."""
     metrics = record.get("metrics", {})
     return metrics if isinstance(metrics, Mapping) else {}
 
@@ -258,6 +259,11 @@ def _numeric_from_aliases(
     *,
     default: float | None = None,
 ) -> float | None:
+    """Return the first numeric value found under ``aliases``, or ``default``.
+
+    Each alias is checked in the record's ``metrics`` block and then at the
+    record root; a present-but-non-numeric value raises rather than being skipped.
+    """
     metrics = _metrics(record)
     for alias in aliases:
         value = metrics.get(alias, record.get(alias))
@@ -271,6 +277,14 @@ def _numeric_from_aliases(
 
 
 def _distance_m(record: Mapping[str, Any]) -> float:
+    """Resolve travelled distance in metres from alias fields, failing closed.
+
+    Raises when distance is missing (required for distance-normalized metrics) or
+    negative.
+
+    Returns:
+        The travelled distance in metres.
+    """
     distance_m = _numeric_from_aliases(record, _DISTANCE_ALIASES)
     if distance_m is None:
         raise LongHorizonRouteError(
@@ -282,6 +296,11 @@ def _distance_m(record: Mapping[str, Any]) -> float:
 
 
 def _count(record: Mapping[str, Any], metric_name: str) -> float:
+    """Resolve a non-negative event count for ``metric_name``, defaulting to zero.
+
+    Returns:
+        The non-negative event count.
+    """
     value = _numeric_from_aliases(record, _COUNT_ALIASES[metric_name], default=0.0)
     assert value is not None
     if value < 0:

@@ -395,6 +395,7 @@ class _PlannerStepProcess:
         timeout_s: float,
         first_step_timeout_s: float | None = None,
     ) -> None:
+        """Store the planner and step-timeout settings for the isolated process boundary."""
         if "fork" not in mp.get_all_start_methods():
             raise RuntimeError(
                 "planner step timeout isolation requires multiprocessing fork support"
@@ -622,6 +623,7 @@ class _NativeCommandPolicy:
         timeout_s: float,
         persistent: bool,
     ) -> None:
+        """Store the native-command argv, environment, timeout, and persistence mode."""
         if not argv:
             raise ValueError("native_command requires a non-empty argv")
         self._argv = [str(item) for item in argv]
@@ -1079,6 +1081,7 @@ def _create_native_command_policy(
     }
 
     def render(value: Any) -> str:
+        """Return ``value`` as a string with template tokens substituted from the mapping."""
         rendered = str(value)
         for token, replacement in mapping.items():
             rendered = rendered.replace(token, replacement)

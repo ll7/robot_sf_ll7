@@ -329,6 +329,7 @@ def render_assurance_fragment_to_markdown(payload: dict[str, Any]) -> str:  # no
     visited = set()
 
     def print_node(node_id, indent=0):
+        """Recursively append ``node_id`` and its children to ``lines`` as an indented Markdown outline."""
         if node_id not in nodes or node_id in visited:
             return
         visited.add(node_id)

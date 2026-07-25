@@ -488,6 +488,7 @@ class _ExternalMPCAdapter:
         robot_kinematics: str | None,
         planner_name: str,
     ) -> None:
+        """Store the wrapped planner and its declared algorithm metadata."""
         self._planner = planner
         self._algo_config = algo_config
         self._robot_kinematics = robot_kinematics
@@ -939,6 +940,7 @@ class _GoalFallbackAdapter:
     """Simple goal-policy fallback adapter for guarded wrapper experiments."""
 
     def __init__(self, *, max_speed: float) -> None:
+        """Store the capped fallback speed."""
         self._max_speed = float(max_speed)
 
     def plan(self, observation: dict[str, Any]) -> tuple[float, float]:
@@ -2592,6 +2594,7 @@ def _run_map_jobs_with_policy_cache(
         robot_command_mode: str | None = None,
         adapter_impact_eval: bool = False,
     ) -> tuple[Any, dict[str, Any]]:
+        """Return the cached policy callable and metadata, building and caching on first use."""
         key = (
             str(algo).strip().lower(),
             _config_hash(algo_config),
@@ -2628,6 +2631,7 @@ def _run_map_jobs_with_policy_cache(
         )
 
     def run_cached_map_job(job: tuple[dict[str, Any], int, dict[str, Any]]) -> dict[str, Any]:
+        """Return one cached map-job result by delegating to ``_execute_map_job``."""
         return _execute_map_job(job, run_map_episode=run_cached_map_episode)
 
     try:

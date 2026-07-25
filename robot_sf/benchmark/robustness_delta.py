@@ -239,6 +239,7 @@ def _active_pair_keys(
     nominal_rows: Sequence[Mapping[str, Any]],
     perturbed_rows: Sequence[Mapping[str, Any]],
 ) -> list[str]:
+    """Return the pairing keys present across the nominal and perturbed rows."""
     rows = [*nominal_rows, *perturbed_rows]
     active = ["planner_identity"]
     for key in PAIR_KEYS:
@@ -254,6 +255,7 @@ def _index_rows(
     pair_keys: Sequence[str],
     label: str,
 ) -> dict[tuple[tuple[str, Any], ...], Mapping[str, Any]]:
+    """Return ``rows`` indexed by pairing key, rejecting duplicates."""
     indexed: dict[tuple[tuple[str, Any], ...], Mapping[str, Any]] = {}
     for row in rows:
         key = _pair_key(row, pair_keys)
@@ -264,6 +266,7 @@ def _index_rows(
 
 
 def _pair_key(row: Mapping[str, Any], pair_keys: Sequence[str]) -> tuple[tuple[str, Any], ...]:
+    """Return the JSON-serializable pairing-key tuple for ``row``."""
     values: list[tuple[str, Any]] = []
     for key in pair_keys:
         value = _planner_identity(row) if key == "planner_identity" else _get_nested(row, key)
@@ -272,6 +275,7 @@ def _pair_key(row: Mapping[str, Any], pair_keys: Sequence[str]) -> tuple[tuple[s
 
 
 def _planner_identity(row: Mapping[str, Any]) -> str:
+    """Return the best available planner identifier for ``row``."""
     for value in (
         row.get("planner_key"),
         row.get("planner"),
@@ -284,11 +288,13 @@ def _planner_identity(row: Mapping[str, Any]) -> str:
 
 
 def _algo(row: Mapping[str, Any]) -> str:
+    """Return the planner algorithm label for ``row``."""
     value = row.get("algo") or _get_nested(row, "scenario_params.algo") or _planner_identity(row)
     return str(value)
 
 
 def _success(row: Mapping[str, Any]) -> bool:
+    """Return whether ``row`` reached its goal from its outcome or success metrics."""
     outcome = _mapping(row.get("outcome"))
     if "route_complete" in outcome:
         return bool(outcome["route_complete"])
@@ -297,6 +303,7 @@ def _success(row: Mapping[str, Any]) -> bool:
 
 
 def _collision(row: Mapping[str, Any]) -> bool:
+    """Return whether ``row`` recorded a collision from its outcome or metrics."""
     outcome = _mapping(row.get("outcome"))
     if "collision" in outcome:
         return bool(outcome["collision"])
@@ -307,6 +314,7 @@ def _collision(row: Mapping[str, Any]) -> bool:
 
 
 def _finalize_planner_row(planner_key: str, planner: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the public per-planner delta row built from accumulated paired signals."""
     nominal_success = planner["_success_nominal"]
     perturbed_success = planner["_success_perturbed"]
     nominal_collision = planner["_collision_nominal"]
@@ -332,12 +340,14 @@ def _finalize_planner_row(planner_key: str, planner: Mapping[str, Any]) -> dict[
 
 
 def _incidence(values: Sequence[bool]) -> float:
+    """Return the fraction of truthy values in ``values`` (``0.0`` when empty)."""
     if not values:
         return 0.0
     return sum(1 for value in values if value) / len(values)
 
 
 def _perturbation_profile(row: Mapping[str, Any]) -> str | None:
+    """Return the observation-noise profile label for ``row``, or ``None``."""
     spec = row.get("observation_noise")
     if isinstance(spec, Mapping):
         profile = spec.get("profile")
@@ -348,6 +358,7 @@ def _perturbation_profile(row: Mapping[str, Any]) -> str | None:
 
 
 def _numeric_stats(value: Any) -> dict[str, int]:
+    """Return numeric entries of ``value`` keyed by name as integers."""
     stats = _mapping(value)
     return {
         str(key): int(number)
@@ -357,10 +368,12 @@ def _numeric_stats(value: Any) -> dict[str, int]:
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
+    """Return ``value`` as a mapping, or an empty mapping when it is not one."""
     return value if isinstance(value, Mapping) else {}
 
 
 def _get_nested(row: Mapping[str, Any], key: str) -> Any:
+    """Return the dotted ``key`` looked up in ``row``, or ``None`` when absent."""
     current: Any = row
     for part in key.split("."):
         if not isinstance(current, Mapping):
@@ -370,6 +383,7 @@ def _get_nested(row: Mapping[str, Any], key: str) -> Any:
 
 
 def _number(value: Any) -> float:
+    """Return ``value`` coerced to a float, with blanks as ``0.0`` and bools as ``0.0``/``1.0``."""
     if value is None or value == "":
         return 0.0
     if isinstance(value, bool):
@@ -381,14 +395,17 @@ def _number(value: Any) -> float:
 
 
 def _jsonable_scalar(value: Any) -> Any:
+    """Return ``value`` as a JSON-serializable scalar, JSON-encoding composite values."""
     if isinstance(value, str | int | float | bool) or value is None:
         return value
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def _key_as_dict(key: tuple[tuple[str, Any], ...]) -> dict[str, Any]:
+    """Return the pairing-key tuple as a plain dictionary."""
     return dict(key)
 
 
 def _sort_key(key: tuple[tuple[str, Any], ...]) -> tuple[str, ...]:
+    """Return a string-tuple sort key derived from a pairing-key tuple."""
     return tuple(f"{name}={value}" for name, value in key)

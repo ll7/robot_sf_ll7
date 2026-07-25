@@ -221,6 +221,7 @@ def _xy_rows(value: Any) -> np.ndarray:
 
 
 def _robot_position(env: Any) -> np.ndarray:
+    """Return the finite 2D robot position read from the simulator."""
     simulator = getattr(env, "simulator", None)
     if simulator is None or not hasattr(simulator, "robot_pos"):
         raise ValueError("safety_wrapper requires simulator.robot_pos")
@@ -235,11 +236,13 @@ def _robot_position(env: Any) -> np.ndarray:
 
 
 def _pedestrian_positions(env: Any) -> np.ndarray:
+    """Return finite ``(n, 2)`` pedestrian positions read from the simulator."""
     simulator = getattr(env, "simulator", None)
     return _xy_rows(getattr(simulator, "ped_pos", np.empty((0, 2), dtype=float)))
 
 
 def _robot_heading(env: Any) -> float:
+    """Return the robot heading in radians from its pose, defaulting to ``0.0``."""
     simulator = getattr(env, "simulator", None)
     robots = getattr(simulator, "robots", None)
     if isinstance(robots, list) and robots:
@@ -255,6 +258,7 @@ def _robot_heading(env: Any) -> float:
 
 
 def _radius(config: Any, *names: str, default: float) -> float:
+    """Return the first finite radius found under ``names`` on the sim config, else ``default``."""
     sim_config = getattr(config, "sim_config", None)
     for name in names:
         value = getattr(sim_config, name, None)
@@ -264,6 +268,7 @@ def _radius(config: Any, *names: str, default: float) -> float:
 
 
 def _robot_radius(config: Any) -> float:
+    """Return the robot radius from the config, defaulting to ``1.0`` when unset."""
     robot_config = getattr(config, "robot_config", None)
     robot_config_radius = getattr(robot_config, "radius", None)
     return _radius(
@@ -283,6 +288,7 @@ def _pedestrian_velocities(
     previous_positions: np.ndarray | None,
     dt: float,
 ) -> np.ndarray:
+    """Return finite-difference pedestrian velocities from consecutive positions, else zeros."""
     if not dt > 0.0:
         raise ValueError("safety_wrapper dt must be positive for pre-step context")
     if previous_positions is None:
@@ -302,6 +308,7 @@ def _min_positive_ttc(
     ped_positions: np.ndarray,
     ped_velocities: np.ndarray,
 ) -> float | None:
+    """Return the minimum positive time-to-closest-approach, or ``None`` when none close."""
     min_ttc: float | None = None
     for ped_pos, ped_velocity in zip(ped_positions, ped_velocities, strict=False):
         relative_pos = np.asarray(ped_pos, dtype=float) - robot_pos

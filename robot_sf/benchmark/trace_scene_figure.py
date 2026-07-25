@@ -205,6 +205,8 @@ class EpisodeTrace:
 
 @dataclass(frozen=True)
 class _RobotSeries:
+    """Internal per-step robot series parsed from trace ``derived_rows``."""
+
     steps: tuple[int, ...]
     times: tuple[float, ...]
     xy: tuple[tuple[float, float], ...]
@@ -216,6 +218,8 @@ class _RobotSeries:
 
 @dataclass(frozen=True)
 class _PedestrianSelection:
+    """Focused pedestrian tracks plus the count and radius of those filtered out."""
+
     tracks: Mapping[str, tuple[PedestrianSample, ...]]
     filtered_count: int
     radius_m: float
@@ -223,12 +227,16 @@ class _PedestrianSelection:
 
 @dataclass(frozen=True)
 class _MarkerLabelSpec:
+    """Placement of one time marker label within the marker sequence."""
+
     marker_position: int
     text: str
 
 
 @dataclass(frozen=True)
 class _PedestrianStyle:
+    """Render style (color, width, markers) for one pedestrian track."""
+
     color: str
     linewidth: float
     alpha: float
@@ -238,6 +246,7 @@ class _PedestrianStyle:
 
 
 def _read_json(path: Path) -> Mapping[str, Any]:
+    """Return the JSON object parsed from ``path``, raising ``TraceSchemaError`` on read or decode failure."""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except OSError as exc:
@@ -250,18 +259,21 @@ def _read_json(path: Path) -> Mapping[str, Any]:
 
 
 def _mapping(value: Any, context: str) -> Mapping[str, Any]:
+    """Return ``value`` as a dict, raising ``TraceSchemaError`` if it is not an object."""
     if not isinstance(value, dict):
         raise TraceSchemaError(f"{context} must be an object")
     return value
 
 
 def _sequence(value: Any, context: str) -> list[Any]:
+    """Return ``value`` as a list, raising ``TraceSchemaError`` if it is not an array."""
     if not isinstance(value, list):
         raise TraceSchemaError(f"{context} must be an array")
     return value
 
 
 def _number(row: Mapping[str, Any], key: str, context: str) -> float:
+    """Return ``row[key]`` coerced to a finite float, raising ``TraceSchemaError`` otherwise."""
     value = row.get(key)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TraceSchemaError(f"{context}.{key} must be numeric")
@@ -272,6 +284,7 @@ def _number(row: Mapping[str, Any], key: str, context: str) -> float:
 
 
 def _integer(row: Mapping[str, Any], key: str, context: str) -> int:
+    """Return ``row[key]`` as an int, raising ``TraceSchemaError`` if it is not an integer."""
     value = row.get(key)
     if isinstance(value, bool) or not isinstance(value, int):
         raise TraceSchemaError(f"{context}.{key} must be an integer")
@@ -279,6 +292,7 @@ def _integer(row: Mapping[str, Any], key: str, context: str) -> int:
 
 
 def _episode_status(metadata: Mapping[str, Any]) -> str:
+    """Return the normalized episode status string read from ``metadata``."""
     summary = _mapping(metadata.get("summary"), "metadata.summary")
     status = metadata.get("episode_status", metadata.get("status", summary.get("episode_status")))
     if not isinstance(status, str) or not status.strip():
@@ -289,6 +303,7 @@ def _episode_status(metadata: Mapping[str, Any]) -> str:
 
 
 def _require_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
+    """Return ``metadata`` validated and normalized with required planner, scenario, seed, and summary keys."""
     normalized = dict(metadata)
     for key in ("planner", "scenario_id", "seed"):
         if key not in normalized:
@@ -320,6 +335,7 @@ def _require_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _parse_derived_rows(raw_rows: Sequence[Any]) -> _RobotSeries:
+    """Return the per-step robot series parsed and validated from ``raw_rows``."""
     steps: list[int] = []
     times: list[float] = []
     robot_xy: list[tuple[float, float]] = []
@@ -359,6 +375,7 @@ def _parse_derived_rows(raw_rows: Sequence[Any]) -> _RobotSeries:
 def _parse_frames(
     raw_frames: Sequence[Any], time_by_step: Mapping[int, float]
 ) -> dict[str, tuple[PedestrianSample, ...]]:
+    """Return pedestrian tracks keyed by id, cross-checked against the shared step times."""
     tracks: dict[str, list[PedestrianSample]] = {}
     frame_steps: list[int] = []
     for index, raw_frame in enumerate(raw_frames):
@@ -576,6 +593,7 @@ def _is_xy_vector(value: Any) -> bool:
 
 
 def _pedestrian_sort_key(ped_id: str) -> tuple[int, int | str]:
+    """Return a sort key ordering numeric pedestrian ids before non-numeric ones."""
     try:
         return (0, int(ped_id))
     except ValueError:
@@ -585,6 +603,7 @@ def _pedestrian_sort_key(ped_id: str) -> tuple[int, int | str]:
 def _focused_pedestrian_tracks(
     episode: EpisodeTrace, radius_m: float
 ) -> tuple[dict[str, tuple[PedestrianSample, ...]], int]:
+    """Return tracks within ``radius_m`` of the robot and the count of pedestrians filtered out."""
     if radius_m <= 0:
         raise ValueError("ped_focus_radius_m must be greater than zero")
     robot_t = np.asarray(episode.time_s)
@@ -609,6 +628,7 @@ def _focused_pedestrian_tracks(
 
 
 def _snap_marker_indices(times: Sequence[float], interval_s: float) -> tuple[int, ...]:
+    """Return marker indices spaced roughly ``interval_s`` apart along ``times``."""
     if interval_s <= 0:
         raise ValueError("marker_interval_s must be greater than zero")
     if not times:
@@ -626,6 +646,7 @@ def _snap_marker_indices(times: Sequence[float], interval_s: float) -> tuple[int
 def _effective_marker_interval(
     episodes: Sequence[EpisodeTrace], requested_interval_s: float | None
 ) -> float:
+    """Return the marker interval to use, honoring an explicit request or widening it for long episodes."""
     if requested_interval_s is not None:
         if requested_interval_s <= 0:
             raise ValueError("marker_interval_s must be greater than zero")
@@ -703,10 +724,12 @@ def _marker_label_specs(
 
 
 def _obstacle_vertices(obstacle: Any) -> list[tuple[float, float]]:
+    """Return an obstacle's vertices as a list of ``(x, y)`` floats."""
     return [(float(x), float(y)) for x, y in obstacle.vertices]
 
 
 def _bbox(points: Sequence[tuple[float, float]]) -> tuple[float, float, float, float]:
+    """Return the ``(min_x, max_x, min_y, max_y)`` bounding box of ``points``."""
     xs = [point[0] for point in points]
     ys = [point[1] for point in points]
     return min(xs), max(xs), min(ys), max(ys)
@@ -715,6 +738,7 @@ def _bbox(points: Sequence[tuple[float, float]]) -> tuple[float, float, float, f
 def _boxes_intersect(
     first: tuple[float, float, float, float], second: tuple[float, float, float, float]
 ) -> bool:
+    """Return whether two axis-aligned bounding boxes overlap."""
     return not (
         first[1] < second[0] or second[1] < first[0] or first[3] < second[2] or second[3] < first[2]
     )
@@ -762,6 +786,7 @@ def _compute_scene_extent(
 
 @lru_cache(maxsize=16)
 def _load_map_definition(scenario_id: str) -> Any:
+    """Return the cached map definition loaded for ``scenario_id``."""
     from robot_sf.benchmark.classic_interactions_loader import (  # noqa: PLC0415
         load_classic_matrix,
         select_scenario,
@@ -782,12 +807,14 @@ def _load_map_definition(scenario_id: str) -> Any:
 
 
 def _zone_vertices(zone: Any) -> list[tuple[float, float]]:
+    """Return the four corner vertices of a rectangular zone defined by a corner triple."""
     first, second, third = zone
     fourth = (first[0] + third[0] - second[0], first[1] + third[1] - second[1])
     return [first, second, third, fourth]
 
 
 def _position_at_time(track: Sequence[PedestrianSample], time_s: float) -> tuple[float, float]:
+    """Return the ``(x, y)`` sample of ``track`` whose time is closest to ``time_s``."""
     index = min(range(len(track)), key=lambda candidate: abs(track[candidate][0] - time_s))
     return track[index][1], track[index][2]
 
@@ -844,6 +871,7 @@ def _scene_label_priority(text: str) -> int:
 
 
 def _shifted_bbox(bbox: Bbox, shift_x: float, shift_y: float) -> Bbox:
+    """Return ``bbox`` translated in display space by ``(shift_x, shift_y)``."""
     return Bbox.from_extents(
         bbox.x0 + shift_x,
         bbox.y0 + shift_y,
@@ -867,6 +895,7 @@ def _clamp_bbox_shift(bbox: Bbox, axes_bbox: Bbox) -> tuple[float, float]:
 
 
 def _bboxes_collide(first: Bbox, second: Bbox) -> bool:
+    """Return whether two label bounding boxes collide within the label padding."""
     first_padded = first.padded(_LABEL_COLLISION_PADDING_PX)
     second_padded = second.padded(_LABEL_COLLISION_PADDING_PX)
     intersection = Bbox.intersection(first_padded, second_padded)
@@ -874,6 +903,7 @@ def _bboxes_collide(first: Bbox, second: Bbox) -> bool:
 
 
 def _bbox_overlap_area(first: Bbox, second: Bbox) -> float:
+    """Return the overlap area of two bounding boxes, or ``0.0`` when they are disjoint."""
     intersection = Bbox.intersection(first, second)
     if intersection is None:
         return 0.0
@@ -881,6 +911,7 @@ def _bbox_overlap_area(first: Bbox, second: Bbox) -> float:
 
 
 def _move_text_in_display_space(text: Any, shift_x: float, shift_y: float) -> None:
+    """Move a matplotlib text artist by ``(shift_x, shift_y)`` given in display pixels."""
     transform = text.get_transform()
     display_position = transform.transform(text.get_position())
     text.set_position(transform.inverted().transform(display_position + (shift_x, shift_y)))
@@ -1039,6 +1070,7 @@ def _collect_marker_obstacles(ax: Axes) -> np.ndarray:
 
 
 def _bbox_contains_markers(bbox: Bbox, markers: np.ndarray, tolerance: float) -> bool:
+    """Return whether any marker point lies inside ``bbox`` within ``tolerance``."""
     if markers.size == 0:
         return False
     inside = (
@@ -1193,6 +1225,7 @@ def _select_label_position(
     """
 
     def _cost(candidate: tuple[float, float, Bbox]) -> tuple[int, int, int, int, float, float]:
+        """Return the placement cost tuple for a candidate, where lower is better."""
         shift_x, shift_y, bbox = candidate
         label_collisions = sum(_bboxes_collide(bbox, placed) for placed in obstacles.placed_bboxes)
         text_overlap = sum(_bbox_overlap_area(bbox, placed) for placed in obstacles.placed_bboxes)
@@ -1350,6 +1383,7 @@ def _draw_robot_time_markers(
     marker_interval_s: float,
     zone_label_centers: Sequence[tuple[float, float]] = (),
 ) -> tuple[_MarkerLabelSpec, ...]:
+    """Return the placed marker-label specs after drawing time markers on ``ax``."""
     marker_points = [episode.robot_xy[index] for index in marker_indices]
     label_specs = _marker_label_specs(
         marker_points,
@@ -1390,6 +1424,7 @@ def _draw_robot_time_markers(
 
 
 def _global_min_index(episode: EpisodeTrace) -> int:
+    """Return the step index of the global minimum robot-pedestrian distance."""
     summary = _mapping(episode.metadata.get("summary"), "metadata.summary")
     min_step = _integer(summary, "global_min_distance_step", "metadata.summary")
     try:
@@ -1401,6 +1436,7 @@ def _global_min_index(episode: EpisodeTrace) -> int:
 def _nearest_pedestrian_position(
     episode: EpisodeTrace, index: int
 ) -> tuple[str, tuple[float, float]] | None:
+    """Return the id and position of the pedestrian nearest the robot at ``index``, or ``None``."""
     time = episode.time_s[index]
     nearest_id = episode.nearest_pedestrian_id[index]
     if nearest_id is not None and nearest_id in episode.pedestrian_tracks:
@@ -1417,6 +1453,7 @@ def _nearest_pedestrian_position(
 
 
 def _focal_pedestrian_id(episode: EpisodeTrace) -> str | None:
+    """Return the id of the pedestrian nearest the robot at the minimum-distance step, or ``None``."""
     nearest = _nearest_pedestrian_position(episode, _global_min_index(episode))
     return nearest[0] if nearest is not None else None
 
@@ -1427,6 +1464,7 @@ def _pedestrian_styles(
     *,
     highlight_focal: bool,
 ) -> dict[str, _PedestrianStyle]:
+    """Return a render style per pedestrian id, optionally highlighting the focal pedestrian."""
     if not highlight_focal:
         return {
             ped_id: _PedestrianStyle(
@@ -1466,6 +1504,7 @@ def _pedestrian_styles(
 
 
 def _draw_obstacles(ax: Axes, map_definition: Any, limits: AxisLimits) -> None:
+    """Draw the obstacles overlapping the viewport onto ``ax``."""
     viewport = (limits[0][0], limits[0][1], limits[1][0], limits[1][1])
     for obstacle in map_definition.obstacles:
         vertices = _obstacle_vertices(obstacle)
@@ -1484,6 +1523,7 @@ def _draw_obstacles(ax: Axes, map_definition: Any, limits: AxisLimits) -> None:
 
 
 def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tuple[float, float]]:
+    """Return the drawn zone-label centers after rendering start/goal zones on ``ax``."""
     drawn_label_centers: list[tuple[float, float]] = []
     for zones, linestyle, label, marker_point in (
         (map_definition.robot_spawn_zones, "--", "start", episode.robot_xy[0]),
@@ -1522,6 +1562,7 @@ def _draw_zones(ax: Axes, map_definition: Any, episode: EpisodeTrace) -> list[tu
 
 
 def _scale_bar_geometry(limits: AxisLimits, length: float, corner: str) -> tuple[float, float]:
+    """Return the ``(start_x, y)`` origin of a scale bar placed in ``corner``."""
     width = limits[0][1] - limits[0][0]
     height = limits[1][1] - limits[1][0]
     inset_x = 0.05 * width
@@ -1539,6 +1580,7 @@ def _choose_scale_bar_corner(
     trajectory_points: Sequence[tuple[float, float]],
     zone_label_centers: Sequence[tuple[float, float]],
 ) -> str:
+    """Return the corner whose scale-bar region overlaps the fewest points."""
     width = limits[0][1] - limits[0][0]
     height = limits[1][1] - limits[1][0]
     horizontal_padding = max(1.0, 0.08 * width)
@@ -1559,6 +1601,7 @@ def _choose_scale_bar_corner(
 
 
 def _draw_key_frames(ax: Axes, episode: EpisodeTrace) -> None:
+    """Draw the start, minimum-distance, and terminal key-frame annotations on ``ax``."""
     start_x, start_y = episode.robot_xy[0]
     ax.scatter(
         [start_x], [start_y], s=28, color=GREEN, edgecolors="white", linewidths=0.5, zorder=9
@@ -1682,6 +1725,7 @@ def _draw_scene_panel(  # noqa: C901 - scene assembly with inherent per-element 
     *,
     highlight_focal: bool,
 ) -> tuple[int, ...]:
+    """Return the marker indices after drawing one scene panel (tracks, markers, key frames) on ``ax``."""
     focused_tracks = pedestrian_selection.tracks
     marker_indices = _snap_marker_indices(episode.time_s, marker_interval_s)
     marker_times = [episode.time_s[index] for index in marker_indices]
@@ -1791,6 +1835,7 @@ def _draw_timeline(
     collision_envelope_m: float,
     comfort_distance_m: float,
 ) -> None:
+    """Draw the distance and speed timeline with reference lines and markers onto ``ax``."""
     time = episode.time_s
     ax.plot(time, episode.min_robot_ped_distance_m, color=INK, linewidth=1.3)
     ax.axhline(
@@ -1936,6 +1981,7 @@ def _clamp_texts_to_canvas(figure: Figure, margin_px: float = 2.0) -> None:
 
 
 def _prepare_output(out: Path) -> Path:
+    """Return ``out`` normalized to a ``.pdf`` or ``.png`` path with a writable parent directory."""
     out = Path(out)
     if not out.suffix:
         out = out.with_suffix(".pdf")
@@ -1948,6 +1994,7 @@ def _prepare_output(out: Path) -> Path:
 def _save_figure(
     figure: Figure, out: Path, dpi: int, *, close: bool = True, tight: bool = True
 ) -> Path:
+    """Return the output path after saving ``figure`` to ``out`` at ``dpi``, optionally closing it."""
     out = _prepare_output(out)
     # Design-at-final-size renders skip the tight-bbox crop so the PDF's natural
     # (MediaBox) width stays EXACTLY the requested figure width.

@@ -1376,12 +1376,14 @@ def clear_tracking_metrics(data: EpisodeData) -> dict[str, Any]:
         return {}
 
     def _float_value(key: str, default: float = float("nan")) -> float:
+        """Return ``key`` from the clear-tracking metadata parsed as a float, else ``default``."""
         try:
             return float(raw.get(key, default))
         except (TypeError, ValueError):
             return default
 
     def _count_value(key: str) -> float:
+        """Return a non-negative finite count for ``key`` from the clear-tracking metadata, else ``0.0``."""
         value = _float_value(key, 0.0)
         return value if math.isfinite(value) and value >= 0.0 else 0.0
 

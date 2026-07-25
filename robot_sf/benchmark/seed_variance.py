@@ -184,6 +184,7 @@ def _taxonomy_from_record(record: dict[str, Any], flat: dict[str, Any]) -> dict[
 
 
 def _present_text(value: Any) -> str | None:
+    """Return ``value`` as a trimmed string, or ``None`` when it is blank or null-like."""
     if value is None:
         return None
     text = str(value).strip()

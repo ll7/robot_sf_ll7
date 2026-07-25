@@ -428,6 +428,7 @@ def assess_campaign_readiness(
     blockers: list[str] = []
 
     def _record(name: str, ok: bool, detail: str) -> None:
+        """Record one readiness criterion, appending its detail to ``blockers`` when not ok."""
         criteria[name] = {"ready": bool(ok), "detail": detail}
         if not ok:
             blockers.append(f"{name}: {detail}")
@@ -596,6 +597,7 @@ def _check_registry_pinned(config_path: Path, registry_path: str | Path | None) 
 
 
 def _validate_factorial_arms(value: Any, *, config_path: str | Path | None) -> None:
+    """Validate the four ordered factorial arms and their algo-config references."""
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ValueError("factorial_arms must be list")
     if not all(isinstance(arm, Mapping) for arm in value):
@@ -618,6 +620,7 @@ def _validate_factorial_arms(value: Any, *, config_path: str | Path | None) -> N
 
 
 def _validate_seed_policy(value: Any) -> None:
+    """Validate the seed-policy block selects the preregistered paper_eval_s30 seed set."""
     if not isinstance(value, Mapping):
         raise ValueError("seed_policy must be mapping")
     if value.get("mode") != "seed-set" or value.get("seed_set") != "paper_eval_s30":
@@ -625,6 +628,7 @@ def _validate_seed_policy(value: Any) -> None:
 
 
 def _validate_seed_budget(value: Any) -> None:
+    """Validate the seed-budget block uses paired paper_eval_s30 with 30 seeds per arm."""
     if not isinstance(value, Mapping):
         raise ValueError("seed_budget must be mapping")
     if value.get("mode") != "paired" or value.get("seed_set") != "paper_eval_s30":
@@ -636,6 +640,7 @@ def _validate_seed_budget(value: Any) -> None:
 def _validate_scenario_provenance(
     config: Mapping[str, Any], *, config_path: str | Path | None
 ) -> None:
+    """Validate the scenario matrix path and its pinned SHA-256 digest."""
     expected_digest = str(config.get("scenario_matrix_sha256", ""))
     if len(expected_digest) != 64 or any(
         char not in "0123456789abcdef" for char in expected_digest
@@ -655,6 +660,7 @@ def _validate_scenario_provenance(
 
 
 def _normalized_arms(arms: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return normalized factorial-arm dictionaries with typed toggle fields."""
     normalized: list[dict[str, Any]] = []
     for arm in arms:
         normalized.append(
@@ -670,6 +676,7 @@ def _normalized_arms(arms: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _load_seeds(seed_sets_path: str, seed_set_name: str) -> list[int]:
+    """Return the integer seed list for ``seed_set_name`` from the seed-sets file, or a default triple."""
     path = Path(seed_sets_path)
     if not path.exists():
         return [111, 112, 113]
@@ -679,6 +686,7 @@ def _load_seeds(seed_sets_path: str, seed_set_name: str) -> list[int]:
 
 
 def _load_scenario_ids(scenario_matrix_path: str) -> list[str]:
+    """Return scenario ids parsed from a scenario matrix file, or an empty list when absent."""
     path = Path(scenario_matrix_path)
     if not path.exists():
         return []
@@ -690,6 +698,7 @@ def _load_scenario_ids(scenario_matrix_path: str) -> list[str]:
 
 
 def _resolve_existing_path(path_text: str, *, config_path: Path) -> Path:
+    """Return ``path_text`` resolved as absolute, cwd-relative, or under a config parent."""
     candidate = Path(path_text)
     if candidate.is_absolute():
         return candidate
@@ -704,6 +713,7 @@ def _resolve_existing_path(path_text: str, *, config_path: Path) -> Path:
 
 
 def _reject_transient_routing_state(config: Mapping[str, Any]) -> None:
+    """Raise ``ValueError`` if ``config`` carries forbidden transient queue-routing state."""
     forbidden_keys = {"target_host", "packet_lineage", "queue_route", "submit_host"}
     found = sorted(forbidden_keys & set(config))
     if found:

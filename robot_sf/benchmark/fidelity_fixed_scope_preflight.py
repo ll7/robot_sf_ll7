@@ -355,6 +355,7 @@ def _declared_non_identifiable_reason(entry: Mapping[str, Any]) -> str:
 
 
 def _in_map(mapping: Mapping[str, Any] | None, key: str) -> bool:
+    """Return whether ``mapping`` is a ``Mapping`` that contains ``key``."""
     return isinstance(mapping, Mapping) and key in mapping
 
 

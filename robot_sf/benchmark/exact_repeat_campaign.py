@@ -198,18 +198,21 @@ def canonical_sha256(value: Any) -> str:
 
 
 def _require_mapping(value: Any, label: str) -> Mapping[str, Any]:
+    """Return ``value`` as a mapping, raising ``ValueError`` with ``label`` otherwise."""
     if not isinstance(value, Mapping):
         raise ValueError(f"{label} must be an object")
     return value
 
 
 def _require_text(value: Any, label: str) -> str:
+    """Return ``value`` as a non-empty stripped string, raising ``ValueError`` with ``label`` otherwise."""
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label} must be a non-empty string")
     return value
 
 
 def _require_sha256(value: Any, label: str) -> str:
+    """Return ``value`` as a lowercase SHA-256 digest, raising ``ValueError`` with ``label`` otherwise."""
     digest = _require_text(value, label)
     if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest.lower()):
         raise ValueError(f"{label} must be a lowercase-or-uppercase SHA-256 digest")
@@ -217,10 +220,12 @@ def _require_sha256(value: Any, label: str) -> str:
 
 
 def _planner(record: Mapping[str, Any]) -> str:
+    """Return the planner name from an episode record's algo or planner field."""
     return _require_text(record.get("algo", record.get("planner")), "episode planner")
 
 
 def _target_key(target: Mapping[str, Any]) -> tuple[str, str, int]:
+    """Return the ``(scenario_id, planner, seed)`` key for ``target`` after validating the seed."""
     seed = target.get("seed")
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError("target seed must be an integer")
@@ -337,6 +342,7 @@ def build_manifest(  # noqa: C901 - validation branches make the fail-closed con
 
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str:
+    """Return the non-empty scenario identifier (name/scenario_id/id) of ``scenario``."""
     for key in ("name", "scenario_id", "id"):
         value = scenario.get(key)
         if isinstance(value, str) and value.strip():
@@ -345,6 +351,7 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
 
 
 def _planner_index(planners: Sequence[Any]) -> dict[str, Any]:
+    """Return planners indexed by key and unique algo name, rejecting duplicate keys."""
     indexed: dict[str, Any] = {}
     for planner in planners:
         identity = str(planner.key)
@@ -548,6 +555,7 @@ def resolve_runnable_definitions(  # noqa: C901 - fail-closed recovery validates
 def _check_manifest(
     manifest: Mapping[str, Any],
 ) -> tuple[dict[tuple[str, str, int], Mapping[str, Any]], int]:
+    """Return manifest targets keyed by target key and the repeat count after validation."""
     if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
         raise ValueError("manifest has an unsupported schema_version")
     contract = _require_mapping(manifest.get("execution_contract"), "manifest execution_contract")
@@ -579,6 +587,7 @@ def _check_manifest(
 
 
 def _repeat_fingerprint(repeat: Mapping[str, Any]) -> tuple[int, str, Any]:
+    """Return the ``(outcome, trajectory_sha256, near_misses)`` fingerprint of one repeat."""
     outcome = repeat.get("outcome")
     if isinstance(outcome, bool):
         outcome = int(outcome)
@@ -589,6 +598,7 @@ def _repeat_fingerprint(repeat: Mapping[str, Any]) -> tuple[int, str, Any]:
 
 
 def _first_divergence(repeats: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
+    """Return the first field where repeat fingerprints diverge from the reference, or ``None``."""
     reference = _repeat_fingerprint(repeats[0])
     for index, repeat in enumerate(repeats[1:], start=1):
         current = _repeat_fingerprint(repeat)
@@ -834,6 +844,7 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     provenance_match = not provenance_mismatches
 
     def index(report: Mapping[str, Any]) -> dict[tuple[str, str, int], Mapping[str, Any]]:
+        """Return the targets of a verified ``report`` keyed by target key."""
         rows = report.get("targets")
         if not isinstance(rows, list):
             raise ValueError("verified host report targets must be a list")

@@ -133,6 +133,11 @@ class BRNEPlanner:
         self._jit_warmup_done = False
 
     def _parse_config(self, config: dict[str, Any] | BRNEPlannerConfig) -> BRNEPlannerConfig:
+        """Normalize ``config`` into a BRNEPlannerConfig, building it from a dict when needed.
+
+        Returns:
+            The normalized planner configuration.
+        """
         if isinstance(config, dict):
             return build_brne_config(config)
         if isinstance(config, BRNEPlannerConfig):
@@ -140,12 +145,22 @@ class BRNEPlanner:
         raise TypeError(f"Invalid config type: {type(config)}")
 
     def _resolve_stage_path(self) -> Path:
+        """Resolve the configured BRNE staging directory, expanding ``~`` and repo-relative paths.
+
+        Returns:
+            The resolved absolute staging path.
+        """
         root = Path(self.config.stage_path).expanduser()
         if not root.is_absolute():
             root = _REPO_ROOT / root
         return root.resolve()
 
     def _ensure_brne_loaded(self) -> ModuleType:
+        """Lazily import and cache the staged BRNE core module on first use.
+
+        Returns:
+            The cached BRNE core module.
+        """
         if self._brne is not None:
             return self._brne
         stage = self._resolve_stage_path()
@@ -153,6 +168,11 @@ class BRNEPlanner:
         return self._brne
 
     def _ensure_cov(self, brne: ModuleType) -> np.ndarray:
+        """Build and cache the kernel L-matrix used to sample trajectory noise.
+
+        Returns:
+            The cached kernel L-matrix.
+        """
         if self._lmat is not None:
             return self._lmat
         cfg = self.config
@@ -195,6 +215,12 @@ class BRNEPlanner:
             raise RuntimeError(f"BRNE solve failed: {exc}") from exc
 
     def _solve(self, obs: Observation) -> dict[str, float]:
+        """Run the BRNE solver for one observation.
+
+        Returns:
+            The ``{v, omega}`` action, falling back to zero motion when the
+            solver exceeds its budget or yields non-finite output.
+        """
         cfg = self.config
         brne = self._ensure_brne_loaded()
         lmat = self._ensure_cov(brne)
@@ -266,6 +292,11 @@ class BRNEPlanner:
         plan_steps: int,
         num_samples: int,
     ) -> np.ndarray | None:
+        """Invoke the upstream ``brne_nav`` kernel with the configured costs and corridor bounds.
+
+        Returns:
+            Per-agent sample weights from the upstream BRNE solve.
+        """
         cfg = self.config
         return brne.brne_nav(
             xtraj,
@@ -287,6 +318,11 @@ class BRNEPlanner:
         r_vel: np.ndarray,
         r_goal: np.ndarray,
     ) -> np.ndarray:
+        """Return the robot ``[x, y, theta]`` pose, taking heading from velocity or goal bearing.
+
+        Returns:
+            The ``[x, y, theta]`` robot pose.
+        """
         if np.linalg.norm(r_vel) > 1e-6:
             theta = float(np.arctan2(r_vel[1], r_vel[0]))
         elif np.linalg.norm(r_goal - r_pos) > 1e-6:
@@ -300,6 +336,11 @@ class BRNEPlanner:
         agents: list[dict[str, Any]],
         r_pos: np.ndarray,
     ) -> list[tuple[float, int]]:
+        """Select the closest agents to the robot, capped at ``maximum_agents - 1`` pedestrians.
+
+        Returns:
+            ``(distance, index)`` tuples of the closest agents, sorted by distance.
+        """
         cfg = self.config
         agent_dists: list[tuple[float, int]] = []
         for idx, agent in enumerate(agents):
@@ -324,6 +365,11 @@ class BRNEPlanner:
         plan_steps: int,
         dt: float,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Sample robot and pedestrian trajectory ensembles for BRNE.
+
+        Returns:
+            The stacked ``xtraj``/``ytraj`` arrays and the control ensemble ``ulist``.
+        """
         cfg = self.config
         direction = r_goal - r_pos
         speed = (
@@ -360,6 +406,7 @@ class BRNEPlanner:
         return xtraj, ytraj, ulist
 
     def _clamp_action(self, action: dict[str, float]) -> None:
+        """Clamp the action's speed and yaw rate to configured limits in place when enabled."""
         if self.config.safety_clamp:
             action["v"] = max(0.0, min(float(action["v"]), self.config.v_max))
             action["omega"] = max(

@@ -298,6 +298,11 @@ def production_candidate_evaluator(
     def _evaluate(
         config: SearchConfig, candidate: CandidateSpec, index: int
     ) -> CandidateEvaluation:
+        """Run one candidate through the production adversarial pipeline.
+
+        Executes the validate -> materialize -> certify -> benchmark sequence under
+        ``config.output_dir / candidate_{index:04d}`` and returns its evaluation.
+        """
         candidate_dir = config.output_dir / f"candidate_{index:04d}"
         validation_errors = config.search_space.validate_candidate(candidate)
         if validation_errors:

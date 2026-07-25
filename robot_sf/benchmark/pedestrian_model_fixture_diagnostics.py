@@ -128,6 +128,7 @@ class PedestrianModelFixtureTrace:
 def _require_finite_number(
     value: float, field_name: str, *, positive: bool = False, non_negative: bool = False
 ) -> None:
+    """Validate ``value`` is finite (and optionally positive/non-negative), else raise."""
     if isinstance(value, bool) or not math.isfinite(float(value)):
         raise ValueError(f"{field_name} must be finite")
     if positive and float(value) <= 0.0:
@@ -679,6 +680,11 @@ def _base_map(
     height: float,
     obstacles: list[Obstacle] | None = None,
 ) -> MapDefinition:
+    """Build a diagnostic map with robot spawn/goal rectangles, bounds, and a minimal robot route.
+
+    Returns:
+        The diagnostic ``MapDefinition``.
+    """
     robot_spawn = _rect(0.2, 0.2, 0.8, 0.8)
     robot_goal = _rect(width - 0.8, height - 0.8, width - 0.2, height - 0.2)
     return MapDefinition(
@@ -715,6 +721,7 @@ def _copy_map_with_single_pedestrians(
     base_map: MapDefinition,
     single_pedestrians: list[SinglePedestrianDefinition],
 ) -> MapDefinition:
+    """Return a shallow copy of ``base_map`` with its ``single_pedestrians`` replaced."""
     return MapDefinition(
         width=base_map.width,
         height=base_map.height,
@@ -732,6 +739,7 @@ def _copy_map_with_single_pedestrians(
 
 
 def _minimum_pairwise_distance(positions: np.ndarray) -> float:
+    """Return the minimum pairwise pedestrian distance across timesteps (0 if too few dims)."""
     if positions.shape[1] < 2:
         return 0.0
     deltas = positions[:, :, np.newaxis, :] - positions[:, np.newaxis, :, :]
@@ -742,6 +750,7 @@ def _minimum_pairwise_distance(positions: np.ndarray) -> float:
 
 
 def _max_consecutive_true(mask: np.ndarray) -> int:
+    """Return the length of the longest run of truthy values in ``mask``."""
     max_run = 0
     current = 0
     for value in np.asarray(mask, dtype=bool):
@@ -754,14 +763,29 @@ def _max_consecutive_true(mask: np.ndarray) -> int:
 
 
 def _axis_index(axis: Axis) -> int:
+    """Map axis name ``'x'``/``'y'`` to the array index ``0``/``1``.
+
+    Returns:
+        The array index for the axis.
+    """
     return 0 if axis == "x" else 1
 
 
 def _rect(x0: float, y0: float, x1: float, y1: float) -> Rect:
+    """Build a three-corner ``Rect`` polygon from its lower-left/upper-right bounds.
+
+    Returns:
+        The three-corner rect polygon.
+    """
     return ((x0, y1), (x1, y1), (x1, y0))
 
 
 def _json_safe(value: Any) -> Any:
+    """Recursively convert numpy/container values into a JSON-serializable structure.
+
+    Returns:
+        The JSON-serializable value.
+    """
     if isinstance(value, dict):
         return {str(key): _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):

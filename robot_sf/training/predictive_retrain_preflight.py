@@ -121,11 +121,17 @@ def validate_retrain_preflight(
 
 
 def _resolve_path(path: Path | str, base: Path) -> Path:
+    """Resolve ``path`` against ``base``, resolving absolute paths as-is.
+
+    Returns:
+        The resolved absolute path.
+    """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (base / candidate).resolve()
 
 
 def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[str]) -> Any:
+    """Return ``mapping[key]`` when it is a non-empty string, else record an error."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty string")
@@ -134,6 +140,7 @@ def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[st
 
 
 def _require_mapping(mapping: dict[str, Any], key: str, errors: list[str]) -> dict[str, Any] | None:
+    """Return ``mapping[key]`` when it is a dict, else record an error and return None."""
     value = mapping.get(key)
     if not isinstance(value, dict):
         errors.append(f"{key} must be a mapping")
@@ -142,6 +149,7 @@ def _require_mapping(mapping: dict[str, Any], key: str, errors: list[str]) -> di
 
 
 def _require_positive_int(mapping: dict[str, Any], key: str, label: str, errors: list[str]) -> None:
+    """Require ``mapping[key]`` to be an integer >= 1, recording an error otherwise."""
     value = mapping.get(key)
     try:
         as_int = int(value)
@@ -153,6 +161,7 @@ def _require_positive_int(mapping: dict[str, Any], key: str, label: str, errors:
 
 
 def _validate_experiment(config: dict[str, Any], errors: list[str]) -> None:
+    """Validate the experiment block's ``run_id`` is a non-empty string."""
     experiment = _require_mapping(config, "experiment", errors)
     if experiment is None:
         return
@@ -164,6 +173,11 @@ def _validate_scenarios(
     config_dir: Path,
     errors: list[str],
 ) -> dict[str, str] | None:
+    """Validate required scenario reference files exist and return resolved paths.
+
+    Returns:
+        Mapping of scenario reference key to its resolved path, or ``None``.
+    """
     scenarios = _require_mapping(config, "scenarios", errors)
     if scenarios is None:
         return None
@@ -248,6 +262,11 @@ def _validate_mixing(
 
 
 def _validate_weighting_spec(spec_path: Path, errors: list[str]) -> dict[str, Any]:
+    """Validate the weighting-spec YAML and return a compact summary.
+
+    Returns:
+        Compact weighting-rule summary mapping.
+    """
     payload = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         errors.append(f"weighting spec must be a YAML mapping: {spec_path}")
@@ -301,6 +320,11 @@ def _validate_evaluation(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any] | None:
+    """Validate the evaluation block and return a baseline summary.
+
+    Returns:
+        Baseline evaluation summary mapping, or ``None``.
+    """
     evaluation = _require_mapping(config, "evaluation", errors)
     if evaluation is None:
         return None
@@ -337,6 +361,11 @@ def _validate_evaluation_algo_config(
     expected_model_id: Any,
     errors: list[str],
 ) -> Path | None:
+    """Validate the baseline algo-config path and that its model id matches.
+
+    Returns:
+        The resolved algo-config path, or ``None`` when invalid.
+    """
     value = evaluation.get("baseline_algo_config")
     if not isinstance(value, str) or not value.strip():
         errors.append("evaluation.baseline_algo_config must be non-empty path string")
@@ -365,6 +394,7 @@ def _validate_evaluation_algo_config(
 
 
 def _validate_registry_model_id(repo_root: Path, model_id: Any, errors: list[str]) -> None:
+    """Validate the baseline model id is registered in the model registry."""
     if not model_id:
         return
     registry_path = repo_root / "model" / "registry.yaml"
@@ -415,6 +445,11 @@ def _validate_provenance(
     *,
     output_root: str | None = None,
 ) -> dict[str, Any] | None:
+    """Validate provenance paths and status, returning expected missing artifacts.
+
+    Returns:
+        Provenance summary including expected missing artifact paths, or ``None``.
+    """
     provenance = _require_mapping(config, "provenance", errors)
     if provenance is None:
         return None
@@ -455,6 +490,7 @@ def _validate_provenance(
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
+    """Return whether ``path`` resolves under ``parent``."""
     try:
         path.relative_to(parent)
     except ValueError:
@@ -463,6 +499,11 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
 
 
 def _validate_output(config: dict[str, Any], errors: list[str]) -> str | None:
+    """Validate the ``output.root`` path string.
+
+    Returns:
+        The validated root path string, or ``None``.
+    """
     output = _require_mapping(config, "output", errors)
     if output is None:
         return None
@@ -614,6 +655,11 @@ def _decision_packet(
 
 
 def _validation_command(config_path: Path, repo_root: Path) -> str:
+    """Build the validation command string recorded in the decision packet.
+
+    Returns:
+        The validation command string.
+    """
     return (
         "uv run python scripts/validation/validate_predictive_retrain_preflight.py "
         f"--config {config_path} --repo-root {repo_root} --json"

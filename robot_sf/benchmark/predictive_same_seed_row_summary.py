@@ -154,6 +154,7 @@ def validate_predictive_same_seed_row_summary_rows(
 
 
 def _mark_duplicate_row_keys(row_reports: list[dict[str, Any]]) -> None:
+    """Mark row reports invalid when their ``row_key`` duplicates an earlier-seen key."""
     seen: dict[str, int] = {}
     for row_report in row_reports:
         row_key = row_report.get("row_key")
@@ -179,6 +180,11 @@ def _validate_row(
     provenance_validation: str,
     git_commit_cache: dict[str, bool],
 ) -> dict[str, Any]:
+    """Validate one row's schema, provenance references, semantics, and feature schema.
+
+    Returns:
+        The row report dict.
+    """
     errors: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
     if not isinstance(row, dict):
@@ -292,6 +298,11 @@ def _validate_optional_feature_schema(
     *,
     errors: list[dict[str, str]],
 ) -> dict[str, Any] | None:
+    """Validate an optional ``feature_schema`` mapping, returning it when valid or ``None``.
+
+    Returns:
+        The validated feature schema, or ``None``.
+    """
     if "feature_schema" not in mapping or mapping["feature_schema"] is None:
         return None
     feature_schema = mapping.get("feature_schema")
@@ -312,6 +323,7 @@ def _validate_optional_feature_schema(
 
 
 def _feature_schema_input_dim(feature_schema: dict[str, Any]) -> int:
+    """Return the integer ``input_dim`` from a feature schema, raising on non-int."""
     input_dim = feature_schema.get("input_dim")
     if isinstance(input_dim, bool) or not isinstance(input_dim, int):
         raise ValueError("feature_schema.input_dim must be an integer")
@@ -326,6 +338,7 @@ def _comparison_context(
     seed: int | None,
     planner_grid_key: str | None,
 ) -> tuple[str | None, str | None, str | None, int | None, str | None] | None:
+    """Return the comparison-context tuple for a row, or ``None`` when key parts are missing."""
     if scenario is None or seed is None or planner_grid_key is None:
         return None
     normalized_group = None
@@ -335,6 +348,7 @@ def _comparison_context(
 
 
 def _guard_mixed_ego_motion_producer_keys(row_reports: list[dict[str, Any]]) -> None:
+    """Group rows by comparison context and apply the ego-motion producer comparability guard."""
     grouped_reports: dict[
         tuple[str | None, str | None, str | None, int | None, str | None],
         list[dict[str, Any]],
@@ -357,6 +371,11 @@ def _apply_ego_motion_producer_guard(
     *,
     context: tuple[str | None, str | None, str | None, int | None, str | None],
 ) -> None:
+    """Apply the producer-key guard to one comparison group.
+
+    Flags mixed producer keys as invalid and warns on missing-producer or
+    all-unknown groups so direct comparability is never assumed silently.
+    """
     producer_keys = sorted(
         {
             str(producer_key)
@@ -388,6 +407,7 @@ def _mark_grouped_rows_invalid_for_mixed_producers(
     context: tuple[str | None, str | None, str | None, int | None, str | None],
     producer_keys: list[str],
 ) -> None:
+    """Mark a grouped row set invalid for mixing ego-motion producer keys."""
     producer_list = ", ".join(repr(key) for key in producer_keys)
     message = (
         f"{_format_comparison_context(context)} mixes "
@@ -409,6 +429,7 @@ def _warn_grouped_rows_for_missing_producers(
     context: tuple[str | None, str | None, str | None, int | None, str | None],
     producer_keys: list[str],
 ) -> None:
+    """Warn grouped rows that lack producer keys alongside producer-stamped rows."""
     producer_list = ", ".join(repr(key) for key in producer_keys)
     message = (
         f"{_format_comparison_context(context)} includes legacy/no-metadata rows without "
@@ -428,6 +449,7 @@ def _warn_grouped_rows_for_unknown_comparability(
     *,
     context: tuple[str | None, str | None, str | None, int | None, str | None],
 ) -> None:
+    """Warn grouped rows that carry no producer-key metadata at all."""
     message = (
         f"{_format_comparison_context(context)} has rows without "
         "ego_motion_channel_producer.producer_key metadata; direct comparability is not proven"
@@ -443,6 +465,11 @@ def _warn_grouped_rows_for_unknown_comparability(
 def _format_comparison_context(
     context: tuple[str | None, str | None, str | None, int | None, str | None],
 ) -> str:
+    """Format a comparison-context tuple into a human-readable string.
+
+    Returns:
+        The formatted context string.
+    """
     campaign, comparison_group, scenario, seed, planner_grid_key = context
     parts = []
     if campaign:
@@ -459,6 +486,7 @@ def _format_comparison_context(
 
 
 def _strip_internal_row_metadata(row_reports: list[dict[str, Any]]) -> None:
+    """Remove underscore-prefixed internal fields from row reports in place."""
     for row_report in row_reports:
         for field in (
             "_comparison_context",
@@ -476,6 +504,7 @@ def _validate_semantics(
     errors: list[dict[str, str]],
     warnings: list[dict[str, str]],
 ) -> None:
+    """Validate cross-field outcome semantics (status vs flags vs min_distance)."""
     _validate_status_specific_nullability(
         row_status=row_status,
         outcomes=outcomes,
@@ -512,6 +541,7 @@ def _validate_status_specific_nullability(
     min_distance: float | None,
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate outcome/min_distance nullability matches the declared row status."""
     if row_status == "ok":
         for field, value in outcomes.items():
             if value is None:
@@ -535,6 +565,7 @@ def _validate_artifact_pointer(
     repo_root: Path,
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate an ``artifact_pointer`` is a single durable reference token."""
     if not isinstance(value, str) or not value.strip():
         _append_problem(errors, field, "must be a non-empty string")
         return
@@ -553,6 +584,11 @@ def _validate_commit_artifact(
     git_commit_cache: dict[str, bool],
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate a ``commit_artifact`` carries a git SHA plus provenance tokens.
+
+    Optionally verifies the git SHA exists in repository history when
+    ``provenance_validation`` is ``"git_history"``.
+    """
     if not isinstance(value, str) or not value.strip():
         _append_problem(errors, field, "must be a non-empty string")
         return
@@ -591,6 +627,7 @@ def _validate_commit_artifact(
 
 
 def _git_commit_exists(sha: str, *, repo_root: Path, cache: dict[str, bool]) -> bool:
+    """Return whether a git commit SHA exists in the repo, caching the result."""
     cached = cache.get(sha)
     if cached is not None:
         return cached
@@ -612,6 +649,7 @@ def _validate_optional_reference(
     repo_root: Path,
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate an optional field is a durable reference token when present."""
     if field not in mapping or mapping[field] is None:
         return
     value = _require_non_empty_string(mapping, field, errors)
@@ -626,6 +664,7 @@ def _validate_reference_token(
     repo_root: Path,
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate a single reference token (durable URI or in-repo relative path)."""
     if token.startswith(DURABLE_URI_PREFIXES):
         return
     path = Path(token)
@@ -659,6 +698,7 @@ def _check_expected_fields(
     prefix: str,
     errors: list[dict[str, str]],
 ) -> None:
+    """Append errors for missing required fields and unexpected fields."""
     missing = sorted(required - mapping.keys())
     for field in missing:
         _append_problem(errors, f"{prefix}.{field}" if prefix != "row" else field, "is required")
@@ -675,6 +715,7 @@ def _check_expected_fields(
 def _require_non_empty_string(
     mapping: dict[str, Any], field: str, errors: list[dict[str, str]]
 ) -> str | None:
+    """Return a field's stripped non-empty string value, appending an error when invalid."""
     value = mapping.get(field)
     if not isinstance(value, str) or not value.strip():
         _append_problem(errors, field, "must be a non-empty string")
@@ -688,6 +729,7 @@ def _require_enum(
     allowed: frozenset[str],
     errors: list[dict[str, str]],
 ) -> str | None:
+    """Return a field's value when it is in the allowed enum, else append an error."""
     value = mapping.get(field)
     if not isinstance(value, str) or value not in allowed:
         _append_problem(errors, field, f"must be one of {sorted(allowed)!r}")
@@ -698,6 +740,7 @@ def _require_enum(
 def _require_non_negative_int(
     mapping: dict[str, Any], field: str, errors: list[dict[str, str]]
 ) -> int | None:
+    """Return a field's non-negative int value, appending an error when invalid."""
     value = mapping.get(field)
     if isinstance(value, bool) or not isinstance(value, int):
         _append_problem(errors, field, "must be a non-negative integer")
@@ -711,6 +754,7 @@ def _require_non_negative_int(
 def _require_nullable_bool(
     mapping: dict[str, Any], field: str, errors: list[dict[str, str]]
 ) -> bool | None:
+    """Return a field's bool-or-None value, appending an error when invalid."""
     value = mapping.get(field)
     if value is None:
         return None
@@ -723,6 +767,7 @@ def _require_nullable_bool(
 def _require_nullable_non_negative_number(
     mapping: dict[str, Any], field: str, errors: list[dict[str, str]]
 ) -> float | None:
+    """Return a field's finite non-negative number-or-None, appending an error when invalid."""
     value = mapping.get(field)
     if value is None:
         return None
@@ -736,14 +781,21 @@ def _require_nullable_non_negative_number(
 
 
 def _split_reference_tokens(value: str) -> list[str]:
+    """Split a reference value into stripped tokens on newlines or commas.
+
+    Returns:
+        The stripped tokens.
+    """
     return [token.strip() for token in re.split(r"[\n,]+", value) if token.strip()]
 
 
 def _append_problem(problems: list[dict[str, str]], field: str, message: str) -> None:
+    """Append a ``{field, message}`` record to a problems list."""
     problems.append({"field": field, "message": message})
 
 
 def _repo_relative_or_absolute(path: Path, *, root: Path) -> str:
+    """Return a path POSIX-relative to ``root``, or its string form when outside root."""
     try:
         return path.relative_to(root.resolve()).as_posix()
     except ValueError:

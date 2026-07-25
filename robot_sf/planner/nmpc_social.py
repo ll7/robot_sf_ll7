@@ -745,6 +745,11 @@ class NMPCSocialPlannerAdapter(OccupancyAwarePlannerMixin):
         return context
 
     def _build_rollout_context(self, observation: dict[str, Any]) -> _RolloutContext:
+        """Build the rollout context for one solve, delegating to the shared context builder.
+
+        Returns:
+            The populated rollout context.
+        """
         return self._build_context(observation)
 
     def _command_from_solution(

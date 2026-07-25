@@ -348,6 +348,11 @@ def _run_status(
     paired_rows: list[dict[str, Any]],
     run_failures: list[dict[str, Any]],
 ) -> str:
+    """Classify the overall run status from paired rows and fail-closed failures.
+
+    Returns:
+        The overall run-status label.
+    """
     if run_failures and not paired_rows:
         return "blocked_no_valid_episode_rows"
     if run_failures:
@@ -445,6 +450,11 @@ def _pair_rows(
     route_config: DiagnosticConfig,
     baseline_config: DiagnosticConfig,
 ) -> list[dict[str, Any]]:
+    """Pair route-conditioned and baseline records by key into matched diagnostic rows.
+
+    Returns:
+        The paired diagnostic rows.
+    """
     route_by_key = {_row_key(record, route_config): record for record in route_records}
     baseline_by_key = {_row_key(record, baseline_config): record for record in baseline_records}
     keys = sorted(set(route_by_key) | set(baseline_by_key))
@@ -460,6 +470,7 @@ def _pair_rows(
 
 
 def _row_key(record: dict[str, Any], config: DiagnosticConfig) -> tuple[str, int, str]:
+    """Return the ``(scenario_id, seed, checkpoint)`` pairing key for a record."""
     scenario_id = str(record.get("scenario_id") or record.get("scenario") or "")
     seed = int(record.get("seed"))
     checkpoint = _record_checkpoint(record) or config.learned_policy_checkpoint
@@ -471,6 +482,11 @@ def _paired_row(
     baseline_record: dict[str, Any],
     route_config: DiagnosticConfig,
 ) -> dict[str, Any]:
+    """Build one paired diagnostic row from matched route and baseline records.
+
+    Returns:
+        The paired diagnostic row.
+    """
     route_diag = _route_diagnostics(route_record)
     route_fallback = _fallback_status(route_record)
     baseline_fallback = _fallback_status(baseline_record)
@@ -530,6 +546,11 @@ def _missing_pair_row(
     route_record: dict[str, Any] | None,
     baseline_record: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    """Build a pairing-error row for a key missing its route or baseline record.
+
+    Returns:
+        The pairing-error row for the missing side.
+    """
     scenario_id, seed, checkpoint = key
     missing = ROUTE_ARM if route_record is None else BASELINE_ARM
     return {
@@ -553,6 +574,11 @@ def _missing_pair_row(
 
 
 def _route_diagnostics(record: dict[str, Any]) -> dict[str, Any]:
+    """Extract the hybrid_global_rl diagnostics sub-mapping from a record's metadata.
+
+    Returns:
+        The hybrid_global_rl diagnostics sub-mapping.
+    """
     metadata = record.get("algorithm_metadata") or {}
     if not isinstance(metadata, dict):
         return {}
@@ -564,6 +590,11 @@ def _route_diagnostics(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _fallback_status(record: dict[str, Any]) -> str:
+    """Classify a record as ``native`` or its first fallback/degraded/failed status.
+
+    Returns:
+        The row's ``native`` or fallback/degraded status.
+    """
     metadata = record.get("algorithm_metadata") or {}
     execution_mode = (
         str(metadata.get("execution_mode", "")).lower() if isinstance(metadata, dict) else ""
@@ -582,6 +613,7 @@ def _fallback_status(record: dict[str, Any]) -> str:
 
 
 def _route_progress(record: dict[str, Any]) -> float | str:
+    """Return the route-progress metric from a record (success as 1.0/0.0, else blank)."""
     metrics = record.get("metrics") or {}
     for key in ("route_progress", "progress", "goal_progress"):
         if key in metrics:
@@ -592,6 +624,7 @@ def _route_progress(record: dict[str, Any]) -> float | str:
 
 
 def _success(record: dict[str, Any]) -> bool:
+    """Return whether a record's metrics/outcome/termination indicate success."""
     metrics = record.get("metrics") or {}
     if "success" in metrics:
         return bool(metrics["success"])
@@ -602,6 +635,7 @@ def _success(record: dict[str, Any]) -> bool:
 
 
 def _safety_event(record: dict[str, Any]) -> bool:
+    """Return whether a record indicates a collision or near-miss safety event."""
     metrics = record.get("metrics") or {}
     outcome = record.get("outcome") or {}
     collision_count = metrics.get("total_collision_count", metrics.get("collisions", 0))
@@ -613,6 +647,11 @@ def _safety_event(record: dict[str, Any]) -> bool:
 
 
 def _record_checkpoint(record: dict[str, Any]) -> str | None:
+    """Extract the learned-policy checkpoint path from a record's metadata, if present.
+
+    Returns:
+        The checkpoint path, or ``None`` when absent.
+    """
     metadata = record.get("algorithm_metadata") or {}
     candidates: list[Any] = [record.get("learned_policy_checkpoint")]
     if isinstance(metadata, dict):
@@ -631,6 +670,7 @@ def _record_checkpoint(record: dict[str, Any]) -> str | None:
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    """Write the paired diagnostic ``rows`` to a CSV with the fixed ``CSV_FIELDS`` header."""
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS, lineterminator="\n")
         writer.writeheader()
@@ -639,6 +679,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 
 def _write_readme(path: Path, summary: dict[str, Any]) -> None:
+    """Write the human-readable README markdown for the diagnostic packet."""
     lines = [
         "# Issue #4183 Hybrid Global/RL Diagnostic",
         "",
@@ -672,6 +713,7 @@ def _write_readme(path: Path, summary: dict[str, Any]) -> None:
 
 
 def _append_integration_report_section(lines: list[str], summary: dict[str, Any]) -> None:
+    """Append the integration-report (blockers/exclusions/next-action) section to ``lines``."""
     report = summary["integration_report"]
     lines.extend(
         [
@@ -702,6 +744,11 @@ def _append_integration_report_section(lines: list[str], summary: dict[str, Any]
 
 
 def _blocker_lines(blockers: list[dict[str, Any]]) -> list[str]:
+    """Render blocker dicts as markdown bullet lines with their status/evidence details.
+
+    Returns:
+        The blocker dicts rendered as markdown bullet lines.
+    """
     lines: list[str] = []
     for blocker in blockers:
         details = [

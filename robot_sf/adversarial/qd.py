@@ -500,6 +500,7 @@ def production_qd_evaluator(
     counter = count()
 
     def _evaluate(qd_config: QDSearchConfig, candidate: CandidateSpec) -> CandidateEvaluation:
+        """Evaluate one QD candidate through the production pipeline at the next candidate index."""
         index = next(counter)
         return production_step(search_config, candidate, index)
 

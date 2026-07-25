@@ -179,6 +179,14 @@ def evaluate_statistic(spec: dict[str, Any]) -> StatisticResult:
 
 
 def _compute_by_kind(statistic_kind: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Return a Chapter 8 statistic computed from a manifest ``data`` block.
+
+    When ``data`` contains ``rows`` the statistic is derived from the table (variance
+    decomposition, Spearman correlation, or rank-stability bootstrap); otherwise the
+    direct ``groups``/``x_values``/``values`` inputs are used. Raises ``ValueError`` for
+    an unsupported ``statistic_kind``.
+    """
+
     if "rows" in data:
         rows = data["rows"]
         if statistic_kind == "partial_eta_squared":
@@ -229,11 +237,20 @@ def _compute_by_kind(statistic_kind: str, data: dict[str, Any]) -> dict[str, Any
 
 
 def _expected_block(spec: dict[str, Any]) -> dict[str, Any]:
+    """Return the ``expected`` block of a statistic spec, or ``{}`` if absent.
+
+    A non-dict ``expected`` value is treated as missing.
+    """
     expected = spec.get("expected")
     return expected if isinstance(expected, dict) else {}
 
 
 def _expected_blockers(computed: dict[str, Any], expected: dict[str, Any]) -> list[str]:
+    """Return the mismatch blockers found by comparing ``computed`` against the ``expected`` block.
+
+    Each present expected field is checked by the relevant helper, and the sample count is
+    verified when supplied.
+    """
     blockers: list[str] = []
     tolerance = float(expected.get("tolerance", 1e-9))
     _check_value(computed, expected, blockers, tolerance)
@@ -251,6 +268,10 @@ def _expected_blockers(computed: dict[str, Any], expected: dict[str, Any]) -> li
 def _check_value(
     computed: dict[str, Any], expected: dict[str, Any], blockers: list[str], tolerance: float
 ) -> None:
+    """Append a blocker if the computed ``value`` (or ``mean``) misses ``expected['value']``.
+
+    Comparison is within the supplied relative and absolute tolerance.
+    """
     if "value" in expected:
         expected_value = float(expected["value"])
         computed_value = float(computed.get("value", computed.get("mean", math.nan)))
@@ -261,6 +282,11 @@ def _check_value(
 def _check_ci(
     computed: dict[str, Any], expected: dict[str, Any], blockers: list[str], tolerance: float
 ) -> None:
+    """Append blockers if the computed two-element ``ci`` misses ``expected['ci']``.
+
+    Each endpoint is compared within the supplied tolerance; malformed computed or expected
+    intervals are reported as blockers.
+    """
     if "ci" in expected:
         computed_ci = computed.get("ci")
         expected_ci = expected["ci"]
@@ -277,6 +303,10 @@ def _check_ci(
 
 
 def _check_rank_ci(computed: dict[str, Any], expected: dict[str, Any], blockers: list[str]) -> None:
+    """Append a blocker if the computed ``rank_ci`` is not exactly ``expected['rank_ci']``.
+
+    Ranks are integer-valued, so the comparison is exact rather than tolerance-based.
+    """
     if "rank_ci" in expected:
         computed_rank_ci = computed.get("rank_ci")
         expected_rank_ci = expected["rank_ci"]
@@ -291,6 +321,10 @@ def _check_rank_ci(computed: dict[str, Any], expected: dict[str, Any], blockers:
 def _check_rank_ci_by_planner(
     computed: dict[str, Any], expected: dict[str, Any], blockers: list[str]
 ) -> None:
+    """Append blockers for each planner whose ``rank_ci`` misses ``expected['rank_ci_by_planner']``.
+
+    Each planner interval must be present and match exactly.
+    """
     if "rank_ci_by_planner" in expected:
         computed_by_planner = computed.get("rank_ci_by_planner")
         expected_by_planner = expected["rank_ci_by_planner"]
@@ -310,6 +344,11 @@ def _check_rank_ci_by_planner(
 def _check_eta_squared(
     computed: dict[str, Any], expected: dict[str, Any], blockers: list[str], tolerance: float
 ) -> None:
+    """Append blockers for any variance-decomposition eta-squared key present in ``expected``.
+
+    Checks ``scenario_family_eta_squared``, ``planner_eta_squared``, and
+    ``interaction_eta_squared`` within the supplied tolerance.
+    """
     for key in ("scenario_family_eta_squared", "planner_eta_squared", "interaction_eta_squared"):
         if key in expected:
             expected_val = float(expected[key])
@@ -319,6 +358,11 @@ def _check_eta_squared(
 
 
 def _parse_float(raw: Any) -> float | None:
+    """Return ``raw`` coerced to ``float``, or ``None`` when it is unparseable.
+
+    Blank strings, the literal ``nan`` (case-insensitive), and surrounding quotes are
+    treated as missing rather than raising.
+    """
     if raw is None:
         return None
     s = str(raw).strip().lstrip("'").strip()
@@ -331,11 +375,18 @@ def _parse_float(raw: Any) -> float | None:
 
 
 def _mean_ch8(xs: list[float | None]) -> float:
+    """Return the arithmetic mean of non-``None`` entries, or ``0.0`` when there are none."""
     valid = [x for x in xs if x is not None]
     return sum(valid) / len(valid) if valid else 0.0
 
 
 def _variance_decomposition_ch8(rows: list[dict[str, Any]], metric: str) -> dict[str, float]:
+    """Return the two-way eta-squared variance decomposition over ``planner_key`` x ``scenario_family``.
+
+    Cells are built from rows where ``metric`` parses to a float; total sum of squares is
+    partitioned into planner, scenario-family, and interaction components, each normalised by
+    the total. Raises ``ValueError`` when no valid cell is found.
+    """
     cells = {}
     planners, families = set(), set()
     for r in rows:
@@ -372,6 +423,7 @@ def _variance_decomposition_ch8(rows: list[dict[str, Any]], metric: str) -> dict
 
 
 def _ranks_ch8(values: list[float]) -> list[float]:
+    """Return 1-based average ranks for ``values``, with ties assigned their mean rank."""
     order = sorted(range(len(values)), key=lambda i: values[i])
     out = [0.0] * len(values)
     i = 0
@@ -387,6 +439,10 @@ def _ranks_ch8(values: list[float]) -> list[float]:
 
 
 def _pearson_ch8(x: list[float], y: list[float]) -> float | None:
+    """Return the Pearson correlation of paired samples, or ``None`` if undefined.
+
+    Returns ``None`` for fewer than three points or when either variable has zero variance.
+    """
     n = len(x)
     if n < 3:
         return None
@@ -400,6 +456,11 @@ def _pearson_ch8(x: list[float], y: list[float]) -> float | None:
 
 
 def _spearman_ch8(rows: list[dict[str, Any]], x_field: str, y_field: str) -> dict[str, float]:
+    """Return Spearman rho computed from two numeric columns of ``rows``.
+
+    Pairs are collected where both fields parse to floats; at least three pairs are required.
+    Raises ``ValueError`` for too few pairs or a non-finite result.
+    """
     pairs = []
     for r in rows:
         x_val = _parse_float(r.get(x_field))
@@ -419,6 +480,12 @@ def _spearman_ch8(rows: list[dict[str, Any]], x_field: str, y_field: str) -> dic
 def _rank_stability_bootstrap_ch8(
     rows: list[dict[str, Any]], metric: str, n_boot: int, seed: int
 ) -> dict[str, dict[str, Any]]:
+    """Return a 95% bootstrap rank-stability interval per planner over scenario families.
+
+    Planners are ranked by mean metric across resampled families using a deterministic
+    linear-congruential generator seeded by ``seed``. Each planner maps to its observed rank
+    and the 2.5%/97.5% bootstrap percentiles.
+    """
     planners = sorted({r["planner_key"] for r in rows if r.get("planner_key")})
     families = sorted({r["scenario_family"] for r in rows if r.get("scenario_family")})
     cell = {p: {} for p in planners}
@@ -428,6 +495,7 @@ def _rank_stability_bootstrap_ch8(
             cell[r["planner_key"]][r["scenario_family"]] = v
 
     def rank_by_mean(sampled_families: list[str]) -> dict[str, int]:
+        """Return planner ranks (1 = highest mean metric) over the given scenario families."""
         means = {}
         for p in planners:
             vals = [cell[p][f] for f in sampled_families if f in cell[p]]
@@ -439,6 +507,7 @@ def _rank_stability_bootstrap_ch8(
     state = seed
 
     def _rand_int(n: int) -> int:
+        """Return a pseudo-random integer in ``[0, n)`` drawn from the seeded LCG state."""
         nonlocal state
         state = (state * 1664525 + 1013904223) & 0xFFFFFFFF
         return state % n
@@ -458,6 +527,7 @@ def _rank_stability_bootstrap_ch8(
 
 
 def _required_str(spec: dict[str, Any], key: str) -> str:
+    """Return a required non-empty string field from ``spec``, raising ``ValueError`` otherwise."""
     value = spec.get(key)
     if not isinstance(value, str) or not value:
         raise ValueError(f"statistic spec requires non-empty string field: {key}")
@@ -465,6 +535,11 @@ def _required_str(spec: dict[str, Any], key: str) -> str:
 
 
 def _validate_groups(groups: dict[str, list[float]]) -> dict[str, list[float]]:
+    """Return ``groups`` validated as an ANOVA-style named mapping.
+
+    Requires at least two groups, non-empty string names, and enough observations for at least
+    one residual degree of freedom. Returns the groups as plain float lists.
+    """
     if not isinstance(groups, dict) or len(groups) < 2:
         raise ValueError("groups must contain at least two named groups")
     clean: dict[str, list[float]] = {}
@@ -478,6 +553,11 @@ def _validate_groups(groups: dict[str, list[float]]) -> dict[str, list[float]]:
 
 
 def _validate_sequence(values: list[float], *, name: str, min_length: int) -> np.ndarray:
+    """Return ``values`` validated as a 1-D finite float array.
+
+    Requires at least ``min_length`` entries; raises ``ValueError`` on shape, length, or
+    non-finite violations, naming the field via ``name``.
+    """
     if not isinstance(values, list) or len(values) < min_length:
         raise ValueError(f"{name} must contain at least {min_length} values")
     array = np.asarray(values, dtype=float)

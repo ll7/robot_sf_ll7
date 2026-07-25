@@ -126,11 +126,17 @@ def validate_launch_packet(
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
+    """Turn an oracle-imitation launch-packet reference into a resolved local filesystem path.
+
+    Returns:
+        Absolute path rooted at ``repo_root`` when the reference is relative.
+    """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
 
 def _require_non_empty_string(packet: dict[str, Any], key: str, errors: list[str]) -> None:
+    """Record an error unless ``packet[key]`` is a non-empty string."""
     value = packet.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty string")
@@ -142,6 +148,7 @@ def _require_existing_path(
     repo_root: Path,
     errors: list[str],
 ) -> None:
+    """Require ``packet[key]`` to be an existing on-disk path, recording an error otherwise."""
     value = packet.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty path string")
@@ -152,6 +159,7 @@ def _require_existing_path(
 
 
 def _validate_scenarios(packet: dict[str, Any], errors: list[str]) -> None:
+    """Validate ``scenario_ids`` is a non-empty list of unique non-empty strings."""
     scenario_ids = packet.get("scenario_ids")
     if not isinstance(scenario_ids, list) or not scenario_ids:
         errors.append("scenario_ids must be a non-empty list")
@@ -167,6 +175,7 @@ def _validate_scenarios(packet: dict[str, Any], errors: list[str]) -> None:
 
 
 def _validate_seed_sets(packet: dict[str, Any], repo_root: Path, errors: list[str]) -> None:
+    """Validate per-split seed lists, inter-split overlap, and optional seed-set refs."""
     seeds_by_split = packet.get("seeds_by_split")
     if not isinstance(seeds_by_split, dict):
         errors.append("seeds_by_split must be a mapping")
@@ -181,6 +190,11 @@ def _split_seed_sets(
     seeds_by_split: dict[str, Any],
     errors: list[str],
 ) -> dict[str, set[int]]:
+    """Parse ``seeds_by_split`` into per-split integer sets, recording parse errors.
+
+    Returns:
+        Mapping of split name to its integer seed set.
+    """
     split_sets: dict[str, set[int]] = {}
     for split in _SPLITS:
         raw_seeds = seeds_by_split.get(split)
@@ -195,6 +209,7 @@ def _split_seed_sets(
 
 
 def _validate_seed_overlap(split_sets: dict[str, set[int]], errors: list[str]) -> None:
+    """Record an error when any seed appears in more than one split."""
     for index, left in enumerate(_SPLITS):
         for right in _SPLITS[index + 1 :]:
             overlap = sorted(split_sets.get(left, set()) & split_sets.get(right, set()))
@@ -208,6 +223,7 @@ def _validate_seed_refs(
     split_sets: dict[str, set[int]],
     errors: list[str],
 ) -> None:
+    """Validate the optional seed-set manifest against the declared per-split seeds."""
     refs = packet.get("seed_set_refs", {})
     if refs is None:
         refs = {}
@@ -244,6 +260,7 @@ def _validate_seed_ref(
     split_sets: dict[str, set[int]],
     errors: list[str],
 ) -> None:
+    """Validate that a split's declared seeds match a named manifest seed set."""
     if not isinstance(ref_name, str) or not ref_name.strip():
         return
     ref_value = seed_payload.get(ref_name)
@@ -271,6 +288,7 @@ def _validate_train_excludes(
     split_sets: dict[str, set[int]],
     errors: list[str],
 ) -> None:
+    """Validate that train seeds do not overlap a named excluded seed set."""
     excluded_ref = refs.get("train_excludes")
     if not isinstance(excluded_ref, str):
         return
@@ -295,6 +313,7 @@ def _validate_train_excludes(
 
 
 def _validate_episodes(packet: dict[str, Any], errors: list[str]) -> None:
+    """Validate ``episode_ids_by_split`` has non-empty, unique ids per split."""
     episodes = packet.get("episode_ids_by_split")
     if not isinstance(episodes, dict):
         errors.append("episode_ids_by_split must be a mapping")
@@ -315,6 +334,7 @@ def _validate_episodes(packet: dict[str, Any], errors: list[str]) -> None:
 
 
 def _validate_hard_slices(packet: dict[str, Any], errors: list[str]) -> None:
+    """Validate ``hard_slice_assignment`` split and evaluation predeclaration rules."""
     assignments = packet.get("hard_slice_assignment")
     if not isinstance(assignments, list):
         errors.append("hard_slice_assignment must be a list")
@@ -334,6 +354,7 @@ def _validate_hard_slices(packet: dict[str, Any], errors: list[str]) -> None:
 
 
 def _validate_relabeling(packet: dict[str, Any], errors: list[str]) -> None:
+    """Validate the optional train-scoped relabeling policy."""
     policy = packet.get("relabeling_policy")
     if policy is None:
         return
@@ -348,6 +369,7 @@ def _validate_relabeling(packet: dict[str, Any], errors: list[str]) -> None:
 
 
 def _validate_generating_commit(packet: dict[str, Any], errors: list[str]) -> None:
+    """Validate that ``generating_commit`` is a 40-character git SHA (or ``current``)."""
     commit = packet.get("generating_commit")
     if not isinstance(commit, str) or (
         commit.strip() != "current" and not _GIT_SHA_RE.match(commit.strip())
@@ -360,6 +382,11 @@ def _validate_artifacts(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, str]:
+    """Validate ``artifact_paths`` and checksums, requiring a durable URI; return paths.
+
+    Returns:
+        Mapping of artifact name to its normalized path string.
+    """
     artifact_paths = packet.get("artifact_paths")
     checksums = packet.get("checksums")
     if not isinstance(artifact_paths, dict) or not artifact_paths:
@@ -398,6 +425,11 @@ def _validate_training_artifact_gate(
     require_training_ready: bool,
     errors: list[str],
 ) -> bool:
+    """Determine training-readiness from durable trace artifacts or a registry pointer.
+
+    Returns:
+        Whether the trace artifacts satisfy the training-ready gate.
+    """
     if trace_uri_registry is not None:
         training_ready = bool(trace_uri_registry.get("training_ready", False))
         if require_training_ready and not training_ready:
@@ -450,6 +482,11 @@ def _validate_trace_uri_registry_pointer(
     require_training_ready: bool,
     errors: list[str],
 ) -> dict[str, Any] | None:
+    """Validate the optional trace-URI registry pointer and return its summary.
+
+    Returns:
+        Registry summary mapping, or ``None`` when no pointer is declared.
+    """
     registry_path = packet.get("trace_uri_registry")
     if registry_path is None:
         return None
@@ -482,6 +519,7 @@ def _validate_trace_uri_registry_pointer(
 
 
 def _first_error_line(exc: Exception) -> str:
+    """Return the first meaningful error line from an exception's string form."""
     for line in str(exc).splitlines():
         stripped = line.strip()
         if not stripped or stripped.endswith("failed validation:"):
@@ -535,6 +573,11 @@ def _validate_collection_roots(packet: dict[str, Any], errors: list[str]) -> dic
 
 
 def _artifact_path_text(name: str, raw_path: Any, errors: list[str]) -> str | None:
+    """Normalize an artifact path string, rejecting worktree-local output paths.
+
+    Returns:
+        The normalized path string, or ``None`` when invalid.
+    """
     if not isinstance(raw_path, str) or not raw_path.strip():
         errors.append(f"artifact_paths.{name} must be a non-empty string")
         return None
@@ -556,14 +599,17 @@ def _has_worktree_output_component(path_text: str) -> bool:
 
 
 def _is_durable_uri(path_text: str) -> bool:
+    """Return whether the path uses a durable artifact scheme."""
     return path_text.startswith(_DURABLE_URI_PREFIXES)
 
 
 def _is_pending_durable_uri(path_text: str) -> bool:
+    """Return whether the path is a durable but unresolved ``:pending`` alias."""
     return _is_durable_uri(path_text) and path_text.rstrip().endswith(":pending")
 
 
 def _is_concrete_durable_uri(path_text: str) -> bool:
+    """Return whether the path is a durable, resolved (non-pending) URI."""
     return _is_durable_uri(path_text) and not _is_pending_durable_uri(path_text)
 
 
@@ -574,6 +620,7 @@ def _validate_local_artifact(
     repo_root: Path,
     errors: list[str],
 ) -> None:
+    """Validate an oracle-imitation local artifact's presence and declared SHA-256 checksum."""
     local_path = _resolve_path(path_text, repo_root)
     if not local_path.is_file():
         errors.append(f"artifact_paths.{name} local artifact is missing: {path_text}")
@@ -588,6 +635,11 @@ def _validate_local_artifact(
 
 
 def _sha256_hex_digest(path: Path, chunk_size: int = 65536) -> str:
+    """Compute the lowercase hex SHA-256 digest of a file's bytes.
+
+    Returns:
+        The lowercase hex SHA-256 digest.
+    """
     sha = hashlib.sha256()
     with path.open("rb") as f:
         while chunk := f.read(chunk_size):

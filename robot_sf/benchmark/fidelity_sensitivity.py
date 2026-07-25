@@ -376,6 +376,7 @@ def write_launch_packet(packet: Mapping[str, Any], output_dir: str | Path) -> No
 
 
 def _baseline_variant_key(axis: Mapping[str, Any]) -> str:
+    """Return the key of the baseline variant of a sensitivity ``axis`` (raises if none)."""
     for variant in axis["variants"]:
         if variant.get("baseline", False):
             return str(variant["key"])
@@ -383,6 +384,11 @@ def _baseline_variant_key(axis: Mapping[str, Any]) -> str:
 
 
 def _finite_float(value: Any, *, key: str) -> float:
+    """Coerce ``value`` to a finite float, raising ``ValueError`` for non-numeric or non-finite.
+
+    Returns:
+        The coerced finite float.
+    """
     try:
         numeric = float(value)
     except (TypeError, ValueError) as exc:
@@ -393,6 +399,7 @@ def _finite_float(value: Any, *, key: str) -> float:
 
 
 def _require_non_empty_list(mapping: Mapping[str, Any], key: str) -> None:
+    """Raise ``ValueError`` unless ``fixed_scope[key]`` is a non-empty list."""
     value = mapping.get(key)
     if not isinstance(value, list) or not value:
         raise ValueError(f"fixed_scope.{key} must be a non-empty list")

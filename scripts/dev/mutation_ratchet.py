@@ -73,6 +73,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -90,6 +91,49 @@ DEFAULT_TEST_PATH = "tests/research/test_aggregation.py"
 # `debug=true` is set in setup.cfg and `mutmut export-cicd-stats` is run.
 DEFAULT_CICD_STATS = Path("mutants/mutmut-cicd-stats.json")
 SURVIVED_SUFFIX = ": survived"
+
+
+def _mutmut_shared_temproot(repo_root: Path) -> Path:
+    """Return the stable, worktree-scoped shared pytest temproot for the mutation lane.
+
+    Mirrors the canonical worktree root from ``tests/support/pytest_temproot.py``
+    (``<tmp>/pytest-of-<user>/wt-<hash>``) and appends a ``mutmut-shared`` child
+    so concurrent ``mutmut run`` workers share one root instead of each creating
+    a per-process ``proc-<pid>`` root that races with sibling cleanup (#6122).
+    """
+    from tests.support.pytest_temproot import pytest_worktree_root
+
+    return pytest_worktree_root(repo_root) / "mutmut-shared"
+
+
+def ensure_mutmut_safe_temproot(repo_root: Path) -> Path:
+    """Pre-set a stable shared ``PYTEST_DEBUG_TEMPROOT`` before ``mutmut run``.
+
+    The per-process pytest temproot isolation added in #6165 (``tests/conftest.py``
+    via ``tests/support/pytest_temproot.py``) removes dead ``proc-<pid>`` siblings
+    on each pytest start. ``mutmut run`` spawns many concurrent pytest workers,
+    and that per-process cleanup can remove another live worker's temproot, so
+    pytest's ``getbasetemp()`` raises ``FileNotFoundError`` and ``mutmut run``
+    exits non-zero (#6122).
+
+    Pre-setting ``PYTEST_DEBUG_TEMPROOT`` to one stable, worktree-scoped root
+    makes every worker skip per-process isolation (the conftest early-returns when
+    the variable is set) and share that root, so no worker removes another's
+    temproot. This is the deterministic opt-out in the mutation wrapper requested
+    by #6122; it changes no normal pytest/CI isolation behaviour.
+
+    A caller-provided ``PYTEST_DEBUG_TEMPROOT`` is respected and returned (created
+    if needed) so the documented manual workaround still overrides this.
+    """
+    configured = os.environ.get("PYTEST_DEBUG_TEMPROOT")
+    if configured:
+        path = Path(configured)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    shared = _mutmut_shared_temproot(repo_root)
+    shared.mkdir(parents=True, exist_ok=True)
+    os.environ["PYTEST_DEBUG_TEMPROOT"] = str(shared)
+    return shared
 
 
 def _repo_root() -> Path:
@@ -125,6 +169,9 @@ def run_mutmut(repo_root: Path) -> tuple[list[str], dict[str, Any]]:
 
 def _run_mutmut_results(repo_root: Path) -> str:
     """Run ``mutmut run`` then ``mutmut results`` and return the results text."""
+    # Stabilize the pytest temproot before spawning mutmut's concurrent workers so
+    # the per-process temproot isolation cannot race with sibling cleanup (#6122).
+    ensure_mutmut_safe_temproot(repo_root)
     run_cmd = [sys.executable, "-m", "mutmut", "run"]
     try:
         run_proc = subprocess.run(

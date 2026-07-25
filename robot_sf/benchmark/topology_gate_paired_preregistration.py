@@ -273,6 +273,11 @@ def write_readiness_packet(packet: Mapping[str, Any], output_dir: str | Path) ->
 
 
 def _planned_rows(config: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Expand the benchmark contract into the full planned planner x scenario x seed x arm row set.
+
+    Returns:
+        The planned row dicts.
+    """
     contract = config["benchmark_contract"]
     rows: list[dict[str, Any]] = []
     for planner in contract["planner_set"]:
@@ -295,6 +300,7 @@ def _planned_rows(config: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def _canonical_arm_payload(arms: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return arms as a deterministic sorted list of key/gate/policy-config dicts."""
     return [
         {
             "key": str(arm.get("key")),
@@ -306,6 +312,11 @@ def _canonical_arm_payload(arms: Sequence[Mapping[str, Any]]) -> list[dict[str, 
 
 
 def _diff_paths(left: Mapping[str, Any], right: Mapping[str, Any]) -> set[tuple[str, ...]]:
+    """Recursively compute the set of differing key paths between two mappings.
+
+    Returns:
+        The set of differing key paths.
+    """
     keys = set(left) | set(right)
     paths: set[tuple[str, ...]] = set()
     for key in keys:
@@ -320,6 +331,7 @@ def _diff_paths(left: Mapping[str, Any], right: Mapping[str, Any]) -> set[tuple[
 
 
 def _reject_transient_queue_state(value: Any, *, path: tuple[str, ...] = ()) -> None:
+    """Recurse through nested config, raising on any transient queue-routing key."""
     if isinstance(value, Mapping):
         for key, child in value.items():
             key_text = str(key)
@@ -335,6 +347,7 @@ def _reject_transient_queue_state(value: Any, *, path: tuple[str, ...] = ()) -> 
 
 
 def _validate_authorization(value: Any) -> None:
+    """Validate the campaign_authorization block enforces no compute/SLURM/GPU submission."""
     if not isinstance(value, Mapping):
         raise ValueError("campaign_authorization must be mapping")
     for key in (
@@ -353,6 +366,7 @@ def _validate_authorization(value: Any) -> None:
 
 
 def _validate_source_contracts(value: Any, *, config_path: str | Path | None) -> None:
+    """Validate source_contracts strings and the existence of their referenced paths."""
     if not isinstance(value, Mapping):
         raise ValueError("source_contracts must be mapping")
     for key in ("enabled_candidate", "disabled_candidate", "promotion_gate"):
@@ -366,6 +380,7 @@ def _validate_source_contracts(value: Any, *, config_path: str | Path | None) ->
 
 
 def _validate_benchmark_contract(value: Any) -> None:
+    """Validate the benchmark_contract planner/scenario/seed lists and positive horizon."""
     if not isinstance(value, Mapping):
         raise ValueError("benchmark_contract must be mapping")
     for key in ("planner_set", "scenario_set", "seed_list"):
@@ -376,6 +391,7 @@ def _validate_benchmark_contract(value: Any) -> None:
 
 
 def _validate_readiness(value: Any) -> None:
+    """Validate the readiness block, including the corrective-issue gate and required capabilities."""
     if not isinstance(value, Mapping):
         raise ValueError("readiness must be mapping")
     if int(value.get("corrective_issue", -1)) != 3463:
@@ -401,6 +417,7 @@ def _validate_readiness(value: Any) -> None:
 
 
 def _validate_corrective_packets(packets: Any) -> None:
+    """Validate each corrective packet has pr/capability strings and issue 3463 when present."""
     if not isinstance(packets, list):
         raise ValueError("readiness.corrective_packets must be list")
     for index, packet in enumerate(packets):
@@ -414,6 +431,7 @@ def _validate_corrective_packets(packets: Any) -> None:
 
 
 def _validate_output_paths(value: Any) -> None:
+    """Validate the required output_paths are non-empty strings."""
     if not isinstance(value, Mapping):
         raise ValueError("output_paths must be mapping")
     for key in (
@@ -426,6 +444,7 @@ def _validate_output_paths(value: Any) -> None:
 
 
 def _corrective_capabilities(packets: Sequence[Mapping[str, Any]]) -> set[str]:
+    """Return the set of non-empty capability strings declared by corrective packets."""
     return {
         str(packet.get("capability", "")).strip()
         for packet in packets
@@ -434,6 +453,11 @@ def _corrective_capabilities(packets: Sequence[Mapping[str, Any]]) -> set[str]:
 
 
 def _repo_root_from_config_path(config_path: Path) -> Path:
+    """Resolve the repository root from a configs/benchmarks config path, else cwd.
+
+    Returns:
+        The resolved repository root.
+    """
     path = config_path.resolve()
     if (
         len(path.parents) >= 3

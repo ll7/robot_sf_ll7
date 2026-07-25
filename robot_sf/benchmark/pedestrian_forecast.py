@@ -697,6 +697,14 @@ def _collect_sample_metrics(
     collision_distance_m: float,
     baseline_function: ForecastBaselineFunction,
 ) -> tuple[int, int, dict[str, int], list[dict[str, float]]]:
+    """Score every pedestrian candidate across trace steps.
+
+    Returns candidate and excluded counts, exclusions by actor type, and per-sample metrics.
+
+    Returns:
+        A tuple of the candidate count, excluded count, exclusions by actor type, and the
+        per-sample metrics list.
+    """
     candidate_count = 0
     excluded_count = 0
     excluded_by_type: dict[str, int] = defaultdict(int)
@@ -737,6 +745,14 @@ def _evaluate_single_pedestrian(
     collision_distance_m: float,
     baseline_function: ForecastBaselineFunction,
 ) -> dict[str, float] | None:
+    """Forecast and score one pedestrian against ground truth.
+
+    Returns ``None`` when no future ground-truth positions exist for the actor.
+
+    Returns:
+        The forecast metrics for the pedestrian, or ``None`` when no future ground-truth
+        positions exist.
+    """
     state = PedestrianState.from_trace(pedestrian_payload)
     ground_truth = _future_pedestrian_positions(
         state.id,
@@ -826,6 +842,11 @@ def _future_pedestrian_positions(
     horizons_s: list[float] | tuple[float, ...],
     dt_s: float,
 ) -> dict[float, np.ndarray]:
+    """Build ground-truth future positions for one pedestrian keyed by horizon in seconds.
+
+    Returns:
+        A mapping from horizon in seconds to the pedestrian's ground-truth position array.
+    """
     positions: dict[float, np.ndarray] = {}
     for horizon_s in horizons_s:
         future_step = start_index + round(float(horizon_s) / dt_s)
@@ -844,6 +865,11 @@ def _future_robot_positions(
     horizons_s: list[float] | tuple[float, ...],
     dt_s: float,
 ) -> dict[float, np.ndarray]:
+    """Build future robot positions keyed by horizon in seconds for collision-relevance scoring.
+
+    Returns:
+        A mapping from horizon in seconds to the robot's future position array.
+    """
     positions: dict[float, np.ndarray] = {}
     for horizon_s in horizons_s:
         future_step = start_index + round(float(horizon_s) / dt_s)

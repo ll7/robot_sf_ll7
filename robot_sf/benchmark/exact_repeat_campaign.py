@@ -198,18 +198,29 @@ def canonical_sha256(value: Any) -> str:
 
 
 def _require_mapping(value: Any, label: str) -> Mapping[str, Any]:
+    """Return ``value`` if it is a Mapping, else raise ``ValueError`` naming ``label``."""
     if not isinstance(value, Mapping):
         raise ValueError(f"{label} must be an object")
     return value
 
 
 def _require_text(value: Any, label: str) -> str:
+    """Validate ``value`` is a non-empty string and return it stripped.
+
+    Returns:
+        The validated non-empty string.
+    """
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label} must be a non-empty string")
     return value
 
 
 def _require_sha256(value: Any, label: str) -> str:
+    """Validate ``value`` is a SHA-256 hex digest and return it lowercased.
+
+    Returns:
+        The validated lowercased SHA-256 digest.
+    """
     digest = _require_text(value, label)
     if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest.lower()):
         raise ValueError(f"{label} must be a lowercase-or-uppercase SHA-256 digest")
@@ -217,10 +228,12 @@ def _require_sha256(value: Any, label: str) -> str:
 
 
 def _planner(record: Mapping[str, Any]) -> str:
+    """Return the non-empty planner/algo label from an episode ``record``."""
     return _require_text(record.get("algo", record.get("planner")), "episode planner")
 
 
 def _target_key(target: Mapping[str, Any]) -> tuple[str, str, int]:
+    """Return a ``(scenario_id, planner, seed)`` key for a target, validating its seed."""
     seed = target.get("seed")
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ValueError("target seed must be an integer")
@@ -337,6 +350,7 @@ def build_manifest(  # noqa: C901 - validation branches make the fail-closed con
 
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str:
+    """Return the non-empty scenario id from ``name``/``scenario_id``/``id``."""
     for key in ("name", "scenario_id", "id"):
         value = scenario.get(key)
         if isinstance(value, str) and value.strip():
@@ -345,6 +359,11 @@ def _scenario_id(scenario: Mapping[str, Any]) -> str:
 
 
 def _planner_index(planners: Sequence[Any]) -> dict[str, Any]:
+    """Index planners by key (and unique algo), raising on duplicate planner keys.
+
+    Returns:
+        Planners indexed by key and unique algo.
+    """
     indexed: dict[str, Any] = {}
     for planner in planners:
         identity = str(planner.key)
@@ -548,6 +567,11 @@ def resolve_runnable_definitions(  # noqa: C901 - fail-closed recovery validates
 def _check_manifest(
     manifest: Mapping[str, Any],
 ) -> tuple[dict[tuple[str, str, int], Mapping[str, Any]], int]:
+    """Validate manifest schema/contract/hash/targets, returning indexed targets and repeats.
+
+    Returns:
+        Indexed targets and the required repeat count.
+    """
     if manifest.get("schema_version") != MANIFEST_SCHEMA_VERSION:
         raise ValueError("manifest has an unsupported schema_version")
     contract = _require_mapping(manifest.get("execution_contract"), "manifest execution_contract")
@@ -579,6 +603,7 @@ def _check_manifest(
 
 
 def _repeat_fingerprint(repeat: Mapping[str, Any]) -> tuple[int, str, Any]:
+    """Return a ``(outcome, trajectory_sha256, near_misses)`` fingerprint for a repeat."""
     outcome = repeat.get("outcome")
     if isinstance(outcome, bool):
         outcome = int(outcome)
@@ -589,6 +614,7 @@ def _repeat_fingerprint(repeat: Mapping[str, Any]) -> tuple[int, str, Any]:
 
 
 def _first_divergence(repeats: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
+    """Return the first field where a repeat diverges from the first, or ``None`` if identical."""
     reference = _repeat_fingerprint(repeats[0])
     for index, repeat in enumerate(repeats[1:], start=1):
         current = _repeat_fingerprint(repeat)
@@ -834,6 +860,11 @@ def compare_verified_hosts(  # noqa: C901 - each rejected cross-host state needs
     provenance_match = not provenance_mismatches
 
     def index(report: Mapping[str, Any]) -> dict[tuple[str, str, int], Mapping[str, Any]]:
+        """Index a verified host report's targets by ``(scenario_id, planner, seed)`` key.
+
+        Returns:
+            Host-report targets keyed by ``(scenario_id, planner, seed)``.
+        """
         rows = report.get("targets")
         if not isinstance(rows, list):
             raise ValueError("verified host report targets must be a list")

@@ -499,7 +499,10 @@ def write_sha256sums(
 ) -> None:
     """Write SHA256SUMS for all generated bundle files except itself.
 
-    Computes hashes over the marked files (including markers).
+    Computes hashes over the marked files (including markers). Manifest labels
+    are repository-root-relative for in-repository bundles, matching the
+    exemplar-bundle audit contract. Outputs outside the repository retain
+    basename labels for portable temporary bundles.
 
     ``write_sha256sums`` is typically the last step of finishing an evidence
     bundle directory. When ``output_dir`` is under ``docs/context/evidence/``,

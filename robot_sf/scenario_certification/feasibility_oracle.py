@@ -840,6 +840,7 @@ def _default_actor_free_runner(config: FeasibilityOracleConfig) -> EpisodeRunner
         horizon: int | None,
         algo: str,
     ) -> Mapping[str, Any]:
+        """Return the result of one actor-free diagnostic rollout run via ``_run_map_episode``."""
         scenario_payload = deepcopy(dict(scenario))
         scenario_payload["seeds"] = [int(seed)]
         return _run_map_episode(
@@ -1022,12 +1023,14 @@ def _scenario_rollout_seed(scenario: Mapping[str, Any], *, override: int | None)
 
 
 def _scenario_id(scenario: Mapping[str, Any]) -> str:
+    """Return a human-readable scenario identifier resolved from ``id``/``name``/``scenario_id``."""
     return str(
         scenario.get("id") or scenario.get("name") or scenario.get("scenario_id") or "unknown"
     )
 
 
 def _scenario_family_id(scenario: Mapping[str, Any]) -> str:
+    """Return the scenario family resolved from metadata archetype/family keys or ``obstacle``/``flow``."""
     metadata = scenario.get("metadata")
     if isinstance(metadata, Mapping):
         for key in ("archetype", "family", "scenario_family", "family_id"):
@@ -1038,6 +1041,7 @@ def _scenario_family_id(scenario: Mapping[str, Any]) -> str:
 
 
 def _scenario_horizon(scenario: Mapping[str, Any]) -> int | None:
+    """Return the configured ``max_episode_steps`` if positive, else ``None``."""
     sim_cfg = scenario.get("simulation_config")
     if not isinstance(sim_cfg, Mapping):
         return None
@@ -1085,6 +1089,7 @@ def _optional_int(value: Any) -> int | None:
 
 
 def _geometric_margin_to_dict(margin: GeometricMargin) -> dict[str, Any]:
+    """Return a :class:`GeometricMargin` serialized into a JSON-ready dict."""
     return {
         "envelope_radius_m": margin.envelope_radius_m,
         "envelope_diameter_m": margin.envelope_diameter_m,
@@ -1099,6 +1104,7 @@ def _geometric_margin_to_dict(margin: GeometricMargin) -> dict[str, Any]:
 
 
 def _completion_margin_to_dict(margin: CompletionMargin) -> dict[str, Any]:
+    """Return a :class:`CompletionMargin` serialized into a JSON-ready dict."""
     return {
         "route_completion_feasible": margin.route_completion_feasible,
         "min_completion_steps": margin.min_completion_steps,

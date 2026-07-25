@@ -265,6 +265,11 @@ def run_adaptive_selection(
 
 
 def _parse_criterion(raw: object, index: int) -> ScoringCriterion:
+    """Return a validated :class:`ScoringCriterion` parsed from one selector criterion mapping.
+
+    Rejects unknown fields and invalid dotted paths, directions, or weights.
+    """
+
     if not isinstance(raw, Mapping):
         raise GeneratedScenarioAdaptiveSelectionError(
             f"selector.criteria[{index}] must be a mapping"
@@ -289,6 +294,11 @@ def _parse_criterion(raw: object, index: int) -> ScoringCriterion:
 
 
 def _numeric_field(entry: Mapping[str, Any], field: str, *, scenario_id: str) -> float:
+    """Return the finite float resolved from a dotted field path on an entry.
+
+    Raises if the path is missing or resolves to a non-finite or non-numeric value.
+    """
+
     value: object = entry
     for part in field.split("."):
         if not isinstance(value, Mapping) or part not in value:
@@ -314,6 +324,12 @@ def _normalized_desirability(
     maximum: float,
     direction: str,
 ) -> float:
+    """Return ``value`` min-max normalized onto a 0-1 desirability scale.
+
+    Inverts the scale for ``lower_is_better`` criteria and returns 1.0 when the
+    archive range is degenerate so every tied entry scores equally.
+    """
+
     if maximum == minimum:
         return 1.0
     normalized = (value - minimum) / (maximum - minimum)
@@ -321,6 +337,11 @@ def _normalized_desirability(
 
 
 def _validated_entries(entries: object) -> list[dict[str, Any]]:
+    """Return archive entries validated and normalized into a list of mutable dicts.
+
+    Each entry is deep-copied and passed through :func:`validate_catalog_entry`.
+    """
+
     if not isinstance(entries, Sequence) or isinstance(entries, str | bytes):
         raise GeneratedScenarioAdaptiveSelectionError(
             "archive entries must be a non-empty sequence"
@@ -345,6 +366,12 @@ def _validated_entries(entries: object) -> list[dict[str, Any]]:
 
 
 def _validate_archive_metadata(raw_metadata: object) -> None:
+    """Check source-archive governance metadata.
+
+    Requires the archive to be marked auto-generated, manually reviewable, and
+    explicitly not benchmark evidence.
+    """
+
     if not isinstance(raw_metadata, Mapping):
         raise GeneratedScenarioAdaptiveSelectionError("source archive metadata must be a mapping")
     required_values = {
@@ -360,17 +387,23 @@ def _validate_archive_metadata(raw_metadata: object) -> None:
 
 
 def _resolve_config_path(value: str, *, config_path: Path) -> Path:
+    """Return ``value`` resolved against the selector config file's directory."""
+
     candidate = Path(value)
     return candidate if candidate.is_absolute() else (config_path.parent / candidate).resolve()
 
 
 def _integer(value: object, path: str) -> int:
+    """Return ``value`` as a non-boolean integer, raising with ``path`` otherwise."""
+
     if not isinstance(value, int) or isinstance(value, bool):
         raise GeneratedScenarioAdaptiveSelectionError(f"{path} must be an integer")
     return value
 
 
 def _positive_finite(value: object, path: str) -> float:
+    """Return ``value`` as a finite positive number, raising with ``path`` otherwise."""
+
     if (
         not isinstance(value, int | float)
         or isinstance(value, bool)
@@ -382,6 +415,8 @@ def _positive_finite(value: object, path: str) -> float:
 
 
 def _non_empty_string(value: object, path: str) -> str:
+    """Return ``value`` as a stripped non-empty string, raising with ``path`` otherwise."""
+
     if not isinstance(value, str) or not value.strip():
         raise GeneratedScenarioAdaptiveSelectionError(f"{path} must be a non-empty string")
     return value.strip()

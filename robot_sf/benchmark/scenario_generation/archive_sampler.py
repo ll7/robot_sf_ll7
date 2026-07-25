@@ -222,6 +222,8 @@ def run_archive_sampling(
 
 
 def _integer(value: object, path: str) -> int:
+    """Return ``value`` as a non-boolean integer, raising with ``path`` otherwise."""
+
     if not isinstance(value, int) or isinstance(value, bool):
         raise GeneratedScenarioArchiveSamplingError(f"{path} must be an integer")
     return value
@@ -238,6 +240,11 @@ def _resolve_config_path(value: str, *, config_path: Path) -> Path:
 
 
 def _validated_entries(entries: object) -> list[dict[str, Any]]:
+    """Return archive entries validated and normalized into a list of mutable dicts.
+
+    Each entry is deep-copied and passed through :func:`validate_catalog_entry`.
+    """
+
     if not isinstance(entries, Sequence) or isinstance(entries, str | bytes):
         raise GeneratedScenarioArchiveSamplingError("archive entries must be a non-empty sequence")
     if not entries:
@@ -258,6 +265,12 @@ def _validated_entries(entries: object) -> list[dict[str, Any]]:
 
 
 def _criticality_weight(clearance_m: float, spec: ArchiveSamplingSpec) -> float:
+    """Return the deterministic criticality sampling weight.
+
+    Uses ``max(clearance_m, floor) ** -exponent`` and fails closed on non-finite
+    clearance or non-positive weights.
+    """
+
     if not math.isfinite(clearance_m) or clearance_m < 0.0:
         raise GeneratedScenarioArchiveSamplingError(
             "criticality.source_metrics.min_clearance_m must be finite and >= 0"
@@ -276,6 +289,12 @@ def _criticality_weight(clearance_m: float, spec: ArchiveSamplingSpec) -> float:
 
 
 def _validate_archive_metadata(raw_metadata: object) -> None:
+    """Check source-archive governance metadata.
+
+    Requires the archive to be marked auto-generated, manually reviewable, and
+    explicitly not benchmark evidence.
+    """
+
     if not isinstance(raw_metadata, Mapping):
         raise GeneratedScenarioArchiveSamplingError("source archive metadata must be a mapping")
     required_values = {
@@ -291,6 +310,8 @@ def _validate_archive_metadata(raw_metadata: object) -> None:
 
 
 def _positive_finite(value: object, path: str) -> float:
+    """Return ``value`` as a finite positive number, raising with ``path`` otherwise."""
+
     if (
         not isinstance(value, int | float)
         or isinstance(value, bool)
@@ -302,6 +323,8 @@ def _positive_finite(value: object, path: str) -> float:
 
 
 def _non_empty_string(value: object, path: str) -> str:
+    """Return ``value`` as a stripped non-empty string, raising with ``path`` otherwise."""
+
     if not isinstance(value, str) or not value.strip():
         raise GeneratedScenarioArchiveSamplingError(f"{path} must be a non-empty string")
     return value.strip()

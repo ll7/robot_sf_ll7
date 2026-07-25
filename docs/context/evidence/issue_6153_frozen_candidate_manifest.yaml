@@ -157,7 +157,7 @@ candidates:
     allowed_claim: none
     fallback_degraded_synthetic_status:
       fallback_degraded: "no"
-      synthetic: "no"
+      synthetic: "exploratory_synthetic"
       execution_mode: "preregistration_blocked"
     disposition: exclude
     rationale: "Excluded: the current full acceptance checker exits non-zero (status=blocked) with three geometrically infeasible rows and campaign_execution_allowed=false. Per stop rules the checker is not waived and the result is routed back to owning issue #5416. The 2026-07-23 include (status=ready) and its source commit 13cb68de... / config sha256 1ec798e7... are stale against current main; the current config sha256 is 0899e774... at source commit adadabaca...."

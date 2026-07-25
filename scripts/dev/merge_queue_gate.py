@@ -54,6 +54,7 @@ if str(_REPO_ROOT) not in sys.path:
 from scripts.dev.pr_loop_policy import (  # noqa: E402
     has_current_accepted_gate_verdict,
 )
+from scripts.dev.snapshot_pr_queue import _extract_gate_verdicts  # noqa: E402
 
 AUDIT_SCHEMA = "merge_queue_gate.v1"
 
@@ -394,11 +395,9 @@ def _normalize_labels(raw: Any) -> list[str]:
 def _to_body_snapshot(items: Any, *, limit: int = 180) -> dict[str, Any]:
     """Convert raw ``gh`` comment/review objects into the compact snapshot shape.
 
-    ``has_current_accepted_gate_verdict`` reads trailers from
-    ``comment_snapshot.latest[].body_excerpt`` / ``review_snapshot.latest[]``.
-    The raw ``gh pr view`` objects expose ``body``; we truncate to the same
-    ``COMMENT_BODY_LIMIT`` (180) used by ``snapshot_pr_queue`` so a full
-    ``gate-verdict: accepted @ <40-char-sha>`` trailer always survives.
+    The compact excerpts are audit context only. ``fetch_pr_snapshot`` extracts
+    accepted gate-verdict trailers from the full raw bodies before truncation,
+    so a valid trailer after the excerpt limit cannot be discarded.
     """
     if not isinstance(items, list):
         return {"latest": []}
@@ -410,6 +409,26 @@ def _to_body_snapshot(items: Any, *, limit: int = 180) -> dict[str, Any]:
         if body:
             latest.append({"body_excerpt": body[:limit]})
     return {"latest": latest}
+
+
+def _fetch_pr_base_sha(pr_number: str | int, *, repo: str) -> tuple[str | None, str | None]:
+    """Return the PR base SHA through the gh-compatible REST pull endpoint."""
+    # ``baseRefOid`` is not available in the repository's supported gh 2.45.0
+    # JSON field set. The REST pull endpoint is stable across supported gh
+    # versions and exposes the same base commit as ``base.sha``.
+    result = _gh(["api", f"repos/{repo}/pulls/{pr_number}"])
+    if result.returncode != 0:
+        return None, result.stderr.strip() or "gh api pull request failed"
+    payload, err = _parse_json(result.stdout)
+    if err or not isinstance(payload, dict):
+        return None, err or "gh API pull-request response is not a JSON object"
+    base = payload.get("base")
+    if not isinstance(base, dict):
+        return None, "PR base metadata is missing"
+    sha = base.get("sha")
+    if not isinstance(sha, str) or not sha:
+        return None, "PR base SHA is empty"
+    return sha, None
 
 
 def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any], str | None]:
@@ -428,7 +447,7 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
             "--repo",
             repo,
             "--json",
-            "number,isDraft,headRefOid,baseRefOid,labels,statusCheckRollup,comments,reviews",
+            "number,isDraft,headRefOid,labels,statusCheckRollup,comments,reviews",
         ]
     )
     if result.returncode != 0:
@@ -437,13 +456,18 @@ def fetch_pr_snapshot(pr_number: str | int, *, repo: str) -> tuple[dict[str, Any
     if err or not isinstance(payload, dict):
         return {}, err or "gh pr view output is not a JSON object"
 
+    base_sha, base_err = _fetch_pr_base_sha(pr_number, repo=repo)
+    if base_err:
+        return {}, f"failed to fetch PR base SHA: {base_err}"
+
     snapshot: dict[str, Any] = {
         "number": payload.get("number"),
         "draft": bool(payload.get("isDraft")),
         "head_sha": str(payload.get("headRefOid") or ""),
-        "base_sha": str(payload.get("baseRefOid") or ""),
+        "base_sha": base_sha,
         "labels": _normalize_labels(payload.get("labels")),
         "checks": {"overall": _rollup_overall(payload.get("statusCheckRollup") or [])},
+        "gate_verdicts": _extract_gate_verdicts(payload),
         "review_snapshot": _to_body_snapshot(payload.get("reviews")),
         "comment_snapshot": _to_body_snapshot(payload.get("comments")),
     }
@@ -458,12 +482,47 @@ def fetch_main_sha(*, repo: str) -> str:
     return result.stdout.strip()
 
 
+def _complete_review_thread_nodes(threads: Any) -> tuple[list[Any] | None, str | None]:
+    """Return nodes only when a review-thread connection is complete and well-formed."""
+    if not isinstance(threads, dict):
+        return None, "reviewThreads is missing from graphql response"
+    nodes = threads.get("nodes")
+    if not isinstance(nodes, list):
+        return None, "reviewThreads.nodes missing from graphql response"
+    total_count = threads.get("totalCount")
+    if type(total_count) is not int or total_count < 0:
+        return None, "reviewThreads.totalCount missing from graphql response"
+    page_info = threads.get("pageInfo")
+    if not isinstance(page_info, dict):
+        return None, "reviewThreads.pageInfo missing from graphql response"
+    has_next_page = page_info.get("hasNextPage")
+    if type(has_next_page) is not bool:
+        return None, "reviewThreads.pageInfo.hasNextPage missing from graphql response"
+    if has_next_page:
+        return None, "reviewThreads connection is incomplete; refusing an unresolved-thread bypass"
+    if total_count != len(nodes):
+        return None, "reviewThreads totalCount does not match the complete node list"
+    return nodes, None
+
+
+def _review_thread_state(node: Any) -> tuple[bool, bool] | None:
+    """Return ``(is_resolved, is_outdated)`` only for a complete thread node."""
+    if not isinstance(node, dict):
+        return None
+    is_resolved = node.get("isResolved")
+    is_outdated = node.get("isOutdated")
+    if type(is_resolved) is not bool or type(is_outdated) is not bool:
+        return None
+    return is_resolved, is_outdated
+
+
 def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | None, str | None]:
     """Return ``(all_resolved, error)`` for a PR's review threads.
 
-    Queries review threads via GraphQL. Returns ``True`` when there are no
-    unresolved, non-outdated (actionable) threads; ``False`` when at least one
-    remains; ``(None, error)`` when the query fails (caller fails closed).
+    Queries the first review-thread page via GraphQL. Returns ``True`` only when
+    that connection is complete and there are no unresolved, non-outdated
+    (actionable) threads; ``False`` when at least one remains; ``(None, error)``
+    when the query fails or is incomplete (caller fails closed).
     """
     owner, _, name = repo.partition("/")
     if not owner or not name:
@@ -471,7 +530,8 @@ def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | N
     query = (
         "query($owner:String!,$name:String!,$number:Int!){"
         "repository(owner:$owner,name:$name){pullRequest(number:$number){"
-        "reviewThreads(first:100){nodes{isResolved isOutdated}}}}}"
+        "reviewThreads(first:100){totalCount pageInfo{hasNextPage}"
+        "nodes{isResolved isOutdated}}}}}"
     )
     result = _gh(
         [
@@ -499,13 +559,15 @@ def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | N
         .get("pullRequest", {})
         .get("reviewThreads", {})
     )
-    nodes = threads.get("nodes") if isinstance(threads, dict) else None
-    if not isinstance(nodes, list):
-        return None, "reviewThreads.nodes missing from graphql response"
+    nodes, connection_error = _complete_review_thread_nodes(threads)
+    if connection_error or nodes is None:
+        return None, connection_error or "reviewThreads connection is incomplete"
     for node in nodes:
-        if not isinstance(node, dict):
-            continue
-        if not node.get("isResolved") and not node.get("isOutdated"):
+        state = _review_thread_state(node)
+        if state is None:
+            return None, "reviewThreads.nodes contains incomplete thread state"
+        is_resolved, is_outdated = state
+        if not is_resolved and not is_outdated:
             return False, None
     return True, None
 

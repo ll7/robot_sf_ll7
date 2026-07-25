@@ -172,6 +172,7 @@ def write_safety_wrapper_factorial_report(
 
 
 def _claim_boundary() -> str:
+    """Return the diagnostic claim-boundary statement for the factorial report."""
     return (
         "Diagnostic paired safety-wrapper factorial report. Rows must already be complete "
         "native benchmark rows under the issue #3501 off/on contract. This report summarizes "
@@ -181,6 +182,11 @@ def _claim_boundary() -> str:
 
 
 def _row_check_blockers(row_check: Mapping[str, Any]) -> list[str]:
+    """Collect human-readable blocker strings from a failed ablation row check.
+
+    Returns:
+        The list of human-readable blocker strings describing the failed row check.
+    """
     blockers: list[str] = []
     for field in (
         "missing_required_fields",
@@ -198,6 +204,11 @@ def _row_check_blockers(row_check: Mapping[str, Any]) -> list[str]:
 def _group_complete_pairs(
     rows: Sequence[Mapping[str, Any]],
 ) -> dict[tuple[Any, ...], dict[str, Mapping[str, Any]]]:
+    """Group rows by pairing key into per-wrapper-arm mappings.
+
+    Returns:
+        A dict mapping each pairing key to a per-wrapper-arm mapping of rows.
+    """
     groups: dict[tuple[Any, ...], dict[str, Mapping[str, Any]]] = defaultdict(dict)
     for row in rows:
         key = tuple(row[field] for field in PAIRING_KEY_FIELDS)
@@ -206,6 +217,11 @@ def _group_complete_pairs(
 
 
 def _extract_metrics(row: Mapping[str, Any]) -> dict[str, float]:
+    """Extract finite factorial metric values from a row, skipping booleans and non-numerics.
+
+    Returns:
+        A dict mapping each finite factorial metric name to its numeric value.
+    """
     metric_values = row.get("metric_values")
     if not isinstance(metric_values, Mapping):
         return {}
@@ -235,6 +251,11 @@ def _paired_effect_row(
     off_row: Mapping[str, Any],
     on_row: Mapping[str, Any],
 ) -> dict[str, Any]:
+    """Build one paired effect row with off/on values and on-minus-off deltas per metric.
+
+    Returns:
+        A paired effect row with wrapper-off/on values and on-minus-off deltas per metric.
+    """
     row: dict[str, Any] = {
         "planner": str(key[0]),
         "scenario_id": str(key[1]),
@@ -253,6 +274,11 @@ def _paired_effect_row(
 
 
 def _per_planner_effects(pair_rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Aggregate paired effect rows per planner into mean on-minus-off deltas.
+
+    Returns:
+        A list of per-planner result dicts with pair counts and mean on-minus-off deltas.
+    """
     by_planner: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
     for row in pair_rows:
         by_planner[str(row["planner"])].append(row)
@@ -268,6 +294,7 @@ def _per_planner_effects(pair_rows: Sequence[Mapping[str, Any]]) -> list[dict[st
 
 
 def _write_per_planner_csv(rows: Any, path: Path) -> None:
+    """Write per-planner mean-delta rows to a CSV file at ``path``."""
     fieldnames = [
         "planner",
         "pair_count",
@@ -283,6 +310,11 @@ def _write_per_planner_csv(rows: Any, path: Path) -> None:
 
 
 def _format_readme(report: Mapping[str, Any]) -> str:
+    """Render the Markdown README for the report, listing blockers when not complete.
+
+    Returns:
+        The rendered Markdown README text for the factorial report.
+    """
     status = report.get("status", "unknown")
     lines = [
         "# Issue #3501 Safety Wrapper Factorial Report",

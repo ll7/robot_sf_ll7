@@ -43,6 +43,11 @@ class InteractionExposureError(RobotSfError, ValueError):
 
 
 def _xy(point: Sequence[float]) -> tuple[float, float]:
+    """Extract a finite ``(x, y)`` pair from a position, rejecting short or non-finite inputs.
+
+    Returns:
+        The finite ``(x, y)`` pair extracted from the position.
+    """
     if len(point) < 2:
         raise InteractionExposureError("positions must contain at least x and y")
     x = float(point[0])
@@ -53,6 +58,11 @@ def _xy(point: Sequence[float]) -> tuple[float, float]:
 
 
 def _pedestrian_points(value: Any) -> list[tuple[float, float]]:
+    """Normalize a per-frame pedestrian container into a list of finite ``(x, y)`` points.
+
+    Returns:
+        The normalized list of finite ``(x, y)`` pedestrian points.
+    """
     if value is None:
         return []
     if isinstance(value, dict):
@@ -66,6 +76,7 @@ def _within_radius(
     *,
     exposure_radius_m: float,
 ) -> bool:
+    """Return whether any pedestrian is within ``exposure_radius_m`` of the robot position."""
     robot_x, robot_y = _xy(robot_position)
     for pedestrian_x, pedestrian_y in _pedestrian_points(pedestrians):
         if math.hypot(robot_x - pedestrian_x, robot_y - pedestrian_y) <= exposure_radius_m:
@@ -74,6 +85,7 @@ def _within_radius(
 
 
 def _robot_moved(previous: Sequence[float], current: Sequence[float]) -> bool:
+    """Return whether the robot moved more than a negligible epsilon between two positions."""
     previous_x, previous_y = _xy(previous)
     current_x, current_y = _xy(current)
     return math.hypot(current_x - previous_x, current_y - previous_y) > 1e-9

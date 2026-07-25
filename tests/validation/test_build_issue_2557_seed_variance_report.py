@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.evidence.writers import review_marker_comment
 from scripts.validation import build_issue_2557_seed_variance_report as report_builder
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -65,11 +66,15 @@ def test_artifact_writer_emits_provenance_and_checksums(tmp_path: Path) -> None:
     assert provenance_path.is_file()
     assert readme_path.is_file()
     assert checksums_path.is_file()
+    assert readme_path.read_text(encoding="utf-8").splitlines()[0] == (
+        "<!-- AI-GENERATED (robot_sf#2557) - NEEDS-REVIEW -->"
+    )
 
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["claim_boundary"].startswith("Diagnostic seed-variance evidence only")
 
     with provenance_path.open("r", encoding="utf-8", newline="") as handle:
+        assert handle.readline().strip() == review_marker_comment()
         rows = list(csv.DictReader(handle))
     assert len(rows) == 17
     assert {row["lineage"] for row in rows} == {"clean", "manifest-incomplete"}
@@ -80,7 +85,8 @@ def test_artifact_writer_emits_provenance_and_checksums(tmp_path: Path) -> None:
         f"{hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()}  {name}"
         for name in ("README.md", "per_run_provenance.csv", "report.json")
     }
-    assert set(checksum_lines) == expected
+    assert checksum_lines[0] == review_marker_comment()
+    assert set(checksum_lines[1:]) == expected
 
 
 def test_completed_job_rows_are_validated_before_sorting(tmp_path) -> None:

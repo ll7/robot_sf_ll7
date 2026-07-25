@@ -407,6 +407,7 @@ def format_report_markdown(report: Mapping[str, Any]) -> str:
 
 
 def _validate_execution_boundary(value: Any) -> None:
+    """Require every execution-boundary flag to be false for this diagnostic slice."""
     boundary = _mapping(value, "execution_boundary")
     for field in (
         "full_benchmark_campaign_run_in_this_pr",
@@ -418,6 +419,7 @@ def _validate_execution_boundary(value: Any) -> None:
 
 
 def _validate_scenario_scope(value: Any, *, repo_root: Path) -> None:
+    """Validate the paired three-scenario, three-seed scope and execution limits."""
     scope = _mapping(value, "scenario_scope")
     source = _repo_path(str(scope.get("source_matrix", "")), repo_root)
     if not source.is_file():
@@ -441,6 +443,7 @@ def _validate_scenario_scope(value: Any, *, repo_root: Path) -> None:
 
 
 def _validate_arm_list(value: Any, *, expected: Sequence[str], repo_root: Path) -> None:
+    """Validate an arm list matches the expected keys in declared order."""
     if not isinstance(value, list) or len(value) != len(expected):
         raise ValueError(f"arm list must contain exactly {len(expected)} entries")
     keys: list[str] = []
@@ -454,6 +457,11 @@ def _validate_arm_list(value: Any, *, expected: Sequence[str], repo_root: Path) 
 
 
 def _validate_arm(value: Any, *, repo_root: Path) -> str:
+    """Validate one arm and its config, enforcing target-arm prediction constraints.
+
+    Returns:
+        The validated arm's key string.
+    """
     if not isinstance(value, Mapping):
         raise ValueError("each arm must be a mapping")
     key = str(value.get("key", "")).strip()
@@ -477,6 +485,7 @@ def _validate_arm(value: Any, *, repo_root: Path) -> str:
 
 
 def _validate_search(value: Any) -> None:
+    """Validate the bounded grid-subset search design, parameters, and candidate points."""
     search = _mapping(value, "search")
     if search.get("design") != "bounded_grid_subset":
         raise ValueError("search.design must be 'bounded_grid_subset'")
@@ -490,6 +499,11 @@ def _validate_search(value: Any) -> None:
 
 
 def _validate_parameter_levels(value: Any) -> Mapping[str, Any]:
+    """Validate that each top parameter declares at least two finite levels.
+
+    Returns:
+        The validated parameter-levels mapping keyed by parameter name.
+    """
     levels = _mapping(value, "search.parameter_levels")
     for parameter in TOP_PARAMETERS:
         values = levels.get(parameter)
@@ -501,6 +515,7 @@ def _validate_parameter_levels(value: Any) -> Mapping[str, Any]:
 
 
 def _validate_candidate_points(value: Any, candidate_count: int, levels: Mapping[str, Any]) -> None:
+    """Validate unique, non-repeating candidate points with exactly one incumbent."""
     points = value
     if not isinstance(points, list) or len(points) != candidate_count:
         raise ValueError("candidate_points must match candidate_count")
@@ -532,12 +547,14 @@ def _validate_candidate_points(value: Any, candidate_count: int, levels: Mapping
 def _validate_candidate_levels(
     point_id: str, overrides: Mapping[str, Any], levels: Mapping[str, Any]
 ) -> None:
+    """Require every candidate override value to be a declared level for its parameter."""
     for parameter, override_value in overrides.items():
         if override_value not in levels[parameter]:
             raise ValueError(f"candidate {point_id} uses undeclared level for {parameter}")
 
 
 def _validate_comparison(value: Any) -> None:
+    """Validate the preregistered comparison metric and fallback-exclusion policy."""
     comparison = _mapping(value, "comparison")
     if comparison.get("primary_metric") != "route_complete_and_collision_free":
         raise ValueError("comparison.primary_metric has drifted")
@@ -549,6 +566,11 @@ def _validate_comparison(value: Any) -> None:
 
 
 def _summarize_targets(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Summarize each target arm's best candidate by success rate.
+
+    Returns:
+        A list of per-target-arm summaries including the best candidate by success rate.
+    """
     summaries = []
     for arm_key in TARGET_ARM_KEYS:
         candidates = [dict(row) for row in rows if row["arm_key"] == arm_key]
@@ -569,6 +591,11 @@ def _summarize_targets(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]
 
 
 def _summarize_incumbents(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Summarize the incumbent hybrid arms' success rates and episode counts.
+
+    Returns:
+        A list of incumbent-arm summaries with success rates and episode counts.
+    """
     return [
         {
             "arm_key": str(row["arm_key"]),
@@ -587,6 +614,11 @@ def _build_read(
     incumbents: Sequence[Mapping[str, Any]],
     all_rows_eligible: bool,
 ) -> dict[str, Any]:
+    """Produce the preregistered decision comparing target MPC rates to the incumbent band.
+
+    Returns:
+        A decision mapping describing whether the MPC read is blocked, supported, or mixed.
+    """
     target_rates = [
         float(summary["best_candidate"]["success_rate"])
         for summary in targets
@@ -621,6 +653,11 @@ def _build_read(
 
 
 def _eligible(row: Mapping[str, Any]) -> bool:
+    """Report whether a row meets every fail-closed eligibility requirement.
+
+    Returns:
+        True when the row satisfies every fail-closed eligibility requirement.
+    """
     return (
         str(row.get("execution_mode", "")).strip().lower() in VALID_EXECUTION_MODES
         and str(row.get("readiness_status", "")).strip().lower() in VALID_READINESS_STATUSES
@@ -656,17 +693,28 @@ def _planner_runtime_status(value: Any) -> str:
 
 
 def _mapping(value: Any, context: str) -> Mapping[str, Any]:
+    """Return a value as a mapping, raising a labeled error otherwise."""
     if not isinstance(value, Mapping):
         raise ValueError(f"{context} must be a mapping")
     return value
 
 
 def _repo_path(value: str, repo_root: Path) -> Path:
+    """Resolve a possibly relative path against the repository root.
+
+    Returns:
+        The resolved absolute path relative to the repository root.
+    """
     path = Path(value)
     return path if path.is_absolute() else repo_root / path
 
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any]:
+    """Load a YAML file and require it to contain a mapping.
+
+    Returns:
+        The parsed YAML content as a dictionary.
+    """
     payload = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(payload, dict):
         raise ValueError(f"YAML config must be a mapping: {path}")
@@ -674,10 +722,12 @@ def _load_yaml_mapping(path: Path) -> dict[str, Any]:
 
 
 def _sha256(path: Path) -> str:
+    """Return the SHA-256 hex digest of a file's bytes."""
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _config_sha256(config_path: str, *, repo_root: Path) -> str | None:
+    """Return a config file's SHA-256 digest, or None when the file is absent."""
     path = Path(config_path)
     if not path.is_absolute():
         path = repo_root / path
@@ -685,26 +735,43 @@ def _config_sha256(config_path: str, *, repo_root: Path) -> str | None:
 
 
 def _is_int(value: Any) -> bool:
+    """Report whether a value is an integer, excluding booleans.
+
+    Returns:
+        True when the value is an integer but not a boolean.
+    """
     return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _finite_number(value: Any) -> bool:
+    """Report whether a value is a finite integer or float, excluding booleans.
+
+    Returns:
+        True when the value is a finite integer or float but not a boolean.
+    """
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def _int_field(value: Any, *, field: str) -> int:
+    """Return a value as an integer, raising a labeled error otherwise."""
     if not _is_int(value):
         raise ValueError(f"{field} must be an integer")
     return int(value)
 
 
 def _bool_field(value: Any, *, field: str) -> bool:
+    """Return a value as a boolean, raising a labeled error otherwise."""
     if not isinstance(value, bool):
         raise ValueError(f"{field} must be a boolean")
     return value
 
 
 def _format_rate(value: Any) -> str:
+    """Format a success rate for display, mapping None to NA.
+
+    Returns:
+        The formatted rate string, or ``NA`` when the value is None.
+    """
     return "NA" if value is None else f"{float(value):.6f}"
 
 

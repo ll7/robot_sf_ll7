@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import hashlib
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+import robot_sf.benchmark.camera_ready._preflight as preflight_module
 from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
 from robot_sf.benchmark.camera_ready._preflight import (
     _build_preflight_preview_payload,
     _campaign_config_provenance,
+    _scenario_matrix_hash,
 )
 from robot_sf.benchmark.camera_ready_campaign import _load_campaign_scenarios, load_campaign_config
 
@@ -244,6 +247,42 @@ class TestIssue6095CrossConfig:
         assert preview["config_sha256"] == hashlib.sha256(NOMINAL.read_bytes()).hexdigest()
         assert route_override == "configs/scenarios/route_overrides/issue_596/empty_goal_east.yaml"
         assert not Path(route_override).is_absolute()
+
+    def test_nominal_scenario_hash_is_portable_across_worktree_roots(
+        self,
+        tmp_path: Path,
+        monkeypatch: Any,
+    ) -> None:
+        """Resolved route-override paths must not change the nominal matrix identity."""
+        scenarios = _load_campaign_scenarios(load_campaign_config(NOMINAL))
+        alternate_worktree = tmp_path / "alternate-worktree"
+        alternate_scenarios = deepcopy(scenarios)
+
+        route_override = next(
+            scenario["route_overrides_file"]
+            for scenario in scenarios
+            if "route_overrides_file" in scenario
+        )
+        assert Path(route_override).is_absolute()
+        alternate_route_override = (
+            alternate_worktree / Path(route_override).relative_to(ROOT)
+        ).as_posix()
+        next(scenario for scenario in alternate_scenarios if "route_overrides_file" in scenario)[
+            "route_overrides_file"
+        ] = alternate_route_override
+
+        def _relative_to_owning_worktree(path: Path) -> str:
+            resolved = path.resolve()
+            for worktree_root in (ROOT, alternate_worktree):
+                try:
+                    return resolved.relative_to(worktree_root.resolve()).as_posix()
+                except ValueError:
+                    continue
+            return resolved.as_posix()
+
+        monkeypatch.setattr(preflight_module, "_repo_relative", _relative_to_owning_worktree)
+
+        assert _scenario_matrix_hash(scenarios) == _scenario_matrix_hash(alternate_scenarios)
 
     def test_preflight_uses_config_checksum_snapshotted_at_load(
         self,

@@ -167,10 +167,10 @@ class TestWriteSha256sums:
         content = sha_file.read_text(encoding="utf-8")
         assert "SHA256SUMS" not in content.split("\n", 1)[1]
 
-    def test_uses_bundle_relative_labels_inside_repo(
+    def test_uses_repo_relative_labels_inside_repo(
         self, tmp_path: Path, monkeypatch: MonkeyPatch
     ) -> None:
-        """Bundle-local labels keep ``sha256sum -c`` valid from an in-repo bundle."""
+        """In-repo labels must keep the repository-root verification contract."""
         monkeypatch.setattr("robot_sf.evidence.writers._repo_root", lambda: tmp_path)
         bundle_dir = tmp_path / "evidence-bundle"
         bundle_dir.mkdir()
@@ -181,7 +181,7 @@ class TestWriteSha256sums:
 
         assert (bundle_dir / "SHA256SUMS").read_text(encoding="utf-8").splitlines() == [
             review_marker_comment(),
-            f"{sha256_file(artifact)}  report.json",
+            f"{sha256_file(artifact)}  evidence-bundle/report.json",
         ]
 
 

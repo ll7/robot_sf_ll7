@@ -10,7 +10,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import fields
 from functools import partial
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import loguru
 import numpy as np
@@ -43,6 +43,9 @@ from robot_sf.render.sim_view import (
 from robot_sf.robot.robot_state import RobotState
 from robot_sf.sensor.range_sensor import lidar_ray_scan
 from robot_sf.sim.simulator import PedSimulator, init_ped_simulators
+
+if TYPE_CHECKING:
+    from robot_sf.nav.occupancy import EgoPedContinuousOccupancy
 
 logger = loguru.logger
 
@@ -351,7 +354,7 @@ class PedestrianEnv(SingleAgentEnv):
         # Setup pedestrian state
         self.ped_state = PedestrianState(
             robot_occupancy=occupancies[0],
-            ego_ped_occupancy=occupancies[1],
+            ego_ped_occupancy=cast("EgoPedContinuousOccupancy", occupancies[1]),
             sensors=sensors[1],
             d_t=self.config.sim_config.time_per_step_in_secs,
             sim_time_limit=self.config.sim_config.sim_time_in_secs,

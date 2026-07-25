@@ -990,7 +990,7 @@ class RobotEnv(BaseEnv):
         # Perform simulation step
         self.simulator.step_once([action])
         # Get updated observation
-        obs = self.state.step()
+        obs: Any = self.state.step()
 
         # T044: Wrap observation as dict if observation space was converted for grid inclusion
         if getattr(self, "_wrap_obs_as_dict", False) and not isinstance(obs, dict):
@@ -1116,7 +1116,7 @@ class RobotEnv(BaseEnv):
             self.simulator.reset_state()
             # Reset the environment's state and return the initial observation
             reset_episode_counter_for_seed(self.state, seed)
-            obs = self.state.reset()
+            obs: Any = self.state.reset()
             self._prime_snqi_proxy_state()
 
             # T044: Wrap observation as dict if observation space was converted for grid inclusion

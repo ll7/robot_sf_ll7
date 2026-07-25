@@ -280,7 +280,7 @@ def init_collision_and_sensors(
 
 def init_spaces(
     env_config: EnvSettings | RobotSimulationConfig, map_def: MapDefinition
-) -> tuple[spaces.Space, spaces.Space, spaces.Space]:
+) -> tuple[spaces.Box, spaces.Dict, spaces.Dict]:
     """
     Initialize the action and observation spaces for the environment.
 
@@ -318,7 +318,7 @@ def create_spaces(  # noqa: C901
     env_config: EnvSettings | PedEnvSettings | RobotSimulationConfig,
     map_def: MapDefinition,
     agent_type: AgentType = AgentType.ROBOT,
-) -> tuple[spaces.Space, spaces.Space, spaces.Space]:
+) -> tuple[spaces.Box, spaces.Dict, spaces.Dict]:
     # Create a agent using the factory method in the environment configuration
     """Create observation and action spaces for the specified agent type.
 
@@ -413,7 +413,7 @@ def create_spaces(  # noqa: C901
 def init_ped_spaces(
     env_config: PedEnvSettings | PedestrianSimulationConfig,
     map_def: MapDefinition,
-) -> tuple[list[spaces.Space], list[spaces.Space], list[spaces.Space]]:
+) -> tuple[list[spaces.Box], list[spaces.Dict], list[spaces.Dict]]:
     """
     Initialize the action and observation spaces for the environment.
 
@@ -614,7 +614,7 @@ def create_spaces_with_image(
     env_config: EnvSettings | PedEnvSettings | RobotEnvSettings,
     map_def: MapDefinition,
     agent_type: AgentType = AgentType.ROBOT,
-) -> tuple[spaces.Space, spaces.Space, spaces.Space]:
+) -> tuple[spaces.Box, spaces.Dict, spaces.Dict]:
     """
     Create observation and action spaces including optional image observations.
 

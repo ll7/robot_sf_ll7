@@ -10,14 +10,14 @@ def training():
     env = RobotEnv(debug=True)
     model = PPO.load("./model/ppo_model", env=env)
 
-    obs = env.reset()
+    obs, _ = env.reset()
     for _ in range(10000):
         action, _ = model.predict(obs, deterministic=True)
-        obs, _, done, _ = env.step(action)
+        obs, _, terminated, truncated, _ = env.step(action)
         env.render()
 
-        if done:
-            obs = env.reset()
+        if terminated or truncated:
+            obs, _ = env.reset()
             env.render()
     env.exit()
 

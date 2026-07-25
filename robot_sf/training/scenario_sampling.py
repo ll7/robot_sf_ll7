@@ -16,6 +16,7 @@ from robot_sf.training.scenario_loader import build_robot_config_from_scenario
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
+    from typing import SupportsFloat
 
     from robot_sf.training.density_curriculum import DensityCurriculumSchedule
 
@@ -338,7 +339,7 @@ class ScenarioSwitchingEnv(Env):
         self._has_reset = True
         return self._current_env.reset(seed=seed, options=options)
 
-    def step(self, action) -> tuple[Any, float, bool, bool, dict[str, Any]]:
+    def step(self, action) -> tuple[Any, SupportsFloat, bool, bool, dict[str, Any]]:
         """Step the active scenario environment.
 
         Returns:

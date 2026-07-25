@@ -6,7 +6,7 @@ Provides common functionality for all environments.
 import datetime
 import importlib
 import pickle
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, SupportsFloat
 
 from gymnasium import Env
 from loguru import logger
@@ -196,7 +196,7 @@ class BaseEnv(Env):
         """Close the environment and release resources."""
         raise NotImplementedError
 
-    def step(self, action) -> None:
+    def step(self, action) -> tuple[Any, SupportsFloat, bool, bool, dict[str, Any]]:
         """Step the environment forward.
 
         Args:

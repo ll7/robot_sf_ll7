@@ -46,8 +46,9 @@ This step is blocked by https://github.com/ll7/robot_sf_ll7/issues/6139, which i
 
 The corrected continuous swept-envelope / runtime simulator-collision recertification
 (<https://github.com/ll7/robot_sf_ll7/issues/6139>) re-certified all 17 registered
-records and left **8 eligible** (≥ the required floor of 2). Hashes are recomputed at
-every check by the side-effect-free preflight:
+records and left **8 eligible** (≥ the required floor of 2). At every side-effect-free
+preflight, the receipt and the actual certified-archive file are each hashed and must
+match the frozen entry-gate digest:
 
 | Artifact | Path | SHA-256 |
 | --- | --- | --- |
@@ -163,9 +164,9 @@ uv run python scripts/tools/check_issue_5303_search_promotion_contract.py
 ```
 
 This recomputes the contract and #6139 receipt hashes, checks raw hashes for the target,
-reference, family, search-space, runner, and analysis inputs, statically verifies the
-registered objective/runner options/complete outcome schema, recomputes the permutation
-power math, and asserts the diagnostic-only stop rule. It imports no adversarial execution
+reference, family, search-space, runner, analysis inputs, and certified archive. It statically
+verifies the registered objective/runner options/complete outcome schema, recomputes the
+permutation power math, and asserts the diagnostic-only stop rule. It imports no adversarial execution
 surface (`samplers`, `search`, `runtime`, `qd`, `warm_start`, `transfer_matrix`, or any
 campaign/replay/benchmark-runner module), no `subprocess`, and no network module; the focused test
 `tests/adversarial/test_issue_5303_search_promotion_preflight.py` AST-scans the preflight
@@ -188,6 +189,11 @@ They are not durable evidence pointers. The analysis retains the matched 192-att
 denominator per method and returns **`inconclusive`**; it does not run or replace replay,
 target/reference confirmation, or second-context confirmation. Those absent gates are
 explicitly recorded as not admitted.
+
+Before accepting a diagnostic result, the analyzer reruns the frozen preflight and requires every
+self-hashed row to match the frozen scenario family and path/hash, search-space path/hash,
+target/reference-config path/hash, objective, and native execution mode. A row's own hash alone
+cannot make a different input packet appear complete.
 
 ## Files
 

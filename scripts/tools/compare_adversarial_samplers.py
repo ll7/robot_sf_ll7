@@ -474,6 +474,7 @@ def build_issue_5303_search_outcome_rows(
                 "readiness_status": readiness_status,
                 "availability_status": availability_status,
                 "constraints_first_outcome": _constraints_first_outcome(record),
+                "objective": comparison_row.objective,
                 "objective_value": item.get("objective_value"),
                 "primary_failure_mechanism": attribution.get("primary_failure"),
                 "stable_attribution_evidence": "not_collected_diagnostic_only",

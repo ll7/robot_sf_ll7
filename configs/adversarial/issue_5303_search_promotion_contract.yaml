@@ -104,10 +104,10 @@ input_provenance:
       sha256: a9d06feec11347ac1470401171da1998ed3635026798716be36e1c03616ceefa
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      sha256: 9e8d2cb2a2821b09e61e92ce6d7e6052078c8fcfd42867c1fb41a9ab6efc1f99
+      sha256: 61bd6d195194fb5d7bbce9a80988330e52fbf1e5fc367ad419baf744579fdf08
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
-      sha256: 5f794ea69aea14cebfeca85a003e29ddf16c4c05e24ef0903c6d2745437e9a47
+      sha256: cb008644ea4303d19e423762eac27451659a34b752da8f087a86c0c181767b5a
     - id: promotion_analysis_cli
       path: scripts/tools/analyze_issue_5303_search_promotion.py
       sha256: 6db5d07151291e0eb1e133582595df7c8de8d4deb1a480f87476602041da7e6e
@@ -350,6 +350,7 @@ outcome_row_schema:
     - readiness_status
     - availability_status
     - constraints_first_outcome
+    - objective
     - objective_value
     - primary_failure_mechanism
     - stable_attribution_evidence
@@ -453,6 +454,8 @@ step3_execution:
   analysis_ref: scripts/tools/analyze_issue_5303_search_promotion.py
   execution_kind: separately_justified_diagnostic_search_stage_only
   promotion_campaign_status: stopped
+  diagnostic_objective: constraints_first_lexicographic_v1
+  required_execution_mode: native
   runner_note: >
     This command is executable only as a diagnostic search-stage handoff. It registers
     constraints_first_lexicographic_v1, uses the corrected certifier from merged #6139,

@@ -16,6 +16,24 @@ from scripts.tools.compare_adversarial_samplers import parse_args
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_PATH = REPO_ROOT / "configs/adversarial/issue_5303_search_promotion_contract.yaml"
+FROZEN_CONTRACT = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+assert isinstance(FROZEN_CONTRACT, dict)
+FROZEN_INPUTS = {
+    entry["id"]: entry
+    for entry in FROZEN_CONTRACT["input_provenance"]["required_inputs"]
+    if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+}
+
+
+def _frozen_input(input_id: str) -> tuple[str, str]:
+    """Return one path/hash pair from the committed frozen contract."""
+    entry = FROZEN_INPUTS[input_id]
+    assert isinstance(entry, dict)
+    path = entry.get("path")
+    digest = entry.get("sha256")
+    assert isinstance(path, str)
+    assert isinstance(digest, str)
+    return path, digest
 
 
 def _immutable_sha256(row: dict[str, object]) -> str:
@@ -26,6 +44,16 @@ def _immutable_sha256(row: dict[str, object]) -> str:
 
 
 def _diagnostic_row(*, arm: str, seed: int, index: int, candidate_hash: str) -> dict[str, object]:
+    scenario_config_path, scenario_config_sha256 = _frozen_input("diagnostic_scenario_template")
+    search_space_path, search_space_sha256 = _frozen_input("search_space")
+    target_config_path, target_config_sha256 = _frozen_input("target_planner_config")
+    reference_config_path, reference_config_sha256 = _frozen_input(
+        "neutral_reference_planner_config"
+    )
+    family_split = FROZEN_CONTRACT["family_split"]
+    step3_execution = FROZEN_CONTRACT["step3_execution"]
+    assert isinstance(family_split, dict)
+    assert isinstance(step3_execution, dict)
     row: dict[str, object] = {
         "schema_version": OUTCOME_ROW_SCHEMA_VERSION,
         "row_id": f"{arm}:{seed}:{index:04d}:search",
@@ -35,26 +63,23 @@ def _diagnostic_row(*, arm: str, seed: int, index: int, candidate_hash: str) -> 
         "candidate_index": index,
         "normalized_candidate_config_sha256": candidate_hash,
         "candidate": {"scenario_seed": seed + index},
-        "scenario_family": "classic_group_crossing_medium",
-        "scenario_config_path": "configs/adversarial/issue_5303_classic_group_crossing_medium.yaml",
-        "scenario_config_sha256": "scenario-hash",
-        "search_space_path": "configs/adversarial/crossing_ttc_space.yaml",
-        "search_space_sha256": "space-hash",
-        "target_planner_config_path": (
-            "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml"
-        ),
-        "target_planner_config_sha256": "target-hash",
-        "neutral_reference_planner_config_path": (
-            "configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml"
-        ),
-        "neutral_reference_planner_config_sha256": "reference-hash",
+        "scenario_family": family_split["fresh_outcome_family"],
+        "scenario_config_path": scenario_config_path,
+        "scenario_config_sha256": scenario_config_sha256,
+        "search_space_path": search_space_path,
+        "search_space_sha256": search_space_sha256,
+        "target_planner_config_path": target_config_path,
+        "target_planner_config_sha256": target_config_sha256,
+        "neutral_reference_planner_config_path": reference_config_path,
+        "neutral_reference_planner_config_sha256": reference_config_sha256,
         "execution_stage": "search",
         "execution_seed": seed + index,
         "seed_lineage": {"search_seed": seed},
-        "execution_mode": "native",
+        "execution_mode": step3_execution["required_execution_mode"],
         "readiness_status": "ready",
         "availability_status": "available",
         "constraints_first_outcome": {"status": "observed"},
+        "objective": step3_execution["diagnostic_objective"],
         "objective_value": 0.0,
         "primary_failure_mechanism": None,
         "stable_attribution_evidence": "not_collected_diagnostic_only",
@@ -173,7 +198,72 @@ def test_diagnostic_analysis_retains_duplicate_attempt_in_primary_denominator(
     assert result.accounting["observed_attempts_per_arm"] == {"optuna": 192, "random": 192}
     assert result.accounting["global_within_arm_normalized_hash_duplicates"]["optuna"] == 1
     assert result.accounting["unique_normalized_hashes_per_arm"]["optuna"] == 191
+    assert result.accounting["frozen_contract_preflight_ready"] is True
+    assert (
+        result.accounting["frozen_contract_sha256"]
+        == hashlib.sha256(CONTRACT_PATH.read_bytes()).hexdigest()
+    )
     assert result.warnings
+
+
+def test_diagnostic_analysis_rejects_self_hashed_wrong_frozen_bindings(tmp_path: Path) -> None:
+    """A self-hash cannot substitute for the frozen input and execution bindings."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    rows = [json.loads(line) for line in outcomes.read_text(encoding="utf-8").splitlines()]
+    wrong_values = {
+        "scenario_family": "classic_cross_trap_medium",
+        "scenario_config_path": "configs/scenarios/templates/crossing_ttc.yaml",
+        "scenario_config_sha256": "0" * 64,
+        "search_space_path": "configs/adversarial/not_the_frozen_space.yaml",
+        "search_space_sha256": "1" * 64,
+        "target_planner_config_path": "configs/policy_search/candidates/not_the_target.yaml",
+        "target_planner_config_sha256": "2" * 64,
+        "neutral_reference_planner_config_path": "configs/policy_search/candidates/not_the_ref.yaml",
+        "neutral_reference_planner_config_sha256": "3" * 64,
+        "objective": "worst_case_snqi",
+        "execution_mode": "not_native",
+    }
+
+    for field, wrong_value in wrong_values.items():
+        tampered_rows = [dict(row) for row in rows]
+        tampered_rows[0][field] = wrong_value
+        tampered_rows[0]["immutable_record_sha256"] = _immutable_sha256(tampered_rows[0])
+        tampered_outcomes = tmp_path / f"wrong_{field}.jsonl"
+        tampered_outcomes.write_text(
+            "\n".join(json.dumps(row, sort_keys=True) for row in tampered_rows) + "\n",
+            encoding="utf-8",
+        )
+
+        result = analyze_issue_5303_search_promotion(
+            tampered_outcomes,
+            contract_path=CONTRACT_PATH,
+            repo_root=REPO_ROOT,
+        )
+
+        assert result.ready is False
+        assert result.accounting["frozen_row_binding_failure_counts"][field] == 1
+        assert any(f"frozen {field!r} binding" in blocker for blocker in result.blockers)
+
+
+def test_diagnostic_analysis_rejects_a_contract_not_matching_its_manifest(tmp_path: Path) -> None:
+    """Acceptance rechecks the manifest instead of trusting a supplied contract file."""
+    outcomes = tmp_path / "outcomes.jsonl"
+    _write_complete_outcomes(outcomes)
+    changed_contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    changed_contract["step3_execution"]["required_execution_mode"] = "degraded"
+    changed_contract_path = tmp_path / "changed_contract.yaml"
+    changed_contract_path.write_text(yaml.safe_dump(changed_contract), encoding="utf-8")
+
+    result = analyze_issue_5303_search_promotion(
+        outcomes,
+        contract_path=changed_contract_path,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert result.accounting["frozen_contract_preflight_ready"] is False
+    assert any("frozen contract preflight failed" in blocker for blocker in result.blockers)
 
 
 def test_diagnostic_analysis_fails_closed_on_a_missing_attempt(tmp_path: Path) -> None:

@@ -95,10 +95,11 @@ def test_contract_hash_matches_manifest() -> None:
 
 
 def test_receipt_hashes_cross_check() -> None:
-    """The receipt raw-file hash, self-declared hash, and archive hash are all consistent."""
+    """The receipt and actual archive raw-file hashes match the frozen entry gate."""
     result = preflight_issue_5303_contract(repo_root=REPO_ROOT)
     receipt = json.loads(RECEIPT_PATH.read_text(encoding="utf-8"))
     contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    archive_path = REPO_ROOT / contract["entry_gate"]["certified_archive_path"]
     assert result.metadata["receipt_file_sha256"] == _sha256_file(RECEIPT_PATH)
     assert (
         result.metadata["receipt_file_sha256"]
@@ -109,8 +110,15 @@ def test_receipt_hashes_cross_check() -> None:
         == contract["entry_gate"]["recertification_self_declared_sha256"]
     )
     assert receipt["archive_sha256"] == contract["entry_gate"]["certified_archive_sha256"]
+    assert result.metadata["certified_archive_file_sha256"] == _sha256_file(archive_path)
+    assert (
+        result.metadata["certified_archive_file_sha256"]
+        == contract["entry_gate"]["certified_archive_sha256"]
+    )
     assert result.checks["receipt_file_hash_matches_contract"]
     assert result.checks["receipt_self_declared_hash_matches_contract"]
+    assert result.checks["certified_archive_exists"]
+    assert result.checks["certified_archive_file_hash_matches_contract"]
     assert result.checks["archive_hash_consistent"]
 
 
@@ -310,6 +318,34 @@ def test_preflight_detects_handoff_input_hash_tampering(tmp_path: Path) -> None:
     assert result.ready is False
     assert result.checks["contract_hash_matches_manifest"] is True
     assert result.checks["input_provenance_hashes"] is False
+
+
+def test_preflight_detects_certified_archive_file_tampering(tmp_path: Path) -> None:
+    """A receipt's stale self-report cannot hide a changed certified archive file."""
+    contract = yaml.safe_load(CONTRACT_PATH.read_text(encoding="utf-8"))
+    archive_path = REPO_ROOT / contract["entry_gate"]["certified_archive_path"]
+    tampered_archive = tmp_path / "archive.json"
+    tampered_archive.write_bytes(archive_path.read_bytes() + b"\narchive-tamper\n")
+    contract["entry_gate"]["certified_archive_path"] = str(tampered_archive)
+    tampered_contract = tmp_path / "archive_tamper_contract.yaml"
+    tampered_contract.write_text(yaml.safe_dump(contract), encoding="utf-8")
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    manifest["contract_sha256"] = hashlib.sha256(tampered_contract.read_bytes()).hexdigest()
+    tampered_manifest = tmp_path / "contract_frozen.json"
+    tampered_manifest.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = preflight_issue_5303_contract(
+        tampered_contract,
+        receipt_path=RECEIPT_PATH,
+        manifest_path=tampered_manifest,
+        repo_root=REPO_ROOT,
+    )
+
+    assert result.ready is False
+    assert result.checks["certified_archive_exists"] is True
+    assert result.checks["certified_archive_file_hash_matches_contract"] is False
+    assert result.checks["archive_hash_consistent"] is False
+    assert any("certified archive file SHA-256" in blocker for blocker in result.blockers)
 
 
 def test_preflight_detects_incomplete_diagnostic_command(tmp_path: Path) -> None:

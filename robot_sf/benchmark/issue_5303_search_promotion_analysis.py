@@ -16,6 +16,11 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.issue_5303_search_promotion_preflight import (
+    DEFAULT_MANIFEST_PATH,
+    preflight_issue_5303_contract,
+)
+
 SCHEMA_VERSION = "issue_5303_search_promotion_analysis.v1"
 OUTCOME_ROW_SCHEMA_VERSION = "issue_5303_search_promotion_outcome_row.v1"
 DEFAULT_CONTRACT_PATH = Path("configs/adversarial/issue_5303_search_promotion_contract.yaml")
@@ -119,10 +124,87 @@ def _required_contract_fields(contract: dict[str, Any], blockers: list[str]) -> 
     return set(fields)
 
 
+def _frozen_row_bindings(contract: dict[str, Any], blockers: list[str]) -> dict[str, str]:
+    """Extract the frozen provenance values that every diagnostic row must carry.
+
+    The immutable row digest only proves that a row was not changed after it was
+    written.  These bindings connect that self-hashed row to the preregistered
+    scenario, search space, planners, objective, and execution mode.
+
+    Returns:
+        Mapping from outcome-row field names to their required frozen values.
+    """
+    provenance = contract.get("input_provenance")
+    entries = provenance.get("required_inputs") if isinstance(provenance, dict) else None
+    indexed_inputs = (
+        {
+            entry.get("id"): entry
+            for entry in entries
+            if isinstance(entry, dict) and isinstance(entry.get("id"), str)
+        }
+        if isinstance(entries, list)
+        else {}
+    )
+    bindings: dict[str, str] = {}
+    input_sources = {
+        "scenario_config_path": ("diagnostic_scenario_template", "path"),
+        "scenario_config_sha256": ("diagnostic_scenario_template", "sha256"),
+        "search_space_path": ("search_space", "path"),
+        "search_space_sha256": ("search_space", "sha256"),
+        "target_planner_config_path": ("target_planner_config", "path"),
+        "target_planner_config_sha256": ("target_planner_config", "sha256"),
+        "neutral_reference_planner_config_path": ("neutral_reference_planner_config", "path"),
+        "neutral_reference_planner_config_sha256": (
+            "neutral_reference_planner_config",
+            "sha256",
+        ),
+    }
+    for row_field, (input_id, input_field) in input_sources.items():
+        entry = indexed_inputs.get(input_id)
+        value = entry.get(input_field) if isinstance(entry, dict) else None
+        if not isinstance(value, str) or not value:
+            blockers.append(
+                f"contract input_provenance {input_id!r} must provide non-empty {input_field!r}"
+            )
+            continue
+        bindings[row_field] = value
+
+    family_split = contract.get("family_split")
+    scenario_family = (
+        family_split.get("fresh_outcome_family") if isinstance(family_split, dict) else None
+    )
+    if not isinstance(scenario_family, str) or not scenario_family:
+        blockers.append("contract family_split.fresh_outcome_family must be a non-empty string")
+    else:
+        bindings["scenario_family"] = scenario_family
+
+    step3_execution = contract.get("step3_execution")
+    diagnostic_objective = (
+        step3_execution.get("diagnostic_objective") if isinstance(step3_execution, dict) else None
+    )
+    if not isinstance(diagnostic_objective, str) or not diagnostic_objective:
+        blockers.append("contract step3_execution.diagnostic_objective must be a non-empty string")
+    else:
+        bindings["objective"] = diagnostic_objective
+    required_execution_mode = (
+        step3_execution.get("required_execution_mode")
+        if isinstance(step3_execution, dict)
+        else None
+    )
+    if not isinstance(required_execution_mode, str) or not required_execution_mode:
+        blockers.append(
+            "contract step3_execution.required_execution_mode must be a non-empty string"
+        )
+    else:
+        bindings["execution_mode"] = required_execution_mode
+    return bindings
+
+
 def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
     outcomes_path: Path,
     *,
     contract_path: Path = DEFAULT_CONTRACT_PATH,
+    manifest_path: Path = DEFAULT_MANIFEST_PATH,
     repo_root: Path | None = None,
 ) -> Issue5303AnalysisResult:
     """Validate full intention-to-search accounting and return a fixed inconclusive decision.
@@ -136,6 +218,7 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
     """
     root = (repo_root or Path.cwd()).resolve()
     contract_path = _resolve(root, contract_path)
+    manifest_path = _resolve(root, manifest_path)
     outcomes_path = _resolve(root, outcomes_path)
     blockers: list[str] = []
     warnings: list[str] = []
@@ -157,7 +240,18 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
             warnings=(),
         )
 
+    frozen_preflight = preflight_issue_5303_contract(
+        contract_path=contract_path,
+        manifest_path=manifest_path,
+        repo_root=root,
+    )
+    if not frozen_preflight.ready:
+        blockers.extend(
+            f"frozen contract preflight failed: {blocker}" for blocker in frozen_preflight.blockers
+        )
+
     required_fields = _required_contract_fields(contract, blockers)
+    frozen_row_bindings = _frozen_row_bindings(contract, blockers)
     methods_block = contract.get("methods") if isinstance(contract.get("methods"), dict) else {}
     methods = tuple(
         str(entry.get("name"))
@@ -188,6 +282,7 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
     invalid_by_arm: dict[str, int] = dict.fromkeys(methods, 0)
     required_field_failures = 0
     immutable_hash_failures = 0
+    frozen_binding_failures: dict[str, int] = dict.fromkeys(frozen_row_bindings, 0)
 
     for row_number, row in enumerate(rows, start=1):
         missing = sorted(required_fields - set(row))
@@ -232,6 +327,10 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
             immutable_hash_failures += 1
             blockers.append(f"row {row_number} immutable_record_sha256 does not match row content")
 
+        for binding_field, frozen_value in frozen_row_bindings.items():
+            if row.get(binding_field) != frozen_value:
+                frozen_binding_failures[binding_field] += 1
+
         normalized_hash = row.get("normalized_candidate_config_sha256")
         if not isinstance(normalized_hash, str) or not normalized_hash:
             blockers.append(f"row {row_number} lacks a normalized candidate hash")
@@ -271,6 +370,13 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
                 "denominator and cannot be complete-case evidence"
             )
 
+    for binding_field, failure_count in frozen_binding_failures.items():
+        if failure_count:
+            blockers.append(
+                f"{failure_count} row(s) do not match frozen {binding_field!r} binding from "
+                "the contract"
+            )
+
     expected_attempts = len(seeds) * candidate_budget
     missing_attempts = {
         arm: max(0, expected_attempts - len(observed_attempts.get(arm, set()))) for arm in methods
@@ -300,6 +406,9 @@ def analyze_issue_5303_search_promotion(  # noqa: C901, PLR0912, PLR0915
         "fully_admitted_yield": "not_estimated_diagnostic_only",
         "required_field_failure_count": required_field_failures,
         "immutable_hash_failure_count": immutable_hash_failures,
+        "frozen_contract_sha256": frozen_preflight.metadata.get("contract_file_sha256"),
+        "frozen_contract_preflight_ready": frozen_preflight.ready,
+        "frozen_row_binding_failure_counts": frozen_binding_failures,
     }
     if any(duplicates_by_arm.values()):
         warnings.append(

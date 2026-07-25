@@ -125,6 +125,7 @@ EXPECTED_OUTCOME_ROW_FIELDS = frozenset(
         "readiness_status",
         "availability_status",
         "constraints_first_outcome",
+        "objective",
         "objective_value",
         "primary_failure_mechanism",
         "stable_attribution_evidence",
@@ -561,11 +562,37 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         checks["contract_hash_matches_manifest"] = False
         blockers.append(f"manifest not found: {_repo_relative(manifest_path, root)}")
 
-    # ---- Receipt hashes (contract <-> receipt tamper-evidence) --------------------
+    # ---- Receipt and archive hashes (contract <-> entry-gate tamper-evidence) -----
     entry_gate = contract.get("entry_gate") if isinstance(contract.get("entry_gate"), dict) else {}
     receipt_resolved = (
         _resolve(root, entry_gate.get("recertification_receipt_path")) or receipt_path
     )
+    certified_archive_resolved = _resolve(root, entry_gate.get("certified_archive_path"))
+    checks["certified_archive_exists"] = bool(
+        certified_archive_resolved and certified_archive_resolved.is_file()
+    )
+    certified_archive_file_hash: str | None = None
+    if checks["certified_archive_exists"]:
+        assert certified_archive_resolved is not None
+        certified_archive_file_hash = sha256_file(certified_archive_resolved)
+        metadata["certified_archive_file_sha256"] = certified_archive_file_hash
+        checks["certified_archive_file_hash_matches_contract"] = (
+            certified_archive_file_hash == entry_gate.get("certified_archive_sha256")
+        )
+        if not checks["certified_archive_file_hash_matches_contract"]:
+            blockers.append(
+                "certified archive file SHA-256 does not match the contract's frozen value "
+                f"(contract={entry_gate.get('certified_archive_sha256')!r}, "
+                f"recomputed={certified_archive_file_hash!r})"
+            )
+    else:
+        checks["certified_archive_file_hash_matches_contract"] = False
+        if certified_archive_resolved is None:
+            blockers.append("entry_gate.certified_archive_path must be a non-empty path")
+        else:
+            blockers.append(
+                f"certified archive not found: {_repo_relative(certified_archive_resolved, root)}"
+            )
     checks["receipt_exists"] = receipt_resolved.is_file()
     receipt: dict[str, Any] = {}
     if checks["receipt_exists"]:
@@ -593,19 +620,19 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
             blockers.append(
                 "receipt self-declared recertification_sha256 does not match the contract"
             )
-        checks["archive_hash_consistent"] = receipt.get("archive_sha256") == entry_gate.get(
-            "certified_archive_sha256"
-        )
-        if not checks["archive_hash_consistent"]:
-            blockers.append(
-                "receipt archive_sha256 does not match the contract's certified_archive_sha256"
-            )
     else:
         checks["receipt_file_hash_matches_contract"] = False
         checks["receipt_self_declared_hash_matches_contract"] = False
-        checks["archive_hash_consistent"] = False
         blockers.append(
             f"recertification receipt not found: {_repo_relative(receipt_resolved, root)}"
+        )
+    checks["archive_hash_consistent"] = receipt.get("archive_sha256") == entry_gate.get(
+        "certified_archive_sha256"
+    ) and certified_archive_file_hash == entry_gate.get("certified_archive_sha256")
+    if not checks["archive_hash_consistent"]:
+        blockers.append(
+            "receipt and certified archive file SHA-256 values must both match the contract's "
+            "certified_archive_sha256"
         )
 
     # ---- Entry-gate eligible counts ----------------------------------------------
@@ -1106,13 +1133,15 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     checks["step3_execution_declared_diagnostic_only"] = (
         step3.get("execution_kind") == "separately_justified_diagnostic_search_stage_only"
         and step3.get("promotion_campaign_status") == "stopped"
+        and step3.get("diagnostic_objective") == "constraints_first_lexicographic_v1"
+        and step3.get("required_execution_mode") == "native"
         and runner_path == root / EXPECTED_PROVENANCE_PATHS["diagnostic_runner"]
         and analysis_path == root / EXPECTED_PROVENANCE_PATHS["promotion_analysis_cli"]
     )
     if not checks["step3_execution_declared_diagnostic_only"]:
         blockers.append(
-            "step3_execution must identify the runner and analysis CLI as a stopped-promotion, "
-            "diagnostic-only handoff"
+            "step3_execution must identify the runner and analysis CLI plus the frozen objective "
+            "and native execution mode for a stopped-promotion diagnostic-only handoff"
         )
     checks["step3_runner_static_support"] = bool(runner_path and runner_path.is_file()) and (
         REQUIRED_DIAGNOSTIC_RUNNER_OPTIONS <= _parser_options(runner_path)
@@ -1159,7 +1188,7 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         "--scenario-family": EXPECTED_FRESH_FAMILY,
         "--search-space": EXPECTED_PROVENANCE_PATHS["search_space"],
         "--budget": str(EXPECTED_CANDIDATE_BUDGET),
-        "--objective": "constraints_first_lexicographic_v1",
+        "--objective": step3.get("diagnostic_objective"),
         "--horizon": str(EXPECTED_HORIZON_STEPS),
         "--dt": str(EXPECTED_DT_S),
         "--benchmark-profile": "experimental",

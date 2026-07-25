@@ -71,6 +71,7 @@ class ReplicaReadinessResult:
 
 
 def _repo_relative(path: Path, repo_root: Path) -> str:
+    """Return ``path`` relative to ``repo_root`` as posix, or its raw posix on failure."""
     try:
         return path.resolve().relative_to(repo_root.resolve()).as_posix()
     except ValueError:
@@ -78,6 +79,11 @@ def _repo_relative(path: Path, repo_root: Path) -> str:
 
 
 def _load_manifest(path: Path) -> dict[str, Any]:
+    """Load ``path`` as a JSON object, raising on missing file or non-object payload.
+
+    Returns:
+        The parsed manifest object.
+    """
     if not path.is_file():
         raise FileNotFoundError(f"Manifest file not found: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -87,6 +93,11 @@ def _load_manifest(path: Path) -> dict[str, Any]:
 
 
 def _parse_expected_seeds(raw: str | None) -> tuple[int, ...]:
+    """Parse a comma- and range-separated seed spec into a sorted tuple of integers.
+
+    Returns:
+        The sorted tuple of expected seeds.
+    """
     if not raw:
         return ()
     seeds: set[int] = set()
@@ -107,14 +118,17 @@ def _parse_expected_seeds(raw: str | None) -> tuple[int, ...]:
 
 
 def _is_finite_number(value: Any) -> bool:
+    """Return whether ``value`` is a finite, non-boolean number."""
     return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def _check_row_required_fields(row: dict[str, Any], *, index: int) -> list[str]:
+    """Return blockers for any missing required fields on ``rows[index]``."""
     return [f"rows[{index}] missing {field}" for field in REQUIRED_ROW_FIELDS if field not in row]
 
 
 def _check_row_numeric_fields(row: dict[str, Any], *, seed: Any) -> list[str]:
+    """Return blockers for non-integer or non-finite numeric fields on a manifest row."""
     blockers: list[str] = []
     for field in ("job_id", "eval_step"):
         value = row.get(field)
@@ -128,6 +142,7 @@ def _check_row_numeric_fields(row: dict[str, Any], *, seed: Any) -> list[str]:
 
 
 def _check_row_provenance_fields(row: dict[str, Any], *, seed: Any) -> list[str]:
+    """Return blockers for invalid ``wandb_url`` or sha256 provenance fields on a row."""
     blockers: list[str] = []
     wandb_url = row.get("wandb_url")
     if not isinstance(wandb_url, str) or not WANDB_URL_RE.match(wandb_url):
@@ -141,6 +156,11 @@ def _check_row_provenance_fields(row: dict[str, Any], *, seed: Any) -> list[str]
 
 
 def _check_row(row: Any, *, index: int) -> tuple[int | None, list[str]]:
+    """Validate one manifest row, returning its parsed seed (or None) and blockers.
+
+    Returns:
+        The row's seed (or ``None``) and its blockers.
+    """
     blockers: list[str] = []
     if not isinstance(row, dict):
         return None, [f"rows[{index}] must be an object"]
@@ -165,6 +185,11 @@ def _check_row(row: Any, *, index: int) -> tuple[int | None, list[str]]:
 
 
 def _check_source_worktrees(payload: dict[str, Any]) -> list[str]:
+    """Validate the ``source_worktrees`` list (fields, commit sha, integer seeds).
+
+    Returns:
+        Blockers for malformed source-worktree entries.
+    """
     blockers: list[str] = []
     sources = payload.get("source_worktrees")
     if not isinstance(sources, list) or not sources:
@@ -192,6 +217,11 @@ def _check_source_worktrees(payload: dict[str, Any]) -> list[str]:
 def _check_manifest_boundary(
     payload: dict[str, Any], *, allow_partial: bool
 ) -> tuple[list[str], list[str]]:
+    """Validate manifest schema/claim_boundary/partial-ness, returning blockers and warnings.
+
+    Returns:
+        Manifest boundary blockers and warnings.
+    """
     blockers: list[str] = []
     warnings: list[str] = []
     schema = payload.get("schema_version")
@@ -215,6 +245,11 @@ def _check_manifest_boundary(
 
 
 def _check_rows(payload: dict[str, Any]) -> tuple[list[int], int, list[str]]:
+    """Validate the ``rows`` list, returning present seeds, row count, and blockers.
+
+    Returns:
+        Present seeds, row count, and blockers.
+    """
     blockers: list[str] = []
     rows = payload.get("rows")
     if not isinstance(rows, list) or not rows:
@@ -234,6 +269,7 @@ def _check_rows(payload: dict[str, Any]) -> tuple[list[int], int, list[str]]:
 
 
 def _check_aggregate(payload: dict[str, Any], *, row_count: int) -> list[str]:
+    """Return a blocker unless ``aggregate.count`` matches the number of rows."""
     aggregate = payload.get("aggregate")
     if not isinstance(aggregate, dict):
         return ["aggregate must be an object"]
@@ -248,6 +284,7 @@ def _check_expected_configs(
     expected_seeds: tuple[int, ...],
     config_template: str,
 ) -> list[str]:
+    """Return blockers for any expected per-seed config file missing under ``root``."""
     blockers: list[str] = []
     for seed in expected_seeds:
         config = root / config_template.format(seed=seed)

@@ -1,6 +1,7 @@
 # Issue #6095 S10 ORCA/PPO Nominal-vs-Stress Discriminability Calibration
 
-**Status**: configs ready, preflight passed. Execution requires SLURM.
+**Status**: proposal-phase preflight complete; full execution requires SLURM and is not benchmark
+evidence.
 
 ## Summary
 
@@ -17,6 +18,12 @@ kinematics.
 
 Both configs include only ORCA (`algo: orca`) and PPO
 (`algo: ppo`, `algo_config: configs/baselines/ppo_15m_grid_socnav.yaml`).
+
+Both configs also use
+`configs/benchmarks/route_clearance_certifications_v1.yaml`, preserving the
+reviewed caveats for intentionally tight route geometry. ORCA uses
+`socnav_missing_prereq_policy: fail-fast`: a missing native prerequisite ends
+the campaign preflight rather than creating a fallback result row.
 
 ## Preflight Results
 
@@ -49,6 +56,10 @@ Both configs passed preflight validation:
 
 Compact preflight outputs archived at:
 `docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/`
+
+The tracked packet keeps provenance paths repository-relative and uses LF line
+endings for CSV artifacts. It is a portable config/preflight record, not raw
+campaign evidence.
 
 ## Execution Requirements
 
@@ -83,10 +94,11 @@ matrix) and `atomic_navigation_minimal_full_v1.yaml`. This means:
 
 ## Claims and Limitations
 
-This is proposal-phase evidence. No benchmark results exist yet because execution
-requires SLURM (`compute_submit` not authorized in current lane).
-Configs are validated and ready for submission. See issue #6095 for the full
-analysis contract.
+This is proposal-phase preflight evidence. No benchmark results or
+discriminability conclusion exist because execution requires SLURM
+(`compute_submit` is not authorized in this lane). Native ORCA/PPO execution
+must complete without fallback or degraded rows before any result is promoted.
+See issue #6095 for the full analysis contract.
 
 ## References
 

@@ -7,12 +7,14 @@ from typing import Any
 
 import yaml
 
+from robot_sf.benchmark.camera_ready._preflight import _build_preflight_preview_payload
 from robot_sf.benchmark.camera_ready_campaign import _load_campaign_scenarios, load_campaign_config
 
 ROOT = Path(__file__).resolve().parents[2]
 NOMINAL = ROOT / "configs/benchmarks/issue_6095_nominal_discriminability_v1.yaml"
 STRESS = ROOT / "configs/benchmarks/issue_6095_stress_discriminability_v1.yaml"
 PPO_ALGO = ROOT / "configs/baselines/ppo_15m_grid_socnav.yaml"
+ROUTE_CLEARANCE_CERTIFICATIONS = ROOT / "configs/benchmarks/route_clearance_certifications_v1.yaml"
 S10_SEEDS = [111, 112, 113, 114, 115, 116, 117, 118, 119, 120]
 
 
@@ -72,6 +74,15 @@ class TestIssue6095NominalConfig:
         cfg = _load_yaml(NOMINAL)
         assert cfg["stop_on_failure"] is False
 
+    def test_route_clearance_and_orca_prerequisites_are_fail_closed(self) -> None:
+        cfg = _load_yaml(NOMINAL)
+        assert cfg["route_clearance_certifications"] == (
+            "configs/benchmarks/route_clearance_certifications_v1.yaml"
+        )
+        assert ROUTE_CLEARANCE_CERTIFICATIONS.is_file()
+        orca = next(planner for planner in cfg["planners"] if planner["key"] == "orca")
+        assert orca["socnav_missing_prereq_policy"] == "fail-fast"
+
     def test_scenario_count(self) -> None:
         cfg = _load_yaml(NOMINAL)
         matrix_path = ROOT / str(cfg["scenario_matrix"])
@@ -116,6 +127,15 @@ class TestIssue6095StressConfig:
     def test_stop_on_failure_is_false(self) -> None:
         cfg = _load_yaml(STRESS)
         assert cfg["stop_on_failure"] is False
+
+    def test_route_clearance_and_orca_prerequisites_are_fail_closed(self) -> None:
+        cfg = _load_yaml(STRESS)
+        assert cfg["route_clearance_certifications"] == (
+            "configs/benchmarks/route_clearance_certifications_v1.yaml"
+        )
+        assert ROUTE_CLEARANCE_CERTIFICATIONS.is_file()
+        orca = next(planner for planner in cfg["planners"] if planner["key"] == "orca")
+        assert orca["socnav_missing_prereq_policy"] == "fail-fast"
 
     def test_stress_scenario_count(self) -> None:
         cfg = _load_yaml(STRESS)
@@ -171,3 +191,27 @@ class TestIssue6095CrossConfig:
         nominal = _load_yaml(NOMINAL)
         stress = _load_yaml(STRESS)
         assert nominal["scenario_matrix"] != stress["scenario_matrix"]
+
+    def test_nominal_preview_keeps_route_override_provenance_portable(self) -> None:
+        cfg = load_campaign_config(NOMINAL)
+        preview = _build_preflight_preview_payload(
+            cfg,
+            campaign_id="issue_6095_test",
+            created_at_utc="2026-07-25T00:00:00Z",
+            scenarios=_load_campaign_scenarios(cfg),
+            route_clearance_warnings=[],
+            route_clearance_warning_summary={
+                "warning_count": 0,
+                "certified_warning_count": 0,
+                "unresolved_warning_count": 0,
+                "status_counts": {},
+                "unresolved_scenarios": [],
+            },
+        )
+        route_override = next(
+            scenario["route_overrides_file"]
+            for scenario in preview["scenarios"]
+            if "route_overrides_file" in scenario
+        )
+        assert route_override == "configs/scenarios/route_overrides/issue_596/empty_goal_east.yaml"
+        assert not Path(route_override).is_absolute()

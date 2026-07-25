@@ -38,6 +38,10 @@ the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier
 or benchmark claim:
 [issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
 
+Issue #6095 S10 ORCA/PPO nominal-vs-stress discriminability calibration: portable, fail-closed
+preflight configuration and its explicit no-result boundary:
+[issue_6095_s10_discriminability_calibration.md](issue_6095_s10_discriminability_calibration.md).
+
 Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch
 contract that blocks duplicate retries when their patch is missing, ambiguous,
 or already merged: [issue_6008_state.yaml](issue_6008_state.yaml).

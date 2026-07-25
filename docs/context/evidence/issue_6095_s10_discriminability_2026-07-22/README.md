@@ -2,7 +2,7 @@
 
 Compact preflight evidence for the issue #6095 benchmark campaign. The configs are
 ready for SLURM execution; this evidence captures config validation and scenario
-preview outputs only.
+preview outputs only. It is not a completed benchmark or a discriminability result.
 
 ## Source
 
@@ -37,3 +37,9 @@ Preflight passed for both configs. Full execution requires SLURM or equivalent.
 This bundle keeps compact preflight evidence in git. Raw benchmark results
 (episode JSONL, videos, logs) belong in durable storage outside git, tracked via
 manifest references.
+
+## Portability
+
+Provenance paths in the tracked preflight packet are repository-relative. CSV
+artifacts use LF line endings so their checksums and review sidecars are stable
+across repository checks.

@@ -4716,6 +4716,14 @@ entries:
   status: evidence
   freshness: evidence
   area: benchmark_evidence
+- path: docs/context/issue_6095_s10_discriminability_calibration.md
+  status: proposal
+  freshness: maintained
+  area: benchmark_evidence
+- path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22
+  status: evidence
+  freshness: evidence
+  area: benchmark_evidence
 - path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml
   status: evidence
   freshness: evidence

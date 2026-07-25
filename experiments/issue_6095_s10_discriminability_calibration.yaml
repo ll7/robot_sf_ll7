@@ -25,9 +25,18 @@ inputs:
   - path: configs/benchmarks/issue_6095_nominal_discriminability_v1.yaml
   - path: configs/benchmarks/issue_6095_stress_discriminability_v1.yaml
   - path: configs/baselines/ppo_15m_grid_socnav.yaml
-outputs: []
+outputs:
+  - path: docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/README.md
+    evidence_role: compact_preflight_packet
 expected_artifacts:
   - name: nominal_campaign
     path: output/benchmarks/camera_ready/issue_6095_nominal_discriminability_v1_*
   - name: stress_campaign
     path: output/benchmarks/camera_ready/issue_6095_stress_discriminability_v1_*
+evidence_grade: proposal
+paper_relevance: exploratory
+state: preflight_passed
+notes: >
+  This card records a portable, fail-closed preflight for the frozen S10 campaign.
+  It does not record a completed campaign, durable raw artifacts, or a
+  discriminability result.

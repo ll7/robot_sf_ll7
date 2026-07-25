@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
@@ -64,7 +65,6 @@ CAMPAIGN_SCHEMA_VERSION = "benchmark-camera-ready-campaign.v1"
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
 
     from robot_sf.benchmark.camera_ready._config_types import CampaignConfig, PlannerSpec
 
@@ -220,6 +220,24 @@ def _tuning_effort_summary(planners: tuple[PlannerSpec, ...]) -> dict[str, Any]:
 def _scenario_display_name(scenario: dict[str, Any]) -> str:
     """Return the stable scenario identifier used in preflight payloads."""
     return str(scenario.get("name") or scenario.get("scenario_id") or scenario.get("id") or "")
+
+
+def _portable_preview_route_override(value: str | Path) -> str:
+    """Return portable route-override provenance without leaking a worktree path."""
+    path = Path(value)
+    if not path.is_absolute():
+        return path.as_posix()
+    normalized = _repo_relative(path)
+    return Path(normalized).name if Path(normalized).is_absolute() else normalized
+
+
+def _preview_scenario(scenario: dict[str, Any]) -> dict[str, Any]:
+    """Return one preview scenario with repository-portable route provenance."""
+    preview = _jsonable_repo_relative(scenario)
+    route_override = scenario.get("route_overrides_file")
+    if isinstance(route_override, (str, Path)):
+        preview["route_overrides_file"] = _portable_preview_route_override(route_override)
+    return preview
 
 
 def _build_preflight_validate_payload(  # noqa: PLR0913
@@ -394,7 +412,7 @@ def _build_preflight_preview_payload(
         ]
     else:
         payload["truncated"] = False
-        payload["scenarios"] = scenarios
+        payload["scenarios"] = [_preview_scenario(scenario) for scenario in scenarios]
     return payload
 
 

@@ -51,6 +51,7 @@ class _TorchSSMLiteBlock(nn.Module):
     """Small PyTorch-only sequence block used when exact Mamba is unavailable."""
 
     def __init__(self, d_model: int, d_conv: int, expand: int, dropout_rate: float) -> None:
+        """Initialize the SSM-lite block with depthwise conv and gated residual modules."""
         super().__init__()
         hidden_dim = d_model * expand
         self.depthwise_conv = nn.Conv1d(
@@ -183,6 +184,11 @@ class MambaFeatureExtractor(BaseFeaturesExtractor):
         dropout_rate: float,
         fail_if_exact_backend_missing: bool,
     ) -> tuple[nn.ModuleList, str, bool]:
+        """Build the sequence-processing layer stack using the selected backend.
+
+        Returns:
+            Tuple of (layer_list, backend_name, is_exact_backend).
+        """
         mamba_cls = _load_mamba_ssm_class() if backend in {"auto", "mamba_ssm"} else None
         if mamba_cls is not None:
             layers = nn.ModuleList(

@@ -258,6 +258,11 @@ def planner_goal_posterior_channel_from_state(
 def _finite_xy(
     value: tuple[float, float] | Sequence[float], field_name: str
 ) -> tuple[float, float]:
+    """Validate and return a two-element tuple of finite floats.
+
+    Returns:
+        Tuple of (x, y) validated finite floats.
+    """
     if len(value) != 2:
         raise ValueError(f"{field_name} must contain exactly two values")
     x = float(value[0])
@@ -270,6 +275,11 @@ def _finite_xy(
 def _validate_candidate_goals(
     candidate_goals: Sequence[CandidateGoal],
 ) -> tuple[CandidateGoal, ...]:
+    """Validate candidate goals for non-empty ids, unique ids, and finite positions.
+
+    Returns:
+        Validated tuple of candidate goals.
+    """
     goals = tuple(candidate_goals)
     if not goals:
         raise ValueError("candidate_goals must be non-empty")
@@ -288,6 +298,7 @@ def _validate_candidate_goals(
 
 
 def _candidate_source(goals: Sequence[CandidateGoal]) -> str:
+    """Return the single source name when all goals share it, otherwise 'mixed'."""
     sources = {goal.source for goal in goals}
     if len(sources) == 1:
         return next(iter(sources))
@@ -299,6 +310,11 @@ def _normalize_prior(
     prior: Mapping[str, float] | None,
     config: GoalPosteriorConfig,
 ) -> dict[str, float]:
+    """Normalize prior weights, defaulting to uniform when prior is None.
+
+    Returns:
+        Dict mapping goal id to normalized prior weight.
+    """
     if prior is None:
         return {goal.id: 1.0 / len(goals) for goal in goals}
 
@@ -317,6 +333,11 @@ def _normalize_prior(
 
 
 def _normalize_weights(weights: Mapping[str, float], prior_floor: float) -> dict[str, float]:
+    """Normalize weight dict to a probability distribution with a prior floor.
+
+    Returns:
+        Dict mapping goal id to normalized probability.
+    """
     floored = {goal_id: max(float(weight), prior_floor) for goal_id, weight in weights.items()}
     total = sum(floored.values())
     if not math.isfinite(total) or total <= 0.0:

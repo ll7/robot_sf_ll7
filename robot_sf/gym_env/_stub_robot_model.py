@@ -49,6 +49,7 @@ class StubRobotModel:  # pragma: no cover - trivial
     def __init__(
         self, action_space: Any | None = None, action_shape: tuple[int, ...] | None = None
     ):
+        """Initialize the stub with an optional action space or shape."""
         self._action_shape: tuple[int, ...] | None = None
         if action_space is not None and hasattr(action_space, "shape"):
             try:

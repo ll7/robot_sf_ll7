@@ -17,6 +17,7 @@ from robot_sf.benchmark.campaign_logging import (
     add_campaign_logging_argument,
     configure_campaign_logging,
 )
+from robot_sf.benchmark.orca_preflight import check_rvo2_importable
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_FSYNC_EVERY = 10
@@ -81,6 +82,7 @@ def main() -> int:
     """Run all ablation scenarios."""
     args = parse_args()
     configure_campaign_logging(debug=args.debug)
+    check_rvo2_importable()
     if args.fsync_every <= 0:
         raise ValueError("--fsync-every must be positive")
     manifest_path = REPO_ROOT / args.manifest

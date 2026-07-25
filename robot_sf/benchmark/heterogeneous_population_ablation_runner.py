@@ -27,6 +27,7 @@ from robot_sf.benchmark.heterogeneous_population_ablation import (
 )
 from robot_sf.benchmark.map_runner import _build_policy
 from robot_sf.benchmark.map_runner_episode import run_map_episode
+from robot_sf.benchmark.orca_preflight import check_rvo2_importable
 from robot_sf.common.robot_defaults import DEFAULT_ROBOT_RADIUS
 from robot_sf.nav.navigation import get_prepared_obstacles
 from robot_sf.ped_npc import ped_population
@@ -199,6 +200,7 @@ def run_manifest_row(
         The emitted episode record with campaign metadata attached.
     """
 
+    check_rvo2_importable()
     response_law_fraction_value = row.get("response_law_fraction")
     response_law_fraction = float(
         0.0 if response_law_fraction_value is None else response_law_fraction_value

@@ -249,11 +249,17 @@ def _coerce_rate(value: Any, label: str, errors: list[str]) -> float | None:
 
 
 def _resolve_path(path: Path | str, repo_root: Path) -> Path:
+    """Resolve ORCA-residual lineage paths from ``repo_root`` and handle absolute pointers directly.
+
+    Returns:
+        Normalized absolute lineage pointer path.
+    """
     candidate = Path(path)
     return candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
 
 
 def _require_non_empty_string(mapping: dict[str, Any], key: str, errors: list[str]) -> None:
+    """Append a residual-lineage error when a requested mapping field lacks nonblank text."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty string")
@@ -265,6 +271,7 @@ def _require_existing_path(
     repo_root: Path,
     errors: list[str],
 ) -> None:
+    """Check a residual-lineage path after repository-aware resolution and report a missing target."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         errors.append(f"{key} must be a non-empty path string")
@@ -274,12 +281,18 @@ def _require_existing_path(
 
 
 def _validate_generating_commit(packet: dict[str, Any], errors: list[str]) -> None:
+    """Verify that the residual-lineage packet records a 40-character Git SHA for provenance."""
     commit = packet.get("generating_commit")
     if not isinstance(commit, str) or not _GIT_SHA_RE.match(commit.strip()):
         errors.append("generating_commit must be a 40-character git SHA")
 
 
 def _validate_objective(packet: dict[str, Any], errors: list[str]) -> dict[str, Any]:
+    """Validate the behavior-cloning-residual objective mapping and return a summary.
+
+    Returns:
+        Summary of the objective method, target, and declared policies.
+    """
     objective = packet.get("objective")
     if not isinstance(objective, dict):
         errors.append("objective must be a mapping")
@@ -310,6 +323,11 @@ def _validate_observation_contract(
     packet: dict[str, Any],
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate the runtime-only observation contract and return a summary.
+
+    Returns:
+        Summary of the observation source, required keys, and forbidden classes.
+    """
     contract = packet.get("observation_contract")
     if not isinstance(contract, dict):
         errors.append("observation_contract must be a mapping")
@@ -339,6 +357,11 @@ def _validate_residual_bounds(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate residual deltas against the candidate config and return a summary.
+
+    Returns:
+        Summary of the residual deltas and candidate config path.
+    """
     bounds = packet.get("residual_bounds")
     if not isinstance(bounds, dict):
         errors.append("residual_bounds must be a mapping")
@@ -395,6 +418,7 @@ def _compare_bound(
     candidate_key: str,
     errors: list[str],
 ) -> None:
+    """Compare a packet residual bound against the matching candidate config value."""
     try:
         packet_value = float(bounds[packet_key])
         candidate_value = float(params[candidate_key])
@@ -410,6 +434,11 @@ def _validate_artifact_lineage(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate input and planned-output artifact lists and return counts.
+
+    Returns:
+        Lineage summary with input and planned-output artifact counts.
+    """
     lineage = packet.get("artifact_lineage")
     if not isinstance(lineage, dict):
         errors.append("artifact_lineage must be a mapping")
@@ -426,6 +455,11 @@ def _validate_artifact_lineage(
 
 
 def _validate_diagnostics(packet: dict[str, Any], errors: list[str]) -> dict[str, Any]:
+    """Validate the fail-closed diagnostics contract and return required fields.
+
+    Returns:
+        Diagnostics summary with the required fields.
+    """
     diagnostics = packet.get("diagnostics")
     if not isinstance(diagnostics, dict):
         errors.append("diagnostics must be a mapping")
@@ -443,6 +477,11 @@ def _validate_comparison_references(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate residual-lineage comparison entries, including required names, candidate IDs, and sources.
+
+    Returns:
+        Mapping whose ``reference_ids`` key contains sorted comparison names, or an empty mapping.
+    """
     references = packet.get("comparison_references")
     if not isinstance(references, dict):
         errors.append("comparison_references must be a mapping")
@@ -464,6 +503,11 @@ def _validate_expected_outputs(
     repo_root: Path,
     errors: list[str],
 ) -> dict[str, Any]:
+    """Validate required output entries as artifact pointers and return their keys.
+
+    Returns:
+        Summary containing the sorted output entry keys.
+    """
     outputs = packet.get("expected_outputs")
     if not isinstance(outputs, dict):
         errors.append("expected_outputs must be a mapping")
@@ -480,6 +524,7 @@ def _validate_expected_outputs(
 
 
 def _validate_execution_boundary(packet: dict[str, Any], errors: list[str]) -> None:
+    """Validate the execution boundary forbids SLURM here and gates stress runs."""
     execution = packet.get("execution_boundary")
     if not isinstance(execution, dict):
         errors.append("execution_boundary must be a mapping")
@@ -503,6 +548,7 @@ def _validate_required_list(
     required_values: tuple[str, ...],
     errors: list[str],
 ) -> None:
+    """Normalize a residual-lineage list field and report required values that are absent."""
     values = mapping.get(key)
     if not isinstance(values, list) or not values:
         errors.append(f"{key} must be a non-empty list")
@@ -519,6 +565,7 @@ def _validate_artifact_list(
     repo_root: Path,
     errors: list[str],
 ) -> None:
+    """Validate a list of artifact mappings (uri/path with optional checksum)."""
     artifacts = mapping.get(key)
     if not isinstance(artifacts, list) or not artifacts:
         errors.append(f"{key} must be a non-empty list")
@@ -544,6 +591,7 @@ def _validate_artifact_pointer(
     repo_root: Path,
     errors: list[str],
 ) -> None:
+    """Validate an artifact pointer as a durable URI or existing local file."""
     if pointer.startswith(_DURABLE_URI_PREFIXES):
         return
     resolved = _resolve_path(pointer, repo_root)
@@ -559,6 +607,11 @@ def _validate_artifact_pointer(
 
 
 def _sha256_matches(pointer: str, expected: str, repo_root: Path) -> bool:
+    """Accept durable URIs without a digest check; otherwise compare a local file with ``expected``.
+
+    Returns:
+        ``True`` for durable URIs or when the resolved local file matches ``expected``.
+    """
     if pointer.startswith(_DURABLE_URI_PREFIXES):
         return True
     path = _resolve_path(pointer, repo_root)

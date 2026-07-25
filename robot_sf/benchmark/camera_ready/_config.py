@@ -7,6 +7,7 @@ re-exports these private helpers for compatibility.
 
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 from collections.abc import Mapping, Sequence
@@ -1480,6 +1481,7 @@ def _assemble_campaign_config(
     *,
     payload: dict[str, Any],
     config_path: Path,
+    source_config_sha256: str,
 ) -> CampaignConfig:
     """Assemble the final ``CampaignConfig`` from parsed components and scalar defaults.
 
@@ -1550,6 +1552,7 @@ def _assemble_campaign_config(
             payload.get("safety_wrapper"), planner_key="<campaign>"
         ),
         source_config_path=config_path,
+        source_config_sha256=source_config_sha256,
     )
 
 
@@ -1560,7 +1563,8 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         Parsed campaign configuration dataclass.
     """
     config_path = path.resolve()
-    payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    source_config_bytes = config_path.read_bytes()
+    payload = yaml.safe_load(source_config_bytes.decode("utf-8")) or {}
     if not isinstance(payload, dict):
         raise ValueError(f"Campaign config must be a mapping: {config_path}")
 
@@ -1611,6 +1615,11 @@ def load_campaign_config(path: Path) -> CampaignConfig:
         synthetic_actuation_raw=synthetic_actuation_raw,
         kinematics_matrix=kinematics_matrix,
     )
-    cfg = _assemble_campaign_config(parsed, payload=payload, config_path=config_path)
+    cfg = _assemble_campaign_config(
+        parsed,
+        payload=payload,
+        config_path=config_path,
+        source_config_sha256=hashlib.sha256(source_config_bytes).hexdigest(),
+    )
     _validate_campaign_config(cfg)
     return cfg

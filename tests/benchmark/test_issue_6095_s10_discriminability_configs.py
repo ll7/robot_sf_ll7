@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from robot_sf.benchmark.camera_ready._preflight import _build_preflight_preview_payload
+from robot_sf.benchmark.camera_ready._config_types import CampaignConfig
+from robot_sf.benchmark.camera_ready._preflight import (
+    _build_preflight_preview_payload,
+    _campaign_config_provenance,
+)
 from robot_sf.benchmark.camera_ready_campaign import _load_campaign_scenarios, load_campaign_config
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -36,6 +41,16 @@ def _resolved_seed_inventory(config_path: Path) -> list[int]:
     return sorted(
         {int(seed) for scenario in _load_campaign_scenarios(cfg) for seed in scenario["seeds"]}
     )
+
+
+def _execution_matrix_row_count(
+    cfg: CampaignConfig,
+    scenarios: list[dict[str, Any]],
+) -> int:
+    """Return planned scenario-seed-planner rows from the resolved execution matrix."""
+    seed_row_count = sum(len(scenario["seeds"]) for scenario in scenarios)
+    enabled_planner_count = sum(1 for planner in cfg.planners if planner.enabled)
+    return seed_row_count * enabled_planner_count
 
 
 class TestIssue6095NominalConfig:
@@ -170,23 +185,34 @@ class TestIssue6095CrossConfig:
         cfg = load_campaign_config(NOMINAL)
         scenarios = _load_campaign_scenarios(cfg)
         assert len(scenarios) == 4
-        seed_count = len(S10_SEEDS)
-        planner_count = len(cfg.planners)
-        assert seed_count == 10
-        assert planner_count == 2
-        total_rows = len(scenarios) * seed_count * planner_count
-        assert total_rows == 80
+        assert sum(len(scenario["seeds"]) for scenario in scenarios) == 40
+        assert sum(1 for planner in cfg.planners if planner.enabled) == 2
+        assert _execution_matrix_row_count(cfg, scenarios) == 80
 
     def test_expected_row_count_stress(self) -> None:
         cfg = load_campaign_config(STRESS)
         scenarios = _load_campaign_scenarios(cfg)
         assert len(scenarios) == 48
-        seed_count = len(S10_SEEDS)
-        planner_count = len(cfg.planners)
-        assert seed_count == 10
-        assert planner_count == 2
-        total_rows = len(scenarios) * seed_count * planner_count
-        assert total_rows == 960
+        assert sum(len(scenario["seeds"]) for scenario in scenarios) == 480
+        assert sum(1 for planner in cfg.planners if planner.enabled) == 2
+        assert _execution_matrix_row_count(cfg, scenarios) == 960
+
+    def test_execution_row_count_uses_resolved_seed_rows_and_enabled_planners(self) -> None:
+        cfg = load_campaign_config(NOMINAL)
+        single_planner_cfg = replace(
+            cfg,
+            planners=(
+                replace(cfg.planners[0], enabled=True),
+                replace(cfg.planners[1], enabled=False),
+            ),
+        )
+        assert (
+            _execution_matrix_row_count(
+                single_planner_cfg,
+                [{"seeds": [111]}, {"seeds": [112, 113]}],
+            )
+            == 3
+        )
 
     def test_different_scenario_matrices(self) -> None:
         nominal = _load_yaml(NOMINAL)
@@ -218,3 +244,33 @@ class TestIssue6095CrossConfig:
         assert preview["config_sha256"] == hashlib.sha256(NOMINAL.read_bytes()).hexdigest()
         assert route_override == "configs/scenarios/route_overrides/issue_596/empty_goal_east.yaml"
         assert not Path(route_override).is_absolute()
+
+    def test_preflight_uses_config_checksum_snapshotted_at_load(
+        self,
+        tmp_path: Path,
+        monkeypatch: Any,
+    ) -> None:
+        source_config = tmp_path / "campaign.yaml"
+        scenario_matrix = load_campaign_config(NOMINAL).scenario_matrix_path
+        source_config.write_text(
+            "name: source-config-snapshot\n"
+            f"scenario_matrix: {scenario_matrix}\n"
+            "planners:\n"
+            "  - key: snapshot-orca\n"
+            "    algo: orca\n",
+            encoding="utf-8",
+        )
+        source_bytes = source_config.read_bytes()
+        cfg = load_campaign_config(source_config)
+
+        source_config.write_text("name: mutated-after-load\n", encoding="utf-8")
+        monkeypatch.setattr(
+            "robot_sf.benchmark.camera_ready._preflight._repo_relative",
+            lambda _path: "configs/benchmarks/snapshot.yaml",
+        )
+
+        assert cfg.source_config_sha256 == hashlib.sha256(source_bytes).hexdigest()
+        assert _campaign_config_provenance(cfg) == {
+            "config_path": "configs/benchmarks/snapshot.yaml",
+            "config_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        }

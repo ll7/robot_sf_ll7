@@ -1,0 +1,215 @@
+{
+  "schema_version": "issue_3275_same_planner_contract.v1",
+  "issue": "6103",
+  "parent_issue": "3275",
+  "thesis_issue": "2921",
+  "prerequisite_issue": "6139",
+  "claim_boundary": {
+    "label": "preregistered_execution_path_and_failure_neighborhood_ranker",
+    "statement": "This contract freezes a preregistered, same-planner held-out-family execution path and a failure-neighborhood ranker. It is NOT a calibrated failure-probability model, and producing this contract generates no new empirical outcome, no proposal-yield claim, no benchmark evidence, and no planner-performance evidence. Any future empirical run is diagnostic/inconclusive until human research-contract review and a powered execution.",
+    "human_review_gate_open": false,
+    "self_closed": false
+  },
+  "design": {
+    "name": "same_planner_held_out_family_transfer",
+    "description": "Fit a failure-neighborhood ranker on the social_force failures of classic_group_crossing_medium; evaluate proposal-vs-random candidate selection on the held-out classic_cross_trap_medium family, using the social_force planner in BOTH arms. Fit and evaluation families are disjoint; the held-out family's archived goal-planner failures are excluded from every fit-side decision."
+  },
+  "source_lineage": {
+    "pre_correction_archive_path": "docs/context/evidence/issue_5305_certified_archive/archive.json",
+    "pre_correction_archive_sha256": "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445",
+    "pre_correction_lineage_note": "Tracked archive SHA-256 from PR #5905; pre-correction source lineage only, not the final frozen input.",
+    "corrected_recertification_path": "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json",
+    "corrected_recertification_sha256": "7bade1d5008d66eba9dfe6c9c72e72e5e6720e7acb96f17a90a61a4f0798f3d0",
+    "derivation_basis": "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json. Final fit IDs/count/hash derive from this file's records, NOT from the #6139 closing comment, which quotes a different SHA-256 (1406ea545cd07b9e2d96154e3ce10d141c7a121e8c8bc1b736c802b99a796a00) and is not the authority here.",
+    "recertification_status": "all 17 records unchanged (before_after_status.unchanged = 17); the corrected fit set is stable relative to the pre-correction provisional set.",
+    "registration_execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f"
+  },
+  "target_planner": {
+    "id": "social_force",
+    "both_arms_use_same_planner": true,
+    "config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+    "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+    "planner_config_source": "archive entry provenance.target_planner / provenance.config_sha256 (issue5305-certified-archive-13518)"
+  },
+  "fit": {
+    "scenario_family": "classic_group_crossing_medium",
+    "target_planner": "social_force",
+    "count": 12,
+    "entry_ids_sha256": "5cf3bb352204d56832b25d6fd1f5c731983aa1ea47c4b3f7e806c332c544c6ad",
+    "entry_ids_sha256_algorithm": "sha256 over canonical JSON of the sorted 12 fit archive_ids (separators=',:', sort_keys=True)",
+    "entry_ids": [
+      "issue5305_classic_group_crossing_medium_0405a12b9e1b",
+      "issue5305_classic_group_crossing_medium_16c4a20e71aa",
+      "issue5305_classic_group_crossing_medium_24f49e195565",
+      "issue5305_classic_group_crossing_medium_3537f5d4f870",
+      "issue5305_classic_group_crossing_medium_47bd4c497818",
+      "issue5305_classic_group_crossing_medium_4de6bcf99283",
+      "issue5305_classic_group_crossing_medium_58a4877312cc",
+      "issue5305_classic_group_crossing_medium_5b9f237a8aee",
+      "issue5305_classic_group_crossing_medium_d8b09e0e988a",
+      "issue5305_classic_group_crossing_medium_e3856ba0906d",
+      "issue5305_classic_group_crossing_medium_f32fc5117cfa",
+      "issue5305_classic_group_crossing_medium_fc6bf8300e51"
+    ],
+    "eligibility_mix_after_recertification": {
+      "eligible": 6,
+      "stress_only": 6
+    },
+    "classification_mix_after_recertification": {
+      "hard_but_solvable": 3,
+      "knife_edge": 6,
+      "valid": 3
+    },
+    "fit_set_definition": "All twelve certified classic_group_crossing_medium / social_force failure records from the corrected recertification artifact. The stress_only/knife_edge axis is the scenario-route benchmark eligibility, which is distinct from candidate_certification (all twelve passed deterministic replay, independent-seed confirmation, and stable attribution). For a failure-neighborhood ranker, every certified social_force failure of the fit family is a valid neighborhood anchor. No record was reclassified by the #6139 correction (all 17 unchanged), so no record is removed and no record is silently replaced.",
+    "model_initialization": "FailureArchiveProposalModel is constructed from a FIT-ONLY payload containing exactly these twelve IDs. The constructor drops every entry whose archive_id is not in this frozen set, so excluded and held-out-family records cannot influence proposal scores or rank order even if the full archive is supplied as input."
+  },
+  "exclusions": {
+    "count": 5,
+    "scenario_family": "classic_cross_trap_medium",
+    "archived_target_planner": "goal",
+    "reason": "wrong_target_planner_and_held_out_family",
+    "reason_detail": "These five records use the goal planner (not the social_force target planner) and belong to the held-out evaluation family. They are excluded from fitting, candidate selection, threshold setting, feature tuning, and result interpretation.",
+    "entry_ids": [
+      "issue5305_classic_cross_trap_medium_34f8c43d3260",
+      "issue5305_classic_cross_trap_medium_7910406dad49",
+      "issue5305_classic_cross_trap_medium_e7cebb2b0b06",
+      "issue5305_classic_cross_trap_medium_fbbd96687d61",
+      "issue5305_classic_cross_trap_medium_fe24f0ff86a1"
+    ]
+  },
+  "evaluation": {
+    "scenario_family": "classic_cross_trap_medium",
+    "target_planner": "social_force",
+    "same_planner_both_arms": true,
+    "held_out_family_disjoint_from_fit_family": true,
+    "map_file": "maps/svg_maps/classic_crossing.svg",
+    "note": "Restores the parent #3275 held-out design: evaluate on classic_cross_trap_medium with social_force in both arms. This is NOT classic_group_crossing_medium for both fit and evaluation."
+  },
+  "feature_representation": {
+    "view": "family_invariant_robot_path_relative",
+    "frozen_against_outcomes": true,
+    "uses_excluded_cross_trap_goal_failures_for_tuning": false,
+    "implementation": "robot_sf.adversarial.disjoint_evaluation.family_invariant_features",
+    "retained_features": [
+      "lateral_spawn_m",
+      "longitudinal_spawn_fraction",
+      "lateral_goal_m",
+      "longitudinal_goal_fraction",
+      "pedestrian_speed_mps",
+      "pedestrian_delay_s",
+      "spawn_time_s"
+    ],
+    "per_feature_semantic_argument": {
+      "lateral_spawn_m": "Signed perpendicular distance from the pedestrian spawn point to the robot's start-to-goal path segment, normalized by the path length. Identical operational meaning in group_crossing and cross_trap: how far off the robot corridor the pedestrian appears.",
+      "longitudinal_spawn_fraction": "Projection of the pedestrian spawn point onto the robot path as a fraction in [0,1] of path length. Identical meaning in both families: where along the robot route the pedestrian spawns.",
+      "lateral_goal_m": "Signed perpendicular distance from the pedestrian goal to the robot path, normalized by path length. Same meaning in both families.",
+      "longitudinal_goal_fraction": "Projection of the pedestrian goal onto the robot path as a fraction of path length. Same meaning in both families.",
+      "pedestrian_speed_mps": "Pedestrian speed. Inherently family-invariant scalar; identical units and operational meaning in both families.",
+      "pedestrian_delay_s": "Pedestrian start delay. Inherently family-invariant scalar.",
+      "spawn_time_s": "Pedestrian spawn time. Inherently family-invariant scalar."
+    },
+    "robot_geometry_source": "Per-record robot_start/robot_goal come from the corrected recertification reconstruction for fit records, and from the evaluation scenario definition for candidates scored at evaluation time. The transform is a deterministic geometric projection; it does not consume any outcome."
+  },
+  "estimand": {
+    "definition": "proposal-minus-random difference in candidate-level certified failure yield under identical candidate budget.",
+    "candidate_level": true,
+    "failure_yield_definition": "A candidate counts as a failure only after the predeclared deterministic replay, independent-seed confirmation, and stable-attribution rule all pass for that candidate's execution.",
+    "proposal_minus_random": true
+  },
+  "failure_admission": {
+    "deterministic_replay": "exact signature match (replay signature SHA-256 equals original signature SHA-256)",
+    "independent_seed_confirmation": "at_least_3_of_5_predeclared_seeds",
+    "four_of_five_required": false,
+    "four_of_five_required_note": "4-of-5 is NOT required. The frozen threshold is at least 3 of 5 predeclared independent confirmation seeds, matching the certified archive's confirmation rule.",
+    "stable_attribution": "primary_failure and termination_reason must be stable across the deterministic replay and the confirming seeds",
+    "predeclared_confirmation_seeds_eval": "To be fixed by the next sub-issue's evaluation runner using the frozen target_planner social_force; this contract fixes the threshold and rule, not the empirical seeds."
+  },
+  "budget": {
+    "candidate_budget_per_arm": 12,
+    "candidate_pool_size": 64,
+    "identical_budget_both_arms": true,
+    "candidate_pool_seed_policy": "single shared candidate pool generated deterministically from one predeclared seed; both arms draw from the same pool under identical budget"
+  },
+  "power_sensitivity": {
+    "method": "fisher_exact_two_proportion_two_sided",
+    "alpha_two_sided": 0.05,
+    "minimally_important_absolute_yield_improvement": 0.20,
+    "recorded_detectable_boundaries": {
+      "k10_per_arm_min_detectable_yield_difference": 0.5,
+      "k12_per_arm_min_detectable_yield_difference": 0.417,
+      "k20_per_arm_min_detectable_yield_difference": 0.25
+    },
+    "recorded_detectable_boundaries_note": "Smallest |proposal_yield - random_yield| for which Fisher's exact two-sided test can reject at alpha=0.05 at the given per-arm budget (boundary of the rejection region; not 80% power, which requires an even larger difference).",
+    "conclusion": "At the frozen budget of 12 candidates per arm, the boundary minimum detectable yield difference is about 0.417, so a minimally important effect of 0.20 is NOT detectable. The frozen budget therefore cannot test the minimally important effect.",
+    "future_run_label_when_underpowered": "diagnostic_or_inconclusive",
+    "decision_consequence": "When independent outcomes are available but the result is underpowered for the minimally important effect, or the null is not rejected, the decision is inconclusive (never continue/stop on an underpowered signal)."
+  },
+  "arm_overlap_policy": {
+    "name": "disjoint_by_candidate",
+    "deterministic": true,
+    "predeclared": true,
+    "description": "Each candidate (identified by manifest ID) belongs to exactly one arm. The proposal arm selects its top-k by rank from the shared pool; the random arm selects k from the REMAINING pool with the proposal arm's k candidates removed. A candidate is never counted in both arms, eliminating pseudoreplication. This single deterministic policy replaces any deduplicate_or_disjoint heuristic."
+  },
+  "outcome_contract": {
+    "schema": "adversarial_independent_outcomes.v2",
+    "row_level": true,
+    "one_row_per": "candidate x execution seed",
+    "admitted_row_fields": [
+      "row_id",
+      "candidate_manifest_id",
+      "candidate_manifest_sha256",
+      "selection_arm",
+      "selection_rank",
+      "candidate_pool_seed",
+      "candidate_pool_index",
+      "target_planner_id",
+      "target_planner_config_sha256",
+      "scenario_family",
+      "scenario_seed",
+      "execution_commit",
+      "execution_command",
+      "execution_config_lineage",
+      "execution_mode",
+      "termination_reason",
+      "independent_failure_outcome",
+      "scenario_certification_status",
+      "candidate_certification_status",
+      "replay_lineage",
+      "confirmation_lineage",
+      "record_sha256",
+      "admission_status",
+      "exclusion_reason"
+    ],
+    "aggregate_arrays_derived_from_admitted_rows_only": true,
+    "fail_closed_conditions": [
+      "missing required field",
+      "malformed row",
+      "candidate_manifest_sha256 or record_sha256 mismatch",
+      "execution_mode is fallback or degraded (or not native)",
+      "target_planner_id != social_force",
+      "target_planner_config_sha256 mismatch",
+      "scenario_family != classic_cross_trap_medium (evaluation family)",
+      "scenario_certification_status != passed",
+      "candidate_certification_status != passed (deterministic replay + 3-of-5 confirmation + stable attribution)",
+      "replay/confirmation lineage incomplete"
+    ]
+  },
+  "diagnostic_namespace": {
+    "archive_nearness": "diagnostic_only_cannot_drive_verdict",
+    "rule": "Archive-nearness is the ranking signal only. It is recorded under an explicitly diagnostic namespace and can never drive the top-level comparison, the #2921 stop rule, or the continue/stop/inconclusive decision. Only independent native planner-execution outcomes admitted under the v2 row contract can drive a verdict."
+  },
+  "decision_rule": {
+    "vocabulary": ["continue", "stop", "inconclusive"],
+    "no_revise": true,
+    "no_generic_blocked": true,
+    "continue": "independent outcomes valid AND (proposal_yield - random_yield) >= minimally_important_absolute_yield_improvement AND Fisher-exact two-sided null rejected at alpha=0.05.",
+    "stop": "independent outcomes valid AND (proposal_yield - random_yield) <= 0 (proposal does not beat random, or random is better).",
+    "inconclusive": "independent outcomes unavailable, fail-closed, underpowered for the minimally important effect, or the null is not rejected. Includes any missing/malformed/mismatched/fallback/degraded/lineage-incomplete outcome row.",
+    "follows_execution_under_opposite_signs": "When archive-nearness and independent execution disagree (either sign), the decision follows independent execution. Both opposite-sign regressions are required tests."
+  },
+  "check_contract": {
+    "invocation": "uv run python scripts/adversarial/run_proposal_vs_random_issue_2921.py --check-contract configs/adversarial/issue_3275_same_planner_contract.json",
+    "side_effect_free": true,
+    "next_subissue_required_input": true
+  }
+}

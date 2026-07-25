@@ -2,19 +2,282 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from robot_sf.adversarial.archive import failure_archive_feature_rows
 from robot_sf.adversarial.certification import CertificationStatus, certify_candidate
 from robot_sf.adversarial.config import CandidateSpec, SearchSpaceConfig
+from robot_sf.adversarial.disjoint_evaluation import family_invariant_distance
 from robot_sf.adversarial.scenario_manifest import (
     AdversarialScenarioManifest,
     GeneratorInfo,
     SourceLineage,
     build_manifest,
 )
+
+# --- Issue #3275 frozen fit-only payload derivation ---------------------------
+#
+# The frozen same-planner contract (configs/adversarial/issue_3275_same_planner_
+# contract.json) requires FailureArchiveProposalModel to be initialized from a
+# FIT-ONLY payload: exactly the twelve corrected, nominally eligible
+# classic_group_crossing_medium / social_force records, excluding the five
+# classic_cross_trap_medium / goal records. The helpers below derive that payload
+# deterministically from the corrected recertification artifact
+# (docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.
+# json), validate its count and hash, and build the fit-only archive payload from
+# the certified archive. They never execute planners and never fall back to
+# synthetic data.
+
+#: Schema tag for the issue #6103 frozen contract config.
+ISSUE_3275_CONTRACT_SCHEMA = "issue_3275_same_planner_contract.v1"
+
+#: Canonical JSON separators used for deterministic SHA-256 digests.
+_CANON_SEPARATORS = (",", ":")
+
+
+@dataclass(frozen=True)
+class FitPayload:
+    """A fit-only payload derived from the corrected recertification artifact."""
+
+    entry_ids: tuple[str, ...]
+    count: int
+    entry_ids_sha256: str
+    excluded_entry_ids: tuple[str, ...]
+    fit_family: str
+    fit_planner: str
+    source: str
+    recertification_sha256: str
+    archive_payload: dict[str, Any] = field(default_factory=dict)
+
+
+def _canonical_sha256(payload: Any) -> str:
+    """Return a deterministic SHA-256 digest over canonical JSON of ``payload``."""
+    encoded = json.dumps(payload, sort_keys=True, separators=_CANON_SEPARATORS).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _load_json(path: str | Path) -> dict[str, Any]:
+    """Load a JSON object from ``path`` fail-closed."""
+    text = Path(path).read_text(encoding="utf-8")
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} must contain a JSON object")
+    return data
+
+
+def derive_fit_ids_from_recertification(
+    recertification_data: dict[str, Any],
+    *,
+    fit_family: str,
+    expected_count: int | None = None,
+    expected_ids_sha256: str | None = None,
+) -> list[str]:
+    """Derive and validate the frozen fit IDs from the recertification artifact.
+
+    Selects every record whose ``scenario_family`` equals ``fit_family`` from the
+    corrected recertification artifact. When ``expected_count`` and/or
+    ``expected_ids_sha256`` are provided, the derived set must match exactly or
+    the function fails closed. The SHA-256 is computed over the canonical JSON
+    of the sorted fit IDs, matching the contract's ``entry_ids_sha256``.
+
+    Args:
+        recertification_data: Parsed recertification artifact (dict with a
+            ``records`` list).
+        fit_family: The frozen fit scenario family.
+        expected_count: Optional required fit-record count.
+        expected_ids_sha256: Optional required canonical SHA-256 of sorted IDs.
+
+    Returns:
+        The sorted list of fit archive IDs.
+    """
+    records = recertification_data.get("records")
+    if not isinstance(records, list):
+        raise ValueError("recertification artifact missing 'records' list")
+    fit_ids = sorted(
+        str(record["archive_id"])
+        for record in records
+        if isinstance(record, dict) and record.get("scenario_family") == fit_family
+    )
+    if not fit_ids:
+        raise ValueError(f"no fit records found for scenario_family={fit_family!r}")
+    if expected_count is not None and len(fit_ids) != expected_count:
+        raise ValueError(
+            f"fit count drift: derived={len(fit_ids)} expected={expected_count}; "
+            "a changed fit count requires a new fit-set hash and a re-evaluated "
+            "power/sensitivity contract"
+        )
+    observed_sha = _canonical_sha256(fit_ids)
+    if expected_ids_sha256 is not None and observed_sha != expected_ids_sha256:
+        raise ValueError(
+            f"fit IDs SHA-256 drift: derived={observed_sha} expected={expected_ids_sha256}"
+        )
+    return fit_ids
+
+
+def derive_excluded_ids_from_recertification(
+    recertification_data: dict[str, Any],
+    *,
+    excluded_family: str,
+) -> list[str]:
+    """Return the sorted archive IDs of the held-out-family exclusion set."""
+    records = recertification_data.get("records")
+    if not isinstance(records, list):
+        raise ValueError("recertification artifact missing 'records' list")
+    return sorted(
+        str(record["archive_id"])
+        for record in records
+        if isinstance(record, dict) and record.get("scenario_family") == excluded_family
+    )
+
+
+def build_fit_archive_payload(
+    archive_data: dict[str, Any],
+    fit_ids: list[str],
+) -> dict[str, Any]:
+    """Filter a certified archive down to the frozen fit IDs (fit-only payload)."""
+    entries = archive_data.get("entries")
+    if not isinstance(entries, list):
+        raise ValueError("archive missing 'entries' list")
+    fit_set = set(fit_ids)
+    fit_entries = [entry for entry in entries if entry.get("archive_id") in fit_set]
+    missing = sorted(fit_set - {entry.get("archive_id") for entry in fit_entries})
+    if missing:
+        raise ValueError(f"fit IDs absent from archive: {missing}")
+    return {
+        "schema_version": archive_data.get("schema_version", "adversarial_failure_archive.v1"),
+        "entries": fit_entries,
+        "null_test_manifest": archive_data.get("null_test_manifest"),
+        "summary": {"fit_only_filter": "issue_3275_same_planner_contract"},
+    }
+
+
+def derive_fit_payload_from_recertification(
+    recertification_data: dict[str, Any],
+    archive_data: dict[str, Any],
+    *,
+    fit_family: str,
+    fit_planner: str,
+    excluded_family: str,
+    expected_count: int | None = None,
+    expected_ids_sha256: str | None = None,
+) -> FitPayload:
+    """Derive the full fit-only payload for the frozen #3275 contract."""
+    fit_ids = derive_fit_ids_from_recertification(
+        recertification_data,
+        fit_family=fit_family,
+        expected_count=expected_count,
+        expected_ids_sha256=expected_ids_sha256,
+    )
+    excluded_ids = derive_excluded_ids_from_recertification(
+        recertification_data,
+        excluded_family=excluded_family,
+    )
+    overlap = sorted(set(fit_ids) & set(excluded_ids))
+    if overlap:
+        raise ValueError(f"fit/excluded ID overlap detected: {overlap}")
+    archive_payload = build_fit_archive_payload(archive_data, fit_ids)
+    return FitPayload(
+        entry_ids=tuple(fit_ids),
+        count=len(fit_ids),
+        entry_ids_sha256=_canonical_sha256(fit_ids),
+        excluded_entry_ids=tuple(excluded_ids),
+        fit_family=fit_family,
+        fit_planner=fit_planner,
+        source="docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json",
+        recertification_sha256=str(recertification_data.get("recertification_sha256", "")),
+        archive_payload=archive_payload,
+    )
+
+
+def load_issue_3275_contract(path_or_data: str | Path | dict[str, Any]) -> dict[str, Any]:
+    """Load and schema-check the frozen #3275 contract config."""
+    if isinstance(path_or_data, dict):
+        data = path_or_data
+    else:
+        data = _load_json(path_or_data)
+    schema = data.get("schema_version")
+    if schema != ISSUE_3275_CONTRACT_SCHEMA:
+        raise ValueError(
+            f"unexpected contract schema_version: {schema!r}; "
+            f"expected {ISSUE_3275_CONTRACT_SCHEMA!r}"
+        )
+    return data
+
+
+def attach_robot_geometry(
+    payload: FitPayload,
+    recertification_data: dict[str, Any],
+) -> None:
+    """Attach per-entry robot geometry from the recertification reconstruction.
+
+    The frozen family-invariant feature view projects each pedestrian candidate
+    relative to its scenario's robot start/goal. For fit entries that geometry is
+    recorded in the corrected recertification artifact's ``reconstruction`` block.
+    This copies ``robot_start``/``robot_goal``/``map_file`` onto each fit archive
+    entry under a ``robot`` key so the ranker can score in family-invariant
+    space without consuming any outcome.
+    """
+    records = recertification_data.get("records")
+    if not isinstance(records, list):
+        raise ValueError("recertification artifact missing 'records' list")
+    reconstruction_by_id: dict[str, dict[str, Any]] = {}
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        archive_id = record.get("archive_id")
+        reconstruction = record.get("reconstruction")
+        if isinstance(archive_id, str) and isinstance(reconstruction, dict):
+            reconstruction_by_id[archive_id] = reconstruction
+    for entry in payload.archive_payload.get("entries", []):
+        archive_id = entry.get("archive_id")
+        reconstruction = reconstruction_by_id.get(str(archive_id))
+        if reconstruction is None:
+            raise ValueError(
+                f"fit entry {archive_id} has no reconstruction in the "
+                "recertification artifact; cannot attach robot geometry"
+            )
+        entry["robot"] = {
+            "robot_start": reconstruction.get("robot_start"),
+            "robot_goal": reconstruction.get("robot_goal"),
+            "map_file": reconstruction.get("map_file"),
+        }
+
+
+def validate_fit_payload_integrity(
+    payload: FitPayload,
+    *,
+    expected_planner: str,
+    expected_planner_config_sha256: str,
+) -> dict[str, Any]:
+    """Validate planner/family integrity of a fit payload; return any drift.
+
+    Every fit entry must belong to the fit family, target the frozen planner, and
+    carry the frozen planner config SHA-256. Any drift is returned as a dict of
+    lists (empty dict means clean) so callers can fail closed.
+    """
+    drift: dict[str, list[str]] = {
+        "family_drift": [],
+        "planner_drift": [],
+        "planner_config_sha256_drift": [],
+    }
+    for entry in payload.archive_payload.get("entries", []):
+        archive_id = str(entry.get("archive_id"))
+        if entry.get("scenario_family") != payload.fit_family:
+            drift["family_drift"].append(archive_id)
+        provenance = entry.get("provenance")
+        if not isinstance(provenance, dict):
+            drift["planner_drift"].append(archive_id)
+            drift["planner_config_sha256_drift"].append(archive_id)
+            continue
+        if provenance.get("target_planner") != expected_planner:
+            drift["planner_drift"].append(archive_id)
+        if provenance.get("config_sha256") != expected_planner_config_sha256:
+            drift["planner_config_sha256_drift"].append(archive_id)
+    return {key: sorted(values) for key, values in drift.items() if values}
 
 
 class FailureArchiveProposalModel:
@@ -24,15 +287,43 @@ class FailureArchiveProposalModel:
         self,
         archive_path_or_data: str | Path | dict[str, Any] | None = None,
         search_space: SearchSpaceConfig | None = None,
+        *,
+        fit_entry_ids: Any = None,
+        feature_view: str = "absolute",
+        candidate_robot_start: Any = None,
+        candidate_robot_goal: Any = None,
+        entry_robot_field: str = "robot",
     ) -> None:
         """Initialize the FailureArchiveProposalModel.
 
         Args:
             archive_path_or_data: Filepath or parsed dictionary of archive entries.
             search_space: Search space bounds for normalizing distance metrics.
+            fit_entry_ids: Optional frozen fit-entry ID allowlist (issue #3275).
+                When provided, every entry whose ``archive_id`` is not in this set
+                is dropped before ranking, so excluded and held-out-family records
+                cannot influence scores or rank order even if the full archive is
+                supplied. Negative regression: scores/ranks are identical whether
+                the input archive contains only the fit IDs or also the excluded
+                records.
+            feature_view: ``"absolute"`` (legacy) or ``"family_invariant"`` (the
+                frozen #3275 cross-family view).
+            candidate_robot_start: Robot start used by the family-invariant view
+                when scoring candidates.
+            candidate_robot_goal: Robot goal used by the family-invariant view.
+            entry_robot_field: Per-entry field carrying that entry's robot
+                geometry for the family-invariant view (default ``"robot"``).
         """
         self.archive_path_or_data = archive_path_or_data
         self.search_space = search_space
+        self.fit_entry_ids: set[str] | None = (
+            {str(identifier) for identifier in fit_entry_ids} if fit_entry_ids is not None else None
+        )
+        self.feature_view = feature_view
+        self.candidate_robot_start = candidate_robot_start
+        self.candidate_robot_goal = candidate_robot_goal
+        self.entry_robot_field = entry_robot_field
+        self.excluded_entry_ids: list[str] = []
         self.entries: list[dict[str, Any]] = []
         self.state = "active"
         self.state_reason = "archive_loaded"
@@ -44,50 +335,109 @@ class FailureArchiveProposalModel:
             return
 
         try:
-            if isinstance(archive_path_or_data, (str, Path)):
-                path = Path(archive_path_or_data)
-                if not path.exists() or path.stat().st_size == 0:
-                    self.state = "blocked"
-                    self.state_reason = "missing_or_empty_archive_file"
-                    return
-                with open(path, encoding="utf-8") as f:
-                    data = json.load(f)
-            else:
-                data = archive_path_or_data
-
-            if not isinstance(data, dict) or "entries" not in data:
-                self.state = "blocked"
-                self.state_reason = "malformed_archive_payload"
-                return
-
-            try:
-                failure_archive_feature_rows(data)
-            except ValueError as exc:
-                self.state = "blocked"
-                self.state_reason = f"invalid_failure_archive_schema: {exc}"
-                return
-
-            raw_entries = data.get("entries", [])
-            if not isinstance(raw_entries, list):
-                self.state = "blocked"
-                self.state_reason = "malformed_archive_entries"
-                return
-            if not raw_entries:
-                self.state = "blocked"
-                self.state_reason = "empty_archive_entries"
-                return
-            if any(
-                not isinstance(entry, dict) or not isinstance(entry.get("candidate", {}), dict)
-                for entry in raw_entries
-            ):
-                self.state = "blocked"
-                self.state_reason = "missing_candidate_metadata"
-                return
-            self.entries = raw_entries
-            self.state_reason = "archive_loaded"
+            load_state, load_reason, raw_entries = self._load_archive_payload(archive_path_or_data)
         except (ValueError, TypeError, json.JSONDecodeError, OSError):
             self.state = "blocked"
             self.state_reason = "archive_load_error"
+            return
+        if load_state == "blocked":
+            self.state = "blocked"
+            self.state_reason = load_reason
+            return
+        self.entries = self._apply_fit_filter(raw_entries)
+        if self.state != "blocked":
+            self.state_reason = "archive_loaded"
+
+    @staticmethod
+    def _load_archive_payload(
+        archive_path_or_data: str | Path | dict[str, Any],
+    ) -> tuple[str, str, list[dict[str, Any]]]:
+        """Read and structurally validate an archive payload (path or dict).
+
+        Returns a ``(state, reason, entries)`` triple. ``state`` is ``"blocked"``
+        with a precise ``reason`` for any structural problem, or ``"active"``
+        with the raw entry list ready for fit-only filtering.
+        """
+        if isinstance(archive_path_or_data, (str, Path)):
+            path = Path(archive_path_or_data)
+            if not path.exists() or path.stat().st_size == 0:
+                return "blocked", "missing_or_empty_archive_file", []
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = archive_path_or_data
+
+        if not isinstance(data, dict) or "entries" not in data:
+            return "blocked", "malformed_archive_payload", []
+        try:
+            failure_archive_feature_rows(data)
+        except ValueError as exc:
+            return "blocked", f"invalid_failure_archive_schema: {exc}", []
+        raw_entries = data.get("entries", [])
+        if not isinstance(raw_entries, list):
+            return "blocked", "malformed_archive_entries", []
+        if not raw_entries:
+            return "blocked", "empty_archive_entries", []
+        if any(
+            not isinstance(entry, dict) or not isinstance(entry.get("candidate", {}), dict)
+            for entry in raw_entries
+        ):
+            return "blocked", "missing_candidate_metadata", []
+        return "active", "archive_loaded", raw_entries
+
+    def _apply_fit_filter(self, raw_entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Keep only entries whose ``archive_id`` is in the frozen fit allowlist.
+
+        When :attr:`fit_entry_ids` is set, every other entry is dropped and
+        recorded in :attr:`excluded_entry_ids`, so excluded and held-out-family
+        records cannot influence scores or rank order. If any frozen fit ID is
+        absent from the archive, the model fails closed. This is the structural
+        guarantee behind the issue #6103 negative regression: scores/ranks are
+        identical whether the input contains only the fit IDs or also the
+        excluded records.
+        """
+        if self.fit_entry_ids is None:
+            return list(raw_entries)
+        kept: list[dict[str, Any]] = []
+        excluded: list[str] = []
+        for entry in raw_entries:
+            archive_id = entry.get("archive_id")
+            if archive_id in self.fit_entry_ids:
+                kept.append(entry)
+            else:
+                excluded.append(str(archive_id))
+        self.excluded_entry_ids = sorted(excluded)
+        missing = sorted(self.fit_entry_ids - {entry.get("archive_id") for entry in kept})
+        if missing:
+            self.state = "blocked"
+            self.state_reason = f"fit_entry_ids_missing_from_archive:{','.join(missing)}"
+            return []
+        return kept
+
+    def _entry_distance(self, candidate: CandidateSpec, entry: dict[str, Any]) -> float:
+        """Distance from ``candidate`` to one archive entry under the active view."""
+        if self.feature_view != "family_invariant":
+            return self._distance(candidate, entry.get("candidate", {}))
+        robot = entry.get(self.entry_robot_field)
+        anchor = entry.get("candidate", {})
+        if not isinstance(robot, dict) or "robot_start" not in robot or "robot_goal" not in robot:
+            raise ValueError(
+                f"entry {entry.get('archive_id')} missing robot geometry for "
+                "the family_invariant feature view"
+            )
+        if self.candidate_robot_start is None or self.candidate_robot_goal is None:
+            raise ValueError(
+                "family_invariant feature view requires candidate_robot_start "
+                "and candidate_robot_goal at scoring time"
+            )
+        return family_invariant_distance(
+            candidate,
+            anchor,
+            self.candidate_robot_start,
+            self.candidate_robot_goal,
+            robot["robot_start"],
+            robot["robot_goal"],
+        )
 
     def get_tabular_view(self) -> list[dict[str, Any]]:
         """Build a tabular feature view from archive entries."""
@@ -154,8 +504,7 @@ class FailureArchiveProposalModel:
 
         distances = []
         for entry in self.entries:
-            c2_dict = entry.get("candidate", {})
-            d = self._distance(candidate, c2_dict)
+            d = self._entry_distance(candidate, entry)
             distances.append((d, entry))
 
         if not distances:
@@ -237,3 +586,74 @@ class FailureArchiveProposalModel:
             scenario_yaml_path=scenario_yaml_path,
             require_certification=require_certification,
         )
+
+    @classmethod
+    def from_frozen_contract(
+        cls,
+        contract_path_or_data: str | Path | dict[str, Any],
+        *,
+        repo_root: str | Path | None = None,
+        feature_view: str = "family_invariant",
+        candidate_robot_start: Any = None,
+        candidate_robot_goal: Any = None,
+    ) -> tuple[FailureArchiveProposalModel, dict[str, Any]]:
+        """Build the fit-only model from the frozen #3275 contract.
+
+        Derives the fit IDs from the corrected recertification artifact,
+        validates count/hash/planner/family, attaches per-entry robot geometry
+        from the reconstruction, and constructs the model from the fit-only
+        payload with the family-invariant feature view. Returns the model and a
+        JSON-safe provenance dict for the contract checker.
+        """
+        contract = load_issue_3275_contract(contract_path_or_data)
+        root = Path(repo_root) if repo_root is not None else Path.cwd()
+        source = contract["source_lineage"]
+        recert = _load_json(root / source["corrected_recertification_path"])
+        archive = _load_json(root / source["pre_correction_archive_path"])
+        expected_recert_sha = source["corrected_recertification_sha256"]
+        if recert.get("recertification_sha256") != expected_recert_sha:
+            raise ValueError(
+                "recertification_sha256 mismatch: file="
+                f"{recert.get('recertification_sha256')} contract={expected_recert_sha}"
+            )
+        fit_cfg = contract["fit"]
+        excl_cfg = contract["exclusions"]
+        planner_cfg = contract["target_planner"]
+        payload = derive_fit_payload_from_recertification(
+            recert,
+            archive,
+            fit_family=fit_cfg["scenario_family"],
+            fit_planner=fit_cfg["target_planner"],
+            excluded_family=excl_cfg["scenario_family"],
+            expected_count=fit_cfg["count"],
+            expected_ids_sha256=fit_cfg["entry_ids_sha256"],
+        )
+        attach_robot_geometry(payload, recert)
+        planner_drift = validate_fit_payload_integrity(
+            payload,
+            expected_planner=planner_cfg["id"],
+            expected_planner_config_sha256=planner_cfg["config_sha256"],
+        )
+        model = cls(
+            payload.archive_payload,
+            search_space=None,
+            fit_entry_ids=payload.entry_ids,
+            feature_view=feature_view,
+            candidate_robot_start=candidate_robot_start,
+            candidate_robot_goal=candidate_robot_goal,
+        )
+        provenance = {
+            "contract_schema_version": contract["schema_version"],
+            "fit_count": payload.count,
+            "fit_entry_ids_sha256": payload.entry_ids_sha256,
+            "excluded_count": len(payload.excluded_entry_ids),
+            "recertification_sha256": payload.recertification_sha256,
+            "pre_correction_archive_sha256": source["pre_correction_archive_sha256"],
+            "fit_only_initialized": model.state == "active",
+            "model_state": model.state,
+            "model_entry_count": len(model.entries),
+            "excluded_entry_ids_dropped": model.excluded_entry_ids,
+            "planner_drift": planner_drift,
+            "feature_view": feature_view,
+        }
+        return model, provenance

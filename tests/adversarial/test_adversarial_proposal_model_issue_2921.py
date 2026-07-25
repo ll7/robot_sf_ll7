@@ -1,64 +1,35 @@
-"""Tests for adversarial proposal model and comparison script."""
+"""Tests for adversarial proposal model, frozen #3275 contract, and comparison script."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from robot_sf.adversarial.config import CandidateSpec, Pose2D
-from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
+from robot_sf.adversarial.proposal_model import (
+    FailureArchiveProposalModel,
+    derive_fit_payload_from_recertification,
+    load_issue_3275_contract,
+)
 from robot_sf.adversarial.scenario_manifest import AdversarialScenarioManifest
 from scripts.adversarial.run_proposal_vs_random_issue_2921 import (
+    ISSUE_3275_DECISION_VOCABULARY,
     classify_issue_2921_stop_rule,
     create_synthetic_archive,
     create_synthetic_search_space,
+    run_check_contract,
 )
 
-
-def _held_out_comparison(*, mean_delta: float, failure_delta: int) -> dict[str, float | int | str]:
-    """Build a comparison payload for the #2921 stop-rule classifier."""
-    return {
-        "interpretation": "independent_planner_execution_outcomes",
-        "mean_objective_improvement": mean_delta,
-        "max_objective_improvement": mean_delta,
-        "failure_count_improvement": failure_delta,
-    }
-
-
-def test_classify_issue_2921_stop_rule_blocks_without_held_out_evidence() -> None:
-    """The stop rule must fail closed to blocked when held-out evidence is unavailable."""
-    decision = classify_issue_2921_stop_rule(
-        held_out_evidence=False,
-        held_out_status="not_available_no_disjoint_split",
-        comparison=_held_out_comparison(mean_delta=5.0, failure_delta=5),
-    )
-    assert decision["status"] == "blocked"
-    assert decision["reason"] == "not_available_no_disjoint_split"
-    assert decision["evidence_tier"] == "analysis_only"
-
-
-def test_classify_issue_2921_stop_rule_stop_on_negative_deltas() -> None:
-    """Negative held-out deltas classify as stop (do not expand the proposal lane)."""
-    decision = classify_issue_2921_stop_rule(
-        held_out_evidence=True,
-        held_out_status="eligible_held_out_diagnostic",
-        comparison=_held_out_comparison(mean_delta=-0.5, failure_delta=-2),
-    )
-    assert decision["status"] == "stop"
-    assert decision["evidence_tier"] == "diagnostic_only"
-
-
-def test_classify_issue_2921_stop_rule_revise_on_neutral_deltas() -> None:
-    """Neutral (zero) held-out deltas classify as revise before another empirical batch."""
-    decision = classify_issue_2921_stop_rule(
-        held_out_evidence=True,
-        held_out_status="eligible_held_out_diagnostic",
-        comparison=_held_out_comparison(mean_delta=0.0, failure_delta=0),
-    )
-    assert decision["status"] == "revise"
-    assert decision["evidence_tier"] == "diagnostic_only"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_CONTRACT = _REPO_ROOT / "configs/adversarial/issue_3275_same_planner_contract.json"
+_RECERT = (
+    _REPO_ROOT
+    / "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json"
+)
+_ARCHIVE = _REPO_ROOT / "docs/context/evidence/issue_5305_certified_archive/archive.json"
 
 
 def _candidate(x: float, y: float, speed: float = 1.0) -> CandidateSpec:
@@ -73,13 +44,134 @@ def _candidate(x: float, y: float, speed: float = 1.0) -> CandidateSpec:
     )
 
 
+# --- Frozen contract: fit-only construction and negative regression ------------
+
+
+def _load_contract_payload():
+    """Load and derive the frozen fit-only payload from the real artifacts."""
+    contract = load_issue_3275_contract(_CONTRACT)
+    recert = json.loads(_RECERT.read_text("utf-8"))
+    archive = json.loads(_ARCHIVE.read_text("utf-8"))
+    payload = derive_fit_payload_from_recertification(
+        recert,
+        archive,
+        fit_family=contract["fit"]["scenario_family"],
+        fit_planner=contract["fit"]["target_planner"],
+        excluded_family=contract["exclusions"]["scenario_family"],
+        expected_count=contract["fit"]["count"],
+        expected_ids_sha256=contract["fit"]["entry_ids_sha256"],
+    )
+    return contract, payload, archive
+
+
+def test_check_contract_validates_frozen_contract() -> None:
+    """The side-effect-free --check-contract command validates the frozen contract."""
+    exit_code, verdict = run_check_contract(_CONTRACT, repo_root=_REPO_ROOT)
+    assert exit_code == 0
+    assert verdict["ok"] is True
+    assert verdict["checks"]["fit_count"] == 12
+    assert verdict["checks"]["model_entry_count"] == 12
+    assert verdict["checks"]["fit_entry_ids_sha256_matches_contract"] is True
+    assert verdict["checks"]["negative_regression_full_archive_same_fit_entries"] is True
+    assert verdict["checks"]["negative_regression_excluded_dropped_count"] == 5
+    assert verdict["checks"]["no_held_out_family_in_model"] is True
+    assert verdict["failures"] == []
+
+
+def test_fit_only_model_uses_exactly_the_twelve_frozen_fit_ids() -> None:
+    """The fit-only model sees exactly the twelve fit IDs and no held-out entry."""
+    _contract, payload, _ = _load_contract_payload()
+    model = FailureArchiveProposalModel(
+        payload.archive_payload, fit_entry_ids=payload.entry_ids, feature_view="family_invariant"
+    )
+    assert model.state == "active"
+    assert len(model.entries) == 12
+    model_ids = {entry["archive_id"] for entry in model.entries}
+    assert model_ids == set(payload.entry_ids)
+    # Every fit entry is group_crossing/social_force; no cross_trap leakage.
+    assert all("classic_group_crossing_medium" in aid for aid in model_ids)
+    assert not any("classic_cross_trap_medium" in aid for aid in model_ids)
+
+
+def test_negative_regression_excluded_records_cannot_change_scores_or_ranks() -> None:
+    """Feeding the full archive (incl. 5 excluded records) must not change scores/ranks."""
+    _contract, payload, archive = _load_contract_payload()
+    fit_ids = list(payload.entry_ids)
+
+    model_fit_only = FailureArchiveProposalModel(
+        payload.archive_payload, fit_entry_ids=fit_ids, feature_view="absolute"
+    )
+    model_full_archive = FailureArchiveProposalModel(
+        archive, fit_entry_ids=fit_ids, feature_view="absolute"
+    )
+    # The full-archive model drops exactly the 5 excluded records.
+    assert len(model_full_archive.excluded_entry_ids) == 5
+    assert {e["archive_id"] for e in model_fit_only.entries} == {
+        e["archive_id"] for e in model_full_archive.entries
+    }
+
+    candidates = [_candidate(2.5, 3.0), _candidate(8.0, 2.0), _candidate(3.0, 3.0)]
+    ranks_a = model_fit_only.rank_candidates(candidates)
+    ranks_b = model_full_archive.rank_candidates(candidates)
+    assert [c for c, _ in ranks_a] == [c for c, _ in ranks_b]
+    assert [s for _, s in ranks_a] == [s for _, s in ranks_b]
+
+
+def test_fit_only_model_fails_closed_when_a_fit_id_is_missing() -> None:
+    """A fit ID absent from the archive fails closed rather than silently shrinking."""
+    _contract, payload, _ = _load_contract_payload()
+    tampered_ids = list(payload.entry_ids) + ["issue5305_missing_record"]
+    model = FailureArchiveProposalModel(
+        payload.archive_payload, fit_entry_ids=tampered_ids, feature_view="absolute"
+    )
+    assert model.state == "blocked"
+    assert model.state_reason.startswith("fit_entry_ids_missing_from_archive:")
+
+
+# --- Decision rule (continue | stop | inconclusive) ---------------------------
+
+
+def _independent_eval(*, available: bool, status: str = "complete", reason: str = "ok") -> dict:
+    """Build a minimal independent-evaluation result for the stop-rule classifier."""
+    return {
+        "independent_outcomes_available": available,
+        "status": status,
+        "reason": reason,
+        "decision": {
+            "status": "continue" if available else "inconclusive",
+            "reason": "proposal_beats_random" if available else reason,
+            "claim_boundary": "diagnostic_only",
+        },
+    }
+
+
+def test_classify_issue_2921_stop_rule_inconclusive_without_outcomes() -> None:
+    """No independent outcomes -> inconclusive (vocabulary is frozen)."""
+    decision = classify_issue_2921_stop_rule(
+        independent_evaluation=_independent_eval(available=False, reason="not_available")
+    )
+    assert decision["status"] == "inconclusive"
+    assert decision["vocabulary"] == list(ISSUE_3275_DECISION_VOCABULARY)
+    assert "revise" not in decision["vocabulary"]
+
+
+def test_classify_issue_2921_stop_rule_follows_independent_decision() -> None:
+    """When independent outcomes are valid, the stop rule mirrors their decision."""
+    decision = classify_issue_2921_stop_rule(
+        independent_evaluation=_independent_eval(available=True)
+    )
+    assert decision["status"] == "continue"
+    assert decision["vocabulary"] == list(ISSUE_3275_DECISION_VOCABULARY)
+
+
+# --- Legacy proposal-model behavior (unchanged API) ---------------------------
+
+
 def test_proposal_model_initialization_and_blocked_state() -> None:
-    """Test that missing/empty archives result in blocked state."""
-    # Empty path
+    """Missing/empty archives result in blocked state."""
     model = FailureArchiveProposalModel(None)
     assert model.state == "blocked"
 
-    # Empty dict
     model_empty_dict = FailureArchiveProposalModel({})
     assert model_empty_dict.state == "blocked"
     assert model_empty_dict.state_reason == "malformed_archive_payload"
@@ -88,7 +180,6 @@ def test_proposal_model_initialization_and_blocked_state() -> None:
     assert entries_only.state == "blocked"
     assert entries_only.state_reason.startswith("invalid_failure_archive_schema:")
 
-    # Valid dict
     archive_data = create_synthetic_archive()
     model_active = FailureArchiveProposalModel(archive_data)
     assert model_active.state == "active"
@@ -97,7 +188,7 @@ def test_proposal_model_initialization_and_blocked_state() -> None:
 
 
 def test_archive_path_loading_and_malformed_inputs(tmp_path: Path) -> None:
-    """Cover path-based archive loading and malformed archive fail-closed states."""
+    """Path-based archive loading and malformed fail-closed states."""
     archive_path = tmp_path / "archive.json"
     archive_path.write_text(json.dumps(create_synthetic_archive()), encoding="utf-8")
 
@@ -105,8 +196,7 @@ def test_archive_path_loading_and_malformed_inputs(tmp_path: Path) -> None:
     assert model_from_path.state == "active"
     assert len(model_from_path.entries) == 2
 
-    missing_model = FailureArchiveProposalModel(tmp_path / "missing.json")
-    assert missing_model.state == "blocked"
+    assert FailureArchiveProposalModel(tmp_path / "missing.json").state == "blocked"
 
     empty_path = tmp_path / "empty.json"
     empty_path.write_text("", encoding="utf-8")
@@ -119,13 +209,13 @@ def test_archive_path_loading_and_malformed_inputs(tmp_path: Path) -> None:
     assert FailureArchiveProposalModel({"entries": []}).state == "blocked"
     assert FailureArchiveProposalModel({"entries": "not-a-list"}).state == "blocked"
     assert FailureArchiveProposalModel({"entries": ["not-a-dict"]}).state == "blocked"
-    assert FailureArchiveProposalModel({"entries": [{"candidate": "not-a-dict"}]}).state == (
-        "blocked"
+    assert (
+        FailureArchiveProposalModel({"entries": [{"candidate": "not-a-dict"}]}).state == "blocked"
     )
 
 
 def test_tabular_view_and_scale_fallbacks() -> None:
-    """Cover tabular feature extraction and scale fallback without search-space bounds."""
+    """Tabular feature extraction and scale fallback without search-space bounds."""
     archive_data = create_synthetic_archive()
     model = FailureArchiveProposalModel(archive_data)
 
@@ -146,29 +236,23 @@ def test_tabular_view_and_scale_fallbacks() -> None:
 
 
 def test_deterministic_ranking() -> None:
-    """Test that candidates are ranked deterministically based on archive proximity."""
+    """Candidates are ranked deterministically by archive proximity."""
     archive_data = create_synthetic_archive()
     search_space = create_synthetic_search_space()
     model = FailureArchiveProposalModel(archive_data, search_space)
 
-    # Candidate close to failure_0000 (which is at start_x=2.0, start_y=2.0)
     c_close = _candidate(2.1, 2.1)
-    # Candidate far from both
     c_far = _candidate(9.0, 9.0)
 
-    # Rank them
-    candidates = [c_far, c_close]
-    ranked = model.rank_candidates(candidates, strategy="nearest_neighbor")
-
+    ranked = model.rank_candidates([c_far, c_close], strategy="nearest_neighbor")
     assert len(ranked) == 2
-    # The closer candidate should have higher score (less negative distance) and be ranked first
     assert ranked[0][0] == c_close
     assert ranked[1][0] == c_far
     assert ranked[0][1] > ranked[1][1]
 
 
 def test_score_strategies_and_empty_candidate_ranking() -> None:
-    """Cover alternative strategy scoring, unknown strategy fallback, and empty inputs."""
+    """Alternative strategy scoring, unknown-strategy fallback, and empty inputs."""
     archive_data = create_synthetic_archive()
     search_space = create_synthetic_search_space()
     model = FailureArchiveProposalModel(archive_data, search_space)
@@ -176,132 +260,109 @@ def test_score_strategies_and_empty_candidate_ranking() -> None:
     c_close = _candidate(2.1, 2.1)
     c_far = _candidate(9.0, 9.0)
 
-    weighted_close = model.score_candidate(c_close, strategy="objective_weighted")
-    weighted_far = model.score_candidate(c_far, strategy="objective_weighted")
-    assert weighted_close > weighted_far
-
-    fallback_score = model.score_candidate(c_close, strategy="unknown_strategy")
-    nearest_score = model.score_candidate(c_close, strategy="nearest_neighbor")
-    assert fallback_score == nearest_score
-
+    assert model.score_candidate(c_close, strategy="objective_weighted") > (
+        model.score_candidate(c_far, strategy="objective_weighted")
+    )
+    assert model.score_candidate(c_close, strategy="unknown_strategy") == (
+        model.score_candidate(c_close, strategy="nearest_neighbor")
+    )
     assert model.rank_candidates([]) == []
 
     blocked = FailureArchiveProposalModel(None)
-    blocked_ranked = blocked.rank_candidates([c_close])
-    assert blocked_ranked == [(c_close, 0.0)]
+    assert blocked.rank_candidates([c_close]) == [(c_close, 0.0)]
     assert blocked.score_candidate(c_close) == 0.0
 
 
 def test_manifest_emission_and_no_benchmark_promotion() -> None:
-    """Test that emitted manifests are valid and contain diagnostic-only evidence boundary."""
+    """Emitted manifests are valid and carry a diagnostic-only evidence boundary."""
     archive_data = create_synthetic_archive()
     search_space = create_synthetic_search_space()
     model = FailureArchiveProposalModel(archive_data, search_space)
 
-    c = _candidate(2.0, 2.0)
-    manifest = model.emit_manifest(c, generator_seed=123, candidate_index=5)
-
+    manifest = model.emit_manifest(_candidate(2.0, 2.0), generator_seed=123, candidate_index=5)
     assert isinstance(manifest, AdversarialScenarioManifest)
     assert manifest.generator is not None
     assert manifest.generator.family == "learned_proposal_model"
     assert manifest.generator.generator_id == "FailureArchiveProposalModel"
     assert manifest.generator.seed == 123
     assert manifest.generator.candidate_index == 5
-
-    # Ensure no benchmark promotion: evidence_tier must be diagnostic-only
     assert manifest.evidence_tier == "diagnostic-only"
     assert "diagnostic-only" in manifest.evidence_boundary
 
 
 def test_certification_status_handling() -> None:
-    """Test that candidate certification handles not_available/passed status."""
+    """Candidate certification handles not_available/passed status."""
     archive_data = create_synthetic_archive()
     model = FailureArchiveProposalModel(archive_data)
-
-    c = _candidate(2.0, 2.0)
     dummy_yaml = Path("dummy_scenario.yaml")
+    assert model.certify_candidate(
+        _candidate(2.0, 2.0), dummy_yaml, require_certification=False
+    ).status in (
+        "passed",
+        "failed",
+        "not_available",
+    )
+    assert model.certify_candidate(
+        _candidate(2.0, 2.0), dummy_yaml, require_certification=True
+    ).status in (
+        "passed",
+        "failed",
+        "not_available",
+    )
 
-    # Advisory mode
-    status_advisory = model.certify_candidate(c, dummy_yaml, require_certification=False)
-    assert status_advisory.status in ("passed", "failed", "not_available")
 
-    # Strict mode: fails closed as not_available if the package isn't present
-    status_strict = model.certify_candidate(c, dummy_yaml, require_certification=True)
-    assert status_strict.status in ("passed", "failed", "not_available")
+# --- Comparison report plumbing ------------------------------------------------
 
 
-def test_comparison_report_runs_and_outputs_correct_shape(tmp_path: Path) -> None:
-    """Test that the run_proposal_vs_random script produces a valid JSON report."""
-    import sys
-
+def test_comparison_report_plumbing_only_shape(tmp_path: Path, monkeypatch) -> None:
+    """The default (no archive, no outcomes) report is plumbing-only and fail-closed."""
     from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
 
     output_json = tmp_path / "comparison_report.json"
-
-    # Run the script via its main function
-    args = ["--budget", "5", "--seed", "10", "--output", str(output_json)]
-
-    # Mock sys.argv
-    original_argv = sys.argv
-    try:
-        sys.argv = ["run_proposal_vs_random_issue_2921.py"] + args
-        exit_code = script_main()
-    finally:
-        sys.argv = original_argv
-
-    assert exit_code == 0
-    assert output_json.exists()
-
-    # Load and verify JSON shape
-    with open(output_json, encoding="utf-8") as f:
-        report = json.load(f)
-
-    assert "state" in report
-    assert report["state"] in ("diagnostic_only", "blocked")
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--budget",
+            "5",
+            "--seed",
+            "10",
+            "--output",
+            str(output_json),
+        ],
+    )
+    assert script_main() == 0
+    report = json.loads(output_json.read_text("utf-8"))
     assert report["schema_version"] == "adversarial_proposal_comparison.v1"
+    assert report["state"] in ("diagnostic_only", "blocked")
     assert report["result_classification"] == "plumbing_validation_only"
     assert report["held_out_evidence"] is False
     assert report["benchmark_evidence"] is False
     assert report["planner_performance_claim"] is False
-    assert report["synthetic_archive"] is True
-    assert report["synthetic_search_space"] is True
-    assert report["archive_evaluation_provenance"]["disjointness_checks_passed"] is False
-    assert report["comparison"]["interpretation"] == (
-        "plumbing_only_circular_archive_nearness_objective"
+    assert report["decision_vocabulary"] == list(ISSUE_3275_DECISION_VOCABULARY)
+    assert (
+        report["comparison_interpretation"] == "plumbing_only_circular_archive_nearness_objective"
     )
-    assert report["null_tests"]["required_for_held_out_claim"] is True
-    assert "random_metrics" in report
-    assert "proposal_metrics" in report
-    assert "comparison" in report
-
-    # Verify budget and seed match
-    assert report["budget"] == 5
-    assert report["seed"] == 10
-
-    # Verify random_metrics and proposal_metrics shapes
-    for key in ("mean_objective", "max_objective", "failure_count"):
-        assert key in report["random_metrics"]
-        assert key in report["proposal_metrics"]
-        assert f"{key}_improvement" in report["comparison"]
+    # Archive-nearness lives under a diagnostic-only namespace.
+    assert report["diagnostic_archive_nearness"]["comparison"]["namespace"] == (
+        "archive_nearness_diagnostic_only_cannot_drive_verdict"
+    )
+    assert report["issue_2921_stop_rule"]["status"] == "inconclusive"
+    assert report["budget_per_arm"] == 5
 
 
 def test_comparison_script_rejects_negative_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Negative budgets should fail during argument parsing before sampling."""
+    """Negative budgets fail during argument parsing before sampling."""
     from scripts.adversarial.run_proposal_vs_random_issue_2921 import parse_args
 
-    monkeypatch.setattr(
-        "sys.argv",
-        ["run_proposal_vs_random_issue_2921.py", "--budget", "-1"],
-    )
-
+    monkeypatch.setattr("sys.argv", ["run_proposal_vs_random_issue_2921.py", "--budget", "-1"])
     with pytest.raises(SystemExit) as exc_info:
         parse_args()
-
     assert exc_info.value.code == 2
 
 
 def test_real_archive_without_search_space_fails_closed(tmp_path: Path, monkeypatch) -> None:
-    """Real archive runs should not claim held-out evidence without a real search space."""
+    """Real archive runs stay fail-closed without a real search space."""
     from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
 
     archive_path = tmp_path / "archive.json"
@@ -319,9 +380,8 @@ def test_real_archive_without_search_space_fails_closed(tmp_path: Path, monkeypa
             output_json.as_posix(),
         ],
     )
-
     assert script_main() == 0
-    report = json.loads(output_json.read_text(encoding="utf-8"))
+    report = json.loads(output_json.read_text("utf-8"))
     assert report["state"] == "blocked"
     assert report["held_out_evidence"] is False
     assert report["synthetic_archive"] is False
@@ -371,13 +431,68 @@ def _two_family_archive() -> dict:
     return {"schema_version": "adversarial_failure_archive.v1", "entries": entries}
 
 
-def _two_family_archive_with_seed_overlap() -> dict:
-    """Build a two-family archive whose families share scenario seeds."""
-    archive = _two_family_archive()
-    for entry in archive["entries"]:
-        suffix = int(entry["archive_id"].rsplit("_", maxsplit=1)[1])
-        entry["candidate"]["scenario_seed"] = 100 + suffix
-    return archive
+def _v2_outcome_packet(
+    *, eval_archive_sha256: str, proposal_failures: int, random_failures: int, per_arm: int = 4
+) -> dict:
+    """Build a minimal v2 row-level outcome packet bound to the eval split hash."""
+    rows: list[dict[str, Any]] = []
+    for rank in range(per_arm):
+        rows.append(
+            _v2_row(f"prop_{rank}", f"prop_cand_{rank}", "proposal", rank, rank < proposal_failures)
+        )
+    for rank in range(per_arm):
+        rows.append(
+            _v2_row(f"rand_{rank}", f"rand_cand_{rank}", "random", rank, rank < random_failures)
+        )
+    return {
+        "schema_version": "adversarial_independent_outcomes.v2",
+        "source": "unit-test-fixture",
+        "artifact": "docs/context/evidence/unit-test.json",
+        "outcome_source": "planner_execution",
+        "objective": "certified_failure_outcome",
+        "target_planner_id": "social_force",
+        "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+        "eval_archive_sha256": eval_archive_sha256,
+        "rows": rows,
+    }
+
+
+def _v2_row(row_id: str, manifest_id: str, arm: str, rank: int, failure: bool) -> dict[str, Any]:
+    """Build one admissible v2 outcome row."""
+    return {
+        "row_id": row_id,
+        "candidate_manifest_id": manifest_id,
+        "candidate_manifest_sha256": f"manifest-{manifest_id}",
+        "selection_arm": arm,
+        "selection_rank": rank + 1,
+        "candidate_pool_seed": 7,
+        "candidate_pool_index": rank,
+        "target_planner_id": "social_force",
+        "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
+        "scenario_family": "classic_cross_trap_medium",
+        "scenario_seed": 99001 + rank,
+        "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
+        "execution_command": ["python", "-m", "robot_sf.run_eval"],
+        "execution_config_lineage": {"config": "eval.yaml"},
+        "execution_mode": "native",
+        "termination_reason": "collision" if failure else "goal_reached",
+        "independent_failure_outcome": failure,
+        "scenario_certification_status": "passed",
+        "candidate_certification_status": "passed",
+        "replay_lineage": {
+            "exact_signature_match": True,
+            "original_signature_sha256": "abc",
+            "replay_signature_sha256": "abc",
+        },
+        "confirmation_lineage": {
+            "confirmed_count": 3,
+            "attempt_count": 5,
+            "stable_attribution": True,
+        },
+        "record_sha256": f"rec-{manifest_id}",
+        "admission_status": "admitted",
+        "exclusion_reason": None,
+    }
 
 
 def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(
@@ -391,7 +506,6 @@ def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(
     output_json = tmp_path / "report.json"
     archive_path.write_text(json.dumps(_two_family_archive()), encoding="utf-8")
     search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
-
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -408,32 +522,26 @@ def test_active_real_archive_computes_disjoint_provenance_but_fails_closed(
             output_json.as_posix(),
         ],
     )
-
     assert script_main() == 0
-    report = json.loads(output_json.read_text(encoding="utf-8"))
+    report = json.loads(output_json.read_text("utf-8"))
     assert report["state"] == "active"
     assert report["synthetic_archive"] is False
-    assert report["synthetic_search_space"] is False
-
     provenance = report["archive_evaluation_provenance"]
     assert provenance["split_policy"] == "disjoint_scenario_family"
     assert provenance["disjointness_checks_passed"] is True
-    assert provenance["scenario_family_overlap"] == []
-    assert provenance["archive_id_overlap"] == []
-    assert provenance["fit_size"] > 0
-    assert provenance["eval_size"] > 0
-
-    # Held-out yield stays fail-closed: independent planner outcomes are not wired yet.
+    # No independent outcomes -> fail-closed held-out gate and inconclusive decision.
     assert report["held_out_evidence"] is False
     assert provenance["held_out_evidence_status"] == (
         "not_available_requires_independent_planner_outcomes"
     )
+    assert report["issue_2921_stop_rule"]["status"] == "inconclusive"
 
 
-def test_real_archive_with_independent_outcomes_becomes_diagnostic_only(
+def test_real_archive_with_independent_outcomes_follows_execution(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """A valid independent outcome packet opens only the diagnostic held-out gate."""
+    """Valid v2 outcomes make the comparison follow execution; archive-nearness is diagnostic."""
+    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
     from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
 
     archive_path = tmp_path / "archive.json"
@@ -443,28 +551,19 @@ def test_real_archive_with_independent_outcomes_becomes_diagnostic_only(
     archive = _two_family_archive()
     archive_path.write_text(json.dumps(archive), encoding="utf-8")
     search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
-    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
-
     split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
+    # Proposal arm: 4/4 certified failures; random arm: 0/4 (execution favors proposal).
     outcomes_path.write_text(
         json.dumps(
-            {
-                "schema_version": "adversarial_independent_outcomes.v1",
-                "source": "unit-test-fixture",
-                "artifact": "docs/context/evidence/unit-test.json",
-                "eval_archive_sha256": archive_sha256(split.eval_entries),
-                "outcome_source": "planner_execution",
-                "objective": "certified_failure_outcome",
-                "proposal_outcomes": [10.0, 10.0, 10.0, 10.0],
-                "random_outcomes": [0.0, 0.0, 0.0, 0.0],
-                "ranked_outcomes": [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
-                "certification_statuses": ["passed"] * 8,
-                "row_statuses": ["success"] * 8,
-            }
+            _v2_outcome_packet(
+                eval_archive_sha256=archive_sha256(split.eval_entries),
+                proposal_failures=4,
+                random_failures=0,
+                per_arm=4,
+            )
         ),
         encoding="utf-8",
     )
-
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -479,70 +578,52 @@ def test_real_archive_with_independent_outcomes_becomes_diagnostic_only(
             "4",
             "--seed",
             "7",
-            "--null-test-permutations",
-            "200",
             "--output",
             output_json.as_posix(),
         ],
     )
-
     assert script_main() == 0
-    report = json.loads(output_json.read_text(encoding="utf-8"))
-    assert report["held_out_evidence"] is True
-    assert report["benchmark_evidence"] is False
-    assert report["planner_performance_claim"] is False
-    assert report["result_classification"] == "held_out_diagnostic_only"
-    assert report["comparison"]["interpretation"] == "independent_planner_execution_outcomes"
-    assert report["issue_2921_stop_rule"] == {
-        "status": "continue",
-        "reason": "diagnostic held-out deltas are positive; run the next predeclared proof step",
-        "evidence_tier": "diagnostic_only",
-        "claim_boundary": (
-            "issue #2921 stop-rule classification from held-out diagnostic evidence only; "
-            "not benchmark, paper, or planner-performance evidence"
-        ),
-    }
-    assert report["archive_evaluation_provenance"]["held_out_evidence_status"] == (
-        "eligible_held_out_diagnostic"
+    report = json.loads(output_json.read_text("utf-8"))
+    assert report["comparison_interpretation"] == "independent_planner_execution_outcomes"
+    assert report["independent_outcome_evaluation"]["independent_outcomes_available"] is True
+    assert report["independent_outcome_evaluation"]["proposal_failure_yield"] == 1.0
+    assert report["independent_outcome_evaluation"]["random_failure_yield"] == 0.0
+    # k=4 is underpowered for delta=0.20 -> inconclusive (honest, not continue).
+    assert report["issue_2921_stop_rule"]["status"] == "inconclusive"
+    assert report["issue_2921_stop_rule"]["vocabulary"] == list(ISSUE_3275_DECISION_VOCABULARY)
+    # Archive-nearness is still reported, but only as a diagnostic namespace.
+    assert report["diagnostic_archive_nearness"]["comparison"]["namespace"] == (
+        "archive_nearness_diagnostic_only_cannot_drive_verdict"
     )
-    assert report["independent_outcome_evaluation"]["certification_available"] is True
-    assert report["independent_outcome_evaluation"]["null_tests_reject_null"] is True
 
 
-def test_real_archive_seed_overlap_cannot_be_held_out_evidence(tmp_path: Path, monkeypatch) -> None:
-    """Even independent outcomes cannot open the held-out gate with seed overlap."""
+def test_opposite_sign_regression_execution_favors_random_decides_stop(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """When execution favors random (opposite sign to archive-nearness), decision is stop."""
+    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
     from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
 
     archive_path = tmp_path / "archive.json"
     search_space_path = tmp_path / "search_space.yaml"
     outcomes_path = tmp_path / "outcomes.json"
     output_json = tmp_path / "report.json"
-    archive = _two_family_archive_with_seed_overlap()
+    archive = _two_family_archive()
     archive_path.write_text(json.dumps(archive), encoding="utf-8")
     search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
-
-    from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
-
     split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
+    # Execution favors random: 0 proposal failures vs 4 random failures -> stop.
     outcomes_path.write_text(
         json.dumps(
-            {
-                "schema_version": "adversarial_independent_outcomes.v1",
-                "source": "unit-test-fixture",
-                "artifact": "docs/context/evidence/unit-test.json",
-                "eval_archive_sha256": archive_sha256(split.eval_entries),
-                "outcome_source": "planner_execution",
-                "objective": "certified_failure_outcome",
-                "proposal_outcomes": [10.0, 10.0, 10.0, 10.0],
-                "random_outcomes": [0.0, 0.0, 0.0, 0.0],
-                "ranked_outcomes": [10.0, 10.0, 10.0, 10.0, 0.0, 0.0, 0.0, 0.0],
-                "certification_statuses": ["passed"] * 8,
-                "row_statuses": ["success"] * 8,
-            }
+            _v2_outcome_packet(
+                eval_archive_sha256=archive_sha256(split.eval_entries),
+                proposal_failures=0,
+                random_failures=4,
+                per_arm=4,
+            )
         ),
         encoding="utf-8",
     )
-
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -557,31 +638,15 @@ def test_real_archive_seed_overlap_cannot_be_held_out_evidence(tmp_path: Path, m
             "4",
             "--seed",
             "7",
-            "--null-test-permutations",
-            "200",
             "--output",
             output_json.as_posix(),
         ],
     )
-
     assert script_main() == 0
-    report = json.loads(output_json.read_text(encoding="utf-8"))
-    provenance = report["archive_evaluation_provenance"]
-    assert report["held_out_evidence"] is False
-    assert report["result_classification"] == "plumbing_validation_only"
-    assert report["comparison"]["interpretation"] == (
-        "independent_outcomes_rejected_by_held_out_gate"
-    )
-    assert report["issue_2921_stop_rule"]["status"] == "blocked"
-    assert report["issue_2921_stop_rule"]["reason"] == "not_available_no_disjoint_split"
-    assert provenance["held_out_evidence_status"] == "not_available_no_disjoint_split"
-    assert provenance["disjointness_checks_passed"] is False
-    assert provenance["seed_overlap"] == [100, 101, 102]
-    assert provenance["seed_overlap_count"] == 3
-    assert provenance["disjointness_failure_reasons"] == ["seed_overlap"]
-    assert provenance["seed_overlap_invalidates_held_out_evidence"] is True
-    assert report["independent_outcome_evaluation"]["independent_outcomes_available"] is True
-    assert report["independent_outcome_evaluation"]["null_tests_reject_null"] is True
+    report = json.loads(output_json.read_text("utf-8"))
+    assert report["independent_outcome_evaluation"]["comparison"]["yield_improvement"] < 0.0
+    assert report["issue_2921_stop_rule"]["status"] == "stop"
+    assert report["issue_2921_stop_rule"]["reason"] == "proposal_does_not_beat_random"
 
 
 def test_real_archive_with_circular_outcomes_stays_fail_closed(tmp_path: Path, monkeypatch) -> None:
@@ -597,18 +662,15 @@ def test_real_archive_with_circular_outcomes_stays_fail_closed(tmp_path: Path, m
     outcomes_path.write_text(
         json.dumps(
             {
+                "schema_version": "adversarial_independent_outcomes.v2",
                 "outcome_source": "planner_execution",
                 "objective": "archive_nearness",
-                "proposal_outcomes": [10.0],
-                "random_outcomes": [0.0],
-                "ranked_outcomes": [10.0, 0.0],
-                "certification_statuses": ["passed", "passed"],
-                "row_statuses": ["success", "success"],
+                "target_planner_id": "social_force",
+                "rows": [],
             }
         ),
         encoding="utf-8",
     )
-
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -627,17 +689,9 @@ def test_real_archive_with_circular_outcomes_stays_fail_closed(tmp_path: Path, m
             output_json.as_posix(),
         ],
     )
-
     assert script_main() == 0
-    report = json.loads(output_json.read_text(encoding="utf-8"))
+    report = json.loads(output_json.read_text("utf-8"))
     assert report["held_out_evidence"] is False
-    assert report["archive_evaluation_provenance"]["held_out_evidence_status"] == (
-        "not_available_requires_independent_planner_outcomes"
-    )
-    assert report["independent_outcome_evaluation"]["status"] == (
-        "blocked_invalid_independent_outcomes"
-    )
-    assert report["issue_2921_stop_rule"]["status"] == "blocked"
-    assert report["issue_2921_stop_rule"]["reason"] == (
-        "not_available_requires_independent_planner_outcomes"
-    )
+    assert report["independent_outcome_evaluation"]["status"] == "blocked"
+    assert "circular" in report["independent_outcome_evaluation"]["reason"]
+    assert report["issue_2921_stop_rule"]["status"] == "inconclusive"

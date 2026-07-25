@@ -258,3 +258,213 @@ def test_classify_held_out_evidence_fail_closed() -> None:
         )
         == "eligible_held_out_diagnostic"
     )
+
+
+# --- Issue #3275 frozen contract primitive tests ------------------------------
+
+from robot_sf.adversarial.disjoint_evaluation import (  # noqa: E402
+    FAMILY_INVARIANT_FEATURE_NAMES,
+    ISSUE_3275_DECISION_VOCABULARY,
+    ArmAssignment,
+    assign_arms_disjoint_by_candidate,
+    binary_yield_min_detectable_difference,
+    classify_issue_3275_decision,
+    family_invariant_distance,
+    family_invariant_features,
+    fisher_exact_two_sided,
+    fisher_exact_two_sided_table,
+    frozen_held_out_family_split,
+)
+
+
+def test_family_invariant_features_are_robot_path_relative() -> None:
+    """Lateral/longitudinal features are computed relative to the robot path."""
+    candidate = {
+        "start": {"x": 2.0, "y": 4.0},
+        "goal": {"x": 8.0, "y": 4.0},
+        "spawn_time_s": 1.0,
+        "pedestrian_speed_mps": 1.2,
+        "pedestrian_delay_s": 0.5,
+    }
+    # Robot walks straight along x from (0,0) to (10,0): path length 10.
+    feats = family_invariant_features(candidate, (0.0, 0.0), (10.0, 0.0))
+    assert set(feats) == set(FAMILY_INVARIANT_FEATURE_NAMES)
+    # Pedestrian spawns at (2,4): longitudinal fraction 0.2, lateral 4/10 = 0.4.
+    assert feats["longitudinal_spawn_fraction"] == pytest.approx(0.2)
+    assert feats["lateral_spawn_m"] == pytest.approx(0.4)
+    assert feats["pedestrian_speed_mps"] == pytest.approx(1.2)
+
+
+def test_family_invariant_features_coincident_robot_path_fails_closed() -> None:
+    """A zero-length robot path has no family-invariant projection."""
+    candidate = {
+        "start": {"x": 1.0, "y": 1.0},
+        "goal": {"x": 2.0, "y": 2.0},
+        "spawn_time_s": 0.0,
+        "pedestrian_speed_mps": 1.0,
+        "pedestrian_delay_s": 0.0,
+    }
+    with pytest.raises(ValueError, match="path length is zero"):
+        family_invariant_features(candidate, (5.0, 5.0), (5.0, 5.0))
+
+
+def test_family_invariant_features_same_meaning_both_families() -> None:
+    """Same RELATIVE geometry yields the same features under either family's robot path."""
+    # Identical relative geometry: candidate offset (2,4)->(8,4) from the robot
+    # start, on a 10-unit eastward path. Path A lives at (0,0); path B is the same
+    # path translated to (5,5), with the candidate translated identically.
+    cand_a = {
+        "start": {"x": 2.0, "y": 4.0},
+        "goal": {"x": 8.0, "y": 4.0},
+        "spawn_time_s": 1.0,
+        "pedestrian_speed_mps": 1.2,
+        "pedestrian_delay_s": 0.5,
+    }
+    cand_b = {
+        "start": {"x": 7.0, "y": 9.0},
+        "goal": {"x": 13.0, "y": 9.0},
+        "spawn_time_s": 1.0,
+        "pedestrian_speed_mps": 1.2,
+        "pedestrian_delay_s": 0.5,
+    }
+    a = family_invariant_features(cand_a, (0.0, 0.0), (10.0, 0.0))
+    b = family_invariant_features(cand_b, (5.0, 5.0), (15.0, 5.0))
+    assert a == b
+
+
+def test_family_invariant_distance_zero_for_identical_geometry() -> None:
+    """Identical relative geometry yields zero family-invariant distance."""
+    cand = {
+        "start": {"x": 2.0, "y": 4.0},
+        "goal": {"x": 8.0, "y": 4.0},
+        "spawn_time_s": 1.0,
+        "pedestrian_speed_mps": 1.2,
+        "pedestrian_delay_s": 0.5,
+    }
+    dist = family_invariant_distance(cand, cand, (0.0, 0.0), (10.0, 0.0), (0.0, 0.0), (10.0, 0.0))
+    assert dist == pytest.approx(0.0)
+
+
+def test_frozen_held_out_family_split_is_deterministic_and_disjoint() -> None:
+    """The frozen split assigns families explicitly and keeps them disjoint."""
+    entries = [
+        {"archive_id": "g0", "scenario_family": "classic_group_crossing_medium"},
+        {"archive_id": "g1", "scenario_family": "classic_group_crossing_medium"},
+        {"archive_id": "t0", "scenario_family": "classic_cross_trap_medium"},
+    ]
+    split = frozen_held_out_family_split(
+        entries,
+        fit_family="classic_group_crossing_medium",
+        eval_family="classic_cross_trap_medium",
+    )
+    assert split.is_disjoint_split is True
+    assert [e["archive_id"] for e in split.fit_entries] == ["g0", "g1"]
+    assert [e["archive_id"] for e in split.eval_entries] == ["t0"]
+
+
+def test_frozen_held_out_family_split_rejects_same_family() -> None:
+    """Fit and evaluation families must differ for a held-out split."""
+    with pytest.raises(ValueError, match="must differ"):
+        frozen_held_out_family_split(
+            [],
+            fit_family="classic_group_crossing_medium",
+            eval_family="classic_group_crossing_medium",
+        )
+
+
+def test_assign_arms_disjoint_by_candidate_has_no_overlap() -> None:
+    """The frozen arm-overlap policy never assigns a candidate to both arms."""
+    pool = [f"c{i}" for i in range(10)]
+    ranked = list(reversed(pool))  # rank order differs from pool order
+    arms = assign_arms_disjoint_by_candidate(ranked, pool, budget_per_arm=3, rng_seed=7)
+    assert isinstance(arms, ArmAssignment)
+    assert arms.policy == "disjoint_by_candidate"
+    assert len(arms.proposal_ids) == 3
+    assert len(arms.random_ids) == 3
+    assert arms.overlap_ids == []
+    assert set(arms.proposal_ids).isdisjoint(arms.random_ids)
+    # Proposal arm takes the top of the ranking.
+    assert arms.proposal_ids == ranked[:3]
+
+
+def test_assign_arms_disjoint_rejects_negative_budget() -> None:
+    """Negative budgets are a contract violation."""
+    with pytest.raises(ValueError, match="budget_per_arm"):
+        assign_arms_disjoint_by_candidate(["a"], ["a"], budget_per_arm=-1, rng_seed=0)
+
+
+def test_fisher_exact_extremes_and_symmetry() -> None:
+    """Disjoint counts reject; identical counts do not."""
+    assert fisher_exact_two_sided(0, 4, 4) <= 0.05
+    assert fisher_exact_two_sided(2, 2, 4) > 0.05
+    # Symmetric in its two arms.
+    assert fisher_exact_two_sided_table(3, 1, 0, 4) == pytest.approx(
+        fisher_exact_two_sided_table(0, 4, 3, 1)
+    )
+
+
+def test_binary_yield_min_detectable_matches_recorded_power_table() -> None:
+    """The recorded power table values are reproducible from the helper."""
+    assert binary_yield_min_detectable_difference(10, alpha=0.05) == pytest.approx(0.5, abs=1e-6)
+    assert binary_yield_min_detectable_difference(12, alpha=0.05) == pytest.approx(0.417, abs=1e-3)
+    assert binary_yield_min_detectable_difference(20, alpha=0.05) == pytest.approx(0.25, abs=1e-6)
+
+
+def test_classify_issue_3275_decision_vocabulary_is_frozen() -> None:
+    """The decision vocabulary is exactly continue|stop|inconclusive."""
+    assert ISSUE_3275_DECISION_VOCABULARY == ("continue", "stop", "inconclusive")
+
+
+def test_classify_issue_3275_decision_inconclusive_without_outcomes() -> None:
+    """No independent outcomes -> inconclusive (never continue/stop)."""
+    decision = classify_issue_3275_decision(
+        proposal_yield=1.0,
+        random_yield=0.0,
+        minimally_important=0.2,
+        null_rejected=True,
+        powered=True,
+        independent_available=False,
+    )
+    assert decision["status"] == "inconclusive"
+    assert decision["reason"] == "independent_outcomes_unavailable_or_fail_closed"
+
+
+def test_classify_issue_3275_decision_stop_when_random_better() -> None:
+    """Random beating proposal -> stop."""
+    decision = classify_issue_3275_decision(
+        proposal_yield=0.1,
+        random_yield=0.5,
+        minimally_important=0.2,
+        null_rejected=False,
+        powered=False,
+        independent_available=True,
+    )
+    assert decision["status"] == "stop"
+    assert decision["reason"] == "proposal_does_not_beat_random"
+
+
+def test_classify_issue_3275_decision_inconclusive_when_underpowered() -> None:
+    """Positive delta but underpowered -> inconclusive."""
+    decision = classify_issue_3275_decision(
+        proposal_yield=1.0,
+        random_yield=0.0,
+        minimally_important=0.2,
+        null_rejected=True,
+        powered=False,
+        independent_available=True,
+    )
+    assert decision["status"] == "inconclusive"
+    assert decision["reason"] == "underpowered_for_minimally_important_effect"
+
+
+def test_classify_issue_3275_decision_continue_when_powered_and_significant() -> None:
+    """Powered, significant, beyond-minimally-important delta -> continue."""
+    decision = classify_issue_3275_decision(
+        proposal_yield=0.9,
+        random_yield=0.1,
+        minimally_important=0.2,
+        null_rejected=True,
+        powered=True,
+        independent_available=True,
+    )
+    assert decision["status"] == "continue"

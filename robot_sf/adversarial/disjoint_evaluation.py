@@ -24,8 +24,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import random
 from dataclasses import dataclass, field
+from math import comb
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -779,3 +781,436 @@ def assess_archive_file_readiness(path: Path | None) -> ArchiveReadinessReport:
     except (ValueError, OSError) as exc:
         return _not_ready("not_ready", f"archive_unreadable:{exc}")
     return assess_archive_readiness(archive_data)
+
+
+# --- Issue #3275 frozen same-planner contract primitives ----------------------
+#
+# The helpers below implement the frozen study contract for issue #6103 / parent
+# #3275. They are pure and side-effect-free: they do not execute planners and
+# produce no new empirical outcome. They provide the cross-family feature view,
+# the deterministic held-out split, the arm-overlap policy, the binary-yield
+# power/sensitivity calculation, and the ``continue | stop | inconclusive``
+# decision rule that the proposal-vs-random contract freezes.
+
+#: Frozen decision vocabulary for the #3275 contract. Post-outcome discretion
+#: (``revise``) and generic ``blocked`` are intentionally absent: the only
+#: terminal decisions are continue, stop, or inconclusive.
+ISSUE_3275_DECISION_VOCABULARY = ("continue", "stop", "inconclusive")
+
+
+def _point(value: Any) -> tuple[float, float]:
+    """Return an ``(x, y)`` pair from a dict, tuple/list, or ``Pose2D``-like obj."""
+    if isinstance(value, dict):
+        return float(value["x"]), float(value["y"])
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        return float(value[0]), float(value[1])
+    # Pose2D-like dataclass with x/y attributes.
+    return float(value.x), float(value.y)
+
+
+def _path_projection(
+    point: tuple[float, float],
+    robot_start: tuple[float, float],
+    robot_goal: tuple[float, float],
+) -> tuple[float, float]:
+    """Project ``point`` onto the robot start->goal path.
+
+    Returns:
+        ``(lateral_m, longitudinal_fraction)`` where ``lateral_m`` is the signed
+        perpendicular distance to the path normalized by path length, and
+        ``longitudinal_fraction`` is the projection onto the path as a fraction
+        of path length (0 at the start, 1 at the goal; may fall outside [0, 1]).
+    """
+    sx, sy = robot_start
+    gx, gy = robot_goal
+    dx, dy = gx - sx, gy - sy
+    path_len = math.hypot(dx, dy)
+    if path_len <= 0.0:
+        raise ValueError("robot start and goal coincide; path length is zero")
+    ux, uy = dx / path_len, dy / path_len
+    nx, ny = -uy, ux  # left-hand normal
+    px, py = point
+    rel_x, rel_y = px - sx, py - sy
+    lateral = (rel_x * nx + rel_y * ny) / path_len
+    longitudinal = (rel_x * ux + rel_y * uy) / path_len
+    return lateral, longitudinal
+
+
+def family_invariant_features(
+    candidate: Any,
+    robot_start: Any,
+    robot_goal: Any,
+) -> dict[str, float]:
+    """Return a frozen, family-invariant feature view for one candidate.
+
+    The view expresses the pedestrian candidate relative to the robot's planned
+    path, so every retained feature has the same operational meaning in both the
+    fit family (``classic_group_crossing_medium``) and the held-out evaluation
+    family (``classic_cross_trap_medium``). This is the cross-family semantic
+    audit required by issue #6103 review gate #3: it replaces a boolean audit
+    flag with a concrete, deterministic, outcome-free geometric representation.
+
+    Per-feature semantic argument:
+
+    * ``lateral_spawn_m`` / ``lateral_goal_m``: signed perpendicular distance of
+      the pedestrian spawn/goal from the robot corridor, normalized by path
+      length. Same meaning in both families (how far off the corridor the
+      pedestrian appears).
+    * ``longitudinal_spawn_fraction`` / ``longitudinal_goal_fraction``:
+      projection of spawn/goal onto the robot path as a fraction of path length.
+      Same meaning in both families (where along the route the pedestrian is).
+    * ``pedestrian_speed_mps``, ``pedestrian_delay_s``, ``spawn_time_s``:
+      inherently family-invariant scalars carried unchanged.
+
+    The transform is deterministic geometry only. It does not consume any
+    outcome and does not use the excluded cross-trap/goal failures for tuning.
+
+    Args:
+        candidate: A ``CandidateSpec`` or dict with ``start``, ``goal``, and the
+            three scalar pedestrian fields.
+        robot_start: Robot start as a dict/tuple/object with ``x``/``y``.
+        robot_goal: Robot goal as a dict/tuple/object with ``x``/"y``.
+
+    Returns:
+        A dict with the seven frozen family-invariant feature values.
+    """
+    rs = _point(robot_start)
+    rg = _point(robot_goal)
+    start = _point(
+        getattr(candidate, "start", None) if not isinstance(candidate, dict) else candidate["start"]
+    )
+    goal = _point(
+        getattr(candidate, "goal", None) if not isinstance(candidate, dict) else candidate["goal"]
+    )
+    lat_start, lon_start = _path_projection(start, rs, rg)
+    lat_goal, lon_goal = _path_projection(goal, rs, rg)
+
+    def _scalar(name: str) -> float:
+        if isinstance(candidate, dict):
+            return float(candidate[name])
+        return float(getattr(candidate, name))
+
+    return {
+        "lateral_spawn_m": round(lat_start, 9),
+        "longitudinal_spawn_fraction": round(lon_start, 9),
+        "lateral_goal_m": round(lat_goal, 9),
+        "longitudinal_goal_fraction": round(lon_goal, 9),
+        "pedestrian_speed_mps": _scalar("pedestrian_speed_mps"),
+        "pedestrian_delay_s": _scalar("pedestrian_delay_s"),
+        "spawn_time_s": _scalar("spawn_time_s"),
+    }
+
+
+#: Feature names of the frozen family-invariant view, in canonical order.
+FAMILY_INVARIANT_FEATURE_NAMES = (
+    "lateral_spawn_m",
+    "longitudinal_spawn_fraction",
+    "lateral_goal_m",
+    "longitudinal_goal_fraction",
+    "pedestrian_speed_mps",
+    "pedestrian_delay_s",
+    "spawn_time_s",
+)
+
+
+def family_invariant_distance(
+    candidate: Any,
+    anchor: Any,
+    robot_start: Any,
+    robot_goal: Any,
+    anchor_robot_start: Any,
+    anchor_robot_goal: Any,
+) -> float:
+    """L1 distance in the frozen family-invariant feature space.
+
+    Both ``candidate`` (scored relative to ``robot_start``/``robot_goal``) and
+    ``anchor`` (an archive entry scored relative to its own recorded
+    ``anchor_robot_start``/``anchor_robot_goal``) are projected into the same
+    family-invariant feature space, so the distance is comparable across
+    families. Speed/delay/time features are normalized to [0, 1] using
+    conservative fixed ranges before the L1 sum.
+    """
+    a = family_invariant_features(candidate, robot_start, robot_goal)
+    b = family_invariant_features(anchor, anchor_robot_start, anchor_robot_goal)
+    # Fixed, predeclared scalar ranges (no outcome tuning). These bound the
+    # inherently family-invariant scalars to [0, 1]; spatial features are already
+    # normalized by path length.
+    scalar_ranges = {
+        "pedestrian_speed_mps": (0.5, 2.0),
+        "pedestrian_delay_s": (0.0, 3.0),
+        "spawn_time_s": (0.0, 5.0),
+    }
+    total = 0.0
+    for name in FAMILY_INVARIANT_FEATURE_NAMES:
+        va, vb = float(a[name]), float(b[name])
+        if name in scalar_ranges:
+            lo, hi = scalar_ranges[name]
+            span = hi - lo
+            if span > 0.0:
+                va = (va - lo) / span
+                vb = (vb - lo) / span
+        total += abs(va - vb)
+    return total
+
+
+def frozen_held_out_family_split(
+    entries: Sequence[dict[str, Any]],
+    *,
+    fit_family: str,
+    eval_family: str,
+) -> DisjointSplit:
+    """Deterministic held-out-family split frozen by the #3275 contract.
+
+    Unlike :func:`disjoint_family_split` (which randomly assigns families), this
+    assigns the frozen fit family and evaluation family explicitly. It is the
+    same-planner held-out design: fit on ``fit_family`` (group crossing),
+    evaluate on the disjoint ``eval_family`` (cross trap). Entries are matched by
+    their ``scenario_family`` field (falling back to a string
+    ``cluster_key.scenario_family``).
+
+    Returns:
+        A :class:`DisjointSplit` whose ``is_disjoint_split`` is ``True`` only
+        when both sides are non-empty and the two families are distinct.
+    """
+    if fit_family == eval_family:
+        raise ValueError("fit_family and eval_family must differ for a held-out split")
+
+    def _family(entry: dict[str, Any]) -> str:
+        fam = entry.get("scenario_family")
+        if isinstance(fam, str) and fam:
+            return fam
+        cluster_key = entry.get("cluster_key")
+        if isinstance(cluster_key, dict):
+            fam = cluster_key.get("scenario_family")
+            if isinstance(fam, str) and fam:
+                return fam
+        return scenario_family_key(entry)
+
+    fit_entries = [e for e in entries if _family(e) == fit_family]
+    eval_entries = [e for e in entries if _family(e) == eval_family]
+    other = [e for e in entries if _family(e) not in {fit_family, eval_family}]
+    # Entries outside the two frozen families cannot be silently assigned; they
+    # are reported via fit_families/eval_families so callers can detect drift.
+    fit_families = sorted({_family(e) for e in fit_entries} | {_family(e) for e in other})
+    return DisjointSplit(
+        fit_entries=fit_entries,
+        eval_entries=eval_entries,
+        fit_families=fit_families,
+        eval_families=[eval_family],
+        is_disjoint_split=bool(fit_entries) and bool(eval_entries),
+    )
+
+
+@dataclass(frozen=True)
+class ArmAssignment:
+    """Result of the frozen disjoint-by-candidate arm-overlap policy."""
+
+    proposal_ids: list[str]
+    random_ids: list[str]
+    overlap_ids: list[str]
+    policy: str
+
+
+def assign_arms_disjoint_by_candidate(
+    ranked_pool_ids: Sequence[str],
+    pool_ids: Sequence[str],
+    *,
+    budget_per_arm: int,
+    rng_seed: int,
+) -> ArmAssignment:
+    """One deterministic, predeclared arm-overlap policy (issue #3275 gate #5).
+
+    Each candidate (by manifest/archive id) belongs to exactly one arm. The
+    proposal arm takes the top ``budget_per_arm`` from ``ranked_pool_ids``
+    (model rank order). The random arm takes ``budget_per_arm`` ids from the
+    remaining pool (``pool_ids`` minus the proposal arm's picks), drawn
+    deterministically from ``rng_seed``. No candidate is ever counted in both
+    arms, eliminating pseudoreplication. This single policy replaces any
+    deduplicate-or-disjoint heuristic.
+
+    Args:
+        ranked_pool_ids: Pool ids ordered by model rank (best first).
+        pool_ids: The full shared candidate pool id list.
+        budget_per_arm: Identical budget for each arm.
+        rng_seed: Deterministic seed for the random-arm draw.
+
+    Returns:
+        An :class:`ArmAssignment` whose ``overlap_ids`` is always empty.
+    """
+    if budget_per_arm < 0:
+        raise ValueError("budget_per_arm must be >= 0")
+    ranked = list(ranked_pool_ids)
+    pool = list(pool_ids)
+    proposal_ids = ranked[: min(budget_per_arm, len(ranked))]
+    proposal_set = set(proposal_ids)
+    remaining = [cid for cid in pool if cid not in proposal_set]
+    random.Random(rng_seed).shuffle(remaining)
+    random_ids = remaining[: min(budget_per_arm, len(remaining))]
+    overlap = sorted(proposal_set & set(random_ids))
+    return ArmAssignment(
+        proposal_ids=proposal_ids,
+        random_ids=random_ids,
+        overlap_ids=overlap,
+        policy="disjoint_by_candidate",
+    )
+
+
+def fisher_exact_two_sided(x: int, y: int, k: int) -> float:
+    """Two-sided Fisher's exact p-value for two binomial samples of size ``k``.
+
+    ``x`` and ``y`` are the failure (success) counts out of ``k`` trials in the
+    proposal and random arms. Returns the sum of hypergeometric probabilities of
+    all 2x2 tables with the same margins whose probability does not exceed the
+    observed table's probability.
+    """
+    return fisher_exact_two_sided_table(x, k - x, y, k - y)
+
+
+def _check_fisher_table_args(a: int, b: int, c: int, d: int) -> None:
+    """Validate that the 2x2 table cells are non-negative integers."""
+    for value, name in ((a, "a"), (b, "b"), (c, "c"), (d, "d")):
+        if not isinstance(value, int) or value < 0:
+            raise ValueError(f"{name} must be a non-negative integer")
+
+
+def fisher_exact_two_sided_table(a: int, b: int, c: int, d: int) -> float:
+    """Two-sided Fisher's exact p-value for a general 2x2 contingency table.
+
+    Table layout ``[[a, b], [c, d]]`` with row totals ``a+b`` and ``c+d`` and
+    column totals ``a+c`` and ``b+d``. Used by the #3275 decision rule when the
+    two arms may have different candidate counts.
+    """
+    _check_fisher_table_args(a, b, c, d)
+    n = a + b + c + d
+    if n == 0:
+        return 1.0
+    row1 = a + b
+    row2 = c + d
+    col1 = a + c
+    col2 = b + d
+    if row1 == 0 or row2 == 0 or col1 == 0 or col2 == 0:
+        return 1.0
+
+    def _choose(nn: int, r: int) -> int:
+        if r < 0 or r > nn:
+            return 0
+        return comb(nn, r)
+
+    # Hypergeometric probability of table [[aa, row1-aa], [col1-aa, ...]] with
+    # row totals (row1, row2) and column totals (col1, col2): choose which of the
+    # ``row1`` row-1 units come from the ``col1`` column-1 units.
+    denom = _choose(n, row1)
+    if denom == 0:
+        return 1.0
+
+    def _prob(aa: int) -> float:
+        return (_choose(col1, aa) * _choose(col2, row1 - aa)) / denom
+
+    p_obs = _prob(a)
+    lo = max(0, row1 - col2)
+    hi = min(row1, col1)
+    total = sum(_prob(aa) for aa in range(lo, hi + 1) if _prob(aa) <= p_obs + _EPS)
+    return min(1.0, total)
+
+
+def binary_yield_min_detectable_difference(k_per_arm: int, alpha: float = 0.05) -> float:
+    """Smallest |yield difference| Fisher's exact test can reject at ``alpha``.
+
+    Enumerates every pair of failure counts ``(x, y)`` out of ``k_per_arm`` and
+    returns the minimum ``|x/k - y/k|`` whose two-sided Fisher p-value is at most
+    ``alpha``. This is the boundary of the rejection region (not 80% power); it
+    is the most optimistic detectable effect and is used only to record an
+    honest power/sensitivity statement for the frozen budget.
+    """
+    if k_per_arm < 1:
+        raise ValueError("k_per_arm must be >= 1")
+    if not (0.0 < alpha < 1.0):
+        raise ValueError("alpha must be in (0, 1)")
+    best = 1.0
+    found = False
+    for x in range(k_per_arm + 1):
+        for y in range(k_per_arm + 1):
+            if x == y:
+                continue
+            if fisher_exact_two_sided(x, y, k_per_arm) <= alpha:
+                found = True
+                diff = abs(x / k_per_arm - y / k_per_arm)
+                best = min(best, diff)
+    if not found:
+        return 1.0
+    return round(best, 6)
+
+
+def classify_issue_3275_decision(
+    *,
+    proposal_yield: float,
+    random_yield: float,
+    minimally_important: float,
+    null_rejected: bool,
+    powered: bool,
+    independent_available: bool,
+) -> dict[str, Any]:
+    """Frozen ``continue | stop | inconclusive`` decision for issue #3275.
+
+    The decision follows independent native planner-execution outcomes only.
+    Archive-nearness can never reach this function as a driver; it lives in a
+    diagnostic-only namespace. The vocabulary is exactly
+    :data:`ISSUE_3275_DECISION_VOCABULARY`: there is no ``revise`` and no
+    generic ``blocked``.
+
+    Decision table:
+
+    * independent outcomes unavailable/fail-closed -> ``inconclusive``;
+    * ``proposal_yield - random_yield <= 0`` -> ``stop``;
+    * outcomes valid but underpowered for the minimally important effect, or the
+      null is not rejected -> ``inconclusive``;
+    * otherwise (delta >= minimally important and null rejected and powered) ->
+      ``continue``.
+
+    Args:
+        proposal_yield: Candidate-level certified failure yield in the proposal
+            arm (fraction in [0, 1]).
+        random_yield: Candidate-level certified failure yield in the random arm.
+        minimally_important: Frozen minimally important absolute yield
+            improvement.
+        null_rejected: Whether the predeclared Fisher-exact null is rejected.
+        powered: Whether the frozen budget can detect the minimally important
+            effect.
+        independent_available: Whether valid independent native execution
+            outcomes are available (not fail-closed).
+
+    Returns:
+        A JSON-safe dict with ``status`` in the frozen vocabulary and a reason.
+    """
+    delta = float(proposal_yield) - float(random_yield)
+    if not independent_available:
+        status = "inconclusive"
+        reason = "independent_outcomes_unavailable_or_fail_closed"
+    elif delta <= 0.0:
+        status = "stop"
+        reason = "proposal_does_not_beat_random"
+    elif not powered:
+        status = "inconclusive"
+        reason = "underpowered_for_minimally_important_effect"
+    elif not null_rejected:
+        status = "inconclusive"
+        reason = "null_not_rejected"
+    elif delta >= float(minimally_important):
+        status = "continue"
+        reason = "proposal_beats_random_beyond_minimally_important_effect"
+    else:
+        status = "inconclusive"
+        reason = "positive_but_below_minimally_important_effect"
+    if status not in ISSUE_3275_DECISION_VOCABULARY:  # defensive; should never fire
+        raise AssertionError(f"non-frozen decision status: {status!r}")
+    return {
+        "status": status,
+        "reason": reason,
+        "vocabulary": list(ISSUE_3275_DECISION_VOCABULARY),
+        "evidence_tier": "diagnostic_only",
+        "follows": "independent_planner_execution_outcomes",
+        "claim_boundary": (
+            "issue #3275/#2921 decision from independent planner-execution rows only; "
+            "not benchmark, paper, or planner-performance evidence"
+        ),
+    }

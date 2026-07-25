@@ -18,6 +18,11 @@ SUPPORTED_ZERO_SHOT_DECAY_METRICS = frozenset({"success_rate", "snqi", "path_eff
 
 
 def _names(raw: object, *, field_name: str) -> tuple[str, ...]:
+    """Coerce a raw config value into a non-empty tuple of unique scenario-ID strings.
+
+    Returns:
+        Tuple of stripped, case-insensitively deduplicated scenario-ID strings.
+    """
     if isinstance(raw, str) or not isinstance(raw, Sequence):
         raise ValueError(f"{field_name} must be a non-empty list of scenario IDs")
     names = tuple(str(value).strip() for value in raw)
@@ -29,6 +34,11 @@ def _names(raw: object, *, field_name: str) -> tuple[str, ...]:
 
 
 def _range(raw: object, *, field_name: str, lower_bound: float = 0.0) -> tuple[float, float]:
+    """Coerce a raw config value into a finite two-item float range with lower <= upper.
+
+    Returns:
+        The validated ``(lower, upper)`` float range.
+    """
     if isinstance(raw, str) or not isinstance(raw, Sequence) or len(raw) != 2:
         raise ValueError(f"{field_name} must be a two-item numeric range")
     lower, upper = (float(raw[0]), float(raw[1]))

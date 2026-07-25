@@ -163,6 +163,7 @@ def _validate_static_contract(
 
 
 def _validate_required_rerun_items(launch_decision: dict[str, Any], blockers: list[str]) -> None:
+    """Validate ``required_before_rerun`` lists every required item."""
     required = launch_decision.get("required_before_rerun")
     if not isinstance(required, list):
         blockers.append("launch_decision.required_before_rerun must be a list")
@@ -319,6 +320,7 @@ def _validate_pipeline_scenario_paths(
 
 
 def _is_repo_output_path(value: str) -> bool:
+    """Return whether a relative path points under the repo ``output/`` directory."""
     path = Path(value)
     return not path.is_absolute() and path.parts[:1] == ("output",)
 
@@ -329,6 +331,7 @@ def _require_packet_output_path(
     blockers: list[str],
     prefix: str,
 ) -> None:
+    """Require a path string to stay under ``output/``, recording a blocker otherwise."""
     value = mapping.get(key)
     if isinstance(value, str) and value.strip() and not _is_repo_output_path(value):
         blockers.append(f"{prefix}.{key} must stay under output/")
@@ -340,12 +343,14 @@ def _require_packet_config_path(
     blockers: list[str],
     prefix: str,
 ) -> None:
+    """Require a path string to point under ``configs/``, recording a blocker otherwise."""
     value = mapping.get(key)
     if isinstance(value, str) and value.strip() and not value.startswith("configs/"):
         blockers.append(f"{prefix}.{key} must point under configs/")
 
 
 def _mapping(value: Any) -> dict[str, Any]:
+    """Return ``value`` when it is a dict, else an empty dict."""
     return value if isinstance(value, dict) else {}
 
 
@@ -356,6 +361,7 @@ def _require_non_empty_string(
     *,
     prefix: str | None = None,
 ) -> None:
+    """Record a blocker unless ``mapping[key]`` is a non-empty string."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         field = f"{prefix}.{key}" if prefix else key
@@ -369,6 +375,7 @@ def _require_existing_repo_path(
     repo_root: Path,
     blockers: list[str],
 ) -> None:
+    """Require ``inputs[key]`` to be an existing file, recording a blocker otherwise."""
     value = mapping.get(key)
     if not isinstance(value, str) or not value.strip():
         blockers.append(f"inputs.{key} must be a non-empty path string")
@@ -379,6 +386,11 @@ def _require_existing_repo_path(
 
 
 def _resolve_path(path: Path | str, repo_root: Path, *, base: Path | None = None) -> Path:
+    """Resolve a path against ``repo_root`` or ``base``, anchoring repo prefixes to the root.
+
+    Returns:
+        The resolved absolute path.
+    """
     candidate = Path(path)
     if candidate.is_absolute():
         return candidate.resolve()

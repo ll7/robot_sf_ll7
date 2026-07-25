@@ -101,6 +101,7 @@ def _episode_metadata(record: Mapping[str, Any], *, run_id: str | None) -> dict[
     """Return the scenario/planner/seed/run metadata for one episode record."""
 
     def required_text(keys: tuple[str, ...], label: str) -> str:
+        """Return the first non-empty string among candidate keys, failing closed when absent."""
         for key in keys:
             value = record.get(key)
             if value is None:

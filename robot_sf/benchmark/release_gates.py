@@ -357,6 +357,11 @@ def format_release_gate_markdown(report: Mapping[str, Any]) -> str:
 
 
 def _parse_gate(item: Mapping[str, Any], *, index: int) -> GateSpec:
+    """Parse and validate one YAML gate mapping into a GateSpec.
+
+    Returns:
+        The validated GateSpec parsed from the YAML gate mapping.
+    """
     required = ("id", "metric", "threshold", "direction", "category", "provenance")
     missing = [field for field in required if field not in item]
     if missing:
@@ -393,6 +398,11 @@ def _evaluate_gate_for_group(
     *,
     scenario_family: str,
 ) -> dict[str, Any]:
+    """Evaluate one gate against a group's observed metric values and return its result row.
+
+    Returns:
+        The gate result row dictionary with the evaluated status and observed values.
+    """
     observed_values = [_finite_float_or_none(_get_nested(row, gate.metric)) for row in rows]
     observed_values = [value for value in observed_values if value is not None]
     if not observed_values:
@@ -417,6 +427,11 @@ def _evaluate_gate_for_group(
 
 
 def _normalize_input_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy a row and fill planner_key and scenario_family from known alias keys.
+
+    Returns:
+        The copied row dictionary with planner_key and scenario_family filled in.
+    """
     normalized = dict(row)
     normalized["planner_key"] = _first_present(
         row, _DEFAULT_PLANNER_KEYS, default="unknown_planner"
@@ -426,6 +441,7 @@ def _normalize_input_row(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _rows_from_mapping(payload: Mapping[str, Any]) -> Any:
+    """Return the row list stored under the first recognized container key in a mapping."""
     # ``planner_rows`` is the canonical container emitted by the retained
     # camera-ready campaign summaries (``reports/campaign_summary.json``), so the
     # merged evaluator can consume a real retained campaign summary directly.
@@ -448,6 +464,11 @@ def _rows_from_mapping(payload: Mapping[str, Any]) -> Any:
 
 
 def _category_status(gate_results: Sequence[Mapping[str, Any]], *, category: str) -> str:
+    """Derive a category status from required gate results: fail, not_evaluable, or pass.
+
+    Returns:
+        The category status string: fail, not_evaluable, or pass.
+    """
     category_results = [
         result
         for result in gate_results
@@ -464,6 +485,11 @@ def _category_status(gate_results: Sequence[Mapping[str, Any]], *, category: str
 
 
 def _overall_status(category_statuses: Mapping[str, str]) -> str:
+    """Combine category statuses into one overall fail, not_evaluable, or pass verdict.
+
+    Returns:
+        The overall verdict string: fail, not_evaluable, or pass.
+    """
     statuses = set(category_statuses.values())
     if "fail" in statuses:
         return "fail"
@@ -473,6 +499,7 @@ def _overall_status(category_statuses: Mapping[str, str]) -> str:
 
 
 def _gate_applies_to_family(gate: GateSpec, scenario_family: str) -> bool:
+    """Return whether a gate's scope matches the given scenario family."""
     if not gate.scope:
         return True
     expected = gate.scope.get("scenario_family")
@@ -486,6 +513,11 @@ def _gate_applies_to_family(gate: GateSpec, scenario_family: str) -> bool:
 
 
 def _count_statuses(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
+    """Tally overall_status values across matrix rows into per-status counts.
+
+    Returns:
+        The per-status count dictionary tallying overall_status values across rows.
+    """
     counts = dict.fromkeys(sorted(GATE_STATUSES), 0)
     for row in rows:
         status = str(row.get("overall_status", "not_evaluable"))
@@ -494,6 +526,7 @@ def _count_statuses(rows: Sequence[Mapping[str, Any]]) -> dict[str, int]:
 
 
 def _first_present(row: Mapping[str, Any], keys: Sequence[str], *, default: str) -> str:
+    """Return the first non-empty value among candidate keys as a string, or the default."""
     for key in keys:
         value = _get_nested(row, key)
         if value not in (None, ""):
@@ -502,6 +535,7 @@ def _first_present(row: Mapping[str, Any], keys: Sequence[str], *, default: str)
 
 
 def _get_nested(row: Mapping[str, Any], key: str) -> Any:
+    """Return a row value by direct key or by resolving a dotted path through nested mappings."""
     if key in row:
         return row[key]
     current: Any = row
@@ -513,12 +547,22 @@ def _get_nested(row: Mapping[str, Any], key: str) -> Any:
 
 
 def _required_string(value: Any, field_name: str) -> str:
+    """Validate that a field is a non-empty string and return its stripped value.
+
+    Returns:
+        The stripped string value of the validated non-empty string field.
+    """
     if not isinstance(value, str) or not value.strip():
         raise ReleaseGateSpecError(f"{field_name} must be a non-empty string")
     return value.strip()
 
 
 def _finite_float(value: Any, field_name: str) -> float:
+    """Validate that a field is a finite number and return it as a float.
+
+    Returns:
+        The validated finite number coerced to a float.
+    """
     if isinstance(value, bool):
         raise ReleaseGateSpecError(f"{field_name} must be numeric")
     try:
@@ -531,6 +575,11 @@ def _finite_float(value: Any, field_name: str) -> float:
 
 
 def _finite_float_or_none(value: Any) -> float | None:
+    """Coerce a value to a finite float, returning None for booleans or non-finite input.
+
+    Returns:
+        The value coerced to a finite float, or None for booleans or non-finite input.
+    """
     if isinstance(value, bool):
         return None
     try:
@@ -541,6 +590,11 @@ def _finite_float_or_none(value: Any) -> float | None:
 
 
 def _path_provenance(path: Path | None) -> dict[str, str] | None:
+    """Build path and sha256 provenance for an optional input file.
+
+    Returns:
+        The path and sha256 provenance dictionary, or None when no path is given.
+    """
     if path is None:
         return None
     resolved = path.resolve()
@@ -548,4 +602,9 @@ def _path_provenance(path: Path | None) -> dict[str, str] | None:
 
 
 def _markdown_cell(value: Any) -> str:
+    """Render a value as a Markdown table cell with pipe characters escaped.
+
+    Returns:
+        The value rendered as a Markdown table cell with pipe characters escaped.
+    """
     return str(value).replace("|", "\\|")

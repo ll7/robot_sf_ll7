@@ -499,7 +499,9 @@ def write_sha256sums(
 ) -> None:
     """Write SHA256SUMS for all generated bundle files except itself.
 
-    Computes hashes over the marked files (including markers).
+    Computes hashes over the marked files (including markers). Manifest labels
+    are relative to ``output_dir`` so ``sha256sum -c SHA256SUMS`` works when
+    run from the bundle directory.
 
     ``write_sha256sums`` is typically the last step of finishing an evidence
     bundle directory. When ``output_dir`` is under ``docs/context/evidence/``,
@@ -514,10 +516,7 @@ def write_sha256sums(
     )
     lines = []
     for path in files:
-        try:
-            label = path.resolve().relative_to(_repo_root()).as_posix()
-        except ValueError:
-            label = path.name
+        label = path.relative_to(output_dir).as_posix()
         lines.append(f"{sha256_file(path)}  {label}")
 
     content = review_marker_comment() + "\n" + "\n".join(lines) + "\n"

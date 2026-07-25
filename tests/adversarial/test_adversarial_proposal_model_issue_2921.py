@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -81,6 +82,7 @@ def test_check_contract_validates_frozen_contract() -> None:
     assert verdict["checks"]["fit_entry_ids_match_contract"] is True
     assert verdict["checks"]["excluded_from_nominal_fit_count"] == 6
     assert verdict["checks"]["excluded_from_nominal_fit_ids_sha256_matches_contract"] is True
+    assert verdict["checks"]["search_space_raw_sha256_matches_contract"] is True
     assert verdict["checks"]["negative_regression_full_archive_same_fit_entries"] is True
     assert verdict["checks"]["negative_regression_non_fit_dropped_count"] == 11
     assert verdict["checks"]["negative_regression_held_out_dropped_count"] == 5
@@ -88,6 +90,33 @@ def test_check_contract_validates_frozen_contract() -> None:
     assert verdict["checks"]["negative_regression_dropped_ids_match_contract"] is True
     assert verdict["checks"]["no_held_out_family_in_model"] is True
     assert verdict["failures"] == []
+
+
+def test_frozen_search_space_rejects_raw_sha_drift(tmp_path: Path) -> None:
+    """Raw-byte drift in a frozen search space fails before candidate sampling."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import (
+        _load_frozen_contract_search_space,
+    )
+
+    search_space_path = tmp_path / "search_space.yaml"
+    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+    contract = {
+        "evaluation": {
+            "search_space_path": "search_space.yaml",
+            "search_space_sha256": hashlib.sha256(search_space_path.read_bytes()).hexdigest(),
+        }
+    }
+
+    _, provenance = _load_frozen_contract_search_space(
+        contract, repo_root=tmp_path, requested_search_space=None
+    )
+    assert provenance["raw_sha256"] == contract["evaluation"]["search_space_sha256"]
+
+    search_space_path.write_text(_SEARCH_SPACE_YAML + "# raw-byte drift\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="frozen contract search-space SHA-256 mismatch"):
+        _load_frozen_contract_search_space(
+            contract, repo_root=tmp_path, requested_search_space=None
+        )
 
 
 def test_fit_only_model_uses_exactly_the_six_nominally_eligible_fit_ids() -> None:
@@ -614,17 +643,13 @@ def test_normal_contract_runner_uses_frozen_fit_factory_and_held_out_split(
     """The normal --contract path cannot use the generic archive or random split."""
     from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
 
-    search_space_path = tmp_path / "search_space.yaml"
     output_json = tmp_path / "contract_report.json"
-    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
     monkeypatch.setattr(
         "sys.argv",
         [
             "run_proposal_vs_random_issue_2921.py",
             "--contract",
             _CONTRACT.as_posix(),
-            "--search-space",
-            search_space_path.as_posix(),
             "--seed",
             "42",
             "--output",
@@ -657,6 +682,13 @@ def test_normal_contract_runner_uses_frozen_fit_factory_and_held_out_split(
     assert frozen_contract["model"]["feature_view"] == "family_invariant"
     assert frozen_contract["model"]["evaluation_robot_start"] == [3.0, 3.0]
     assert frozen_contract["model"]["evaluation_robot_goal"] == [17.0, 17.0]
+    assert frozen_contract["search_space"] == {
+        "path": "configs/adversarial/crossing_ttc_space.yaml",
+        "raw_sha256": "e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34",
+        "override_path": None,
+        "override_raw_sha256": None,
+        "override_matches_frozen": None,
+    }
     assert report["issue_2921_stop_rule"]["status"] == "inconclusive"
 
 
@@ -666,8 +698,28 @@ def test_contract_runner_rejects_a_budget_outside_the_frozen_contract(
     """A larger packet budget cannot be requested through the --contract path."""
     from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
 
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            _CONTRACT.as_posix(),
+            "--budget",
+            "30",
+        ],
+    )
+
+    assert script_main() == 2
+
+
+def test_contract_runner_rejects_mismatched_search_space_override(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A contract run cannot replace the frozen candidate-pool search space."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
     search_space_path = tmp_path / "search_space.yaml"
-    search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
+    search_space_path.write_text(_SEARCH_SPACE_YAML + "# override drift\n", encoding="utf-8")
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -676,8 +728,6 @@ def test_contract_runner_rejects_a_budget_outside_the_frozen_contract(
             _CONTRACT.as_posix(),
             "--search-space",
             search_space_path.as_posix(),
-            "--budget",
-            "30",
         ],
     )
 

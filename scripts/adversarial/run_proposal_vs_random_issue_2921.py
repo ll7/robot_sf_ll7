@@ -15,9 +15,10 @@ and produces no new empirical outcome; its exact invocation is a required input
 to the next sub-issue.
 
 Supplying ``--contract`` to the normal comparison path applies that same frozen
-contract: it reads the canonical source archive, constructs the fit-only,
-family-invariant model with the map-backed evaluation geometry, uses the
-explicit held-out-family split, and rejects a non-frozen budget or archive.
+contract: it reads the canonical source archive and candidate-pool search space,
+constructs the fit-only, family-invariant model with the map-backed evaluation
+geometry, uses the explicit held-out-family split, and rejects a non-frozen
+budget, archive, or search-space override.
 
 The comparison run keeps archive-nearness under an explicitly diagnostic
 namespace. When valid independent native planner-execution outcomes (the frozen
@@ -252,6 +253,7 @@ def build_archive_evaluation_provenance(
     independent_evaluation: dict[str, Any] | None = None,
     frozen_contract: dict[str, Any] | None = None,
     model_provenance: dict[str, Any] | None = None,
+    search_space_provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build archive-evaluation provenance for the comparison report.
 
@@ -308,7 +310,10 @@ def build_archive_evaluation_provenance(
             "candidate_budget_per_arm": frozen_contract["budget"]["candidate_budget_per_arm"],
             "candidate_pool_size": frozen_contract["budget"]["candidate_pool_size"],
             "model": model_provenance or {},
+            "search_space": search_space_provenance or {},
         }
+    if search_space_provenance is not None:
+        provenance["search_space"] = search_space_provenance
     provenance["fit_archive_sha256"] = archive_sha256(split.fit_entries)
     provenance["eval_archive_sha256"] = archive_sha256(split.eval_entries)
     provenance["independent_outcome_evaluation"] = independent_evaluation.get(
@@ -503,6 +508,26 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
         ),
     }
     failures: list[str] = []
+    try:
+        _, search_space_provenance = _load_frozen_contract_search_space(
+            contract, repo_root=root, requested_search_space=None
+        )
+        checks.update(
+            {
+                "search_space_path": search_space_provenance["path"],
+                "search_space_raw_sha256_expected": contract["evaluation"]["search_space_sha256"],
+                "search_space_raw_sha256_observed": search_space_provenance["raw_sha256"],
+                "search_space_raw_sha256_matches_contract": True,
+            }
+        )
+    except ValueError as exc:
+        checks["search_space_error"] = str(exc)
+        return 1, {
+            "ok": False,
+            "checks": checks,
+            "failures": [str(exc)],
+            "claim_boundary": contract["claim_boundary"]["label"],
+        }
     if recert.get("recertification_sha256") != source["corrected_recertification_sha256"]:
         failures.append(
             "recertification_sha256_mismatch: "
@@ -776,6 +801,106 @@ def _load_frozen_contract_archive(
     return archive_data, canonical_path.as_posix()
 
 
+def _frozen_search_space_contract_fields(contract: dict[str, Any]) -> tuple[str, str]:
+    """Return the required canonical search-space path and raw digest from a contract."""
+    evaluation = contract.get("evaluation")
+    if not isinstance(evaluation, dict):
+        raise ValueError("frozen contract evaluation must be an object")
+    configured_path = evaluation.get("search_space_path")
+    expected_sha256 = evaluation.get("search_space_sha256")
+    if not isinstance(configured_path, str) or not configured_path:
+        raise ValueError("frozen contract evaluation.search_space_path must be a non-empty string")
+    if not isinstance(expected_sha256, str) or not expected_sha256:
+        raise ValueError(
+            "frozen contract evaluation.search_space_sha256 must be a non-empty string"
+        )
+    return configured_path, expected_sha256
+
+
+def _raw_file_sha256(path: Path) -> str:
+    """Return the SHA-256 digest of a file's raw bytes."""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _load_frozen_contract_search_space(
+    contract: dict[str, Any],
+    *,
+    repo_root: Path,
+    requested_search_space: Path | None,
+) -> tuple[Any, dict[str, Any]]:
+    """Load the canonical search space and reject raw-byte drift or mismatched overrides."""
+    configured_path, expected_sha256 = _frozen_search_space_contract_fields(contract)
+
+    canonical_path = repo_root / configured_path
+    resolved_root = repo_root.resolve()
+    resolved_path = canonical_path.resolve()
+    if not resolved_path.is_relative_to(resolved_root):
+        raise ValueError("frozen contract search-space path must stay within the repository")
+    if not canonical_path.is_file():
+        raise ValueError(f"frozen contract search space is missing: {configured_path}")
+    observed_sha256 = _raw_file_sha256(canonical_path)
+    if observed_sha256 != expected_sha256:
+        raise ValueError(
+            "frozen contract search-space SHA-256 mismatch: "
+            f"observed={observed_sha256} expected={expected_sha256}"
+        )
+
+    override_sha256 = None
+    if requested_search_space is not None:
+        if not requested_search_space.is_file():
+            raise ValueError(f"--search-space override is missing: {requested_search_space}")
+        override_sha256 = _raw_file_sha256(requested_search_space)
+        if override_sha256 != expected_sha256:
+            raise ValueError(
+                "--search-space override does not match the frozen contract search-space "
+                f"SHA-256: observed={override_sha256} expected={expected_sha256}"
+            )
+
+    search_space_state, search_space_reason, search_space, synthetic_search_space = (
+        load_search_space(canonical_path)
+    )
+    if search_space_state != "active" or synthetic_search_space:
+        raise ValueError(f"failed to load frozen contract search space: {search_space_reason}")
+    return search_space, {
+        "path": configured_path,
+        "raw_sha256": observed_sha256,
+        "override_path": requested_search_space.as_posix() if requested_search_space else None,
+        "override_raw_sha256": override_sha256,
+        "override_matches_frozen": (
+            override_sha256 == expected_sha256 if requested_search_space is not None else None
+        ),
+    }
+
+
+def _load_frozen_contract_run_inputs(
+    contract: dict[str, Any],
+    *,
+    repo_root: Path,
+    requested_archive: Path | None,
+    requested_search_space: Path | None,
+) -> tuple[Any, dict[str, Any], dict[str, Any], str, Any, dict[str, Any]]:
+    """Load every normal-run input that is pinned by the frozen contract."""
+    from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
+
+    search_space, search_space_provenance = _load_frozen_contract_search_space(
+        contract, repo_root=repo_root, requested_search_space=requested_search_space
+    )
+    archive_data, canonical_archive_path = _load_frozen_contract_archive(
+        contract, repo_root=repo_root, requested_archive=requested_archive
+    )
+    model, model_provenance = FailureArchiveProposalModel.from_frozen_contract(
+        contract, repo_root=repo_root
+    )
+    return (
+        search_space,
+        search_space_provenance,
+        archive_data,
+        canonical_archive_path,
+        model,
+        model_provenance,
+    )
+
+
 def _frozen_binding_matches_generated_arms(
     binding: dict[str, Any] | None,
     *,
@@ -993,9 +1118,6 @@ def main() -> int:
             f"pool={candidate_pool_size} budget_per_arm={run_budget}"
         )
 
-    search_space_state, search_space_reason, search_space, synthetic_search_space = (
-        load_search_space(args.search_space)
-    )
     from robot_sf.adversarial.independent_outcomes import (
         AdmissionSpec,
         build_independent_outcome_evaluation,
@@ -1004,26 +1126,41 @@ def main() -> int:
     from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
 
     model_provenance: dict[str, Any] | None = None
+    search_space_provenance: dict[str, Any] | None = None
     if contract is None:
+        search_space_state, search_space_reason, search_space, synthetic_search_space = (
+            load_search_space(args.search_space)
+        )
         archive_state, archive_reason, archive_data, synthetic_archive = load_archive(args.archive)
         model = FailureArchiveProposalModel(archive_data, search_space)
     else:
         repo_root = Path(__file__).resolve().parents[2]
         try:
-            archive_data, canonical_archive_path = _load_frozen_contract_archive(
-                contract, repo_root=repo_root, requested_archive=args.archive
-            )
-            model, model_provenance = FailureArchiveProposalModel.from_frozen_contract(
-                contract, repo_root=repo_root
+            (
+                search_space,
+                search_space_provenance,
+                archive_data,
+                canonical_archive_path,
+                model,
+                model_provenance,
+            ) = _load_frozen_contract_run_inputs(
+                contract,
+                repo_root=repo_root,
+                requested_archive=args.archive,
+                requested_search_space=args.search_space,
             )
         except ValueError as exc:
             return _contract_configuration_error(str(exc))
-        archive_state = "active"
+        search_space_state, synthetic_search_space = "active", False
+        search_space_reason = (
+            "Frozen contract search space loaded from "
+            f"{search_space_provenance['path']}; raw SHA-256 verified."
+        )
+        archive_state, synthetic_archive = "active", False
         archive_reason = (
             "Frozen contract archive loaded from "
             f"{canonical_archive_path}; fit-only model factory initialized."
         )
-        synthetic_archive = False
 
     outcome_state, outcome_reason, outcome_data = load_independent_outcomes(
         args.evaluation_outcomes
@@ -1066,6 +1203,7 @@ def main() -> int:
         split_seed=args.seed,
         frozen_contract=contract,
         model_provenance=model_provenance,
+        search_space_provenance=search_space_provenance,
     )
     frozen_binding_reason = None
     if contract is not None and manifest_binding is not None:
@@ -1144,6 +1282,7 @@ def main() -> int:
         independent_evaluation=independent_evaluation,
         frozen_contract=contract,
         model_provenance=model_provenance,
+        search_space_provenance=search_space_provenance,
     )
     report = _assemble_report(
         state=state,

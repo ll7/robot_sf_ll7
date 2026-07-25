@@ -57,6 +57,14 @@ Target planner: `social_force` (config SHA-256
 `dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735`), in **both**
 arms. Held-out evaluation family: `classic_cross_trap_medium`.
 
+Candidate-pool search space: `configs/adversarial/crossing_ttc_space.yaml`
+(raw-file SHA-256
+`e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34`).
+The normal `--contract` path reads this committed file, verifies its raw bytes,
+and records its path and hash in report provenance. A `--search-space` override
+is accepted only when it has the same raw SHA-256; the runner still loads the
+canonical contract path, so candidate-pool bounds cannot silently drift.
+
 ## Train-only ranking (issue #6103 gap 1)
 
 `FailureArchiveProposalModel` is constructed from a fit-only payload of exactly
@@ -154,6 +162,11 @@ the contract: the explicit `classic_crossing.svg` robot-zone centres at
 `[3.0, 3.0]` to `[17.0, 17.0]` metres (`cells_per_meter=2.0`). The runner
 records this map-backed geometry in its provenance and does not substitute a
 geometry derived from the excluded held-out failures.
+
+The same normal path also freezes the candidate-pool bounds in
+`configs/adversarial/crossing_ttc_space.yaml` by raw SHA-256. It samples the
+verified canonical file and rejects any `--search-space` override whose bytes do
+not match, preventing candidate-pool, ranking, or arm-selection drift.
 
 ## Side-effect-free contract check (required input to the next sub-issue)
 

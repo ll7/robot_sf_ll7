@@ -90,6 +90,10 @@
     "held_out_family_disjoint_from_fit_family": true,
     "map_file": "maps/svg_maps/classic_crossing.svg",
     "map_file_sha256": "dec460721d422340653732125f8b02b76f793fb916446275ccefff60fea9c911",
+    "search_space_path": "configs/adversarial/crossing_ttc_space.yaml",
+    "search_space_sha256": "e90353f9653173cc351117bfc874c1e7d5933d32f1f892f1b264d8148c767f34",
+    "search_space_sha256_algorithm": "sha256 over raw search-space file bytes",
+    "search_space_role": "Frozen candidate-pool bounds for the held-out cross-trap evaluation. The normal --contract path samples only this verified committed file; a --search-space override is accepted only when its raw SHA-256 matches, and the canonical file remains the loaded source.",
     "robot_start": [
       3.0,
       3.0

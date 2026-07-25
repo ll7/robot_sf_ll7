@@ -17,11 +17,21 @@ from robot_sf.adversarial.independent_outcomes import (
 _PLANNER = "social_force"
 _PLANNER_CFG = "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735"
 _EVAL_FAMILY = "classic_cross_trap_medium"
+_EXPECTED_MANIFEST_HASHES = {
+    "c0": "manifest-c0",
+    "cp0": "manifest-cp0",
+    "cp1": "manifest-cp1",
+    "cr0": "manifest-cr0",
+    "shared": "manifest-shared",
+    **{f"prop_cand_{index}": f"manifest-prop_cand_{index}" for index in range(64)},
+    **{f"rand_cand_{index}": f"manifest-rand_cand_{index}" for index in range(64)},
+}
 _SPEC = AdmissionSpec(
     expected_target_planner_id=_PLANNER,
     expected_eval_family=_EVAL_FAMILY,
     confirmation_threshold="3_of_5",
     expected_target_planner_config_sha256=_PLANNER_CFG,
+    expected_candidate_manifest_sha256_by_id=_EXPECTED_MANIFEST_HASHES,
 )
 
 
@@ -222,6 +232,35 @@ def test_missing_required_field_fails_closed() -> None:
     assert "record_sha256" in result["reason"]
 
 
+def test_candidate_manifest_hash_requires_external_binding() -> None:
+    """Rows cannot self-attest manifest lineage when no frozen binding is supplied."""
+    packet = _packet([_row(row_id="r0", manifest_id="c0", arm="proposal", rank=1, failure=True)])
+    unbound_spec = AdmissionSpec(
+        expected_target_planner_id=_PLANNER,
+        expected_eval_family=_EVAL_FAMILY,
+        expected_target_planner_config_sha256=_PLANNER_CFG,
+    )
+
+    result = build_independent_outcome_evaluation(
+        packet, budget_per_arm=1, minimally_important=0.20, admission_spec=unbound_spec
+    )
+
+    assert result["status"] == "blocked"
+    assert "manifest_sha256 binding is unavailable" in result["reason"]
+
+
+def test_candidate_manifest_hash_mismatch_fails_closed() -> None:
+    """A row hash must match the separate frozen manifest-hash binding."""
+    row = _row(row_id="r0", manifest_id="c0", arm="proposal", rank=1, failure=True)
+    row["candidate_manifest_sha256"] = "wrong-manifest-hash"
+    result = build_independent_outcome_evaluation(
+        _packet([row]), budget_per_arm=1, minimally_important=0.20, admission_spec=_SPEC
+    )
+
+    assert result["status"] == "blocked"
+    assert "candidate_manifest_sha256 mismatch" in result["reason"]
+
+
 def test_replay_signature_mismatch_fails_closed() -> None:
     """A replay signature that differs from the original signature fails closed."""
     row = _row(
@@ -336,6 +375,22 @@ def test_unstable_attribution_across_seeds_fails_closed() -> None:
     assert "unstable attribution" in result["reason"]
 
 
+def test_candidate_manifest_id_in_both_arms_fails_closed() -> None:
+    """A candidate manifest cannot be aggregated into both disjoint arms."""
+    packet = _packet(
+        [
+            _row(row_id="p0", manifest_id="shared", arm="proposal", rank=1, failure=True),
+            _row(row_id="r0", manifest_id="shared", arm="random", rank=1, failure=False),
+        ]
+    )
+    result = build_independent_outcome_evaluation(
+        packet, budget_per_arm=1, minimally_important=0.20, admission_spec=_SPEC
+    )
+
+    assert result["status"] == "blocked"
+    assert "both proposal and random arms" in result["reason"]
+
+
 def test_complete_packet_decision_follows_execution() -> None:
     """A strong proposal-favors-execution packet yields a continue/underpowered decision."""
     # 4/4 proposal failures vs 0/4 random: large effect, but k=4 is underpowered
@@ -355,16 +410,17 @@ def test_complete_packet_decision_follows_execution() -> None:
     assert result["decision"]["reason"] == "underpowered_for_minimally_important_effect"
 
 
-def test_random_better_than_proposal_decides_stop() -> None:
-    """When execution favors random, the decision is stop regardless of power."""
-    # 0/6 proposal vs 6/6 random: random is better -> stop.
+def test_underpowered_random_better_than_proposal_is_inconclusive() -> None:
+    """An underpowered random-favoring result cannot produce a stop decision."""
+    # 0/6 proposal vs 6/6 random is still underpowered for the frozen 0.20 effect.
     packet = _balanced_packet(proposal_failures=0, random_failures=6, per_arm=6)
     result = build_independent_outcome_evaluation(
         packet, budget_per_arm=6, minimally_important=0.20, admission_spec=_SPEC
     )
     assert result["status"] == "complete"
-    assert result["decision"]["status"] == "stop"
-    assert result["decision"]["reason"] == "proposal_does_not_beat_random"
+    assert result["comparison"]["powered"] is False
+    assert result["decision"]["status"] == "inconclusive"
+    assert result["decision"]["reason"] == "underpowered_for_minimally_important_effect"
 
 
 def test_opposite_sign_regressions_decision_follows_execution() -> None:
@@ -375,20 +431,30 @@ def test_opposite_sign_regressions_decision_follows_execution() -> None:
     opposite-sign guarantee: the decision tracks execution, and the
     diagnostic archive-nearness namespace is never consulted here.
     """
+    # k=30 is the smallest frozen-effect budget whose Fisher boundary is <= 0.20.
     # Case A: execution favors proposal.
-    exec_proposal_better = _balanced_packet(proposal_failures=6, random_failures=0, per_arm=6)
+    exec_proposal_better = _balanced_packet(proposal_failures=30, random_failures=0, per_arm=30)
     res_a = build_independent_outcome_evaluation(
-        exec_proposal_better, budget_per_arm=6, minimally_important=0.20, admission_spec=_SPEC
+        exec_proposal_better,
+        budget_per_arm=30,
+        minimally_important=0.20,
+        admission_spec=_SPEC,
+        n_permutations=10,
     )
     assert res_a["comparison"]["yield_improvement"] > 0.0
 
     # Case B: execution favors random (opposite sign).
-    exec_random_better = _balanced_packet(proposal_failures=0, random_failures=6, per_arm=6)
+    exec_random_better = _balanced_packet(proposal_failures=0, random_failures=30, per_arm=30)
     res_b = build_independent_outcome_evaluation(
-        exec_random_better, budget_per_arm=6, minimally_important=0.20, admission_spec=_SPEC
+        exec_random_better,
+        budget_per_arm=30,
+        minimally_important=0.20,
+        admission_spec=_SPEC,
+        n_permutations=10,
     )
     assert res_b["comparison"]["yield_improvement"] < 0.0
     assert res_b["decision"]["status"] == "stop"
+    assert res_a["decision"]["status"] == "continue"
     assert res_a["comparison"]["yield_improvement"] * res_b["comparison"]["yield_improvement"] < 0.0
 
 

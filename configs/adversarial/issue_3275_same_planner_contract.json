@@ -21,7 +21,7 @@
     "corrected_recertification_path": "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json",
     "corrected_recertification_sha256": "7bade1d5008d66eba9dfe6c9c72e72e5e6720e7acb96f17a90a61a4f0798f3d0",
     "derivation_basis": "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json. Final fit IDs/count/hash derive from this file's records, NOT from the #6139 closing comment, which quotes a different SHA-256 (1406ea545cd07b9e2d96154e3ce10d141c7a121e8c8bc1b736c802b99a796a00) and is not the authority here.",
-    "recertification_status": "all 17 records unchanged (before_after_status.unchanged = 17); the corrected fit set is stable relative to the pre-correction provisional set.",
+    "recertification_status": "all 17 records are unchanged (before_after_status.unchanged = 17), but the corrected eligibility decisions are authoritative: the final nominal fit set excludes the six group-crossing stress_only records without replacement.",
     "registration_execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f"
   },
   "target_planner": {
@@ -34,34 +34,40 @@
   "fit": {
     "scenario_family": "classic_group_crossing_medium",
     "target_planner": "social_force",
-    "count": 12,
-    "entry_ids_sha256": "5cf3bb352204d56832b25d6fd1f5c731983aa1ea47c4b3f7e806c332c544c6ad",
-    "entry_ids_sha256_algorithm": "sha256 over canonical JSON of the sorted 12 fit archive_ids (separators=',:', sort_keys=True)",
+    "required_benchmark_eligibility": "eligible",
+    "count": 6,
+    "entry_ids_sha256": "41fa8863e2345a9cdc665ede7ac8e0110d93da042b4dd03ee2cc579c72f12e25",
+    "entry_ids_sha256_algorithm": "sha256 over canonical JSON of the sorted 6 nominally eligible fit archive_ids (separators=',:', sort_keys=True)",
     "entry_ids": [
       "issue5305_classic_group_crossing_medium_0405a12b9e1b",
       "issue5305_classic_group_crossing_medium_16c4a20e71aa",
+      "issue5305_classic_group_crossing_medium_58a4877312cc",
+      "issue5305_classic_group_crossing_medium_5b9f237a8aee",
+      "issue5305_classic_group_crossing_medium_d8b09e0e988a",
+      "issue5305_classic_group_crossing_medium_fc6bf8300e51"
+    ],
+    "eligibility_mix_after_recertification": {
+      "eligible": 6
+    },
+    "classification_mix_after_recertification": {
+      "hard_but_solvable": 3,
+      "valid": 3
+    },
+    "excluded_from_nominal_fit_count": 6,
+    "excluded_from_nominal_fit_entry_ids_sha256": "63df8ecaba9a996fdf7cc49c554e3f6cb9f63b9f0c8966d1a3aa7e29efdd88ea",
+    "excluded_from_nominal_fit_entry_ids": [
       "issue5305_classic_group_crossing_medium_24f49e195565",
       "issue5305_classic_group_crossing_medium_3537f5d4f870",
       "issue5305_classic_group_crossing_medium_47bd4c497818",
       "issue5305_classic_group_crossing_medium_4de6bcf99283",
-      "issue5305_classic_group_crossing_medium_58a4877312cc",
-      "issue5305_classic_group_crossing_medium_5b9f237a8aee",
-      "issue5305_classic_group_crossing_medium_d8b09e0e988a",
       "issue5305_classic_group_crossing_medium_e3856ba0906d",
-      "issue5305_classic_group_crossing_medium_f32fc5117cfa",
-      "issue5305_classic_group_crossing_medium_fc6bf8300e51"
+      "issue5305_classic_group_crossing_medium_f32fc5117cfa"
     ],
-    "eligibility_mix_after_recertification": {
-      "eligible": 6,
+    "excluded_from_nominal_fit_eligibility_mix": {
       "stress_only": 6
     },
-    "classification_mix_after_recertification": {
-      "hard_but_solvable": 3,
-      "knife_edge": 6,
-      "valid": 3
-    },
-    "fit_set_definition": "All twelve certified classic_group_crossing_medium / social_force failure records from the corrected recertification artifact. The stress_only/knife_edge axis is the scenario-route benchmark eligibility, which is distinct from candidate_certification (all twelve passed deterministic replay, independent-seed confirmation, and stable attribution). For a failure-neighborhood ranker, every certified social_force failure of the fit family is a valid neighborhood anchor. No record was reclassified by the #6139 correction (all 17 unchanged), so no record is removed and no record is silently replaced.",
-    "model_initialization": "FailureArchiveProposalModel is constructed from a FIT-ONLY payload containing exactly these twelve IDs. The constructor drops every entry whose archive_id is not in this frozen set, so excluded and held-out-family records cannot influence proposal scores or rank order even if the full archive is supplied as input."
+    "fit_set_definition": "Only the six corrected nominally eligible classic_group_crossing_medium / social_force failure records from the recertification artifact are fit anchors. The six stress_only / knife_edge records are excluded from the nominal fit set even though they retain candidate-certification lineage; they are not replaced.",
+    "model_initialization": "FailureArchiveProposalModel is constructed from a FIT-ONLY payload containing exactly these six nominally eligible IDs. The constructor drops every entry whose archive_id is not in this frozen set, so stress_only, excluded, and held-out-family records cannot influence proposal scores or rank order even if the full archive is supplied as input."
   },
   "exclusions": {
     "count": 5,
@@ -141,6 +147,7 @@
     },
     "recorded_detectable_boundaries_note": "Smallest |proposal_yield - random_yield| for which Fisher's exact two-sided test can reject at alpha=0.05 at the given per-arm budget (boundary of the rejection region; not 80% power, which requires an even larger difference).",
     "conclusion": "At the frozen budget of 12 candidates per arm, the boundary minimum detectable yield difference is about 0.417, so a minimally important effect of 0.20 is NOT detectable. The frozen budget therefore cannot test the minimally important effect.",
+    "fit_set_recheck_after_eligibility_exclusion": "After the six stress_only fit records were excluded, the candidate-level Fisher calculation was rerun at the unchanged k=12 per arm: the 0.417 boundary remains above the 0.20 minimally important effect. The reduced six-anchor fit set therefore does not authorize a powered outcome claim.",
     "future_run_label_when_underpowered": "diagnostic_or_inconclusive",
     "decision_consequence": "When independent outcomes are available but the result is underpowered for the minimally important effect, or the null is not rejected, the decision is inconclusive (never continue/stop on an underpowered signal)."
   },
@@ -148,7 +155,7 @@
     "name": "disjoint_by_candidate",
     "deterministic": true,
     "predeclared": true,
-    "description": "Each candidate (identified by manifest ID) belongs to exactly one arm. The proposal arm selects its top-k by rank from the shared pool; the random arm selects k from the REMAINING pool with the proposal arm's k candidates removed. A candidate is never counted in both arms, eliminating pseudoreplication. This single deterministic policy replaces any deduplicate_or_disjoint heuristic."
+    "description": "Each candidate is identified by one stable shared pool/manifest ID and belongs to exactly one arm. The ranked ID list must be a unique full permutation of that pool. The proposal arm selects its top-k IDs; the random arm selects k IDs from the remaining pool after those exact IDs are removed. A candidate is never counted in both arms, eliminating pseudoreplication. This single deterministic policy replaces any deduplicate_or_disjoint heuristic."
   },
   "outcome_contract": {
     "schema": "adversarial_independent_outcomes.v2",
@@ -185,6 +192,8 @@
       "missing required field",
       "malformed row",
       "candidate_manifest_sha256 or record_sha256 mismatch",
+      "missing external frozen candidate-manifest ID-to-SHA-256 binding",
+      "candidate_manifest_id appears in both arms",
       "execution_mode is fallback or degraded (or not native)",
       "target_planner_id != social_force",
       "target_planner_config_sha256 mismatch",
@@ -202,9 +211,9 @@
     "vocabulary": ["continue", "stop", "inconclusive"],
     "no_revise": true,
     "no_generic_blocked": true,
-    "continue": "independent outcomes valid AND (proposal_yield - random_yield) >= minimally_important_absolute_yield_improvement AND Fisher-exact two-sided null rejected at alpha=0.05.",
-    "stop": "independent outcomes valid AND (proposal_yield - random_yield) <= 0 (proposal does not beat random, or random is better).",
-    "inconclusive": "independent outcomes unavailable, fail-closed, underpowered for the minimally important effect, or the null is not rejected. Includes any missing/malformed/mismatched/fallback/degraded/lineage-incomplete outcome row.",
+    "continue": "independent outcomes valid AND powered for the minimally important effect AND (proposal_yield - random_yield) >= minimally_important_absolute_yield_improvement AND Fisher-exact two-sided null rejected at alpha=0.05.",
+    "stop": "independent outcomes valid AND powered for the minimally important effect AND (proposal_yield - random_yield) <= 0 (proposal does not beat random, or random is better).",
+    "inconclusive": "independent outcomes unavailable, fail-closed, underpowered for the minimally important effect (regardless of outcome sign), or the null is not rejected. Includes any missing/malformed/mismatched/fallback/degraded/lineage-incomplete outcome row.",
     "follows_execution_under_opposite_signs": "When archive-nearness and independent execution disagree (either sign), the decision follows independent execution. Both opposite-sign regressions are required tests."
   },
   "check_contract": {

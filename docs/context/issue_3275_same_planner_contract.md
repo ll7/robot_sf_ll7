@@ -37,19 +37,20 @@ contract before any bounded campaign:
   (SHA-256 `7bade1d5008d66eba9dfe6c9c72e72e5e6720e7acb96f17a90a61a4f0798f3d0`).
   Note: the #6139 closing comment quotes a different SHA-256
   (`1406ea54...`); the file is the authority here, not the comment.
-- Recertification left all 17 records **unchanged**, so the fit set is stable and
-  no record is silently replaced.
+- Recertification left all 17 records **unchanged**, but its corrected
+  eligibility decisions are authoritative. The six group-crossing `stress_only`
+  / `knife_edge` records are removed from the nominal fit set and are not
+  replaced.
 
-Fit set: the twelve `classic_group_crossing_medium` / `social_force` records (IDs
-and `entry_ids_sha256 = 5cf3bb352204d56832b25d6fd1f5c731983aa1ea47c4b3f7e806c332c544c6ad`
-live in `configs/adversarial/issue_3275_same_planner_contract.json`). The
-`stress_only` / `knife_edge` axis is the scenario-route benchmark eligibility,
-which is distinct from candidate certification: all twelve passed deterministic
-replay, independent-seed confirmation, and stable attribution. For a
-failure-neighborhood ranker, every certified `social_force` failure of the fit
-family is a valid neighborhood anchor.
+Fit set: the six corrected `eligible` `classic_group_crossing_medium` /
+`social_force` records (IDs and
+`entry_ids_sha256 = 41fa8863e2345a9cdc665ede7ac8e0110d93da042b4dd03ee2cc579c72f12e25`
+live in `configs/adversarial/issue_3275_same_planner_contract.json`). The six
+removed `stress_only` IDs and their hash are frozen in the same config, so the
+eligibility exclusion cannot silently drift.
 
-Excluded set: the five `classic_cross_trap_medium` / `goal` records (wrong target
+Excluded sets: the six group-crossing `stress_only` records (not nominally
+eligible) and the five `classic_cross_trap_medium` / `goal` records (wrong target
 planner and held-out family).
 
 Target planner: `social_force` (config SHA-256
@@ -59,12 +60,13 @@ arms. Held-out evaluation family: `classic_cross_trap_medium`.
 ## Train-only ranking (issue #6103 gap 1)
 
 `FailureArchiveProposalModel` is constructed from a fit-only payload of exactly
-the twelve frozen IDs (`fit_entry_ids`). The constructor drops every entry whose
-`archive_id` is not in the frozen set, so excluded and held-out-family records
-cannot influence scores or rank order even if the full archive is supplied. The
-negative-regression guarantee (tested): feeding the full 17-record archive yields
-the same fit entries and identical candidate scores/ranks as the 12-record
-fit-only payload, and the five excluded records are reported as dropped.
+the six nominally eligible frozen IDs (`fit_entry_ids`). The constructor drops
+every entry whose `archive_id` is not in the frozen set, so `stress_only`,
+excluded, and held-out-family records cannot influence scores or rank order even
+if the full archive is supplied. The negative-regression guarantee (tested):
+feeding the full 17-record archive yields the same fit entries and identical
+candidate scores/ranks as the six-record fit-only payload, and all eleven
+non-fit records (six `stress_only` plus five held-out) are reported as dropped.
 
 ## Independent outcomes are authoritative (issue #6103 gap 2)
 
@@ -87,9 +89,12 @@ SHA, selection arm + rank, candidate-pool seed/index, target planner ID + config
 SHA, scenario family + seed, execution commit + command/config lineage +
 native/fallback/degraded status, termination reason + independent failure
 outcome, scenario and candidate certification status, replay/confirmation
-lineage + record hash, and exclusion reason when inadmissible. Aggregate arrays
-derive from admitted rows only. Missing, malformed, mismatched, fallback,
-degraded, or lineage-incomplete rows fail closed (block the evaluation).
+lineage + record hash, and exclusion reason when inadmissible. Each admitted
+manifest SHA must match a separate, frozen ID-to-hash binding from the arm
+manifests; an outcome packet cannot self-attest it. A candidate manifest ID may
+appear in one arm only. Aggregate arrays derive from admitted rows only.
+Missing, malformed, mismatched, fallback, degraded, cross-arm-overlapping, or
+lineage-incomplete rows fail closed (block the evaluation).
 
 ## Estimand, power/sensitivity, and decision rule (issue #6103 gaps 4–5)
 
@@ -101,24 +106,28 @@ and stable attribution.
 
 Power/sensitivity (Fisher exact two-sided, alpha = 0.05): the boundary minimum
 detectable yield difference is ~0.50 at k = 10/arm, ~0.417 at k = 12/arm, and
-~0.25 at k = 20/arm. With the frozen budget of 12/arm and a minimally important
-absolute yield improvement of 0.20, the study is **underpowered**: a future run is
-labeled **diagnostic/inconclusive** unless a larger budget is authorized and a
-powered execution is approved.
+~0.25 at k = 20/arm. After excluding the six `stress_only` fit anchors, the
+candidate-level calculation was rechecked at the unchanged k = 12/arm budget:
+the ~0.417 boundary remains above the minimally important absolute yield
+improvement of 0.20. The study is **underpowered**. Every future underpowered
+result is **diagnostic/inconclusive**, whether it favors proposal or random;
+only a maintainer-authorized, powered budget can permit a continue/stop decision.
 
 Arm-overlap policy: **disjoint-by-candidate** (one deterministic predeclared
-policy). The proposal arm takes the top-k by rank; the random arm takes k from
-the remaining pool with the proposal arm's k removed; a candidate is never in
-both arms.
+policy). The model rank is converted to the shared pool's stable candidate IDs
+before assignment; the rank list must be a unique full permutation of that pool.
+The proposal arm takes the top-k IDs; the random arm takes k from the remaining
+pool with those exact IDs removed; a candidate is never in both arms.
 
 Decision rule vocabulary is exactly `continue | stop | inconclusive`:
 
 - `continue`: independent outcomes valid AND
   (proposal_yield - random_yield) >= minimally important AND null rejected AND
   powered;
-- `stop`: independent outcomes valid AND (proposal_yield - random_yield) <= 0;
+- `stop`: independent outcomes valid AND powered AND
+  (proposal_yield - random_yield) <= 0;
 - `inconclusive`: outcomes unavailable/fail-closed, underpowered, or null not
-  rejected.
+  rejected. Underpowered comes first, so it is never `continue` or `stop`.
 
 There is no `revise` and no generic `blocked` in this contract.
 
@@ -158,13 +167,11 @@ review; the implementing PR is left in draft. The worker does not self-close
 
 ## Risks and residual conditions
 
-- The "nominally eligible" reading: the canonical issue §2 asserts "exactly the
-  twelve frozen fit IDs" while the objective text says "nominally eligible". This
-  contract freezes **twelve** (matching the repeated "twelve" and §2's hard
-  assertion); the eligibility mix (6 eligible / 6 stress_only) is recorded in the
-  config so a reviewer can confirm or amend. Recertification left eligibility
-  unchanged, so no stop-condition-2 re-evaluation is triggered.
-- The study is underpowered at the frozen budget; any future `continue` claim
-  requires a maintainer amendment authorizing a larger, powered budget.
+- The final nominal fit set contains six anchors. Its IDs, hash, and the six
+  rejected `stress_only` IDs/hash derive directly from the corrected
+  recertification artifact; no replacement occurred.
+- The study is underpowered at the frozen budget; no future `continue` **or
+  `stop`** claim is valid without a maintainer amendment authorizing a larger,
+  powered budget.
 - Changing the primary planner, held-out family, estimand, effect margin, or
   decision rule requires an amendment to parent #3275 before any campaign.

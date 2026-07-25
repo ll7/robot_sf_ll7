@@ -12,7 +12,9 @@ The v2 contract replaces the deprecated flat-array v1 contract. Aggregate
 arrays (proposal/random/ranked outcomes) are DERIVED from admitted rows only and
 are never supplied independently of them. Rows that are missing, malformed,
 mismatched, fallback, degraded, or lineage-incomplete fail closed: they can never
-open the held-out gate or drive a verdict.
+open the held-out gate or drive a verdict. The candidate manifest hash must also
+match an external, frozen ID-to-hash binding; the packet cannot self-attest that
+lineage. A candidate manifest ID may appear in one arm only.
 
 When valid v2 rows are available, the top-level proposal/random metrics, the
 comparison, and the issue #2921 stop rule are computed EXCLUSIVELY from those
@@ -88,6 +90,7 @@ class AdmissionSpec:
     expected_eval_family: str
     confirmation_threshold: str = "3_of_5"
     expected_target_planner_config_sha256: str | None = None
+    expected_candidate_manifest_sha256_by_id: dict[str, str] | None = None
     expected_record_sha256_by_manifest: dict[str, str] | None = None
 
 
@@ -211,6 +214,10 @@ def _row_missing_fields(row: dict[str, Any], _row_id: Any, _spec: AdmissionSpec)
         return f"invalid selection_arm {row.get('selection_arm')!r}"
     if not isinstance(row.get("independent_failure_outcome"), bool):
         return "independent_failure_outcome must be bool"
+    if not isinstance(row.get("candidate_manifest_sha256"), str) or not row.get(
+        "candidate_manifest_sha256"
+    ):
+        return "candidate_manifest_sha256 must be a non-empty string"
     if not isinstance(row.get("execution_command"), list) or not row.get("execution_command"):
         return "execution_command must be a non-empty list"
     if not isinstance(row.get("execution_config_lineage"), dict):
@@ -271,6 +278,22 @@ def _row_lineage_drift(row: dict[str, Any], _row_id: Any, spec: AdmissionSpec) -
     return None
 
 
+def _row_candidate_manifest_hash_drift(
+    row: dict[str, Any], _row_id: Any, spec: AdmissionSpec
+) -> str | None:
+    """Require each row's manifest hash to match a frozen external binding."""
+    expected_hashes = spec.expected_candidate_manifest_sha256_by_id
+    if not expected_hashes:
+        return "expected candidate_manifest_sha256 binding is unavailable"
+    manifest_id = str(row["candidate_manifest_id"])
+    expected = expected_hashes.get(manifest_id)
+    if expected is None:
+        return "candidate_manifest_id is absent from the expected manifest-hash binding"
+    if row["candidate_manifest_sha256"] != expected:
+        return "candidate_manifest_sha256 mismatch for manifest"
+    return None
+
+
 def _row_record_hash_drift(row: dict[str, Any], _row_id: Any, spec: AdmissionSpec) -> str | None:
     """Validate per-manifest record-hash binding when expected hashes are supplied."""
     if not spec.expected_record_sha256_by_manifest:
@@ -288,6 +311,7 @@ _ROW_CHECKERS = (
     _row_execution_drift,
     _row_certification_drift,
     _row_lineage_drift,
+    _row_candidate_manifest_hash_drift,
     _row_record_hash_drift,
 )
 
@@ -336,6 +360,13 @@ def _candidate_level_outcomes(
         manifest_id = str(row["candidate_manifest_id"])
         by_arm_candidate[arm].setdefault(manifest_id, []).append(
             bool(row["independent_failure_outcome"])
+        )
+
+    overlap_ids = sorted(set(by_arm_candidate["proposal"]) & set(by_arm_candidate["random"]))
+    if overlap_ids:
+        return None, (
+            "candidate_manifest_id appears in both proposal and random arms: "
+            f"{', '.join(overlap_ids)}"
         )
 
     result: dict[str, dict[str, Any]] = {}

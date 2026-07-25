@@ -296,9 +296,13 @@ def build_archive_evaluation_provenance(
 
 
 def _negative_regression_checks(
-    payload: Any, archive: dict[str, Any], excl_cfg: dict[str, Any]
+    payload: Any,
+    archive: dict[str, Any],
+    *,
+    fit_cfg: dict[str, Any],
+    excl_cfg: dict[str, Any],
 ) -> tuple[list[str], dict[str, Any]]:
-    """Verify the full archive (incl. excluded records) yields the same fit entries."""
+    """Verify the full archive cannot reintroduce non-nominal or held-out records."""
     from robot_sf.adversarial.proposal_model import FailureArchiveProposalModel
 
     failures: list[str] = []
@@ -307,21 +311,44 @@ def _negative_regression_checks(
     )
     full_entry_ids = [entry.get("archive_id") for entry in full_model.entries]
     same = sorted(full_entry_ids) == sorted(payload.entry_ids)
+    dropped_ids = set(full_model.excluded_entry_ids)
+    expected_held_out_ids = set(payload.excluded_entry_ids)
+    expected_non_eligible_ids = set(payload.non_eligible_fit_entry_ids)
+    expected_dropped_ids = expected_held_out_ids | expected_non_eligible_ids
     checks = {
         "negative_regression_full_archive_same_fit_entries": same,
-        "negative_regression_excluded_dropped_count": len(full_model.excluded_entry_ids),
+        "negative_regression_non_fit_dropped_count": len(dropped_ids),
+        "negative_regression_held_out_dropped_count": len(dropped_ids & expected_held_out_ids),
+        "negative_regression_non_eligible_fit_dropped_count": len(
+            dropped_ids & expected_non_eligible_ids
+        ),
+        "negative_regression_dropped_ids_match_contract": dropped_ids == expected_dropped_ids,
     }
     if not same:
         failures.append("negative regression failed: full archive changed fit entries")
-    if len(full_model.excluded_entry_ids) != excl_cfg["count"]:
+    if payload.entry_ids != tuple(fit_cfg["entry_ids"]):
+        failures.append("negative regression failed: fit IDs do not match contract IDs")
+    if payload.excluded_entry_ids != tuple(excl_cfg["entry_ids"]):
+        failures.append("negative regression failed: held-out exclusion IDs do not match contract")
+    if len(dropped_ids & expected_held_out_ids) != excl_cfg["count"]:
         failures.append(
-            "negative regression failed: excluded drop count "
-            f"{len(full_model.excluded_entry_ids)} != {excl_cfg['count']}"
+            "negative regression failed: held-out drop count "
+            f"{len(dropped_ids & expected_held_out_ids)} != {excl_cfg['count']}"
+        )
+    if len(dropped_ids & expected_non_eligible_ids) != fit_cfg["excluded_from_nominal_fit_count"]:
+        failures.append(
+            "negative regression failed: non-eligible fit drop count "
+            f"{len(dropped_ids & expected_non_eligible_ids)} "
+            f"!= {fit_cfg['excluded_from_nominal_fit_count']}"
+        )
+    if dropped_ids != expected_dropped_ids:
+        failures.append(
+            "negative regression failed: full archive dropped IDs drifted from contract"
         )
     return failures, checks
 
 
-def _check_fit_only_model(
+def _check_fit_only_model(  # noqa: C901
     payload: Any,
     archive: dict[str, Any],
     *,
@@ -340,6 +367,19 @@ def _check_fit_only_model(
         "fit_entry_ids_sha256_matches_contract": (
             payload.entry_ids_sha256 == fit_cfg["entry_ids_sha256"]
         ),
+        "fit_entry_ids_match_contract": tuple(fit_cfg["entry_ids"]) == payload.entry_ids,
+        "excluded_from_nominal_fit_count": len(payload.non_eligible_fit_entry_ids),
+        "excluded_from_nominal_fit_ids_sha256": _payload_sha256(
+            list(payload.non_eligible_fit_entry_ids)
+        ),
+        "excluded_from_nominal_fit_ids_sha256_matches_contract": (
+            _payload_sha256(list(payload.non_eligible_fit_entry_ids))
+            == fit_cfg["excluded_from_nominal_fit_entry_ids_sha256"]
+        ),
+        "excluded_from_nominal_fit_ids_match_contract": (
+            tuple(fit_cfg["excluded_from_nominal_fit_entry_ids"])
+            == payload.non_eligible_fit_entry_ids
+        ),
         "excluded_count": len(payload.excluded_entry_ids),
         "planner_family_drift": drift,
     }
@@ -347,6 +387,17 @@ def _check_fit_only_model(
         failures.append(f"fit_count drift: {payload.count} != {fit_cfg['count']}")
     if payload.entry_ids_sha256 != fit_cfg["entry_ids_sha256"]:
         failures.append("fit_entry_ids_sha256 does not match contract")
+    if payload.entry_ids != tuple(fit_cfg["entry_ids"]):
+        failures.append("fit entry IDs do not match contract")
+    if len(payload.non_eligible_fit_entry_ids) != fit_cfg["excluded_from_nominal_fit_count"]:
+        failures.append("excluded-from-nominal-fit count does not match contract")
+    if (
+        _payload_sha256(list(payload.non_eligible_fit_entry_ids))
+        != fit_cfg["excluded_from_nominal_fit_entry_ids_sha256"]
+    ):
+        failures.append("excluded-from-nominal-fit IDs SHA-256 does not match contract")
+    if payload.non_eligible_fit_entry_ids != tuple(fit_cfg["excluded_from_nominal_fit_entry_ids"]):
+        failures.append("excluded-from-nominal-fit IDs do not match contract")
     if len(payload.excluded_entry_ids) != excl_cfg["count"]:
         failures.append(
             f"excluded count drift: {len(payload.excluded_entry_ids)} != {excl_cfg['count']}"
@@ -383,7 +434,9 @@ def _check_fit_only_model(
     if not checks["no_held_out_family_in_model"]:
         failures.append("a held-out family record entered the fit-only model")
 
-    neg_failures, neg_checks = _negative_regression_checks(payload, archive, excl_cfg)
+    neg_failures, neg_checks = _negative_regression_checks(
+        payload, archive, fit_cfg=fit_cfg, excl_cfg=excl_cfg
+    )
     checks.update(neg_checks)
     failures.extend(neg_failures)
     return failures, checks
@@ -437,8 +490,11 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
             fit_family=fit_cfg["scenario_family"],
             fit_planner=fit_cfg["target_planner"],
             excluded_family=excl_cfg["scenario_family"],
+            required_benchmark_eligibility=fit_cfg["required_benchmark_eligibility"],
             expected_count=fit_cfg["count"],
             expected_ids_sha256=fit_cfg["entry_ids_sha256"],
+            expected_non_eligible_count=fit_cfg["excluded_from_nominal_fit_count"],
+            expected_non_eligible_ids_sha256=fit_cfg["excluded_from_nominal_fit_entry_ids_sha256"],
         )
         attach_robot_geometry(payload, recert)
         drift = validate_fit_payload_integrity(
@@ -507,6 +563,15 @@ def parse_args() -> argparse.Namespace:
         help="Optional v2 row-level independent planner-execution outcome packet.",
     )
     parser.add_argument(
+        "--expected-candidate-manifest-hashes",
+        type=Path,
+        default=None,
+        help=(
+            "Frozen external JSON binding of candidate manifest IDs to SHA-256 values; required "
+            "before supplied independent outcomes can drive a decision."
+        ),
+    )
+    parser.add_argument(
         "--null-test-permutations", type=int, default=1000, help="Permutations for diagnostic null."
     )
     parser.add_argument(
@@ -521,6 +586,45 @@ def parse_args() -> argparse.Namespace:
     if args.null_test_permutations < 1:
         parser.error("--null-test-permutations must be >= 1")
     return args
+
+
+def load_expected_candidate_manifest_hashes(
+    path: Path | None,
+) -> tuple[dict[str, str] | None, str]:
+    """Load an external candidate-manifest hash binding fail-closed.
+
+    The outcome packet cannot establish its own manifest lineage. This separate
+    input must be a frozen arm-manifest binding with schema
+    ``adversarial_candidate_manifest_hash_bindings.v1`` and a non-empty
+    ``candidate_manifest_sha256_by_id`` object. Its values are compared against
+    every admitted outcome row by :class:`AdmissionSpec`.
+    """
+    if path is None:
+        return None, "expected candidate-manifest hash binding was not provided"
+    if not path.exists():
+        return None, f"expected candidate-manifest hash binding does not exist: {path}"
+    if path.stat().st_size == 0:
+        return None, f"expected candidate-manifest hash binding is empty: {path}"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return None, f"failed to load expected candidate-manifest hash binding: {exc}"
+    if not isinstance(payload, dict):
+        return None, "expected candidate-manifest hash binding must be a JSON object"
+    if payload.get("schema_version") != "adversarial_candidate_manifest_hash_bindings.v1":
+        return None, "unexpected candidate-manifest hash binding schema_version"
+    bindings = payload.get("candidate_manifest_sha256_by_id")
+    if not isinstance(bindings, dict) or not bindings:
+        return None, "candidate_manifest_sha256_by_id must be a non-empty object"
+    if any(
+        not isinstance(manifest_id, str)
+        or not manifest_id
+        or not isinstance(digest, str)
+        or not digest
+        for manifest_id, digest in bindings.items()
+    ):
+        return None, "candidate-manifest hash binding keys and values must be non-empty strings"
+    return {str(manifest_id): str(digest) for manifest_id, digest in bindings.items()}, "ok"
 
 
 def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
@@ -599,6 +703,37 @@ def _diagnostic_archive_nearness(
         ),
     }
     return random_metrics, proposal_metrics, comparison
+
+
+def _rank_pool_ids_by_candidate_identity(
+    model: Any,
+    pool: list[Any],
+    pool_ids: list[str],
+) -> list[str]:
+    """Return model rank order expressed in the shared pool's stable IDs.
+
+    ``FailureArchiveProposalModel.rank_candidates`` returns candidate objects,
+    not candidate-pool identifiers. The frozen disjoint-by-candidate policy is
+    defined over stable pool/manifest IDs, so converting objects to formatted
+    strings would disconnect proposal picks from the random arm's exclusion set.
+    Object identity is safe here because the ranker returns the exact objects it
+    received; duplicate or foreign objects fail closed.
+    """
+    if len(pool) != len(pool_ids) or len(set(pool_ids)) != len(pool_ids):
+        raise ValueError("candidate pool IDs must be unique and match the candidate pool")
+    id_by_candidate_identity = {
+        id(candidate): pool_id for pool_id, candidate in zip(pool_ids, pool, strict=True)
+    }
+    if len(id_by_candidate_identity) != len(pool):
+        raise ValueError("candidate pool contains duplicate object identities")
+    ranked_pool = model.rank_candidates(pool, strategy="nearest_neighbor")
+    ranked_ids: list[str] = []
+    for candidate, _score in ranked_pool:
+        pool_id = id_by_candidate_identity.get(id(candidate))
+        if pool_id is None:
+            raise ValueError("ranker returned a candidate not present in the shared pool")
+        ranked_ids.append(pool_id)
+    return ranked_ids
 
 
 def _assemble_report(  # noqa: PLR0913
@@ -688,6 +823,9 @@ def main() -> int:
     outcome_state, outcome_reason, outcome_data = load_independent_outcomes(
         args.evaluation_outcomes
     )
+    expected_manifest_hashes, manifest_binding_reason = load_expected_candidate_manifest_hashes(
+        args.expected_candidate_manifest_hashes
+    )
     state, reason = _resolve_run_state(
         archive_state=archive_state,
         archive_reason=archive_reason,
@@ -703,24 +841,16 @@ def main() -> int:
     rng = random.Random(args.seed)
     pool = [search_space.sample_candidate(rng) for _ in range(max(args.budget * 5, 50))]
     pool_ids = [f"pool_{i}" for i in range(len(pool))]
-    ranked_pool = model.rank_candidates(pool, strategy="nearest_neighbor")
-    ranked_ids = [f"pool_{i}" for i, _ in ranked_pool]
+    ranked_ids = _rank_pool_ids_by_candidate_identity(model, pool, pool_ids)
 
     from robot_sf.adversarial.disjoint_evaluation import assign_arms_disjoint_by_candidate
 
     arms = assign_arms_disjoint_by_candidate(
         ranked_ids, pool_ids, budget_per_arm=args.budget, rng_seed=args.seed
     )
-    proposal_set = set(arms.proposal_ids)
-    random_set = set(arms.random_ids)
-    proposal_selection = [
-        ranked_pool[i][0] for i, cid in enumerate(ranked_ids) if cid in proposal_set
-    ]
-    if not proposal_selection:
-        proposal_selection = [cand for cand, _ in ranked_pool[: args.budget]]
-    random_selection = [
-        pool[i] for i, cid in enumerate(pool_ids) if cid in random_set
-    ] or rng.sample(pool, min(args.budget, len(pool)))
+    pool_by_id = dict(zip(pool_ids, pool, strict=True))
+    proposal_selection = [pool_by_id[candidate_id] for candidate_id in arms.proposal_ids]
+    random_selection = [pool_by_id[candidate_id] for candidate_id in arms.random_ids]
 
     diagnostic_random_metrics, diagnostic_proposal_metrics, diagnostic_comparison = (
         _diagnostic_archive_nearness(model, proposal_selection, random_selection)
@@ -737,11 +867,17 @@ def main() -> int:
             expected_eval_family=frozen["expected_eval_family"],
             confirmation_threshold=frozen["confirmation_threshold"],
             expected_target_planner_config_sha256=frozen["expected_target_planner_config_sha256"],
+            expected_candidate_manifest_sha256_by_id=expected_manifest_hashes,
         ),
         expected_eval_archive_sha256=provenance.get("eval_archive_sha256"),
         n_permutations=args.null_test_permutations,
         seed=args.seed,
     )
+    independent_evaluation["candidate_manifest_hash_binding"] = {
+        "required": True,
+        "available": expected_manifest_hashes is not None,
+        "reason": manifest_binding_reason,
+    }
     provenance = build_archive_evaluation_provenance(
         archive_data,
         state=state,

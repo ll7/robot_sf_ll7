@@ -1041,6 +1041,16 @@ def assign_arms_disjoint_by_candidate(
         raise ValueError("budget_per_arm must be >= 0")
     ranked = list(ranked_pool_ids)
     pool = list(pool_ids)
+    if len(set(pool)) != len(pool):
+        raise ValueError("pool_ids must contain unique stable candidate IDs")
+    if len(set(ranked)) != len(ranked):
+        raise ValueError("ranked_pool_ids must contain unique stable candidate IDs")
+    unknown_ranked_ids = sorted(set(ranked) - set(pool))
+    if unknown_ranked_ids:
+        raise ValueError(f"ranked_pool_ids contains IDs absent from pool_ids: {unknown_ranked_ids}")
+    missing_ranked_ids = sorted(set(pool) - set(ranked))
+    if missing_ranked_ids:
+        raise ValueError(f"ranked_pool_ids omits pool IDs: {missing_ranked_ids}")
     proposal_ids = ranked[: min(budget_per_arm, len(ranked))]
     proposal_set = set(proposal_ids)
     remaining = [cid for cid in pool if cid not in proposal_set]
@@ -1161,9 +1171,10 @@ def classify_issue_3275_decision(
     Decision table:
 
     * independent outcomes unavailable/fail-closed -> ``inconclusive``;
-    * ``proposal_yield - random_yield <= 0`` -> ``stop``;
-    * outcomes valid but underpowered for the minimally important effect, or the
-      null is not rejected -> ``inconclusive``;
+    * outcomes valid but underpowered for the minimally important effect ->
+      ``inconclusive`` (before any continue/stop outcome sign is considered);
+    * powered outcomes with ``proposal_yield - random_yield <= 0`` -> ``stop``;
+    * powered outcomes whose null is not rejected -> ``inconclusive``;
     * otherwise (delta >= minimally important and null rejected and powered) ->
       ``continue``.
 
@@ -1186,12 +1197,12 @@ def classify_issue_3275_decision(
     if not independent_available:
         status = "inconclusive"
         reason = "independent_outcomes_unavailable_or_fail_closed"
-    elif delta <= 0.0:
-        status = "stop"
-        reason = "proposal_does_not_beat_random"
     elif not powered:
         status = "inconclusive"
         reason = "underpowered_for_minimally_important_effect"
+    elif delta <= 0.0:
+        status = "stop"
+        reason = "proposal_does_not_beat_random"
     elif not null_rejected:
         status = "inconclusive"
         reason = "null_not_rejected"

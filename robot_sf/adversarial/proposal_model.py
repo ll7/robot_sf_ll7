@@ -23,9 +23,10 @@ from robot_sf.adversarial.scenario_manifest import (
 #
 # The frozen same-planner contract (configs/adversarial/issue_3275_same_planner_
 # contract.json) requires FailureArchiveProposalModel to be initialized from a
-# FIT-ONLY payload: exactly the twelve corrected, nominally eligible
-# classic_group_crossing_medium / social_force records, excluding the five
-# classic_cross_trap_medium / goal records. The helpers below derive that payload
+# FIT-ONLY payload: exactly the corrected, nominally eligible
+# classic_group_crossing_medium / social_force records, excluding both
+# non-nominal fit-family records and the five classic_cross_trap_medium / goal
+# records. The helpers below derive that payload
 # deterministically from the corrected recertification artifact
 # (docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.
 # json), validate its count and hash, and build the fit-only archive payload from
@@ -46,6 +47,7 @@ class FitPayload:
     entry_ids: tuple[str, ...]
     count: int
     entry_ids_sha256: str
+    non_eligible_fit_entry_ids: tuple[str, ...]
     excluded_entry_ids: tuple[str, ...]
     fit_family: str
     fit_planner: str
@@ -69,17 +71,49 @@ def _load_json(path: str | Path) -> dict[str, Any]:
     return data
 
 
+def _fit_family_records(
+    recertification_data: dict[str, Any], *, fit_family: str
+) -> list[dict[str, Any]]:
+    """Return well-formed recertification records for one frozen fit family.
+
+    The corrected eligibility decision is authoritative for #3275. A malformed
+    fit-family row must therefore fail closed instead of being silently omitted
+    from either the nominal fit set or its recorded exclusion set.
+    """
+    records = recertification_data.get("records")
+    if not isinstance(records, list):
+        raise ValueError("recertification artifact missing 'records' list")
+    family_records: list[dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, dict) or record.get("scenario_family") != fit_family:
+            continue
+        archive_id = record.get("archive_id")
+        after = record.get("after")
+        if not isinstance(archive_id, str) or not archive_id:
+            raise ValueError(f"fit-family record has invalid archive_id: {archive_id!r}")
+        if not isinstance(after, dict) or not isinstance(after.get("benchmark_eligibility"), str):
+            raise ValueError(
+                f"fit-family record {archive_id!r} has no corrected benchmark_eligibility"
+            )
+        family_records.append(record)
+    if not family_records:
+        raise ValueError(f"no fit records found for scenario_family={fit_family!r}")
+    return family_records
+
+
 def derive_fit_ids_from_recertification(
     recertification_data: dict[str, Any],
     *,
     fit_family: str,
+    required_benchmark_eligibility: str = "eligible",
     expected_count: int | None = None,
     expected_ids_sha256: str | None = None,
 ) -> list[str]:
     """Derive and validate the frozen fit IDs from the recertification artifact.
 
-    Selects every record whose ``scenario_family`` equals ``fit_family`` from the
-    corrected recertification artifact. When ``expected_count`` and/or
+    Selects only records whose ``scenario_family`` equals ``fit_family`` and
+    whose corrected ``after.benchmark_eligibility`` equals
+    ``required_benchmark_eligibility``. When ``expected_count`` and/or
     ``expected_ids_sha256`` are provided, the derived set must match exactly or
     the function fails closed. The SHA-256 is computed over the canonical JSON
     of the sorted fit IDs, matching the contract's ``entry_ids_sha256``.
@@ -88,22 +122,28 @@ def derive_fit_ids_from_recertification(
         recertification_data: Parsed recertification artifact (dict with a
             ``records`` list).
         fit_family: The frozen fit scenario family.
+        required_benchmark_eligibility: Corrected eligibility tier required for
+            a nominal fit record. ``stress_only`` and all other tiers are
+            excluded when the frozen contract requires ``eligible``.
         expected_count: Optional required fit-record count.
         expected_ids_sha256: Optional required canonical SHA-256 of sorted IDs.
 
     Returns:
         The sorted list of fit archive IDs.
     """
-    records = recertification_data.get("records")
-    if not isinstance(records, list):
-        raise ValueError("recertification artifact missing 'records' list")
+    if not isinstance(required_benchmark_eligibility, str) or not required_benchmark_eligibility:
+        raise ValueError("required_benchmark_eligibility must be a non-empty string")
     fit_ids = sorted(
         str(record["archive_id"])
-        for record in records
-        if isinstance(record, dict) and record.get("scenario_family") == fit_family
+        for record in _fit_family_records(recertification_data, fit_family=fit_family)
+        if record["after"]["benchmark_eligibility"] == required_benchmark_eligibility
     )
     if not fit_ids:
-        raise ValueError(f"no fit records found for scenario_family={fit_family!r}")
+        raise ValueError(
+            "no nominal fit records found for "
+            f"scenario_family={fit_family!r}, "
+            f"benchmark_eligibility={required_benchmark_eligibility!r}"
+        )
     if expected_count is not None and len(fit_ids) != expected_count:
         raise ValueError(
             f"fit count drift: derived={len(fit_ids)} expected={expected_count}; "
@@ -116,6 +156,22 @@ def derive_fit_ids_from_recertification(
             f"fit IDs SHA-256 drift: derived={observed_sha} expected={expected_ids_sha256}"
         )
     return fit_ids
+
+
+def derive_non_eligible_fit_ids_from_recertification(
+    recertification_data: dict[str, Any],
+    *,
+    fit_family: str,
+    required_benchmark_eligibility: str,
+) -> list[str]:
+    """Return fit-family IDs excluded by the corrected eligibility requirement."""
+    if not isinstance(required_benchmark_eligibility, str) or not required_benchmark_eligibility:
+        raise ValueError("required_benchmark_eligibility must be a non-empty string")
+    return sorted(
+        str(record["archive_id"])
+        for record in _fit_family_records(recertification_data, fit_family=fit_family)
+        if record["after"]["benchmark_eligibility"] != required_benchmark_eligibility
+    )
 
 
 def derive_excluded_ids_from_recertification(
@@ -155,23 +211,50 @@ def build_fit_archive_payload(
     }
 
 
-def derive_fit_payload_from_recertification(
+def derive_fit_payload_from_recertification(  # noqa: PLR0913
     recertification_data: dict[str, Any],
     archive_data: dict[str, Any],
     *,
     fit_family: str,
     fit_planner: str,
     excluded_family: str,
+    required_benchmark_eligibility: str = "eligible",
     expected_count: int | None = None,
     expected_ids_sha256: str | None = None,
+    expected_non_eligible_count: int | None = None,
+    expected_non_eligible_ids_sha256: str | None = None,
 ) -> FitPayload:
     """Derive the full fit-only payload for the frozen #3275 contract."""
     fit_ids = derive_fit_ids_from_recertification(
         recertification_data,
         fit_family=fit_family,
+        required_benchmark_eligibility=required_benchmark_eligibility,
         expected_count=expected_count,
         expected_ids_sha256=expected_ids_sha256,
     )
+    non_eligible_fit_ids = derive_non_eligible_fit_ids_from_recertification(
+        recertification_data,
+        fit_family=fit_family,
+        required_benchmark_eligibility=required_benchmark_eligibility,
+    )
+    if (
+        expected_non_eligible_count is not None
+        and len(non_eligible_fit_ids) != expected_non_eligible_count
+    ):
+        raise ValueError(
+            "non-eligible fit count drift: "
+            f"derived={len(non_eligible_fit_ids)} expected={expected_non_eligible_count}"
+        )
+    observed_non_eligible_sha = _canonical_sha256(non_eligible_fit_ids)
+    if (
+        expected_non_eligible_ids_sha256 is not None
+        and observed_non_eligible_sha != expected_non_eligible_ids_sha256
+    ):
+        raise ValueError(
+            "non-eligible fit IDs SHA-256 drift: "
+            f"derived={observed_non_eligible_sha} "
+            f"expected={expected_non_eligible_ids_sha256}"
+        )
     excluded_ids = derive_excluded_ids_from_recertification(
         recertification_data,
         excluded_family=excluded_family,
@@ -184,6 +267,7 @@ def derive_fit_payload_from_recertification(
         entry_ids=tuple(fit_ids),
         count=len(fit_ids),
         entry_ids_sha256=_canonical_sha256(fit_ids),
+        non_eligible_fit_entry_ids=tuple(non_eligible_fit_ids),
         excluded_entry_ids=tuple(excluded_ids),
         fit_family=fit_family,
         fit_planner=fit_planner,
@@ -625,8 +709,11 @@ class FailureArchiveProposalModel:
             fit_family=fit_cfg["scenario_family"],
             fit_planner=fit_cfg["target_planner"],
             excluded_family=excl_cfg["scenario_family"],
+            required_benchmark_eligibility=fit_cfg["required_benchmark_eligibility"],
             expected_count=fit_cfg["count"],
             expected_ids_sha256=fit_cfg["entry_ids_sha256"],
+            expected_non_eligible_count=fit_cfg["excluded_from_nominal_fit_count"],
+            expected_non_eligible_ids_sha256=fit_cfg["excluded_from_nominal_fit_entry_ids_sha256"],
         )
         attach_robot_geometry(payload, recert)
         planner_drift = validate_fit_payload_integrity(
@@ -646,6 +733,7 @@ class FailureArchiveProposalModel:
             "contract_schema_version": contract["schema_version"],
             "fit_count": payload.count,
             "fit_entry_ids_sha256": payload.entry_ids_sha256,
+            "non_eligible_fit_count": len(payload.non_eligible_fit_entry_ids),
             "excluded_count": len(payload.excluded_entry_ids),
             "recertification_sha256": payload.recertification_sha256,
             "pre_correction_archive_sha256": source["pre_correction_archive_sha256"],

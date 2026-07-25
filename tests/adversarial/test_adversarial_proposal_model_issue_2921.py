@@ -17,6 +17,7 @@ from robot_sf.adversarial.proposal_model import (
 from robot_sf.adversarial.scenario_manifest import AdversarialScenarioManifest
 from scripts.adversarial.run_proposal_vs_random_issue_2921 import (
     ISSUE_3275_DECISION_VOCABULARY,
+    _rank_pool_ids_by_candidate_identity,
     classify_issue_2921_stop_rule,
     create_synthetic_archive,
     create_synthetic_search_space,
@@ -58,8 +59,13 @@ def _load_contract_payload():
         fit_family=contract["fit"]["scenario_family"],
         fit_planner=contract["fit"]["target_planner"],
         excluded_family=contract["exclusions"]["scenario_family"],
+        required_benchmark_eligibility=contract["fit"]["required_benchmark_eligibility"],
         expected_count=contract["fit"]["count"],
         expected_ids_sha256=contract["fit"]["entry_ids_sha256"],
+        expected_non_eligible_count=contract["fit"]["excluded_from_nominal_fit_count"],
+        expected_non_eligible_ids_sha256=contract["fit"][
+            "excluded_from_nominal_fit_entry_ids_sha256"
+        ],
     )
     return contract, payload, archive
 
@@ -69,28 +75,56 @@ def test_check_contract_validates_frozen_contract() -> None:
     exit_code, verdict = run_check_contract(_CONTRACT, repo_root=_REPO_ROOT)
     assert exit_code == 0
     assert verdict["ok"] is True
-    assert verdict["checks"]["fit_count"] == 12
-    assert verdict["checks"]["model_entry_count"] == 12
+    assert verdict["checks"]["fit_count"] == 6
+    assert verdict["checks"]["model_entry_count"] == 6
     assert verdict["checks"]["fit_entry_ids_sha256_matches_contract"] is True
+    assert verdict["checks"]["fit_entry_ids_match_contract"] is True
+    assert verdict["checks"]["excluded_from_nominal_fit_count"] == 6
+    assert verdict["checks"]["excluded_from_nominal_fit_ids_sha256_matches_contract"] is True
     assert verdict["checks"]["negative_regression_full_archive_same_fit_entries"] is True
-    assert verdict["checks"]["negative_regression_excluded_dropped_count"] == 5
+    assert verdict["checks"]["negative_regression_non_fit_dropped_count"] == 11
+    assert verdict["checks"]["negative_regression_held_out_dropped_count"] == 5
+    assert verdict["checks"]["negative_regression_non_eligible_fit_dropped_count"] == 6
+    assert verdict["checks"]["negative_regression_dropped_ids_match_contract"] is True
     assert verdict["checks"]["no_held_out_family_in_model"] is True
     assert verdict["failures"] == []
 
 
-def test_fit_only_model_uses_exactly_the_twelve_frozen_fit_ids() -> None:
-    """The fit-only model sees exactly the twelve fit IDs and no held-out entry."""
-    _contract, payload, _ = _load_contract_payload()
+def test_fit_only_model_uses_exactly_the_six_nominally_eligible_fit_ids() -> None:
+    """The fit-only model excludes every corrected stress-only fit-family record."""
+    contract, payload, _ = _load_contract_payload()
     model = FailureArchiveProposalModel(
         payload.archive_payload, fit_entry_ids=payload.entry_ids, feature_view="family_invariant"
     )
     assert model.state == "active"
-    assert len(model.entries) == 12
+    assert len(model.entries) == 6
     model_ids = {entry["archive_id"] for entry in model.entries}
     assert model_ids == set(payload.entry_ids)
+    assert model_ids == set(contract["fit"]["entry_ids"])
+    assert set(payload.non_eligible_fit_entry_ids) == set(
+        contract["fit"]["excluded_from_nominal_fit_entry_ids"]
+    )
+    assert model_ids.isdisjoint(payload.non_eligible_fit_entry_ids)
     # Every fit entry is group_crossing/social_force; no cross_trap leakage.
     assert all("classic_group_crossing_medium" in aid for aid in model_ids)
     assert not any("classic_cross_trap_medium" in aid for aid in model_ids)
+
+
+def test_frozen_contract_factory_preserves_nominal_fit_and_exclusion_lineage() -> None:
+    """The public factory enforces the six-anchor frozen contract end to end."""
+    model, provenance = FailureArchiveProposalModel.from_frozen_contract(
+        _CONTRACT, repo_root=_REPO_ROOT
+    )
+
+    assert model.state == "active"
+    assert len(model.entries) == 6
+    assert all("robot" in entry for entry in model.entries)
+    assert provenance["fit_count"] == 6
+    assert provenance["non_eligible_fit_count"] == 6
+    assert provenance["excluded_count"] == 5
+    assert provenance["fit_only_initialized"] is True
+    assert provenance["model_entry_count"] == 6
+    assert provenance["planner_drift"] == {}
 
 
 def test_negative_regression_excluded_records_cannot_change_scores_or_ranks() -> None:
@@ -104,8 +138,8 @@ def test_negative_regression_excluded_records_cannot_change_scores_or_ranks() ->
     model_full_archive = FailureArchiveProposalModel(
         archive, fit_entry_ids=fit_ids, feature_view="absolute"
     )
-    # The full-archive model drops exactly the 5 excluded records.
-    assert len(model_full_archive.excluded_entry_ids) == 5
+    # The full archive drops six ineligible fit-family records plus five held-out records.
+    assert len(model_full_archive.excluded_entry_ids) == 11
     assert {e["archive_id"] for e in model_fit_only.entries} == {
         e["archive_id"] for e in model_full_archive.entries
     }
@@ -249,6 +283,23 @@ def test_deterministic_ranking() -> None:
     assert ranked[0][0] == c_close
     assert ranked[1][0] == c_far
     assert ranked[0][1] > ranked[1][1]
+
+
+def test_runner_converts_ranked_candidates_to_stable_pool_ids_before_arm_assignment() -> None:
+    """The random arm removes the actual ranked proposal candidates, not object reprs."""
+    from robot_sf.adversarial.disjoint_evaluation import assign_arms_disjoint_by_candidate
+
+    model = FailureArchiveProposalModel(create_synthetic_archive(), create_synthetic_search_space())
+    pool = [_candidate(9.0, 9.0), _candidate(2.1, 2.1), _candidate(3.0, 3.0)]
+    pool_ids = ["pool_far", "pool_close", "pool_mid"]
+
+    ranked_ids = _rank_pool_ids_by_candidate_identity(model, pool, pool_ids)
+    arms = assign_arms_disjoint_by_candidate(ranked_ids, pool_ids, budget_per_arm=1, rng_seed=7)
+
+    assert ranked_ids[0] == "pool_close"
+    assert set(ranked_ids) == set(pool_ids)
+    assert set(arms.proposal_ids).isdisjoint(arms.random_ids)
+    assert arms.proposal_ids == ["pool_close"]
 
 
 def test_score_strategies_and_empty_candidate_ranking() -> None:
@@ -457,6 +508,16 @@ def _v2_outcome_packet(
     }
 
 
+def _manifest_hash_binding(packet: dict[str, Any]) -> dict[str, Any]:
+    """Build the separately supplied frozen manifest-hash binding test fixture."""
+    return {
+        "schema_version": "adversarial_candidate_manifest_hash_bindings.v1",
+        "candidate_manifest_sha256_by_id": {
+            row["candidate_manifest_id"]: row["candidate_manifest_sha256"] for row in packet["rows"]
+        },
+    }
+
+
 def _v2_row(row_id: str, manifest_id: str, arm: str, rank: int, failure: bool) -> dict[str, Any]:
     """Build one admissible v2 outcome row."""
     return {
@@ -547,23 +608,21 @@ def test_real_archive_with_independent_outcomes_follows_execution(
     archive_path = tmp_path / "archive.json"
     search_space_path = tmp_path / "search_space.yaml"
     outcomes_path = tmp_path / "outcomes.json"
+    manifest_hashes_path = tmp_path / "manifest_hashes.json"
     output_json = tmp_path / "report.json"
     archive = _two_family_archive()
     archive_path.write_text(json.dumps(archive), encoding="utf-8")
     search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
     split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
     # Proposal arm: 4/4 certified failures; random arm: 0/4 (execution favors proposal).
-    outcomes_path.write_text(
-        json.dumps(
-            _v2_outcome_packet(
-                eval_archive_sha256=archive_sha256(split.eval_entries),
-                proposal_failures=4,
-                random_failures=0,
-                per_arm=4,
-            )
-        ),
-        encoding="utf-8",
+    packet = _v2_outcome_packet(
+        eval_archive_sha256=archive_sha256(split.eval_entries),
+        proposal_failures=4,
+        random_failures=0,
+        per_arm=4,
     )
+    outcomes_path.write_text(json.dumps(packet), encoding="utf-8")
+    manifest_hashes_path.write_text(json.dumps(_manifest_hash_binding(packet)), encoding="utf-8")
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -574,6 +633,8 @@ def test_real_archive_with_independent_outcomes_follows_execution(
             search_space_path.as_posix(),
             "--evaluation-outcomes",
             outcomes_path.as_posix(),
+            "--expected-candidate-manifest-hashes",
+            manifest_hashes_path.as_posix(),
             "--budget",
             "4",
             "--seed",
@@ -588,6 +649,11 @@ def test_real_archive_with_independent_outcomes_follows_execution(
     assert report["independent_outcome_evaluation"]["independent_outcomes_available"] is True
     assert report["independent_outcome_evaluation"]["proposal_failure_yield"] == 1.0
     assert report["independent_outcome_evaluation"]["random_failure_yield"] == 0.0
+    assert report["independent_outcome_evaluation"]["candidate_manifest_hash_binding"] == {
+        "required": True,
+        "available": True,
+        "reason": "ok",
+    }
     # k=4 is underpowered for delta=0.20 -> inconclusive (honest, not continue).
     assert report["issue_2921_stop_rule"]["status"] == "inconclusive"
     assert report["issue_2921_stop_rule"]["vocabulary"] == list(ISSUE_3275_DECISION_VOCABULARY)
@@ -597,33 +663,29 @@ def test_real_archive_with_independent_outcomes_follows_execution(
     )
 
 
-def test_opposite_sign_regression_execution_favors_random_decides_stop(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """When execution favors random (opposite sign to archive-nearness), decision is stop."""
+def test_underpowered_execution_favors_random_is_inconclusive(tmp_path: Path, monkeypatch) -> None:
+    """Underpowered random-favoring execution cannot stop the study."""
     from robot_sf.adversarial.disjoint_evaluation import archive_sha256, disjoint_family_split
     from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
 
     archive_path = tmp_path / "archive.json"
     search_space_path = tmp_path / "search_space.yaml"
     outcomes_path = tmp_path / "outcomes.json"
+    manifest_hashes_path = tmp_path / "manifest_hashes.json"
     output_json = tmp_path / "report.json"
     archive = _two_family_archive()
     archive_path.write_text(json.dumps(archive), encoding="utf-8")
     search_space_path.write_text(_SEARCH_SPACE_YAML, encoding="utf-8")
     split = disjoint_family_split(archive["entries"], eval_fraction=0.5, seed=7)
-    # Execution favors random: 0 proposal failures vs 4 random failures -> stop.
-    outcomes_path.write_text(
-        json.dumps(
-            _v2_outcome_packet(
-                eval_archive_sha256=archive_sha256(split.eval_entries),
-                proposal_failures=0,
-                random_failures=4,
-                per_arm=4,
-            )
-        ),
-        encoding="utf-8",
+    # Execution favors random, but k=4 is underpowered for the frozen 0.20 effect.
+    packet = _v2_outcome_packet(
+        eval_archive_sha256=archive_sha256(split.eval_entries),
+        proposal_failures=0,
+        random_failures=4,
+        per_arm=4,
     )
+    outcomes_path.write_text(json.dumps(packet), encoding="utf-8")
+    manifest_hashes_path.write_text(json.dumps(_manifest_hash_binding(packet)), encoding="utf-8")
     monkeypatch.setattr(
         "sys.argv",
         [
@@ -634,6 +696,8 @@ def test_opposite_sign_regression_execution_favors_random_decides_stop(
             search_space_path.as_posix(),
             "--evaluation-outcomes",
             outcomes_path.as_posix(),
+            "--expected-candidate-manifest-hashes",
+            manifest_hashes_path.as_posix(),
             "--budget",
             "4",
             "--seed",
@@ -645,8 +709,8 @@ def test_opposite_sign_regression_execution_favors_random_decides_stop(
     assert script_main() == 0
     report = json.loads(output_json.read_text("utf-8"))
     assert report["independent_outcome_evaluation"]["comparison"]["yield_improvement"] < 0.0
-    assert report["issue_2921_stop_rule"]["status"] == "stop"
-    assert report["issue_2921_stop_rule"]["reason"] == "proposal_does_not_beat_random"
+    assert report["issue_2921_stop_rule"]["status"] == "inconclusive"
+    assert report["issue_2921_stop_rule"]["reason"] == "underpowered_for_minimally_important_effect"
 
 
 def test_real_archive_with_circular_outcomes_stays_fail_closed(tmp_path: Path, monkeypatch) -> None:

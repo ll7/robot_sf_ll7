@@ -393,6 +393,18 @@ def test_assign_arms_disjoint_rejects_negative_budget() -> None:
         assign_arms_disjoint_by_candidate(["a"], ["a"], budget_per_arm=-1, rng_seed=0)
 
 
+def test_assign_arms_disjoint_rejects_non_pool_or_partial_rank_ids() -> None:
+    """Arm assignment fails closed unless rank IDs are a full pool-ID permutation."""
+    with pytest.raises(ValueError, match="absent from pool_ids"):
+        assign_arms_disjoint_by_candidate(
+            ["candidate-object"], ["pool_0"], budget_per_arm=1, rng_seed=0
+        )
+    with pytest.raises(ValueError, match="omits pool IDs"):
+        assign_arms_disjoint_by_candidate(
+            ["pool_0"], ["pool_0", "pool_1"], budget_per_arm=1, rng_seed=0
+        )
+
+
 def test_fisher_exact_extremes_and_symmetry() -> None:
     """Disjoint counts reject; identical counts do not."""
     assert fisher_exact_two_sided(0, 4, 4) <= 0.05
@@ -430,7 +442,21 @@ def test_classify_issue_3275_decision_inconclusive_without_outcomes() -> None:
 
 
 def test_classify_issue_3275_decision_stop_when_random_better() -> None:
-    """Random beating proposal -> stop."""
+    """A powered random-favoring result stops the proposal lane."""
+    decision = classify_issue_3275_decision(
+        proposal_yield=0.1,
+        random_yield=0.5,
+        minimally_important=0.2,
+        null_rejected=False,
+        powered=True,
+        independent_available=True,
+    )
+    assert decision["status"] == "stop"
+    assert decision["reason"] == "proposal_does_not_beat_random"
+
+
+def test_classify_issue_3275_decision_underpowered_random_better_is_inconclusive() -> None:
+    """Underpowered evidence is inconclusive even when random has the better yield."""
     decision = classify_issue_3275_decision(
         proposal_yield=0.1,
         random_yield=0.5,
@@ -439,8 +465,8 @@ def test_classify_issue_3275_decision_stop_when_random_better() -> None:
         powered=False,
         independent_available=True,
     )
-    assert decision["status"] == "stop"
-    assert decision["reason"] == "proposal_does_not_beat_random"
+    assert decision["status"] == "inconclusive"
+    assert decision["reason"] == "underpowered_for_minimally_important_effect"
 
 
 def test_classify_issue_3275_decision_inconclusive_when_underpowered() -> None:

@@ -289,6 +289,11 @@ def _variant_manifest(variant: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _payload_kind(*, patch: Any, observation_noise: Any) -> str:
+    """Classify a variant payload as patch, observation_noise, both, or none.
+
+    Returns:
+        One of ``patch_and_observation_noise``, ``patch``, ``observation_noise``, or ``none``.
+    """
     if patch is not None and observation_noise is not None:
         return "patch_and_observation_noise"
     if patch is not None:
@@ -299,6 +304,11 @@ def _payload_kind(*, patch: Any, observation_noise: Any) -> str:
 
 
 def _surface_relationship(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Describe how the canonical ``axes`` surface relates to the secondary ``fidelity_axes``.
+
+    Returns:
+        A mapping describing the canonical and secondary axis surfaces and their relationship.
+    """
     fidelity_axes = config.get("fidelity_axes")
     secondary_axis_keys = (
         sorted(str(key) for key in fidelity_axes) if isinstance(fidelity_axes, dict) else []

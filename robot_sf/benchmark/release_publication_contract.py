@@ -65,6 +65,11 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _sha256(path: Path) -> str:
+    """Compute the SHA-256 hex digest of a file, reading it in chunks.
+
+    Returns:
+        The SHA-256 hex digest of the file contents.
+    """
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -106,6 +111,7 @@ def _parse_checksums(path: Path) -> dict[str, str]:
 
 
 def _campaign_block(summary: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return the ``campaign`` object from a campaign summary, failing closed when absent."""
     campaign = summary.get("campaign")
     if not isinstance(campaign, Mapping):
         raise ValueError("campaign_summary.json: missing object field 'campaign'")

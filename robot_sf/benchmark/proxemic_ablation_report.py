@@ -388,6 +388,11 @@ def _index_rows(
     records: Sequence[Mapping[str, Any]],
     blockers: list[str],
 ) -> dict[tuple[str, str], Mapping[str, Any]]:
+    """Index usable rows by pair key, recording blockers for bad, missing, or duplicate keys.
+
+    Returns:
+        The index mapping each scenario/seed pair key to its usable record.
+    """
     index: dict[tuple[str, str], Mapping[str, Any]] = {}
     for idx, record in enumerate(records):
         status = str(record.get("row_status", record.get("status", "native"))).lower()
@@ -404,6 +409,7 @@ def _index_rows(
 
 
 def _pair_key(record: Mapping[str, Any]) -> tuple[str, str] | None:
+    """Return the scenario_id/seed pair key, or None when a pair field is absent."""
     missing = [field for field in PAIR_KEYS if field not in record]
     if missing:
         return None
@@ -415,6 +421,7 @@ def _validate_metric_fields(
     records: Sequence[Mapping[str, Any]],
     blockers: list[str],
 ) -> None:
+    """Append blockers for paired rows missing report metrics or holding invalid caveat values."""
     for idx, record in enumerate(records):
         missing = [metric for metric in REPORT_METRICS if _extract_float(record, metric) is None]
         missing.extend(metric for metric in REPORT_CAVEATS if _get_alias(record, metric) is None)
@@ -432,6 +439,11 @@ def _validate_metric_fields(
 
 
 def _summarize_arm(arm: str, records: Sequence[Mapping[str, Any]]) -> ArmSummary:
+    """Compute the mean metric and rate summary for one paired arm.
+
+    Returns:
+        The ArmSummary holding mean metrics and rates for the paired arm.
+    """
     return ArmSummary(
         arm=arm,
         rows=len(records),
@@ -445,10 +457,20 @@ def _summarize_arm(arm: str, records: Sequence[Mapping[str, Any]]) -> ArmSummary
 
 
 def _required_values(records: Sequence[Mapping[str, Any]], metric: str) -> list[float]:
+    """Collect the finite float values of one metric across all records.
+
+    Returns:
+        The list of finite float values of the metric across all records.
+    """
     return [value for record in records if (value := _extract_float(record, metric)) is not None]
 
 
 def _bool_values(records: Sequence[Mapping[str, Any]], field: str) -> list[float]:
+    """Collect parseable boolean field values across records as floats.
+
+    Returns:
+        The parseable boolean field values across records, encoded as floats.
+    """
     values: list[float] = []
     for record in records:
         parsed = _extract_bool(record, field)
@@ -459,6 +481,11 @@ def _bool_values(records: Sequence[Mapping[str, Any]], field: str) -> list[float
 
 
 def _extract_bool(record: Mapping[str, Any], field: str) -> bool | None:
+    """Parse an aliased field into a boolean, returning None when absent or unrecognized.
+
+    Returns:
+        The parsed boolean value, or None when the field is absent or unrecognized.
+    """
     raw = _get_alias(record, field)
     if raw is None:
         return None
@@ -478,6 +505,11 @@ def _extract_bool(record: Mapping[str, Any], field: str) -> bool | None:
 
 
 def _extract_float(record: Mapping[str, Any], metric: str) -> float | None:
+    """Parse an aliased metric into a finite float, returning None when absent or non-finite.
+
+    Returns:
+        The parsed finite float value, or None when the metric is absent or non-finite.
+    """
     raw = _get_alias(record, metric)
     if raw is None:
         return None
@@ -491,6 +523,7 @@ def _extract_float(record: Mapping[str, Any], metric: str) -> float | None:
 
 
 def _get_alias(record: Mapping[str, Any], metric: str) -> Any | None:
+    """Return the first non-None value among a metric's known field aliases."""
     for alias in _FIELD_ALIASES[metric]:
         value = _get_nested(record, alias)
         if value is not None:
@@ -499,6 +532,11 @@ def _get_alias(record: Mapping[str, Any], metric: str) -> Any | None:
 
 
 def _get_nested(record: Mapping[str, Any], dotted: str) -> Any | None:
+    """Resolve a dotted key path through nested mappings, returning None when absent.
+
+    Returns:
+        The value at the dotted key path, or None when any segment is absent.
+    """
     current: Any = record
     for part in dotted.split("."):
         if not isinstance(current, Mapping) or part not in current:
@@ -508,6 +546,7 @@ def _get_nested(record: Mapping[str, Any], dotted: str) -> Any | None:
 
 
 def _mean(values: Iterable[float]) -> float:
+    """Return the arithmetic mean of the values, or 0.0 when empty."""
     value_list = list(values)
     if not value_list:
         return 0.0
@@ -515,6 +554,11 @@ def _mean(values: Iterable[float]) -> float:
 
 
 def _proxemic_costmap_metadata(record: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Locate proxemic_costmap metadata under any supported algorithm_metadata nesting.
+
+    Returns:
+        The proxemic_costmap metadata mapping, or None when no supported nesting holds it.
+    """
     algorithm_metadata = record.get("algorithm_metadata")
     if not isinstance(algorithm_metadata, Mapping):
         return None
@@ -535,6 +579,7 @@ def _proxemic_costmap_metadata(record: Mapping[str, Any]) -> Mapping[str, Any] |
 
 
 def _first_present(record: Mapping[str, Any], *fields: str) -> Any | None:
+    """Return the value of the first field present in the record, or None."""
     for field in fields:
         if field in record:
             return record[field]
@@ -542,12 +587,22 @@ def _first_present(record: Mapping[str, Any], *fields: str) -> Any | None:
 
 
 def _safe_ratio(numerator: float, denominator: float) -> float:
+    """Divide numerator by denominator, returning 0.0 when the denominator is zero.
+
+    Returns:
+        The quotient of numerator over denominator, or 0.0 when the denominator is zero.
+    """
     if denominator == 0.0:
         return 0.0
     return numerator / denominator
 
 
 def _arm_summary_dict(summary: ArmSummary) -> dict[str, float | int | str]:
+    """Convert an ArmSummary dataclass into a plain JSON-serializable dictionary.
+
+    Returns:
+        The plain JSON-serializable dictionary of the ArmSummary fields.
+    """
     return {
         "arm": summary.arm,
         "rows": summary.rows,
@@ -561,6 +616,11 @@ def _arm_summary_dict(summary: ArmSummary) -> dict[str, float | int | str]:
 
 
 def _config_provenance(path: Path, parsed: Mapping[str, Any]) -> dict[str, Any]:
+    """Build path, sha256, and parameter provenance for a loaded config file.
+
+    Returns:
+        The provenance dictionary with the config path, sha256, and parameters.
+    """
     data = path.read_bytes()
     return {
         "path": str(path),

@@ -554,10 +554,11 @@ def _validate_zanlungo_parameters(parameters: Mapping[str, Any]) -> None:
 def _parameter_bookkeeping_complete(
     cases: tuple[SensitivityCase, ...], reference_case_id: str
 ) -> bool:
-    """Return whether each Zanlungo case varies exactly one parameter relative to the reference.
+    """Return whether Zanlungo cases satisfy reference and variant parameter bookkeeping.
 
-    Non-Zanlungo cases must carry no parameters; each Zanlungo case must differ from the
-    reference in exactly its declared ``varied_parameter`` and by the recorded relative factor.
+    Non-Zanlungo cases must carry no parameters. The reference Zanlungo row deliberately uses the
+    ``varied_parameter="reference"`` sentinel and a factor of ``1.0``; each non-reference variant
+    must differ from it in exactly its declared parameter and by the recorded relative factor.
     """
     reference = next(case for case in cases if case.case_id == reference_case_id)
     reference_parameters = dict(reference.parameters)

@@ -56,6 +56,7 @@ class _CampcEnvAdapter:
     """
 
     def __init__(self, env_config: configparser.RawConfigParser) -> None:
+        """Initialize the adapter from the upstream env config (time step/limit and scenario name)."""
         self.config = env_config
         self.time_step = env_config.getfloat("env", "time_step")
         self.time_limit = env_config.getfloat("env", "time_limit")
@@ -87,6 +88,7 @@ class _CampcPolicyRunner:
         *,
         omega_max: float,
     ) -> None:
+        """Bind the CAMPC policy, env adapter, and state classes, recording the yaw-rate limit."""
         self._policy = policy
         self._env = env
         self._full_state_cls = full_state_cls

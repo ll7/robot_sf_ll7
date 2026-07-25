@@ -830,14 +830,17 @@ def build_sipp_lattice_config(cfg: dict[str, Any] | None) -> SippLatticeConfig:
     defaults = SippLatticeConfig()
 
     def _get_float(key: str) -> float:
+        """Return config ``key`` as a float, falling back to the default when omitted."""
         value = cfg.get(key)
         return float(getattr(defaults, key, 0.0) if value is None else value)
 
     def _get_int(key: str) -> int:
+        """Return config ``key`` as an int, falling back to the default when omitted."""
         value = cfg.get(key)
         return int(getattr(defaults, key, 1) if value is None else value)
 
     def _get_bool(key: str) -> bool:
+        """Return config ``key`` as a bool, coercing truthy strings and defaulting when omitted."""
         v = cfg.get(key)
         if v is None:
             v = getattr(defaults, key, False)

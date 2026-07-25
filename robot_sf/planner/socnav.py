@@ -397,6 +397,7 @@ class SamplingPlannerAdapter(OccupancyAwarePlannerMixin):
         """Minimal goal-distance objective for the upstream sampling planner."""
 
         def __init__(self, goal_pos: np.ndarray | None = None) -> None:
+            """Initialize the goal-distance objective, defaulting the goal to the origin."""
             self._goal_pos = (
                 np.zeros(2, dtype=float) if goal_pos is None else np.asarray(goal_pos, dtype=float)
             )

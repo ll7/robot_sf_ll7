@@ -1,7 +1,7 @@
 {
   "schema_version": "benchmark-amv-coverage-summary.v1",
-  "campaign_id": "issue_6095_stress_discriminability_v1_20260722_163914",
-  "generated_at_utc": "2026-07-22T14:39:14.348377Z",
+  "campaign_id": "issue_6095_stress_discriminability_v1_20260725_final",
+  "generated_at_utc": "2026-07-25T05:05:53.339378Z",
   "profile_name": "amv-paper-v1",
   "contract_version": "1",
   "coverage_enforcement": "warn",

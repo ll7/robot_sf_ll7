@@ -1,8 +1,10 @@
 # Issue #6095 S10 ORCA/PPO Discriminability Calibration Evidence (2026-07-22)
 
 Compact preflight evidence for the issue #6095 benchmark campaign. The configs are
-ready for SLURM execution; this evidence captures config validation and scenario
-preview outputs only. It is not a completed benchmark or a discriminability result.
+validated for a future staged execution; this evidence captures config validation
+and scenario preview outputs only. It is not a completed benchmark or a
+discriminability result. The metadata-only checkpoint check is not submit-safe.
+S10 denotes the frozen ten-seed schedule (111-120).
 
 ## Source
 
@@ -27,6 +29,26 @@ Preflight outputs generated via `scripts/tools/run_camera_ready_benchmark.py --m
 | Kinematics | differential_drive | differential_drive |
 | PPO checkpoint | `ppo_expert_issue_791_reward_curriculum_eval_aligned_large_capacity_20260417` | same |
 | Expected rows | 80 (4x10x2) | 960 (48x10x2) |
+
+## Exact Preflight Provenance
+
+The packet was regenerated from source revision
+`c24325e76a7c831941e0efe7ac8b25e231b9574b` with the canonical
+metadata-only preflight command. Each preflight artifact records the
+repository-relative source config and its full source-file SHA-256.
+
+| Property | Nominal | Stress |
+|---|---|---|
+| Campaign ID | `issue_6095_nominal_discriminability_v1_20260725_final` | `issue_6095_stress_discriminability_v1_20260725_final` |
+| Config hash | `47d684f55e8c1377` | `0375e182d186a8bc` |
+| Source config SHA-256 | `3bf27cc362055e6874125f93b793c70f099ce6049641b60c1cb69974b3a55df7` | `e8f8b56097964568da4784054d23e1c590c14d32634c8ec6d465f735d1208dc6` |
+| Clearance warnings | 2 total; 1 certified, 1 unresolved | 15 total; all 15 certified |
+| ORCA native prerequisite | `rvo2` import passed | `rvo2` import passed |
+| PPO checkpoint mode | metadata-only; stageable remote; not submit-safe | metadata-only; stageable remote; not submit-safe |
+
+The stress certifications retain their Issue #1105 planner-attribution caveats.
+The remaining nominal `empty_map_8_directions_east` map-level warning is
+explicitly unresolved and must remain a caveat in any later campaign report.
 
 ## Execution Status
 

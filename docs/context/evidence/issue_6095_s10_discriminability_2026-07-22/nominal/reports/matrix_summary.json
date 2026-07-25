@@ -3,7 +3,7 @@
   "rows": [
     {
       "scenario_matrix": "configs/scenarios/nominal_v1.yaml",
-      "scenario_matrix_hash": "6d48b0410b14",
+      "scenario_matrix_hash": "c70233c8e7ae",
       "scenario_count": 4,
       "scenario_candidates": [],
       "synthetic_actuation_profile": null,
@@ -39,14 +39,14 @@
       "observation_noise.profile": "none",
       "observation_noise.enabled": false,
       "observation_noise_hash": "0a5609f0b2b1",
-      "config_hash": "91e9b28ba49b53fe",
-      "git_commit": "301edc874eeb693aae21a83da8b25c71a8bb8fef",
-      "campaign_id": "issue_6095_nominal_discriminability_v1_20260722_163913",
-      "created_at_utc": "2026-07-22T14:39:13.843582Z"
+      "config_hash": "47d684f55e8c1377",
+      "git_commit": "c24325e76a7c831941e0efe7ac8b25e231b9574b",
+      "campaign_id": "issue_6095_nominal_discriminability_v1_20260725_final",
+      "created_at_utc": "2026-07-25T05:05:37.225928Z"
     },
     {
       "scenario_matrix": "configs/scenarios/nominal_v1.yaml",
-      "scenario_matrix_hash": "6d48b0410b14",
+      "scenario_matrix_hash": "c70233c8e7ae",
       "scenario_count": 4,
       "scenario_candidates": [],
       "synthetic_actuation_profile": null,
@@ -82,10 +82,10 @@
       "observation_noise.profile": "none",
       "observation_noise.enabled": false,
       "observation_noise_hash": "0a5609f0b2b1",
-      "config_hash": "91e9b28ba49b53fe",
-      "git_commit": "301edc874eeb693aae21a83da8b25c71a8bb8fef",
-      "campaign_id": "issue_6095_nominal_discriminability_v1_20260722_163913",
-      "created_at_utc": "2026-07-22T14:39:13.843582Z"
+      "config_hash": "47d684f55e8c1377",
+      "git_commit": "c24325e76a7c831941e0efe7ac8b25e231b9574b",
+      "campaign_id": "issue_6095_nominal_discriminability_v1_20260725_final",
+      "created_at_utc": "2026-07-25T05:05:37.225928Z"
     }
   ]
 }

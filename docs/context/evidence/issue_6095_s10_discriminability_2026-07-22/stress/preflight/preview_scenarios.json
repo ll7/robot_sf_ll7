@@ -1,7 +1,9 @@
 {
   "schema_version": "benchmark-preflight-preview-scenarios.v1",
-  "campaign_id": "issue_6095_stress_discriminability_v1_20260722_163914",
-  "generated_at_utc": "2026-07-22T14:39:14.348377Z",
+  "campaign_id": "issue_6095_stress_discriminability_v1_20260725_final",
+  "generated_at_utc": "2026-07-25T05:05:53.339378Z",
+  "config_path": "configs/benchmarks/issue_6095_stress_discriminability_v1.yaml",
+  "config_sha256": "e8f8b56097964568da4784054d23e1c590c14d32634c8ec6d465f735d1208dc6",
   "scenario_count": 48,
   "preview_limit": 100,
   "scenario_candidates": [],
@@ -16,7 +18,13 @@
       "min_center_distance_m": 1.013277,
       "min_clearance_margin_m": 0.013277,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Route keeps a narrow positive obstacle margin by design to exercise cross-traffic pressure.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "classic_cross_trap_low",
@@ -25,7 +33,13 @@
       "min_center_distance_m": 1.013277,
       "min_clearance_margin_m": 0.013277,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Route keeps a narrow positive obstacle margin by design to exercise cross-traffic pressure.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "classic_cross_trap_medium",
@@ -34,7 +48,13 @@
       "min_center_distance_m": 1.013277,
       "min_clearance_margin_m": 0.013277,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Route keeps a narrow positive obstacle margin by design to exercise cross-traffic pressure.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "classic_doorway_high",
@@ -43,7 +63,13 @@
       "min_center_distance_m": 1.012233,
       "min_clearance_margin_m": 0.012233,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready bottleneck stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Doorway route intentionally leaves only near-zero positive robot-radius clearance.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "classic_doorway_low",
@@ -52,7 +78,13 @@
       "min_center_distance_m": 1.012233,
       "min_clearance_margin_m": 0.012233,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready bottleneck stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Doorway route intentionally leaves only near-zero positive robot-radius clearance.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "classic_doorway_medium",
@@ -61,7 +93,13 @@
       "min_center_distance_m": 1.012233,
       "min_clearance_margin_m": 0.012233,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready bottleneck stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Doorway route intentionally leaves only near-zero positive robot-radius clearance.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "classic_overtaking_low",
@@ -70,7 +108,13 @@
       "min_center_distance_m": 1.326555,
       "min_clearance_margin_m": 0.326555,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Positive but sub-threshold obstacle margin is consistent with a constrained overtaking corridor.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "classic_overtaking_medium",
@@ -79,7 +123,13 @@
       "min_center_distance_m": 1.326555,
       "min_clearance_margin_m": 0.326555,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Positive but sub-threshold obstacle margin is consistent with a constrained overtaking corridor.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "classic_t_intersection_low",
@@ -88,7 +138,13 @@
       "min_center_distance_m": 1.288118,
       "min_clearance_margin_m": 0.288118,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Positive but sub-threshold obstacle margin is consistent with a constrained T-intersection route.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "classic_t_intersection_medium",
@@ -97,7 +153,13 @@
       "min_center_distance_m": 1.288118,
       "min_clearance_margin_m": 0.288118,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "benchmark-ready stress geometry; planner-attribution claims require caveat",
+      "certification_rationale": "Positive but sub-threshold obstacle margin is consistent with a constrained T-intersection route.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "francis2023_entering_elevator",
@@ -106,7 +168,13 @@
       "min_center_distance_m": 1.0,
       "min_clearance_margin_m": 0.0,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "stress-only doorway/elevator geometry; use for capability stress, not uncaveated planner attribution",
+      "certification_rationale": "Tangent robot-radius clearance is intentional for Francis-style tight elevator entry.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "francis2023_entering_room",
@@ -115,7 +183,13 @@
       "min_center_distance_m": 1.0,
       "min_clearance_margin_m": 0.0,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "stress-only doorway geometry; use for capability stress, not uncaveated planner attribution",
+      "certification_rationale": "Tangent robot-radius clearance is intentional for Francis-style room entry.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "francis2023_exiting_elevator",
@@ -124,7 +198,13 @@
       "min_center_distance_m": 1.0,
       "min_clearance_margin_m": 0.0,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "stress-only doorway/elevator geometry; use for capability stress, not uncaveated planner attribution",
+      "certification_rationale": "Tangent robot-radius clearance is intentional for Francis-style elevator exit.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "francis2023_exiting_room",
@@ -133,7 +213,13 @@
       "min_center_distance_m": 1.0,
       "min_clearance_margin_m": 0.0,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "stress-only doorway geometry; use for capability stress, not uncaveated planner attribution",
+      "certification_rationale": "Tangent robot-radius clearance is intentional for Francis-style room exit.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     },
     {
       "scenario": "francis2023_narrow_doorway",
@@ -142,34 +228,26 @@
       "min_center_distance_m": 1.0,
       "min_clearance_margin_m": 0.0,
       "warning_threshold_m": 0.5,
-      "warning_scope": "scenario"
+      "warning_scope": "scenario",
+      "certification_status": "certified_stress_geometry",
+      "certification_claim_scope": "stress-only doorway geometry; use for capability stress, not uncaveated planner attribution",
+      "certification_rationale": "Tangent robot-radius clearance is intentional for the narrow-doorway stress case.",
+      "certification_reviewed_on": "2026-05-09",
+      "certification_reviewed_by": "ll7",
+      "certification_issue": "1105"
     }
   ],
   "route_clearance_warning_count": 15,
   "route_clearance_warning_summary": {
     "warning_count": 15,
-    "certified_warning_count": 0,
-    "unresolved_warning_count": 15,
-    "status_counts": {},
-    "unresolved_scenarios": [
-      "classic_cross_trap_high",
-      "classic_cross_trap_low",
-      "classic_cross_trap_medium",
-      "classic_doorway_high",
-      "classic_doorway_low",
-      "classic_doorway_medium",
-      "classic_overtaking_low",
-      "classic_overtaking_medium",
-      "classic_t_intersection_low",
-      "classic_t_intersection_medium",
-      "francis2023_entering_elevator",
-      "francis2023_entering_room",
-      "francis2023_exiting_elevator",
-      "francis2023_exiting_room",
-      "francis2023_narrow_doorway"
-    ]
+    "certified_warning_count": 15,
+    "unresolved_warning_count": 0,
+    "status_counts": {
+      "certified_stress_geometry": 15
+    },
+    "unresolved_scenarios": []
   },
-  "route_clearance_certifications_path": null,
+  "route_clearance_certifications_path": "configs/benchmarks/route_clearance_certifications_v1.yaml",
   "truncated": false,
   "scenarios": [
     {

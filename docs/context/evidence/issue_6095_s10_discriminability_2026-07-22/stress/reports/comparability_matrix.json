@@ -1,7 +1,7 @@
 {
   "schema_version": "benchmark-comparability-summary.v1",
-  "campaign_id": "issue_6095_stress_discriminability_v1_20260722_163914",
-  "generated_at_utc": "2026-07-22T14:39:14.348377Z",
+  "campaign_id": "issue_6095_stress_discriminability_v1_20260725_final",
+  "generated_at_utc": "2026-07-25T05:05:53.339378Z",
   "mapping_path": "configs/benchmarks/alyassi_comparability_map_v1.yaml",
   "mapping_version": "alyassi-comparability-v1",
   "mapping_hash": "2321f90648b9",

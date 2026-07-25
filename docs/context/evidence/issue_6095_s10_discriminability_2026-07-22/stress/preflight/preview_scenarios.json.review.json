@@ -1,7 +1,7 @@
 {
-  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_6095_s10_discriminability_2026-07-22/stress/preflight/preview_scenarios.json",
-  "artifact_sha256": "81e3800daf5def9f6c88cdb78db57cd4015f999089cbb4eccd6dfb3de87c628f",
+  "artifact_sha256": "ce1883464dd4b67ea6cc5bcae9f3da8df8fd2234d49a22f8350a7d0e96bdbdc0",
+  "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "preserved_exact_bytes": true
+  "schema_version": "evidence-review-marker.v1"
 }

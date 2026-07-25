@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 import robot_sf.benchmark.heterogeneous_population_ablation as harness_module
+import robot_sf.benchmark.heterogeneous_population_ablation_runner as runner_module
 from robot_sf.benchmark.heterogeneous_population_ablation import (
     EPISODE_CONTROL_TRACE_PATH,
     HETEROGENEOUS_POPULATION_ABLATION_SCHEMA,
@@ -979,6 +980,25 @@ def _run_single_cell_records(tmp_path: Path) -> tuple[dict[str, object], list[di
         for row in manifest_rows
     ]
     return manifest, records
+
+
+def test_orca_manifest_row_preflights_rvo2_before_runtime_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An ORCA row stops before scenario setup when its optional runtime is unavailable."""
+
+    preflight_calls: list[None] = []
+
+    def abort_for_missing_rvo2() -> None:
+        preflight_calls.append(None)
+        raise RuntimeError("rvo2 unavailable")
+
+    monkeypatch.setattr(runner_module, "check_rvo2_importable", abort_for_missing_rvo2)
+
+    with pytest.raises(RuntimeError, match="rvo2 unavailable"):
+        run_manifest_row({"planner": "orca"}, scenario_path=tmp_path / "manifest.json")
+
+    assert preflight_calls == [None]
 
 
 @pytest.mark.slow

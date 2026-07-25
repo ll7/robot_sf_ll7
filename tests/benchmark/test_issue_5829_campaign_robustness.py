@@ -191,7 +191,6 @@ def test_runner_preserves_completed_jsonl_records_on_abort(
     fsync_calls: list[int] = []
     monkeypatch.setattr(module, "_run_manifest_row", abort_after_two)
     monkeypatch.setattr(module, "configure_campaign_logging", lambda **_kwargs: None)
-    monkeypatch.setattr(module, "check_rvo2_importable", lambda: None)
     monkeypatch.setattr(module.os, "fsync", fsync_calls.append)
 
     with pytest.raises(RuntimeError, match="simulated abrupt campaign stop"):

@@ -35,6 +35,8 @@ def build(
     meta["robot_kinematics"] = robot_kinematics
 
     def _policy(obs: dict[str, Any]) -> tuple[float, float]:
+        """Return the distributional-RL (v, omega) command for ``obs``, refreshing captured diagnostics."""
+
         action = planner.step(obs)
         if not isinstance(action, dict):
             raise TypeError(f"distributional RL planner returned non-dict action: {type(action)}")

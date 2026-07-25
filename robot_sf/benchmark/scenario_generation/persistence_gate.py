@@ -62,6 +62,12 @@ def _stable_digest(payload: Any) -> str:
 
 
 def _verify_schema(record: Mapping[str, Any]) -> None:
+    """Validate ``record`` against the cached persistence JSON Schema.
+
+    Lazily builds the validator and raises one combined error listing every
+    violation, sorted by path.
+    """
+
     global _SCHEMA_VALIDATOR
     if _SCHEMA_VALIDATOR is None:
         _SCHEMA_VALIDATOR = Draft202012Validator(load_persistence_schema())

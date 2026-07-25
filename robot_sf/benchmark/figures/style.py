@@ -126,6 +126,8 @@ def planner_color(planner_key: str) -> str:
 
 
 def _humanize_metric_key(metric_key: str) -> str:
+    """Return ``metric_key`` reformatted as a human-readable title-cased label."""
+
     return metric_key.replace("_", " ").strip().title()
 
 

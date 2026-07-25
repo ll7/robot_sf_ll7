@@ -1549,6 +1549,7 @@ def _assemble_campaign_config(
         safety_wrapper=_parse_safety_wrapper(
             payload.get("safety_wrapper"), planner_key="<campaign>"
         ),
+        source_config_path=config_path,
     )
 
 

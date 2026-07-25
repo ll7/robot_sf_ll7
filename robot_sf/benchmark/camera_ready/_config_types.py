@@ -237,3 +237,7 @@ class CampaignConfig:
     # as per-arm overrides). Raw mapping consumed by ``runtime_config_from_mapping``; ``None`` keeps
     # the wrapper off.
     safety_wrapper: dict[str, Any] | None = None
+    # The immutable campaign YAML that produced this object.  This is deliberately
+    # retained separately from the resolved runtime inputs so preflight evidence
+    # can bind a portable config path to the exact source-file SHA-256.
+    source_config_path: Path | None = None

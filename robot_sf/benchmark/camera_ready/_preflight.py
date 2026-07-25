@@ -40,7 +40,6 @@ from robot_sf.benchmark.camera_ready._util import (
     _jsonable_repo_relative,
     _latency_stress_metadata,
     _repo_relative,
-    _sha256_file,
     _synthetic_actuation_metadata,
     _utc_now,
 )
@@ -89,7 +88,7 @@ def _campaign_config_provenance(cfg: CampaignConfig) -> dict[str, str]:
     no portable repository provenance, so this helper intentionally omits the
     fields rather than serializing an absolute local path.
     """
-    if cfg.source_config_path is None:
+    if cfg.source_config_path is None or not cfg.source_config_sha256:
         return {}
     config_path = Path(cfg.source_config_path).resolve()
     portable_path = _repo_relative(config_path)
@@ -97,7 +96,7 @@ def _campaign_config_provenance(cfg: CampaignConfig) -> dict[str, str]:
         return {}
     return {
         "config_path": portable_path,
-        "config_sha256": _sha256_file(config_path),
+        "config_sha256": cfg.source_config_sha256,
     }
 
 

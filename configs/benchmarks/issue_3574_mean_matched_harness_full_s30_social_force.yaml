@@ -1,0 +1,19 @@
+schema_version: mean_matched_heterogeneity_harness.config.v1
+issue: 3574
+claim_boundary: harness_only_no_ablation_result
+trace_metric_keys: [clearance_m, near_field_exposure_s]
+planners:
+  - key: social_force
+    algo: social_force
+seeds: [111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+response_law_fractions: [0.0, 0.1, 0.25, 0.5]
+scenario_matrix: configs/scenarios/classic_interactions_francis2023.yaml
+scenario_matrix_derivation:
+  population_size: 12
+  archetype_seed: 3574
+  response_law_seed: 3574
+  composition: {cautious: 0.25, standard: 0.5, hurried: 0.25}
+  archetypes:
+    cautious: {desired_speed_factor: 0.7, radius_m: 0.35}
+    standard: {desired_speed_factor: 1.0, radius_m: 0.3}
+    hurried: {desired_speed_factor: 1.4, radius_m: 0.25}

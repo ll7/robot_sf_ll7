@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -213,5 +214,7 @@ class TestIssue6095CrossConfig:
             for scenario in preview["scenarios"]
             if "route_overrides_file" in scenario
         )
+        assert preview["config_path"] == NOMINAL.relative_to(ROOT).as_posix()
+        assert preview["config_sha256"] == hashlib.sha256(NOMINAL.read_bytes()).hexdigest()
         assert route_override == "configs/scenarios/route_overrides/issue_596/empty_goal_east.yaml"
         assert not Path(route_override).is_absolute()

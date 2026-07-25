@@ -40,6 +40,7 @@ from robot_sf.benchmark.camera_ready._util import (
     _jsonable_repo_relative,
     _latency_stress_metadata,
     _repo_relative,
+    _sha256_file,
     _synthetic_actuation_metadata,
     _utc_now,
 )
@@ -76,6 +77,28 @@ _CHECKPOINT_PREFLIGHT_REPORT_NAME: dict[str, str] = {
 # distinct from a declared ``backfilled`` source: it makes the cross-arm asymmetry visible in the
 # manifest without inventing tuning parameters the author never recorded (issue #5143).
 _TUNING_BACKFILL_PENDING = "backfill_pending"
+
+
+def _campaign_config_provenance(cfg: CampaignConfig) -> dict[str, str]:
+    """Return portable immutable-config provenance for preflight artifacts.
+
+    Campaign configs loaded from the repository retain their source path.  A
+    preflight packet must name that repository-relative path and its full file
+    checksum so evidence-registry tooling can verify the packet against the
+    producing commit.  Programmatically constructed or external configs have
+    no portable repository provenance, so this helper intentionally omits the
+    fields rather than serializing an absolute local path.
+    """
+    if cfg.source_config_path is None:
+        return {}
+    config_path = Path(cfg.source_config_path).resolve()
+    portable_path = _repo_relative(config_path)
+    if Path(portable_path).is_absolute():
+        return {}
+    return {
+        "config_path": portable_path,
+        "config_sha256": _sha256_file(config_path),
+    }
 
 
 def _verify_existing_resume_context(
@@ -262,6 +285,7 @@ def _build_preflight_validate_payload(  # noqa: PLR0913
         "schema_version": "benchmark-preflight-validate-config.v1",
         "campaign_id": campaign_id,
         "generated_at_utc": created_at_utc,
+        **_campaign_config_provenance(cfg),
         "scenario_matrix": _repo_relative(cfg.scenario_matrix_path),
         "scenario_count": len(scenarios),
         "scenario_candidates": {
@@ -372,6 +396,7 @@ def _build_preflight_preview_payload(
         "schema_version": "benchmark-preflight-preview-scenarios.v1",
         "campaign_id": campaign_id,
         "generated_at_utc": created_at_utc,
+        **_campaign_config_provenance(cfg),
         "scenario_count": len(scenarios),
         "preview_limit": preview_limit,
         "scenario_candidates": list(cfg.scenario_candidates.names),

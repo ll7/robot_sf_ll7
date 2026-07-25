@@ -410,6 +410,46 @@ The gate-side rule remains useful as a safety net for non-GitHub CI providers.
 `.opencode/skills/gh-pr-merger/SKILL.md`. The script `scripts/dev/check_pr_merge_staleness.py`
 and its tests can be deleted at that point.
 
+### Merge queue gate (issue #6274)
+
+**Problem.** An external or parallel auto-merge path merged several PRs without the `merge-ready`
+label and without a current exact-head `gate-verdict: accepted` trailer (issue #6274). The in-repo
+`gh-pr-merger` contract is fail-closed, but it only governs merges it performs itself; any
+dispatcher that routes through the GitHub native merge queue (or auto-merge) bypassed those gates,
+so review notes could not fail closed.
+
+**Decision: required merge-queue status-check gate.** We add a dedicated status-check workflow that
+runs inside the native merge queue and enforces the same fail-closed preflight as `gh-pr-merger`
+before the queue auto-merges a PR:
+
+- **Workflow**: `.github/workflows/merge-queue-gate.yml` (triggers on `merge_group`; also
+  `workflow_dispatch` with a PR number for advisory evaluation).
+- **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
+- **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
+  `gate-verdict: accepted @ <head_sha>` trailer (reuses
+  `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`), and no unresolved actionable
+  review threads. CI-green-on-head is subsumed by the gate-verdict trailer (the trailer is only
+  posted after CI went green on that head); staleness is fresh by construction inside the queue
+  (the queue base SHA equals current `main`).
+- **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, base
+  SHA, label set, gate-verdict status, staleness verdict, CI conclusion, and reviewer-thread
+  resolution, so every merge decision is inspectable and reproducible.
+- **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
+  fail-closed contract deterministically (the issue #6274 validation scenarios).
+
+**Required maintainer toggle (cannot be done from a worktree).** The gate fails closed only after
+a maintainer adds the status check **`Merge Queue Gate / merge-queue-gate`** to the merge queue's
+required status checks in the branch protection rules for `main` (Settings → Branches → `main` →
+merge queue → required status checks). Until that toggle is applied, the workflow runs but does not
+block the queue; the in-repo `gh-pr-merger` preflight remains the binding contract for guarded
+merges. Enabling GitHub's native merge queue itself also requires maintainer approval to toggle
+branch-protection settings, consistent with the gate-side rationale above.
+
+**Relationship to the gate-side staleness check.** The staleness preflight (step 6 of
+`gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for
+non-queue CI providers. Inside the native merge queue, staleness is inherently fresh, so the
+merge-queue gate records the staleness verdict for audit purposes but does not block on it.
+
 ### Reusable dev scripts
 
 Prefer calling shared scripts from `scripts/dev/` so VS Code tasks, local shells, and Codex

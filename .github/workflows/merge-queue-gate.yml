@@ -1,0 +1,69 @@
+name: Merge Queue Gate
+
+# Required status check for the GitHub native merge queue (issue #6274).
+#
+# The native merge queue (and any external/parallel auto-merge dispatcher that
+# routes through it) must not auto-merge a PR until this gate passes. It enforces
+# the same fail-closed preflight as the in-repository `gh-pr-merger` skill:
+# non-draft state, current `merge-ready` label, a current exact-head
+# `gate-verdict: accepted @ <head_sha>` trailer, and no unresolved actionable
+# review threads. The audit record (evaluated head/base SHAs, label set,
+# gate-verdict status, staleness verdict, CI conclusion, thread resolution) is
+# emitted to the job summary and stdout.
+#
+# To activate fail-closed behavior, add this job's status check
+# ("Merge Queue Gate / merge-queue-gate") to the merge queue's required status
+# checks in the branch protection rules for `main`. See docs/dev_guide.md
+# ("Merge queue gate") for the exact configuration and the maintainer toggle.
+
+on:
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Open PR number to evaluate (advisory; does not gate a merge)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: merge-queue-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  merge-queue-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Run merge-queue gate (merge_group)
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/merge_queue_gate.py \
+            --from-event "$GITHUB_EVENT_PATH" \
+            --repo "${{ github.repository }}" \
+            --json
+
+      - name: Run merge-queue gate (advisory, workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/merge_queue_gate.py \
+            --pr "${{ inputs.pr_number }}" \
+            --repo "${{ github.repository }}" \
+            --json

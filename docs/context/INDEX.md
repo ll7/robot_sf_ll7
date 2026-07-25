@@ -1,5 +1,10 @@
 # Context Retrieval Index
 
+Issue #6103 / Issue #3275 same-planner held-out contract: six frozen eligible
+fit anchors, cross-family same-planner evaluation, exact per-arm outcome
+admission, and the pending human-review boundary:
+[issue_3275_same_planner_contract.md](issue_3275_same_planner_contract.md).
+
 Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch
 contract that blocks duplicate retries when their patch is missing, ambiguous,
 or already merged: [issue_6008_state.yaml](issue_6008_state.yaml).

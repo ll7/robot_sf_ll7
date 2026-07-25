@@ -175,7 +175,7 @@ cannot satisfy. This contract is frozen and posted for human research-contract
 review; PR #6315 is open (not draft) and awaiting that review, but remains
 **not merge-ready** until the Domain-Aware Approval records that the
 six-anchor, underpowered design is acceptable. The worker does not self-close
-#6103 or claim merge readiness.
+Issue #6103 or claim merge readiness.
 
 ## Risks and residual conditions
 

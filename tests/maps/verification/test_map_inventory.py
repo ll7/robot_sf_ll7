@@ -109,14 +109,7 @@ class TestMapInventory:
         assert inventory.get_all_maps() == []
 
     def test_missing_root_yields_empty_inventory(self, tmp_path: Path):
-        """A maps root that does not exist produces an empty inventory.
-
-        The test points the inventory at a genuinely absent path (it does not
-        create the directory itself). Only the empty-outcome contract is locked
-        here; the implementation's directory-creation side effect is intentionally
-        not asserted to avoid changing current public behavior (see issue #6339
-        stop-condition #5).
-        """
+        """A missing maps root yields an empty inventory without being created."""
         missing_root = tmp_path / "absent"
         assert not missing_root.exists()
 
@@ -125,6 +118,7 @@ class TestMapInventory:
         assert len(inventory) == 0
         assert inventory.get_all_maps() == []
         assert inventory.get_ci_enabled_maps() == []
+        assert not missing_root.exists()
 
     @pytest.mark.parametrize(
         ("map_id", "expected_tags"),

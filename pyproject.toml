@@ -127,6 +127,10 @@ source = "vcs"
 [tool.hatch.version.raw-options]
 tag_regex = "^(?:[\\w.-]*?)(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
 fallback_version = "0.0.3.dev0"
+# Evidence/archive tags are intentionally not package releases. Limit version
+# derivation to the established release and RC tag families so a newer artifact
+# tag cannot make editable CI builds fail before their requested check runs.
+git_describe_command = "git describe --tags --long --match [0-9]* --match rc[0-9]*"
 
 [tool.hatch.build.hooks.vcs]
 # Build hook writes the resolved version to an importable module so

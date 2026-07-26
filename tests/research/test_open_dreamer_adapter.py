@@ -429,6 +429,19 @@ def test_validate_split_leakage_fails_closed_on_cross_split_key() -> None:
     assert "leaky_map:42" in report.leaked_keys
 
 
+def test_adapt_episodes_rejects_cross_split_scenario_seed_leakage() -> None:
+    """The public batch adapter rejects a scenario/seed key that crosses train and test splits."""
+    same_key_train = _make_episode(
+        scenario_id="leaky_map", seed=42, step_count=1, extra={"split": "train"}
+    )
+    same_key_test = _make_episode(
+        scenario_id="leaky_map", seed=42, step_count=1, extra={"split": "test"}
+    )
+
+    with pytest.raises(OpenDreamerAdapterError, match="scenario/seed split leakage.*leaky_map:42"):
+        adapt_episodes([same_key_train, same_key_test], action_bounds=_DEFAULT_BOUNDS)
+
+
 def test_adapter_preserves_stored_split_without_reassigning() -> None:
     """The adapter preserves the dataset's recorded split and never silently rewrites it."""
     episode = _make_episode(scenario_id="classic_cross_trap_low", seed=202, extra={"split": "test"})

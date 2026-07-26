@@ -536,9 +536,10 @@ def adapt_episodes(
 ) -> list[StructuredEpisode]:
     """Adapt a sequence of v1 episodes into episode-major structured episodes.
 
-    Each episode is adapted independently (see :func:`adapt_episode`); the result is returned in
-    input order and stays episode-major. This entry point does not itself check cross-episode split
-    leakage -- call :func:`validate_split_leakage` on the source episodes for that contract check.
+    The batch is first checked for cross-episode scenario/seed split leakage, then each episode is
+    adapted independently (see :func:`adapt_episode`). The result is returned in input order and
+    stays episode-major. Rejecting leakage here prevents a caller from passing a mixed-split batch
+    to a future model while incorrectly treating the adapter as the fail-closed contract boundary.
 
     Args:
         episodes: Validated ``RLTrajectoryEpisode.v1`` rows from the benchmark contract.
@@ -548,9 +549,15 @@ def adapt_episodes(
         A list of :class:`StructuredEpisode` in input order.
 
     Raises:
-        OpenDreamerAdapterError: If any episode fails the fail-closed contract in
-            :func:`adapt_episode`.
+        OpenDreamerAdapterError: If the batch leaks a ``(scenario_id, seed)`` key across splits or
+            any episode fails the fail-closed contract in :func:`adapt_episode`.
     """
+    leakage_report = validate_split_leakage(episodes)
+    if not leakage_report.ok:
+        raise OpenDreamerAdapterError(
+            "scenario/seed split leakage detected across batch: "
+            f"{', '.join(leakage_report.leaked_keys)}"
+        )
     return [adapt_episode(episode, action_bounds=action_bounds) for episode in episodes]
 
 

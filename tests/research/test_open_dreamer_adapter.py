@@ -318,11 +318,13 @@ def test_action_mapping_boundaries_are_respected() -> None:
 
 
 def test_action_mapping_absorbs_float_roundoff_within_tolerance() -> None:
-    """Tiny roundoff outside [-1, 1] (within 1e-9) still maps without raising."""
+    """Accepted roundoff is clamped, so both mapped velocities stay in their envelopes."""
     bounds = ActionBounds(max_linear_speed=2.0, max_angular_speed=1.0, min_linear_speed=0.0)
     linear, angular = map_action_to_velocity([1.0 + 1e-12, -1.0 - 1e-12], bounds)
-    assert linear == pytest.approx(2.0)
-    assert angular == pytest.approx(-1.0)
+    assert linear == 2.0
+    assert angular == -1.0
+    assert bounds.min_linear_speed <= linear <= bounds.max_linear_speed
+    assert -bounds.max_angular_speed <= angular <= bounds.max_angular_speed
 
 
 def test_action_mapping_rejects_wrong_shape_nonfinite_and_far_out_of_domain() -> None:

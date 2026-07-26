@@ -363,9 +363,10 @@ def map_action_to_velocity(
     uses an affine map from ``[-1, 1]`` onto ``[min_linear_speed, max_linear_speed]`` so forward-only
     drivetrains (``min_linear_speed=0``) are represented faithfully; angular velocity uses a
     symmetric map onto ``[-max_angular_speed, max_angular_speed]``. The domain is strictly bounded:
-    inputs must lie in ``[-1, 1]`` (a tiny float tolerance absorbs roundoff); out-of-domain inputs
-    are rejected rather than silently clipped, so a future policy cannot emit an action that escapes
-    the declared envelope unnoticed. Both outputs are checked finite.
+    inputs must lie in ``[-1, 1]`` (a tiny float tolerance absorbs roundoff); accepted roundoff is
+    clamped to that interval before mapping, while genuinely out-of-domain inputs are rejected. This
+    prevents tolerated roundoff from escaping the declared envelope. Both outputs are checked finite
+    and against the supplied bounds.
 
     Args:
         normalized: A length-2 action with both components in ``[-1, 1]``.
@@ -387,6 +388,7 @@ def map_action_to_velocity(
         raise OpenDreamerAdapterError("normalized action must be finite")
     if np.any(arr < -1.0 - 1e-9) or np.any(arr > 1.0 + 1e-9):
         raise OpenDreamerAdapterError("normalized action must lie in [-1, 1]")
+    arr = np.clip(arr, -1.0, 1.0)
     linear_range = bounds.max_linear_speed - bounds.min_linear_speed
     linear_velocity = bounds.min_linear_speed + (arr[0] + 1.0) * 0.5 * linear_range
     angular_velocity = arr[1] * bounds.max_angular_speed
@@ -394,6 +396,11 @@ def map_action_to_velocity(
     angular_velocity = float(angular_velocity)
     if not (np.isfinite(linear_velocity) and np.isfinite(angular_velocity)):
         raise OpenDreamerAdapterError("mapped velocity must be finite")
+    if not (
+        bounds.min_linear_speed <= linear_velocity <= bounds.max_linear_speed
+        and -bounds.max_angular_speed <= angular_velocity <= bounds.max_angular_speed
+    ):
+        raise OpenDreamerAdapterError("mapped velocity must lie within the supplied action bounds")
     return linear_velocity, angular_velocity
 
 

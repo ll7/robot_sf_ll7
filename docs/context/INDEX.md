@@ -1,7 +1,14 @@
 # Context Retrieval Index
 
-Issue #5303 step 2 frozen TPE-versus-random search-promotion preregistration (proposal/preflight only): the side-effect-free frozen contract, hash manifest, and check command for the adversarial v1 Optuna/TPE-vs-random promotion study on `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`; the evidence-grade promotion campaign is stopped because three search seeds cannot test the promote gate at p<=0.05, while a separately justified native diagnostic handoff has a fixed inconclusive-only outcome:
+Issue #5303 step 2 frozen TPE-versus-random search-promotion preregistration (proposal/preflight only): the side-effect-free frozen contract, hash manifest, and check command for the adversarial v1 Optuna/TPE-vs-random promotion study on `scenario_adaptive_hybrid_orca_v2_collision_guard` / held-out `classic_group_crossing_medium`; the evidence-grade promotion campaign is stopped because three search seeds cannot test the promote gate at p<=0.05, while a separately justified adapter-mode diagnostic handoff has a fixed inconclusive-only outcome:
 [README.md](evidence/issue_5303_search_promotion_preregistration/README.md).
+Issue #6318 Open Dreamer Gate 0 license determination and architecture study: the
+upstream `next-state/open-dreamer` `LICENSE` at pinned commit `5a4127f` reserves all rights, so the
+only permissible route is clean-room reimplementation (no upstream code copied, vendored, or
+adapted) unless and until a formal license or explicit permission is obtained and recorded; this is
+the compute-free hard predecessor for the adapter/model/SAC steps, evidence tier `idea`, no policy
+or benchmark claim:
+[issue_6318_open_dreamer_license_architecture.md](issue_6318_open_dreamer_license_architecture.md).
 
 Issue #6008 continue-patch retry reconciliation: the fail-closed pre-dispatch
 contract that blocks duplicate retries when their patch is missing, ambiguous,

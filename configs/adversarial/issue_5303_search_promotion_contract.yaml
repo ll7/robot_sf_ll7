@@ -104,7 +104,7 @@ input_provenance:
       sha256: a9d06feec11347ac1470401171da1998ed3635026798716be36e1c03616ceefa
     - id: diagnostic_runner
       path: scripts/tools/compare_adversarial_samplers.py
-      sha256: 61bd6d195194fb5d7bbce9a80988330e52fbf1e5fc367ad419baf744579fdf08
+      sha256: eb8b6b4ff09b5c51d91f9bf9efe71fb12e271554b74a217c9d0acf103fca7afa
     - id: promotion_analysis_module
       path: robot_sf/benchmark/issue_5303_search_promotion_analysis.py
       sha256: cb008644ea4303d19e423762eac27451659a34b752da8f087a86c0c181767b5a
@@ -455,7 +455,7 @@ step3_execution:
   execution_kind: separately_justified_diagnostic_search_stage_only
   promotion_campaign_status: stopped
   diagnostic_objective: constraints_first_lexicographic_v1
-  required_execution_mode: native
+  required_execution_mode: adapter
   runner_note: >
     This command is executable only as a diagnostic search-stage handoff. It registers
     constraints_first_lexicographic_v1, uses the corrected certifier from merged #6139,
@@ -478,7 +478,10 @@ step3_execution:
     --require-certification
     --benchmark-profile experimental
     --issue-5303-diagnostic-only
-    --execution-context-label diagnostic_native_context_a
+    --execution-context-label diagnostic_adapter_context_a
+    --warm-start-archive docs/context/evidence/issue_5305_certified_archive/archive.json
+    --warm-start-record issue5305_classic_cross_trap_medium_fbbd96687d61
+    --warm-start-record issue5305_classic_cross_trap_medium_fe24f0ff86a1
     --output-dir output/adversarial/issue_5303_search_promotion
     --out-json output/adversarial/issue_5303_search_promotion/report.json
     --out-md output/adversarial/issue_5303_search_promotion/comparison_table.md

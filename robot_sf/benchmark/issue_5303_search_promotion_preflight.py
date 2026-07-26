@@ -61,6 +61,7 @@ EXPECTED_DT_S = 0.1
 EXPECTED_TIME_CAP_S = 10.0
 EXPECTED_DOORWAY_SEEDS: tuple[int, ...] = (128, 130)
 EXPECTED_NEGATIVE_CONTROL_FAMILY = "francis2023_blind_corner"
+EXPECTED_DIAGNOSTIC_EXECUTION_MODE = "adapter"
 EXPECTED_NULL_TEST_COUNT = 2
 EXPECTED_COUNTED_GATE_COUNT = 7
 NULL_THRESHOLD = 0.05
@@ -164,6 +165,8 @@ REQUIRED_DIAGNOSTIC_RUNNER_OPTIONS = frozenset(
         "--outcomes-jsonl",
         "--issue-5303-diagnostic-only",
         "--execution-context-label",
+        "--warm-start-archive",
+        "--warm-start-record",
     }
 )
 
@@ -276,6 +279,38 @@ def _parser_options(path: Path) -> set[str]:
             if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                 options.add(arg.value)
     return options
+
+
+def _algorithm_default_execution_mode(path: Path, algorithm: str) -> str | None:
+    """Read an algorithm's declared production execution mode without importing it.
+
+    Returns:
+        Declared execution mode, or ``None`` when the static profile is unavailable.
+    """
+    tree = _read_python_ast(path)
+    if tree is None:
+        return None
+    for node in tree.body:
+        if not isinstance(node, ast.AnnAssign) or not isinstance(node.target, ast.Name):
+            continue
+        if node.target.id != "_KINEMATICS_PROFILE_BY_CANONICAL" or not isinstance(
+            node.value, ast.Dict
+        ):
+            continue
+        for key, value in zip(node.value.keys, node.value.values, strict=True):
+            if not (isinstance(key, ast.Constant) and key.value == algorithm):
+                continue
+            if not isinstance(value, ast.Dict):
+                return None
+            for profile_key, profile_value in zip(value.keys, value.values, strict=True):
+                if (
+                    isinstance(profile_key, ast.Constant)
+                    and profile_key.value == "default_execution_mode"
+                    and isinstance(profile_value, ast.Constant)
+                    and isinstance(profile_value.value, str)
+                ):
+                    return profile_value.value
+    return None
 
 
 def _function_row_keys(path: Path, *, function_name: str) -> set[str]:
@@ -1130,18 +1165,30 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
     )
     runner_path = _resolve(root, step3.get("runner_ref"))
     analysis_path = _resolve(root, step3.get("analysis_ref"))
+    execution_mode = _algorithm_default_execution_mode(
+        root / "robot_sf/benchmark/algorithm_metadata.py", "hybrid_rule_local_planner"
+    )
     checks["step3_execution_declared_diagnostic_only"] = (
         step3.get("execution_kind") == "separately_justified_diagnostic_search_stage_only"
         and step3.get("promotion_campaign_status") == "stopped"
         and step3.get("diagnostic_objective") == "constraints_first_lexicographic_v1"
-        and step3.get("required_execution_mode") == "native"
+        and step3.get("required_execution_mode") == EXPECTED_DIAGNOSTIC_EXECUTION_MODE
         and runner_path == root / EXPECTED_PROVENANCE_PATHS["diagnostic_runner"]
         and analysis_path == root / EXPECTED_PROVENANCE_PATHS["promotion_analysis_cli"]
     )
     if not checks["step3_execution_declared_diagnostic_only"]:
         blockers.append(
             "step3_execution must identify the runner and analysis CLI plus the frozen objective "
-            "and native execution mode for a stopped-promotion diagnostic-only handoff"
+            "and the declared execution mode for a stopped-promotion diagnostic-only handoff"
+        )
+    checks["step3_execution_mode_matches_production_metadata"] = (
+        execution_mode == EXPECTED_DIAGNOSTIC_EXECUTION_MODE
+        and step3.get("required_execution_mode") == execution_mode
+    )
+    if not checks["step3_execution_mode_matches_production_metadata"]:
+        blockers.append(
+            "the diagnostic execution mode must match hybrid_rule_local_planner's production "
+            "algorithm_metadata default_execution_mode"
         )
     checks["step3_runner_static_support"] = bool(runner_path and runner_path.is_file()) and (
         REQUIRED_DIAGNOSTIC_RUNNER_OPTIONS <= _parser_options(runner_path)
@@ -1192,7 +1239,8 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         "--horizon": str(EXPECTED_HORIZON_STEPS),
         "--dt": str(EXPECTED_DT_S),
         "--benchmark-profile": "experimental",
-        "--execution-context-label": "diagnostic_native_context_a",
+        "--execution-context-label": "diagnostic_adapter_context_a",
+        "--warm-start-archive": ("docs/context/evidence/issue_5305_certified_archive/archive.json"),
         "--output-dir": "output/adversarial/issue_5303_search_promotion",
         "--out-json": "output/adversarial/issue_5303_search_promotion/report.json",
         "--out-md": "output/adversarial/issue_5303_search_promotion/comparison_table.md",
@@ -1209,6 +1257,11 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         and "--issue-5303-diagnostic-only" in command_options
         and "--synthetic" not in command_options
         and "--empirical" not in command_options
+        and command_options.get("--warm-start-record")
+        == [
+            "issue5305_classic_cross_trap_medium_fbbd96687d61",
+            "issue5305_classic_cross_trap_medium_fe24f0ff86a1",
+        ]
     )
     artifact_paths_match = expected_artifacts == {
         "output_dir": "output/adversarial/issue_5303_search_promotion",
@@ -1228,6 +1281,23 @@ def preflight_issue_5303_contract(  # noqa: C901, PLR0912, PLR0915
         blockers.append(
             "the frozen diagnostic command must bind target/reference/configuration/certification "
             "inputs, all seeds/arms, and report/outcome artifact paths"
+        )
+    checks["step3_warm_start_wiring"] = (
+        "_load_archive_warm_starts" in runner_functions
+        and "warm_start" in _function_names(runner_path)
+        if runner_path
+        else False
+    )
+    # The command and parser checks above prove the frozen IDs reach the runner; this source
+    # check makes the SearchConfig handoff explicit without importing execution surfaces.
+    if runner_path:
+        checks["step3_warm_start_wiring"] = checks["step3_warm_start_wiring"] or (
+            "_load_archive_warm_starts" in runner_path.read_text(encoding="utf-8")
+            and "warm_start=warm_starts" in runner_path.read_text(encoding="utf-8")
+        )
+    if not checks["step3_warm_start_wiring"]:
+        blockers.append(
+            "the frozen fit-family warm-start archive IDs must be wired into SearchConfig"
         )
 
     analysis_options, analysis_error = _command_options(step3.get("analysis_command"))

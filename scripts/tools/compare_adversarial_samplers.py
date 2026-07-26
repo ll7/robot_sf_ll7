@@ -16,14 +16,18 @@ import yaml
 from robot_sf.adversarial.attribution import attribution_from_episode_record
 from robot_sf.adversarial.bundle import write_trajectory_csv
 from robot_sf.adversarial.certification import passed_status
-from robot_sf.adversarial.config import CandidateEvaluation, SearchConfig
+from robot_sf.adversarial.config import (
+    CandidateEvaluation,
+    CandidateSpec,
+    Pose2D,
+    SearchConfig,
+    WarmStartCandidate,
+)
 from robot_sf.adversarial.samplers import build_sampler
 from robot_sf.adversarial.search import run_adversarial_search
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-
-    from robot_sf.adversarial.config import CandidateSpec
 
 
 @dataclass(frozen=True)
@@ -321,10 +325,16 @@ def _episode_execution_status(
     """Extract conservative execution status fields from an episode or attribution payload."""
     details = attribution.get("details") if isinstance(attribution.get("details"), dict) else {}
     algorithm = record.get("algorithm") if isinstance(record.get("algorithm"), dict) else {}
+    planner_kinematics = (
+        algorithm.get("planner_kinematics")
+        if isinstance(algorithm.get("planner_kinematics"), dict)
+        else {}
+    )
     execution_mode = str(
         details.get("execution_mode")
         or record.get("execution_mode")
         or algorithm.get("execution_mode")
+        or planner_kinematics.get("execution_mode")
         or "unknown"
     )
     readiness_status = str(
@@ -340,6 +350,54 @@ def _episode_execution_status(
         or "unknown"
     )
     return execution_mode, readiness_status, availability_status
+
+
+def _load_archive_warm_starts(
+    archive_path: Path,
+    record_ids: Sequence[str],
+    *,
+    scenario: str,
+    planner: str,
+) -> tuple[WarmStartCandidate, ...]:
+    """Load explicitly selected certified archive candidates as matched warm starts."""
+    payload = json.loads(archive_path.read_text(encoding="utf-8"))
+    entries = payload.get("entries") if isinstance(payload, dict) else None
+    if not isinstance(entries, list):
+        raise ValueError("warm-start archive must contain an entries list")
+    by_id = {
+        str(entry.get("archive_id")): entry
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get("archive_id"), str)
+    }
+    if len(record_ids) != len(set(record_ids)):
+        raise ValueError("warm-start record IDs must be unique")
+    warm_starts: list[WarmStartCandidate] = []
+    for record_id in record_ids:
+        entry = by_id.get(record_id)
+        if entry is None:
+            raise ValueError(f"warm-start record not found in archive: {record_id}")
+        candidate = entry.get("candidate")
+        if not isinstance(candidate, dict):
+            raise ValueError(f"warm-start record has no candidate: {record_id}")
+        start = candidate.get("start")
+        goal = candidate.get("goal")
+        if not isinstance(start, dict) or not isinstance(goal, dict):
+            raise ValueError(f"warm-start record has invalid poses: {record_id}")
+        warm_starts.append(
+            WarmStartCandidate(
+                candidate=CandidateSpec(
+                    start=Pose2D(**start),
+                    goal=Pose2D(**goal),
+                    spawn_time_s=float(candidate["spawn_time_s"]),
+                    pedestrian_speed_mps=float(candidate["pedestrian_speed_mps"]),
+                    pedestrian_delay_s=float(candidate["pedestrian_delay_s"]),
+                    scenario_seed=int(candidate["scenario_seed"]),
+                ),
+                scenario=scenario,
+                planner=planner,
+            )
+        )
+    return tuple(warm_starts)
 
 
 def _metric_float(metrics: dict[str, Any], name: str) -> float:
@@ -1012,6 +1070,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Non-sensitive label for the recorded execution context in issue #5303 rows.",
     )
+    parser.add_argument(
+        "--warm-start-archive",
+        type=Path,
+        default=None,
+        help="Certified archive containing explicitly selected matched warm-start candidates.",
+    )
+    parser.add_argument(
+        "--warm-start-record",
+        action="append",
+        default=None,
+        help="Certified archive ID to use as a warm start; repeat in frozen archive order.",
+    )
     args = parser.parse_args(argv)
     if args.manifest is None and args.output_dir is None:
         parser.error("--output-dir is required unless --manifest is supplied")
@@ -1030,6 +1100,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "--out-md": args.out_md,
             "--outcomes-jsonl": args.outcomes_jsonl,
             "--execution-context-label": args.execution_context_label,
+            "--warm-start-archive": args.warm_start_archive,
+            "--warm-start-record": args.warm_start_record,
         }
         missing = [flag for flag, value in required.items() if value is None or value == ""]
         if missing:
@@ -1055,6 +1127,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     else:
         objectives = args.objectives or ["worst_case_snqi"]
         output_dir = args.output_dir
+        warm_starts = ()
+        if args.warm_start_archive is not None or args.warm_start_record:
+            if args.warm_start_archive is None or not args.warm_start_record:
+                raise ValueError(
+                    "--warm-start-archive and at least one --warm-start-record must be supplied together"
+                )
+            warm_starts = _load_archive_warm_starts(
+                args.warm_start_archive,
+                tuple(args.warm_start_record),
+                scenario=str(args.scenario_family or ""),
+                planner=str(args.policy),
+            )
         config = SearchConfig.from_files(
             policy=args.policy,
             scenario_template=args.scenario_template,
@@ -1068,6 +1152,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             dt=args.dt,
             require_certification=bool(args.require_certification),
             benchmark_profile=str(args.benchmark_profile),
+            warm_start=warm_starts,
         )
         budgets = (
             (16, 32, 64) if args.package_b_budget_grid and args.budget is None else args.budget

@@ -174,7 +174,7 @@ source to prove this.
 
 ## Separately justified diagnostic execution (not the stopped promotion campaign)
 
-The authoritative complete native command is
+The authoritative complete adapter-mode command is
 `step3_execution.diagnostic_search_command` in the
 [frozen contract](../../../../configs/adversarial/issue_5303_search_promotion_contract.yaml).
 It binds the target algorithm config, records the neutral reference config for later
@@ -192,7 +192,7 @@ explicitly recorded as not admitted.
 
 Before accepting a diagnostic result, the analyzer reruns the frozen preflight and requires every
 self-hashed row to match the frozen scenario family and path/hash, search-space path/hash,
-target/reference-config path/hash, objective, and native execution mode. A row's own hash alone
+target/reference-config path/hash, objective, and adapter execution mode. A row's own hash alone
 cannot make a different input packet appear complete.
 
 ## Files

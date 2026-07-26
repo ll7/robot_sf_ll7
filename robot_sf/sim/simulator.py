@@ -374,7 +374,7 @@ class Simulator:
         return np.where(speeds <= MIN_HEADING_SPEED_MPS, 0.0, velocity_headings)
 
     def _build_residual_adversary(self) -> BoundedResidualAdversary | None:
-        """Construct the bounded residual adversary from config, or ``None`` when off.
+        """Construct the bounded residual adversary from config.
 
         The adversary is strictly additive: :meth:`_apply_residual_adversary` adds its
         output to the nominal pedestrian forces, so the Social Force base law is
@@ -388,58 +388,41 @@ class Simulator:
         BoundedResidualAdversary | None
             A ready-to-step adversary, or ``None`` when the config is inactive.
         """
-        config = getattr(self.config, "residual_adversary", None)
-        if config is None:
-            return None
+        config = self.config.residual_adversary
         num_peds = self.pysf_state.num_peds
-        route_polylines = self._collect_residual_route_polylines(num_peds)
-        obstacle_segments = self._collect_residual_obstacle_segments()
-        bounds = self._collect_residual_map_bounds()
         return build_default_residual_adversary(
             config,
             self.config.time_per_step_in_secs,
             num_peds,
-            route_polylines=route_polylines,
-            obstacle_segments=obstacle_segments,
-            bounds=bounds,
+            route_polylines=self._collect_residual_route_polylines(),
+            obstacle_segments=self._collect_residual_obstacle_segments(),
+            bounds=self._collect_residual_map_bounds(),
             ped_radius=float(self.config.ped_radius),
         )
 
-    def _collect_residual_route_polylines(self, num_peds: int) -> list[np.ndarray] | None:
-        """Return per-target reference route polylines when pedestrian routes exist."""
+    def _collect_residual_route_polylines(self) -> list[np.ndarray] | None:
+        """Return reference pedestrian-route polylines when any routes exist.
+
+        Routes are forwarded per-slot to the route-deviation bound; maps without
+        pedestrian routes return ``None`` so that bound degrades to a no-op.
+        """
         routes = getattr(self.map_def, "ped_routes", None) or []
         if not routes:
             return None
-        polylines = [np.asarray(route.waypoints, dtype=float) for route in routes]
-        if not polylines:
-            return None
-        return polylines
+        return [np.asarray(route.waypoints, dtype=float) for route in routes]
 
     def _collect_residual_obstacle_segments(self) -> np.ndarray | None:
-        """Return obstacle segments for the walkable-space projection when available."""
+        """Return obstacle segments for the walkable-space projection, or ``None``."""
         obstacles = getattr(self.map_def, "obstacles_pysf", None)
-        if obstacles is None:
+        if not obstacles:
             return None
-        try:
-            array = np.asarray(obstacles, dtype=float)
-        except (TypeError, ValueError):
-            return None
-        if array.size == 0:
-            return None
-        return array
+        return np.asarray(obstacles, dtype=float)
 
     def _collect_residual_map_bounds(
         self,
     ) -> tuple[tuple[float, float], tuple[float, float]] | None:
-        """Return map bounds for the walkable-space clamp when finite."""
-        try:
-            raw_bounds = self.map_def.get_map_bounds()
-        except (AttributeError, TypeError, ValueError):
-            return None
-        try:
-            (min_x, max_x), (min_y, max_y) = raw_bounds
-        except (TypeError, ValueError):
-            return None
+        """Return finite map bounds for the walkable-space clamp, or ``None``."""
+        min_x, max_x, min_y, max_y = self.map_def.get_map_bounds()
         coords = (min_x, max_x, min_y, max_y)
         if not all(isinstance(value, int | float) and isfinite(float(value)) for value in coords):
             return None
@@ -450,21 +433,18 @@ class Simulator:
 
         When the adversary is inactive (the default) the input forces are returned
         unchanged. When active, the additive residual perturbs (never replaces) the
-        nominal Social Force contribution already present in ``ped_forces``.
+        nominal Social Force contribution already present in ``ped_forces``. An empty
+        crowd short-circuits with no residual.
         """
-        if (
-            not getattr(self.config, "residual_adversary", None)
-            or not self.config.residual_adversary.is_active
-        ):
+        if not self.config.residual_adversary.is_active:
             return ped_forces
         if self._residual_adversary is None:
             self._residual_adversary = self._build_residual_adversary()
-        adversary = self._residual_adversary
-        if adversary is None:
-            return ped_forces
         forces_array = np.asarray(ped_forces, dtype=float)
         if forces_array.shape[0] == 0:
             return forces_array
+        adversary = self._residual_adversary
+        assert adversary is not None  # built above because the config is active
         positions = np.asarray(self.pysf_state.ped_positions, dtype=float)
         velocities = np.asarray(self.pysf_state.ped_velocities, dtype=float)
         max_speeds = np.asarray(self.pysf_sim.peds.max_speeds, dtype=float)

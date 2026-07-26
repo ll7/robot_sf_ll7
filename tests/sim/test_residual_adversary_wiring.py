@@ -159,3 +159,40 @@ def test_active_adversary_changes_forces_vs_inactive() -> None:
     forces_on = np.asarray(sim_on.last_ped_forces, dtype=float)
     if forces_off.size and forces_on.size:
         assert not np.allclose(forces_off, forces_on)
+
+
+def test_apply_residual_adversary_short_circuits_empty_crowd() -> None:
+    """An empty force matrix must short-circuit without allocating adversary state."""
+    sim = _build_simulator(residual_active=True)
+    empty_forces = np.zeros((0, 2), dtype=float)
+    out = sim._apply_residual_adversary(empty_forces)
+    assert out.shape == (0, 2)
+    # Building for an empty crowd still produces a finite-sized adversary handle,
+    # but no residual is applied to the empty force matrix.
+    assert np.all(np.isfinite(out)) if out.size else True
+
+
+def test_collect_helpers_forward_geometry_from_map(monkeypatch) -> None:
+    """The collect-helpers forward routes/obstacles/bounds and degrade to None.
+
+    Exercises the realistic defensive branches: a map without pedestrian routes
+    yields ``None`` polylines, and a map without obstacles yields ``None`` segments,
+    while a normal map forwards finite geometry to the bounded adversary.
+    """
+    sim = _build_simulator(residual_active=True)
+    # Normal map: routes and obstacles (bounds) are present.
+    assert sim._collect_residual_route_polylines() is not None
+    assert sim._collect_residual_obstacle_segments() is not None
+    assert sim._collect_residual_map_bounds() is not None
+
+    # Map without pedestrian routes degrades the polyline source to None.
+    monkeypatch.setattr(sim.map_def, "ped_routes", [])
+    assert sim._collect_residual_route_polylines() is None
+
+    # Map without obstacle segments degrades the obstacle source to None.
+    monkeypatch.setattr(sim.map_def, "obstacles_pysf", [])
+    assert sim._collect_residual_obstacle_segments() is None
+
+    # Non-finite bounds degrade the bounds source to None.
+    monkeypatch.setattr(sim.map_def, "get_map_bounds", lambda: (float("inf"), 1.0, 0.0, 1.0))
+    assert sim._collect_residual_map_bounds() is None

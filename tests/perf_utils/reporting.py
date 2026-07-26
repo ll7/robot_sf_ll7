@@ -2,6 +2,13 @@
 
 Provides helpers to transform raw runtime samples into a ranked report
 with breach classification and guidance suggestions.
+
+A narrow, deliberately scoped set of *diagnostic contract* nodes (tests whose
+runtime is dominated by a deliberate subprocess/gate contract that carries its
+own budget) are classified as ``"diagnostic"`` instead of the generic
+``"soft"``/``"hard"`` envelope. They still appear in the report (nothing is
+hidden), but they are labelled and explained rather than emitted as unexplained
+``SOFT`` breaches whose generic "reduce episode count" guidance does not apply.
 """
 
 from __future__ import annotations
@@ -15,6 +22,44 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from .policy import PerformanceBudgetPolicy
+
+
+# Scoped diagnostic-contract nodes. Each entry maps an exact pytest node id to a
+# short explanation. A node listed here is reported as ``"diagnostic"`` (an
+# accepted, self-budgeted contract) instead of as an unexplained ``"soft"``/
+# ``"hard"`` breach. This set is intentionally narrow: only tests that own a
+# separate, stricter budget (for example an inner ``assert elapsed < N`` cap)
+# belong here. Generic test slowness must keep flowing through the normal
+# envelope. See issue #6320.
+DIAGNOSTIC_NODES: dict[str, str] = {
+    "tests/dev/test_base_sensitive_gate_contract.py::TestGateScript::test_subset_run_under_two_minutes": (
+        "Base-sensitive gate subset subprocess contract. The outer test walls a "
+        "`pytest -m base_sensitive` subprocess whose runtime is dominated by full "
+        "suite collection (~tens of seconds, by design); the test carries its own "
+        "120s hard cap (`assert elapsed < 120`), so the 20s/60s per-test envelope "
+        "does not apply to this node."
+    ),
+}
+
+
+def _diagnostic_note(test_identifier: str) -> str | None:
+    """Return the explanatory note if ``test_identifier`` is a diagnostic node.
+
+    Matching is robust to absolute-vs-relative paths and OS path separators:
+    pytest emits repo-relative node ids with forward slashes, but the check also
+    accepts a path that ends with the registered relative key.
+
+    Returns:
+        The explanatory note for the node, or ``None`` when it is not a
+        registered diagnostic contract.
+    """
+    if not test_identifier:
+        return None
+    norm = test_identifier.replace("\\", "/")
+    for key, note in DIAGNOSTIC_NODES.items():
+        if norm == key or norm.endswith("/" + key):
+            return note
+    return None
 
 
 @dataclass(slots=True)
@@ -66,6 +111,21 @@ def generate_report(
     top = ordered[: policy.report_count]
     records: list[SlowTestRecord] = []
     for s in top:
+        note = _diagnostic_note(s.test_identifier)
+        if note is not None:
+            # Accepted, self-budgeted diagnostic contract: report it transparently
+            # as ``"diagnostic"`` with an explanation instead of a generic soft
+            # breach whose episode/horizon guidance does not apply (issue #6320).
+            guidance = [f"Accepted diagnostic contract: {note}"]
+            records.append(
+                SlowTestRecord(
+                    test_identifier=s.test_identifier,
+                    duration_seconds=s.duration_seconds,
+                    breach_type="diagnostic",
+                    guidance=guidance,
+                ),
+            )
+            continue
         breach = policy.classify(s.duration_seconds)
         guidance = default_guidance(s.duration_seconds, breach)
         records.append(

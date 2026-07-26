@@ -127,6 +127,15 @@ source = "vcs"
 
 [tool.hatch.version.raw-options]
 tag_regex = "^(?:[\\w.-]*?)(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+# Restrict `git describe` to dotted-numeric tags so non-version tags never win
+# the "nearest tag" race. Model-registry tags such as
+# `artifact/legacy-models-2026-07-registry-v1` contain digits but no dotted
+# version, so the default `--match '*[0-9]*'` glob returned them as the nearest
+# tag and hatch-vcs raised `Can't parse version from tag ...`, breaking
+# `uv sync` (and thus all of CI). The glob below is equivalent to vcs_versioning's
+# `tag.strict = true` (`*[0-9]*.*[0-9]*`): it still matches every real release
+# tag (0.0.2, 0.0.3, rc0.0.3, camera-ready-v0.0.1a) while rejecting artifact tags.
+git_describe_command = "git describe --dirty --tags --long --abbrev=40 --match *[0-9]*.*[0-9]*"
 fallback_version = "0.0.3.dev0"
 
 [tool.hatch.version.raw-options.scm.git]

@@ -471,6 +471,12 @@ class TestRequireXy:
         with pytest.raises(ValueError, match="Missing or malformed required field: goal_current"):
             _require_xy(None, "goal_current")
 
+    @pytest.mark.parametrize("value", [[np.nan, 1.0], [np.inf, 1.0], [1.0, -np.inf]])
+    def test_non_finite_required_fields_raise_with_field_name(self, value: list[float]) -> None:
+        """Required XY vectors reject NaN and infinity rather than reaching the policy."""
+        with pytest.raises(ValueError, match="Missing or malformed required field: robot.position"):
+            _require_xy(value, "robot.position")
+
 
 # --------------------------------------------------------------------------- #
 # _clip_holonomic_to_v_pref: preferred-speed magnitude clipping               #

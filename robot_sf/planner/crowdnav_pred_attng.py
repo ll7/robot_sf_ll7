@@ -288,7 +288,7 @@ def _require_xy(value: Any, field: str) -> np.ndarray:
         Two-element float array.
     """
     arr = np.asarray([] if value is None else value, dtype=float).reshape(-1)
-    if arr.size < 2:
+    if arr.size < 2 or not np.isfinite(arr[:2]).all():
         raise ValueError(f"Missing or malformed required field: {field}")
     return arr[:2]
 

@@ -136,10 +136,6 @@ tag_regex = "^(?:[\\w.-]*?)(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
 # tag (0.0.2, 0.0.3, rc0.0.3, camera-ready-v0.0.1a) while rejecting artifact tags.
 git_describe_command = "git describe --dirty --tags --long --abbrev=40 --match *[0-9]*.*[0-9]*"
 fallback_version = "0.0.3.dev0"
-# Evidence/archive tags are intentionally not package releases. Limit version
-# derivation to the established release and RC tag families so a newer artifact
-# tag cannot make editable CI builds fail before their requested check runs.
-git_describe_command = "git describe --tags --long --match [0-9]* --match rc[0-9]*"
 
 [tool.hatch.build.hooks.vcs]
 # Build hook writes the resolved version to an importable module so

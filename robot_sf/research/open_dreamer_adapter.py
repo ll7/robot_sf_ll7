@@ -49,10 +49,12 @@ The adapter fails closed (raises :class:`OpenDreamerAdapterError`) when:
   ``return_to_go``, or the mapped velocity);
 * a stored action is not a finite 2D continuous ``(linear, angular)`` command (incompatible action
   space);
-* the dataset leaks a ``(scenario_id, seed)`` key across more than one split.
+* a stored split does not equal the canonical deterministic assignment for its
+  ``(scenario_id, seed)`` key, or the dataset leaks that key across more than one split.
 
 Split policy is the canonical :func:`assign_deterministic_split` from the benchmark contract;
-:func:`validate_split_leakage` verifies no scenario-seed key appears in two splits.
+:func:`adapt_episode` enforces it and :func:`validate_split_leakage` verifies no scenario-seed key
+appears in two stored splits.
 """
 
 from __future__ import annotations
@@ -409,7 +411,7 @@ def canonical_split(scenario_id: str, seed: int) -> str:
 
     This is a thin delegation to the benchmark contract's
     :func:`assign_deterministic_split`, re-exposed so consumers of the adapter have a single
-    import surface and the split policy respected by :func:`validate_split_leakage` is explicit.
+    import surface and the split policy enforced by :func:`adapt_episode` is explicit.
     A dataset split entirely through this function cannot leak a scenario-seed key by
     construction.
 
@@ -426,13 +428,12 @@ def canonical_split(scenario_id: str, seed: int) -> str:
 def validate_split_leakage(
     episodes: Sequence[RLTrajectoryEpisode | StructuredEpisode],
 ) -> SplitLeakageReport:
-    """Verify no ``(scenario_id, seed)`` key appears in more than one split.
+    """Verify no ``(scenario_id, seed)`` key appears in more than one stored split.
 
-    The split policy respected here is the canonical :func:`assign_deterministic_split`: a
-    deterministic scenario-seed hash. Because that hash is a pure function of
-    ``(scenario_id, seed)``, a dataset assigned entirely through it cannot leak by construction;
-    this check still fails closed for datasets whose stored ``split`` field was assigned by any
-    other policy, so leakage is caught rather than silently propagated to a future model.
+    :func:`adapt_episode` separately rejects each stored split that differs from the canonical
+    :func:`assign_deterministic_split` result. This batch-level report detects the additional
+    duplicate-key case before adaptation, so a mixed stored assignment cannot silently reach a
+    future model.
 
     Args:
         episodes: Episodes carrying ``scenario_id``, ``seed``, and ``split`` attributes.
@@ -484,7 +485,8 @@ def adapt_episode(
 
     Raises:
         OpenDreamerAdapterError: If a required field is missing, any produced output is non-finite,
-            the stored action is not a finite 2D continuous command, or the episode split is invalid.
+            the stored action is not a finite 2D continuous command, or the stored split is invalid
+            or differs from its canonical deterministic assignment.
     """
     try:
         validate_rl_trajectory_episode(episode)
@@ -496,6 +498,13 @@ def adapt_episode(
         ) from exc
     if episode.split not in SPLIT_NAMES:
         raise OpenDreamerAdapterError(f"split must be one of {SPLIT_NAMES}, got {episode.split!r}")
+    expected_split = canonical_split(episode.scenario_id, episode.seed)
+    if episode.split != expected_split:
+        raise OpenDreamerAdapterError(
+            "stored split does not match canonical deterministic split for "
+            f"{episode.scenario_id!r}:{episode.seed}: expected {expected_split!r}, "
+            f"got {episode.split!r}"
+        )
     rewards = _finite_floats(episode.rewards, "rewards")
     return_to_go = _finite_floats(episode.return_to_go, "return_to_go")
 
@@ -552,9 +561,10 @@ def adapt_episodes(
     """Adapt a sequence of v1 episodes into episode-major structured episodes.
 
     The batch is first checked for cross-episode scenario/seed split leakage, then each episode is
-    adapted independently (see :func:`adapt_episode`). The result is returned in input order and
-    stays episode-major. Rejecting leakage here prevents a caller from passing a mixed-split batch
-    to a future model while incorrectly treating the adapter as the fail-closed contract boundary.
+    adapted independently (see :func:`adapt_episode`), including canonical split enforcement. The
+    result is returned in input order and stays episode-major. Rejecting leakage here prevents a
+    caller from passing a mixed-split batch to a future model while incorrectly treating the adapter
+    as the fail-closed contract boundary.
 
     Args:
         episodes: Validated ``RLTrajectoryEpisode.v1`` rows from the benchmark contract.

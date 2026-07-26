@@ -467,6 +467,25 @@ def test_adapter_preserves_stored_split_without_reassigning() -> None:
     assert assign_deterministic_split("classic_cross_trap_low", 202) != "train"
 
 
+def test_adapter_rejects_valid_but_noncanonical_stored_split() -> None:
+    """A valid stored split must equal its deterministic assignment, preventing single-key leakage."""
+    scenario_id = "canonical_split_guard"
+    seed = 31337
+    canonical = assign_deterministic_split(scenario_id, seed)
+    noncanonical = next(split for split in ("train", "validation", "test") if split != canonical)
+    episode = _make_episode(
+        scenario_id=scenario_id,
+        seed=seed,
+        step_count=1,
+        extra={"split": noncanonical},
+    )
+
+    with pytest.raises(
+        OpenDreamerAdapterError, match="does not match canonical deterministic split"
+    ):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+
 def test_adapter_rejects_invalid_split_name() -> None:
     """A split outside the canonical names fails closed at adaptation time."""
     episode = _make_episode(step_count=1, extra={"split": "holdout"})

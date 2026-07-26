@@ -184,9 +184,69 @@ uv run python scripts/validation/check_legacy_ppo_snapshot_parity.py \
 
 Root-local debug checkpoints such as `model/run_023.zip`, `model/run_043.zip`,
 `model/ppo_model_retrained_10m_2024-09-17.zip`, and
-`model/ppo_model_retrained_10m_2025-02-01.zip` are explicitly unsupported for durable compatibility
-because they lack registry provenance and release checksums. They may remain useful for local
-debugging, but benchmark or regression workflows should use a registry `model_id`.
+`model/ppo_model_retrained_10m_2025-02-01.zip` were previously explicitly unsupported for
+durable compatibility because they lacked registry provenance and release checksums. **Phase A of
+issue #6268 (issue #6321) published them as durable registry artifacts** (see the next section), so
+they are now `supported` rows with GitHub release provenance, immutable SHA-256 checksums, and
+`benchmark_promotion.claim_boundary: legacy_non_track`. The in-tree files are not deleted, moved,
+or renamed; each registry `local_path` still points at the in-tree file so existing load paths keep
+working.
+
+### Durable legacy checkpoints (Phase A of #6268)
+
+Plain-language summary: the pre-registry legacy model binaries that already lived under `model/`
+now also have durable GitHub Release copies, immutable SHA-256 checksums, and registry entries, so
+they are reproducible from a public source instead of only from a fresh checkout.
+
+Every tracked legacy binary checkpoint under `model/` that previously had no durable
+registry/release provenance is now a durable registry entry with
+`benchmark_promotion.claim_boundary: legacy_non_track`. The durable assets live under the immutable
+GitHub release tag `artifact/legacy-models-2026-07-registry-v1`:
+
+<https://github.com/ll7/robot_sf_ll7/releases/tag/artifact/legacy-models-2026-07-registry-v1>
+
+The durable legacy `model_id`s are:
+
+- `legacy_ppo_run_023` (`model/run_023.zip`)
+- `legacy_ppo_run_043` (`model/run_043.zip`)
+- `legacy_ppo_retrained_10m_2024_09_17` (`model/ppo_model_retrained_10m_2024-09-17.zip`)
+- `legacy_ppo_retrained_10m_2025_02_01` (`model/ppo_model_retrained_10m_2025-02-01.zip`; default
+  `model_path` in `configs/baselines/ppo.yaml` and `robot_sf/baselines/ppo.py`)
+- `legacy_ppo_pedestrian_ped_01` (`model/pedestrian/ppo_ped_01.zip`)
+- `legacy_ppo_pedestrian_ped_02` (`model/pedestrian/ppo_ped_02.zip`)
+- `legacy_ppo_pedestrian_headon` (`model/pedestrian/ppo_headon.zip`)
+- `legacy_ppo_pedestrian_intersection` (`model/pedestrian/ppo_intersection.zip`)
+- `legacy_ppo_pedestrian_corner` (`model/pedestrian/ppo_corner.zip`)
+- `ga3c_cadrl_iros18` (the GA3C-CADRL IROS18 TensorFlow checkpoint; the `.data/.index/.meta` triplet
+  is published as one coherent `.tar.gz` bundle asset, not loose files)
+
+That is **9 single-file zip checkpoints plus the 1 ga3c triplet bundle = 10 checkpoints (12 binary
+files)**. The parent issue text refers to "11 checkpoints / 10 zips"; the repository only contains 9
+legacy zips plus the 3-file ga3c triplet, so the implemented, verified set is the complete actual
+set (10 checkpoints). See the release `manifest.json` for the authoritative list.
+
+Each entry records a `github_release` pointer with `asset_name`, an immutable `version` pin (`v1`)
+under the dated, non-moving tag, `sha256`, `size_bytes`, and `benchmark_promotion.claim_boundary:
+legacy_non_track`. `local_path` stays pointed at the in-tree file so `resolve_model_path` keeps
+returning the existing file (no download, no load-path change); the `github_release` pointer records
+durable provenance and the checksum used for byte-identity verification.
+
+For the multi-file ga3c triplet, `local_path` keeps resolving to the in-tree `.meta`; the
+`github_release` bundle pointer records provenance and per-component checksums only. Multi-file
+TensorFlow-checkpoint download/unpack via the resolver is a Phase C concern and is not exercised in
+Phase A, because the in-tree `local_path` always resolves first.
+
+The validation script resolves every durable legacy checkpoint through `resolve_model_path` and
+byte-matches its recorded checksum in the default (cheap, no-download) inventory:
+
+```bash
+uv run python scripts/validation/check_legacy_ppo_snapshot_parity.py --json
+```
+
+Byte-identity is established by publishing byte copies of the in-tree files and verifying that each
+downloaded asset's SHA-256 equals the in-tree blob SHA-256 (single-file zips are byte copies; the
+ga3c bundle additionally records per-component checksums). These are non-benchmark legacy
+checkpoints retained for traceability and local debugging; they are **not benchmark evidence**.
 
 ## Predictive Planner Models
 

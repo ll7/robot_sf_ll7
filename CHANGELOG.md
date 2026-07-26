@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+* **repo-hygiene #6321: publish and register legacy `model/` checkpoints as durable
+  artifacts (Phase A of #6268, additive).** Every tracked legacy binary checkpoint under `model/`
+  that previously had no durable registry/release provenance is now published as a byte-identical
+  GitHub Release asset under the immutable, dated tag
+  `artifact/legacy-models-2026-07-registry-v1`, and registered in `model/registry.yaml` with an
+  immutable `version: v1` pin, SHA-256 checksum, `size_bytes`, a `github_release` pointer, and
+  `benchmark_promotion.claim_boundary: legacy_non_track`. Scope: 9 single-file PPO/Stable-Baselines3
+  zip checkpoints plus the GA3C-CADRL (IROS18) TensorFlow triplet published as one coherent
+  `.tar.gz` bundle = 10 checkpoints (12 binary files). Nothing is deleted, moved, renamed, or
+  byte-modified; each registry `local_path` keeps pointing at the in-tree file so existing load
+  paths (`configs/baselines/ppo.yaml`, `robot_sf/baselines/ppo.py`, `robot_sf/planner/socnav.py`,
+  `robot_sf/benchmark/doctor.py`) and `resolve_model_path` keep working unchanged.
+  `scripts/validation/check_legacy_ppo_snapshot_parity.py` now resolves every durable legacy
+  checkpoint through `resolve_model_path` and byte-matches its recorded checksum in the default
+  (cheap, no-download) inventory; the four root-local PPO snapshots that were previously
+  `unsupported_local_only` flip to `supported`/verified (the guard mechanism is retained, not
+  bypassed). Byte-identity was verified by downloading each published asset and confirming its
+  SHA-256 equals the in-tree blob SHA-256. These are non-benchmark legacy checkpoints retained for
+  traceability and local debugging; they are **not benchmark evidence**.
+
 * **issue #6152 topology-parallel NMPC prototype (#5310 child).** New
   `robot_sf/planner/topology_parallel_nmpc.py` with
   `TopologyParallelNMPCPlannerAdapter` that evaluates 2-4 deterministic x-y-t

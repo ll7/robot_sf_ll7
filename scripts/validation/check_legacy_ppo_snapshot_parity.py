@@ -2,8 +2,10 @@
 """Inventory and optionally smoke-test legacy PPO snapshots against Gymnasium.
 
 The default mode is intentionally cheap: it verifies that legacy PPO checkpoints
-that should remain supported are represented by durable registry entries, and it
-records root-local debug snapshots as explicitly unsupported.  Pass
+that should remain supported are represented by durable registry entries, it
+records root-local debug snapshots as explicitly unsupported, and -- since Phase A
+of issue #6268 -- it resolves every durable legacy checkpoint through
+``resolve_model_path`` and byte-matches its recorded SHA-256.  Pass
 ``--smoke-model-id`` for a hydrated/downloadable checkpoint smoke that loads the
 model, predicts one action, and executes one current ``make_robot_env`` step.
 """
@@ -11,6 +13,7 @@ model, predicts one action, and executes one current ``make_robot_env`` step.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from collections.abc import Mapping
@@ -30,16 +33,103 @@ SUPPORTED_LEGACY_PPO_MODEL_IDS = (
     "ppo_expert_br06_v2_15m_all_maps_20260303T074433",
 )
 
-UNSUPPORTED_ROOT_LOCAL_PPO_SNAPSHOTS = {
-    "model/run_023.zip": "legacy debug checkpoint with no durable registry provenance",
-    "model/run_043.zip": "legacy debug checkpoint with no durable registry provenance",
-    "model/ppo_model_retrained_10m_2024-09-17.zip": (
-        "root-local retrained checkpoint with no durable registry provenance"
+# Root-local debug checkpoints that are STILL not durable. Phase A of issue #6268
+# published the previous four entries (run_023, run_043, and the two retrained
+# zips) as durable registry artifacts, so this guard is now empty for those. The
+# mechanism is retained intentionally: any root-local snapshot that lacks durable
+# registry provenance belongs here, and the inventory will report it as
+# unsupported_local_only.
+UNSUPPORTED_ROOT_LOCAL_PPO_SNAPSHOTS: dict[str, str] = {}
+
+
+@dataclass(frozen=True)
+class DurableLegacyCheckpoint:
+    """One Phase-A durable legacy checkpoint declared in this validator.
+
+    The checkpoint resolves through the registry by ``model_id``. ``source_paths``
+    are the in-tree files whose bytes must match the recorded checksums.
+
+    - ``single_file``: one in-tree file; its SHA-256 must equal
+      ``github_release.sha256`` (the published asset is a byte copy).
+    - ``multi_file_bundle``: several in-tree files published as one coherent
+      bundle asset. ``github_release.per_file_sha256`` records each component
+      checksum; every component must byte-match. The bundle asset's own
+      ``github_release.sha256`` is the published bundle digest (verified at
+      publish time and used by the resolver only if the in-tree local_path is
+      absent, which Phase A does not exercise).
+    """
+
+    model_id: str
+    source_paths: tuple[str, ...]
+    kind: str
+    display_path: str = ""
+
+
+# Phase A of issue #6268: legacy checkpoints now published as durable GitHub
+# release artifacts (tag artifact/legacy-models-2026-07-registry-v1) with
+# immutable SHA-256 checksums and registry entries. The four PPO debug/retrained
+# zips below previously lived in UNSUPPORTED_ROOT_LOCAL_PPO_SNAPSHOTS; the
+# pedestrian zips and the ga3c_cadrl triplet had no durable classification.
+# Phase A flips all of them to supported/durable. Nothing is deleted, moved, or
+# renamed: each local_path keeps pointing at the in-tree file so existing load
+# paths and resolve_model_path keep working.
+DURABLE_LEGACY_CHECKPOINTS: tuple[DurableLegacyCheckpoint, ...] = (
+    DurableLegacyCheckpoint(
+        model_id="legacy_ppo_run_023",
+        source_paths=("model/run_023.zip",),
+        kind="single_file",
     ),
-    "model/ppo_model_retrained_10m_2025-02-01.zip": (
-        "root-local retrained checkpoint with no durable registry provenance"
+    DurableLegacyCheckpoint(
+        model_id="legacy_ppo_run_043",
+        source_paths=("model/run_043.zip",),
+        kind="single_file",
     ),
-}
+    DurableLegacyCheckpoint(
+        model_id="legacy_ppo_retrained_10m_2024_09_17",
+        source_paths=("model/ppo_model_retrained_10m_2024-09-17.zip",),
+        kind="single_file",
+    ),
+    DurableLegacyCheckpoint(
+        model_id="legacy_ppo_retrained_10m_2025_02_01",
+        source_paths=("model/ppo_model_retrained_10m_2025-02-01.zip",),
+        kind="single_file",
+    ),
+    DurableLegacyCheckpoint(
+        model_id="legacy_ppo_pedestrian_ped_01",
+        source_paths=("model/pedestrian/ppo_ped_01.zip",),
+        kind="single_file",
+    ),
+    DurableLegacyCheckpoint(
+        model_id="legacy_ppo_pedestrian_ped_02",
+        source_paths=("model/pedestrian/ppo_ped_02.zip",),
+        kind="single_file",
+    ),
+    DurableLegacyCheckpoint(
+        model_id="legacy_ppo_pedestrian_headon",
+        source_paths=("model/pedestrian/ppo_headon.zip",),
+        kind="single_file",
+    ),
+    DurableLegacyCheckpoint(
+        model_id="legacy_ppo_pedestrian_intersection",
+        source_paths=("model/pedestrian/ppo_intersection.zip",),
+        kind="single_file",
+    ),
+    DurableLegacyCheckpoint(
+        model_id="legacy_ppo_pedestrian_corner",
+        source_paths=("model/pedestrian/ppo_corner.zip",),
+        kind="single_file",
+    ),
+    DurableLegacyCheckpoint(
+        model_id="ga3c_cadrl_iros18",
+        source_paths=(
+            "model/ga3c_cadrl/IROS18/network_01900000.data-00000-of-00001",
+            "model/ga3c_cadrl/IROS18/network_01900000.index",
+            "model/ga3c_cadrl/IROS18/network_01900000.meta",
+        ),
+        kind="multi_file_bundle",
+        display_path="model/ga3c_cadrl/IROS18/network_01900000.meta",
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -52,6 +142,8 @@ class SnapshotRow:
     local_path: str
     durable_uri: str
     reason: str
+    checksum_status: str = ""
+    checksum_detail: str = ""
 
 
 @dataclass(frozen=True)
@@ -99,11 +191,98 @@ def _durable_release_reason(entry: Mapping[str, Any]) -> str:
     return ""
 
 
+def _sha256(path: Path) -> str:
+    """Return the lowercase-hex SHA-256 digest of a local file."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_single_file(entry: Mapping[str, Any], *, resolved: Path) -> tuple[str, str]:
+    """Byte-match a single-file durable checkpoint against its recorded SHA-256."""
+    release = entry.get("github_release")
+    if not isinstance(release, Mapping):
+        return "missing_release", "entry has no github_release mapping"
+    expected = str(release.get("sha256") or "").strip().lower()
+    if not expected:
+        return "missing_sha256", "github_release.sha256 is empty"
+    observed = _sha256(resolved)
+    if observed != expected:
+        return (
+            "checksum_mismatch",
+            f"observed {observed} != recorded {expected} for {resolved}",
+        )
+    return "verified", f"single-file byte-match for {resolved}"
+
+
+def _verify_multi_file_bundle(entry: Mapping[str, Any], *, repo_root: Path) -> tuple[str, str]:
+    """Byte-match each component of a multi-file bundle checkpoint."""
+    release = entry.get("github_release")
+    if not isinstance(release, Mapping):
+        return "missing_release", "entry has no github_release mapping"
+    per_file = release.get("per_file_sha256")
+    if not isinstance(per_file, Mapping) or not per_file:
+        return "missing_per_file_sha256", "github_release.per_file_sha256 is absent"
+    bundle_files = release.get("bundle_files")
+    if not isinstance(bundle_files, list) or not bundle_files:
+        return "missing_bundle_files", "github_release.bundle_files is absent"
+    details: list[str] = []
+    for rel in bundle_files:
+        component = repo_root / str(rel)
+        if not component.exists():
+            return "missing_component", f"bundle component absent in-tree: {rel}"
+        key = Path(str(rel)).name
+        expected = str(per_file.get(key) or "").strip().lower()
+        if not expected:
+            return "missing_component_sha256", f"no per_file_sha256 entry for {key}"
+        observed = _sha256(component)
+        if observed != expected:
+            return (
+                "checksum_mismatch",
+                f"component {key}: observed {observed} != recorded {expected}",
+            )
+        details.append(f"{key}=ok")
+    return "verified", f"multi-file bundle byte-match ({'; '.join(details)})"
+
+
+def _verify_durable_checkpoint(
+    checkpoint: DurableLegacyCheckpoint,
+    *,
+    entry: Mapping[str, Any],
+    repo_root: Path,
+    registry_path: Path,
+) -> tuple[str, str]:
+    """Resolve and byte-match one durable legacy checkpoint.
+
+    Returns a ``(checksum_status, detail)`` tuple. ``checksum_status`` is
+    ``"verified"`` when the resolved in-tree file(s) byte-match the recorded
+    checksums, otherwise a short failure label and a human-readable detail.
+    """
+    try:
+        resolved = resolve_model_path(
+            checkpoint.model_id,
+            registry_path=registry_path,
+            allow_download=False,
+        )
+    except FileNotFoundError as exc:
+        return "unresolved", f"resolve_model_path failed: {exc}"
+
+    if checkpoint.kind == "single_file":
+        return _verify_single_file(entry, resolved=resolved)
+    if checkpoint.kind == "multi_file_bundle":
+        return _verify_multi_file_bundle(entry, repo_root=repo_root)
+    return "unknown_kind", f"unsupported checkpoint kind: {checkpoint.kind}"
+
+
 def build_inventory(
     *,
     repo_root: Path,
     registry_path: Path,
     supported_model_ids: tuple[str, ...] = SUPPORTED_LEGACY_PPO_MODEL_IDS,
+    durable_checkpoints: tuple[DurableLegacyCheckpoint, ...] = DURABLE_LEGACY_CHECKPOINTS,
+    unsupported_root_local: Mapping[str, str] = UNSUPPORTED_ROOT_LOCAL_PPO_SNAPSHOTS,
 ) -> tuple[SnapshotRow, ...]:
     """Return support-status rows for legacy PPO snapshots."""
     registry = load_registry(registry_path)
@@ -134,7 +313,64 @@ def build_inventory(
             )
         )
 
-    for rel_path, reason in UNSUPPORTED_ROOT_LOCAL_PPO_SNAPSHOTS.items():
+    for checkpoint in durable_checkpoints:
+        entry = registry.get(checkpoint.model_id)
+        if entry is None:
+            rows.append(
+                SnapshotRow(
+                    identifier=checkpoint.model_id,
+                    status="missing_registry_entry",
+                    source="model_registry",
+                    local_path="",
+                    durable_uri="",
+                    reason=(
+                        f"durable legacy checkpoint {checkpoint.model_id} is absent from "
+                        "model/registry.yaml"
+                    ),
+                )
+            )
+            continue
+        release_reason = _durable_release_reason(entry)
+        durable_uri = _release_uri(entry)
+        if release_reason:
+            rows.append(
+                SnapshotRow(
+                    identifier=checkpoint.model_id,
+                    status="unsupported_missing_durable_pointer",
+                    source="model_registry",
+                    local_path=str(entry.get("local_path") or ""),
+                    durable_uri=durable_uri,
+                    reason=release_reason,
+                )
+            )
+            continue
+        checksum_status, checksum_detail = _verify_durable_checkpoint(
+            checkpoint,
+            entry=entry,
+            repo_root=repo_root,
+            registry_path=registry_path,
+        )
+        if checksum_status == "verified":
+            status = "supported"
+            reason = "durable GitHub release pointer; in-tree bytes match recorded checksum"
+        else:
+            status = "unsupported_checksum_mismatch"
+            reason = f"{checksum_status}: {checksum_detail}"
+        display_path = checkpoint.display_path or str(entry.get("local_path") or "")
+        rows.append(
+            SnapshotRow(
+                identifier=checkpoint.model_id,
+                status=status,
+                source="model_registry",
+                local_path=display_path,
+                durable_uri=durable_uri,
+                reason=reason,
+                checksum_status=checksum_status,
+                checksum_detail=checksum_detail,
+            )
+        )
+
+    for rel_path, reason in unsupported_root_local.items():
         rows.append(
             SnapshotRow(
                 identifier=rel_path,
@@ -253,10 +489,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         for model_id in args.smoke_model_id
     ]
+    durable_ids = {checkpoint.model_id for checkpoint in DURABLE_LEGACY_CHECKPOINTS}
     blocking_rows = [
         row
         for row in inventory
-        if row.identifier in SUPPORTED_LEGACY_PPO_MODEL_IDS and row.status != "supported"
+        if (row.identifier in SUPPORTED_LEGACY_PPO_MODEL_IDS or row.identifier in durable_ids)
+        and row.status != "supported"
     ]
     payload = {
         "schema": "legacy_ppo_snapshot_parity.v1",
@@ -271,10 +509,12 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "legacy PPO snapshot parity: "
             f"status={payload['status']} supported={len(SUPPORTED_LEGACY_PPO_MODEL_IDS)} "
-            f"smoke={len(smoke_reports)} blocking={len(blocking_rows)}"
+            f"durable={len(DURABLE_LEGACY_CHECKPOINTS)} smoke={len(smoke_reports)} "
+            f"blocking={len(blocking_rows)}"
         )
         for row in inventory:
-            print(f"- {row.status}: {row.identifier} ({row.reason})")
+            extra = f" [{row.checksum_status}]" if row.checksum_status else ""
+            print(f"- {row.status}: {row.identifier}{extra} ({row.reason})")
     return 2 if blocking_rows else 0
 
 

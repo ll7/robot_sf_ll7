@@ -49,6 +49,7 @@ from robot_sf.training.multi_extractor_paths import (
     resolve_base_output_root,
     summary_paths,
 )
+from scripts.multi_extractor_training import load_configuration
 
 # %Y%m%d-%H%M%S as produced by ``datetime.now(UTC).strftime`` in make_run_directory.
 RUN_TIMESTAMP_PATTERN = re.compile(r"^\d{8}-\d{6}$")
@@ -254,6 +255,25 @@ def test_make_extractor_directory_normalizes_to_safe_single_component(
     assert extractor_dir == run_dir / "extractors" / expected_name
     assert extractor_dir.is_dir()
     assert extractor_dir.parent == run_dir / "extractors"
+
+
+def test_load_configuration_rejects_colliding_normalized_extractor_names(
+    tmp_path: Path,
+) -> None:
+    """Reject names that would otherwise write distinct extractors into one directory."""
+
+    config_path = tmp_path / "colliding_extractors.yaml"
+    config_path.write_text(
+        """
+extractors:
+  - name: alpha/beta
+  - name: alpha beta
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"alpha/beta.*alpha beta.*alpha_beta"):
+        load_configuration(config_path)
 
 
 @pytest.mark.parametrize("extractor_name", ["", "   ", "../", "---"])

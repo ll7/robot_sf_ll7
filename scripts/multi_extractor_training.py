@@ -46,6 +46,7 @@ from robot_sf.training.multi_extractor_analysis import (
     load_eval_history,
     sample_efficiency_ratio,
 )
+from robot_sf.training.multi_extractor_paths import validate_unique_extractor_names
 
 if TYPE_CHECKING:
     from robot_sf.feature_extractors.config import FeatureExtractorConfig
@@ -300,6 +301,7 @@ def load_configuration(
         )
         profiles.append(profile)
 
+    validate_unique_extractor_names(profile.name for profile in profiles)
     profiles.sort(key=lambda profile: profile.priority if profile.priority is not None else 0)
     return settings, profiles
 

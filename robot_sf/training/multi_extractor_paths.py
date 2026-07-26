@@ -5,8 +5,12 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from robot_sf.common.artifact_paths import resolve_artifact_path
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 ENV_TMP_OVERRIDE = "ROBOT_SF_MULTI_EXTRACTOR_TMP"
 DEFAULT_TMP_ROOT = Path("tmp/multi_extractor_training")
@@ -19,6 +23,21 @@ def _normalize_extractor_name(extractor_name: str) -> str:
     if not normalized:
         raise ValueError("extractor_name must contain at least one alphanumeric character")
     return normalized
+
+
+def validate_unique_extractor_names(extractor_names: Iterable[str]) -> None:
+    """Reject extractor names that would map to the same artifact directory."""
+
+    names_by_directory: dict[str, str] = {}
+    for extractor_name in extractor_names:
+        normalized = _normalize_extractor_name(extractor_name)
+        first_name = names_by_directory.get(normalized)
+        if first_name is not None:
+            raise ValueError(
+                "Extractor names normalize to the same artifact directory: "
+                f"{first_name!r} and {extractor_name!r} -> {normalized!r}"
+            )
+        names_by_directory[normalized] = extractor_name
 
 
 def resolve_base_output_root(env: dict[str, str] | None = None) -> Path:

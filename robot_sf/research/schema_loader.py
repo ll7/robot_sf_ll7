@@ -33,32 +33,35 @@ def get_schema_path(schema_filename: str) -> Path:
     """Get the path to a schema file.
 
     Args:
-        schema_filename: Schema filename (e.g., "report_metadata.schema.v1.json")
+        schema_filename: Relative schema filename (e.g., "report_metadata.schema.v1.json")
 
     Returns:
         Path to the schema file
 
     Raises:
-        ValidationError: If schema file not found
+        ValidationError: If the schema file is not found or its resolved path escapes a schema root
     """
-    # Check in robot_sf/benchmark/schemas/ (canonical location)
-    schema_dir = Path(__file__).parent.parent / "benchmark" / "schemas"
-    schema_path = schema_dir / schema_filename
+    # Check the canonical directory first, then the development fallback. Resolve both the root and
+    # candidate so a traversal path, absolute filename, or symlink cannot escape an approved root.
+    schema_dirs = (
+        Path(__file__).parent.parent / "benchmark" / "schemas",
+        Path(__file__).parent.parent.parent / "specs" / "270-imitation-report" / "contracts",
+    )
 
-    if not schema_path.exists():
-        # Fallback to specs directory (development location)
-        specs_dir = (
-            Path(__file__).parent.parent.parent / "specs" / "270-imitation-report" / "contracts"
-        )
-        schema_path = specs_dir / schema_filename
+    for schema_dir in schema_dirs:
+        resolved_schema_dir = schema_dir.resolve()
+        schema_path = (resolved_schema_dir / schema_filename).resolve()
+        if not schema_path.is_relative_to(resolved_schema_dir):
+            msg = f"Schema path must stay within configured schema directories: {schema_filename}"
+            logger.error(msg, schema_root=str(resolved_schema_dir))
+            raise ValidationError(msg)
+        if schema_path.exists():
+            logger.debug("Located schema file", path=str(schema_path))
+            return schema_path
 
-    if not schema_path.exists():
-        msg = f"Schema file not found: {schema_filename}"
-        logger.error(msg, search_paths=[str(schema_dir), str(specs_dir)])
-        raise ValidationError(msg)
-
-    logger.debug("Located schema file", path=str(schema_path))
-    return schema_path
+    msg = f"Schema file not found: {schema_filename}"
+    logger.error(msg, search_paths=[str(schema_dir) for schema_dir in schema_dirs])
+    raise ValidationError(msg)
 
 
 def load_schema(schema_filename: str) -> dict[str, Any]:

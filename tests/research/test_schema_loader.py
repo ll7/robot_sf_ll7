@@ -101,6 +101,37 @@ def test_get_schema_path_falls_back_to_specs_dir(
     assert resolved.is_relative_to(isolated_schema_dirs.fallback_dir)
 
 
+def test_get_schema_path_rejects_parent_traversal(
+    isolated_schema_dirs: SimpleNamespace,
+) -> None:
+    """A traversal filename cannot reach a file adjacent to the canonical schema root."""
+    traversal_name = "../outside.json"
+    outside_schema = isolated_schema_dirs.canonical_dir.parent / "outside.json"
+    _write_json(outside_schema, {"type": "object"})
+
+    with pytest.raises(ValidationError) as exc_info:
+        get_schema_path(traversal_name)
+
+    message = str(exc_info.value)
+    assert message.startswith("Schema path must stay within configured schema directories:")
+    assert traversal_name in message
+
+
+def test_get_schema_path_rejects_absolute_filename(
+    isolated_schema_dirs: SimpleNamespace,
+) -> None:
+    """An absolute filename cannot bypass the configured schema roots."""
+    outside_schema = isolated_schema_dirs.root / "outside.json"
+    _write_json(outside_schema, {"type": "object"})
+
+    with pytest.raises(ValidationError) as exc_info:
+        get_schema_path(str(outside_schema))
+
+    message = str(exc_info.value)
+    assert message.startswith("Schema path must stay within configured schema directories:")
+    assert str(outside_schema) in message
+
+
 def test_get_schema_path_raises_for_missing_schema(
     isolated_schema_dirs: SimpleNamespace,
 ) -> None:

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import shlex
+import subprocess
+import tomllib
 from typing import TYPE_CHECKING
 
 import pytest
 
 from scripts.dev.check_version_alignment import (
+    REPO_ROOT,
     base_version,
     evaluate,
     git_all_tags,
@@ -35,6 +39,42 @@ if TYPE_CHECKING:
 def test_numeric_version_from_tag(tag: str, expected: str | None) -> None:
     """Only release-line tags (X.Y.Z / vX.Y.Z / rcX.Y.Z) map to a number."""
     assert numeric_version_from_tag(tag) == expected
+
+
+def test_hatch_vcs_describe_command_ignores_artifact_tags(tmp_path: Path) -> None:
+    """Artifact tags cannot become the package version selected by git describe."""
+
+    def git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git("init", "-q")
+    git("config", "user.email", "agent@example.invalid")
+    git("config", "user.name", "Robot SF test")
+    (repo / "payload.txt").write_text("release\n", encoding="utf-8")
+    git("add", "payload.txt")
+    git("commit", "-qm", "release")
+    git("tag", "0.0.3")
+    (repo / "payload.txt").write_text("artifact release\n", encoding="utf-8")
+    git("commit", "-am", "artifact release")
+    git("tag", "artifact/legacy-models-2026-07-registry-v1")
+
+    assert git("describe", "--dirty", "--tags", "--long").stdout.startswith(
+        "artifact/legacy-models-"
+    )
+
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    command = pyproject["tool"]["hatch"]["version"]["raw-options"]["git_describe_command"]
+    assert isinstance(command, str)
+    command_parts = shlex.split(command)
+    assert command_parts[:2] == ["git", "describe"]
+    assert {"[0-9]*", "v[0-9]*", "rc[0-9]*"} <= set(command_parts)
+
+    filtered_describe = subprocess.run(
+        command_parts, cwd=repo, check=True, capture_output=True, text=True
+    )
+    assert filtered_describe.stdout.startswith("0.0.3-1-g")
 
 
 @pytest.mark.parametrize(

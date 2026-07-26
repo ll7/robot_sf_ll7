@@ -126,6 +126,10 @@ source = "vcs"
 
 [tool.hatch.version.raw-options]
 tag_regex = "^(?:[\\w.-]*?)(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
+# Artifact provenance tags are not package releases. Restrict `git describe`
+# before tag_regex parses its selected tag, while preserving every documented
+# plain, v-prefixed, and release-candidate version tag form.
+git_describe_command = "git describe --dirty --tags --long --match '[0-9]*' --match 'v[0-9]*' --match 'rc[0-9]*'"
 fallback_version = "0.0.3.dev0"
 
 [tool.hatch.build.hooks.vcs]

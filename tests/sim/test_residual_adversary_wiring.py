@@ -69,7 +69,7 @@ def _build_simulator(residual_active: bool):
             is_active=residual_active,
             target_ped_idx=-1,
             max_residual_accel_mps2=1.0,
-            max_jerk_mps3=5.0,
+            max_jerk_mps3=1e9,
         ),
     )
     config = RobotSimulationConfig(

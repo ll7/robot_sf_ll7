@@ -23,6 +23,7 @@ from robot_sf.ped_npc.residual_adversary import (
     BoundedResidualAdversary,
     ResidualAdversaryConfig,
     ResidualAdversaryObservation,
+    ResidualBoundConflictError,
     ScriptedPullResidualAdversaryPolicy,
     bound_heading_change,
     bound_route_deviation,
@@ -413,7 +414,7 @@ def test_residual_jerk_is_bounded_across_steps() -> None:
 
 
 def test_residual_fails_closed_when_jerk_and_route_bounds_are_infeasible() -> None:
-    """A route transition emits no residual when it conflicts with the jerk limit."""
+    """An infeasible route transition raises without violating the jerk bound."""
     max_jerk = 1.0
     dt = 0.1
 
@@ -440,13 +441,21 @@ def test_residual_fails_closed_when_jerk_and_route_bounds_are_infeasible() -> No
     velocities = np.zeros((1, 2))
     max_speeds = np.array([10.0])
     adversary._last_residual = np.array([[0.0, 0.5]])
-    current = adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
-    np.testing.assert_allclose(current, np.zeros((1, 2)))
-    assert abs(positions[0, 1] + current[0, 1] * dt**2) <= 0.05
+    with pytest.raises(ResidualBoundConflictError, match="jerk and non-jerk"):
+        adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
+    zero_fallback_jerk = np.linalg.norm(adversary._last_residual) / dt
+    assert zero_fallback_jerk > max_jerk
+    np.testing.assert_allclose(adversary._last_residual, [[0.0, 0.5]])
 
 
 @pytest.mark.parametrize(
-    ("positions", "velocities", "max_speeds", "last_residual", "route_polylines"),
+    (
+        "positions",
+        "velocities",
+        "max_speeds",
+        "last_residual",
+        "route_polylines",
+    ),
     [
         (
             np.array([[0.0, 0.0]]),
@@ -471,14 +480,14 @@ def test_residual_fails_closed_when_jerk_and_route_bounds_are_infeasible() -> No
         ),
     ],
 )
-def test_state_transition_final_output_preserves_hard_bounds(
+def test_conflicting_state_transition_fails_closed(
     positions: np.ndarray,
     velocities: np.ndarray,
     max_speeds: np.ndarray,
     last_residual: np.ndarray,
     route_polylines: list[np.ndarray] | None,
 ) -> None:
-    """Final output remains safe after speed, route, or separation state changes."""
+    """Conflicting speed, route, or separation constraints fail closed."""
 
     @dataclass
     class _PositiveXPolicy:
@@ -502,16 +511,8 @@ def test_state_transition_final_output_preserves_hard_bounds(
     )
     adversary._last_residual = last_residual
 
-    current = adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
-
-    np.testing.assert_allclose(current, np.zeros_like(current))
-    resulting_speeds = np.linalg.norm(velocities + current * dt, axis=1)
-    assert np.all(resulting_speeds <= max_speeds + 1e-9)
-    if route_polylines is not None:
-        assert abs(positions[0, 1] + current[0, 1] * dt**2) <= 0.05
-    candidate_positions = positions + current * dt**2
-    if len(positions) > 1:
-        assert np.linalg.norm(candidate_positions[0] - candidate_positions[1]) >= 0.6 - 1e-9
+    with pytest.raises(ResidualBoundConflictError, match="jerk and non-jerk"):
+        adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
 
 
 def test_residual_does_not_exceed_max_speed() -> None:

@@ -51,6 +51,10 @@ MIN_WALKABLE_MARGIN_M = 1e-3
 """Floor for the walkable-space projection margin so it is always strictly positive."""
 
 
+class ResidualBoundConflictError(RuntimeError):
+    """Raised when no residual can satisfy the jerk and non-jerk hard bounds."""
+
+
 def _require_finite(value: float, name: str, *, strict_positive: bool = False) -> None:
     """Raise ``ValueError`` when a scalar config value is non-finite or out of range."""
     if not isfinite(value):
@@ -882,7 +886,8 @@ class BoundedResidualAdversary:
 
         On each macro-action boundary (``step_index % macro_steps == 0``) a fresh
         proposal is requested from the policy and held. The applied residual then
-        passes through the full bound pipeline. Fails closed on non-finite input.
+        passes through the full bound pipeline. Fails closed on non-finite input or
+        an incompatible hard-bound state.
         """
         positions_array = _validate_finite_array(positions, "positions")
         velocities_array = _validate_finite_array(velocities, "velocities")
@@ -934,18 +939,15 @@ class BoundedResidualAdversary:
         bounded = self._apply_non_jerk_bounds(
             bounded, positions_array, velocities_array, max_speeds_array
         )
-        # Reapplying jerk can reintroduce a kinematic or geometry violation after
-        # the state changes.  Project it once more, then accept the result only if
-        # it still lies in the jerk-limited set.  When those sets do not intersect,
-        # emit no perturbation instead of weakening a hard safety bound.
-        jerk_limited = rate_limit_jerk(
-            bounded, self._last_residual, self.dt_s, self.config.max_jerk_mps3
-        )
-        bounded = self._apply_non_jerk_bounds(
-            jerk_limited, positions_array, velocities_array, max_speeds_array
-        )
-        if not np.allclose(bounded, jerk_limited, rtol=0.0, atol=EPSILON):
-            bounded = np.zeros_like(bounded)
+        # Geometry or kinematic projection may change the jerk-limited proposal.
+        # Accept that projection only when it is still jerk-reachable from the
+        # previous residual. When the hard-bound sets do not intersect, fail closed:
+        # zero is not necessarily jerk-reachable from the prior state.
+        max_jerk_step = self.config.max_jerk_mps3 * self.dt_s
+        if np.any(np.linalg.norm(bounded - self._last_residual, axis=1) > max_jerk_step + EPSILON):
+            raise ResidualBoundConflictError(
+                "jerk and non-jerk residual bounds are infeasible; residual not applied"
+            )
         self._last_residual = bounded
         self._step_index += 1
         return bounded.copy()
@@ -1037,6 +1039,7 @@ __all__ = [
     "ResidualAdversaryObservation",
     "ResidualAdversaryPolicy",
     "ResidualAdversarySettings",
+    "ResidualBoundConflictError",
     "ScriptedPullResidualAdversaryPolicy",
     "bound_heading_change",
     "bound_route_deviation",

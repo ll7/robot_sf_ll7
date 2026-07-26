@@ -109,10 +109,12 @@ class TensorBoardAdapter:
         """
 
         count = 0
-        for snapshot in iter_telemetry_snapshots(telemetry_file):
-            self.consume_snapshot(snapshot)
-            count += 1
-        self.close()
+        try:
+            for snapshot in iter_telemetry_snapshots(telemetry_file):
+                self.consume_snapshot(snapshot)
+                count += 1
+        finally:
+            self.close()
         return count
 
 

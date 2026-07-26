@@ -234,6 +234,13 @@ class _FakeSummaryWriter:
         self.closed += 1
 
 
+class _RaisingSummaryWriter(_FakeSummaryWriter):
+    """Writer double that fails during scalar emission."""
+
+    def add_scalar(self, tag: str, value: float, global_step: int | None = None) -> None:
+        raise RuntimeError("synthetic scalar-emission failure")
+
+
 def _adapter(
     log_dir: Path, *, available: bool = True, tag_prefix: str = "telemetry"
 ) -> TensorBoardAdapter:
@@ -456,5 +463,22 @@ def test_mirror_file_emits_scalars_and_closes_writer(tmp_path: Path):
         ("mirror/memory_rss_mb", 300.0, 2),
     ]
     # close is guaranteed
+    assert writer.closed == 1
+    assert adapter._writer is None
+
+
+def test_mirror_file_closes_writer_when_scalar_emission_raises(tmp_path: Path):
+    path = tmp_path / "telemetry.jsonl"
+    _write_jsonl(path, [json.dumps({"timestamp_ms": 1, "steps_per_sec": 10.0})])
+    adapter = _adapter(tmp_path / "events", available=True)
+    adapter._writer_cls = _RaisingSummaryWriter
+    adapter.start()
+    writer = adapter._writer
+    assert writer is not None
+
+    with pytest.raises(RuntimeError, match="synthetic scalar-emission failure"):
+        adapter.mirror_file(path)
+
+    assert writer.flushed == 1
     assert writer.closed == 1
     assert adapter._writer is None

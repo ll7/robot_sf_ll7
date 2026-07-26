@@ -412,8 +412,8 @@ def test_residual_jerk_is_bounded_across_steps() -> None:
         prev = nxt
 
 
-def test_residual_jerk_remains_bounded_after_route_projection() -> None:
-    """Route projection cannot bypass the final per-step jerk limit."""
+def test_residual_fails_closed_when_jerk_and_route_bounds_are_infeasible() -> None:
+    """A route transition emits no residual when it conflicts with the jerk limit."""
     max_jerk = 1.0
     dt = 0.1
 
@@ -440,9 +440,78 @@ def test_residual_jerk_remains_bounded_after_route_projection() -> None:
     velocities = np.zeros((1, 2))
     max_speeds = np.array([10.0])
     adversary._last_residual = np.array([[0.0, 0.5]])
-    previous = adversary.last_residual
     current = adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
-    assert np.linalg.norm(current - previous) / dt <= max_jerk + 1e-9
+    np.testing.assert_allclose(current, np.zeros((1, 2)))
+    assert abs(positions[0, 1] + current[0, 1] * dt**2) <= 0.05
+
+
+@pytest.mark.parametrize(
+    ("positions", "velocities", "max_speeds", "last_residual", "route_polylines"),
+    [
+        (
+            np.array([[0.0, 0.0]]),
+            np.array([[1.49, 0.0]]),
+            np.array([1.5]),
+            np.array([[0.5, 0.0]]),
+            None,
+        ),
+        (
+            np.array([[0.0, 0.05]]),
+            np.zeros((1, 2)),
+            np.array([10.0]),
+            np.array([[0.0, 0.5]]),
+            [np.array([[0.0, 0.0], [2.0, 0.0]])],
+        ),
+        (
+            np.array([[0.0, 0.0], [0.6, 0.0]]),
+            np.zeros((2, 2)),
+            np.array([10.0, 10.0]),
+            np.array([[0.5, 0.0], [0.0, 0.0]]),
+            None,
+        ),
+    ],
+)
+def test_state_transition_final_output_preserves_hard_bounds(
+    positions: np.ndarray,
+    velocities: np.ndarray,
+    max_speeds: np.ndarray,
+    last_residual: np.ndarray,
+    route_polylines: list[np.ndarray] | None,
+) -> None:
+    """Final output remains safe after speed, route, or separation state changes."""
+
+    @dataclass
+    class _PositiveXPolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            return np.tile(np.array([5.0, 0.0]), (observation.positions.shape[0], 1))
+
+    dt = 0.1
+    adversary = BoundedResidualAdversary(
+        config=ResidualAdversaryConfig(
+            is_active=True,
+            macro_action_dt_s=dt,
+            max_residual_accel_mps2=10.0,
+            max_jerk_mps3=1.0,
+            max_route_deviation_m=0.05,
+            min_separation_m=0.6,
+        ),
+        policy=_PositiveXPolicy(),
+        dt_s=dt,
+        num_peds=len(positions),
+        route_polylines=route_polylines,
+    )
+    adversary._last_residual = last_residual
+
+    current = adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
+
+    np.testing.assert_allclose(current, np.zeros_like(current))
+    resulting_speeds = np.linalg.norm(velocities + current * dt, axis=1)
+    assert np.all(resulting_speeds <= max_speeds + 1e-9)
+    if route_polylines is not None:
+        assert abs(positions[0, 1] + current[0, 1] * dt**2) <= 0.05
+    candidate_positions = positions + current * dt**2
+    if len(positions) > 1:
+        assert np.linalg.norm(candidate_positions[0] - candidate_positions[1]) >= 0.6 - 1e-9
 
 
 def test_residual_does_not_exceed_max_speed() -> None:

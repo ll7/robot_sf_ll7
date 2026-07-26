@@ -812,6 +812,65 @@ class BoundedResidualAdversary:
         """Return a copy of the residual applied on the most recent step."""
         return self._last_residual.copy()
 
+    def _apply_non_jerk_bounds(
+        self,
+        residual: np.ndarray,
+        positions: np.ndarray,
+        velocities: np.ndarray,
+        max_speeds: np.ndarray,
+    ) -> np.ndarray:
+        """Apply every hard bound other than the stateful jerk-rate limit.
+
+        This helper is deliberately reusable after jerk limiting: geometry and
+        kinematic projections may otherwise be invalidated by a later rate limit.
+
+        Returns
+        -------
+        np.ndarray
+            Residual satisfying acceleration, kinematic, route, walkable-space,
+            and separation bounds.
+        """
+        bounded = clamp_magnitude(residual, self.config.max_residual_accel_mps2)
+        bounded = bound_speed(
+            bounded,
+            velocities,
+            max_speeds,
+            self.dt_s,
+            self.config.max_speed_delta_mps,
+        )
+        per_step_allowance = self.config.max_heading_change_per_macro_rad / self._macro_steps
+        bounded = bound_heading_change(bounded, velocities, per_step_allowance)
+        bounded = bound_route_deviation(
+            bounded,
+            positions,
+            self.dt_s,
+            self.route_polylines,
+            self._target_indices,
+            self.config.max_route_deviation_m,
+        )
+        residual_displacement = bounded * (self.dt_s * self.dt_s)
+        residual_displacement = project_residual_displacement_walkable(
+            positions,
+            residual_displacement,
+            self.obstacle_segments,
+            self.bounds,
+            self.ped_radius,
+            self.config.obstacle_projection_margin_m,
+        )
+        bounded = residual_displacement / (self.dt_s * self.dt_s)
+        bounded = clamp_magnitude(bounded, self.config.max_residual_accel_mps2)
+        residual_displacement = bounded * (self.dt_s * self.dt_s)
+        residual_displacement = enforce_inter_agent_separation(
+            residual_displacement,
+            positions,
+            self._target_mask,
+            self.config.min_separation_m,
+        )
+        bounded = residual_displacement / (self.dt_s * self.dt_s)
+        return clamp_magnitude(
+            bounded * self._target_mask[:, None], self.config.max_residual_accel_mps2
+        )
+
     def step_residual(
         self,
         positions: np.ndarray,
@@ -872,70 +931,21 @@ class BoundedResidualAdversary:
         bounded = rate_limit_jerk(
             bounded, self._last_residual, self.dt_s, self.config.max_jerk_mps3
         )
-        # 2. Acceleration magnitude clamp.
-        bounded = clamp_magnitude(bounded, self.config.max_residual_accel_mps2)
-        # 3. Speed bound.
-        bounded = bound_speed(
-            bounded,
-            velocities_array,
-            max_speeds_array,
-            self.dt_s,
-            self.config.max_speed_delta_mps,
+        bounded = self._apply_non_jerk_bounds(
+            bounded, positions_array, velocities_array, max_speeds_array
         )
-        # 4. Heading change bound (per-step allowance derived from the macro budget).
-        per_step_allowance = self.config.max_heading_change_per_macro_rad / self._macro_steps
-        bounded = bound_heading_change(bounded, velocities_array, per_step_allowance)
-        # 5. Route deviation bound.
-        bounded = bound_route_deviation(
-            bounded,
-            positions_array,
-            self.dt_s,
-            self.route_polylines,
-            self._target_indices,
-            self.config.max_route_deviation_m,
-        )
-        # 6. Walkable-space projection on the residual displacement.
-        residual_displacement = bounded * (self.dt_s * self.dt_s)
-        residual_displacement = project_residual_displacement_walkable(
-            positions_array,
-            residual_displacement,
-            self.obstacle_segments,
-            self.bounds,
-            self.ped_radius,
-            self.config.obstacle_projection_margin_m,
-        )
-        with np.errstate(divide="ignore", invalid="ignore"):
-            bounded = np.where(
-                self.dt_s * self.dt_s > EPSILON,
-                residual_displacement / (self.dt_s * self.dt_s),
-                0.0,
-            )
-        # Re-clamp after projection so the push-out never inflates the residual.
-        bounded = clamp_magnitude(bounded, self.config.max_residual_accel_mps2)
-        # 7. Inter-agent separation on the residual displacement.
-        residual_displacement = bounded * (self.dt_s * self.dt_s)
-        residual_displacement = enforce_inter_agent_separation(
-            residual_displacement,
-            positions_array,
-            self._target_mask,
-            self.config.min_separation_m,
-        )
-        with np.errstate(divide="ignore", invalid="ignore"):
-            bounded = np.where(
-                self.dt_s * self.dt_s > EPSILON,
-                residual_displacement / (self.dt_s * self.dt_s),
-                0.0,
-            )
-        # Keep non-targeted rows exactly zero and store for the next jerk step.
-        bounded = bounded * self._target_mask[:, None]
-        bounded = clamp_magnitude(bounded, self.config.max_residual_accel_mps2)
-        # Geometry and separation projections can change the applied residual.
-        # Reapply the jerk limit after those projections so the stored residual
-        # always satisfies the advertised per-step jerk contract.
-        bounded = rate_limit_jerk(
+        # Reapplying jerk can reintroduce a kinematic or geometry violation after
+        # the state changes.  Project it once more, then accept the result only if
+        # it still lies in the jerk-limited set.  When those sets do not intersect,
+        # emit no perturbation instead of weakening a hard safety bound.
+        jerk_limited = rate_limit_jerk(
             bounded, self._last_residual, self.dt_s, self.config.max_jerk_mps3
         )
-        bounded = clamp_magnitude(bounded, self.config.max_residual_accel_mps2)
+        bounded = self._apply_non_jerk_bounds(
+            jerk_limited, positions_array, velocities_array, max_speeds_array
+        )
+        if not np.allclose(bounded, jerk_limited, rtol=0.0, atol=EPSILON):
+            bounded = np.zeros_like(bounded)
         self._last_residual = bounded
         self._step_index += 1
         return bounded.copy()

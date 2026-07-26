@@ -1,7 +1,7 @@
 {
-  "schema_version": "evidence-review-marker.v1",
   "artifact_path": "docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml",
-  "artifact_sha256": "89520a1dc5b875386693a2c54829a621c8ad18d814f63b34d737844b658f24fb",
+  "artifact_sha256": "d030d4fddb1d8c95ae18b449e9307280bf6a8f01a3c0d521481adc8e2d099158",
+  "preserved_exact_bytes": true,
   "review_marker": "AI-GENERATED NEEDS-REVIEW",
-  "preserved_exact_bytes": true
+  "schema_version": "evidence-review-marker.v1"
 }

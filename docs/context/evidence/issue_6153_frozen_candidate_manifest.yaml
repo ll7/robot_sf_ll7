@@ -1,17 +1,14 @@
-# Frozen 0.0.5 Release Candidate Manifest (refreeze)
+# Frozen 0.0.5 Release Candidate Manifest (reverification)
 # Issue: #6153
 # Parent Issue: #6149
 # Release Target: 0.0.5
-# Refreeze Date: 2026-07-25
+# Verification Date: 2026-07-26
 #
-# This refreeze supersedes the invalidated 2026-07-23 freeze merged in PR #6167.
-# Per the reopen comment on #6153, candidate #5416's full acceptance checker now
-# exits non-zero with status=blocked on current main, and its frozen provenance
-# (source commit 13cb68de... / config sha256 1ec798e7...) is stale relative to
-# current main. This manifest is refrozen against current acceptance results:
-# #5416 is excluded unless its frozen bytes genuinely pass the current checker
-# (they do not). No candidate result or metric was changed during this freeze;
-# corrections are routed back to the owning issue.
+# This manifest was re-verified on 2026-07-26 against origin/main HEAD
+# e27a5a990. All acceptance checkers were re-run; all three included candidates
+# still pass their gates. The three excluded candidates remain excluded with
+# the same missing-gate reasons. No candidate result or metric was changed.
+# Corrections are routed back to the owning issue.
 #
 # The manifest's own SHA-256 is recorded in the sibling file
 # issue_6153_frozen_candidate_manifest.yaml.sha256 (computed over these bytes).
@@ -20,13 +17,13 @@ schema_version: release_0_0_5_candidate_manifest.v1
 issue: 6153
 parent_issue: 6149
 target_release: "0.0.5"
-date: "2026-07-25"
-evaluated_against_origin_main: "e5f8bece13d7d03c53bf917d190e3825ec4c6718"
+date: "2026-07-26"
+evaluated_against_origin_main: "e27a5a9900e9f83f1b1bbf2501de76bc71eed400"
 supersedes:
-  prior_manifest_commit: "d14d55e7a"
-  prior_pr: 6167
-  prior_date: "2026-07-23"
-  reason: "Prior freeze recorded candidate #5416 as include/status=ready; current-main full acceptance checker returns status=blocked and the frozen #5416 provenance is stale."
+  prior_manifest_commit: "e5f8bece13d7d03c53bf917d190e3825ec4c6718"
+  prior_pr: 6312
+  prior_date: "2026-07-25"
+  reason: "Re-verified all acceptance checkers against current origin/main HEAD on 2026-07-26. All dispositions unchanged."
 
 summary:
   total_candidates: 6
@@ -34,9 +31,9 @@ summary:
   excluded_candidates: 3
   included: [5034, 5592, 5305]
   excluded: [4977, 5416, 5756]
-  disposition_status: candidate_manifest_frozen_refreeze
+  disposition_status: candidate_manifest_reverified
   release_recommendation: "proceed_to_assembly_with_three_candidates"
-  note: "No candidate result or metric was changed here. Excluded candidates remain owned by their original issues."
+  note: "Re-verified 2026-07-26 against origin/main HEAD e27a5a990. No candidate result or metric was changed here. Excluded candidates remain owned by their original issues."
 
 pool_review:
   named_pool: [5034, 4977, 5592, 5416, 5756, 5305]
@@ -61,11 +58,11 @@ candidates:
     sha256_coverage:
       manifest_file: "docs/context/evidence/issue_5034_control_action_latency_sweep/manifest.sha256"
       summary_json_sha256: "caa5355200b19ec78adb87b261806d3e4a4f13bc56fd30423b6c1b3d66eb27ba"
-      checksum_verification: "passed (sha256sum -c manifest.sha256: all 9 entries OK at refreeze)"
+      checksum_verification: "passed (sha256sum -c manifest.sha256: all 9 entries OK at reverification)"
     acceptance_checker:
       command: "verify fixed_scope_coverage.status in docs/context/evidence/issue_5034_control_action_latency_sweep/summary.json"
       version: "control_action_latency_fixed_scope_coverage.v1"
-      result: "fixed_scope_coverage.status=verified (expected_row_count=1296, observed_row_count=1296; 48 scenarios x 3 latency variants x 3 planner groups x 3 seeds)"
+      result: "fixed_scope_coverage.status=verified (expected_row_count=1296, observed_row_count=1296; 48 scenarios x 3 latency variants x 3 planner groups x 3 seeds); re-verified 2026-07-26"
       gate_status: passed
     evidence_classification: metric_evidence_promotion
     allowed_claim: "control-action-latency metric-evidence promotion only: action latency metadata plus success / collision / minimum-clearance metrics per eligible native/adapter latency cell. evidence_tier=targeted smoke; result_classification=diagnostic-only."
@@ -74,7 +71,7 @@ candidates:
       synthetic: "no"
       execution_mode: "native_or_adapter"
     disposition: include
-    rationale: "Passed acceptance gate (fixed_scope_coverage.status=verified with matching row count); manifest.sha256 checksums verified at refreeze; explicit claim boundary documented."
+    rationale: "Passed acceptance gate (fixed_scope_coverage.status=verified with matching row count); manifest.sha256 checksums verified at reverification; explicit claim boundary documented."
     dependencies:
       parent_issue: 4977
       depends_on_pr: "#5026"
@@ -92,7 +89,7 @@ candidates:
     acceptance_checker:
       command: "check docs/context/evidence for issue #4977 campaign evidence and confirm GitHub state"
       version: none
-      result: "gate missing: issue #4977 is CLOSED with label blocked:needs-campaign; campaign was not executed. Only classification notes (issue_5034_parent_4977_classification_*) exist; no campaign evidence."
+      result: "gate missing: issue #4977 is CLOSED with label blocked:needs-campaign; campaign was not executed. Only classification notes (issue_5034_parent_4977_classification_*) exist; no campaign evidence; re-verified 2026-07-26"
       gate_status: failed
     evidence_classification: campaign_not_executed
     allowed_claim: none
@@ -121,7 +118,7 @@ candidates:
     acceptance_checker:
       command: "uv run python scripts/validation/check_issue_5592_cross_matrix_preregistration.py --json"
       version: "issue_5592_cross_matrix_preregistration.v1"
-      result: "status=ready, campaign_execution_allowed=false (reference_scenario_count=23, candidate_scenario_count=3, planner_count=12, seed_count=5); exit_code=0 at refreeze"
+      result: "status=ready, campaign_execution_allowed=false (reference_scenario_count=23, candidate_scenario_count=3, planner_count=12, seed_count=5); exit_code=0 at reverification 2026-07-26"
       gate_status: passed
     evidence_classification: preregistration_packet
     allowed_claim: "Generalization check contract across two scenario matrices only. Does not establish paper/dissertation ranking."
@@ -145,13 +142,13 @@ candidates:
     durable_artifact_uri: "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
     sha256_coverage:
       config_file: "configs/benchmarks/issue_5416_sipp_four_geometry_preregistration.yaml"
-      checksum_verification: "verified (current config sha256 recorded above; matches current main and PR #6280, not the stale 1ec798e7... from the 2026-07-23 freeze)"
+      checksum_verification: "verified (current config sha256 recorded above; matches current main HEAD e27a5a990; re-verified 2026-07-26)"
     acceptance_checker:
       command: "uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --json"
       version: "issue_5416_sipp_four_geometry_preregistration.v1"
-      result: "status=blocked, campaign_execution_allowed=false, geometry_certified=true, exit_code=1 at refreeze. blocked_rows: [classic_doorway_low, classic_station_platform_medium, classic_merging_low] (three geometrically infeasible: planned_path_swept_envelope_clips_obstacle). Only classic_head_on_corridor_low is eligible (hard_but_solvable)."
+      result: "status=blocked, campaign_execution_allowed=false, geometry_certified=true, exit_code=1 at reverification 2026-07-26. blocked_rows: [classic_doorway_low, classic_station_platform_medium, classic_merging_low] (three geometrically infeasible: planned_path_swept_envelope_clips_obstacle). Only classic_head_on_corridor_low is eligible (hard_but_solvable)."
       metadata_only_command: "uv run python scripts/validation/check_issue_5416_sipp_four_geometry_packet.py --metadata-only --json"
-      metadata_only_result: "status=metadata_only, geometry_certified=false, exit_code=0 (metadata-only does not certify geometry and is not the acceptance gate)"
+      metadata_only_result: "status=metadata_only, geometry_certified=false, exit_code=0 (metadata-only does not certify geometry and is not the acceptance gate); re-verified 2026-07-26"
       gate_status: failed
     evidence_classification: preregistration_packet_blocked
     allowed_claim: none
@@ -178,7 +175,7 @@ candidates:
     acceptance_checker:
       command: "check docs/context/evidence for completed issue #5756 evidence and confirm GitHub state"
       version: none
-      result: "gate missing: issue #5756 is OPEN with label state:running and no completed evidence directory under docs/context/evidence/ (campaign in progress)"
+      result: "gate missing: issue #5756 is OPEN with label state:running and no completed evidence directory under docs/context/evidence/ (campaign in progress); re-verified 2026-07-26"
       gate_status: failed
     evidence_classification: campaign_in_progress
     allowed_claim: none
@@ -203,11 +200,11 @@ candidates:
       checksum_sums: "docs/context/evidence/issue_5305_certified_archive/SHA256SUMS"
       archive_json_sha256: "79e022587b35c1c42bc07cfefaf882af473e96841a99ef57f98a4cee26636445"
       acceptance_report_json_sha256: "d297f759e5cb91d7c18a964c09162fd98091f8c38f9c30756431260a2dbb587c"
-      checksum_verification: "passed (sha256sum -c SHA256SUMS: all 7 entries OK at refreeze)"
+      checksum_verification: "passed (sha256sum -c SHA256SUMS: all 7 entries OK at reverification 2026-07-26)"
     acceptance_checker:
       command: "verify acceptance_report.json in docs/context/evidence/issue_5305_certified_archive"
       version: "issue5305_archive_acceptance.v1"
-      result: "status=passed, repository_readiness.ready=true (entry_count=17 certified entries across 2 distinct scenario families; archive_id_overlap_count=0, seed_overlap_count=0)"
+      result: "status=passed, repository_readiness.ready=true (entry_count=17 certified entries across 2 distinct scenario families; archive_id_overlap_count=0, seed_overlap_count=0); re-verified 2026-07-26, SHA256SUMS all OK"
       gate_status: passed
     evidence_classification: certified_adversarial_archive
     allowed_claim: "certified adversarial archive of 17 certified episode entries with stable failure mechanism attributions and disjoint scenario splits."
@@ -216,7 +213,7 @@ candidates:
       synthetic: "no"
       execution_mode: "certified_archive"
     disposition: include
-    rationale: "Passed acceptance gate (status=passed, repository_readiness.ready=true); SHA256SUMS verified at refreeze; non-fallback certified archive."
+    rationale: "Passed acceptance gate (status=passed, repository_readiness.ready=true); SHA256SUMS verified at reverification; non-fallback certified archive."
     dependencies:
       reference_archives:
         - "docs/context/evidence/issue_1501_adversarial_smoke_2026-05-28/archive.json"

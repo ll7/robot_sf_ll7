@@ -127,6 +127,16 @@ source = "vcs"
 [tool.hatch.version.raw-options]
 tag_regex = "^(?:[\\w.-]*?)(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
 fallback_version = "0.0.3.dev0"
+# Restrict `git describe` to version-shaped tags so non-version tags cannot win
+# the "most recent reachable tag" election and break VCS versioning.
+# Evidence-provenance tags such as `artifact/legacy-models-2026-07-registry-v1`
+# and `camera-ready-*` carry no dotted X.Y.Z and are excluded here, mirroring
+# scripts/dev/check_version_alignment.py (_VERSION_TAG_RE). This is the glob
+# setuptools-scm uses for `tag.strict = true` (*[0-9]*.*[0-9]*, "tags must
+# contain at least one dot, rejecting event-style tags"). hatch-vcs 0.5 calls
+# setuptools_scm.get_version(**raw-options), whose signature has no nested
+# `tag` parameter, so the describe command is overridden directly instead.
+git_describe_command = "git describe --dirty --tags --long --abbrev=40 --match *[0-9]*.*[0-9]*"
 
 [tool.hatch.build.hooks.vcs]
 # Build hook writes the resolved version to an importable module so

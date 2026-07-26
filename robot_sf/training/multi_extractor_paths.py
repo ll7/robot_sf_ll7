@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -9,6 +10,15 @@ from robot_sf.common.artifact_paths import resolve_artifact_path
 
 ENV_TMP_OVERRIDE = "ROBOT_SF_MULTI_EXTRACTOR_TMP"
 DEFAULT_TMP_ROOT = Path("tmp/multi_extractor_training")
+
+
+def _normalize_extractor_name(extractor_name: str) -> str:
+    """Return a filesystem-safe, single-component extractor directory name."""
+
+    normalized = re.sub(r"[^A-Za-z0-9._-]+", "_", extractor_name.strip()).strip("._-")
+    if not normalized:
+        raise ValueError("extractor_name must contain at least one alphanumeric character")
+    return normalized
 
 
 def resolve_base_output_root(env: dict[str, str] | None = None) -> Path:
@@ -45,16 +55,13 @@ def make_run_directory(
 
 
 def make_extractor_directory(run_dir: Path, extractor_name: str) -> Path:
-    """Ensure the per-extractor subdirectory exists and return it.
+    """Ensure the normalized per-extractor subdirectory exists and return it.
 
     Returns:
         Path: The path to the extractor-specific directory.
     """
 
-    if not extractor_name:
-        raise ValueError("extractor_name must be provided")
-
-    extractor_dir = run_dir / "extractors" / extractor_name
+    extractor_dir = run_dir / "extractors" / _normalize_extractor_name(extractor_name)
     extractor_dir.mkdir(parents=True, exist_ok=True)
     return extractor_dir
 

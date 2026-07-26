@@ -11,7 +11,8 @@ These tests lock the filesystem contracts exposed by
   materializes the base root, creates the ``extractors/`` sibling subdirectory,
   and rejects empty run ids.
 * ``make_extractor_directory`` creates the per-extractor directory under
-  ``extractors/`` and rejects empty names.
+  ``extractors/`` using a filesystem-safe normalized name and rejects names
+  that contain no alphanumeric characters.
 * ``summary_paths`` returns the canonical ``summary.json`` / ``summary.md``
   locations for a run.
 
@@ -26,13 +27,10 @@ Determinism / isolation rules:
   (``robot_sf.common.artifact_paths.resolve_artifact_path``) so no
   repository-rooted path is materialized.
 
-Note on extractor-name handling: the issue objective lists
-"sanitization/normalization", but the implementation uses the supplied
-extractor name verbatim (it is not rewritten). Per the issue stop condition
-("Do not change artifact layout unless a focused test proves a clear defect"),
-these tests lock the actual verbatim contract instead of inventing
-normalization; the contradiction is reported in the PR rather than resolved by
-changing the artifact layout.
+Extractor names are normalized to a single portable directory component: unsafe
+characters (including path separators and whitespace) become underscores, and
+leading/trailing punctuation is removed. This prevents traversal-like names
+from escaping the run's ``extractors/`` directory.
 """
 
 from __future__ import annotations
@@ -229,8 +227,20 @@ def test_make_extractor_directory_creates_dir_under_extractors(tmp_path: Path) -
     assert first.is_dir()
 
 
-def test_make_extractor_directory_uses_name_verbatim(tmp_path: Path) -> None:
-    """Extractor names are used verbatim; no normalization is applied."""
+@pytest.mark.parametrize(
+    ("extractor_name", "expected_name"),
+    [
+        ("My_CNN.v2", "My_CNN.v2"),
+        ("My CNN/v2", "My_CNN_v2"),
+        ("../outside", "outside"),
+    ],
+)
+def test_make_extractor_directory_normalizes_to_safe_single_component(
+    tmp_path: Path,
+    extractor_name: str,
+    expected_name: str,
+) -> None:
+    """Unsafe names cannot introduce nested or traversal directory components."""
 
     base = tmp_path / "mx_base"
     run_dir = make_run_directory(
@@ -239,15 +249,18 @@ def test_make_extractor_directory_uses_name_verbatim(tmp_path: Path) -> None:
         timestamp="20240101-000000",
     )
 
-    name = "My_CNN.v2"
-    extractor_dir = make_extractor_directory(run_dir, name)
+    extractor_dir = make_extractor_directory(run_dir, extractor_name)
 
-    assert extractor_dir == run_dir / "extractors" / name
+    assert extractor_dir == run_dir / "extractors" / expected_name
     assert extractor_dir.is_dir()
+    assert extractor_dir.parent == run_dir / "extractors"
 
 
-def test_make_extractor_directory_empty_name_raises(tmp_path: Path) -> None:
-    """An empty extractor name is rejected."""
+@pytest.mark.parametrize("extractor_name", ["", "   ", "../", "---"])
+def test_make_extractor_directory_name_without_alphanumeric_characters_raises(
+    tmp_path: Path, extractor_name: str
+) -> None:
+    """Names that normalize to no usable directory component are rejected."""
 
     base = tmp_path / "mx_base"
     run_dir = make_run_directory(
@@ -256,8 +269,8 @@ def test_make_extractor_directory_empty_name_raises(tmp_path: Path) -> None:
         timestamp="20240101-000000",
     )
 
-    with pytest.raises(ValueError, match="extractor_name must be provided"):
-        make_extractor_directory(run_dir, "")
+    with pytest.raises(ValueError, match="extractor_name must contain"):
+        make_extractor_directory(run_dir, extractor_name)
 
 
 # ---------------------------------------------------------------------------

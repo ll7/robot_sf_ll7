@@ -118,15 +118,30 @@ build-backend = "hatchling.build"
 # --- Single-source version: git tag -> package version (hatch-vcs) ---------
 # The git tag/release line is the canonical version source. Release tags are
 # plain "X.Y.Z" (e.g. 0.0.2) and release-candidate tags are "rcX.Y.Z"
-# (e.g. rc0.0.3); tag_regex maps both to the numeric X.Y.Z. For non-tag builds
-# (sdists, untagged CI checkouts) hatch-vcs derives a PEP 440 dev version and
-# falls back to fallback_version so builds never break.
+# (e.g. rc0.0.3); tag_regex maps both to the numeric X.Y.Z. Version-tag
+# discovery filters to the three release-line forms so operational tags such
+# as ``artifact/...-2026-07`` do not become the nearest candidate. For non-tag
+# builds (sdists, untagged CI checkouts) hatch-vcs derives a PEP 440 dev
+# version and falls back to fallback_version so builds never break.
 [tool.hatch.version]
 source = "vcs"
 
 [tool.hatch.version.raw-options]
 tag_regex = "^(?:[\\w.-]*?)(?P<version>\\d+\\.\\d+\\.\\d+.*)$"
 fallback_version = "0.0.3.dev0"
+git_describe_command = [
+    "git",
+    "describe",
+    "--dirty",
+    "--tags",
+    "--long",
+    "--match",
+    "[0-9]*.[0-9]*.[0-9]*",
+    "--match",
+    "rc[0-9]*.[0-9]*.[0-9]*",
+    "--match",
+    "v[0-9]*.[0-9]*.[0-9]*",
+]
 
 [tool.hatch.build.hooks.vcs]
 # Build hook writes the resolved version to an importable module so

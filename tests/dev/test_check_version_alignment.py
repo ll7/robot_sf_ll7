@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -14,9 +15,6 @@ from scripts.dev.check_version_alignment import (
     load_citation_version,
     numeric_version_from_tag,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 @pytest.mark.parametrize(
@@ -189,3 +187,24 @@ def test_repo_citation_matches_latest_release_tag() -> None:
         citation_version=citation_version,
     )
     assert problems == [], problems
+
+
+def test_hatch_vcs_ignores_non_release_operational_tags() -> None:
+    """Version discovery must not select numeric operational artifact tags."""
+    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
+    config = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    raw_options = config["tool"]["hatch"]["version"]["raw-options"]
+
+    assert raw_options["git_describe_command"] == [
+        "git",
+        "describe",
+        "--dirty",
+        "--tags",
+        "--long",
+        "--match",
+        "[0-9]*.[0-9]*.[0-9]*",
+        "--match",
+        "rc[0-9]*.[0-9]*.[0-9]*",
+        "--match",
+        "v[0-9]*.[0-9]*.[0-9]*",
+    ]

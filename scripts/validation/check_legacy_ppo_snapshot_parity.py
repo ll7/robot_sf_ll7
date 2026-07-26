@@ -27,7 +27,11 @@ import numpy as np
 
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
 
-from robot_sf.models.registry import load_registry, resolve_model_path
+from robot_sf.models.registry import (
+    _download_from_github_release,
+    load_registry,
+    resolve_model_path,
+)
 
 SUPPORTED_LEGACY_PPO_MODEL_IDS = (
     "ppo_expert_br06_v3_15m_all_maps_randomized_20260304T075200",
@@ -71,7 +75,9 @@ class DurableLegacyCheckpoint:
 # zips below previously lived in UNSUPPORTED_ROOT_LOCAL_PPO_SNAPSHOTS; the
 # pedestrian zips and the ga3c_cadrl triplet had no durable classification.
 # Phase A flips all of them to supported/durable. Nothing is deleted, moved, or
-# renamed; registry local paths point at the resolver's ignored release cache.
+# renamed. Single-file registry local paths point at the resolver's ignored release
+# cache; GA3C retains its existing in-tree .meta resolver path because SA-CADRL
+# requires the adjacent TensorFlow checkpoint files.
 DURABLE_LEGACY_CHECKPOINTS: tuple[DurableLegacyCheckpoint, ...] = (
     DurableLegacyCheckpoint(
         model_id="legacy_ppo_run_023",
@@ -335,12 +341,21 @@ def _verify_durable_checkpoint(
         return source_status, source_detail
 
     try:
-        resolved = resolve_model_path(
-            checkpoint.model_id,
-            registry_path=registry_path,
-            allow_download=True,
-            cache_dir=cache_dir,
-        )
+        if checkpoint.kind == "multi_file_bundle":
+            # Phase A deliberately retains GA3C's in-tree ``.meta`` local_path so
+            # SA-CADRL receives a usable checkpoint prefix. Download the published
+            # bundle directly for provenance verification without changing that
+            # runtime resolver contract.
+            resolved = _download_from_github_release(
+                dict(entry), cache_dir=cache_dir, allow_download=True
+            )
+        else:
+            resolved = resolve_model_path(
+                checkpoint.model_id,
+                registry_path=registry_path,
+                allow_download=True,
+                cache_dir=cache_dir,
+            )
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
         return "unresolved", f"release resolution failed: {exc}"
     if checkpoint.kind == "single_file":

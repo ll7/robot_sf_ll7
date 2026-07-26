@@ -478,7 +478,7 @@ models:
   public_artifact_source: github_release
 - model_id: ga3c_cadrl_iros18
   display_name: GA3C-CADRL (IROS18) checkpoint
-  local_path: output/model_cache/ga3c_cadrl_iros18/ga3c_cadrl_iros18-network_01900000.tar.gz
+  local_path: model/ga3c_cadrl/IROS18/network_01900000.meta
   config_path: null
   commit: null
   wandb_run_id: null
@@ -500,10 +500,10 @@ models:
   - 'Referenced as model_id ga3c_cadrl_iros18 by robot_sf/planner/socnav.py and robot_sf/benchmark/campaign_checkpoint_preflight.py.'
   - >-
     Phase A of #6268: the .data/.index/.meta triplet is published as one coherent
-    tar.gz bundle (asset ga3c_cadrl_iros18-network_01900000.tar.gz). The registry
-    hydrates into the ignored model cache; the cache artifact is retained as a
-    bundle in Phase A. Multi-file TensorFlow-checkpoint unpack for runtime use is
-    a Phase C concern and remains outside this additive publication slice.
+    tar.gz bundle (asset ga3c_cadrl_iros18-network_01900000.tar.gz) for durable
+    provenance. local_path remains the existing in-tree .meta file so resolver
+    callers retain the usable TensorFlow checkpoint-prefix contract; archive
+    extraction for fresh-cache runtime use remains a Phase C concern.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1

@@ -18,14 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `benchmark_promotion.claim_boundary: legacy_non_track`. Scope: 9 single-file PPO/Stable-Baselines3
   zip checkpoints plus the GA3C-CADRL (IROS18) TensorFlow triplet published as one coherent
   `.tar.gz` bundle = 10 checkpoints (12 binary files). Nothing is deleted, moved, renamed, or
-  byte-modified; each registry `local_path` names its ignored `output/model_cache/` release-cache
-  target. Existing hardcoded in-tree load paths (`configs/baselines/ppo.yaml`,
+  byte-modified. Single-file registry `local_path` values name ignored `output/model_cache/`
+  release-cache targets; GA3C retains its existing in-tree `.meta` checkpoint path because
+  SA-CADRL requires the adjacent TensorFlow checkpoint files. Existing hardcoded in-tree load paths
+  (`configs/baselines/ppo.yaml`,
   `robot_sf/baselines/ppo.py`, `robot_sf/planner/socnav.py`, `robot_sf/benchmark/doctor.py`) stay
   unchanged in this Phase-A publication slice.
-  `scripts/validation/check_legacy_ppo_snapshot_parity.py` now resolves every durable legacy
-  checkpoint through `resolve_model_path` during the explicit release-hydration check and
-  byte-matches its recorded checksum; the default inventory remains cheap and validates in-tree
-  sources. The four root-local PPO snapshots that were previously
+  `scripts/validation/check_legacy_ppo_snapshot_parity.py` resolves durable single-file checkpoints
+  through `resolve_model_path` during the explicit release-hydration check, downloads the GA3C
+  bundle separately to preserve its checkpoint-prefix resolver contract, and byte-matches recorded
+  checksums; the default inventory remains cheap and validates in-tree sources. The four root-local
+  PPO snapshots that were previously
   `unsupported_local_only` flip to `supported`/verified (the guard mechanism is retained, not
   bypassed). Byte-identity was verified by downloading each published asset and confirming its
   SHA-256 equals the in-tree blob SHA-256. These are non-benchmark legacy checkpoints retained for

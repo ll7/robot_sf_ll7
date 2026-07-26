@@ -157,8 +157,8 @@ def test_durable_legacy_recorded_checksums_match_in_tree_sha256() -> None:
             raise AssertionError(f"unexpected kind {cp.kind}")
 
 
-def test_durable_legacy_entries_use_release_cache_local_paths() -> None:
-    """Phase-A durable entries must not let resolver bypass the release cache."""
+def test_durable_legacy_entries_preserve_ga3c_checkpoint_prefix_contract() -> None:
+    """Phase-A entries cache single files but retain GA3C's usable in-tree prefix."""
     repo_root = Path(__file__).resolve().parents[2]
     registry_path = repo_root / "model" / "registry.yaml"
     registry = load_registry(registry_path)
@@ -166,7 +166,12 @@ def test_durable_legacy_entries_use_release_cache_local_paths() -> None:
     for cp in checker.DURABLE_LEGACY_CHECKPOINTS:
         entry = registry[cp.model_id]
         release = entry["github_release"]
-        assert entry["local_path"] == (f"output/model_cache/{cp.model_id}/{release['asset_name']}")
+        if cp.kind == "multi_file_bundle":
+            assert entry["local_path"] == "model/ga3c_cadrl/IROS18/network_01900000.meta"
+        else:
+            assert entry["local_path"] == (
+                f"output/model_cache/{cp.model_id}/{release['asset_name']}"
+            )
 
 
 def test_release_hydration_uses_cache_and_verifies_downloaded_single_file(

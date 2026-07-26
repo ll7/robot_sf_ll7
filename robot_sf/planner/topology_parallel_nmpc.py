@@ -100,10 +100,12 @@ _HYPOTHESIS_SIDES: dict[str, int] = {
 
 
 def _signed_side_for_label(label: str) -> int:
+    """Return the signed passing side for a topology ``label`` (``0`` when unknown)."""
     return _HYPOTHESIS_SIDES.get(label, 0)
 
 
 def _preferred_turn_for_label(label: str) -> float:
+    """Return the preferred turn bias for a topology ``label``, scaled from its side."""
     side = _signed_side_for_label(label)
     return float(side) * 0.5
 

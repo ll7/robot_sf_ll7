@@ -1109,6 +1109,12 @@ class PortfolioSelectionSpec:
 
 
 def _get_clearance_m_v1(entry: dict[str, Any]) -> float | None:
+    """Return the minimum-clearance metric extracted from an entry.
+
+    Falls back to the metrics-summary severity block, returning ``None`` if
+    unavailable or non-numeric.
+    """
+
     clearance_m = None
     crit_source = entry.get("criticality", {}).get("source_metrics", {})
     if "min_clearance_m" in crit_source:
@@ -1125,6 +1131,8 @@ def _get_clearance_m_v1(entry: dict[str, Any]) -> float | None:
 
 
 def _get_ped_count_v1(entry: dict[str, Any]) -> int:
+    """Return the pedestrian count from the first trace frame, falling back to the first step and then zero."""
+
     frames = entry.get("segment", {}).get("trace_frames", [])
     if frames:
         return len(frames[0].get("pedestrians", []))
@@ -1135,6 +1143,11 @@ def _get_ped_count_v1(entry: dict[str, Any]) -> int:
 
 
 def _get_min_dist_v1(entry: dict[str, Any]) -> float | None:
+    """Return the minimum robot-to-pedestrian distance across trace frames.
+
+    Falls back to step positions and returns ``None`` when no positions exist.
+    """
+
     min_dist = float("inf")
     frames = entry.get("segment", {}).get("trace_frames", [])
     for frame in frames:
@@ -1165,6 +1178,11 @@ def _get_min_dist_v1(entry: dict[str, Any]) -> float | None:
 
 
 def _get_replay_persistence_v1(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return an availability block summarizing an entry's replay-persistence verdict.
+
+    Marks promoted/passed verdicts persistent and everything else non-persistent.
+    """
+
     persistence_data = entry.get("persistence")
     if not persistence_data:
         return {
@@ -1186,6 +1204,12 @@ def _get_replay_persistence_v1(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _extract_entry_descriptors_v1(entry: dict[str, Any]) -> dict[str, Any]:
+    """Return one entry's portfolio descriptor block.
+
+    Combines criticality, topology, actor interaction, mechanism signature, and
+    replay persistence into a single descriptor payload.
+    """
+
     scenario_id = (
         entry.get("source_episode", {}).get("episode_id")
         or entry.get("scenario_id")
@@ -1241,12 +1265,20 @@ def _extract_entry_descriptors_v1(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _extract_descriptors_v1(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return portfolio descriptors derived for a list of entries."""
+
     return [_extract_entry_descriptors_v1(e) for e in entries]
 
 
 def _dominates_v1(
     v_i: list[float], v_j: list[float], axes: list[str], directions: dict[str, str]
 ) -> bool:
+    """Return whether ``v_i`` Pareto-dominates ``v_j``.
+
+    Applies the per-axis minimize/maximize directions with a tolerance and
+    requires strict improvement on at least one axis.
+    """
+
     better_on_all = True
     strictly_better = False
     for val_i, val_j, axis in zip(v_i, v_j, axes, strict=True):
@@ -1348,6 +1380,8 @@ def _max_min_coverage_selection_v1(
     vectors_by_id = dict(zip(candidate_ids, vectors, strict=True))
 
     def dist_fn(id_a: str, id_b: str) -> float:
+        """Return the Euclidean distance between two candidates' Pareto vectors."""
+
         va = vectors_by_id[id_a]
         vb = vectors_by_id[id_b]
         return math.dist(va, vb)
@@ -1377,6 +1411,11 @@ def _max_min_coverage_selection_v1(
 
 
 def _get_nested_val(d: dict[str, Any], path: str) -> Any:
+    """Return the value resolved from a dotted path in nested dicts.
+
+    Returns ``None`` if any segment is missing or not a dict.
+    """
+
     val = d
     for p in path.split("."):
         val = val.get(p) if isinstance(val, dict) else None
@@ -1386,6 +1425,11 @@ def _get_nested_val(d: dict[str, Any], path: str) -> Any:
 def _get_cell_v1(
     d: dict[str, Any], fields: list[str], ignore_criticality: bool = False
 ) -> tuple[Any, ...]:
+    """Return a hashable cell tuple of nested values for ``fields`` in ``d``.
+
+    Optionally skips fields containing ``criticality`` for grouping.
+    """
+
     vals = []
     for f in fields:
         if ignore_criticality and "criticality" in f:

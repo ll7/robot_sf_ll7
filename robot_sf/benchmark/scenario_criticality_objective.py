@@ -252,6 +252,7 @@ def compute_criticality_score(
 
 
 def _apply_speed_scale(ped: dict[str, Any], value: float) -> None:
+    """Scale a pedestrian's speed by ``value`` via multiplier or absolute speed field."""
     if "speed_multiplier" in ped:
         ped["speed_multiplier"] = float(value)
     elif "speed_mps" in ped:
@@ -259,10 +260,12 @@ def _apply_speed_scale(ped: dict[str, Any], value: float) -> None:
 
 
 def _apply_start_delay(ped: dict[str, Any], value: float) -> None:
+    """Set a pedestrian's ``start_delay_s`` field to ``value``."""
     ped["start_delay_s"] = float(value)
 
 
 def _apply_waypoint_offset(ped: dict[str, Any], value: float) -> None:
+    """Offset the y-coordinate of the pedestrian's first crossing waypoint by ``value``."""
     if "waypoints" not in ped:
         return
     waypoints = ped["waypoints"]
@@ -277,6 +280,7 @@ def _apply_waypoint_offset(ped: dict[str, Any], value: float) -> None:
 
 
 def _apply_robot_offset(patched: dict[str, Any], value: float) -> None:
+    """Offset the robot's start x-coordinate (``start_x`` or ``start[0]``) by ``value``."""
     if "robot" not in patched:
         return
     robot = patched["robot"]
@@ -302,6 +306,7 @@ def _apply_single_param(
     key: str,
     value: float,
 ) -> None:
+    """Dispatch one named criticality parameter to its robot or pedestrian-group applier."""
     if key == "robot_start_offset_m":
         _apply_robot_offset(patched, value)
     elif key in _PARAM_APPLIERS:
@@ -320,6 +325,7 @@ def _apply_single_param(
 
 
 def _validate_params(params: dict[str, float]) -> None:
+    """Raise ``ValueError`` unless every parameter is a string key with a numeric value."""
     for key, value in params.items():
         if not isinstance(key, str):
             raise ValueError(f"parameter key must be string, got {key!r}")

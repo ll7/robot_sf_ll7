@@ -155,6 +155,11 @@ def linear_inflation_policy(alpha: float, dt: float) -> SpatialInflationPolicy:
         raise ValueError("dt must be finite and > 0")
 
     def _inflation(horizon_step: int) -> float:
+        """Linear horizon-step inflation: alpha * step * dt.
+
+        Returns:
+            Additional radius in metres for the given horizon step.
+        """
         step = int(horizon_step)
         if step < 0:
             raise ValueError("horizon_step must be >= 0")

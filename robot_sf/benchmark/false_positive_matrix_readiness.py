@@ -72,6 +72,8 @@ class FalsePositiveMatrixReadiness:
 
 @dataclass(frozen=True)
 class _ReadinessInputs:
+    """Bundle of validated inputs feeding the false-positive matrix readiness check."""
+
     nominal_cfg: CampaignConfig
     perturbed_cfg: CampaignConfig
     nominal_ids: Sequence[str]
@@ -190,6 +192,7 @@ def _readiness_blockers(
 
 
 def _planner_mode_blockers(planner_modes: Sequence[str]) -> list[str]:
+    """Return a blocker when any planner observation mode is not the required structured mode."""
     non_structured = [mode for mode in planner_modes if mode != REQUIRED_OBSERVATION_MODE]
     if not non_structured:
         return []
@@ -203,6 +206,11 @@ def _observation_noise_blockers(
     nominal_cfg: CampaignConfig,
     perturbed_cfg: CampaignConfig,
 ) -> list[str]:
+    """Return blockers when the perturbed profile or nominal noise config is wrong.
+
+    The perturbed config must reference the required false-positive profile and
+    the nominal config must leave observation noise disabled.
+    """
     blockers: list[str] = []
     profile = None
     if isinstance(perturbed_cfg.observation_noise, Mapping):
@@ -218,6 +226,11 @@ def _observation_noise_blockers(
 
 
 def _scenario_ids(scenarios: Sequence[Mapping[str, Any]]) -> list[str]:
+    """Extract scenario ids preferring ``name``, then ``scenario_id``, then ``id``.
+
+    Returns:
+        The ordered list of scenario id strings (``"unknown"`` for unnamed scenarios).
+    """
     ids: list[str] = []
     for scenario in scenarios:
         value = scenario.get("name")
@@ -230,12 +243,14 @@ def _scenario_ids(scenarios: Sequence[Mapping[str, Any]]) -> list[str]:
 
 
 def _fixed_seeds(cfg: CampaignConfig) -> list[int]:
+    """Return the config's fixed seed list, or empty when the policy is not fixed-list."""
     if cfg.seed_policy.mode != "fixed-list":
         return []
     return [int(seed) for seed in cfg.seed_policy.seeds]
 
 
 def _planner_observation_modes(cfg: CampaignConfig) -> list[str]:
+    """Return each planner's resolved observation mode (planner-level or config default)."""
     modes: list[str] = []
     for planner in cfg.planners:
         mode = planner.observation_mode or cfg.observation_mode
@@ -245,6 +260,7 @@ def _planner_observation_modes(cfg: CampaignConfig) -> list[str]:
 
 
 def _scenario_has_pedestrians(scenario: Mapping[str, Any]) -> bool:
+    """Return whether a scenario has a pedestrian list or positive ped_density."""
     if scenario.get("single_pedestrians"):
         return True
     sim_config = scenario.get("simulation_config")
@@ -257,6 +273,15 @@ def _scenario_has_pedestrians(scenario: Mapping[str, Any]) -> bool:
 
 
 def _structured_injection_probe(noise_spec: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Run a structured observation-noise probe to confirm the profile adds actors.
+
+    Returns the injected pedestrian count, noisy-step count, and resulting
+    pedestrian count; absent specs report zeros.
+
+    Returns:
+        Mapping with ``pedestrians_added``, ``steps_with_noise``, and
+        ``pedestrians_count``.
+    """
     if noise_spec is None:
         return {"pedestrians_added": 0, "steps_with_noise": 0}
     noise_dict = dict(noise_spec)
@@ -280,6 +305,7 @@ def _structured_injection_probe(noise_spec: Mapping[str, Any] | None) -> dict[st
 
 
 def _first_int(value: Any) -> int:
+    """Return the first int of a list/tuple, else coerce ``value`` to int (zero on falsy)."""
     if isinstance(value, list | tuple) and value:
         return int(value[0])
     return int(value or 0)

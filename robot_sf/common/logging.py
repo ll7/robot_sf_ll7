@@ -68,6 +68,7 @@ def safe_sink(
     """
 
     def _sink(message: str) -> None:
+        """Write message to stream, skipping writes on closed streams."""
         closed = getattr(stream, "closed", False)
         if closed:
             return

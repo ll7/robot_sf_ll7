@@ -129,6 +129,7 @@ class TangentSubgoalGroupAvoidanceAdapter:
         return _goal_command(robot_pos, heading, subgoal, self.config.max_speed)
 
     def _nearest_triggering_group(self, robot_pos: np.ndarray) -> _GroupGeometry | None:
+        """Return the nearest group within the safety margin, or ``None`` when none triggers."""
         nearest: _GroupGeometry | None = None
         nearest_clearance = float("inf")
         for spec in self._group_specs:
@@ -151,6 +152,13 @@ class TangentSubgoalGroupAvoidanceAdapter:
         centroid: np.ndarray,
         effective_radius: float,
     ) -> np.ndarray:
+        """Compute a tangent detour subgoal around a group's effective radius.
+
+        Chooses the configured side, or the side nearer the goal when set to auto.
+
+        Returns:
+            The tangent detour subgoal position.
+        """
         vec = robot_pos - centroid
         distance = float(np.linalg.norm(vec))
         radius = max(float(effective_radius), 1e-6)
@@ -180,6 +188,8 @@ class TangentSubgoalGroupAvoidanceAdapter:
 
 @dataclass(frozen=True)
 class _GroupGeometry:
+    """Frozen geometric snapshot of a social group: centroid, o-space radius, and polygon."""
+
     group_id: str | None
     centroid: np.ndarray
     radius: float
@@ -187,6 +197,11 @@ class _GroupGeometry:
 
     @classmethod
     def from_spec(cls, spec: dict[str, Any]) -> _GroupGeometry | None:
+        """Build a group geometry from a spec mapping, or ``None`` when geometry is invalid.
+
+        Returns:
+            The group geometry, or ``None`` if the spec is invalid.
+        """
         try:
             centroid = np.asarray(spec.get("centroid"), dtype=float).reshape(-1)[:2]
             radius = float(spec.get("radius", 0.0))
@@ -221,6 +236,11 @@ class _GroupGeometry:
 
 
 def _extract_robot_goal(obs: dict[str, Any]) -> tuple[np.ndarray, float, np.ndarray]:
+    """Extract robot position, heading, and current goal from a planning observation.
+
+    Returns:
+        Robot position, heading, and goal position.
+    """
     robot = obs.get("robot") if isinstance(obs.get("robot"), dict) else {}
     goal = obs.get("goal") if isinstance(obs.get("goal"), dict) else {}
     robot_pos = np.asarray(
@@ -233,6 +253,11 @@ def _extract_robot_goal(obs: dict[str, Any]) -> tuple[np.ndarray, float, np.ndar
 
 
 def _group_specs_from_source(source: Any) -> list[dict[str, Any]]:
+    """Collect group spec mappings from an observation source's ``social_groups``.
+
+    Returns:
+        The collected group spec mappings (possibly empty).
+    """
     groups = getattr(source, "social_groups", None) or []
     specs: list[dict[str, Any]] = []
     for group in groups:
@@ -250,6 +275,11 @@ def _goal_command(
     goal_pos: np.ndarray,
     max_speed: float,
 ) -> tuple[float, float]:
+    """Return a goal-seeking ``(linear, angular)`` command throttled by heading error.
+
+    Returns:
+        The ``(linear, angular)`` goal-seeking command.
+    """
     vec = goal_pos - robot_pos
     distance = float(np.linalg.norm(vec))
     if distance < 1e-6:
@@ -262,6 +292,7 @@ def _goal_command(
 
 
 def _unit(vec: np.ndarray) -> np.ndarray:
+    """Return the unit vector of ``vec``, falling back to ``[1, 0]`` for near-zero input."""
     norm = float(np.linalg.norm(vec))
     if norm < 1e-9:
         return np.array([1.0, 0.0], dtype=float)

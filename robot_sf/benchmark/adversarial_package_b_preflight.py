@@ -68,6 +68,7 @@ class PackageBPreflightResult:
 
 
 def _repo_relative(path: Path, repo_root: Path) -> str:
+    """Return ``path`` POSIX-relative to ``repo_root``, falling back to the raw path."""
     try:
         return path.resolve().relative_to(repo_root.resolve()).as_posix()
     except ValueError:
@@ -75,6 +76,11 @@ def _repo_relative(path: Path, repo_root: Path) -> str:
 
 
 def _as_int_tuple(value: Any) -> tuple[int, ...]:
+    """Coerce a list of ints to a tuple; empty on a non-list or any bool/non-int item.
+
+    Returns:
+        The coerced int tuple, empty on invalid input.
+    """
     if not isinstance(value, list):
         return ()
     values: list[int] = []
@@ -86,6 +92,11 @@ def _as_int_tuple(value: Any) -> tuple[int, ...]:
 
 
 def _as_str_tuple(value: Any) -> tuple[str, ...]:
+    """Coerce a list of non-blank strings to a stripped tuple; empty on bad input.
+
+    Returns:
+        The coerced stripped string tuple, empty on invalid input.
+    """
     if not isinstance(value, list):
         return ()
     values: list[str] = []
@@ -97,6 +108,13 @@ def _as_str_tuple(value: Any) -> tuple[str, ...]:
 
 
 def _resolve_repo_path(repo_root: Path, value: Any) -> Path | None:
+    """Resolve ``value`` to a path, joining relative paths under ``repo_root``.
+
+    Returns ``None`` for blank or non-string values; absolute paths are kept as-is.
+
+    Returns:
+        The resolved path, or ``None`` for blank/non-string values.
+    """
     if not isinstance(value, str) or not value.strip():
         return None
     path = Path(value)
@@ -108,6 +126,14 @@ def _resolve_repo_path(repo_root: Path, value: Any) -> Path | None:
 def _extract_output_paths(
     command: str, repo_root: Path
 ) -> tuple[Path | None, Path | None, list[str]]:
+    """Parse an example command's ``--output-dir``/``--out-json`` into resolved paths.
+
+    Returns ``(output_dir, out_json, warnings)``; shlex parse failures are reported
+    as warnings rather than raised.
+
+    Returns:
+        ``(output_dir, out_json, warnings)``.
+    """
     warnings: list[str] = []
     try:
         tokens = shlex.split(command)
@@ -126,6 +152,11 @@ def _extract_output_paths(
 
 
 def _extract_repeated_seed_args(command: str) -> tuple[tuple[int, ...], list[str]]:
+    """Extract all ``--seed`` values from a command as an int tuple, collecting warnings.
+
+    Returns:
+        ``(seed_values, warnings)``.
+    """
     warnings: list[str] = []
     try:
         tokens = shlex.split(command)
@@ -199,6 +230,7 @@ def _extract_budget_grid_flags(command: str) -> tuple[int, tuple[str, ...], list
 
 
 def _under_output_prefix(path: Path | None, repo_root: Path) -> bool:
+    """Return whether ``path`` resolves to or under the expected package-b output prefix."""
     if path is None:
         return False
     try:

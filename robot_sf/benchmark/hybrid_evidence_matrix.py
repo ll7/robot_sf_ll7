@@ -574,6 +574,11 @@ def _validate_row(
     provenance_validation: str,
     git_commit_cache: dict[str, bool],
 ) -> dict[str, Any]:
+    """Validate one evidence-matrix row, returning its status and any errors/warnings.
+
+    Returns:
+        The row's validation result with status, errors, and warnings.
+    """
     errors: list[dict[str, str]] = []
     warnings: list[dict[str, str]] = []
     if not isinstance(row, dict):
@@ -656,6 +661,11 @@ def _validate_guard_authority(
     guard_raw: object,
     errors: list[dict[str, str]],
 ) -> dict[str, Any]:
+    """Validate the ``guard_authority`` block and return its normalized fields.
+
+    Returns:
+        The normalized guard-authority fields.
+    """
     if not isinstance(guard_raw, dict):
         _append_problem(errors, "guard_authority", "must be a mapping")
         return {}
@@ -692,6 +702,11 @@ def _validate_learned_component_contribution(
     evidence_tier: str | None,
     errors: list[dict[str, str]],
 ) -> dict[str, Any]:
+    """Validate the ``learned_component_contribution`` block and return its fields.
+
+    Returns:
+        The normalized learned-component-contribution fields.
+    """
     if not isinstance(contribution_raw, dict):
         _append_problem(errors, "learned_component_contribution", "must be a mapping")
         return {}
@@ -737,6 +752,11 @@ def _validate_intervention_rates(
     intervention_raw: object,
     errors: list[dict[str, str]],
 ) -> dict[str, Any]:
+    """Validate the ``intervention_fallback_rates`` block and return its rate fields.
+
+    Returns:
+        The normalized intervention-fallback rate fields.
+    """
     if not isinstance(intervention_raw, dict):
         _append_problem(errors, "intervention_fallback_rates", "must be a mapping")
         return {}
@@ -770,6 +790,7 @@ def _validate_intervention_rates(
 
 
 def _validate_outcomes(outcomes_raw: object, errors: list[dict[str, str]]) -> None:
+    """Validate the ``outcomes`` mapping, requiring each field to be a nullable rate."""
     if not isinstance(outcomes_raw, dict):
         _append_problem(errors, "outcomes", "must be a mapping")
         return
@@ -790,6 +811,7 @@ def _validate_optional_fields(
     repo_root: Path,
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate optional row fields (numbers, comparators, scenario-manifest references)."""
     for field in (
         "comfort_exposure",
         "min_pedestrian_distance",
@@ -823,6 +845,7 @@ def _validate_semantics(  # noqa: PLR0913
     errors: list[dict[str, str]],
     warnings: list[dict[str, str]],
 ) -> None:
+    """Validate cross-field semantic consistency among slice, tier, verdict, and guard fields."""
     active = guard.get("active")
     veto_rate = guard.get("veto_rate")
     guard_veto_rate = intervention.get("guard_veto_rate")
@@ -877,6 +900,7 @@ def _validate_execution_state(
     active: object,
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate guard ``active`` consistency with ``not_run``/executed evaluation slices."""
     if evaluation_slice == "not_run":
         if evidence_tier != "launch_packet":
             _append_problem(
@@ -901,6 +925,7 @@ def _validate_slice_tier_alignment(
     evidence_tier: str | None,
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate that the ``evaluation_slice`` matches the slice expected by ``evidence_tier``."""
     tier_to_slice = {
         "launch_packet": "not_run",
         "smoke_only": "smoke",
@@ -925,6 +950,7 @@ def _validate_fallback_degraded_semantics(
     degraded_rate: float | None,
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate fallback/degraded rates are consistent with their evidence tier."""
     if fallback_rate is not None and fallback_rate > 0 and evidence_tier in SUCCESS_LIKE_TIERS:
         _append_problem(
             errors,
@@ -962,6 +988,7 @@ def _validate_synthesis_candidate(
     errors: list[dict[str, str]],
     warnings: list[dict[str, str]],
 ) -> None:
+    """Validate the extra constraints required for a row to be synthesis-eligible."""
     if active is not True:
         _append_problem(
             errors, "guard_authority.active", "must be true for synthesis-eligible rows"
@@ -1018,6 +1045,7 @@ def _validate_commit_artifact(
     git_commit_cache: dict[str, bool],
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate ``commit_artifact`` provenance tokens (git SHA plus provenance references)."""
     if not isinstance(value, str) or not value.strip():
         _append_problem(errors, field, "must be a non-empty string")
         return
@@ -1056,6 +1084,7 @@ def _validate_commit_artifact(
 
 
 def _git_commit_exists(sha: str, *, repo_root: Path, cache: dict[str, bool]) -> bool:
+    """Return (cached) whether ``sha`` resolves to an existing commit in ``repo_root``."""
     cached = cache.get(sha)
     if cached is not None:
         return cached
@@ -1077,6 +1106,7 @@ def _validate_reference_token(
     repo_root: Path,
     errors: list[dict[str, str]],
 ) -> None:
+    """Validate a reference token is a durable URI or an in-repo relative path."""
     if token.startswith(DURABLE_URI_PREFIXES):
         return
     path = Path(token)
@@ -1110,6 +1140,7 @@ def _check_expected_fields(
     prefix: str,
     errors: list[dict[str, str]],
 ) -> None:
+    """Report missing required fields and unexpected fields for ``mapping``."""
     missing = sorted(required - mapping.keys())
     for field in missing:
         _append_problem(errors, f"{prefix}.{field}" if prefix != "row" else field, "is required")
@@ -1130,6 +1161,11 @@ def _require_non_empty_string(
     *,
     parent: dict[str, Any] | None = None,
 ) -> str | None:
+    """Require a non-empty string ``field``, recording an error and returning ``None`` on failure.
+
+    Returns:
+        The stripped string, or ``None`` on error.
+    """
     source = mapping if parent is None else parent
     key = field if parent is None else field.rsplit(".", maxsplit=1)[-1]
     value = source.get(key)
@@ -1145,6 +1181,11 @@ def _require_enum(
     allowed: frozenset[str],
     errors: list[dict[str, str]],
 ) -> str | None:
+    """Require ``field`` value to be one of ``allowed``, recording an error otherwise.
+
+    Returns:
+        The validated enum value, or ``None`` on error.
+    """
     value = mapping.get(field)
     if not isinstance(value, str) or value not in allowed:
         _append_problem(errors, field, f"must be one of {sorted(allowed)!r}")
@@ -1159,6 +1200,11 @@ def _require_nullable_rate(
     *,
     parent: dict[str, Any] | None = None,
 ) -> float | None:
+    """Require ``field`` to be a nullable rate in ``[0, 1]``, recording errors when out of range.
+
+    Returns:
+        The validated rate, or ``None``.
+    """
     value = _require_nullable_number(mapping, field, errors, parent=parent)
     if value is None:
         return None
@@ -1174,6 +1220,11 @@ def _require_nullable_number(
     *,
     parent: dict[str, Any] | None = None,
 ) -> float | None:
+    """Require ``field`` to be a nullable finite number, recording an error on invalid values.
+
+    Returns:
+        The validated number, or ``None``.
+    """
     source = mapping if parent is None else parent
     key = field if parent is None else field.rsplit(".", maxsplit=1)[-1]
     value = source.get(key)
@@ -1186,18 +1237,26 @@ def _require_nullable_number(
 
 
 def _split_reference_tokens(value: str) -> list[str]:
+    """Split a newline/comma-separated reference string into stripped, non-empty tokens.
+
+    Returns:
+        The stripped, non-empty reference tokens.
+    """
     return [token.strip() for token in re.split(r"[\n,]+", value) if token.strip()]
 
 
 def _append_problem(problems: list[dict[str, str]], field: str, message: str) -> None:
+    """Append a ``{field, message}`` problem dict to ``problems``."""
     problems.append({"field": field, "message": message})
 
 
 def _is_positive_rate(value: object) -> bool:
+    """Return whether ``value`` is a positive, non-boolean number."""
     return isinstance(value, (int, float)) and not isinstance(value, bool) and float(value) > 0
 
 
 def _repo_relative_or_absolute(path: Path, *, root: Path) -> str:
+    """Return ``path`` relative to ``root`` as posix, or its raw string when not under root."""
     try:
         return path.relative_to(root.resolve()).as_posix()
     except ValueError:

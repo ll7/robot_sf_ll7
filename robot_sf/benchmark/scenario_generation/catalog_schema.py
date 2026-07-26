@@ -51,6 +51,11 @@ def validate_catalog_entry(entry: Mapping[str, Any]) -> None:
 
 
 def _validate_json_schema(entry: Mapping[str, Any]) -> None:
+    """Validate ``entry`` against the versioned generated-catalog JSON Schema.
+
+    Raises one combined error listing every schema violation, sorted by path.
+    """
+
     errors = sorted(
         Draft202012Validator(load_catalog_entry_schema()).iter_errors(dict(entry)),
         key=lambda error: list(error.absolute_path),
@@ -64,6 +69,12 @@ def _validate_json_schema(entry: Mapping[str, Any]) -> None:
 
 
 def _validate_temporal_contract(entry: Mapping[str, Any]) -> None:
+    """Validate segment timing invariants.
+
+    Requires finite times, a non-negative window, and ``observed_at_s`` inside
+    the extracted segment window.
+    """
+
     segment = entry["segment"]
     start_s = float(segment["window_start_s"])
     end_s = float(segment["window_end_s"])
@@ -81,6 +92,12 @@ def _validate_temporal_contract(entry: Mapping[str, Any]) -> None:
 
 
 def _validate_replay_contract(entry: Mapping[str, Any]) -> None:
+    """Validate replay provenance.
+
+    The replay seed must match the source episode, and ``not_representable_yet``
+    entries must carry a ``replay_gap`` warning.
+    """
+
     if entry["replay"]["source_seed"] != entry["source_episode"]["source_seed"]:
         raise GeneratedScenarioCatalogValidationError(
             "replay.source_seed must equal source_episode.source_seed"
@@ -94,6 +111,13 @@ def _validate_replay_contract(entry: Mapping[str, Any]) -> None:
 
 
 def _validate_trace_frames(entry: Mapping[str, Any]) -> None:
+    """Validate trace-frame consistency.
+
+    Timestamps must strictly increase and bound the segment window, the initial
+    robot state must match the first frame, and every actor position must be
+    finite.
+    """
+
     segment = entry["segment"]
     start_s = float(segment["window_start_s"])
     end_s = float(segment["window_end_s"])
@@ -118,6 +142,8 @@ def _validate_trace_frames(entry: Mapping[str, Any]) -> None:
 
 
 def _require_finite_position(position: list[object]) -> None:
+    """Validate that every component of a trace position is a finite number."""
+
     if not all(isinstance(value, int | float) and math.isfinite(value) for value in position):
         raise GeneratedScenarioCatalogValidationError("trace positions must be finite numbers")
 

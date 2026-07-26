@@ -184,6 +184,11 @@ def write_best_config_artifacts(
 
 
 def _trial_payload(trial: optuna.trial.FrozenTrial) -> dict[str, object]:
+    """Build a JSON-friendly dict summary of an Optuna frozen trial.
+
+    Returns:
+        The JSON-friendly trial summary mapping.
+    """
     return {
         "number": trial.number,
         "state": trial.state.name,
@@ -194,6 +199,11 @@ def _trial_payload(trial: optuna.trial.FrozenTrial) -> dict[str, object]:
 
 
 def _selection_report(*, trial: optuna.trial.FrozenTrial, selection: dict[str, object]) -> str:
+    """Render a markdown best-config selection report from the chosen trial.
+
+    Returns:
+        The rendered markdown report string.
+    """
     lines = [
         "# Optuna Best-Config Selection",
         "",
@@ -212,10 +222,16 @@ def _selection_report(*, trial: optuna.trial.FrozenTrial, selection: dict[str, o
 
 
 def _jsonable_mapping(payload: dict[str, object]) -> dict[str, object]:
+    """Normalize a mapping to JSON-serializable types via ``str`` fallback.
+
+    Returns:
+        The JSON-normalized mapping.
+    """
     return json.loads(json.dumps(payload, default=str, sort_keys=True))
 
 
 def _write_json(path: Path, payload: object) -> None:
+    """Write a JSON payload to ``path``, creating parent directories."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8"
@@ -223,6 +239,11 @@ def _write_json(path: Path, payload: object) -> None:
 
 
 def _git(cwd: Path, *args: str) -> str:
+    """Run a git command in ``cwd`` and return its stripped stdout.
+
+    Returns:
+        The stripped git command stdout.
+    """
     return subprocess.check_output(
         ["git", *args], cwd=cwd, text=True, stderr=subprocess.DEVNULL
     ).strip()

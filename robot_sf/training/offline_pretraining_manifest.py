@@ -312,6 +312,7 @@ def validate_finetune_manifest(
 def _validate_finetune_normalizer_compatibility(
     manifest: Mapping[str, Any], *, base_dir: Path | None
 ) -> None:
+    """Require a fine-tune manifest to carry matching parent normalizer state."""
     parent_state = _load_normalizer_state(
         manifest["parent_offline_checkpoint_manifest_path"],
         normalizer_path_key="normalizer_path",
@@ -343,6 +344,11 @@ def _load_normalizer_state(
     normalizer_path_key: str,
     base_dir: Path | None,
 ) -> dict[str, Any]:
+    """Load and schema-check normalizer state from a manifest or manifest path.
+
+    Returns:
+        The loaded normalizer-state payload mapping.
+    """
     if isinstance(manifest_or_path, Mapping):
         manifest = manifest_or_path
         manifest_dir = base_dir
@@ -368,6 +374,11 @@ def _load_normalizer_state(
 
 
 def _resolve_manifest_path(path: Path, *, base_dir: Path | None) -> Path:
+    """Resolve a manifest path against an optional base directory.
+
+    Returns:
+        The resolved manifest path.
+    """
     if not path.is_absolute() and base_dir is not None:
         return base_dir / path
     return path
@@ -389,6 +400,11 @@ def assert_environment_compatible(
 
 
 def _space_payload(space: gym_spaces.Space[Any]) -> dict[str, Any]:
+    """Serialize a gymnasium space into a JSON-friendly payload dict.
+
+    Returns:
+        The JSON-friendly space payload.
+    """
     if isinstance(space, gym_spaces.Box):
         return {
             "type": "Box",
@@ -408,6 +424,11 @@ def _space_payload(space: gym_spaces.Space[Any]) -> dict[str, Any]:
 
 
 def _array_summary(value: np.ndarray) -> Any:
+    """Summarize an array: full values when small, else shape/dtype/min/max.
+
+    Returns:
+        The full array as a list when small, else a shape/dtype/min/max mapping.
+    """
     array = np.asarray(value)
     if array.size <= 16:
         return array.tolist()
@@ -420,6 +441,7 @@ def _array_summary(value: np.ndarray) -> Any:
 
 
 def _require_schema(manifest: Mapping[str, Any], expected: str) -> None:
+    """Raise unless the manifest carries the expected ``schema_version``."""
     if manifest.get("schema_version") != expected:
         raise ValueError(
             f"expected schema_version {expected!r}, got {manifest.get('schema_version')!r}"
@@ -427,12 +449,14 @@ def _require_schema(manifest: Mapping[str, Any], expected: str) -> None:
 
 
 def _require_fields(mapping: Mapping[str, Any], fields: tuple[str, ...]) -> None:
+    """Raise unless all given fields are present and non-empty."""
     missing = [field for field in fields if mapping.get(field) in (None, "")]
     if missing:
         raise ValueError(f"manifest missing required fields: {missing}")
 
 
 def _mapping_field(mapping: Mapping[str, Any], field: str) -> Mapping[str, Any]:
+    """Return a mapping field, raising unless it is a JSON object."""
     value = mapping.get(field)
     if not isinstance(value, Mapping):
         raise ValueError(f"manifest field {field!r} must be an object")
@@ -440,6 +464,7 @@ def _mapping_field(mapping: Mapping[str, Any], field: str) -> Mapping[str, Any]:
 
 
 def _validate_environment_contract(contract: Mapping[str, Any]) -> None:
+    """Require the environment contract's core fields are present."""
     _require_fields(
         contract,
         ("scenario_config", "observation_space_fingerprint", "action_space_fingerprint"),
@@ -453,6 +478,7 @@ def _verify_file_sha(
     *,
     base_dir: Path | None,
 ) -> None:
+    """Verify a manifest-referenced file exists and matches its recorded SHA-256."""
     path = Path(str(mapping[path_key]))
     if not path.is_absolute() and base_dir is not None:
         path = base_dir / path

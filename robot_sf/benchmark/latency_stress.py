@@ -380,6 +380,11 @@ class LatencyMeasurementHarness:
             orig_filter = cbf_filter.filter_command
 
             def wrapped_filter(*args: Any, **kwargs: Any) -> Any:
+                """Call the CBF filter command, recording its duration under collision-risk.
+
+                Returns:
+                    The result of the wrapped CBF filter command.
+                """
                 t0 = time.perf_counter()
                 res = orig_filter(*args, **kwargs)
                 active_harness = LatencyMeasurementHarness.get_current()
@@ -393,6 +398,15 @@ class LatencyMeasurementHarness:
             cbf_filter.filter_command = wrapped_filter
 
         def wrapped_policy(obs: dict[str, Any]) -> Any:
+            """Wrap the policy step, recording net planner time.
+
+            Subtracts already-measured sub-components (observation, prediction,
+            action conversion, collision-risk filter) so only residual planner
+            compute is attributed to ``planner_computation``.
+
+            Returns:
+                The result of the wrapped policy step.
+            """
             active_harness = LatencyMeasurementHarness.get_current()
             if active_harness is not None and active_harness.current_accumulator is not None:
                 t0 = time.perf_counter()
@@ -736,7 +750,18 @@ def instrument_adapter_for_latency(adapter: Any) -> None:  # noqa: C901
         if original and not hasattr(original, "_instrumented"):
 
             def make_wrapped(orig_func: Callable[..., Any]) -> Callable[..., Any]:
+                """Factory returning a wrapper that records an adapter method under observation construction.
+
+                Returns:
+                    The timing wrapper function.
+                """
+
                 def wrapped(*args: Any, **kwargs: Any) -> Any:
+                    """Call the original adapter method, timing it when a harness is active.
+
+                    Returns:
+                        The original method's result.
+                    """
                     t0 = time.perf_counter()
                     res = orig_func(*args, **kwargs)
                     active_harness = LatencyMeasurementHarness.get_current()
@@ -757,7 +782,18 @@ def instrument_adapter_for_latency(adapter: Any) -> None:  # noqa: C901
         if original and not hasattr(original, "_instrumented"):
 
             def make_wrapped(orig_func: Callable[..., Any]) -> Callable[..., Any]:
+                """Factory returning a wrapper that records an adapter method under prediction.
+
+                Returns:
+                    The timing wrapper function.
+                """
+
                 def wrapped(*args: Any, **kwargs: Any) -> Any:
+                    """Call the original adapter method, timing it when a harness is active.
+
+                    Returns:
+                        The original method's result.
+                    """
                     t0 = time.perf_counter()
                     res = orig_func(*args, **kwargs)
                     active_harness = LatencyMeasurementHarness.get_current()
@@ -795,6 +831,11 @@ def apply_latency_instrumentation() -> None:  # noqa: C901
 
     # Patch safety wrappers outside policy.
     def wrapped_safety_wrapper(*args: Any, **kwargs: Any) -> Any:
+        """Wrap the safety-wrapper step, recording its duration under collision-risk.
+
+        Returns:
+            The result of the wrapped safety-wrapper step.
+        """
         harness = LatencyMeasurementHarness.get_current()
         if harness is not None:
             t0 = time.perf_counter()
@@ -805,6 +846,11 @@ def apply_latency_instrumentation() -> None:  # noqa: C901
 
     # Patch the CBF safety path as a separate component wrapper.
     def wrapped_cbf_safety(*args: Any, **kwargs: Any) -> Any:
+        """Wrap the CBF safety-filter step, recording its duration under collision-risk.
+
+        Returns:
+            The result of the wrapped CBF safety-filter step.
+        """
         harness = LatencyMeasurementHarness.get_current()
         if harness is not None:
             t0 = time.perf_counter()
@@ -815,6 +861,11 @@ def apply_latency_instrumentation() -> None:  # noqa: C901
 
     # Patch observation processing outside policy.
     def wrapped_noise(*args: Any, **kwargs: Any) -> Any:
+        """Wrap observation-noise application, recording its duration under observation construction.
+
+        Returns:
+            The result of the wrapped observation-noise step.
+        """
         harness = LatencyMeasurementHarness.get_current()
         if harness is not None:
             t0 = time.perf_counter()
@@ -824,6 +875,11 @@ def apply_latency_instrumentation() -> None:  # noqa: C901
         return original_noise(*args, **kwargs)
 
     def wrapped_tracking(*args: Any, **kwargs: Any) -> Any:
+        """Wrap tracking-precision application, recording its duration under observation construction.
+
+        Returns:
+            The result of the wrapped tracking-precision step.
+        """
         harness = LatencyMeasurementHarness.get_current()
         if harness is not None:
             t0 = time.perf_counter()

@@ -24,20 +24,29 @@ from pathlib import Path
 
 @dataclass
 class Sample:
-    """TODO docstring. Document this class."""
+    """A single slow-test timing sample.
+
+    Attributes:
+        test_identifier: Stable identifier of the test (e.g. ``module::test_name``).
+        duration_seconds: Measured duration of the test in seconds.
+    """
 
     test_identifier: str
     duration_seconds: float
 
 
 def load_any(path: Path) -> list[Sample]:
-    """TODO docstring. Document this function.
+    """Load slow-test timing samples from a JSON capture.
+
+    Accepts either a simple list of sample objects or an object containing a
+    ``"samples"`` list. Entries missing ``test_identifier`` or
+    ``duration_seconds`` are skipped.
 
     Args:
-        path: TODO docstring.
+        path: Path to the JSON capture file.
 
     Returns:
-        TODO docstring.
+        Parsed :class:`Sample` instances in file order.
     """
     raw = json.loads(path.read_text(encoding="utf-8"))
     data = raw["samples"] if isinstance(raw, dict) and "samples" in raw else raw
@@ -56,25 +65,29 @@ def load_any(path: Path) -> list[Sample]:
 
 
 def index_by(samples: list[Sample]) -> dict[str, float]:
-    """TODO docstring. Document this function.
+    """Index timing samples by their test identifier.
 
     Args:
-        samples: TODO docstring.
+        samples: Timing samples to index.
 
     Returns:
-        TODO docstring.
+        Mapping of test identifier to duration in seconds.
     """
     return {s.test_identifier: s.duration_seconds for s in samples}
 
 
 def main(argv=None) -> int:
-    """TODO docstring. Document this function.
+    """Compare two slow-test captures and print a Markdown summary.
+
+    Loads the before/after captures, computes per-test duration deltas over the
+    common tests, and prints top regressions and improvements sorted by absolute
+    delta.
 
     Args:
-        argv: TODO docstring.
+        argv: Optional argument vector (defaults to ``sys.argv[1:]``).
 
     Returns:
-        TODO docstring.
+        Exit code; ``0`` on success.
     """
     p = argparse.ArgumentParser(description="Compare slow test duration captures")
     p.add_argument("--before", required=True)

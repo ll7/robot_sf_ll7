@@ -250,12 +250,16 @@ def run_generation_pipeline(
 
 
 def _prepare_output_root(output_root: Path) -> None:
+    """Create the output directory, failing if it already exists and is non-empty."""
+
     if output_root.exists() and any(output_root.iterdir()):
         raise FileExistsError(f"output_root must be empty: {output_root}")
     output_root.mkdir(parents=True, exist_ok=True)
 
 
 def _required_string(payload: Mapping[str, Any], key: str) -> str:
+    """Return a non-empty stripped string from ``payload[key]``, raising with the key name otherwise."""
+
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{key} must be a non-empty string")
@@ -263,6 +267,8 @@ def _required_string(payload: Mapping[str, Any], key: str) -> str:
 
 
 def _required_int(payload: Mapping[str, Any], key: str) -> int:
+    """Return a non-boolean integer from ``payload[key]``, raising with the key name otherwise."""
+
     value = payload.get(key)
     if not isinstance(value, int) or isinstance(value, bool):
         raise ValueError(f"{key} must be an integer")
@@ -270,6 +276,8 @@ def _required_int(payload: Mapping[str, Any], key: str) -> int:
 
 
 def _source_scenario_name(scenario: Mapping[str, Any]) -> str:
+    """Return a scenario's required non-empty ``name``."""
+
     return _required_string(scenario, "name")
 
 
@@ -298,6 +306,11 @@ def _repo_relative_map_reference(source_map: str, source_scenarios_path: Path) -
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Return the dict records parsed from a JSONL file.
+
+    Blank lines are skipped and non-object lines raise with their line number.
+    """
+
     records: list[dict[str, Any]] = []
     for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():
@@ -310,6 +323,8 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def _write_jsonl(path: Path, records: Sequence[Mapping[str, Any]]) -> None:
+    """Write records as sorted-key JSONL, one compact object per line."""
+
     path.write_text(
         "".join(json.dumps(dict(record), sort_keys=True) + "\n" for record in records),
         encoding="utf-8",
@@ -317,6 +332,11 @@ def _write_jsonl(path: Path, records: Sequence[Mapping[str, Any]]) -> None:
 
 
 def _distiller_episode(record: Mapping[str, Any], sample: SampledEpisode) -> dict[str, Any]:
+    """Return the simulation-step trace and identity fields needed for segment distillation.
+
+    Fails closed if the ``simulation-step-trace.v1`` trace or its steps are absent.
+    """
+
     metadata = record.get("algorithm_metadata")
     trace = metadata.get("simulation_step_trace") if isinstance(metadata, Mapping) else None
     if not isinstance(trace, Mapping) or trace.get("schema_version") != "simulation-step-trace.v1":
@@ -333,6 +353,8 @@ def _distiller_episode(record: Mapping[str, Any], sample: SampledEpisode) -> dic
 
 
 def _criticality_series(steps: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Return a per-step minimum robot-to-pedestrian clearance time series from trace steps."""
+
     series: list[dict[str, Any]] = []
     for step in steps:
         robot = step["robot"]["position"]
@@ -352,6 +374,11 @@ def _outcome_record(
     sample: SampledEpisode,
     steps: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any]:
+    """Return the outcome record for one sampled episode.
+
+    Pairs run status and termination reason with the episode's criticality time series.
+    """
+
     return {
         "schema_version": "scenario-generation-episode-outcome.v1",
         "sample": sample.manifest_record(),

@@ -189,8 +189,8 @@ durable compatibility because they lacked registry provenance and release checks
 issue #6268 (issue #6321) published them as durable registry artifacts** (see the next section), so
 they are now `supported` rows with GitHub release provenance, immutable SHA-256 checksums, and
 `benchmark_promotion.claim_boundary: legacy_non_track`. The in-tree files are not deleted, moved,
-or renamed; each registry `local_path` still points at the in-tree file so existing load paths keep
-working.
+or renamed; each registry `local_path` now names its ignored `output/model_cache/` release-cache
+target, while existing hardcoded in-tree load paths remain unchanged in this Phase-A slice.
 
 ### Durable legacy checkpoints (Phase A of #6268)
 
@@ -227,20 +227,21 @@ set (10 checkpoints). See the release `manifest.json` for the authoritative list
 
 Each entry records a `github_release` pointer with `asset_name`, an immutable `version` pin (`v1`)
 under the dated, non-moving tag, `sha256`, `size_bytes`, and `benchmark_promotion.claim_boundary:
-legacy_non_track`. `local_path` stays pointed at the in-tree file so `resolve_model_path` keeps
-returning the existing file (no download, no load-path change); the `github_release` pointer records
-durable provenance and the checksum used for byte-identity verification.
+legacy_non_track`. Each `local_path` names the ignored `output/model_cache/` target that
+`resolve_model_path` hydrates from the release; the `github_release` pointer records durable
+provenance and the checksum used for byte-identity verification.
 
-For the multi-file ga3c triplet, `local_path` keeps resolving to the in-tree `.meta`; the
-`github_release` bundle pointer records provenance and per-component checksums only. Multi-file
-TensorFlow-checkpoint download/unpack via the resolver is a Phase C concern and is not exercised in
-Phase A, because the in-tree `local_path` always resolves first.
+For the multi-file ga3c triplet, `local_path` names the cached `.tar.gz` bundle. The release
+hydration proof verifies its archive digest and every component checksum without extracting it.
+Multi-file TensorFlow-checkpoint unpack for runtime use remains a Phase C concern.
 
-The validation script resolves every durable legacy checkpoint through `resolve_model_path` and
-byte-matches its recorded checksum in the default (cheap, no-download) inventory:
+The default inventory byte-matches in-tree source files against recorded checksums without a
+download. The explicit release-hydration proof resolves every durable legacy checkpoint through
+`resolve_model_path` into an isolated cache and byte-matches the downloaded assets:
 
 ```bash
-uv run python scripts/validation/check_legacy_ppo_snapshot_parity.py --json
+uv run python scripts/validation/check_legacy_ppo_snapshot_parity.py \
+  --verify-release-hydration --cache-dir /tmp/legacy-model-cache --json
 ```
 
 Byte-identity is established by publishing byte copies of the in-tree files and verifying that each

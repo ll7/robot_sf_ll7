@@ -157,22 +157,53 @@ def test_durable_legacy_recorded_checksums_match_in_tree_sha256() -> None:
             raise AssertionError(f"unexpected kind {cp.kind}")
 
 
-def test_durable_legacy_resolution_uses_in_tree_local_path() -> None:
-    """resolve_model_path must keep returning the in-tree file (no download, no path change)."""
+def test_durable_legacy_entries_use_release_cache_local_paths() -> None:
+    """Phase-A durable entries must not let resolver bypass the release cache."""
     repo_root = Path(__file__).resolve().parents[2]
     registry_path = repo_root / "model" / "registry.yaml"
+    registry = load_registry(registry_path)
 
     for cp in checker.DURABLE_LEGACY_CHECKPOINTS:
-        resolved = checker.resolve_model_path(
-            cp.model_id, registry_path=registry_path, allow_download=False
-        )
-        assert resolved.exists(), (cp.model_id, resolved)
-        # The resolved path is inside the repo tree (in-tree), not a cache download.
-        assert resolved.is_absolute()
-        assert (
-            repo_root in resolved.resolve().parents
-            or resolved.resolve() == (repo_root / cp.source_paths[-1]).resolve()
-        ), (cp.model_id, resolved)
+        entry = registry[cp.model_id]
+        release = entry["github_release"]
+        assert entry["local_path"] == (f"output/model_cache/{cp.model_id}/{release['asset_name']}")
+
+
+def test_release_hydration_uses_cache_and_verifies_downloaded_single_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Hydration must use an isolated resolver cache, not an in-tree source path."""
+    source = tmp_path / "source.zip"
+    source.write_bytes(b"checkpoint")
+    model_id = "legacy_ppo_synthetic_hydration"
+    entry = _durable_entry(model_id, source, sha256=_sha256(source))
+    entry["local_path"] = f"output/model_cache/{model_id}/{model_id}.zip"
+    registry_path = tmp_path / "registry.yaml"
+    _write_registry(registry_path, [entry])
+    cache_dir = tmp_path / "cache"
+    hydrated = cache_dir / model_id / f"{model_id}.zip"
+    hydrated.parent.mkdir(parents=True)
+    hydrated.write_bytes(source.read_bytes())
+    calls: list[dict] = []
+
+    def fake_resolve(*args, **kwargs):
+        calls.append(kwargs)
+        return hydrated
+
+    monkeypatch.setattr(checker, "resolve_model_path", fake_resolve)
+    status, detail = checker._verify_durable_checkpoint(
+        checker.DurableLegacyCheckpoint(model_id, ("source.zip",), "single_file"),
+        entry=entry,
+        repo_root=tmp_path,
+        registry_path=registry_path,
+        verify_release_hydration=True,
+        cache_dir=cache_dir,
+    )
+
+    assert status == "verified", detail
+    assert calls == [
+        {"registry_path": registry_path, "allow_download": True, "cache_dir": cache_dir}
+    ]
 
 
 def test_verify_durable_checkpoint_detects_checksum_mismatch(tmp_path: Path) -> None:

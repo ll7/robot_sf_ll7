@@ -478,7 +478,7 @@ models:
   public_artifact_source: github_release
 - model_id: ga3c_cadrl_iros18
   display_name: GA3C-CADRL (IROS18) checkpoint
-  local_path: model/ga3c_cadrl/IROS18/network_01900000.meta
+  local_path: output/model_cache/ga3c_cadrl_iros18/ga3c_cadrl_iros18-network_01900000.tar.gz
   config_path: null
   commit: null
   wandb_run_id: null
@@ -501,10 +501,9 @@ models:
   - >-
     Phase A of #6268: the .data/.index/.meta triplet is published as one coherent
     tar.gz bundle (asset ga3c_cadrl_iros18-network_01900000.tar.gz). The registry
-    keeps the in-tree local_path resolving to the .meta; the github_release pointer
-    records durable provenance and checksums only and does NOT alter resolver
-    download/unpack behavior. Multi-file TensorFlow-checkpoint download/unpack is
-    a Phase C concern; in Phase A the in-tree local_path always resolves first.
+    hydrates into the ignored model cache; the cache artifact is retained as a
+    bundle in Phase A. Multi-file TensorFlow-checkpoint unpack for runtime use is
+    a Phase C concern and remains outside this additive publication slice.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1
@@ -719,7 +718,7 @@ models:
   public_artifact_source: github_release
 - model_id: legacy_ppo_run_023
   display_name: Legacy PPO debug checkpoint run_023 (root-local, durable)
-  local_path: model/run_023.zip
+  local_path: output/model_cache/legacy_ppo_run_023/legacy_ppo_run_023.zip
   config_path: null
   commit: null
   wandb_run_id: null
@@ -737,9 +736,8 @@ models:
   - 'Pre-registry PPO debug checkpoint retained at its original in-tree path model/run_023.zip.'
   - 'Historically adapted by robot_sf/training/observation_wrappers.py (run_23 adapter).'
   - >-
-    Phase A of #6268: published as a durable GitHub release asset. local_path keeps
-    pointing at the in-tree file so existing load paths and resolve_model_path keep
-    working; the github_release pointer records durable provenance and checksum only.
+    Phase A of #6268: published as a durable GitHub release asset and hydrated to
+    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1
@@ -758,7 +756,7 @@ models:
       debugging; not benchmark evidence and not promoted to any benchmark track.
 - model_id: legacy_ppo_run_043
   display_name: Legacy PPO debug checkpoint run_043 (root-local, durable)
-  local_path: model/run_043.zip
+  local_path: output/model_cache/legacy_ppo_run_043/legacy_ppo_run_043.zip
   config_path: null
   commit: null
   wandb_run_id: null
@@ -775,9 +773,8 @@ models:
   notes:
   - 'Pre-registry PPO debug checkpoint retained at its original in-tree path model/run_043.zip.'
   - >-
-    Phase A of #6268: published as a durable GitHub release asset. local_path keeps
-    pointing at the in-tree file so existing load paths and resolve_model_path keep
-    working; the github_release pointer records durable provenance and checksum only.
+    Phase A of #6268: published as a durable GitHub release asset and hydrated to
+    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1
@@ -796,7 +793,7 @@ models:
       debugging; not benchmark evidence and not promoted to any benchmark track.
 - model_id: legacy_ppo_retrained_10m_2024_09_17
   display_name: Legacy PPO retrained-10m checkpoint (2024-09-17, root-local, durable)
-  local_path: model/ppo_model_retrained_10m_2024-09-17.zip
+  local_path: output/model_cache/legacy_ppo_retrained_10m_2024_09_17/legacy_ppo_retrained_10m_2024_09_17.zip
   config_path: null
   commit: null
   wandb_run_id: null
@@ -813,9 +810,8 @@ models:
   notes:
   - 'Pre-registry retrained PPO checkpoint retained at its original in-tree path.'
   - >-
-    Phase A of #6268: published as a durable GitHub release asset. local_path keeps
-    pointing at the in-tree file so existing load paths and resolve_model_path keep
-    working; the github_release pointer records durable provenance and checksum only.
+    Phase A of #6268: published as a durable GitHub release asset and hydrated to
+    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1
@@ -834,7 +830,7 @@ models:
       local debugging; not benchmark evidence and not promoted to any benchmark track.
 - model_id: legacy_ppo_retrained_10m_2025_02_01
   display_name: Legacy PPO retrained-10m checkpoint (2025-02-01, root-local, durable, default ppo.yaml model)
-  local_path: model/ppo_model_retrained_10m_2025-02-01.zip
+  local_path: output/model_cache/legacy_ppo_retrained_10m_2025_02_01/legacy_ppo_retrained_10m_2025_02_01.zip
   config_path: configs/baselines/ppo.yaml
   commit: null
   wandb_run_id: null
@@ -856,9 +852,8 @@ models:
     listed in robot_sf/benchmark/doctor.py expected-present paths. No hardcoded load
     path is changed.
   - >-
-    Phase A of #6268: published as a durable GitHub release asset. local_path keeps
-    pointing at the in-tree file so existing load paths and resolve_model_path keep
-    working; the github_release pointer records durable provenance and checksum only.
+    Phase A of #6268: published as a durable GitHub release asset and hydrated to
+    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1
@@ -877,7 +872,7 @@ models:
       local debugging; not benchmark evidence and not promoted to any benchmark track.
 - model_id: legacy_ppo_pedestrian_ped_01
   display_name: Legacy pedestrian PPO checkpoint ppo_ped_01 (durable)
-  local_path: model/pedestrian/ppo_ped_01.zip
+  local_path: output/model_cache/legacy_ppo_pedestrian_ped_01/legacy_ppo_pedestrian_ped_01.zip
   config_path: null
   commit: null
   wandb_run_id: null
@@ -895,9 +890,8 @@ models:
   - 'Pre-registry pedestrian-scenario PPO checkpoint retained at its original in-tree path.'
   - 'Listed in robot_sf/benchmark/doctor.py expected-present paths.'
   - >-
-    Phase A of #6268: published as a durable GitHub release asset. local_path keeps
-    pointing at the in-tree file so existing load paths and resolve_model_path keep
-    working; the github_release pointer records durable provenance and checksum only.
+    Phase A of #6268: published as a durable GitHub release asset and hydrated to
+    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1
@@ -917,7 +911,7 @@ models:
       to any benchmark track.
 - model_id: legacy_ppo_pedestrian_ped_02
   display_name: Legacy pedestrian PPO checkpoint ppo_ped_02 (durable)
-  local_path: model/pedestrian/ppo_ped_02.zip
+  local_path: output/model_cache/legacy_ppo_pedestrian_ped_02/legacy_ppo_pedestrian_ped_02.zip
   config_path: null
   commit: null
   wandb_run_id: null
@@ -935,9 +929,8 @@ models:
   - 'Pre-registry pedestrian-scenario PPO checkpoint retained at its original in-tree path.'
   - 'Listed in robot_sf/benchmark/doctor.py expected-present paths.'
   - >-
-    Phase A of #6268: published as a durable GitHub release asset. local_path keeps
-    pointing at the in-tree file so existing load paths and resolve_model_path keep
-    working; the github_release pointer records durable provenance and checksum only.
+    Phase A of #6268: published as a durable GitHub release asset and hydrated to
+    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1
@@ -957,7 +950,7 @@ models:
       to any benchmark track.
 - model_id: legacy_ppo_pedestrian_headon
   display_name: Legacy pedestrian PPO checkpoint ppo_headon (durable)
-  local_path: model/pedestrian/ppo_headon.zip
+  local_path: output/model_cache/legacy_ppo_pedestrian_headon/legacy_ppo_pedestrian_headon.zip
   config_path: null
   commit: null
   wandb_run_id: null
@@ -975,9 +968,8 @@ models:
   - 'Pre-registry pedestrian-scenario PPO checkpoint retained at its original in-tree path.'
   - 'Listed in robot_sf/benchmark/doctor.py expected-present paths.'
   - >-
-    Phase A of #6268: published as a durable GitHub release asset. local_path keeps
-    pointing at the in-tree file so existing load paths and resolve_model_path keep
-    working; the github_release pointer records durable provenance and checksum only.
+    Phase A of #6268: published as a durable GitHub release asset and hydrated to
+    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1
@@ -997,7 +989,7 @@ models:
       to any benchmark track.
 - model_id: legacy_ppo_pedestrian_intersection
   display_name: Legacy pedestrian PPO checkpoint ppo_intersection (durable)
-  local_path: model/pedestrian/ppo_intersection.zip
+  local_path: output/model_cache/legacy_ppo_pedestrian_intersection/legacy_ppo_pedestrian_intersection.zip
   config_path: null
   commit: null
   wandb_run_id: null
@@ -1015,9 +1007,8 @@ models:
   - 'Pre-registry pedestrian-scenario PPO checkpoint retained at its original in-tree path.'
   - 'Listed in robot_sf/benchmark/doctor.py expected-present paths.'
   - >-
-    Phase A of #6268: published as a durable GitHub release asset. local_path keeps
-    pointing at the in-tree file so existing load paths and resolve_model_path keep
-    working; the github_release pointer records durable provenance and checksum only.
+    Phase A of #6268: published as a durable GitHub release asset and hydrated to
+    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1
@@ -1037,7 +1028,7 @@ models:
       to any benchmark track.
 - model_id: legacy_ppo_pedestrian_corner
   display_name: Legacy pedestrian PPO checkpoint ppo_corner (durable)
-  local_path: model/pedestrian/ppo_corner.zip
+  local_path: output/model_cache/legacy_ppo_pedestrian_corner/legacy_ppo_pedestrian_corner.zip
   config_path: null
   commit: null
   wandb_run_id: null
@@ -1055,9 +1046,8 @@ models:
   - 'Pre-registry pedestrian-scenario PPO checkpoint retained at its original in-tree path.'
   - 'Listed in robot_sf/benchmark/doctor.py expected-present paths.'
   - >-
-    Phase A of #6268: published as a durable GitHub release asset. local_path keeps
-    pointing at the in-tree file so existing load paths and resolve_model_path keep
-    working; the github_release pointer records durable provenance and checksum only.
+    Phase A of #6268: published as a durable GitHub release asset and hydrated to
+    the ignored model cache by resolve_model_path; the in-tree source remains unchanged.
   github_release:
     repo: ll7/robot_sf_ll7
     tag: artifact/legacy-models-2026-07-registry-v1

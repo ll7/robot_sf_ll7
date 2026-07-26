@@ -3,9 +3,10 @@
 
 The default mode is intentionally cheap: it verifies that legacy PPO checkpoints
 that should remain supported are represented by durable registry entries, it
-records root-local debug snapshots as explicitly unsupported, and -- since Phase A
-of issue #6268 -- it resolves every durable legacy checkpoint through
-``resolve_model_path`` and byte-matches its recorded SHA-256.  Pass
+records root-local debug snapshots as explicitly unsupported, and byte-matches
+the in-tree source files against their recorded SHA-256 values. Pass
+``--verify-release-hydration`` to resolve every durable legacy checkpoint from
+its GitHub Release into an isolated cache and verify the hydrated bytes. Pass
 ``--smoke-model-id`` for a hydrated/downloadable checkpoint smoke that loads the
 model, predicts one action, and executes one current ``make_robot_env`` step.
 """
@@ -16,6 +17,7 @@ import argparse
 import hashlib
 import json
 import os
+import tarfile
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -53,10 +55,8 @@ class DurableLegacyCheckpoint:
       ``github_release.sha256`` (the published asset is a byte copy).
     - ``multi_file_bundle``: several in-tree files published as one coherent
       bundle asset. ``github_release.per_file_sha256`` records each component
-      checksum; every component must byte-match. The bundle asset's own
-      ``github_release.sha256`` is the published bundle digest (verified at
-      publish time and used by the resolver only if the in-tree local_path is
-      absent, which Phase A does not exercise).
+      checksum; every component must byte-match. The optional release-hydration
+      check also reads the downloaded archive without extracting it.
     """
 
     model_id: str
@@ -71,8 +71,7 @@ class DurableLegacyCheckpoint:
 # zips below previously lived in UNSUPPORTED_ROOT_LOCAL_PPO_SNAPSHOTS; the
 # pedestrian zips and the ga3c_cadrl triplet had no durable classification.
 # Phase A flips all of them to supported/durable. Nothing is deleted, moved, or
-# renamed: each local_path keeps pointing at the in-tree file so existing load
-# paths and resolve_model_path keep working.
+# renamed; registry local paths point at the resolver's ignored release cache.
 DURABLE_LEGACY_CHECKPOINTS: tuple[DurableLegacyCheckpoint, ...] = (
     DurableLegacyCheckpoint(
         model_id="legacy_ppo_run_023",
@@ -127,7 +126,6 @@ DURABLE_LEGACY_CHECKPOINTS: tuple[DurableLegacyCheckpoint, ...] = (
             "model/ga3c_cadrl/IROS18/network_01900000.meta",
         ),
         kind="multi_file_bundle",
-        display_path="model/ga3c_cadrl/IROS18/network_01900000.meta",
     ),
 )
 
@@ -217,8 +215,10 @@ def _verify_single_file(entry: Mapping[str, Any], *, resolved: Path) -> tuple[st
     return "verified", f"single-file byte-match for {resolved}"
 
 
-def _verify_multi_file_bundle(entry: Mapping[str, Any], *, repo_root: Path) -> tuple[str, str]:
-    """Byte-match each component of a multi-file bundle checkpoint."""
+def _verify_multi_file_bundle_sources(
+    entry: Mapping[str, Any], *, repo_root: Path
+) -> tuple[str, str]:
+    """Byte-match each in-tree component of a multi-file bundle checkpoint."""
     release = entry.get("github_release")
     if not isinstance(release, Mapping):
         return "missing_release", "entry has no github_release mapping"
@@ -247,33 +247,109 @@ def _verify_multi_file_bundle(entry: Mapping[str, Any], *, repo_root: Path) -> t
     return "verified", f"multi-file bundle byte-match ({'; '.join(details)})"
 
 
+def _verify_hydrated_multi_file_bundle(
+    entry: Mapping[str, Any], *, archive_path: Path
+) -> tuple[str, str]:
+    """Verify a release-hydrated GA3C archive and each expected member checksum."""
+    release = entry.get("github_release")
+    if not isinstance(release, Mapping):
+        return "missing_release", "entry has no github_release mapping"
+    expected_archive_sha = str(release.get("sha256") or "").strip().lower()
+    if not expected_archive_sha:
+        return "missing_sha256", "github_release.sha256 is empty"
+    observed_archive_sha = _sha256(archive_path)
+    if observed_archive_sha != expected_archive_sha:
+        return (
+            "checksum_mismatch",
+            f"archive observed {observed_archive_sha} != recorded {expected_archive_sha}",
+        )
+    per_file = release.get("per_file_sha256")
+    if not isinstance(per_file, Mapping) or not per_file:
+        return "missing_per_file_sha256", "github_release.per_file_sha256 is absent"
+
+    expected = {str(name): str(value).strip().lower() for name, value in per_file.items()}
+    status, observed = _archive_component_digests(archive_path, expected_names=set(expected))
+    if status:
+        return status, str(observed)
+    assert isinstance(observed, dict)
+    missing = sorted(set(expected) - set(observed))
+    if missing:
+        return "missing_component", f"hydrated archive missing: {', '.join(missing)}"
+    mismatches = [name for name, digest in observed.items() if digest != expected[name]]
+    if mismatches:
+        return "checksum_mismatch", f"hydrated archive components mismatch: {', '.join(mismatches)}"
+    return "verified", f"hydrated bundle byte-match ({'; '.join(sorted(observed))})"
+
+
+def _archive_component_digests(
+    archive_path: Path, *, expected_names: set[str]
+) -> tuple[str, dict[str, str] | str]:
+    """Read expected regular-file digests from a gzip tar archive without extracting it."""
+    observed: dict[str, str] = {}
+    try:
+        with tarfile.open(archive_path, mode="r:gz") as archive:
+            for member in archive.getmembers():
+                if not member.isfile():
+                    continue
+                name = Path(member.name).name
+                if name not in expected_names:
+                    continue
+                if name in observed:
+                    return "duplicate_component", f"archive contains duplicate component {name}"
+                handle = archive.extractfile(member)
+                if handle is None:
+                    return "unreadable_component", f"cannot read archive component {name}"
+                digest = hashlib.sha256()
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+                observed[name] = digest.hexdigest()
+    except (OSError, tarfile.TarError) as exc:
+        return "invalid_bundle", f"cannot read hydrated archive {archive_path}: {exc}"
+    return "", observed
+
+
 def _verify_durable_checkpoint(
     checkpoint: DurableLegacyCheckpoint,
     *,
     entry: Mapping[str, Any],
     repo_root: Path,
     registry_path: Path,
+    verify_release_hydration: bool = False,
+    cache_dir: Path | None = None,
 ) -> tuple[str, str]:
-    """Resolve and byte-match one durable legacy checkpoint.
+    """Byte-match a durable legacy checkpoint and optionally prove release hydration.
 
     Returns a ``(checksum_status, detail)`` tuple. ``checksum_status`` is
-    ``"verified"`` when the resolved in-tree file(s) byte-match the recorded
-    checksums, otherwise a short failure label and a human-readable detail.
+    ``"verified"`` when the in-tree source bytes match the recorded checksums,
+    and when requested, the release-hydrated cache bytes match too.
     """
+    if checkpoint.kind == "single_file":
+        source_status, source_detail = _verify_single_file(
+            entry, resolved=repo_root / checkpoint.source_paths[0]
+        )
+    elif checkpoint.kind == "multi_file_bundle":
+        source_status, source_detail = _verify_multi_file_bundle_sources(entry, repo_root=repo_root)
+    else:
+        return "unknown_kind", f"unsupported checkpoint kind: {checkpoint.kind}"
+    if source_status != "verified" or not verify_release_hydration:
+        return source_status, source_detail
+
     try:
         resolved = resolve_model_path(
             checkpoint.model_id,
             registry_path=registry_path,
-            allow_download=False,
+            allow_download=True,
+            cache_dir=cache_dir,
         )
-    except FileNotFoundError as exc:
-        return "unresolved", f"resolve_model_path failed: {exc}"
-
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        return "unresolved", f"release resolution failed: {exc}"
     if checkpoint.kind == "single_file":
-        return _verify_single_file(entry, resolved=resolved)
-    if checkpoint.kind == "multi_file_bundle":
-        return _verify_multi_file_bundle(entry, repo_root=repo_root)
-    return "unknown_kind", f"unsupported checkpoint kind: {checkpoint.kind}"
+        status, detail = _verify_single_file(entry, resolved=resolved)
+    else:
+        status, detail = _verify_hydrated_multi_file_bundle(entry, archive_path=resolved)
+    if status != "verified":
+        return status, detail
+    return "verified", f"source verified; {detail}"
 
 
 def build_inventory(
@@ -283,6 +359,8 @@ def build_inventory(
     supported_model_ids: tuple[str, ...] = SUPPORTED_LEGACY_PPO_MODEL_IDS,
     durable_checkpoints: tuple[DurableLegacyCheckpoint, ...] = DURABLE_LEGACY_CHECKPOINTS,
     unsupported_root_local: Mapping[str, str] = UNSUPPORTED_ROOT_LOCAL_PPO_SNAPSHOTS,
+    verify_release_hydration: bool = False,
+    cache_dir: Path | None = None,
 ) -> tuple[SnapshotRow, ...]:
     """Return support-status rows for legacy PPO snapshots."""
     registry = load_registry(registry_path)
@@ -349,10 +427,17 @@ def build_inventory(
             entry=entry,
             repo_root=repo_root,
             registry_path=registry_path,
+            verify_release_hydration=verify_release_hydration,
+            cache_dir=cache_dir,
         )
         if checksum_status == "verified":
             status = "supported"
-            reason = "durable GitHub release pointer; in-tree bytes match recorded checksum"
+            proof = (
+                "release cache byte-match"
+                if verify_release_hydration
+                else "in-tree source byte-match"
+            )
+            reason = f"durable GitHub release pointer; {proof} against recorded checksum"
         else:
             status = "unsupported_checksum_mismatch"
             reason = f"{checksum_status}: {checksum_detail}"
@@ -465,6 +550,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Registry model id to load and step once. May be repeated.",
     )
     parser.add_argument("--allow-download", action="store_true")
+    parser.add_argument(
+        "--verify-release-hydration",
+        action="store_true",
+        help="Download each durable legacy release asset into --cache-dir and verify its bytes.",
+    )
+    parser.add_argument(
+        "--cache-dir",
+        type=Path,
+        help="Ignored model-cache root used by --verify-release-hydration.",
+    )
     parser.add_argument("--seed", type=int, default=3469)
     parser.add_argument("--json", action="store_true")
     return parser
@@ -478,7 +573,12 @@ def main(argv: list[str] | None = None) -> int:
     if not registry_path.is_absolute():
         registry_path = repo_root / registry_path
 
-    inventory = build_inventory(repo_root=repo_root, registry_path=registry_path)
+    inventory = build_inventory(
+        repo_root=repo_root,
+        registry_path=registry_path,
+        verify_release_hydration=bool(args.verify_release_hydration),
+        cache_dir=args.cache_dir,
+    )
     smoke_reports = [
         run_model_step_smoke(
             model_id=model_id,

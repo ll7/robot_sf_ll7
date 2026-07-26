@@ -241,7 +241,8 @@ class StructuredEpisode:
     The view is **episode-major**: per-step fields are aligned tuples whose lengths equal the
     episode step count. Episodes are never flattened into transitions here, so terminal/truncated
     semantics cannot be silently crossed. Every v1 field is preserved verbatim in addition to the
-    structured groups; ``provenance`` carries the original episode provenance plus an
+    structured groups; ``raw_observations`` retains the original per-step observation mappings
+    verbatim; ``provenance`` carries the original episode provenance plus an
     :data:`ADAPTER_PROVENANCE_KEY` entry recording the adapter version, bounds, and rays
     availability.
 
@@ -253,6 +254,8 @@ class StructuredEpisode:
         source_policy_id: Preserved v1 source policy id.
         split: Preserved v1 split name (one of :data:`SPLIT_NAMES`).
         observations: Per-step structured-observation view (drive_state + rays).
+        raw_observations: Original v1 per-step observation mappings, retained verbatim alongside
+            the derived groups so unrecognized source fields remain recoverable.
         actions: Per-step preserved action view.
         rewards: Preserved v1 per-step rewards, finite-validated.
         return_to_go: Preserved v1 per-step return-to-go, finite-validated.
@@ -272,6 +275,7 @@ class StructuredEpisode:
     source_policy_id: str
     split: str
     observations: tuple[StructuredObservationStep, ...]
+    raw_observations: tuple[Any, ...]
     actions: tuple[StructuredActionStep, ...]
     rewards: tuple[float, ...]
     return_to_go: tuple[float, ...]
@@ -287,7 +291,8 @@ class StructuredEpisode:
         """Return a JSON-safe summary of the structured episode (groups as lists).
 
         Returns:
-            A dictionary with all preserved v1 fields and the structured-observation/action groups.
+            A dictionary with all preserved v1 fields, including ``raw_observations``, and the
+            structured-observation/action groups.
         """
         return {
             "schema_version": OPEN_DREAMER_ADAPTER_VERSION,
@@ -307,6 +312,7 @@ class StructuredEpisode:
                 }
                 for step in self.observations
             ],
+            "raw_observations": list(self.raw_observations),
             "actions": [list(step.raw) for step in self.actions],
             "rewards": list(self.rewards),
             "return_to_go": list(self.return_to_go),
@@ -457,9 +463,10 @@ def adapt_episode(
     """Adapt one ``RLTrajectoryEpisode.v1`` into a leakage-safe structured-observation episode.
 
     The episode is re-validated through the canonical v1 validator, every per-step field is
-    preserved, and the structured ``drive_state`` / ``rays`` groups plus the validated action view
-    are produced. The adapter stays **episode-major**: no flattening to transitions occurs. The
-    original provenance is preserved and augmented under :data:`ADAPTER_PROVENANCE_KEY`.
+    preserved, including the original per-step observations, and the structured ``drive_state`` /
+    ``rays`` groups plus the validated action view are produced. The adapter stays
+    **episode-major**: no flattening to transitions occurs. The original provenance is preserved
+    and augmented under :data:`ADAPTER_PROVENANCE_KEY`.
 
     Args:
         episode: A validated ``RLTrajectoryEpisode.v1`` from the benchmark contract.
@@ -517,6 +524,7 @@ def adapt_episode(
         source_policy_id=episode.source_policy_id,
         split=episode.split,
         observations=tuple(structured_obs),
+        raw_observations=tuple(episode.observations),
         actions=tuple(structured_actions),
         rewards=rewards,
         return_to_go=return_to_go,

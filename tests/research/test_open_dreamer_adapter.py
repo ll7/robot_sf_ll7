@@ -6,8 +6,8 @@ plan. They verify that the clean-room, episode-major adapter under
 
 * consumes the existing ``RLTrajectoryDataset.v1`` / ``RLTrajectoryEpisode.v1`` contract read-only
   (the benchmark module is never edited here);
-* preserves reward, return_to_go, terminated, truncated, pedestrians, robot_states, scenario_id,
-  seed, split, source_policy_id, and provenance for every episode;
+* preserves raw observations, reward, return_to_go, terminated, truncated, pedestrians,
+  robot_states, scenario_id, seed, split, source_policy_id, and provenance for every episode;
 * produces a leakage-safe structured-observation view with ``drive_state`` and ``rays`` groups;
 * exposes a bounded ``[-1, 1] -> (linear velocity, angular velocity)`` action mapping;
 * stays **episode-major** (no flattening to transitions);
@@ -210,8 +210,15 @@ def test_rays_group_is_populated_when_observation_carries_ray_key() -> None:
 
 
 def test_all_v1_fields_preserved_verbatim() -> None:
-    """Reward, return_to_go, terminated, truncated, pedestrians, robot_states, and ids are preserved."""
-    episode = _make_episode(step_count=3)
+    """Every v1 field, including unrecognized raw observation keys, is retained verbatim."""
+    observations = tuple(
+        {
+            **_full_observation(step),
+            "future_model_feature": {"source": "preserve-me", "step": step},
+        }
+        for step in range(3)
+    )
+    episode = _make_episode(step_count=3, observations=observations)
     structured = adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
     assert structured.dataset_id == episode.dataset_id
@@ -220,12 +227,18 @@ def test_all_v1_fields_preserved_verbatim() -> None:
     assert structured.seed == episode.seed
     assert structured.source_policy_id == episode.source_policy_id
     assert structured.split == episode.split
+    assert structured.raw_observations == episode.observations
+    assert structured.raw_observations[0]["future_model_feature"] == {
+        "source": "preserve-me",
+        "step": 0,
+    }
     assert structured.rewards == episode.rewards
     assert structured.return_to_go == episode.return_to_go
     assert structured.terminated == episode.terminated
     assert structured.truncated == episode.truncated
     assert structured.pedestrians == episode.pedestrians
     assert structured.robot_states == episode.robot_states
+    assert structured.to_dict()["raw_observations"] == list(episode.observations)
 
 
 def test_raw_stored_action_preserved_verbatim() -> None:
@@ -487,6 +500,7 @@ def test_adapter_consumes_committed_smoke_preview_read_only() -> None:
         assert adapted.seed == original.seed
         assert adapted.source_policy_id == original.source_policy_id
         assert adapted.split == original.split
+        assert adapted.raw_observations == original.observations
         assert adapted.rewards == original.rewards
         assert adapted.return_to_go == original.return_to_go
         assert adapted.terminated == original.terminated

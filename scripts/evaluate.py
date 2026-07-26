@@ -94,14 +94,14 @@ class AdaptedEnv(gymnasium.Env):
         Args:
             action: TODO docstring.
         """
-        obs, reward, terminated, truncated, info = self.orig_env.step(action)
+        obs, reward, done, meta = self.orig_env.step(action)
         obs = self.config.obs_adapter(obs)
-        return obs, reward, terminated, truncated, info
+        return obs, reward, done, meta
 
     def reset(self):
         """TODO docstring. Document this function."""
-        obs, info = self.orig_env.reset()
-        return self.config.obs_adapter(obs), info
+        obs = self.orig_env.reset()
+        return self.config.obs_adapter(obs)
 
 
 def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMetrics:
@@ -120,7 +120,7 @@ def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMet
     iterator = tqdm(range(num_episodes)) if tqdm is not None else range(num_episodes)
     for _ in iterator:
         is_end_of_route = False
-        obs, _ = env.reset()
+        obs = env.reset()
         while not is_end_of_route:
             action, _ = model.predict(obs, deterministic=True)
             # Env step returns obs, reward, terminated, truncated, info
@@ -129,7 +129,7 @@ def evaluate(env: gymnasium.Env, model: DriveModel, num_episodes: int) -> EnvMet
             meta = meta["meta"]
             eval_metrics.update(meta)
             if done:
-                obs, _ = env.reset()
+                obs = env.reset()
                 is_end_of_route = (
                     meta["is_pedestrian_collision"]
                     or meta["is_obstacle_collision"]

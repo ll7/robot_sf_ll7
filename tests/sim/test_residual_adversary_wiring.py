@@ -145,6 +145,17 @@ def test_active_adversary_residual_is_additive_within_accel_bound() -> None:
             assert np.linalg.norm(residual, axis=1).max() <= max_accel + 1e-9
 
 
+def test_simulator_reset_clears_residual_adversary_state() -> None:
+    """A fresh episode reset also restarts the stateful residual controller."""
+    sim = _build_simulator(residual_active=True)
+    sim.step_once([(0.0, 0.0)])
+    assert sim._residual_adversary is not None
+    assert sim._residual_adversary.step_index == 1
+    sim.reset_state()
+    assert sim._residual_adversary.step_index == 0
+    assert sim._residual_adversary.macro_action_index == 0
+
+
 def test_active_adversary_changes_forces_vs_inactive() -> None:
     """Enabling the adversary must change at least one force vs the inactive baseline.
 

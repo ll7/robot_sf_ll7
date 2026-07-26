@@ -649,19 +649,40 @@ def project_residual_displacement_walkable(
     return corrected
 
 
+def _pairwise_separation_scale(
+    relative_position: np.ndarray,
+    relative_displacement: np.ndarray,
+    min_separation_m: float,
+) -> float:
+    """Return the largest safe displacement prefix for one pedestrian pair."""
+    quadratic_a = float(np.dot(relative_displacement, relative_displacement))
+    quadratic_b = 2.0 * float(np.dot(relative_position, relative_displacement))
+    quadratic_c = float(np.dot(relative_position, relative_position)) - min_separation_m**2
+
+    if quadratic_c < -EPSILON or (quadratic_c <= EPSILON and quadratic_b < 0.0):
+        return 0.0
+    if quadratic_c <= EPSILON or quadratic_a <= EPSILON:
+        return 1.0
+    discriminant = quadratic_b**2 - 4.0 * quadratic_a * quadratic_c
+    if discriminant <= 0.0:
+        return 1.0
+    first_root = (-quadratic_b - float(np.sqrt(discriminant))) / (2.0 * quadratic_a)
+    return first_root if 0.0 < first_root < 1.0 else 1.0
+
+
 def enforce_inter_agent_separation(
     residual_displacement: np.ndarray,
     positions: np.ndarray,
     target_mask: np.ndarray,
     min_separation_m: float,
 ) -> np.ndarray:
-    """Scale targeted displacements so targeted agents keep ``min_separation_m`` apart.
+    """Scale targeted displacements so agents keep ``min_separation_m`` apart.
 
-    A single conservative pass: for each targeted pedestrian, if applying its
-    displacement would bring it closer than ``min_separation_m`` to any other
-    pedestrian (targeted or not), the displacement is scaled toward zero until the
-    separation is restored (or zeroed when restoration is impossible). Non-targeted
-    rows are never modified.
+    A single shared scale is applied to every targeted displacement.  This makes
+    the all-target case atomic: every candidate pair is evaluated from the same
+    positions rather than from stale, row-by-row candidates.  The scale is the
+    largest prefix of the proposed displacement that preserves every pairwise
+    separation. Non-targeted rows are never modified.
 
     Returns
     -------
@@ -678,32 +699,31 @@ def enforce_inter_agent_separation(
     target_mask = np.asarray(target_mask, dtype=bool)
     if target_mask.shape != (positions_array.shape[0],):
         raise ValueError("target_mask must have shape (N,) matching positions")
-    result = displacement_array.copy()
     targeted_indices = np.flatnonzero(target_mask)
     if targeted_indices.size == 0:
-        return result
-    candidate_positions = positions_array + result
+        return displacement_array.copy()
+
+    # A single global scale preserves all pairwise constraints simultaneously.
+    # For each pair, squared separation along that scale is a quadratic.  Starting
+    # from alpha=0 (the current state), its first positive root is the largest safe
+    # prefix for that pair; taking the minimum root is safe for every pair.
+    shared_scale = 1.0
+    num_peds = positions_array.shape[0]
     for i in targeted_indices:
-        others = np.arange(positions_array.shape[0]) != i
-        if not np.any(others):
-            continue
-        deltas = candidate_positions[i] - candidate_positions[others]
-        distances = np.linalg.norm(deltas, axis=1)
-        min_distance = float(np.min(distances))
-        if min_distance >= min_separation_m:
-            continue
-        # Binary search the scale in [0, 1] that restores separation.
-        lo, hi = 0.0, 1.0
-        for _ in range(24):
-            mid = 0.5 * (lo + hi)
-            test_position = positions_array[i] + mid * result[i]
-            test_deltas = test_position - candidate_positions[others]
-            test_distances = np.linalg.norm(test_deltas, axis=1)
-            if np.min(test_distances) < min_separation_m:
-                hi = mid
-            else:
-                lo = mid
-        result[i] = result[i] * lo
+        for j in range(num_peds):
+            if j == i or (target_mask[j] and j < i):
+                continue
+            pair_scale = _pairwise_separation_scale(
+                positions_array[i] - positions_array[j],
+                displacement_array[i] - displacement_array[j],
+                min_separation_m,
+            )
+            shared_scale = min(shared_scale, pair_scale)
+        if shared_scale == 0.0:
+            break
+
+    result = displacement_array.copy()
+    result[targeted_indices] *= shared_scale
     return result
 
 
@@ -908,6 +928,13 @@ class BoundedResidualAdversary:
             )
         # Keep non-targeted rows exactly zero and store for the next jerk step.
         bounded = bounded * self._target_mask[:, None]
+        bounded = clamp_magnitude(bounded, self.config.max_residual_accel_mps2)
+        # Geometry and separation projections can change the applied residual.
+        # Reapply the jerk limit after those projections so the stored residual
+        # always satisfies the advertised per-step jerk contract.
+        bounded = rate_limit_jerk(
+            bounded, self._last_residual, self.dt_s, self.config.max_jerk_mps3
+        )
         bounded = clamp_magnitude(bounded, self.config.max_residual_accel_mps2)
         self._last_residual = bounded
         self._step_index += 1

@@ -224,6 +224,26 @@ def test_enforce_inter_agent_separation_leaves_non_targeted_unchanged() -> None:
     np.testing.assert_allclose(corrected, displacement)
 
 
+def test_enforce_inter_agent_separation_preserves_all_target_pairs() -> None:
+    """All targeted candidates are projected together, without stale-row overlap."""
+    positions = np.array([[0.0, 0.0], [1.2, 0.0]], dtype=float)
+    displacement = np.array([[0.5, 0.0], [-0.5, 0.0]], dtype=float)
+    corrected = enforce_inter_agent_separation(displacement, positions, np.array([True, True]), 0.6)
+    candidate = positions + corrected
+    assert np.linalg.norm(candidate[0] - candidate[1]) >= 0.6 - 1e-9
+
+
+def test_enforce_inter_agent_separation_checks_lower_index_non_target() -> None:
+    """A targeted row also preserves separation from earlier non-targeted rows."""
+    positions = np.array([[0.0, 0.0], [1.2, 0.0]], dtype=float)
+    displacement = np.array([[0.0, 0.0], [-1.0, 0.0]], dtype=float)
+    corrected = enforce_inter_agent_separation(
+        displacement, positions, np.array([False, True]), 0.6
+    )
+    candidate = positions + corrected
+    assert np.linalg.norm(candidate[0] - candidate[1]) >= 0.6 - 1e-9
+
+
 # ---------------------------------------------------------------------------
 # Fail-closed behavior on malformed / non-finite input
 # ---------------------------------------------------------------------------
@@ -390,6 +410,39 @@ def test_residual_jerk_is_bounded_across_steps() -> None:
         change = np.linalg.norm(nxt - prev) / dt
         assert change <= max_jerk + 1e-6
         prev = nxt
+
+
+def test_residual_jerk_remains_bounded_after_route_projection() -> None:
+    """Route projection cannot bypass the final per-step jerk limit."""
+    max_jerk = 1.0
+    dt = 0.1
+
+    @dataclass
+    class _OutwardPolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            return np.array([[0.0, 5.0]])
+
+    config = ResidualAdversaryConfig(
+        is_active=True,
+        macro_action_dt_s=dt,
+        max_residual_accel_mps2=10.0,
+        max_jerk_mps3=max_jerk,
+        max_route_deviation_m=0.05,
+    )
+    adversary = BoundedResidualAdversary(
+        config=config,
+        policy=_OutwardPolicy(),
+        dt_s=dt,
+        num_peds=1,
+        route_polylines=[np.array([[0.0, 0.0], [2.0, 0.0]])],
+    )
+    positions = np.array([[0.0, 0.05]])
+    velocities = np.zeros((1, 2))
+    max_speeds = np.array([10.0])
+    adversary._last_residual = np.array([[0.0, 0.5]])
+    previous = adversary.last_residual
+    current = adversary.step_residual(positions, velocities, max_speeds, ROBOT_POSE)
+    assert np.linalg.norm(current - previous) / dt <= max_jerk + 1e-9
 
 
 def test_residual_does_not_exceed_max_speed() -> None:

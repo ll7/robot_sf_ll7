@@ -270,9 +270,9 @@ def _is_failure_episode(row: Mapping[str, object]) -> bool:
 
     Uses the campaign's own ``success`` column (the write-time episode outcome
     ``route_complete and not collision``). A row whose ``success`` value is
-    absent or unparseable is treated conservatively as a failure episode so a
-    malformed campaign degrades to the stricter all-rows denominator rather
-    than silently shrinking the failure-episode denominator.
+    absent or unparseable is treated as a failure for the provisional partition.
+    The caller must use the all-rows denominator whenever any outcome is invalid,
+    so a malformed campaign cannot silently shrink the denominator.
     """
 
     raw_value = row.get(SUCCESS_COLUMN)
@@ -300,20 +300,43 @@ def _is_failure_episode(row: Mapping[str, object]) -> bool:
     return value == 0.0
 
 
+def _success_outcome_is_valid(row: Mapping[str, object]) -> bool:
+    """Return whether the write-time ``success`` outcome is in the strict domain.
+
+    The failure-episode denominator is only meaningful when every row carries a
+    valid boolean/0-or-1 outcome. Missing, malformed, non-finite, or out-of-domain
+    values therefore trigger the conservative all-rows fallback in the caller.
+    """
+
+    raw_value = row.get(SUCCESS_COLUMN)
+    if raw_value is None:
+        return False
+    raw = str(raw_value).strip().casefold()
+    if raw in {"true", "false"}:
+        return True
+    try:
+        value = float(raw)
+    except ValueError:
+        return False
+    return math.isfinite(value) and value in {0.0, SUCCESS_THRESHOLD}
+
+
 def _compute_trace_coverage(
     rows: list[dict[str, str]],
     *,
     trace_modes: set[str],
     sidecar_by_episode: dict[str, dict[str, str]],
-) -> tuple[int, int, int, int, int]:
+) -> tuple[int, int, int, int, int, int, int, bool]:
     """Return trace-labeled counts plus the failure-episode denominator size.
 
     Counts trace-labeled rows (with and without the sidecar overlay) and the
-    number of failure episodes. Returns
+    number of failure episodes. If any write-time ``success`` outcome is invalid,
+    the effective gated population conservatively falls back to all rows. Returns
     ``(failure_labeled_with_sidecar, all_labeled_without_sidecar,
-    all_labeled_with_sidecar, matched, failure_episode_count)``. The
-    caller computes both the all-rows and failure-episode fractions from these
-    counts so the receipt can report both while gating on one.
+    all_labeled_with_sidecar, matched, failure_episode_count,
+    effective_denominator_count, invalid_success_count, denominator_fallback)``.
+    The caller computes both the all-rows and failure-episode fractions from
+    these counts so the receipt can report both while gating on one.
     """
 
     def _row_labeled(row: dict[str, str]) -> bool:
@@ -328,8 +351,11 @@ def _compute_trace_coverage(
     )
     all_labeled_with_sidecar = sum(_row_labeled(row) for row in rows) if trace_modes else 0
     failure_rows = [row for row in rows if _is_failure_episode(row)]
+    invalid_success_count = sum(not _success_outcome_is_valid(row) for row in rows)
+    denominator_fallback = bool(rows) and invalid_success_count > 0
+    gated_rows = rows if denominator_fallback else failure_rows
     failure_labeled_with_sidecar = (
-        sum(_row_labeled(row) for row in failure_rows) if trace_modes else 0
+        sum(_row_labeled(row) for row in gated_rows) if trace_modes else 0
     )
     matched = (
         sum(1 for row in rows if str(row.get("episode_id") or "").strip() in sidecar_by_episode)
@@ -342,6 +368,9 @@ def _compute_trace_coverage(
         all_labeled_with_sidecar,
         matched,
         len(failure_rows),
+        len(gated_rows),
+        invalid_success_count,
+        denominator_fallback,
     )
 
 
@@ -373,6 +402,7 @@ def _validate_campaign_summary(
                 f"{campaign.get('campaign_execution_status')!r}"
             )
     except ValueError as exc:
+        summary = None
         blockers.append(str(exc))
     return summary, blockers
 
@@ -486,6 +516,9 @@ def build_registration_receipt(
         trace_labeled_rows_all_rows,
         sidecar_matched_rows,
         failure_episode_count,
+        effective_denominator_count,
+        invalid_success_count,
+        denominator_fallback,
     ) = _compute_trace_coverage(
         rows, trace_modes=trace_modes, sidecar_by_episode=sidecar_by_episode
     )
@@ -496,16 +529,21 @@ def build_registration_receipt(
         trace_labeled_rows_all_rows / total_row_count if total_row_count else 0.0
     )
     trace_labeled_fraction = (
-        trace_labeled_rows / failure_episode_count if failure_episode_count else 0.0
+        trace_labeled_rows / effective_denominator_count if effective_denominator_count else 0.0
     )
     trace_labeled_fraction_without_sidecar = (
         trace_labeled_rows_without_sidecar / total_row_count if total_row_count else 0.0
     )
     if rows_loaded and min_fraction is not None and trace_labeled_fraction < min_fraction:
+        denominator_label = (
+            "all-rows fallback due to invalid success outcomes"
+            if denominator_fallback
+            else "failure-episode denominator"
+        )
         blockers.append(
-            "trace-verified labeled fraction (failure-episode denominator) must meet "
+            f"trace-verified labeled fraction ({denominator_label}) must meet "
             f"preregistration minimum {min_fraction:.3f}; got {trace_labeled_fraction:.3f} "
-            f"({trace_labeled_rows} of {failure_episode_count} failure episodes)"
+            f"({trace_labeled_rows} of {effective_denominator_count} gated rows)"
         )
 
     status = READY_STATUS if not blockers else BLOCKED_STATUS
@@ -541,6 +579,12 @@ def build_registration_receipt(
             "denominator_correction": DENOMINATOR_CORRECTION_NOTE,
             "total_row_count": total_row_count,
             "failure_episode_count": failure_episode_count,
+            "effective_denominator_count": effective_denominator_count,
+            "invalid_success_count": invalid_success_count,
+            "denominator_fallback": (
+                "all_rows_due_to_invalid_success" if denominator_fallback else None
+            ),
+            "effective_denominator": "all_rows" if denominator_fallback else denominator,
             "trace_labeled_rows": trace_labeled_rows,
             "trace_labeled_fraction": trace_labeled_fraction,
             "trace_labeled_rows_all_rows": trace_labeled_rows_all_rows,
@@ -587,11 +631,12 @@ def _render_markdown(receipt: dict[str, Any]) -> str:
         f"| Total episodes | {campaign['total_episodes_observed']} / expected {campaign['total_episodes_expected']} |",
         f"| Execution status | `{campaign['campaign_execution_status']}` |",
         f"| Episode rows | {campaign['episode_row_count']} |",
-        f"| Failure episodes (denominator) | {trace_labels['failure_episode_count']} |",
+        f"| Failure episodes (candidate population) | {trace_labels['failure_episode_count']} |",
         (
-            f"| Trace-labeled rows (failure episodes) | {trace_labels['trace_labeled_rows']} "
+            f"| Trace-labeled rows (effective denominator) | {trace_labels['trace_labeled_rows']} "
             f"({trace_labels['trace_labeled_fraction']:.3f}) |"
         ),
+        f"| Effective gating denominator | `{trace_labels['effective_denominator']}` |",
         (
             f"| Trace-labeled fraction (all rows) | "
             f"{trace_labels['trace_labeled_fraction_all_rows']:.3f} |"

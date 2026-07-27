@@ -142,6 +142,16 @@ def test_min_labeled_fraction_out_of_range_fails_closed(tmp_path: Path, base_pay
         load_preregistration(path)
 
 
+def test_boolean_min_labeled_fraction_fails_closed(tmp_path: Path, base_payload: dict) -> None:
+    """A YAML boolean must not satisfy the numeric fraction contract."""
+    base_payload["required_outputs"]["failure_mechanism"]["min_trace_verified_labeled_fraction"] = (
+        True
+    )
+    path = _write_config(tmp_path, base_payload)
+    with pytest.raises(RerunPreregistrationError, match="min_trace_verified_labeled_fraction"):
+        load_preregistration(path)
+
+
 def test_missing_denominator_field_fails_closed(tmp_path: Path, base_payload: dict) -> None:
     """A contract that omits the denominator declaration fails closed.
 

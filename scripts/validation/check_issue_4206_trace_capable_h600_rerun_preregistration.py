@@ -217,7 +217,9 @@ def _validate_required_outputs(required_outputs: Any) -> None:
     )
     fraction = mechanism.get("min_trace_verified_labeled_fraction")
     _require(
-        isinstance(fraction, (int, float)) and 0.0 < float(fraction) <= 1.0,
+        not isinstance(fraction, bool)
+        and isinstance(fraction, (int, float))
+        and 0.0 < float(fraction) <= 1.0,
         "min_trace_verified_labeled_fraction must be in (0, 1] so an all-unknown "
         "re-run cannot pass successful outcome",
     )

@@ -182,6 +182,18 @@ def test_incomplete_campaign_is_blocked_without_promoting_status(tmp_path: Path)
     assert any("campaign_execution_status" in blocker for blocker in receipt["blockers"])
 
 
+def test_malformed_campaign_summary_fails_closed_without_raising(tmp_path: Path) -> None:
+    """A summary without a campaign block produces a blocked receipt, not an exception."""
+    campaign = _write_campaign(tmp_path / "campaign")
+    (campaign / "reports" / "campaign_summary.json").write_text("{}\n", encoding="utf-8")
+
+    receipt = _receipt(campaign)
+
+    assert receipt["status"] == BLOCKED_STATUS
+    assert receipt["campaign"]["total_episodes_observed"] is None
+    assert any("must contain a campaign object" in blocker for blocker in receipt["blockers"])
+
+
 def test_episode_total_mismatch_is_blocked(tmp_path: Path) -> None:
     """A completed campaign cannot register when summary and requested totals disagree."""
 
@@ -622,6 +634,37 @@ def test_failure_episode_denominator_excludes_success_episodes(tmp_path: Path) -
     assert trace_labels["trace_labeled_fraction_all_rows"] == 0.2
 
 
+def test_invalid_success_outcome_falls_back_to_all_rows(tmp_path: Path) -> None:
+    """A mixed malformed outcome cannot make the failure-only floor easier to pass."""
+
+    # One labeled failure, one malformed outcome, and one success would be 1/2
+    # under a row-local fallback. The conservative global fallback must gate on
+    # all three rows instead, yielding 1/3 and a blocked receipt.
+    campaign = _write_campaign(
+        tmp_path / "campaign",
+        episode_count=3,
+        trace_labeled_rows=1,
+        success_values=["0.0", "not-a-number", "1.0"],
+    )
+
+    receipt = build_registration_receipt(
+        campaign_root=campaign,
+        job_id="fixture-job",
+        expected_total_episodes=3,
+        preregistration_config=PREREGISTRATION_CONFIG,
+        generated_at="2026-07-20T000000Z",
+    )
+
+    trace_labels = receipt["trace_labels"]
+    assert receipt["status"] == BLOCKED_STATUS
+    assert trace_labels["failure_episode_count"] == 2
+    assert trace_labels["effective_denominator_count"] == 3
+    assert trace_labels["invalid_success_count"] == 1
+    assert trace_labels["denominator_fallback"] == "all_rows_due_to_invalid_success"
+    assert trace_labels["effective_denominator"] == "all_rows"
+    assert trace_labels["trace_labeled_fraction"] == 1 / 3
+
+
 def test_failure_episode_numerator_excludes_labeled_successes(tmp_path: Path) -> None:
     """A labeled success cannot satisfy coverage for an unlabeled failure."""
     campaign = _write_campaign(
@@ -743,7 +786,7 @@ def test_failure_denominator_below_floor_still_blocks(tmp_path: Path) -> None:
     assert receipt["status"] == BLOCKED_STATUS
     blocker = next(b for b in receipt["blockers"] if "trace-verified labeled fraction" in b)
     assert "failure-episode denominator" in blocker
-    assert "1 of 4 failure episodes" in blocker
+    assert "1 of 4 gated rows" in blocker
     assert receipt["trace_labels"]["trace_labeled_fraction"] == 0.25
 
 
@@ -803,6 +846,8 @@ def test_missing_success_column_degrades_to_all_rows_denominator(tmp_path: Path)
     # No success column -> every row counted as a failure -> both denominators 4.
     assert trace_labels["failure_episode_count"] == 4
     assert trace_labels["total_row_count"] == 4
+    assert trace_labels["effective_denominator"] == "all_rows"
+    assert trace_labels["denominator_fallback"] == "all_rows_due_to_invalid_success"
     assert trace_labels["trace_labeled_fraction"] == 0.25
     assert trace_labels["trace_labeled_fraction_all_rows"] == 0.25
     assert receipt["status"] == BLOCKED_STATUS

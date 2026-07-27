@@ -239,6 +239,13 @@ class StructuredObservationStep:
         if not self.rays_available and self.rays.size != 0:
             raise OpenDreamerAdapterError("rays_available=False requires an empty rays vector")
 
+        drive_state = np.array(self.drive_state, copy=True)
+        rays = np.array(self.rays, copy=True)
+        drive_state.setflags(write=False)
+        rays.setflags(write=False)
+        object.__setattr__(self, "drive_state", drive_state)
+        object.__setattr__(self, "rays", rays)
+
 
 @dataclass(frozen=True, slots=True)
 class StructuredActionStep:
@@ -570,8 +577,8 @@ def adapt_episode(
     structured_obs: list[StructuredObservationStep] = []
     structured_actions: list[StructuredActionStep] = []
     for step_index in range(episode.step_count):
-        robot_state = episode.robot_states[step_index]
-        observation = episode.observations[step_index]
+        robot_state = _episode_step_value(episode.robot_states, "robot_states", step_index)
+        observation = _episode_step_value(episode.observations, "observations", step_index)
         drive_state = _extract_drive_state(robot_state)
         rays, rays_available = _extract_rays(observation)
         structured_obs.append(
@@ -581,7 +588,7 @@ def adapt_episode(
                 rays_available=rays_available,
             )
         )
-        raw_action = episode.actions[step_index]
+        raw_action = _episode_step_value(episode.actions, "actions", step_index)
         structured_actions.append(_coerce_action_step(raw_action, step_index, action_bounds))
 
     rays_available = _validate_episode_ray_contract(structured_obs)
@@ -643,6 +650,16 @@ def adapt_episodes(
             f"{', '.join(leakage_report.leaked_keys)}"
         )
     return [adapt_episode(episode, action_bounds=action_bounds) for episode in episodes]
+
+
+def _episode_step_value(values: Any, field_name: str, step_index: int) -> Any:
+    """Return one position from a v1 per-step field through the adapter error boundary."""
+    try:
+        return values[step_index]
+    except (IndexError, KeyError, TypeError) as exc:
+        raise OpenDreamerAdapterError(
+            f"{field_name} must support positional access at step {step_index}"
+        ) from exc
 
 
 def _extract_drive_state(robot_state: Any) -> np.ndarray:

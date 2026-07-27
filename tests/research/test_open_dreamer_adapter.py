@@ -231,6 +231,18 @@ def test_rays_group_is_populated_when_observation_carries_ray_key() -> None:
         np.testing.assert_allclose(step.rays, [1.0 - 0.1 * float(index), 0.8, 0.6])
 
 
+@pytest.mark.parametrize("field_name", ["observations", "actions", "robot_states"])
+def test_adapter_wraps_non_indexable_per_step_fields(field_name: str) -> None:
+    """Correct-length but non-indexable step fields stay inside the public error boundary."""
+    episode = replace(_make_episode(step_count=2), **{field_name: {0, 1}})
+
+    with pytest.raises(
+        OpenDreamerAdapterError,
+        match=rf"{field_name} must support positional access at step 0",
+    ):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+
 @pytest.mark.parametrize(
     ("ray_presence",),
     [((True, False),), ((False, True),)],
@@ -464,6 +476,21 @@ def test_to_dict_rejects_non_finite_preserved_raw_values() -> None:
 
     with pytest.raises(OpenDreamerAdapterError, match="raw_observations.*non-finite float"):
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS).to_dict()
+
+
+def test_structured_observation_groups_are_immutable_after_validation() -> None:
+    """Derived arrays cannot be mutated into an invalid state after adaptation."""
+    structured = adapt_episode(
+        _make_episode(step_count=1, observations=(_full_observation(0, with_rays=True),)),
+        action_bounds=_DEFAULT_BOUNDS,
+    )
+
+    for values in (
+        structured.observations[0].drive_state,
+        structured.observations[0].rays,
+    ):
+        with pytest.raises(ValueError, match="read-only"):
+            values[0] = float("nan")
 
 
 def test_adapt_episodes_preserves_input_order_and_count() -> None:

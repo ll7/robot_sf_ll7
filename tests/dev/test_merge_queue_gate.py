@@ -156,6 +156,43 @@ def test_fetch_pr_snapshot_ignores_current_gate_check() -> None:
     assert snapshot["checks"] == {"overall": "success"}
 
 
+@pytest.mark.parametrize(
+    ("rollup", "expected"),
+    [
+        (
+            [
+                {
+                    "__typename": "CheckRun",
+                    "name": "merge-queue-gate",
+                    "workflowName": "Merge Queue Gate",
+                    "startedAt": "2026-07-25T12:05:00Z",
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS",
+                }
+            ],
+            "pending",
+        ),
+        ([{"status": "COMPLETED", "conclusion": "STALE"}], "failure"),
+        ([{"status": "COMPLETED", "conclusion": None}], "pending"),
+    ],
+)
+def test_fetch_pr_snapshot_fails_closed_on_non_green_ci_rollups(
+    rollup: list[dict[str, object]], expected: str
+) -> None:
+    """A missing, stale, or malformed current CI rollup cannot become green."""
+    raw_pr = _raw_pr()
+    raw_pr["statusCheckRollup"] = rollup
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["checks"] == {"overall": expected}
+
+
 def test_workflow_dispatch_passes_pr_number_through_environment() -> None:
     """Manual input is data, not interpolated into the generated shell program."""
     workflow = Path(".github/workflows/merge-queue-gate.yml").read_text(encoding="utf-8")
@@ -247,6 +284,32 @@ def test_fetch_merge_queue_strategy_rejects_missing_queue_entry() -> None:
     assert error is not None
 
 
+def test_fetch_merge_queue_strategy_rejects_partial_graphql_errors() -> None:
+    """Partial GraphQL data cannot bypass the queue-strategy fail-closed check."""
+    payload = _merge_queue_strategy_payload("ALLGREEN")
+    payload["errors"] = [{"message": "configuration may be incomplete"}]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(stdout=json.dumps(payload))
+        strategy, error = fetch_merge_queue_strategy(42, repo="owner/repo")
+
+    assert strategy is None
+    assert error is not None
+    assert "incomplete" in error
+
+
+def test_fetch_threads_resolved_rejects_partial_graphql_errors() -> None:
+    """Partial GraphQL data cannot hide an unresolved review thread."""
+    payload = _review_threads_payload(nodes=[], total_count=0, has_next_page=False)
+    payload["errors"] = [{"message": "thread data may be incomplete"}]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(stdout=json.dumps(payload))
+        resolved_state, error = fetch_threads_resolved(42, repo="owner/repo")
+
+    assert resolved_state is None
+    assert error is not None
+    assert "incomplete" in error
+
+
 def test_headgreen_merge_queue_strategy_fails_closed() -> None:
     """A passing tail entry cannot carry an earlier ungated entry through."""
     gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
@@ -333,3 +396,20 @@ def test_from_event_fails_closed_when_encoded_head_differs_from_pr(tmp_path, cap
     assert audit["merge_group_head_sha"] == encoded_sha
     assert audit["merge_group_head_binding"] == "mismatch"
     assert "merge_group_head_sha_mismatch" in audit["reasons"]
+
+
+def test_pr_mode_fails_closed_when_current_main_sha_is_unavailable(capsys) -> None:
+    """Standalone source-head evaluation cannot pass without a current main SHA."""
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
+            _gh_response(stdout=json.dumps({"base": {"sha": FULL_SHA}})),
+            _gh_response(returncode=1, stderr="main ref unavailable"),
+        ]
+        exit_code = main(["--pr", "42", "--repo", "owner/repo"])
+
+    audit = json.loads(capsys.readouterr().out)
+    assert exit_code == 1
+    assert audit["main_sha"] == ""
+    assert "main_sha_unavailable" in audit["reasons"]

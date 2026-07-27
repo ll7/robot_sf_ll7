@@ -43,7 +43,7 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -55,7 +55,11 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.dev.check_pr_ci_status import _latest_check_runs  # noqa: E402
+from scripts.dev.check_pr_ci_status import (  # noqa: E402
+    _latest_check_runs,
+    _rollup_conclusion,
+    _rollup_status,
+)
 from scripts.dev.pr_loop_policy import (  # noqa: E402
     has_current_accepted_gate_verdict,
 )
@@ -69,10 +73,12 @@ FAILURE_CONCLUSIONS = {
     "failure",
     "error",
     "cancelled",
+    "stale",
     "timed_out",
     "action_required",
     "startup_failure",
 }
+SUCCESS_CONCLUSIONS = {"neutral", "skipped", "success"}
 PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested", "waiting"}
 GATE_WORKFLOW_NAME = "Merge Queue Gate"
 GATE_JOB_NAME = "merge-queue-gate"
@@ -345,6 +351,8 @@ def _rollup_overall(rollup: list[dict[str, Any]]) -> str:
     """
     if not isinstance(rollup, list) or not rollup:
         return "pending"
+    if any(not isinstance(check, dict) for check in rollup):
+        return "pending"
     effective_rollup, _superseded_count = _latest_check_runs(rollup)
     without_current_gate = [
         check
@@ -353,20 +361,44 @@ def _rollup_overall(rollup: list[dict[str, Any]]) -> str:
             check.get("workflowName") == GATE_WORKFLOW_NAME and check.get("name") == GATE_JOB_NAME
         )
     ]
-    if not without_current_gate and len(effective_rollup) != len(without_current_gate):
-        return "success"
+    if not without_current_gate:
+        # A source-head gate run must not be allowed to establish its own CI
+        # prerequisite.  The exact-head verdict is evidence about a prior
+        # review, not a substitute for at least one current non-gate check.
+        return "pending"
     for check in without_current_gate:
-        if not isinstance(check, dict):
-            continue
-        conclusion = str(check.get("conclusion") or check.get("state") or "").lower()
-        status = str(check.get("status") or check.get("state") or "").lower()
+        conclusion = _rollup_conclusion(check)
+        status = _rollup_status(check)
         if conclusion in FAILURE_CONCLUSIONS:
             return "failure"
         if status in PENDING_STATUSES:
             return "pending"
         if conclusion in PENDING_STATUSES:
             return "pending"
+        if conclusion not in SUCCESS_CONCLUSIONS:
+            return "unknown"
     return "success"
+
+
+def _graphql_error(payload: dict[str, Any]) -> str | None:
+    """Return a normalized GraphQL error, including partial-data errors."""
+    errors = payload.get("errors")
+    if errors is None:
+        return None
+    if not isinstance(errors, list):
+        return "GraphQL errors field is malformed"
+    if not errors:
+        return None
+    messages = [
+        str(error.get("message") or error) if isinstance(error, dict) else str(error)
+        for error in errors
+    ]
+    return "; ".join(messages) or "GraphQL returned errors"
+
+
+def _failed_audit(audit: MergeGateAudit, reason: str) -> MergeGateAudit:
+    """Return an audit forced to fail with one additional machine-readable reason."""
+    return replace(audit, passed=False, reasons=[*audit.reasons, reason])
 
 
 def _resolve_owner_repo(explicit: str) -> str | None:
@@ -582,6 +614,9 @@ def fetch_merge_queue_strategy(pr_number: str | int, *, repo: str) -> tuple[str 
     payload, err = _parse_json(result.stdout)
     if err or not isinstance(payload, dict):
         return None, err or "graphql response is not JSON"
+    graphql_err = _graphql_error(payload)
+    if graphql_err:
+        return None, graphql_err
     data = payload.get("data")
     repository = data.get("repository") if isinstance(data, dict) else None
     pull_request = repository.get("pullRequest") if isinstance(repository, dict) else None
@@ -631,6 +666,9 @@ def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | N
     payload, err = _parse_json(result.stdout)
     if err or not isinstance(payload, dict):
         return None, err or "graphql response is not JSON"
+    graphql_err = _graphql_error(payload)
+    if graphql_err:
+        return None, graphql_err
     threads = (
         payload.get("data", {})
         .get("repository", {})
@@ -738,6 +776,15 @@ def _evaluate_live(
             )
     else:
         main_sha = fetch_main_sha(repo=repo)
+        if not main_sha:
+            audit = evaluate_merge_gate(
+                snapshot,
+                main_sha="",
+                threads_resolved=None,
+            )
+            return _failed_audit(audit, "main_sha_unavailable"), (
+                "failed to fetch current main SHA; refusing a source-head gate pass"
+            )
         queue_merging_strategy = ""
 
     threads_resolved, thread_err = fetch_threads_resolved(pr_number, repo=repo)

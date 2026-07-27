@@ -114,27 +114,33 @@ def _packet(rows: list[dict[str, Any]], **overrides: Any) -> dict[str, Any]:
 
 
 def _balanced_packet(*, proposal_failures: int, random_failures: int, per_arm: int = 4) -> dict:
-    """Build a packet with ``per_arm`` candidates per arm and chosen failure counts."""
+    """Build a 3-of-5-compatible packet with chosen candidate failure counts."""
     rows: list[dict[str, Any]] = []
     for rank in range(per_arm):
-        rows.append(
+        rows.extend(
             _row(
-                row_id=f"prop_{rank}",
+                row_id=f"prop_{rank}_{seed}",
                 manifest_id=f"prop_cand_{rank}",
                 arm="proposal",
                 rank=rank + 1,
                 failure=rank < proposal_failures,
+                scenario_seed=99_000 + rank * 10 + seed,
+                execution_seed=70_000 + rank * 10 + seed,
             )
+            for seed in range(5)
         )
     for rank in range(per_arm):
-        rows.append(
+        rows.extend(
             _row(
-                row_id=f"rand_{rank}",
+                row_id=f"rand_{rank}_{seed}",
                 manifest_id=f"rand_cand_{rank}",
                 arm="random",
                 rank=rank + 1,
                 failure=rank < random_failures,
+                scenario_seed=199_000 + rank * 10 + seed,
+                execution_seed=170_000 + rank * 10 + seed,
             )
+            for seed in range(5)
         )
     return _packet(rows)
 
@@ -492,31 +498,74 @@ def test_excluded_row_with_reason_blocks_an_incomplete_predeclared_arm() -> None
     assert "complete predeclared manifest set" in result["reason"]
 
 
-def test_unstable_attribution_across_seeds_fails_closed() -> None:
-    """A candidate whose seeds disagree on the failure outcome fails closed."""
+def test_three_of_five_confirmation_counts_as_one_candidate_failure() -> None:
+    """Mixed seeds honor the frozen 3-of-5 rule instead of requiring 5-of-5."""
     rows = [
-        _row(
-            row_id="p0a",
-            manifest_id="cp0",
-            arm="proposal",
-            rank=1,
-            failure=True,
-            scenario_seed=1,
-            execution_seed=1,
-        ),
-        _row(
-            row_id="p0b",
-            manifest_id="cp0",
-            arm="proposal",
-            rank=1,
-            failure=False,
-            scenario_seed=2,
-            execution_seed=2,
-        ),
-        _row(row_id="r0", manifest_id="cr0", arm="random", rank=1, failure=False),
+        *[
+            _row(
+                row_id=f"p0_{seed}",
+                manifest_id="cp0",
+                arm="proposal",
+                rank=1,
+                failure=seed <= 3,
+                scenario_seed=seed,
+                execution_seed=seed,
+            )
+            for seed in range(1, 6)
+        ],
+        *[
+            _row(
+                row_id=f"r0_{seed}",
+                manifest_id="cr0",
+                arm="random",
+                rank=1,
+                failure=False,
+                scenario_seed=100 + seed,
+                execution_seed=100 + seed,
+            )
+            for seed in range(1, 6)
+        ],
     ]
     packet = _packet(rows)
-    result = _evaluate(packet, budget_per_arm=2)
+    result = _evaluate(packet, budget_per_arm=1)
+
+    assert result["status"] == "complete"
+    assert result["proposal"]["outcomes"] == [True]
+    assert result["random"]["outcomes"] == [False]
+
+
+def test_different_confirming_termination_reasons_fail_closed() -> None:
+    """The confirming seeds must retain a stable failure attribution."""
+    rows = [
+        *[
+            _row(
+                row_id=f"p0_{seed}",
+                manifest_id="cp0",
+                arm="proposal",
+                rank=1,
+                failure=True,
+                scenario_seed=seed,
+                execution_seed=seed,
+            )
+            for seed in range(1, 6)
+        ],
+        *[
+            _row(
+                row_id=f"r0_{seed}",
+                manifest_id="cr0",
+                arm="random",
+                rank=1,
+                failure=False,
+                scenario_seed=100 + seed,
+                execution_seed=100 + seed,
+            )
+            for seed in range(1, 6)
+        ],
+    ]
+    rows[1]["termination_reason"] = "timeout"
+
+    result = _evaluate(_packet(rows), budget_per_arm=1)
+
     assert result["status"] == "blocked"
     assert "unstable attribution" in result["reason"]
 

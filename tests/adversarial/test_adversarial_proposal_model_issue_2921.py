@@ -547,15 +547,31 @@ def _two_family_archive() -> dict:
 def _v2_outcome_packet(
     *, eval_archive_sha256: str, proposal_failures: int, random_failures: int, per_arm: int = 4
 ) -> dict:
-    """Build a minimal v2 row-level outcome packet bound to the eval split hash."""
+    """Build a 3-of-5-compatible v2 packet bound to the eval split hash."""
     rows: list[dict[str, Any]] = []
     for rank in range(per_arm):
-        rows.append(
-            _v2_row(f"prop_{rank}", f"prop_cand_{rank}", "proposal", rank, rank < proposal_failures)
+        rows.extend(
+            _v2_row(
+                f"prop_{rank}_{seed}",
+                f"prop_cand_{rank}",
+                "proposal",
+                rank,
+                rank < proposal_failures,
+                seed,
+            )
+            for seed in range(5)
         )
     for rank in range(per_arm):
-        rows.append(
-            _v2_row(f"rand_{rank}", f"rand_cand_{rank}", "random", rank, rank < random_failures)
+        rows.extend(
+            _v2_row(
+                f"rand_{rank}_{seed}",
+                f"rand_cand_{rank}",
+                "random",
+                rank,
+                rank < random_failures,
+                seed,
+            )
+            for seed in range(5)
         )
     return {
         "schema_version": "adversarial_independent_outcomes.v2",
@@ -587,17 +603,31 @@ def _manifest_hash_binding(
             row["candidate_manifest_id"]: row["record_sha256"] for row in rows
         },
         "candidate_manifest_ids_by_arm": {
-            arm: [row["candidate_manifest_id"] for row in rows if row["selection_arm"] == arm]
+            arm: list(
+                dict.fromkeys(
+                    row["candidate_manifest_id"] for row in rows if row["selection_arm"] == arm
+                )
+            )
             for arm in ("proposal", "random")
         },
         "execution_seeds_by_manifest_id": {
-            row["candidate_manifest_id"]: [row["execution_seed"]] for row in rows
+            manifest_id: [
+                row["execution_seed"] for row in rows if row["candidate_manifest_id"] == manifest_id
+            ]
+            for manifest_id in dict.fromkeys(row["candidate_manifest_id"] for row in rows)
         },
         "candidate_pool_seed": candidate_pool_seed,
     }
 
 
-def _v2_row(row_id: str, manifest_id: str, arm: str, rank: int, failure: bool) -> dict[str, Any]:
+def _v2_row(
+    row_id: str,
+    manifest_id: str,
+    arm: str,
+    rank: int,
+    failure: bool,
+    seed_offset: int = 0,
+) -> dict[str, Any]:
     """Build one admissible v2 outcome row."""
     return {
         "row_id": row_id,
@@ -610,8 +640,8 @@ def _v2_row(row_id: str, manifest_id: str, arm: str, rank: int, failure: bool) -
         "target_planner_id": "social_force",
         "target_planner_config_sha256": "dfdebd497e19a046e41cb2b1e7d7a7f54cd592ac0a465e4149efff19efa16735",
         "scenario_family": "classic_cross_trap_medium",
-        "scenario_seed": 99001 + rank,
-        "execution_seed": 70001 + rank,
+        "scenario_seed": 99_001 + rank * 10 + seed_offset,
+        "execution_seed": 70_001 + rank * 10 + seed_offset,
         "execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f",
         "execution_command": ["python", "-m", "robot_sf.run_eval"],
         "execution_config_lineage": {"config": "eval.yaml"},
@@ -642,16 +672,18 @@ def _contract_v2_outcome_packet(report: dict[str, Any]) -> dict[str, Any]:
     for arm in ("proposal", "random"):
         manifest_ids = report["arm_manifest_ids_by_arm"][arm]
         for rank, manifest_id in enumerate(manifest_ids):
-            row = _v2_row(
-                row_id=f"{arm}_{rank}",
-                manifest_id=manifest_id,
-                arm=arm,
-                rank=rank,
-                failure=arm == "proposal",
-            )
-            row["candidate_pool_seed"] = 42
-            row["candidate_pool_index"] = int(manifest_id.removeprefix("pool_"))
-            rows.append(row)
+            for seed in range(5):
+                row = _v2_row(
+                    row_id=f"{arm}_{rank}_{seed}",
+                    manifest_id=manifest_id,
+                    arm=arm,
+                    rank=rank,
+                    failure=arm == "proposal",
+                    seed_offset=seed,
+                )
+                row["candidate_pool_seed"] = 42
+                row["candidate_pool_index"] = int(manifest_id.removeprefix("pool_"))
+                rows.append(row)
     return {
         "schema_version": "adversarial_independent_outcomes.v2",
         "source": "unit-test-fixture",

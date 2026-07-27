@@ -521,6 +521,33 @@ def _admit_row(
     return row, None
 
 
+def _candidate_outcome_from_seed_rows(
+    seed_rows: dict[int, dict[str, Any]],
+    *,
+    manifest_id: str,
+    arm: str,
+    expected_seeds: set[int],
+    min_confirmed: int,
+) -> tuple[bool | None, str | None]:
+    """Derive one candidate outcome while retaining the frozen confirmation rule."""
+    observed_seeds = set(seed_rows)
+    if observed_seeds != expected_seeds:
+        return None, (
+            f"execution-seed lineage mismatch for candidate {manifest_id} in arm {arm}: "
+            f"observed={sorted(observed_seeds)} expected={sorted(expected_seeds)}"
+        )
+    confirming_rows = [row for row in seed_rows.values() if row["independent_failure_outcome"]]
+    if len(confirming_rows) < min_confirmed:
+        return False, None
+    termination_reasons = {str(row["termination_reason"]) for row in confirming_rows}
+    if len(termination_reasons) != 1:
+        return None, (
+            f"unstable attribution: candidate {manifest_id} in arm {arm} has "
+            "different termination reasons across confirming seeds"
+        )
+    return True, None
+
+
 def _candidate_level_outcomes(
     admitted_rows: list[dict[str, Any]],
     *,
@@ -528,12 +555,26 @@ def _candidate_level_outcomes(
 ) -> tuple[dict[str, dict[str, Any]] | None, str | None]:
     """Cluster admitted rows by (arm, candidate) and return candidate outcomes.
 
-    A candidate's failure outcome must be stable across its execution seeds. Any
-    disagreement fails closed (unstable attribution). Returns a dict keyed by arm
-    with ``{"count": n, "failures": k, "outcomes": [...], "ids": [...]}`` or
+    A candidate is a failure when its predeclared confirmation threshold is met.
+    Non-confirming seeds may legitimately be non-failures under the frozen
+    3-of-5 rule, so their outcome must not turn that rule into an accidental
+    5-of-5 requirement. The termination attribution must nevertheless agree
+    across the confirming failure seeds. Returns a dict keyed by arm with
+    ``{"count": n, "failures": k, "outcomes": [...], "ids": [...]}`` or
     ``(None, reason)`` to block.
     """
-    by_arm_candidate: dict[str, dict[str, dict[int, bool]]] = {"proposal": {}, "random": {}}
+    threshold_rule = _CONFIRMATION_THRESHOLDS.get(admission_spec.confirmation_threshold)
+    if threshold_rule is None:
+        return (
+            None,
+            f"unsupported confirmation threshold: {admission_spec.confirmation_threshold!r}",
+        )
+    min_confirmed = int(threshold_rule["min_confirmed"])
+
+    by_arm_candidate: dict[str, dict[str, dict[int, dict[str, Any]]]] = {
+        "proposal": {},
+        "random": {},
+    }
     for row in admitted_rows:
         arm = row["selection_arm"]
         manifest_id = str(row["candidate_manifest_id"])
@@ -544,7 +585,7 @@ def _candidate_level_outcomes(
                 f"duplicate execution_seed {execution_seed} for candidate {manifest_id} "
                 f"in arm {arm}"
             )
-        seed_outcomes[execution_seed] = bool(row["independent_failure_outcome"])
+        seed_outcomes[execution_seed] = row
 
     overlap_ids = sorted(set(by_arm_candidate["proposal"]) & set(by_arm_candidate["random"]))
     if overlap_ids:
@@ -562,19 +603,16 @@ def _candidate_level_outcomes(
             expected_seeds = set(
                 (admission_spec.expected_execution_seeds_by_manifest_id or {}).get(manifest_id, ())
             )
-            observed_seeds = set(seed_outcomes_by_id)
-            if observed_seeds != expected_seeds:
-                return None, (
-                    f"execution-seed lineage mismatch for candidate {manifest_id} in arm {arm}: "
-                    f"observed={sorted(observed_seeds)} expected={sorted(expected_seeds)}"
-                )
-            seed_outcomes = list(seed_outcomes_by_id.values())
-            if any(outcome != seed_outcomes[0] for outcome in seed_outcomes):
-                return None, (
-                    f"unstable attribution: candidate {manifest_id} in arm {arm} has "
-                    "disagreement across execution seeds"
-                )
-            outcomes.append(seed_outcomes[0])
+            candidate_outcome, reason = _candidate_outcome_from_seed_rows(
+                seed_outcomes_by_id,
+                manifest_id=manifest_id,
+                arm=arm,
+                expected_seeds=expected_seeds,
+                min_confirmed=min_confirmed,
+            )
+            if reason is not None or candidate_outcome is None:
+                return None, reason or "candidate outcome aggregation failed"
+            outcomes.append(candidate_outcome)
             ids.append(manifest_id)
         result[arm] = {
             "count": len(outcomes),

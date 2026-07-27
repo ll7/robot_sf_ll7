@@ -71,7 +71,6 @@ class MapInventory:
 
         if not self.maps_root.exists():
             logger.warning(f"Maps root does not exist: {self.maps_root}")
-            self.maps_root.mkdir(parents=True, exist_ok=True)
 
         self._inventory: dict[str, MapRecord] = {}
         self._load_inventory()

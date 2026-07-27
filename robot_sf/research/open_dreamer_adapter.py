@@ -21,9 +21,11 @@ module is never edited by this slice) and produces a leakage-safe, episode-major
 * ``rays`` -- a finite float vector of range/lidar readings derived from each step's ``observations``
   entry when it exposes a recognized ray-like key. When the source observation carries no ray-like
   field (the current ``RLTrajectoryDataset.v1`` recorder does not record lidar rays), the group is
-  honestly reported as **unavailable** (empty vector, ``available=False``). The adapter never
-  fabricates ray distances from pedestrian positions -- doing so would invent new contract
-  semantics.
+  honestly reported as **unavailable** (empty vector, ``available=False``). Ray availability is an
+  episode-wide contract: all steps must expose a ray-like field with one common vector width, or no
+  step may expose one. The adapter rejects partial or width-heterogeneous ray records rather than
+  padding or fabricating data. It never fabricates ray distances from pedestrian positions -- doing
+  so would invent new contract semantics.
 * ``[-1, 1] -> (linear velocity, angular velocity)`` action mapping -- the clean-room replacement
   for upstream's VPT-style action container. The mapping is parameterized by caller-supplied speed
   bounds (:class:`ActionBounds`) so the adapter never hardcodes or assumes a particular robot
@@ -47,6 +49,8 @@ The adapter fails closed (raises :class:`OpenDreamerAdapterError`) when:
 * a required field is missing (e.g. ``robot_states`` lacks ``position``/``heading``/``velocity``);
 * any produced output is non-finite (NaN/Inf in ``drive_state``, ``rays``, ``rewards``,
   ``return_to_go``, or the mapped velocity);
+* ray-like observations appear for only some episode steps, or their vector lengths differ across
+  steps (the structured sequence view requires one fixed ray width when rays are available);
 * a stored action is not a finite 2D continuous ``(linear, angular)`` command, does not use the
   recorder's canonical ``linear_velocity``/``angular_velocity`` mapping, or falls outside the
   caller-supplied physical action bounds (incompatible action space);
@@ -185,6 +189,8 @@ class StructuredObservationStep:
             empty vector. Never contains non-finite values.
         rays_available: Whether the source observation exposed a recognized ray-like field. False
             for the current ``RLTrajectoryDataset.v1`` recorder, which does not record lidar rays.
+            :func:`adapt_episode` additionally enforces episode-wide availability and one shared
+            ray-vector width before returning a structured episode.
     """
 
     drive_state: np.ndarray
@@ -267,7 +273,9 @@ class StructuredEpisode:
         pedestrians: Preserved v1 per-step pedestrian state.
         robot_states: Preserved v1 per-step robot state.
         provenance: Original episode provenance plus the adapter provenance entry.
-        rays_available: Whether any step exposed a recognized ray-like field.
+        rays_available: True only when every step exposed a recognized ray-like field with one
+            shared ray-vector width. False when no step exposed one; partial availability or mixed
+            widths fail closed during adaptation.
         drive_state_layout: The fixed component order of :attr:`observations[i].drive_state`.
     """
 
@@ -486,6 +494,7 @@ def adapt_episode(
 
     Raises:
         OpenDreamerAdapterError: If a required field is missing, any produced output is non-finite,
+            ray availability is partial or ray widths are inconsistent across episode steps,
             the stored action is not a finite 2D continuous command within the supplied physical
             action bounds, or the stored split is invalid or differs from its canonical deterministic
             assignment.
@@ -512,13 +521,11 @@ def adapt_episode(
 
     structured_obs: list[StructuredObservationStep] = []
     structured_actions: list[StructuredActionStep] = []
-    any_rays = False
     for step_index in range(episode.step_count):
         robot_state = episode.robot_states[step_index]
         observation = episode.observations[step_index]
         drive_state = _extract_drive_state(robot_state)
         rays, rays_available = _extract_rays(observation)
-        any_rays = any_rays or rays_available
         structured_obs.append(
             StructuredObservationStep(
                 drive_state=drive_state,
@@ -529,10 +536,11 @@ def adapt_episode(
         raw_action = episode.actions[step_index]
         structured_actions.append(_coerce_action_step(raw_action, step_index, action_bounds))
 
+    rays_available = _validate_episode_ray_contract(structured_obs)
     provenance = _augment_provenance(
         episode.provenance,
         action_bounds=action_bounds,
-        rays_available=any_rays,
+        rays_available=rays_available,
     )
     return StructuredEpisode(
         dataset_id=episode.dataset_id,
@@ -551,7 +559,7 @@ def adapt_episode(
         pedestrians=tuple(episode.pedestrians),
         robot_states=tuple(episode.robot_states),
         provenance=provenance,
-        rays_available=any_rays,
+        rays_available=rays_available,
     )
 
 
@@ -660,6 +668,48 @@ def _extract_rays(observation: Any) -> tuple[np.ndarray, bool]:
             raise OpenDreamerAdapterError(f"observation ray-like key {key!r} must be finite")
         return arr, True
     return np.asarray([], dtype=float), False
+
+
+def _validate_episode_ray_contract(steps: Sequence[StructuredObservationStep]) -> bool:
+    """Require one stackable ray representation across an episode's structured steps.
+
+    The adapter deliberately has no masking or padding policy. An episode is therefore either
+    entirely ray-free (every step reports ``rays_available=False`` and has an empty vector), or
+    entirely ray-bearing with one fixed ray-vector width. This keeps a future structured sequence
+    encoder from receiving an object/ragged array while preserving the recorder's semantics rather
+    than inventing missing ranges.
+
+    Args:
+        steps: Structured observation steps already validated for finite per-step values.
+
+    Returns:
+        ``True`` when all steps carry one common-width ray vector; ``False`` when no step carries
+        rays.
+
+    Raises:
+        OpenDreamerAdapterError: If ray availability is partial or ray-vector widths differ.
+    """
+    availability = tuple(step.rays_available for step in steps)
+    if not any(availability):
+        return False
+
+    available_steps = [index for index, available in enumerate(availability) if available]
+    unavailable_steps = [index for index, available in enumerate(availability) if not available]
+    if unavailable_steps:
+        raise OpenDreamerAdapterError(
+            "ray availability must be episode-wide: recognized ray-like observations are present "
+            f"at steps {available_steps} but absent at steps {unavailable_steps}"
+        )
+
+    widths_by_step = [step.rays.size for step in steps]
+    if len(set(widths_by_step)) != 1:
+        width_summary = ", ".join(
+            f"step {index}: {width}" for index, width in enumerate(widths_by_step)
+        )
+        raise OpenDreamerAdapterError(
+            f"ray vectors must have a consistent length across an episode; got {width_summary}"
+        )
+    return True
 
 
 def _coerce_action_step(
@@ -810,7 +860,7 @@ def _augment_provenance(
     Args:
         provenance: The original v1 episode provenance mapping.
         action_bounds: Speed bounds to record for the ``[-1, 1] -> velocity`` mapping.
-        rays_available: Whether the episode exposed any ray-like observation field.
+        rays_available: Whether every episode step exposed one fixed-width ray-like observation.
 
     Returns:
         A new mapping with the adapter provenance entry nested under ADAPTER_PROVENANCE_KEY.

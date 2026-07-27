@@ -9,6 +9,8 @@ plan. They verify that the clean-room, episode-major adapter under
 * preserves raw observations, reward, return_to_go, terminated, truncated, pedestrians,
   robot_states, scenario_id, seed, split, source_policy_id, and provenance for every episode;
 * produces a leakage-safe structured-observation view with ``drive_state`` and ``rays`` groups;
+* requires rays to be either unavailable for the whole episode or present at every step with one
+  fixed vector width;
 * exposes a bounded ``[-1, 1] -> (linear velocity, angular velocity)`` action mapping;
 * stays **episode-major** (no flattening to transitions);
 * and **fails closed** on missing fields, scenario/seed split leakage, non-finite outputs, and
@@ -223,6 +225,34 @@ def test_rays_group_is_populated_when_observation_carries_ray_key() -> None:
         assert step.rays.shape == (3,)
         assert np.all(np.isfinite(step.rays))
         np.testing.assert_allclose(step.rays, [1.0 - 0.1 * float(index), 0.8, 0.6])
+
+
+@pytest.mark.parametrize(
+    ("ray_presence",),
+    [((True, False),), ((False, True),)],
+    ids=["missing-final-step", "missing-initial-step"],
+)
+def test_adapter_rejects_partial_ray_availability(ray_presence: tuple[bool, bool]) -> None:
+    """A valid v1 episode cannot mix ray-bearing and ray-free steps."""
+    observations = tuple(
+        _full_observation(step, with_rays=has_rays) for step, has_rays in enumerate(ray_presence)
+    )
+    episode = _make_episode(step_count=2, observations=observations)
+
+    with pytest.raises(OpenDreamerAdapterError, match="ray availability must be episode-wide"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+
+def test_adapter_rejects_inconsistent_ray_vector_lengths() -> None:
+    """A ray-bearing episode must keep one ray-vector width for sequence stacking."""
+    observations = (
+        {**_full_observation(0, with_rays=True), "rays": [1.0, 0.8]},
+        {**_full_observation(1, with_rays=True), "rays": [0.9, 0.7, 0.6]},
+    )
+    episode = _make_episode(step_count=2, observations=observations)
+
+    with pytest.raises(OpenDreamerAdapterError, match="ray vectors must have a consistent length"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
 
 def test_all_v1_fields_preserved_verbatim() -> None:

@@ -1050,7 +1050,7 @@ def _json_safe_value(value: Any, field_name: str) -> Any:
             raise OpenDreamerAdapterError(f"{field_name} contains a non-finite float")
         return value
     if isinstance(value, np.generic):
-        return _json_safe_value(value.item(), field_name)
+        return _json_safe_numpy_scalar(value, field_name)
     if isinstance(value, np.ndarray):
         return _json_safe_value(value.tolist(), field_name)
     if isinstance(value, Mapping):
@@ -1069,6 +1069,19 @@ def _json_safe_value(value: Any, field_name: str) -> Any:
     raise OpenDreamerAdapterError(
         f"{field_name} contains unsupported JSON value {type(value).__name__}"
     )
+
+
+def _json_safe_numpy_scalar(value: np.generic, field_name: str) -> Any:
+    """Convert a NumPy scalar without recursing on extended-precision floating values.
+
+    Returns:
+        A recursively JSON-safe scalar value.
+    """
+    if isinstance(value, np.floating):
+        # ``np.longdouble.item()`` can return another NumPy scalar rather than a Python float.
+        # JSON has no extended-precision scalar type, so serialize through a checked float instead.
+        return _json_safe_value(float(value), field_name)
+    return _json_safe_value(value.item(), field_name)
 
 
 def _as_finite_float(value: Any, name: str) -> float:

@@ -518,6 +518,25 @@ def test_to_dict_is_json_safe_for_accepted_numpy_producer_values() -> None:
     assert payload["provenance"]["producer_counter"] == 3
 
 
+def test_to_dict_serializes_numpy_longdouble_without_recursion() -> None:
+    """Extended-precision NumPy raw values serialize through a checked JSON float."""
+    episode = _make_episode(
+        step_count=1,
+        observations=(
+            {
+                "robot": {"quality": np.float32(0.75)},
+                "pedestrians": [],
+                "extended_precision_raw_value": np.longdouble("1.25"),
+            },
+        ),
+    )
+
+    payload = adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS).to_dict()
+
+    json.dumps(payload)
+    assert payload["raw_observations"][0]["extended_precision_raw_value"] == 1.25
+
+
 def test_to_dict_rejects_non_finite_preserved_raw_values() -> None:
     """Serialization fails closed instead of emitting non-standard JSON NaN values."""
     episode = _make_episode(

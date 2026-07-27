@@ -77,6 +77,23 @@ the policy and holds it constant in between. Jerk rate-limiting bounds how fast
 the applied residual can move toward the held proposal, so a step change in the
 proposal still produces a smooth, bounded residual.
 
+## Reproducible runtime smoke
+
+Run the bounded, real-simulator smoke with:
+
+```bash
+scripts/dev/run_worktree_shared_venv.sh -- \
+  uv run pytest tests/sim/test_residual_adversary_wiring.py \
+  -k active_adversary_perturbs_but_keeps_peds_finite -q
+```
+
+The test constructs the repository's `MapDefinition`, enables
+`SimulationSettings.residual_adversary`, and advances the real
+`init_simulators` path for 20 fixed-timestep steps. It proves only runtime
+wiring and finite-state behavior for the deterministic scripted policy; it is
+smoke evidence, not a benchmark, safety, or stress-strength result. The YAML
+example is a documented parameter template, not a runner input format.
+
 ## Claim boundary (what this slice does NOT do)
 
 This is a capability-only slice. It makes **no** benchmark, planner-ranking,

@@ -83,6 +83,33 @@ def test_build_returns_none_when_inactive() -> None:
     assert build_default_residual_adversary(ResidualAdversaryConfig(), 0.1, 3) is None
 
 
+def test_direct_controller_construction_respects_inactive_config() -> None:
+    """The public controller must not bypass the opt-in switch when built directly."""
+
+    @dataclass
+    class _FailIfCalledPolicy:
+        def propose_residual(self, observation: ResidualAdversaryObservation) -> np.ndarray:
+            raise AssertionError("inactive controller must not invoke its policy")
+
+    adversary = BoundedResidualAdversary(
+        config=ResidualAdversaryConfig(),
+        policy=_FailIfCalledPolicy(),
+        dt_s=0.1,
+        num_peds=1,
+    )
+
+    residual = adversary.step_residual(
+        np.array([[1.0, 0.0]]),
+        np.zeros((1, 2)),
+        np.array([1.5]),
+        ((0.0, 0.0), float("nan")),
+    )
+
+    np.testing.assert_allclose(residual, [[0.0, 0.0]])
+    assert adversary.step_index == 1
+    assert adversary.macro_action_index == 0
+
+
 def test_resolve_target_mask_supports_all_minus_one_and_list() -> None:
     """The all-target sentinel is preserved when config normalization uses a list."""
     config_all = ResidualAdversaryConfig(is_active=True, target_ped_idx=-1)

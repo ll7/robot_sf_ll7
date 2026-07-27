@@ -1304,6 +1304,14 @@ class BoundedResidualAdversary:
         if max_speeds_array.shape != (self.num_peds,):
             raise ValueError(f"max_speeds must have shape ({self.num_peds},)")
 
+        # The factory normally avoids constructing a controller while disabled,
+        # but the controller is public and must preserve the same opt-in contract
+        # when callers construct it directly.
+        if not self.config.is_active:
+            self._step_index += 1
+            self._last_residual = np.zeros((self.num_peds, 2), dtype=float)
+            return self._last_residual.copy()
+
         if self.num_peds == 0:
             self._step_index += 1
             self._last_residual = np.zeros((0, 2), dtype=float)

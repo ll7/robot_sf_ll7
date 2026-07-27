@@ -5,7 +5,7 @@ release_url: "https://github.com/ll7/robot_sf_ll7/releases/tag/0.0.5"
 doi_url: "https://doi.org/10.5281/zenodo.19482025"
 target_commit: adadabacabfa663d6ace7eac10e23c67e6a18da7
 source_branch: orchestrator/ll7-lease-6154-0ca26983e5b6
-generated_at_utc: "2026-07-24T20:30:00Z"
+generated_at_utc: "2026-07-24T18:30:00Z"
 generated_by: scripts/repro/verify_release_checksums.py
 
 artifact_set:

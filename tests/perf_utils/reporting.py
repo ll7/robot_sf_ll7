@@ -99,14 +99,15 @@ def generate_report(
     samples: Iterable[SlowTestSample],
     policy: PerformanceBudgetPolicy,
 ) -> list[SlowTestRecord]:
-    """TODO docstring. Document this function.
+    """Rank runtime samples and classify their performance-budget status.
 
     Args:
-        samples: TODO docstring.
-        policy: TODO docstring.
+        samples: Test identifiers paired with their measured call durations.
+        policy: Thresholds and report-size limit used for classification.
 
     Returns:
-        TODO docstring.
+        Slowest samples, ordered by duration, with guidance for their normal
+        soft/hard status or scoped diagnostic-contract explanation.
     """
     ordered = sorted(samples, key=lambda s: s.duration_seconds, reverse=True)
     top = ordered[: policy.report_count]

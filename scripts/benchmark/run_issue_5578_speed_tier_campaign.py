@@ -1107,8 +1107,8 @@ def _read_jsonl_records(path: pathlib.Path) -> list[dict[str, Any]]:
     return records
 
 
-def _write_jsonl(path: pathlib.Path, payload: Mapping[str, Any]) -> None:
-    """Write one deterministic JSON object to a JSONL-compatible artifact path."""
+def _write_json_object(path: pathlib.Path, payload: Mapping[str, Any]) -> None:
+    """Write one deterministic JSON object artifact."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(dict(payload), indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
@@ -1534,6 +1534,8 @@ def _run_native_batch(
     *,
     algo: str,
     algo_config_path: str | None,
+    horizon_steps: int,
+    dt_seconds: float,
     resume: bool,
 ) -> dict[str, Any]:
     """Invoke the canonical map runner; this seam is intentionally testable."""
@@ -1544,8 +1546,8 @@ def _run_native_batch(
         out_path,
         EPISODE_SCHEMA_PATH,
         scenario_path=CAMPAIGN_SCENARIO_MATRIX,
-        horizon=HORIZON_STEPS,
-        dt=DT_SECONDS,
+        horizon=horizon_steps,
+        dt=dt_seconds,
         record_forces=False,
         algo=algo,
         algo_config_path=(str(REPO_ROOT / algo_config_path) if algo_config_path else None),
@@ -1603,24 +1605,28 @@ def _validate_runner_summary(  # noqa: C901
         )
 
     availability = summary.get("benchmark_availability")
-    if isinstance(availability, Mapping):
-        if availability.get("availability_status") != "available":
-            raise AuthorizedCampaignError(
-                f"runner batch {batch_name} is not benchmark-available: "
-                f"{availability.get('availability_status')!r}"
-            )
-        if availability.get("benchmark_success") is not True:
-            raise AuthorizedCampaignError(
-                f"runner batch {batch_name} did not report benchmark_success=true"
-            )
+    if not isinstance(availability, Mapping):
+        raise AuthorizedCampaignError(
+            f"runner batch {batch_name} is missing benchmark_availability"
+        )
+    if availability.get("availability_status") != "available":
+        raise AuthorizedCampaignError(
+            f"runner batch {batch_name} is not benchmark-available: "
+            f"{availability.get('availability_status')!r}"
+        )
+    if availability.get("benchmark_success") is not True:
+        raise AuthorizedCampaignError(
+            f"runner batch {batch_name} did not report benchmark_success=true"
+        )
 
     provenance = summary.get("provenance")
-    if isinstance(provenance, Mapping):
-        manifest_status = provenance.get("result_manifest_status")
-        if manifest_status is not None and manifest_status != "available":
-            raise AuthorizedCampaignError(
-                f"runner batch {batch_name} result provenance is not available: {manifest_status!r}"
-            )
+    if not isinstance(provenance, Mapping):
+        raise AuthorizedCampaignError(f"runner batch {batch_name} is missing provenance")
+    manifest_status = provenance.get("result_manifest_status")
+    if manifest_status != "available":
+        raise AuthorizedCampaignError(
+            f"runner batch {batch_name} result provenance is not available: {manifest_status!r}"
+        )
 
 
 def _campaign_command_environment_manifest(manifest: CampaignManifest) -> dict[str, Any]:
@@ -1676,9 +1682,8 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
         raise AuthorizedCampaignError("runtime preflight requires at least one disjoint seed")
     if set(preflight_seeds) & set(manifest.seeds):
         raise AuthorizedCampaignError("runtime preflight seeds overlap registered seeds 111-140")
-    execution_commit = _git_head()
-    if not _is_hex(execution_commit, length=40):
-        raise AuthorizedCampaignError("runtime preflight requires a known 40-character git HEAD")
+    execution_provenance = _git_provenance()
+    execution_commit = _require_clean_execution_provenance(execution_provenance)
 
     root = pathlib.Path(output_root)
     root.mkdir(parents=True, exist_ok=True)
@@ -1724,7 +1729,7 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
         "seeds": list(preflight_seeds),
         "batches": [],
         "status": "running",
-        "git_provenance": _git_provenance(),
+        "git_provenance": execution_provenance,
         "command_environment_manifest": _campaign_command_environment_manifest(manifest),
     }
     try:
@@ -1743,6 +1748,8 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
                     raw_batch_path,
                     algo=planner.algorithm,
                     algo_config_path=planner.config_path,
+                    horizon_steps=manifest.horizon_steps,
+                    dt_seconds=manifest.dt_seconds,
                     resume=False,
                 )
                 _validate_runner_summary(
@@ -1819,7 +1826,7 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
                     "finished_at_utc": _utc_timestamp(),
                 }
             )
-            _write_jsonl(root / "runtime_preflight_report.json", report)
+            _write_json_object(root / "runtime_preflight_report.json", report)
             raise AuthorizedCampaignError(
                 f"runtime preflight rejected {len(non_native)} non-native rows"
             )
@@ -1831,14 +1838,20 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
                 "finished_at_utc": _utc_timestamp(),
             }
         )
-        _write_jsonl(root / "runtime_preflight_report.json", report)
+        _write_json_object(root / "runtime_preflight_report.json", report)
         return report
     except AuthorizedCampaignError:
         if report.get("status") == "running":
             report["status"] = "blocked_or_failed"
-            report["finished_at_utc"] = _utc_timestamp()
-            _write_jsonl(root / "runtime_preflight_report.json", report)
+        report["finished_at_utc"] = _utc_timestamp()
+        _write_json_object(root / "runtime_preflight_report.json", report)
         raise
+    except Exception as exc:
+        report["status"] = "failed"
+        report["error"] = f"{type(exc).__name__}: {exc}"
+        report["finished_at_utc"] = _utc_timestamp()
+        _write_json_object(root / "runtime_preflight_report.json", report)
+        raise AuthorizedCampaignError(str(exc)) from exc
 
 
 def _campaign_descriptor(manifest: CampaignManifest) -> dict[str, Any]:
@@ -1980,6 +1993,11 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
     rows: list[dict[str, Any]] = []
     seen_keys: set[tuple[str, str, str, int]] = set()
     base_scenarios = _authorized_campaign_scenarios(manifest)
+    declared_scenario_ids = {scenario.scenario_id for scenario in manifest.scenarios}
+    declared_seeds = set(manifest.seeds)
+    expected_batch_keys = {
+        (scenario_id, int(seed)) for scenario_id in declared_scenario_ids for seed in declared_seeds
+    }
     try:
         for tier in manifest.speed_tiers:
             for planner in manifest.planners:
@@ -1999,6 +2017,8 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
                     raw_batch_path,
                     algo=planner.algorithm,
                     algo_config_path=planner.config_path,
+                    horizon_steps=manifest.horizon_steps,
+                    dt_seconds=manifest.dt_seconds,
                     resume=resume,
                 )
                 expected_batch_count = len(manifest.scenarios) * len(manifest.seeds)
@@ -2016,13 +2036,6 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
                     )
                 batch_seen: set[tuple[str, int]] = set()
                 batch_modes: dict[str, int] = {}
-                declared_scenario_ids = {scenario.scenario_id for scenario in manifest.scenarios}
-                declared_seeds = set(manifest.seeds)
-                expected_batch_keys = {
-                    (scenario_id, int(seed))
-                    for scenario_id in declared_scenario_ids
-                    for seed in declared_seeds
-                }
                 for record in batch_records:
                     scenario_id = str(record.get("scenario_id"))
                     seed = _episode_integer(record.get("seed"), "seed")
@@ -2074,7 +2087,7 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
                     raise AuthorizedCampaignError(
                         f"batch {batch_name} does not cover the exact scenario/seed block"
                     )
-                _write_jsonl(
+                _write_json_object(
                     raw_path / f"{batch_name}.summary.json",
                     {
                         "schema_version": AUTHORIZED_EXECUTION_SCHEMA_VERSION,
@@ -2134,7 +2147,7 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
             report["excluded_cell_count"] = len(non_native)
             report["rejected_cell_summaries_path"] = _repo_rel(rejected_path)
             report["finished_at_utc"] = _utc_timestamp()
-            _write_jsonl(report_file, report)
+            _write_json_object(report_file, report)
             raise AuthorizedCampaignError(
                 f"authorized campaign rejected {len(non_native)} fallback/degraded/failed rows; "
                 "no synthesis was promoted"
@@ -2151,19 +2164,19 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
                 "finished_at_utc": _utc_timestamp(),
             }
         )
-        _write_jsonl(report_file, report)
+        _write_json_object(report_file, report)
         return report
     except AuthorizedCampaignError:
         if report.get("status") == "running":
             report["status"] = "blocked_or_failed"
             report["finished_at_utc"] = _utc_timestamp()
-            _write_jsonl(report_file, report)
+            _write_json_object(report_file, report)
         raise
     except Exception as exc:
         report["status"] = "failed"
         report["error"] = f"{type(exc).__name__}: {exc}"
         report["finished_at_utc"] = _utc_timestamp()
-        _write_jsonl(report_file, report)
+        _write_json_object(report_file, report)
         raise AuthorizedCampaignError(str(exc)) from exc
 
 

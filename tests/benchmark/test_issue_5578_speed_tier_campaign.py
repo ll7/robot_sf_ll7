@@ -65,6 +65,88 @@ def _manifest() -> Any:
     return compile_campaign_manifest()
 
 
+def _successful_runner_summary(written: int) -> dict[str, Any]:
+    """Return the fail-closed runner summary required by authorized execution."""
+    return {
+        "written": written,
+        "failed_jobs": 0,
+        "skipped_jobs": 0,
+        "failures": [],
+        "benchmark_availability": {
+            "availability_status": "available",
+            "benchmark_success": True,
+        },
+        "provenance": {"result_manifest_status": "available"},
+    }
+
+
+def _fake_episode_row(
+    scenario: dict[str, Any],
+    seed: int,
+    *,
+    algo: str,
+    cap: float,
+    status: str = "ok",
+) -> dict[str, Any]:
+    """Build one canonical fake map-runner row for authorized-lane tests."""
+    planner_mode = "adapter" if algo == "orca" else "native"
+    return {
+        "episode_id": f"{scenario['name']}--{seed}",
+        "scenario_id": scenario["name"],
+        "seed": seed,
+        "horizon": 600,
+        "algorithm_metadata": {
+            "status": status,
+            "canonical_algorithm": algo,
+            "planner_kinematics": {"execution_mode": planner_mode},
+            "simulation_step_trace": {
+                "dt": 0.1,
+                "steps": [
+                    {
+                        "robot": {"velocity": [cap, 0.0]},
+                        "planner": {"selected_action": {"linear_velocity": cap}},
+                    },
+                    {
+                        "robot": {"velocity": [cap, 0.0]},
+                        "planner": {"selected_action": {"linear_velocity": cap}},
+                    },
+                ],
+            },
+        },
+        "metrics": {
+            "success": True,
+            "total_collision_count": 0,
+            "collisions": 0,
+            "ped_collision_count": 0,
+            "obstacle_collision_count": 0,
+            "agent_collision_count": 0,
+            "near_misses": 0,
+            "time_to_goal_norm": 0.5,
+            "socnavbench_path_length": 1.0,
+            "mean_clearance": 1.0,
+            "min_clearance": 0.5,
+        },
+        "interaction_exposure": {
+            "interaction_exposure_share": 0.0,
+            "interaction_exposure_denominator_steps": 2,
+        },
+        "config_hash": "a" * 16,
+        "git_hash": "a" * 40,
+        "result_provenance": {
+            "schema_version": "benchmark_row_provenance.v1",
+            "scenario_id": scenario["name"],
+            "seed": seed,
+            "config_hash": "a" * 16,
+            "repo_commit": "a" * 40,
+            "simulator_settings": {"horizon": 600, "dt": 0.1},
+            "postprocessing": [
+                {"step": "compute_all_metrics", "status": "completed"},
+                {"step": "post_process_metrics", "status": "completed"},
+            ],
+        },
+    }
+
+
 def test_manifest_has_exactly_2160_unique_registered_identities() -> None:
     """The manifest materializes the exact 6x3x4x30 frozen cross."""
     manifest = _manifest()
@@ -392,6 +474,130 @@ def test_runner_summary_rejects_failed_jobs_before_reading_rows() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("summary", "match"),
+    [
+        (
+            {"written": 1, "failed_jobs": 0, "skipped_jobs": 0, "failures": []},
+            "benchmark_availability",
+        ),
+        (
+            {
+                "written": 1,
+                "failed_jobs": 0,
+                "skipped_jobs": 0,
+                "failures": [],
+                "benchmark_availability": {
+                    "availability_status": "available",
+                    "benchmark_success": True,
+                },
+            },
+            "provenance",
+        ),
+        (
+            {
+                **_successful_runner_summary(1),
+                "provenance": {"result_manifest_status": "error"},
+            },
+            "not available",
+        ),
+    ],
+)
+def test_runner_summary_requires_availability_and_provenance(
+    summary: dict[str, Any],
+    match: str,
+) -> None:
+    """Malformed runner summaries cannot cross the authorized campaign boundary."""
+    with pytest.raises(campaign.AuthorizedCampaignError, match=match):
+        campaign._validate_runner_summary(
+            summary,
+            batch_name="cap_2_0_nominal__orca",
+            expected_count=1,
+            resume=False,
+        )
+
+
+def test_authorized_output_resume_requires_matching_descriptor(tmp_path: Path) -> None:
+    """Resume accepts owned partial batches and rejects orphaned batch artifacts."""
+    manifest = _manifest()
+    raw_root = tmp_path / "owned"
+    descriptor = campaign._prepare_authorized_output_root(
+        raw_root,
+        manifest,
+        resume=False,
+    )
+    (raw_root / "partial.jsonl").write_text("{}\n", encoding="utf-8")
+    (raw_root / "partial.summary.json").write_text("{}\n", encoding="utf-8")
+
+    assert campaign._prepare_authorized_output_root(raw_root, manifest, resume=True) == descriptor
+
+    orphan_root = tmp_path / "orphan"
+    orphan_root.mkdir()
+    (orphan_root / "partial.jsonl").write_text("{}\n", encoding="utf-8")
+    with pytest.raises(campaign.AuthorizedCampaignError, match="matching descriptor"):
+        campaign._prepare_authorized_output_root(orphan_root, manifest, resume=True)
+
+
+def test_runtime_preflight_requires_clean_worktree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Operational preflight cannot attest rows from uncommitted source state."""
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {
+            "git_head": "a" * 40,
+            "git_worktree_dirty": True,
+            "git_status_short": [" M local-change.py"],
+        },
+    )
+
+    with pytest.raises(campaign.AuthorizedCampaignError, match="clean git worktree"):
+        campaign.run_authorized_runtime_preflight(
+            _manifest(),
+            output_root=tmp_path / "preflight",
+            authorization_issue=6102,
+        )
+
+
+def test_runtime_preflight_records_unexpected_runner_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unexpected runner errors leave a terminal operational report."""
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {
+            "git_head": "a" * 40,
+            "git_worktree_dirty": False,
+            "git_status_short": [],
+        },
+    )
+    monkeypatch.setattr(
+        campaign,
+        "_authorized_campaign_scenarios",
+        lambda _manifest: {PREFLIGHT_SCENARIO: {"name": PREFLIGHT_SCENARIO}},
+    )
+
+    def fail_runner(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("runner exploded")
+
+    monkeypatch.setattr(campaign, "_run_native_batch", fail_runner)
+    output_root = tmp_path / "preflight"
+    with pytest.raises(campaign.AuthorizedCampaignError, match="runner exploded"):
+        campaign.run_authorized_runtime_preflight(
+            _manifest(),
+            output_root=output_root,
+            authorization_issue=6102,
+        )
+
+    report = json.loads((output_root / "runtime_preflight_report.json").read_text(encoding="utf-8"))
+    assert report["status"] == "failed"
+    assert report["error"] == "RuntimeError: runner exploded"
+
+
 def test_authorized_campaign_fake_runner_covers_exact_2160_native_cells(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -403,82 +609,22 @@ def test_authorized_campaign_fake_runner_covers_exact_2160_native_cells(
         *,
         algo: str,
         algo_config_path: str | None,
+        horizon_steps: int,
+        dt_seconds: float,
         resume: bool,
     ) -> dict[str, Any]:
         del algo_config_path, resume
+        assert horizon_steps == 600
+        assert dt_seconds == 0.1
         cap = float(scenarios[0]["robot_config"]["max_velocity"])
-        planner_mode = "adapter" if algo == "orca" else "native"
-        rows: list[dict[str, Any]] = []
-        for scenario in scenarios:
-            for seed in scenario["seeds"]:
-                rows.append(
-                    {
-                        "episode_id": f"{scenario['name']}--{seed}",
-                        "scenario_id": scenario["name"],
-                        "seed": seed,
-                        "horizon": 600,
-                        "algorithm_metadata": {
-                            "status": "ok",
-                            "canonical_algorithm": algo,
-                            "planner_kinematics": {"execution_mode": planner_mode},
-                            "simulation_step_trace": {
-                                "dt": 0.1,
-                                "steps": [
-                                    {
-                                        "robot": {"velocity": [cap, 0.0]},
-                                        "planner": {
-                                            "selected_action": {
-                                                "linear_velocity": cap,
-                                            }
-                                        },
-                                    },
-                                    {
-                                        "robot": {"velocity": [cap, 0.0]},
-                                        "planner": {
-                                            "selected_action": {
-                                                "linear_velocity": cap,
-                                            }
-                                        },
-                                    },
-                                ],
-                            },
-                        },
-                        "metrics": {
-                            "success": True,
-                            "total_collision_count": 0,
-                            "collisions": 0,
-                            "ped_collision_count": 0,
-                            "obstacle_collision_count": 0,
-                            "agent_collision_count": 0,
-                            "near_misses": 0,
-                            "time_to_goal_norm": 0.5,
-                            "socnavbench_path_length": 1.0,
-                            "mean_clearance": 1.0,
-                            "min_clearance": 0.5,
-                        },
-                        "interaction_exposure": {
-                            "interaction_exposure_share": 0.0,
-                            "interaction_exposure_denominator_steps": 2,
-                        },
-                        "config_hash": "a" * 16,
-                        "git_hash": "a" * 40,
-                        "result_provenance": {
-                            "schema_version": "benchmark_row_provenance.v1",
-                            "scenario_id": scenario["name"],
-                            "seed": seed,
-                            "config_hash": "a" * 16,
-                            "repo_commit": "a" * 40,
-                            "simulator_settings": {"horizon": 600, "dt": 0.1},
-                            "postprocessing": [
-                                {"step": "compute_all_metrics", "status": "completed"},
-                                {"step": "post_process_metrics", "status": "completed"},
-                            ],
-                        },
-                    }
-                )
+        rows = [
+            _fake_episode_row(scenario, seed, algo=algo, cap=cap)
+            for scenario in scenarios
+            for seed in scenario["seeds"]
+        ]
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
-        return {"written": len(rows), "failed_jobs": 0}
+        return _successful_runner_summary(len(rows))
 
     monkeypatch.setattr(campaign, "_run_native_batch", fake_run_native_batch)
     monkeypatch.setattr(
@@ -523,9 +669,13 @@ def test_authorized_campaign_rejection_quarantines_non_native_rows(
         *,
         algo: str,
         algo_config_path: str | None,
+        horizon_steps: int,
+        dt_seconds: float,
         resume: bool,
     ) -> dict[str, Any]:
         del algo_config_path, resume
+        assert horizon_steps == 600
+        assert dt_seconds == 0.1
         cap = float(scenarios[0]["robot_config"]["max_velocity"])
         planner_mode = "adapter" if algo == "orca" else "native"
         rows: list[dict[str, Any]] = []
@@ -594,7 +744,7 @@ def test_authorized_campaign_rejection_quarantines_non_native_rows(
                 )
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
-        return {"written": len(rows), "failed_jobs": 0}
+        return _successful_runner_summary(len(rows))
 
     monkeypatch.setattr(campaign, "_run_native_batch", fake_run_native_batch)
     monkeypatch.setattr(

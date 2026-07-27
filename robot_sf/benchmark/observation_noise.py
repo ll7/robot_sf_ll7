@@ -267,6 +267,11 @@ def apply_observation_noise(
 
 
 def _as_xy_array(value: Any) -> np.ndarray | None:
+    """Coerce a value to a two-element float xy array, or None when too short or non-numeric.
+
+    Returns:
+        The two-element float xy array, or None when the value is too short or non-numeric.
+    """
     try:
         arr = np.asarray(value, dtype=float)
     except (TypeError, ValueError):
@@ -277,6 +282,11 @@ def _as_xy_array(value: Any) -> np.ndarray | None:
 
 
 def _robot_position(obs: dict[str, Any]) -> np.ndarray:
+    """Extract the robot xy position from an observation, defaulting to the origin.
+
+    Returns:
+        The robot xy position as a two-element array, defaulting to the origin.
+    """
     robot_pos = _as_xy_array(obs.get("robot_position"))
     if robot_pos is not None:
         return robot_pos
@@ -293,6 +303,7 @@ def _apply_pose_noise(
     rng: np.random.Generator,
     stats: dict[str, int],
 ) -> None:
+    """Add Gaussian position and heading noise to the robot fields of an observation in place."""
     pose_std = float(spec.get("pose_noise_std_m", 0.0))
     heading_std = float(spec.get("heading_noise_std_rad", 0.0))
     robot = obs.get("robot") if isinstance(obs.get("robot"), dict) else None
@@ -323,6 +334,11 @@ def _apply_pose_noise(
 
 
 def _with_heading_delta(value: Any, delta_heading: float) -> float | list[float]:
+    """Add a heading delta to a scalar heading or the first element of a vector heading.
+
+    Returns:
+        The adjusted heading as a scalar float or a list of floats for vector headings.
+    """
     heading = np.asarray(value, dtype=float)
     if heading.shape == ():
         return float(heading + delta_heading)
@@ -337,12 +353,18 @@ def _apply_lidar_dropout(
     rng: np.random.Generator,
     stats: dict[str, int],
 ) -> None:
+    """Probabilistically replace lidar range values with a dropout value across the observation."""
     dropout_prob = float(spec.get("lidar_dropout_prob", 0.0))
     if dropout_prob <= 0.0:
         return
     dropout_value = float(spec.get("lidar_dropout_value", 0.0))
 
     def _visit(node: Any) -> Any:
+        """Recursively descend nested dicts and drop values held under lidar-keyed fields.
+
+        Returns:
+            The visited node with lidar-keyed numeric values dropped in place.
+        """
         if isinstance(node, dict):
             for key, value in list(node.items()):
                 key_norm = str(key).strip().lower()
@@ -362,6 +384,11 @@ def _drop_numeric_values(
     rng: np.random.Generator,
     stats: dict[str, int],
 ) -> Any:
+    """Replace a random fraction of a numeric array's entries with the dropout value.
+
+    Returns:
+        The array as a list with a random fraction of entries replaced by the dropout value.
+    """
     try:
         arr = np.asarray(value, dtype=float)
     except (TypeError, ValueError):
@@ -381,6 +408,7 @@ def _apply_pedestrian_noise(
     rng: np.random.Generator,
     stats: dict[str, int],
 ) -> None:
+    """Apply false-negative, occlusion, position-noise, and false-positive pedestrian noise."""
     pedestrians = obs.get("pedestrians")
     if not isinstance(pedestrians, dict):
         _apply_flat_pedestrian_noise(obs, spec, rng, stats)
@@ -441,6 +469,7 @@ def _apply_flat_pedestrian_noise(
     rng: np.random.Generator,
     stats: dict[str, int],
 ) -> None:
+    """Apply pedestrian noise to flat buffer-style observations and rewrite the padded buffers."""
     if "pedestrians_positions" not in obs:
         return
     positions_buf = np.asarray(obs.get("pedestrians_positions", []), dtype=float).reshape(-1, 2)
@@ -508,6 +537,11 @@ def _apply_range_occlusion(
     spec: dict[str, Any],
     stats: dict[str, int],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Drop pedestrians farther than the occlusion max range from the robot.
+
+    Returns:
+        The filtered pedestrian positions, velocities, and radii arrays after occlusion.
+    """
     range_limit = spec.get("pedestrian_occlusion_max_range_m")
     if range_limit is None or positions.shape[0] == 0:
         return positions, velocities, radii
@@ -541,6 +575,11 @@ def _apply_pedestrian_position_noise(
 
 
 def _pedestrian_snapshot(obs: dict[str, Any]) -> dict[str, Any] | None:
+    """Capture a deep-copied pedestrian snapshot for delay buffering, or None when absent.
+
+    Returns:
+        The deep-copied pedestrian snapshot dictionary, or None when no pedestrians exist.
+    """
     pedestrians = obs.get("pedestrians")
     if isinstance(pedestrians, dict):
         return {"kind": "structured", "pedestrians": deepcopy(pedestrians)}
@@ -555,6 +594,7 @@ def _pedestrian_snapshot(obs: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _restore_pedestrian_snapshot(obs: dict[str, Any], snapshot: dict[str, Any]) -> None:
+    """Restore a previously captured pedestrian snapshot back into the observation."""
     if snapshot.get("kind") == "structured":
         obs["pedestrians"] = deepcopy(snapshot["pedestrians"])
         return
@@ -569,6 +609,7 @@ def _apply_observation_delay(
     state: ObservationNoiseState | None,
     stats: dict[str, int],
 ) -> None:
+    """Delay pedestrian observations by replaying buffered snapshots from the per-episode state."""
     delay_steps = int(spec.get("observation_delay_steps", 0) or 0)
     if delay_steps <= 0:
         return

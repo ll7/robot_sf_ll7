@@ -291,6 +291,11 @@ def normalize_parameterized_scenario_parameters(  # noqa: C901, PLR0912
 
 
 def _density_tier_from_pedestrian_density(pedestrian_density: float) -> str:
+    """Map a pedestrian density value onto a low, med, or high density tier.
+
+    Returns:
+        The density tier label: ``low``, ``med``, or ``high``.
+    """
     if pedestrian_density < 0.04:
         return "low"
     if pedestrian_density < 0.12:
@@ -299,6 +304,11 @@ def _density_tier_from_pedestrian_density(pedestrian_density: float) -> str:
 
 
 def _flow_from_crossing_angle(crossing_angle: float) -> str:
+    """Map a crossing angle in degrees onto a flow category (uni, merge, cross, or bi).
+
+    Returns:
+        The flow category label: ``uni``, ``merge``, ``cross``, or ``bi``.
+    """
     if crossing_angle < 30.0:
         return "uni"
     if crossing_angle < 75.0:
@@ -309,6 +319,11 @@ def _flow_from_crossing_angle(crossing_angle: float) -> str:
 
 
 def _obstacle_profile_from_parameters(params: Mapping[str, float]) -> str:
+    """Derive an obstacle profile (maze, bottleneck, or open) from physical parameters.
+
+    Returns:
+        The obstacle profile label: ``maze``, ``bottleneck``, or ``open``.
+    """
     if params["obstacle_density"] >= 0.35:
         return "maze"
     if params["bottleneck_width"] < params["sidewalk_width"] * 0.75:

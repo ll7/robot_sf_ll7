@@ -128,14 +128,20 @@ def write_generated_catalog(
 
 
 def _stable_order_key(entry: Mapping[str, Any]) -> tuple[float, str]:
+    """Return a deterministic sort key (criticality rank, then scenario id)."""
+
     return (_criticality_rank(entry), str(entry.get("scenario_id", "")))
 
 
 def _criticality_rank(entry: Mapping[str, Any]) -> float:
+    """Return the entry's criticality rank from minimum clearance (smaller is more critical)."""
+
     return float(entry["criticality"]["source_metrics"]["min_clearance_m"])
 
 
 def _critical_frame(entry: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Return the trace frame closest to ``observed_at_s`` (the minimum-clearance instant)."""
+
     observed_at = float(entry["criticality"]["observed_at_s"])
     return min(
         entry["segment"]["trace_frames"],
@@ -144,6 +150,11 @@ def _critical_frame(entry: Mapping[str, Any]) -> Mapping[str, Any]:
 
 
 def _dedup_group(entry: Mapping[str, Any]) -> tuple[str, str, int]:
+    """Return the deduplication group key.
+
+    Groups by map family, criticality signal, and actor count at the critical frame.
+    """
+
     frame = _critical_frame(entry)
     return (
         Path(entry["source_episode"]["source_map"]).stem,
@@ -153,6 +164,12 @@ def _dedup_group(entry: Mapping[str, Any]) -> tuple[str, str, int]:
 
 
 def _feature_vector(entry: Mapping[str, Any]) -> tuple[float, float, float, float]:
+    """Return the dedup feature vector.
+
+    Combines the critical robot position with the normalized end-to-end route
+    direction, zeroed when the route has no extent.
+    """
+
     frames = entry["segment"]["trace_frames"]
     critical = _critical_frame(entry)
     x, y = (float(value) for value in critical["robot"]["position"])
@@ -167,6 +184,8 @@ def _feature_vector(entry: Mapping[str, Any]) -> tuple[float, float, float, floa
 
 
 def _feature_distance(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
+    """Return the Euclidean distance between two entries' dedup feature vectors."""
+
     left_feature = _feature_vector(left)
     right_feature = _feature_vector(right)
     return math.dist(left_feature, right_feature)
@@ -177,6 +196,8 @@ def _dropped_record(
     kept: Mapping[str, Any],
     threshold: float,
 ) -> dict[str, Any]:
+    """Return a provenance record for one entry dropped as a lower-criticality near duplicate."""
+
     return {
         "dropped_scenario_id": dropped["scenario_id"],
         "kept_scenario_id": kept["scenario_id"],

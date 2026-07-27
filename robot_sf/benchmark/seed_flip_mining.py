@@ -560,6 +560,12 @@ def _pareto_select(candidates: list[dict[str, Any]]) -> list[str]:
     """
 
     def axes(cand: dict[str, Any]) -> tuple[float, float, float, float]:
+        """Return the four maximized Pareto axes for a candidate.
+
+        Axes are seed-flip entropy, absolute held-out skill gap, cross-planner
+        disagreement entropy, and effective denominator; missing signals map to
+        zero so an absent axis never dominates the frontier.
+        """
         flip = cand.get("seed_flip") or {}
         gap = cand.get("heldout_planner_skill_gap")
         return (

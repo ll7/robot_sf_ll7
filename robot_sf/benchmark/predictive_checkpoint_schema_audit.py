@@ -532,6 +532,7 @@ def format_schema_audit_table(result: SchemaAuditResult) -> str:
         )
 
     def _width(idx: int) -> int:
+        """Return the display width for audit-table column ``idx`` over its header and rows."""
         return (
             max(len(headers[idx]), *(len(row[idx]) for row in rows)) if rows else len(headers[idx])
         )

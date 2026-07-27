@@ -26,6 +26,8 @@ class _MapRunnerDiffusionPolicyAdapter:
     """Convert map-runner observations before calling the diffusion adapter."""
 
     def __init__(self, adapter: DiffusionPolicyAdapter) -> None:
+        """Wrap a diffusion-policy adapter for use as a map-runner policy."""
+
         self._adapter = adapter
 
     def reset(self, *, seed: int | None = None) -> None:

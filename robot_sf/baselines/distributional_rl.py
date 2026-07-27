@@ -57,6 +57,14 @@ class DistributionalRLPlanner:
     def _parse_config(
         config: DistributionalRLPlannerConfig | dict[str, Any],
     ) -> DistributionalRLPlannerConfig:
+        """Validate and normalize a distributional-RL config.
+
+        Rejects unknown keys and out-of-range ``risk_objective``/``risk_alpha``/
+        ``risk_blend_beta`` values.
+
+        Returns:
+            The validated planner configuration.
+        """
         if isinstance(config, DistributionalRLPlannerConfig):
             parsed = config
         elif isinstance(config, dict):
@@ -80,6 +88,11 @@ class DistributionalRLPlanner:
         return parsed
 
     def _load_checkpoint(self) -> None:
+        """Load the QR-DQN checkpoint and matching action lattice.
+
+        Populates the model and sets the adapter status, or records a fallback
+        reason when the checkpoint is missing.
+        """
         path = Path(self.config.checkpoint_path)
         if not path.exists():
             self._status = "missing"
@@ -180,6 +193,13 @@ class DistributionalRLPlanner:
 
     @staticmethod
     def _flatten_observation(obs: dict[str, Any], *, observation_dim: int) -> np.ndarray:
+        """Flatten an observation mapping into a fixed-length float vector.
+
+        Concatenated features are padded or truncated to ``observation_dim``.
+
+        Returns:
+            The fixed-length float observation vector.
+        """
         values: list[np.ndarray] = []
         for key in sorted(obs):
             try:

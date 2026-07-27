@@ -163,6 +163,11 @@ def preflight_sustained_flow_matrix(matrix_path: str | Path) -> SustainedFlowPre
 
 
 def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
+    """Parse and fail-closed validate one scenario matrix row into a SustainedFlowVariant.
+
+    Returns:
+        The validated SustainedFlowVariant parsed from the scenario matrix row.
+    """
     name = _required_str(scenario, "name")
     metadata = _required_mapping(scenario, "metadata", scenario_name=name)
     continuous_spawn = _required_mapping(metadata, "continuous_spawn", scenario_name=name)
@@ -232,6 +237,11 @@ def _variant_from_scenario(scenario: Mapping[str, Any]) -> SustainedFlowVariant:
 
 
 def _variant_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tuple[str, ...]:
+    """Collect per-variant blockers for tier, runtime, config, step, and seed drift.
+
+    Returns:
+        A tuple of human-readable blocker messages, empty when all variants pass.
+    """
     blockers: list[str] = []
     for variant in variants:
         if variant.target_density_tier != variant.density_tier:
@@ -311,6 +321,7 @@ def _variant_name_tier_blockers(variants: tuple[SustainedFlowVariant, ...]) -> t
 
 
 def _validate_continuous_spawn_definition(value: Any, *, scenario_name: str) -> None:
+    """Fail closed unless continuous_spawn.definition matches the non-clearing demand contract."""
     if not isinstance(value, Mapping):
         raise SustainedFlowPreflightError(
             f"{scenario_name}: continuous_spawn.definition must be a mapping"
@@ -357,6 +368,11 @@ def _generator_drift_blockers(variants: tuple[SustainedFlowVariant, ...]) -> tup
 
 
 def _variant_generator_profile(variant: SustainedFlowVariant) -> tuple[object, ...]:
+    """Build a hashable tuple of the generator-owned fields used to detect matrix drift.
+
+    Returns:
+        A hashable tuple of the generator-owned variant fields used to detect drift.
+    """
     return (
         variant.name,
         variant.density_tier,
@@ -378,6 +394,11 @@ def _variant_generator_profile(variant: SustainedFlowVariant) -> tuple[object, .
 def _runtime_readiness(
     variants: tuple[SustainedFlowVariant, ...],
 ) -> SustainedFlowRuntimeReadiness:
+    """Summarize observed continuous-spawn runtime support into a readiness verdict.
+
+    Returns:
+        The runtime readiness verdict summarizing observed continuous-spawn support.
+    """
     observed = tuple(dict.fromkeys(variant.current_runtime_support for variant in variants))
     status = "supported" if variants and observed == (RUNTIME_SUPPORTED_VALUE,) else "not_supported"
     return SustainedFlowRuntimeReadiness(
@@ -388,11 +409,13 @@ def _runtime_readiness(
 
 
 def _strictly_increasing_spawn_rates(variants: tuple[SustainedFlowVariant, ...]) -> bool:
+    """Return whether spawn rates strictly increase across the ordered variants."""
     rates = [variant.spawn_rate_per_min for variant in variants]
     return all(left < right for left, right in pairwise(rates))
 
 
 def _strictly_increasing_ped_density(variants: tuple[SustainedFlowVariant, ...]) -> bool:
+    """Return whether pedestrian densities strictly increase across the ordered variants."""
     densities = [variant.ped_density for variant in variants]
     return all(left < right for left, right in pairwise(densities))
 
@@ -400,6 +423,7 @@ def _strictly_increasing_ped_density(variants: tuple[SustainedFlowVariant, ...])
 def _required_mapping(
     payload: Mapping[str, Any], key: str, *, scenario_name: str
 ) -> Mapping[str, Any]:
+    """Return a required mapping field or raise a fail-closed preflight error."""
     value = payload.get(key)
     if not isinstance(value, Mapping):
         raise SustainedFlowPreflightError(f"{scenario_name}: {key} must be a mapping")
@@ -407,6 +431,7 @@ def _required_mapping(
 
 
 def _required_str(payload: Mapping[str, Any], key: str, *, scenario_name: str = "scenario") -> str:
+    """Return a required non-empty string field or raise a fail-closed preflight error."""
     value = payload.get(key)
     if not isinstance(value, str) or not value:
         raise SustainedFlowPreflightError(f"{scenario_name}: {key} must be a non-empty string")
@@ -414,6 +439,7 @@ def _required_str(payload: Mapping[str, Any], key: str, *, scenario_name: str = 
 
 
 def _required_float(payload: Mapping[str, Any], key: str, *, scenario_name: str) -> float:
+    """Return a required numeric field as a float or raise a fail-closed preflight error."""
     value = payload.get(key)
     if not isinstance(value, int | float) or isinstance(value, bool):
         raise SustainedFlowPreflightError(f"{scenario_name}: {key} must be numeric")
@@ -421,6 +447,7 @@ def _required_float(payload: Mapping[str, Any], key: str, *, scenario_name: str)
 
 
 def _required_int(payload: Mapping[str, Any], key: str, *, scenario_name: str) -> int:
+    """Return a required integer field or raise a fail-closed preflight error."""
     value = payload.get(key)
     if not isinstance(value, int) or isinstance(value, bool):
         raise SustainedFlowPreflightError(f"{scenario_name}: {key} must be an integer")
@@ -428,6 +455,7 @@ def _required_int(payload: Mapping[str, Any], key: str, *, scenario_name: str) -
 
 
 def _required_bool(payload: Mapping[str, Any], key: str, *, scenario_name: str) -> bool:
+    """Return a required boolean field or raise a fail-closed preflight error."""
     value = payload.get(key)
     if not isinstance(value, bool):
         raise SustainedFlowPreflightError(f"{scenario_name}: {key} must be a boolean")

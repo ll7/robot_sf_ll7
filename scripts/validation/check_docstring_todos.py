@@ -401,8 +401,8 @@ def _parse_args() -> argparse.Namespace:
         choices=("diff", "report", "write-baseline", "ratchet", "verify-baseline"),
         default="diff",
         help="diff preserves the historical touched-definition check; ratchet compares backlog "
-        "counts to a tracked baseline; verify-baseline confirms the committed baseline still "
-        "matches the base ref (origin/main) backlog so docs-only PRs are not failed by drift.",
+        "counts to a tracked baseline; verify-baseline confirms the base ref matches its own "
+        "committed baseline so branch baseline updates are validated independently.",
     )
     parser.add_argument("--base", default="origin/main", help="Base ref to diff against")
     parser.add_argument(
@@ -516,19 +516,28 @@ def main() -> int:
 
 
 def _run_verify_baseline(args: argparse.Namespace, repo_root: Path) -> int:
-    """Verify the committed baseline matches the base-ref backlog (drift guard).
+    """Verify the base snapshot and optional branch snapshot independently.
 
-    With ``--check-working-tree`` it also fails when the committed baseline
-    over-counts the current working tree, so a cleanup PR that removes placeholder
-    docstrings must regenerate the baseline in the same PR (issue #5894).
+    The base-ref report is compared with the baseline blob stored in that same
+    ref. ``--check-working-tree`` additionally fails if the branch baseline
+    over-counts the current working tree. This lets a cleanup PR regenerate its
+    baseline without comparing the new baseline to the old base tree (issue
+    #5894).
     """
     baseline_path = repo_root / args.baseline
     baseline = _read_backlog_baseline(baseline_path, repo_root)
     if baseline is None:
         return 1
+    ref_baseline = _read_backlog_baseline_for_ref(
+        baseline_path,
+        repo_root,
+        args.base,
+    )
+    if ref_baseline is None:
+        return 1
     roots = tuple(args.roots or DEFAULT_BACKLOG_ROOTS)
     ref_report = build_backlog_report_for_ref(repo_root, args.base, roots=roots)
-    drift, reverse_drift = compare_baseline_drift(ref_report, baseline)
+    drift, reverse_drift = compare_baseline_drift(ref_report, ref_baseline)
     if drift or reverse_drift:
         print(f"TODO-docstring baseline drift detected against base '{args.base}':")
         for line in drift:
@@ -658,6 +667,41 @@ def _read_backlog_baseline(baseline_path: Path, repo_root: Path) -> dict[str, An
     if not isinstance(baseline, dict):
         print(
             f"Error: Baseline file at {display_path} must contain a JSON object",
+            file=sys.stderr,
+        )
+        return None
+    return baseline
+
+
+def _read_backlog_baseline_for_ref(
+    baseline_path: Path,
+    repo_root: Path,
+    ref: str,
+) -> dict[str, Any] | None:
+    """Read the baseline blob stored at ``ref`` and fail closed on invalid data."""
+    try:
+        relative_path = baseline_path.relative_to(repo_root).as_posix()
+    except ValueError:
+        print(
+            f"Error: Baseline path {_display_path(baseline_path, repo_root)} "
+            "must be inside the repository to read it from a git ref",
+            file=sys.stderr,
+        )
+        return None
+
+    ref_path = f"{ref}:{relative_path}"
+    try:
+        raw_baseline = _run(["git", "show", ref_path], cwd=repo_root)
+        baseline = json.loads(raw_baseline)
+    except (RuntimeError, json.JSONDecodeError) as exc:
+        print(
+            f"Error: Failed to read baseline file {relative_path} at {ref}: {exc}",
+            file=sys.stderr,
+        )
+        return None
+    if not isinstance(baseline, dict):
+        print(
+            f"Error: Baseline file {relative_path} at {ref} must contain a JSON object",
             file=sys.stderr,
         )
         return None

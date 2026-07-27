@@ -976,6 +976,12 @@ def _compute_and_emit_badging_artifacts(  # noqa: C901
     rel_url = pub_channels.get("release_url")
 
     def is_valid_durable_id(val: str | None) -> bool:
+        """Return whether ``val`` is a durable public identifier.
+
+        Rejects empty values, default DOI/release-tag templates, localhost URIs,
+        and local or relative paths, so only resolved public identifiers count
+        toward the ``available`` badge level.
+        """
         if not val:
             return False
         v = val.strip()

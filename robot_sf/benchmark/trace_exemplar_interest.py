@@ -292,6 +292,7 @@ def write_report_markdown(
 
 
 def _is_episode_dir(path: Path) -> bool:
+    """Return whether a directory is a parseable episode (metadata.json + trace_series.json)."""
     return (
         path.is_dir()
         and (path / "metadata.json").is_file()
@@ -300,6 +301,11 @@ def _is_episode_dir(path: Path) -> bool:
 
 
 def _load_episode(episode_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load and validate an episode's metadata and trace_series JSON objects.
+
+    Returns:
+        ``(metadata, trace)`` JSON objects.
+    """
     metadata_path = episode_dir / "metadata.json"
     trace_path = episode_dir / "trace_series.json"
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -316,6 +322,11 @@ def _compute_features(
     metadata: Mapping[str, Any],
     episode_status: str,
 ) -> dict[str, float]:
+    """Compute the per-episode interest feature vector from derived rows and metadata.
+
+    Returns:
+        The feature vector dict.
+    """
     distances = [_float(row.get("min_robot_ped_distance_m")) for row in rows]
     distance_values = [value for value in distances if value is not None]
     global_min = _metadata_global_min(metadata)
@@ -352,6 +363,7 @@ def _compute_features(
 
 
 def _metadata_global_min(metadata: Mapping[str, Any]) -> float | None:
+    """Return the global minimum robot-pedestrian distance from metadata, if present."""
     summary = metadata.get("summary")
     if isinstance(summary, Mapping):
         value = _float(summary.get("global_min_robot_ped_distance_m"))
@@ -361,6 +373,7 @@ def _metadata_global_min(metadata: Mapping[str, Any]) -> float | None:
 
 
 def _collapse_rate(rows: Sequence[Mapping[str, Any]]) -> float:
+    """Return the steepest per-second distance-collapse rate (a closing-speed proxy), clamped."""
     samples: list[tuple[float, float]] = []
     for index, row in enumerate(rows):
         distance = _float(row.get("min_robot_ped_distance_m"))
@@ -382,12 +395,14 @@ def _collapse_rate(rows: Sequence[Mapping[str, Any]]) -> float:
 
 
 def _time_below(values: Sequence[float], threshold: float, total_steps: int) -> float:
+    """Return the fraction of steps whose value is below ``threshold``."""
     if total_steps <= 0:
         return 0.0
     return _clamp(sum(1 for value in values if value < threshold) / total_steps)
 
 
 def _outcome_salience(episode_status: str, metadata: Mapping[str, Any]) -> float:
+    """Return outcome salience: 0 for success, 1 for collision-like termination, else 0.8."""
     if episode_status == "success":
         return 0.0
     termination_reason = ""
@@ -401,6 +416,7 @@ def _outcome_salience(episode_status: str, metadata: Mapping[str, Any]) -> float
 
 
 def _heading_activity(values: Sequence[float | None], times: Sequence[float]) -> float:
+    """Return the per-time heading-change activity, clamped to ``[0, 1]``."""
     changes: list[float] = []
     for previous, current in pairwise(values):
         if previous is None or current is None:
@@ -422,6 +438,7 @@ def _frozen_robot(
     proxy_distance: float | None,
     step_count: int,
 ) -> float:
+    """Return a frozen-robot flag (1 when displacement is negligible vs expected travel)."""
     if episode_status == "success":
         return 0.0
     if proxy_distance is not None and proxy_distance > 0.0 and displacement < 0.2 * proxy_distance:
@@ -436,6 +453,7 @@ def _spawn_goal_proxy(
     commanded_cap: float,
     duration: float,
 ) -> float | None:
+    """Return a spawn-to-goal distance proxy (or commanded-cap x duration fallback)."""
     start = _point_from_any(metadata.get("start") or metadata.get("spawn"))
     goal = _point_from_any(metadata.get("goal") or metadata.get("target"))
     if start is not None and goal is not None:
@@ -446,6 +464,11 @@ def _spawn_goal_proxy(
 
 
 def _comparison_pairs(episodes: Sequence[EpisodeInterest]) -> list[ComparisonPair]:
+    """Build cross-planner comparison pairs grouped by (scenario, seed) with outcome/trajectory divergence.
+
+    Returns:
+        The cross-planner comparison pairs.
+    """
     groups: dict[tuple[str, int | None], list[EpisodeInterest]] = {}
     for episode in episodes:
         groups.setdefault((episode.scenario_id, episode.seed), []).append(episode)
@@ -485,6 +508,7 @@ def _comparison_pairs(episodes: Sequence[EpisodeInterest]) -> list[ComparisonPai
 
 
 def _trajectory_divergence(left_dir: Path, right_dir: Path) -> float:
+    """Return the normalized mean per-step position distance between two episodes' traces."""
     _, left_trace = _load_episode(left_dir)
     _, right_trace = _load_episode(right_dir)
     left_positions = _positions_by_step(left_trace.get("derived_rows", []))
@@ -499,6 +523,11 @@ def _trajectory_divergence(left_dir: Path, right_dir: Path) -> float:
 
 
 def _positions_by_step(raw_rows: Any) -> dict[int, tuple[float, float]]:
+    """Map step index to robot position from derived trace rows.
+
+    Returns:
+        The step-index to position mapping.
+    """
     if not isinstance(raw_rows, list):
         return {}
     out: dict[int, tuple[float, float]] = {}
@@ -514,10 +543,12 @@ def _positions_by_step(raw_rows: Any) -> dict[int, tuple[float, float]]:
 
 
 def _positions(rows: Sequence[Mapping[str, Any]]) -> list[tuple[float, float]]:
+    """Return the list of robot positions from rows, dropping unparseable ones."""
     return [point for row in rows if (point := _row_position(row)) is not None]
 
 
 def _row_position(row: Mapping[str, Any]) -> tuple[float, float] | None:
+    """Return a row's robot ``(x, y)`` position, or ``None`` when missing."""
     x = _float(row.get("robot_x_m"))
     y = _float(row.get("robot_y_m"))
     if x is None or y is None:
@@ -526,6 +557,7 @@ def _row_position(row: Mapping[str, Any]) -> tuple[float, float] | None:
 
 
 def _times(rows: Sequence[Mapping[str, Any]]) -> list[float]:
+    """Return per-row times, using the row index when ``time_s`` is absent."""
     times: list[float] = []
     for index, row in enumerate(rows):
         value = _float(row.get("time_s"))
@@ -534,20 +566,28 @@ def _times(rows: Sequence[Mapping[str, Any]]) -> list[float]:
 
 
 def _path_length(positions: Sequence[tuple[float, float]]) -> float:
+    """Return the summed Euclidean distance between consecutive positions."""
     return sum(_distance(left, right) for left, right in pairwise(positions))
 
 
 def _straight_line(positions: Sequence[tuple[float, float]]) -> float:
+    """Return the straight-line displacement between the first and last positions."""
     if len(positions) < 2:
         return 0.0
     return _distance(positions[0], positions[-1])
 
 
 def _distance(left: tuple[float, float], right: tuple[float, float]) -> float:
+    """Return the Euclidean distance between two points."""
     return math.hypot(right[0] - left[0], right[1] - left[1])
 
 
 def _point_from_any(raw: Any) -> tuple[float, float] | None:
+    """Parse an ``(x, y)`` point from a mapping or 2-element sequence, or ``None``.
+
+    Returns:
+        The parsed ``(x, y)`` point, or ``None``.
+    """
     if isinstance(raw, Mapping):
         x = _float(raw.get("x") or raw.get("x_m"))
         y = _float(raw.get("y") or raw.get("y_m"))
@@ -562,6 +602,7 @@ def _point_from_any(raw: Any) -> tuple[float, float] | None:
 
 
 def _stddev(values: Sequence[float]) -> float:
+    """Return the population standard deviation of ``values`` (0 when empty)."""
     if not values:
         return 0.0
     mean = sum(values) / len(values)
@@ -569,10 +610,12 @@ def _stddev(values: Sequence[float]) -> float:
 
 
 def _angle_delta(current: float, previous: float) -> float:
+    """Return the signed smallest angular difference between two headings (radians)."""
     return (current - previous + math.pi) % (2.0 * math.pi) - math.pi
 
 
 def _effective_weights(overrides: Mapping[str, float] | None) -> dict[str, float]:
+    """Return default weights merged with validated overrides."""
     weights = dict(DEFAULT_WEIGHTS)
     if overrides:
         for key, value in overrides.items():
@@ -583,6 +626,7 @@ def _effective_weights(overrides: Mapping[str, float] | None) -> dict[str, float
 
 
 def _weighted_score(features: Mapping[str, float], weights: Mapping[str, float]) -> float:
+    """Return the clamped positive-weighted normalized composite interest score."""
     weight_total = sum(max(0.0, value) for value in weights.values())
     if weight_total <= 0.0:
         raise ValueError("at least one weight must be positive")
@@ -591,6 +635,7 @@ def _weighted_score(features: Mapping[str, float], weights: Mapping[str, float])
 
 
 def _replace_score(episode: EpisodeInterest, weights: Mapping[str, float]) -> EpisodeInterest:
+    """Return a copy of an episode with its composite score recomputed under new weights."""
     return EpisodeInterest(
         episode_dir=episode.episode_dir,
         episode_id=episode.episode_id,
@@ -604,6 +649,11 @@ def _replace_score(episode: EpisodeInterest, weights: Mapping[str, float]) -> Ep
 
 
 def _report_payload(report: InterestReport, top_n: int | None) -> dict[str, Any]:
+    """Build the JSON-serializable report payload (roots, weights, episodes, comparison pairs).
+
+    Returns:
+        The JSON-serializable report payload.
+    """
     return {
         "roots": [root.as_posix() for root in report.roots],
         "weights": report.weights,
@@ -613,18 +663,25 @@ def _report_payload(report: InterestReport, top_n: int | None) -> dict[str, Any]
 
 
 def _episode_payload(episode: EpisodeInterest) -> dict[str, Any]:
+    """Return a JSON-serializable episode payload with the dir as a POSIX string."""
     payload = asdict(episode)
     payload["episode_dir"] = episode.episode_dir.as_posix()
     return payload
 
 
 def _top_episodes(report: InterestReport, top_n: int | None) -> list[EpisodeInterest]:
+    """Return the report's episodes, optionally truncated to the first ``top_n``."""
     if top_n is None:
         return list(report.episodes)
     return list(report.episodes[: max(0, top_n)])
 
 
 def _float(raw: Any) -> float | None:
+    """Coerce a raw value to a finite float, returning ``None`` on failure.
+
+    Returns:
+        The coerced finite float, or ``None``.
+    """
     try:
         value = float(raw)
     except (TypeError, ValueError):
@@ -635,6 +692,11 @@ def _float(raw: Any) -> float | None:
 
 
 def _optional_int(raw: Any) -> int | None:
+    """Coerce a raw value to ``int``, returning ``None`` on failure.
+
+    Returns:
+        The coerced int, or ``None``.
+    """
     try:
         return int(raw)
     except (TypeError, ValueError):
@@ -642,12 +704,23 @@ def _optional_int(raw: Any) -> int | None:
 
 
 def _clamp(value: float, lower: float = 0.0, upper: float = 1.0) -> float:
+    """Clamp ``value`` to the ``[lower, upper]`` range.
+
+    Returns:
+        The clamped value.
+    """
     return min(upper, max(lower, value))
 
 
 def _fmt(value: float) -> str:
+    """Format a float to 6 decimal places.
+
+    Returns:
+        The formatted string.
+    """
     return f"{value:.6f}"
 
 
 def _seed_text(seed: int | None) -> str:
+    """Return the seed as a string, or an empty string when ``None``."""
     return "" if seed is None else str(seed)

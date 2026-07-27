@@ -92,6 +92,7 @@ def label_availability(label: Mapping[str, Any], available_fields: set[str]) -> 
 
 
 def _validate_top_level_contract(payload: Mapping[str, Any]) -> None:
+    """Validate schema_version, claim_boundary language, and source literature."""
     if payload.get("schema_version") != SOCIAL_PREFERENCE_LABEL_SCHEMA_VERSION:
         raise SocialPreferenceLabelConfigError(
             f"schema_version must be {SOCIAL_PREFERENCE_LABEL_SCHEMA_VERSION}"
@@ -106,6 +107,7 @@ def _validate_top_level_contract(payload: Mapping[str, Any]) -> None:
 
 
 def _allowed_direction_set(payload: Mapping[str, Any]) -> set[str]:
+    """Return the validated set of allowed preferred directions from the payload."""
     allowed_directions = payload.get("allowed_preferred_directions")
     if not isinstance(allowed_directions, list) or not allowed_directions:
         raise SocialPreferenceLabelConfigError(
@@ -121,6 +123,11 @@ def _allowed_direction_set(payload: Mapping[str, Any]) -> set[str]:
 
 
 def _validate_labels(labels: Any, allowed_directions: set[str]) -> list[Mapping[str, Any]]:
+    """Validate and return every label entry, checking fields/direction/thresholds/traces/metrics.
+
+    Returns:
+        The validated label mappings.
+    """
     if not isinstance(labels, list) or not labels:
         raise SocialPreferenceLabelConfigError("labels must be a non-empty list")
 
@@ -138,6 +145,7 @@ def _validate_labels(labels: Any, allowed_directions: set[str]) -> list[Mapping[
 
 
 def _validate_required_label_ids(labels: list[Mapping[str, Any]]) -> None:
+    """Check label ids are unique and include all required label ids."""
     label_ids = [label["id"] for label in labels]
     duplicate_ids = sorted({label_id for label_id in label_ids if label_ids.count(label_id) > 1})
     if duplicate_ids:
@@ -151,6 +159,7 @@ def _validate_required_label_ids(labels: list[Mapping[str, Any]]) -> None:
 
 
 def _require_boundary_language(claim_boundary: str) -> None:
+    """Require the claim_boundary to state diagnostic, not-reward, and not-calibrated status."""
     normalized = claim_boundary.casefold()
     required_phrases = ("diagnostic", "not a reward", "not calibrated")
     missing = [phrase for phrase in required_phrases if phrase not in normalized]
@@ -161,6 +170,7 @@ def _require_boundary_language(claim_boundary: str) -> None:
 
 
 def _validate_source_literature(source_literature: Any) -> None:
+    """Validate the source_literature list: each entry is motivation_only with a url."""
     if not isinstance(source_literature, list) or not source_literature:
         raise SocialPreferenceLabelConfigError("source_literature must be a non-empty list")
     for entry in source_literature:
@@ -175,6 +185,7 @@ def _validate_source_literature(source_literature: Any) -> None:
 
 
 def _validate_label_fields(index: int, label: Mapping[str, Any]) -> None:
+    """Validate a label's required fields are present, well-typed, and snake_case id."""
     missing_fields = sorted(REQUIRED_LABEL_FIELDS.difference(label))
     if missing_fields:
         raise SocialPreferenceLabelConfigError(
@@ -201,6 +212,7 @@ def _validate_label_fields(index: int, label: Mapping[str, Any]) -> None:
 
 
 def _validate_label_direction(label: Mapping[str, Any], allowed_directions: set[str]) -> None:
+    """Validate a label's preferred_direction is in the allowed set."""
     label_id = str(label["id"])
     preferred_direction = label["preferred_direction"]
     if preferred_direction not in allowed_directions:
@@ -210,6 +222,7 @@ def _validate_label_direction(label: Mapping[str, Any], allowed_directions: set[
 
 
 def _validate_label_thresholds(label: Mapping[str, Any]) -> None:
+    """Validate a label's diagnostic_thresholds carry the uncalibrated placeholder status."""
     label_id = str(label["id"])
     diagnostic_thresholds = label["diagnostic_thresholds"]
     if not isinstance(diagnostic_thresholds, Mapping):
@@ -225,10 +238,12 @@ def _validate_label_thresholds(label: Mapping[str, Any]) -> None:
 
 
 def _validate_label_trace_fields(label: Mapping[str, Any]) -> None:
+    """Validate a label's required_trace_fields is a non-empty string list."""
     _require_string_list(str(label["id"]), label["required_trace_fields"], "required_trace_fields")
 
 
 def _validate_label_candidate_metrics(label: Mapping[str, Any]) -> None:
+    """Validate a label's candidate_metric_keys (non-empty strings, or empty only when not_available)."""
     label_id = str(label["id"])
     candidate_metric_keys = label["candidate_metric_keys"]
     if not isinstance(candidate_metric_keys, list):
@@ -247,6 +262,7 @@ def _validate_label_candidate_metrics(label: Mapping[str, Any]) -> None:
 
 
 def _require_string_list(label_id: str, value: Any, field_name: str) -> None:
+    """Require ``value`` to be a non-empty list of non-empty strings."""
     if not isinstance(value, list) or not value:
         raise SocialPreferenceLabelConfigError(f"label {label_id} {field_name} must be a list")
     for item in value:
@@ -257,6 +273,7 @@ def _require_string_list(label_id: str, value: Any, field_name: str) -> None:
 
 
 def _is_lowercase_snake_case(value: str) -> bool:
+    """Return whether ``value`` is a lowercase snake_case identifier."""
     if not value:
         return False
     return value[0].islower() and all(
@@ -326,6 +343,7 @@ def _resolve_dot_path(root: Mapping[str, Any], dot_path: str) -> Any:
 
 
 def _is_finite(value: float) -> bool:
+    """Return whether ``value`` is a finite number (not NaN or Inf)."""
     return math.isfinite(value)
 
 

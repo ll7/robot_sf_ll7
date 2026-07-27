@@ -97,6 +97,11 @@ def _arm(
     name: str,
     blockers: list[str],
 ) -> dict[str, Any]:
+    """Extract a named curriculum or baseline arm mapping, recording a blocker when invalid.
+
+    Returns:
+        The arm mapping, or an empty dict when absent or malformed.
+    """
     raw = manifest.get(name)
     if not isinstance(raw, dict):
         blockers.append(f"{name} arm must be a mapping")
@@ -109,6 +114,7 @@ def _check_pair(
     baseline: dict[str, Any],
     blockers: list[str],
 ) -> None:
+    """Validate that the curriculum and baseline arms form a contrasting comparison pair."""
     if curriculum.get("density_curriculum_enabled") is not True:
         blockers.append("curriculum arm must enable density_curriculum")
     if baseline.get("density_curriculum_enabled") is not False:
@@ -130,6 +136,7 @@ def _check_pair(
 
 
 def _check_artifacts(manifest: dict[str, Any], blockers: list[str]) -> None:
+    """Validate the manifest's required checkpoint artifact paths for non-dry-run readiness."""
     artifacts = manifest.get("artifacts")
     if not isinstance(artifacts, dict):
         blockers.append("manifest artifacts mapping is required for non-dry-run readiness")
@@ -142,6 +149,11 @@ def _check_artifacts(manifest: dict[str, Any], blockers: list[str]) -> None:
 
 
 def _compact_arm(arm: dict[str, Any]) -> dict[str, Any]:
+    """Project an arm mapping down to the readiness-summary fields.
+
+    Returns:
+        Mapping of the readiness-summary fields for the arm.
+    """
     return {
         "path": arm.get("path"),
         "policy_id": arm.get("policy_id"),

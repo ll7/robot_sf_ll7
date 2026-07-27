@@ -20,6 +20,7 @@ DynamicsMetricTables = Mapping[str, MetricTable]
 
 
 def _finite_metric_value(metrics: Mapping[str, object], metric: str) -> float | None:
+    """Return ``metric`` as a finite float, or ``None`` when absent or non-finite."""
     try:
         value = float(metrics[metric])
     except (KeyError, TypeError, ValueError):
@@ -30,6 +31,11 @@ def _finite_metric_value(metrics: Mapping[str, object], metric: str) -> float | 
 
 
 def _metric_values(table: MetricTable, metric: str) -> dict[str, float]:
+    """Map each planner to its finite ``metric`` value, skipping absent/non-finite planners.
+
+    Returns:
+        Each planner mapped to its finite metric value.
+    """
     values: dict[str, float] = {}
     for planner, metrics in table.items():
         value = _finite_metric_value(metrics, metric)
@@ -44,6 +50,11 @@ def _rank_planners(
     *,
     higher_is_better: bool,
 ) -> list[str]:
+    """Rank planners by ``metric`` using the canonical ``rank_order`` with the given direction.
+
+    Returns:
+        The planners ranked by metric.
+    """
     values = _metric_values(table, metric)
     return [str(planner) for planner in rank_order(values, higher_is_better=higher_is_better)]
 
@@ -51,6 +62,11 @@ def _rank_planners(
 def _project_table(
     table: MetricTable, metric_names: tuple[str, ...]
 ) -> dict[str, dict[str, float]]:
+    """Project a metric table to ``metric_names`` per planner, keeping finite values only.
+
+    Returns:
+        The per-planner projected metric row.
+    """
     rows: dict[str, dict[str, float]] = {}
     for planner, metrics in table.items():
         row: dict[str, float] = {}
@@ -196,6 +212,11 @@ def analyze_dynamics_sensitivity(
 
 
 def _count_rank_flips(reference: list[str], candidate: list[str]) -> int:
+    """Count pairwise rank inversions between ``reference`` and ``candidate`` orderings.
+
+    Returns:
+        The number of pairwise rank inversions.
+    """
     position = {planner: index for index, planner in enumerate(candidate)}
     flips = 0
     for left_index, left in enumerate(reference):

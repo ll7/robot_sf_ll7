@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from robot_sf.evidence.writers import write_sha256sums
+
 SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "audit_exemplar_bundles.py"
 SPEC = importlib.util.spec_from_file_location("audit_exemplar_bundles", SCRIPT_PATH)
 assert SPEC is not None
@@ -105,6 +107,22 @@ def test_verify_checksums_mismatch(tmp_path: Path) -> None:
     ok, errors = audit_mod.verify_checksums(bundle, tmp_path)
     assert ok is False
     assert any("MISMATCH" in e for e in errors)
+
+
+def test_verify_checksums_accepts_shared_writer_repo_relative_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Shared manifests must remain compatible with the exemplar auditor's root resolver."""
+    bundle = tmp_path / "generated" / "exemplar"
+    bundle.mkdir(parents=True)
+    (bundle / "README.md").write_text("# Generated exemplar\n", encoding="utf-8")
+    monkeypatch.setattr("robot_sf.evidence.writers._repo_root", lambda: tmp_path)
+
+    write_sha256sums(bundle)
+
+    ok, errors = audit_mod.verify_checksums(bundle, tmp_path)
+    assert ok is True
+    assert errors == []
 
 
 def test_check_metadata_valid(tmp_path: Path) -> None:

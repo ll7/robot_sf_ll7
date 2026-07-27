@@ -221,7 +221,10 @@ class OmplGeometricAdapter:
         obstacle_union = self._obstacle_union
 
         class _Checker(ob.StateValidityChecker):
+            """OMPL state-validity checker that rejects states inside the inflated obstacle union."""
+
             def isValid(self, state) -> bool:  # type: ignore[override]
+                """Return ``True`` when ``(x, y)`` lies outside the inflated obstacle union."""
                 x, y = state[0], state[1]
                 return not obstacle_union.contains(Point(x, y))
 

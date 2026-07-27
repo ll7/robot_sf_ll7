@@ -1052,9 +1052,11 @@ def evaluate_estimator(
         ll = log_loss(scores, labels, weights)
 
         def _brier_stat(idx: np.ndarray) -> float:
+            """Return the Brier score over the samples selected by ``idx`` (bootstrap statistic)."""
             return brier_score(scores[idx], labels[idx], weights[idx])
 
         def _ece_stat(idx: np.ndarray) -> float:
+            """Return the expected calibration error over the samples selected by ``idx``."""
             sub_curve = reliability_curve(
                 scores[idx], labels[idx], weights[idx], n_bins=n_reliability_bins
             )

@@ -815,6 +815,11 @@ def assess_mean_matched_episode_records(
 def _index_episode_records(
     episode_records: Sequence[Mapping[str, Any]],
 ) -> tuple[dict[tuple[str, str, int, str], Mapping[str, Any]], list[str]]:
+    """Index episode records by campaign key, returning the index and malformed/duplicate blockers.
+
+    Returns:
+        Records keyed by campaign key and malformed/duplicate blockers.
+    """
     observed_by_key: dict[tuple[str, str, int, str], Mapping[str, Any]] = {}
     blockers: list[str] = []
     for index, record in enumerate(episode_records):
@@ -838,6 +843,7 @@ def _episode_trace_blockers(
     manifest_row: Mapping[str, Any],
     metric_keys: Sequence[str],
 ) -> list[str]:
+    """Return control-trace readiness blockers for an episode record versus its manifest row."""
     disposition = record.get("disposition")
     if disposition is not None:
         reason = str(record.get("disposition_reason", "reason missing")).strip()
@@ -1054,6 +1060,11 @@ def _manifest_scenario_rows(
     metric_keys: Sequence[str],
     response_law_fractions: Sequence[float],
 ) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
+    """Build a scenario row and its manifest rows (and blockers) from a scenario definition.
+
+    Returns:
+        The scenario row, manifest rows, and any blockers.
+    """
     scenario_id = _required_str(scenario, "id", context=f"scenarios[{scenario_index}]")
     density = _required_float(scenario, "density", context=f"scenarios[{scenario_index}]")
     if density < 0.0:
@@ -1206,6 +1217,11 @@ def _trace_readiness_by_arm(
     metric_keys: Sequence[str],
     arm_populations: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
+    """Compute per-arm control-trace readiness, returning readiness, blockers, and pending flag.
+
+    Returns:
+        Per-arm readiness, blockers, and a pending-capture flag.
+    """
     traces = scenario.get("control_traces")
     if traces is not None and not isinstance(traces, Mapping):
         raise ValueError("scenario.control_traces must be mapping when provided")
@@ -1328,6 +1344,7 @@ def _trace_population_metadata_blockers(
 
 
 def _trace_label_blockers(pedestrian: Any, expected_label: Any, *, index: int) -> list[str]:
+    """Return blockers where a trace pedestrian's label fields mismatch the manifest label."""
     if not isinstance(pedestrian, Mapping) or not isinstance(expected_label, Mapping):
         return [f"control_trace label alignment at index {index} must use mappings"]
     blockers: list[str] = []
@@ -1344,6 +1361,11 @@ def _trace_label_blockers(pedestrian: Any, expected_label: Any, *, index: int) -
 
 
 def _planner_rows(planners: Sequence[Any]) -> list[dict[str, Any]]:
+    """Normalize planner entries into ``{key, algo?}`` rows, validating each.
+
+    Returns:
+        The normalized ``{key, algo?}`` planner rows.
+    """
     rows: list[dict[str, Any]] = []
     for index, planner in enumerate(planners):
         if isinstance(planner, str):
@@ -1363,6 +1385,11 @@ def _planner_rows(planners: Sequence[Any]) -> list[dict[str, Any]]:
 
 
 def _seed_rows(seeds: Sequence[Any]) -> list[dict[str, int]]:
+    """Normalize seed entries into ``{seed}`` integer rows, rejecting non-integers.
+
+    Returns:
+        The normalized ``{seed}`` integer rows.
+    """
     rows: list[dict[str, int]] = []
     for index, seed in enumerate(seeds):
         if isinstance(seed, bool):
@@ -1375,6 +1402,11 @@ def _seed_rows(seeds: Sequence[Any]) -> list[dict[str, int]]:
 
 
 def _metric_keys(raw_metric_keys: Any) -> list[str]:
+    """Validate ``trace_metric_keys`` into a list of non-empty string keys.
+
+    Returns:
+        The validated list of non-empty metric-key strings.
+    """
     if not isinstance(raw_metric_keys, Sequence) or isinstance(raw_metric_keys, str):
         raise ValueError("trace_metric_keys must be sequence")
     metric_keys = [str(metric_key).strip() for metric_key in raw_metric_keys]
@@ -1451,6 +1483,7 @@ def _with_response_law_fraction(
 
 
 def _campaign_row_key(row: Mapping[str, Any], *, context: str) -> tuple[str, str, int, str, float]:
+    """Return the ``(scenario, planner, seed, arm, response_law_fraction)`` key for a row."""
     scenario_id = _required_str(row, "scenario_id", context=context)
     planner = _required_str(row, "planner", context=context)
     seed = _required_int(row, "seed", context=context)
@@ -1462,6 +1495,11 @@ def _campaign_row_key(row: Mapping[str, Any], *, context: str) -> tuple[str, str
 def _rows_by_campaign_key(
     rows: Sequence[Any], *, source: str
 ) -> dict[tuple[str, str, int, str, float], Mapping[str, Any]]:
+    """Index ``rows`` by campaign key, raising on a malformed row or duplicate key.
+
+    Returns:
+        Rows keyed by campaign key.
+    """
     indexed: dict[tuple[str, str, int, str, float], Mapping[str, Any]] = {}
     for index, row in enumerate(rows):
         if not isinstance(row, Mapping):
@@ -1474,6 +1512,11 @@ def _rows_by_campaign_key(
 
 
 def _format_campaign_key(key: tuple[str, str, int, str, float]) -> str:
+    """Format a campaign key tuple into a human-readable ``scenario/planner/seed/arm/...`` string.
+
+    Returns:
+        The formatted campaign-key string.
+    """
     scenario_id, planner, seed, population_arm, response_law_fraction = key
     return (
         f"{scenario_id}/{planner}/seed_{seed}/{population_arm}/"
@@ -1505,6 +1548,7 @@ def _response_law_fraction_from_row(row: Mapping[str, Any], *, context: str) -> 
 
 
 def _required_sequence(config: Mapping[str, Any], key: str) -> Sequence[Any]:
+    """Return a required non-empty sequence field, raising ``ValueError`` otherwise."""
     value = config.get(key)
     if not isinstance(value, Sequence) or isinstance(value, str) or not value:
         raise ValueError(f"{key} must be non-empty sequence")
@@ -1512,6 +1556,7 @@ def _required_sequence(config: Mapping[str, Any], key: str) -> Sequence[Any]:
 
 
 def _required_mapping(config: Mapping[str, Any], key: str) -> Mapping[str, Any]:
+    """Return a required non-empty mapping field, raising ``ValueError`` otherwise."""
     value = config.get(key)
     if not isinstance(value, Mapping) or not value:
         raise ValueError(f"{key} must be non-empty mapping")
@@ -1519,6 +1564,7 @@ def _required_mapping(config: Mapping[str, Any], key: str) -> Mapping[str, Any]:
 
 
 def _required_str(config: Mapping[str, Any], key: str, *, context: str) -> str:
+    """Return a required non-empty string field (stripped), raising ``ValueError`` otherwise."""
     value = config.get(key)
     text = "" if value is None else str(value).strip()
     if not text:
@@ -1527,6 +1573,7 @@ def _required_str(config: Mapping[str, Any], key: str, *, context: str) -> str:
 
 
 def _required_float(config: Mapping[str, Any], key: str, *, context: str) -> float:
+    """Return a required finite float field, raising ``ValueError`` otherwise."""
     try:
         value = float(config[key])
     except KeyError as exc:
@@ -1539,6 +1586,7 @@ def _required_float(config: Mapping[str, Any], key: str, *, context: str) -> flo
 
 
 def _required_int(config: Mapping[str, Any], key: str, *, context: str) -> int:
+    """Return a required positive integer field, raising ``ValueError`` otherwise."""
     if isinstance(config.get(key), bool):
         raise ValueError(f"{context}.{key} must be integer")
     try:
@@ -1553,11 +1601,17 @@ def _required_int(config: Mapping[str, Any], key: str, *, context: str) -> int:
 
 
 def _stable_hash(payload: Mapping[str, Any]) -> str:
+    """Return a short (16-char) stable SHA-256 hash of a JSON-serializable payload."""
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
 def _normalize_composition(composition: Mapping[str, float]) -> dict[str, float]:
+    """Validate and renormalize an archetype composition so its fractions sum to 1.
+
+    Returns:
+        The renormalized archetype composition.
+    """
     if not composition:
         raise ValueError("composition must be non-empty")
     normalized = {str(name).strip(): float(value) for name, value in composition.items()}
@@ -1576,6 +1630,11 @@ def _coerce_archetype_spec(
     name: str,
     value: ArchetypePopulationSpec | Mapping[str, Any],
 ) -> ArchetypePopulationSpec:
+    """Coerce an archetype spec (mapping or dataclass) into a validated ``ArchetypePopulationSpec``.
+
+    Returns:
+        The validated archetype population spec.
+    """
     if isinstance(value, ArchetypePopulationSpec):
         spec = value
     elif isinstance(value, Mapping):
@@ -1605,6 +1664,7 @@ def _validate_composition_keys(
     composition: Mapping[str, float],
     specs: Mapping[str, ArchetypePopulationSpec],
 ) -> None:
+    """Raise ``ValueError`` if composition names archetypes absent from ``specs``."""
     missing = sorted(name for name in composition if name not in specs)
     if missing:
         raise ValueError(f"composition references unknown archetypes: {missing}")
@@ -1615,6 +1675,7 @@ def _weighted_mean(
     values: Mapping[str, float],
     parameter_name: str,
 ) -> float:
+    """Return the composition-weighted mean of ``values`` for ``parameter_name``."""
     weighted_value = sum(composition[name] * values[name] for name in composition)
     if not math.isfinite(weighted_value):
         raise ValueError(f"weighted {parameter_name} mean must be finite")
@@ -1627,6 +1688,11 @@ def _population_record(
     archetype: str,
     spec: ArchetypePopulationSpec,
 ) -> dict[str, Any]:
+    """Build a population record dict from a simulator index, archetype name, and spec.
+
+    Returns:
+        The population record dict.
+    """
     return {
         "simulator_index": simulator_index,
         "archetype": str(archetype),

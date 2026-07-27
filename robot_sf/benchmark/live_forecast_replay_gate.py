@@ -159,9 +159,15 @@ def load_trace_tolerant(path: Path | str) -> SimulationTraceExport:
     allowed_frame_keys = {"step", "time_s", "robot", "pedestrians", "planner"}
 
     def _value_or_default(value: Any, default: Any) -> Any:
+        """Return ``default`` when ``value`` is ``None``, otherwise ``value``."""
         return default if value is None else value
 
     def _normalize_frame(frame: dict[str, Any]) -> SimulationTraceFrame:
+        """Strip unknown keys and coerce a raw frame into a typed ``SimulationTraceFrame``.
+
+        Returns:
+            The coerced ``SimulationTraceFrame`` with unknown keys removed.
+        """
         stripped = {key: frame[key] for key in allowed_frame_keys if key in frame}
         pedestrians_raw = stripped.get("pedestrians")
         pedestrians_list = pedestrians_raw if pedestrians_raw is not None else []
@@ -353,6 +359,11 @@ def _baseline_for_variant(
             state: PedestrianState,
             horizons_s: list[float] | tuple[float, ...],
         ) -> Any:
+            """Bind the robot position and risk distance into the risk-filtered baseline call.
+
+            Returns:
+                The risk-filtered constant-velocity baseline forecast for the state.
+            """
             return risk_filtered_cv_baseline(
                 state,
                 horizons_s,

@@ -164,6 +164,11 @@ def check_campaign_scenario_maps_preflight(
     if resolver is None:
 
         def resolver(map_file: str | None) -> Any:
+            """Resolve a map file against the campaign scenario path with repo-root semantics.
+
+            Returns:
+                The resolved map definition, or ``None`` when the map cannot be resolved.
+            """
             return resolve_map_definition(map_file, scenario_path=scenario_path)
 
     failures: list[tuple[str, str, Exception]] = []

@@ -54,6 +54,7 @@ def discover_recipes() -> list[Recipe]:
     category_index = {name: i for i, name in enumerate(CATEGORIES)}
 
     def _sort_key(recipe: Recipe) -> tuple[int, str]:
+        """Return a sort key ordering by category index then recipe id."""
         return (category_index.get(recipe.category, len(CATEGORIES)), recipe.id)
 
     return sorted(by_id.values(), key=_sort_key)

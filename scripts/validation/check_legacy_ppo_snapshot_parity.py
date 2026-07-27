@@ -19,6 +19,7 @@ import json
 import os
 import tarfile
 from collections.abc import Mapping
+from contextlib import chdir
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -218,6 +219,29 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _resolve_model_path_from_repo_root(
+    model_id: str,
+    *,
+    repo_root: Path,
+    registry_path: Path,
+    allow_download: bool,
+    cache_dir: Path | None = None,
+) -> Path:
+    """Resolve a model while anchoring registry-relative paths at ``repo_root``.
+
+    ``resolve_model_path`` intentionally interprets a relative ``local_path`` from
+    the current working directory. This validator exposes ``--repo-root``, so it
+    must temporarily use that selected checkout rather than the caller's directory.
+    """
+    with chdir(repo_root):
+        return resolve_model_path(
+            model_id,
+            registry_path=registry_path,
+            allow_download=allow_download,
+            cache_dir=cache_dir,
+        )
+
+
 def _verify_single_file(entry: Mapping[str, Any], *, resolved: Path) -> tuple[str, str]:
     """Byte-match a single-file durable checkpoint against its recorded SHA-256."""
     release = entry.get("github_release")
@@ -329,8 +353,9 @@ def _verify_multi_file_bundle_resolution(
         )
 
     try:
-        resolved = resolve_model_path(
+        resolved = _resolve_model_path_from_repo_root(
             checkpoint.model_id,
+            repo_root=repo_root,
             registry_path=registry_path,
             allow_download=False,
             cache_dir=cache_dir,
@@ -477,8 +502,9 @@ def _verify_durable_checkpoint(
                 dict(entry), cache_dir=cache_dir, allow_download=True
             )
         else:
-            resolved = resolve_model_path(
+            resolved = _resolve_model_path_from_repo_root(
                 checkpoint.model_id,
+                repo_root=repo_root,
                 registry_path=registry_path,
                 allow_download=True,
                 cache_dir=cache_dir,
@@ -640,8 +666,9 @@ def run_model_step_smoke(
 ) -> SmokeReport:
     """Load a PPO checkpoint and execute one current Gymnasium robot-env step."""
 
-    model_path = resolve_model_path(
+    model_path = _resolve_model_path_from_repo_root(
         model_id,
+        repo_root=repo_root,
         registry_path=registry_path,
         allow_download=allow_download,
     )

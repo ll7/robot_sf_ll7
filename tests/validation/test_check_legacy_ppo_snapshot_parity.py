@@ -399,6 +399,32 @@ def test_cli_json_inventory_reports_ok_for_repo_registry(
     assert all(row["durable_uri"].startswith("https://github.com/") for row in durable_rows)
 
 
+def test_cli_inventory_honors_explicit_repo_root_outside_checkout(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An explicit repo root must anchor GA3C's relative resolver path."""
+    repo_root = Path(__file__).resolve().parents[2]
+    monkeypatch.chdir(tmp_path)
+
+    exit_code = checker.main(
+        [
+            "--repo-root",
+            str(repo_root),
+            "--registry-path",
+            str(repo_root / "model" / "registry.yaml"),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload["blocking_rows"] == []
+    ga3c_row = next(row for row in payload["inventory"] if row["identifier"] == "ga3c_cadrl_iros18")
+    assert ga3c_row["checksum_status"] == "verified"
+
+
 def test_run_model_step_smoke_uses_factory_model_prediction_and_gymnasium_step(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

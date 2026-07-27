@@ -375,14 +375,19 @@ class TestVerificationScript:
         evidence_path = tmp_path / "docs" / "evidence.txt"
         evidence_path.parent.mkdir(parents=True)
         evidence_path.write_text("durable evidence", encoding="utf-8")
+        evidence_digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
         manifest = {
             "release_tag": "test",
             "release_id": "test_release",
-            "artifact_set": {"bundle_evidence": {"files": []}},
+            "artifact_set": {
+                "bundle_evidence": {
+                    "files": [{"path": "docs/evidence.txt", "sha256": evidence_digest}],
+                },
+            },
             "entries": [
                 {
                     "path": "docs/evidence.txt",
-                    "sha256": hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+                    "sha256": evidence_digest,
                 },
             ],
         }
@@ -399,7 +404,82 @@ class TestVerificationScript:
         )
 
         assert report["overall_verdict"] == "pass"
+        assert report["verdicts"]["bundle_evidence_coverage"]["match"] is True
         assert report["verdicts"]["repository_entries"][0]["match"] is True
+
+    def test_repository_entry_verification_requires_complete_bundle_coverage(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        evidence_path = tmp_path / "docs" / "evidence.txt"
+        evidence_path.parent.mkdir(parents=True)
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        digest = hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+        manifest = {
+            "release_tag": "test",
+            "release_id": "test_release",
+            "artifact_set": {
+                "bundle_evidence": {
+                    "files": [{"path": "docs/evidence.txt", "sha256": digest}],
+                },
+            },
+            "entries": [
+                {
+                    "path": "docs/other.txt",
+                    "sha256": digest,
+                },
+            ],
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "fail"
+        assert report["verdicts"]["bundle_evidence_coverage"]["match"] is False
+        assert report["verdicts"]["bundle_evidence_coverage"]["errors"] == [
+            "Bundle-evidence file 'docs/evidence.txt' is missing from checksum entries.",
+        ]
+
+    def test_null_bundle_archive_cannot_fall_back_to_repository_entries(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from scripts.repro.verify_release_checksums import verify_release
+
+        evidence_path = tmp_path / "evidence.txt"
+        evidence_path.write_text("durable evidence", encoding="utf-8")
+        manifest = {
+            "release_tag": "test",
+            "artifact_set": {"bundle_archive": None},
+            "entries": [
+                {
+                    "path": "evidence.txt",
+                    "sha256": hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+                },
+            ],
+        }
+        manifest_path = tmp_path / "manifest.yaml"
+        manifest_path.write_text(yaml.dump(manifest), encoding="utf-8")
+
+        report = verify_release(
+            manifest_path=manifest_path,
+            bundle_path=None,
+            output_dir=tmp_path / "output",
+            download=False,
+            repo_root=tmp_path,
+        )
+
+        assert report["overall_verdict"] == "error"
+        assert report["errors"] == ["artifact_set.bundle_archive must be a mapping."]
 
     def test_verification_fails_closed_for_non_mapping_manifest(self, tmp_path: Path) -> None:
         from scripts.repro.verify_release_checksums import verify_release

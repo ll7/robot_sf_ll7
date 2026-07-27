@@ -146,7 +146,11 @@ def _verify_repository_entries(entries: Any, repo_root: Path) -> list[dict[str, 
             result["error"] = f"entries[{index}] is missing a non-empty path."
             results.append(result)
             continue
-        if not isinstance(expected_sha256, str) or len(expected_sha256) != 64:
+        if (
+            not isinstance(expected_sha256, str)
+            or len(expected_sha256) != 64
+            or any(character not in "0123456789abcdefABCDEF" for character in expected_sha256)
+        ):
             result["error"] = f"entries[{index}] has an invalid SHA-256 digest."
             results.append(result)
             continue
@@ -170,12 +174,76 @@ def _verify_repository_entries(entries: Any, repo_root: Path) -> list[dict[str, 
 
         actual_sha256 = _sha256_file(path)
         result["actual_sha256"] = actual_sha256
-        result["match"] = actual_sha256 == expected_sha256
+        result["match"] = actual_sha256 == expected_sha256.lower()
         results.append(result)
     return results
 
 
-def verify_release(  # noqa: C901 - each manifest/download/checksum failure needs a structured report.
+def _repository_entry_digests(entries: Any) -> tuple[dict[str, str], list[str]]:
+    """Index repository checksum entries by path for bundle-coverage validation."""
+    if not isinstance(entries, list) or not entries:
+        return {}, ["Manifest entries must be a non-empty list."]
+
+    entry_digests: dict[str, str] = {}
+    errors: list[str] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("path")
+        digest = entry.get("sha256")
+        if not isinstance(path, str) or not path or not isinstance(digest, str):
+            continue
+        if path in entry_digests:
+            errors.append(f"Duplicate repository checksum entry for {path!r}.")
+            continue
+        entry_digests[path] = digest.lower()
+    return entry_digests, errors
+
+
+def _bundle_file_coverage_errors(
+    index: int,
+    bundle_file: Any,
+    entry_digests: dict[str, str],
+    bundle_paths: set[str],
+) -> list[str]:
+    """Validate one bundle file declaration against repository checksum entries."""
+    if not isinstance(bundle_file, dict):
+        return [f"artifact_set.bundle_evidence.files[{index}] must be a mapping."]
+    path = bundle_file.get("path")
+    digest = bundle_file.get("sha256")
+    if not isinstance(path, str) or not path:
+        return [f"artifact_set.bundle_evidence.files[{index}] is missing a non-empty path."]
+    if path in bundle_paths:
+        return [f"Duplicate bundle-evidence file declaration for {path!r}."]
+    bundle_paths.add(path)
+    if not isinstance(digest, str) or not digest:
+        return [f"Bundle-evidence file {path!r} is missing a SHA-256 digest."]
+    entry_digest = entry_digests.get(path)
+    if entry_digest is None:
+        return [f"Bundle-evidence file {path!r} is missing from checksum entries."]
+    if entry_digest != digest.lower():
+        return [f"Bundle-evidence file {path!r} has a checksum inconsistent with entries."]
+    return []
+
+
+def _verify_bundle_evidence_coverage(bundle_evidence: Any, entries: Any) -> list[str]:
+    """Verify every declared bundle-evidence file has an identical checksum entry."""
+    if not isinstance(bundle_evidence, dict):
+        return ["artifact_set.bundle_evidence must be a mapping."]
+    files = bundle_evidence.get("files")
+    if not isinstance(files, list) or not files:
+        return ["artifact_set.bundle_evidence.files must be a non-empty list."]
+
+    entry_digests, errors = _repository_entry_digests(entries)
+    bundle_paths: set[str] = set()
+    for index, bundle_file in enumerate(files):
+        errors.extend(
+            _bundle_file_coverage_errors(index, bundle_file, entry_digests, bundle_paths),
+        )
+    return errors
+
+
+def verify_release(  # noqa: C901, PLR0912 - failures need distinct structured reports.
     manifest_path: Path,
     bundle_path: Path | None,
     output_dir: Path,
@@ -230,8 +298,24 @@ def verify_release(  # noqa: C901 - each manifest/download/checksum failure need
         report["overall_verdict"] = "error"
         return report
 
-    expected_bundle = artifact_set.get("bundle_archive")
-    if expected_bundle is None:
+    has_bundle_archive = "bundle_archive" in artifact_set
+    has_bundle_evidence = "bundle_evidence" in artifact_set
+    if has_bundle_archive and has_bundle_evidence:
+        report["errors"].append(
+            "artifact_set must define exactly one of bundle_archive or bundle_evidence.",
+        )
+        report["overall_verdict"] = "error"
+        return report
+    if has_bundle_evidence:
+        coverage_errors = _verify_bundle_evidence_coverage(
+            artifact_set["bundle_evidence"],
+            manifest.get("entries"),
+        )
+        report["verdicts"]["bundle_evidence_coverage"] = {
+            "match": not coverage_errors,
+            "errors": coverage_errors,
+        }
+        report["errors"].extend(coverage_errors)
         repository_results = _verify_repository_entries(
             manifest.get("entries"),
             repo_root or Path.cwd(),
@@ -244,6 +328,13 @@ def verify_release(  # noqa: C901 - each manifest/download/checksum failure need
                 )
         report["overall_verdict"] = "pass" if not report["errors"] else "fail"
         return report
+    if not has_bundle_archive:
+        report["errors"].append(
+            "artifact_set must define exactly one of bundle_archive or bundle_evidence.",
+        )
+        report["overall_verdict"] = "error"
+        return report
+    expected_bundle = artifact_set["bundle_archive"]
     if not isinstance(expected_bundle, dict):
         report["errors"].append("artifact_set.bundle_archive must be a mapping.")
         report["overall_verdict"] = "error"

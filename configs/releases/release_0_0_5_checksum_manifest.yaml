@@ -74,4 +74,4 @@ entries:
   - path: docs/context/evidence/issue_6153_frozen_candidate_manifest.yaml.sha256
     sha256: b9223fb6374545b34419d0448aa6d68c65e053c5d17b04a78e47cc22b23f2b61
   - path: configs/benchmarks/releases/release_0_0_5_preflight_checklist.yaml
-    sha256: ad31d517819d9bbea1ffd8856330d3888f60456565cbfea23b0f2bd0bce74484
+    sha256: 02cbbc2569ab30ce24708b742b66b0034c85036ddd37a914a48cec8a7abaff4d

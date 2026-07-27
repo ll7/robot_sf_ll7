@@ -154,7 +154,7 @@ class TestKdePlotGridCreation:
 # --------------------------------------------------------------------------- #
 
 
-def _run_visualize(positions, bounds, *, bw_method="scott"):
+def _run_visualize(positions, bounds, *, bw_method=None):
     """Invoke the visualizer with mocked KDE/matplotlib and return the spies.
 
     Returns a namespace of the injected mocks so individual tests can assert on
@@ -174,15 +174,15 @@ def _run_visualize(positions, bounds, *, bw_method="scott"):
     plt_mock = MagicMock(name="plt")
     plt_mock.subplots.return_value = (fig, ax)
 
+    visualize_kwargs = {}
+    if bw_method is not None:
+        visualize_kwargs["kde_bandwith_method"] = bw_method
+
     with (
         patch.object(recording_analysis, "plt", plt_mock),
         patch.object(recording_analysis, "gaussian_kde", kde_cls),
     ):
-        visualize_kde_of_pedestrians_on_map(
-            positions,
-            map_def,
-            kde_bandwith_method=bw_method,
-        )
+        visualize_kde_of_pedestrians_on_map(positions, map_def, **visualize_kwargs)
 
     return SimpleNamespace(
         map_def=map_def,

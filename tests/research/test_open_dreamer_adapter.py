@@ -51,6 +51,7 @@ from robot_sf.research.open_dreamer_adapter import (
     StructuredObservationStep,
     adapt_episode,
     adapt_episodes,
+    canonical_split,
     map_action_to_velocity,
     validate_split_leakage,
 )
@@ -803,6 +804,24 @@ def test_validate_split_leakage_passes_for_deterministic_assignment() -> None:
     assert report.leaked_keys == ()
     # Every split name is represented in the canonical names tuple.
     assert set(report.split_scenario_seed_keys).issubset({"train", "validation", "test"})
+
+
+@pytest.mark.parametrize(
+    ("scenario_id", "seed", "message"),
+    [
+        ("", 101, "scenario_id must be a non-empty string"),
+        ("classic_cross_trap_low", True, "seed must be a non-boolean integer"),
+        ("classic_cross_trap_low", "101", "seed must be a non-boolean integer"),
+    ],
+)
+def test_canonical_split_rejects_malformed_metadata(
+    scenario_id: object,
+    seed: object,
+    message: str,
+) -> None:
+    """The public split helper shares the adapter's fail-closed metadata boundary."""
+    with pytest.raises(OpenDreamerAdapterError, match=message):
+        canonical_split(scenario_id, seed)  # type: ignore[arg-type]
 
 
 def test_validate_split_leakage_fails_closed_on_cross_split_key() -> None:

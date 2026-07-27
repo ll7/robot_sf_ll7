@@ -496,6 +496,12 @@ def canonical_split(scenario_id: str, seed: int) -> str:
     Returns:
         One of :data:`SPLIT_NAMES`.
     """
+    if not isinstance(scenario_id, str) or not scenario_id:
+        raise OpenDreamerAdapterError(
+            f"scenario_id must be a non-empty string, got {scenario_id!r}"
+        )
+    if isinstance(seed, bool) or not isinstance(seed, int):
+        raise OpenDreamerAdapterError(f"seed must be a non-boolean integer, got {seed!r}")
     return assign_deterministic_split(scenario_id, seed)
 
 

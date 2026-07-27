@@ -258,6 +258,18 @@ def _git_provenance() -> dict[str, Any]:
     }
 
 
+def _require_clean_execution_provenance(provenance: Mapping[str, Any]) -> str:
+    """Return a usable execution commit or reject an unreproducible campaign launch."""
+    git_head = provenance.get("git_head")
+    if not _is_hex(git_head, length=40):
+        raise AuthorizedCampaignError("authorized campaign requires a known 40-character git HEAD")
+    if provenance.get("git_worktree_dirty") is not False:
+        raise AuthorizedCampaignError(
+            "authorized campaign requires a clean git worktree before registered execution"
+        )
+    return str(git_head)
+
+
 def _repo_rel(path: pathlib.Path) -> str:
     try:
         return path.resolve().relative_to(REPO_ROOT).as_posix()
@@ -1154,6 +1166,7 @@ def _validate_episode_provenance(  # noqa: C901
     seed: int,
     horizon_steps: int,
     dt_seconds: float,
+    expected_repo_commit: str,
 ) -> str:
     """Validate the row provenance required before a cell can become campaign input."""
     provenance = record.get("result_provenance")
@@ -1181,6 +1194,13 @@ def _validate_episode_provenance(  # noqa: C901
     if not _is_hex(repo_commit, length=40):
         raise AuthorizedCampaignError(
             "raw episode result_provenance.repo_commit must be a 40-character git SHA"
+        )
+    if not _is_hex(expected_repo_commit, length=40):
+        raise AuthorizedCampaignError("authorized campaign has no valid execution commit")
+    if str(repo_commit).lower() != expected_repo_commit.lower():
+        raise AuthorizedCampaignError(
+            "raw episode result_provenance.repo_commit does not match the authorized execution "
+            "commit"
         )
     record_git_hash = record.get("git_hash")
     if record_git_hash is not None and record_git_hash != repo_commit:
@@ -1368,6 +1388,7 @@ def _cell_summary_from_episode(
     seed: int,
     horizon_steps: int,
     dt_seconds: float,
+    expected_repo_commit: str,
 ) -> dict[str, Any]:
     """Convert one canonical map-runner episode into the reviewed cell contract."""
     if str(record.get("scenario_id")) != scenario_id:
@@ -1391,6 +1412,7 @@ def _cell_summary_from_episode(
         seed=seed,
         horizon_steps=horizon_steps,
         dt_seconds=dt_seconds,
+        expected_repo_commit=expected_repo_commit,
     )
 
     metadata = record.get("algorithm_metadata")
@@ -1654,6 +1676,9 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
         raise AuthorizedCampaignError("runtime preflight requires at least one disjoint seed")
     if set(preflight_seeds) & set(manifest.seeds):
         raise AuthorizedCampaignError("runtime preflight seeds overlap registered seeds 111-140")
+    execution_commit = _git_head()
+    if not _is_hex(execution_commit, length=40):
+        raise AuthorizedCampaignError("runtime preflight requires a known 40-character git HEAD")
 
     root = pathlib.Path(output_root)
     root.mkdir(parents=True, exist_ok=True)
@@ -1752,6 +1777,7 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
                         seed=record_seed,
                         horizon_steps=manifest.horizon_steps,
                         dt_seconds=manifest.dt_seconds,
+                        expected_repo_commit=execution_commit,
                     )
                     rows.append(cell)
                     mode = str(cell["execution_mode"])
@@ -1922,6 +1948,8 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
         if report_path is not None
         else raw_path / "campaign_run_report.json"
     )
+    execution_provenance = _git_provenance()
+    execution_commit = _require_clean_execution_provenance(execution_provenance)
     descriptor_path = _prepare_authorized_output_root(raw_path, manifest, resume=resume)
     manifest_path = raw_path / "campaign_manifest.json"
     write_manifest(manifest, manifest_path)
@@ -1946,7 +1974,7 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
         "fallback_or_degraded_policy": "reject",
         "batches": [],
         "exclusions": [],
-        "git_provenance": _git_provenance(),
+        "git_provenance": execution_provenance,
         "command_environment_manifest": _campaign_command_environment_manifest(manifest),
     }
     rows: list[dict[str, Any]] = []
@@ -2020,6 +2048,7 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
                         seed=seed,
                         horizon_steps=manifest.horizon_steps,
                         dt_seconds=manifest.dt_seconds,
+                        expected_repo_commit=execution_commit,
                     )
                     cell_key = (
                         scenario_id,

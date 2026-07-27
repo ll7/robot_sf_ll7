@@ -331,6 +331,7 @@ def test_episode_provenance_requires_canonical_row_contract() -> None:
             seed=211,
             horizon_steps=600,
             dt_seconds=0.1,
+            expected_repo_commit="a" * 40,
         )
 
     malformed = {
@@ -349,6 +350,34 @@ def test_episode_provenance_requires_canonical_row_contract() -> None:
             seed=211,
             horizon_steps=600,
             dt_seconds=0.1,
+            expected_repo_commit="a" * 40,
+        )
+
+
+def test_episode_provenance_requires_the_authorized_execution_commit() -> None:
+    """Rows from another revision cannot be resumed into a registered campaign."""
+    record = {
+        "result_provenance": {
+            "schema_version": "benchmark_row_provenance.v1",
+            "scenario_id": PREFLIGHT_SCENARIO,
+            "seed": 211,
+            "config_hash": "a" * 16,
+            "repo_commit": "a" * 40,
+            "simulator_settings": {"horizon": 600, "dt": 0.1},
+            "postprocessing": [
+                {"step": "compute_all_metrics", "status": "completed"},
+                {"step": "post_process_metrics", "status": "completed"},
+            ],
+        }
+    }
+    with pytest.raises(campaign.AuthorizedCampaignError, match="does not match"):
+        campaign._validate_episode_provenance(
+            record,
+            scenario_id=PREFLIGHT_SCENARIO,
+            seed=211,
+            horizon_steps=600,
+            dt_seconds=0.1,
+            expected_repo_commit="b" * 40,
         )
 
 
@@ -452,6 +481,11 @@ def test_authorized_campaign_fake_runner_covers_exact_2160_native_cells(
         return {"written": len(rows), "failed_jobs": 0}
 
     monkeypatch.setattr(campaign, "_run_native_batch", fake_run_native_batch)
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {"git_head": "a" * 40, "git_worktree_dirty": False, "git_status_short": []},
+    )
     manifest = _manifest()
     report = campaign.execute_authorized_campaign(
         manifest,
@@ -563,6 +597,11 @@ def test_authorized_campaign_rejection_quarantines_non_native_rows(
         return {"written": len(rows), "failed_jobs": 0}
 
     monkeypatch.setattr(campaign, "_run_native_batch", fake_run_native_batch)
+    monkeypatch.setattr(
+        campaign,
+        "_git_provenance",
+        lambda: {"git_head": "a" * 40, "git_worktree_dirty": False, "git_status_short": []},
+    )
     manifest = _manifest()
     cells = tmp_path / "cells.jsonl"
     report_path = tmp_path / "report.json"

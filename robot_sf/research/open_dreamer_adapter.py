@@ -207,6 +207,15 @@ class ActionBounds:
         }
 
 
+def _require_action_bounds(bounds: Any) -> ActionBounds:
+    """Return validated action bounds without leaking an implementation-level attribute error."""
+    if not isinstance(bounds, ActionBounds):
+        raise OpenDreamerAdapterError(
+            f"action_bounds must be an ActionBounds instance, got {type(bounds).__name__}"
+        )
+    return bounds
+
+
 @dataclass(frozen=True, slots=True)
 class StructuredObservationStep:
     """One step of the leakage-safe structured-observation view.
@@ -476,6 +485,7 @@ def map_action_to_velocity(
         OpenDreamerAdapterError: If the action is not length-2, is out of ``[-1, 1]``, is
             non-finite, or maps to a non-finite velocity.
     """
+    bounds = _require_action_bounds(bounds)
     try:
         arr = np.asarray(normalized, dtype=float)
     except (OverflowError, TypeError, ValueError) as exc:
@@ -598,6 +608,7 @@ def adapt_episode(
             action bounds, or the stored split is invalid or differs from its canonical deterministic
             assignment.
     """
+    action_bounds = _require_action_bounds(action_bounds)
     try:
         validate_rl_trajectory_episode(episode)
     except (TypeError, ValueError) as exc:
@@ -688,6 +699,7 @@ def adapt_episodes(
         OpenDreamerAdapterError: If the batch leaks a ``(scenario_id, seed)`` key across splits or
             any episode fails the fail-closed contract in :func:`adapt_episode`.
     """
+    action_bounds = _require_action_bounds(action_bounds)
     leakage_report = validate_split_leakage(episodes)
     if not leakage_report.ok:
         raise OpenDreamerAdapterError(

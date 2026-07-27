@@ -620,6 +620,17 @@ def test_action_bounds_validate_non_degenerate_envelope() -> None:
         ActionBounds(max_linear_speed=True, max_angular_speed=1.0)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("invalid_bounds", [None, {"max_linear_speed": 2.0}])
+def test_public_adapter_surfaces_reject_non_action_bounds(invalid_bounds: object) -> None:
+    """Public adapter entry points keep malformed bounds inside the fail-closed error boundary."""
+    with pytest.raises(OpenDreamerAdapterError, match="action_bounds must be an ActionBounds"):
+        map_action_to_velocity([0.0, 0.0], invalid_bounds)  # type: ignore[arg-type]
+    with pytest.raises(OpenDreamerAdapterError, match="action_bounds must be an ActionBounds"):
+        adapt_episode(_make_episode(step_count=1), action_bounds=invalid_bounds)  # type: ignore[arg-type]
+    with pytest.raises(OpenDreamerAdapterError, match="action_bounds must be an ActionBounds"):
+        adapt_episodes([], action_bounds=invalid_bounds)  # type: ignore[arg-type]
+
+
 def test_action_bounds_and_mapping_wrap_overflowing_numeric_inputs() -> None:
     """Huge numeric inputs stay inside the adapter's public fail-closed error boundary."""
     huge = 10**400

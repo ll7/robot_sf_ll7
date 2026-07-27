@@ -132,9 +132,11 @@ def test_ensure_report_tree_generated_root_under_artifact_root(
     assert (expected_root / "figures").is_dir()
     assert (expected_root / "data").is_dir()
     assert (expected_root / "configs").is_dir()
-    # The directory tree stays inside tmp_path (no repository output/ created).
-    assert "output" not in str(expected_root.resolve())
+    # The directory tree stays inside the configured artifact root.
     assert expected_root.resolve().is_relative_to(tmp_path.resolve())
+    assert expected_root.relative_to(tmp_path) == Path("research_reports") / (
+        f"{EXPECTED_TIMESTAMP}_my_exp"
+    )
 
 
 def test_ensure_report_tree_paths_are_layout_not_yet_files(
@@ -178,7 +180,7 @@ def test_ensure_report_tree_explicit_output_override(monkeypatch, tmp_path: Path
     paths = ap.ensure_report_tree("ignored-name", output_override=override)
 
     assert paths["root"] == override
-    assert "research_reports" not in str(override)
+    assert paths["root"].relative_to(tmp_path) == Path("custom_report")
     # Tree is created at the override location.
     assert override.is_dir()
     assert (override / "figures").is_dir()

@@ -34,7 +34,9 @@ contract before any bounded campaign:
   pre-correction lineage only).
 - Corrected recertification:
   `docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json`
-  (SHA-256 `7bade1d5008d66eba9dfe6c9c72e72e5e6720e7acb96f17a90a61a4f0798f3d0`).
+  (artifact SHA-256 `0d643f2c36d0f1f11e2be2351359567215d47ed216d156018fc6909a79a42cfe`;
+  its recorded recertification SHA-256 is
+  `7bade1d5008d66eba9dfe6c9c72e72e5e6720e7acb96f17a90a61a4f0798f3d0`).
   Note: the #6139 closing comment quotes a different SHA-256
   (`1406ea54...`); the file is the authority here, not the comment.
 - Recertification left all 17 records **unchanged**, but its corrected
@@ -64,6 +66,8 @@ The normal `--contract` path reads this committed file, verifies its raw bytes,
 and records its path and hash in report provenance. A `--search-space` override
 is accepted only when it has the same raw SHA-256; the runner still loads the
 canonical contract path, so candidate-pool bounds cannot silently drift.
+The candidate-pool seed is likewise frozen at `42`; a `--contract` invocation
+with a different `--seed` fails before sampling.
 
 ## Train-only ranking (issue #6103 gap 1)
 

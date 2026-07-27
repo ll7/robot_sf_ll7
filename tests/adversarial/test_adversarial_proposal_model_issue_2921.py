@@ -83,6 +83,10 @@ def test_check_contract_validates_frozen_contract() -> None:
     assert verdict["checks"]["excluded_from_nominal_fit_count"] == 6
     assert verdict["checks"]["excluded_from_nominal_fit_ids_sha256_matches_contract"] is True
     assert verdict["checks"]["search_space_raw_sha256_matches_contract"] is True
+    assert (
+        verdict["checks"]["recertification_artifact_sha256_observed"]
+        == (verdict["checks"]["recertification_artifact_sha256_expected"])
+    )
     assert verdict["checks"]["negative_regression_full_archive_same_fit_entries"] is True
     assert verdict["checks"]["negative_regression_non_fit_dropped_count"] == 11
     assert verdict["checks"]["negative_regression_held_out_dropped_count"] == 5
@@ -154,6 +158,15 @@ def test_frozen_contract_factory_preserves_nominal_fit_and_exclusion_lineage() -
     assert provenance["fit_only_initialized"] is True
     assert provenance["model_entry_count"] == 6
     assert provenance["planner_drift"] == {}
+
+
+def test_frozen_contract_factory_rejects_recertification_artifact_hash_drift() -> None:
+    """The contract pins the raw corrected-recertification artifact bytes."""
+    contract = json.loads(_CONTRACT.read_text(encoding="utf-8"))
+    contract["source_lineage"]["corrected_recertification_artifact_sha256"] = "wrong-hash"
+
+    with pytest.raises(ValueError, match="recertification artifact SHA-256 mismatch"):
+        FailureArchiveProposalModel.from_frozen_contract(contract, repo_root=_REPO_ROOT)
 
 
 def test_negative_regression_excluded_records_cannot_change_scores_or_ranks() -> None:
@@ -746,6 +759,7 @@ def test_normal_contract_runner_uses_frozen_fit_factory_and_held_out_split(
     assert provenance["eval_size"] == 5
     frozen_contract = provenance["frozen_contract"]
     assert frozen_contract["fit_entry_count"] == 6
+    assert frozen_contract["candidate_pool_seed"] == 42
     assert (
         frozen_contract["fit_entry_ids_sha256"]
         == load_issue_3275_contract(_CONTRACT)["fit"]["entry_ids_sha256"]
@@ -863,6 +877,28 @@ def test_contract_runner_rejects_a_budget_outside_the_frozen_contract(
             _CONTRACT.as_posix(),
             "--budget",
             "30",
+        ],
+    )
+
+    assert script_main() == 2
+
+
+def test_contract_runner_rejects_a_non_frozen_candidate_pool_seed(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A contract run cannot select a post-hoc candidate pool with another seed."""
+    from scripts.adversarial.run_proposal_vs_random_issue_2921 import main as script_main
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "run_proposal_vs_random_issue_2921.py",
+            "--contract",
+            _CONTRACT.as_posix(),
+            "--seed",
+            "43",
+            "--output",
+            (tmp_path / "report.json").as_posix(),
         ],
     )
 

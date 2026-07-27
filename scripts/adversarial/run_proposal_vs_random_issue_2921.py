@@ -309,6 +309,7 @@ def build_archive_evaluation_provenance(
             "fit_entry_ids_sha256": frozen_contract["fit"]["entry_ids_sha256"],
             "candidate_budget_per_arm": frozen_contract["budget"]["candidate_budget_per_arm"],
             "candidate_pool_size": frozen_contract["budget"]["candidate_pool_size"],
+            "candidate_pool_seed": frozen_contract["budget"]["candidate_pool_seed"],
             "model": model_provenance or {},
             "search_space": search_space_provenance or {},
         }
@@ -495,13 +496,21 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
     contract = load_issue_3275_contract(contract_path)
     root = repo_root if repo_root is not None else Path.cwd()
     source = contract["source_lineage"]
-    recert = json.loads((root / source["corrected_recertification_path"]).read_text("utf-8"))
+    recertification_path = root / source["corrected_recertification_path"]
+    recertification_bytes = recertification_path.read_bytes()
+    recert = json.loads(recertification_bytes)
     archive = json.loads((root / source["pre_correction_archive_path"]).read_text("utf-8"))
     checks: dict[str, Any] = {
         "contract_schema_version": contract["schema_version"],
         "contract_path": str(contract_path),
         "recertification_sha256_expected": source["corrected_recertification_sha256"],
         "recertification_sha256_observed": recert.get("recertification_sha256"),
+        "recertification_artifact_sha256_expected": source.get(
+            "corrected_recertification_artifact_sha256"
+        ),
+        "recertification_artifact_sha256_observed": hashlib.sha256(
+            recertification_bytes
+        ).hexdigest(),
         "recertification_all_unchanged": (
             recert.get("counts", {}).get("before_after_status", {}).get("unchanged")
             == recert.get("counts", {}).get("record_count")
@@ -534,6 +543,11 @@ def run_check_contract(contract_path: Path, *, repo_root: Path | None = None) ->
             f"observed={recert.get('recertification_sha256')} "
             f"expected={source['corrected_recertification_sha256']}"
         )
+    if (
+        checks["recertification_artifact_sha256_observed"]
+        != checks["recertification_artifact_sha256_expected"]
+    ):
+        failures.append("corrected recertification artifact SHA-256 does not match contract")
 
     fit_cfg = contract["fit"]
     excl_cfg = contract["exclusions"]
@@ -775,6 +789,7 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
             "contract": None,
             "candidate_budget_per_arm": args.budget,
             "candidate_pool_size": max(args.budget * 5, 50),
+            "candidate_pool_seed": args.seed,
             "expected_execution_commit": None,
         }
     from robot_sf.adversarial.proposal_model import load_issue_3275_contract
@@ -793,6 +808,7 @@ def _contract_frozen_params(args: argparse.Namespace) -> dict[str, Any]:
         "contract": contract,
         "candidate_budget_per_arm": contract["budget"]["candidate_budget_per_arm"],
         "candidate_pool_size": contract["budget"]["candidate_pool_size"],
+        "candidate_pool_seed": contract["budget"]["candidate_pool_seed"],
         "expected_execution_commit": contract["target_planner"]["execution_commit"],
     }
 
@@ -1197,6 +1213,11 @@ def main() -> int:
     if contract is not None and args.budget != run_budget:
         return _contract_configuration_error(
             f"--budget {args.budget} does not match frozen candidate_budget_per_arm {run_budget}"
+        )
+    if contract is not None and args.seed != frozen["candidate_pool_seed"]:
+        return _contract_configuration_error(
+            f"--seed {args.seed} does not match frozen candidate_pool_seed "
+            f"{frozen['candidate_pool_seed']}"
         )
     if candidate_pool_size < 2 * run_budget:
         return _contract_configuration_error(

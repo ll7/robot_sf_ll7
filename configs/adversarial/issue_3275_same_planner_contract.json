@@ -20,6 +20,7 @@
     "pre_correction_lineage_note": "Tracked archive SHA-256 from PR #5905; pre-correction source lineage only, not the final frozen input.",
     "corrected_recertification_path": "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json",
     "corrected_recertification_sha256": "7bade1d5008d66eba9dfe6c9c72e72e5e6720e7acb96f17a90a61a4f0798f3d0",
+    "corrected_recertification_artifact_sha256": "0d643f2c36d0f1f11e2be2351359567215d47ed216d156018fc6909a79a42cfe",
     "derivation_basis": "docs/context/evidence/issue_5305_certified_archive/recertification_issue_6139.json. Final fit IDs/count/hash derive from this file's records, NOT from the #6139 closing comment, which quotes a different SHA-256 (1406ea545cd07b9e2d96154e3ce10d141c7a121e8c8bc1b736c802b99a796a00) and is not the authority here.",
     "recertification_status": "all 17 records are unchanged (before_after_status.unchanged = 17), but the corrected eligibility decisions are authoritative: the final nominal fit set excludes the six group-crossing stress_only records without replacement.",
     "registration_execution_commit": "ecf997d392a4f2c1a4fb5a56e8101acb030b7e2f"
@@ -147,8 +148,9 @@
   "budget": {
     "candidate_budget_per_arm": 12,
     "candidate_pool_size": 64,
+    "candidate_pool_seed": 42,
     "identical_budget_both_arms": true,
-    "candidate_pool_seed_policy": "single shared candidate pool generated deterministically from one predeclared seed; both arms draw from the same pool under identical budget"
+    "candidate_pool_seed_policy": "single shared candidate pool generated deterministically from the frozen candidate_pool_seed; both arms draw from the same pool under identical budget"
   },
   "power_sensitivity": {
     "method": "fisher_exact_two_proportion_two_sided",

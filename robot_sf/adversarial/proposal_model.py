@@ -672,7 +672,7 @@ class FailureArchiveProposalModel:
         )
 
     @classmethod
-    def from_frozen_contract(
+    def from_frozen_contract(  # noqa: C901
         cls,
         contract_path_or_data: str | Path | dict[str, Any],
         *,
@@ -694,7 +694,25 @@ class FailureArchiveProposalModel:
         contract = load_issue_3275_contract(contract_path_or_data)
         root = Path(repo_root) if repo_root is not None else Path.cwd()
         source = contract["source_lineage"]
-        recert = _load_json(root / source["corrected_recertification_path"])
+        recertification_path = root / source["corrected_recertification_path"]
+        recertification_bytes = recertification_path.read_bytes()
+        expected_artifact_sha = source.get("corrected_recertification_artifact_sha256")
+        if not isinstance(expected_artifact_sha, str) or not expected_artifact_sha:
+            raise ValueError(
+                "frozen contract is missing corrected recertification artifact SHA-256"
+            )
+        observed_artifact_sha = hashlib.sha256(recertification_bytes).hexdigest()
+        if observed_artifact_sha != expected_artifact_sha:
+            raise ValueError(
+                "corrected recertification artifact SHA-256 mismatch: "
+                f"observed={observed_artifact_sha} expected={expected_artifact_sha}"
+            )
+        try:
+            recert = json.loads(recertification_bytes)
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError(f"failed to load corrected recertification artifact: {exc}") from exc
+        if not isinstance(recert, dict):
+            raise ValueError("corrected recertification artifact must be a JSON object")
         archive = _load_json(root / source["pre_correction_archive_path"])
         expected_recert_sha = source["corrected_recertification_sha256"]
         if recert.get("recertification_sha256") != expected_recert_sha:
@@ -751,6 +769,8 @@ class FailureArchiveProposalModel:
             expected_planner=planner_cfg["id"],
             expected_planner_config_sha256=planner_cfg["config_sha256"],
         )
+        if planner_drift:
+            raise ValueError(f"frozen fit payload has planner/family drift: {planner_drift}")
         model = cls(
             payload.archive_payload,
             search_space=None,
@@ -766,6 +786,7 @@ class FailureArchiveProposalModel:
             "non_eligible_fit_count": len(payload.non_eligible_fit_entry_ids),
             "excluded_count": len(payload.excluded_entry_ids),
             "recertification_sha256": payload.recertification_sha256,
+            "recertification_artifact_sha256": observed_artifact_sha,
             "pre_correction_archive_sha256": source["pre_correction_archive_sha256"],
             "fit_only_initialized": model.state == "active",
             "model_state": model.state,

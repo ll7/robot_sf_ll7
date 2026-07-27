@@ -427,12 +427,15 @@ that dispatcher and the active `main` protection configuration have both been ve
 runs inside the native merge queue and enforces the same fail-closed preflight as `gh-pr-merger`
 before the queue auto-merges a PR:
 
-- **Workflow**: `.github/workflows/merge-queue-gate.yml` (reports the required check context
-  advisory on source-head `pull_request` label/synchronization events, enforces it fail-closed on
-  queue-time `merge_group`, and supports `workflow_dispatch` with a PR number for advisory
-  evaluation). The source-head invocation exits successfully after recording a failing audit so
-  review can reach the exact-head verdict/label transition; the queue-time invocation is the
-  authoritative blocker.
+- **Workflow**: `.github/workflows/merge-queue-gate.yml` (checks out the gate implementation from
+  the trusted base revision rather than the evaluated PR or synthetic merge-group tree, with
+  checkout credentials disabled; reports the required check context advisory on source-head
+  `pull_request` label/synchronization events, enforces it fail-closed on queue-time
+  `merge_group`, and supports `workflow_dispatch` with a PR number for advisory evaluation). If a
+  source-head base predates this new gate file, the advisory run records a notice and skips the
+  evaluation; a queue-time run fails closed when the trusted implementation is unavailable. The
+  source-head invocation exits successfully after recording a failing audit so review can reach
+  the exact-head verdict/label transition; the queue-time invocation is the authoritative blocker.
 - **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
 - **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
   `gate-verdict: accepted @ <head_sha>` trailer (reuses

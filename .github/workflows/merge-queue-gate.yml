@@ -47,8 +47,62 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Select trusted gate revision
+        id: trusted-gate
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            merge_group)
+              trusted_ref="$MERGE_GROUP_BASE_SHA"
+              ;;
+            pull_request)
+              trusted_ref="$PULL_REQUEST_BASE_SHA"
+              ;;
+            workflow_dispatch)
+              trusted_ref="$DEFAULT_BRANCH"
+              ;;
+            *)
+              echo "Unsupported event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          if [[ -z "$trusted_ref" ]]; then
+            echo "Trusted gate revision is empty for event $EVENT_NAME" >&2
+            exit 1
+          fi
+          printf 'ref=%s\n' "$trusted_ref" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Never execute gate code from the PR or synthetic merge-group tree:
+          # the evaluated change must not be able to weaken its own gate.
+          ref: ${{ steps.trusted-gate.outputs.ref }}
+          persist-credentials: false
+
+      - name: Verify trusted gate source
+        id: gate-source
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ -f scripts/dev/merge_queue_gate.py ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "available=false" >> "$GITHUB_OUTPUT"
+          if [[ "$EVENT_NAME" == "merge_group" ]]; then
+            echo "::error::Trusted base does not contain scripts/dev/merge_queue_gate.py; refusing the merge-group gate."
+            exit 1
+          fi
+          echo "::notice::Trusted base does not contain scripts/dev/merge_queue_gate.py; source-head evaluation is advisory and was skipped."
 
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -56,7 +110,7 @@ jobs:
           python-version: "3.12"
 
       - name: Run merge-queue gate (merge_group)
-        if: github.event_name == 'merge_group'
+        if: github.event_name == 'merge_group' && steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -67,7 +121,7 @@ jobs:
             --json
 
       - name: Report merge-queue gate context (pull_request head, advisory)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -84,7 +138,7 @@ jobs:
           exit 0
 
       - name: Run merge-queue gate (advisory, workflow_dispatch)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && steps.gate-source.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}

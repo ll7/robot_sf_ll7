@@ -166,6 +166,11 @@ def test_workflow_dispatch_passes_pr_number_through_environment() -> None:
     assert "pull_request:" in workflow
     assert "PR_NUMBER: ${{ github.event.pull_request.number }}" in workflow
     assert "PR-head evaluation is advisory; merge_group enforces the gate." in workflow
+    assert "MERGE_GROUP_BASE_SHA: ${{ github.event.merge_group.base_sha }}" in workflow
+    assert "PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}" in workflow
+    assert "ref: ${{ steps.trusted-gate.outputs.ref }}" in workflow
+    assert "persist-credentials: false" in workflow
+    assert "Trusted base does not contain scripts/dev/merge_queue_gate.py" in workflow
     assert "exit 0" in workflow
 
 

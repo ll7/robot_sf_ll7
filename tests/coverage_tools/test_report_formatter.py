@@ -95,6 +95,14 @@ def test_markdown_default_report_type_is_coverage(sample_coverage_data):
     assert "**Coverage**: 66.67%" in out
 
 
+def test_markdown_coverage_empty_payload_uses_defaults():
+    """An empty Markdown coverage payload falls back to zero totals without error."""
+    out = format_markdown_report({}, "coverage")
+    assert "**Total Lines**: 0" in out
+    assert "**Covered Lines**: 0" in out
+    assert "**Coverage**: 0.00%" in out
+
+
 # ---------------------------------------------------------------------------
 # Gap report
 # ---------------------------------------------------------------------------
@@ -185,6 +193,15 @@ def test_terminal_trend_empty_payload():
     assert "Oldest Coverage: 0.00%" in out
     assert "Trend Direction: unknown" in out
     assert "Rate: +0.00% per week" in out
+
+
+def test_markdown_trend_empty_payload_uses_defaults():
+    """An empty Markdown trend payload uses zero values and unknown direction."""
+    out = format_markdown_report({}, "trend")
+    assert "**Current Coverage**: 0.00%" in out
+    assert "**Oldest Coverage**: 0.00%" in out
+    assert "**Trend Direction**: unknown" in out
+    assert "**Rate**: +0.00% per week" in out
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +315,15 @@ def test_terminal_baseline_empty_payload_is_unchanged():
     assert "Current Coverage: 0.00%" in out
     assert "Change: +0.00% (UNCHANGED)" in out
     assert "WARNING" not in out
+
+
+def test_markdown_baseline_empty_payload_is_unchanged():
+    """An empty Markdown baseline payload defaults to zero values and no warning."""
+    out = format_markdown_report({}, "baseline")
+    assert "**Baseline Coverage**: 0.00%" in out
+    assert "**Current Coverage**: 0.00%" in out
+    assert "**Change**: +0.00% (➡️ UNCHANGED)" in out
+    assert "Warning: Coverage Decreased" not in out
 
 
 # ---------------------------------------------------------------------------

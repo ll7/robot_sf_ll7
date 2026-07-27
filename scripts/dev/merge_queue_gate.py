@@ -11,12 +11,15 @@ fail-closed preflight as ``gh-pr-merger``:
   - a current exact-head ``gate-verdict: accepted @ <head_sha>`` trailer
     (reuses ``scripts.dev.pr_loop_policy.has_current_accepted_gate_verdict``),
   - no unresolved actionable review threads,
+  - the merge queue's ``ALLGREEN`` strategy, so every constituent entry must
+    pass its own required gate check,
   - staleness-free base (fresh by construction inside the merge queue, where the
     base SHA equals current ``main``; evaluated against ``main`` in ``--pr`` mode).
 
 It emits a ``merge_queue_gate.v1`` audit record with the evaluated head SHA,
-base SHA, label set, gate-verdict status, staleness verdict, CI conclusion, and
-reviewer-thread resolution so the merge decision is inspectable and reproducible.
+queue merging strategy, base SHA, label set, gate-verdict status, staleness
+verdict, CI conclusion, and reviewer-thread resolution so the merge decision is
+inspectable and reproducible.
 
 The pure function ``evaluate_merge_gate`` is deterministic and exercised by
 ``--self-test`` (the validation contract for issue #6274). The CLI resolves a
@@ -52,6 +55,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts.dev.check_pr_ci_status import _latest_check_runs  # noqa: E402
 from scripts.dev.pr_loop_policy import (  # noqa: E402
     has_current_accepted_gate_verdict,
 )
@@ -70,6 +74,8 @@ FAILURE_CONCLUSIONS = {
     "startup_failure",
 }
 PENDING_STATUSES = {"expected", "in_progress", "pending", "queued", "requested", "waiting"}
+GATE_WORKFLOW_NAME = "Merge Queue Gate"
+GATE_JOB_NAME = "merge-queue-gate"
 
 # GitHub's documented native merge-queue ref is
 # ``refs/heads/gh-readonly-queue/<base>/pr-<number>-<source-sha>``.  The
@@ -92,6 +98,7 @@ class MergeGateAudit:
     head_sha: str
     merge_group_head_sha: str
     merge_group_head_binding: str
+    queue_merging_strategy: str
     base_sha: str
     main_sha: str
     labels: list[str]
@@ -193,6 +200,7 @@ def evaluate_merge_gate(
     ci_overall: str | None = None,
     threads_resolved: bool | None = None,
     merge_group_head_sha: str = "",
+    queue_merging_strategy: str = "",
 ) -> MergeGateAudit:
     """Evaluate the merge-queue gate for one PR snapshot.
 
@@ -246,8 +254,10 @@ def evaluate_merge_gate(
         merge_group_head_binding = (
             "match" if _merge_group_head_matches(merge_group_head_sha, head_sha) else "mismatch"
         )
+        queue_merging_strategy = str(queue_merging_strategy or "unknown").upper()
     else:
         merge_group_head_binding = "not_applicable"
+        queue_merging_strategy = "not_applicable"
 
     if base_sha and main_sha:
         staleness_verdict = "fresh" if base_sha == main_sha else "stale"
@@ -271,6 +281,8 @@ def evaluate_merge_gate(
         thread_resolution=thread_resolution,
         merge_group_head_binding=merge_group_head_binding,
     )
+    if queue_merging_strategy not in {"not_applicable", "ALLGREEN"}:
+        reasons.append(f"unsafe_merge_queue_strategy:{queue_merging_strategy}")
 
     passed = not reasons
 
@@ -280,6 +292,7 @@ def evaluate_merge_gate(
         head_sha=head_sha,
         merge_group_head_sha=merge_group_head_sha,
         merge_group_head_binding=merge_group_head_binding,
+        queue_merging_strategy=queue_merging_strategy,
         base_sha=base_sha,
         main_sha=str(main_sha or ""),
         labels=labels,
@@ -332,7 +345,17 @@ def _rollup_overall(rollup: list[dict[str, Any]]) -> str:
     """
     if not isinstance(rollup, list) or not rollup:
         return "pending"
-    for check in rollup:
+    effective_rollup, _superseded_count = _latest_check_runs(rollup)
+    without_current_gate = [
+        check
+        for check in effective_rollup
+        if not (
+            check.get("workflowName") == GATE_WORKFLOW_NAME and check.get("name") == GATE_JOB_NAME
+        )
+    ]
+    if not without_current_gate and len(effective_rollup) != len(without_current_gate):
+        return "success"
+    for check in without_current_gate:
         if not isinstance(check, dict):
             continue
         conclusion = str(check.get("conclusion") or check.get("state") or "").lower()
@@ -523,6 +546,54 @@ def _review_thread_state(node: Any) -> tuple[bool, bool] | None:
     return is_resolved, is_outdated
 
 
+def fetch_merge_queue_strategy(pr_number: str | int, *, repo: str) -> tuple[str | None, str | None]:
+    """Return the live merge queue's grouping strategy for an enqueued PR.
+
+    ``HEADGREEN`` permits an earlier failing queue entry to merge with a passing
+    tail entry. This gate validates the PR encoded in the merge-group ref, so it
+    requires ``ALLGREEN`` to ensure every earlier constituent entry also passed
+    its own required gate check.
+    """
+    owner, _, name = repo.partition("/")
+    if not owner or not name:
+        return None, f"invalid repo identifier: {repo!r}"
+    query = (
+        "query($owner:String!,$name:String!,$number:Int!){"
+        "repository(owner:$owner,name:$name){pullRequest(number:$number){"
+        "mergeQueueEntry{mergeQueue{configuration{mergingStrategy}}}}}}"
+    )
+    result = _gh(
+        [
+            "api",
+            "graphql",
+            "-f",
+            f"query={query}",
+            "-F",
+            f"owner={owner}",
+            "-F",
+            f"name={name}",
+            "-F",
+            f"number={pr_number}",
+        ],
+        timeout=45,
+    )
+    if result.returncode != 0:
+        return None, result.stderr.strip() or "graphql mergeQueue configuration query failed"
+    payload, err = _parse_json(result.stdout)
+    if err or not isinstance(payload, dict):
+        return None, err or "graphql response is not JSON"
+    data = payload.get("data")
+    repository = data.get("repository") if isinstance(data, dict) else None
+    pull_request = repository.get("pullRequest") if isinstance(repository, dict) else None
+    entry = pull_request.get("mergeQueueEntry") if isinstance(pull_request, dict) else None
+    queue = entry.get("mergeQueue") if isinstance(entry, dict) else None
+    configuration = queue.get("configuration") if isinstance(queue, dict) else None
+    strategy = configuration.get("mergingStrategy") if isinstance(configuration, dict) else None
+    if strategy not in {"ALLGREEN", "HEADGREEN"}:
+        return None, "merge queue strategy missing or unsupported in graphql response"
+    return str(strategy), None
+
+
 def fetch_threads_resolved(pr_number: str | int, *, repo: str) -> tuple[bool | None, str | None]:
     """Return ``(all_resolved, error)`` for a PR's review threads.
 
@@ -589,6 +660,7 @@ def _format_summary(audit: MergeGateAudit) -> str:
         f"- evaluated head SHA: `{audit.head_sha or '?'}`",
         f"- merge-group source head SHA: `{audit.merge_group_head_sha or 'n/a'}`",
         f"- merge-group source-head binding: `{audit.merge_group_head_binding}`",
+        f"- merge queue merging strategy: `{audit.queue_merging_strategy}`",
         f"- base SHA: `{audit.base_sha or '?'}`",
         f"- main SHA: `{audit.main_sha or 'n/a'}`",
         f"- labels: `{', '.join(audit.labels) if audit.labels else '(none)'}`",
@@ -604,8 +676,8 @@ def _format_summary(audit: MergeGateAudit) -> str:
     lines.append("")
     lines.append(
         "Gate contract: non-draft + `merge-ready` + current exact-head "
-        "`gate-verdict: accepted` trailer + resolved threads; fail-closed on any "
-        "missing dimension. See `docs/dev_guide.md` and "
+        "`gate-verdict: accepted` trailer + resolved threads + `ALLGREEN` queue "
+        "strategy; fail-closed on any missing dimension. See `docs/dev_guide.md` and "
         "`.agents/skills/gh-pr-merger/SKILL.md`."
     )
     return "\n".join(lines)
@@ -652,8 +724,21 @@ def _evaluate_live(
         # and main so the audit reflects that guarantee.
         snapshot["base_sha"] = merge_group_base_sha
         main_sha = merge_group_base_sha
+        queue_merging_strategy, strategy_err = fetch_merge_queue_strategy(pr_number, repo=repo)
+        if strategy_err:
+            return (
+                evaluate_merge_gate(
+                    snapshot,
+                    main_sha=main_sha,
+                    threads_resolved=None,
+                    merge_group_head_sha=merge_group_head_sha,
+                    queue_merging_strategy="unknown",
+                ),
+                f"merge queue strategy query failed: {strategy_err}",
+            )
     else:
         main_sha = fetch_main_sha(repo=repo)
+        queue_merging_strategy = ""
 
     threads_resolved, thread_err = fetch_threads_resolved(pr_number, repo=repo)
     if thread_err:
@@ -664,6 +749,7 @@ def _evaluate_live(
                 main_sha=main_sha,
                 threads_resolved=False,
                 merge_group_head_sha=merge_group_head_sha,
+                queue_merging_strategy=queue_merging_strategy or "",
             ),
             f"thread resolution query failed: {thread_err}",
         )
@@ -673,6 +759,7 @@ def _evaluate_live(
         main_sha=main_sha,
         threads_resolved=threads_resolved,
         merge_group_head_sha=merge_group_head_sha,
+        queue_merging_strategy=queue_merging_strategy or "",
     )
     return audit, None
 
@@ -794,6 +881,18 @@ def _self_test() -> int:
     expect(
         not audit.passed and "pr_is_draft" in audit.reasons,
         "draft: draft PR must fail closed",
+    )
+
+    # HEADGREEN permits an earlier failing entry to hitchhike with a passing tail.
+    audit = evaluate_merge_gate(
+        _pr(labels=["merge-ready"], gate_verdict_sha=full_sha),
+        threads_resolved=True,
+        merge_group_head_sha=full_sha,
+        queue_merging_strategy="HEADGREEN",
+    )
+    expect(
+        not audit.passed and "unsafe_merge_queue_strategy:HEADGREEN" in audit.reasons,
+        "queue-strategy: HEADGREEN must fail closed",
     )
 
     # Full pass: all dimensions satisfied and explicitly authoritative.

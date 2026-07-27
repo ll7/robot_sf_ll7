@@ -31,7 +31,10 @@ status check (`.github/workflows/merge-queue-gate.yml`, backed by
 `scripts/dev/merge_queue_gate.py`), so the GitHub native merge queue and any
 external/parallel auto-merge dispatcher that routes through it cannot bypass
 `merge-ready`, the exact-head `gate-verdict: accepted` trailer, or unresolved
-threads. That workflow is the merge-queue entry point for this contract; this
+threads. The queue gate also fails closed unless the live queue uses GitHub's
+`ALLGREEN` ("Only merge non-failing pull requests") strategy, which prevents a
+passing tail entry from carrying an earlier ungated entry through a grouped
+merge. That workflow is the merge-queue entry point for this contract; this
 skill remains the binding authority for guarded merges it executes directly.
 See `docs/dev_guide.md` ("Merge queue gate") for the required-check toggle and
 the audit record shape (`merge_queue_gate.v1`).

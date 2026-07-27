@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from scripts.dev.merge_queue_gate import (
     evaluate_merge_gate,
+    fetch_merge_queue_strategy,
     fetch_pr_snapshot,
     fetch_threads_resolved,
     main,
@@ -57,6 +59,21 @@ def _review_threads_payload(
     }
 
 
+def _merge_queue_strategy_payload(strategy: str) -> dict[str, object]:
+    """Build a GraphQL merge-queue configuration payload."""
+    return {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "mergeQueueEntry": {
+                        "mergeQueue": {"configuration": {"mergingStrategy": strategy}}
+                    }
+                }
+            }
+        }
+    }
+
+
 def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     """Live snapshots avoid unsupported ``baseRefOid`` and obtain ``base.sha`` via REST."""
     with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
@@ -73,6 +90,81 @@ def test_fetch_pr_snapshot_uses_supported_gh_fields_and_rest_base_sha() -> None:
     fields = first_call[first_call.index("--json") + 1]
     assert "baseRefOid" not in fields
     assert mock_gh.call_args_list[1].args[0] == ["api", "repos/owner/repo/pulls/42"]
+
+
+def test_fetch_pr_snapshot_ignores_superseded_failed_check_run() -> None:
+    """The live gate uses the canonical current-run CI classification."""
+    raw_pr = _raw_pr()
+    raw_pr["statusCheckRollup"] = [
+        {
+            "__typename": "CheckRun",
+            "name": "test",
+            "workflowName": "CI",
+            "startedAt": "2026-07-25T12:00:00Z",
+            "status": "COMPLETED",
+            "conclusion": "FAILURE",
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "test",
+            "workflowName": "CI",
+            "startedAt": "2026-07-25T12:05:00Z",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+    ]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["checks"] == {"overall": "success"}
+
+
+def test_fetch_pr_snapshot_ignores_current_gate_check() -> None:
+    """The PR-head gate does not wait on its own in-progress check run."""
+    raw_pr = _raw_pr()
+    raw_pr["statusCheckRollup"] = [
+        {
+            "__typename": "CheckRun",
+            "name": "merge-queue-gate",
+            "workflowName": "Merge Queue Gate",
+            "startedAt": "2026-07-25T12:05:00Z",
+            "status": "IN_PROGRESS",
+            "conclusion": None,
+        },
+        {
+            "__typename": "CheckRun",
+            "name": "test",
+            "workflowName": "CI",
+            "startedAt": "2026-07-25T12:00:00Z",
+            "status": "COMPLETED",
+            "conclusion": "SUCCESS",
+        },
+    ]
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.side_effect = [
+            _gh_response(stdout=json.dumps(raw_pr)),
+            _gh_response(stdout=json.dumps({"base": {"sha": "base_sha"}})),
+        ]
+        snapshot, error = fetch_pr_snapshot(42, repo="owner/repo")
+
+    assert error is None
+    assert snapshot["checks"] == {"overall": "success"}
+
+
+def test_workflow_dispatch_passes_pr_number_through_environment() -> None:
+    """Manual input is data, not interpolated into the generated shell program."""
+    workflow = Path(".github/workflows/merge-queue-gate.yml").read_text(encoding="utf-8")
+
+    assert "PR_NUMBER: ${{ inputs.pr_number }}" in workflow
+    assert '--pr "$PR_NUMBER"' in workflow
+    assert '--pr "${{ inputs.pr_number }}"' not in workflow
+    assert "pull_request:" in workflow
+    assert "PR_NUMBER: ${{ github.event.pull_request.number }}" in workflow
 
 
 @pytest.mark.parametrize("carrier", ["comments", "reviews"])
@@ -124,6 +216,51 @@ def test_fetch_threads_resolved_accepts_complete_resolved_connection() -> None:
     assert error is None
 
 
+def test_fetch_merge_queue_strategy_reads_allgreen_configuration() -> None:
+    """The live gate can prove every constituent queue entry must pass."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(
+            stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))
+        )
+        strategy, error = fetch_merge_queue_strategy(42, repo="owner/repo")
+
+    assert strategy == "ALLGREEN"
+    assert error is None
+
+
+def test_fetch_merge_queue_strategy_rejects_missing_queue_entry() -> None:
+    """A race or incomplete GraphQL response cannot bypass the queue strategy gate."""
+    with patch("scripts.dev.merge_queue_gate._gh") as mock_gh:
+        mock_gh.return_value = _gh_response(
+            stdout=json.dumps({"data": {"repository": {"pullRequest": {"mergeQueueEntry": None}}}})
+        )
+        strategy, error = fetch_merge_queue_strategy(42, repo="owner/repo")
+
+    assert strategy is None
+    assert error is not None
+
+
+def test_headgreen_merge_queue_strategy_fails_closed() -> None:
+    """A passing tail entry cannot carry an earlier ungated entry through."""
+    gate_verdict = f"gate-verdict: accepted @ {FULL_SHA}"
+    audit = evaluate_merge_gate(
+        {
+            "number": 42,
+            "head_sha": FULL_SHA,
+            "labels": ["merge-ready"],
+            "gate_verdicts": [gate_verdict],
+            "checks": {"overall": "success"},
+        },
+        threads_resolved=True,
+        merge_group_head_sha=FULL_SHA[:12],
+        queue_merging_strategy="HEADGREEN",
+    )
+
+    assert audit.passed is False
+    assert audit.queue_merging_strategy == "HEADGREEN"
+    assert "unsafe_merge_queue_strategy:HEADGREEN" in audit.reasons
+
+
 def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> None:
     """The live merge_group path uses its encoded PR and matching source SHA."""
     event_path = tmp_path / "merge_group.json"
@@ -146,6 +283,7 @@ def test_from_event_resolves_canonical_queue_ref_and_binds_pr_head(tmp_path) -> 
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
         exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])
@@ -178,6 +316,7 @@ def test_from_event_fails_closed_when_encoded_head_differs_from_pr(tmp_path, cap
         mock_gh.side_effect = [
             _gh_response(stdout=json.dumps(_raw_pr(body=gate_verdict))),
             _gh_response(stdout=json.dumps({"base": {"sha": "stale_base_sha"}})),
+            _gh_response(stdout=json.dumps(_merge_queue_strategy_payload("ALLGREEN"))),
             _gh_response(stdout=json.dumps(threads)),
         ]
         exit_code = main(["--from-event", str(event_path), "--repo", "owner/repo"])

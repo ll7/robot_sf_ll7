@@ -427,29 +427,38 @@ that dispatcher and the active `main` protection configuration have both been ve
 runs inside the native merge queue and enforces the same fail-closed preflight as `gh-pr-merger`
 before the queue auto-merges a PR:
 
-- **Workflow**: `.github/workflows/merge-queue-gate.yml` (triggers on `merge_group`; also
-  `workflow_dispatch` with a PR number for advisory evaluation).
+- **Workflow**: `.github/workflows/merge-queue-gate.yml` (reports the same required check on
+  source-head `pull_request` label/synchronization events and queue-time `merge_group`; also
+  supports `workflow_dispatch` with a PR number for advisory evaluation).
 - **Script**: `scripts/dev/merge_queue_gate.py` (pure gate logic + live CLI).
 - **Checks enforced**: non-draft state, current `merge-ready` label, a current exact-head
   `gate-verdict: accepted @ <head_sha>` trailer (reuses
   `scripts/dev/pr_loop_policy.has_current_accepted_gate_verdict`), and no unresolved actionable
-  review threads. CI-green-on-head is subsumed by the gate-verdict trailer (the trailer is only
-  posted after CI went green on that head); staleness is fresh by construction inside the queue
-  (the queue base SHA equals current `main`).
+  review threads. The current source-head CI rollup must also remain green; superseded check runs
+  are discarded with the same helper used by the guarded merger preflight, and the gate excludes
+  its own in-progress source-head check to avoid waiting on itself. The exact-head trailer binds
+  that CI and review evidence to the source head, while the merge queue independently runs its
+  required checks on the synthetic queue head. The live queue must use GitHub's `ALLGREEN`
+  strategy ("Only merge non-failing pull requests"), so every earlier entry represented by a
+  grouped synthetic head must pass its own gate; `HEADGREEN` fails closed because it can merge a
+  failing earlier entry with a passing tail entry. Staleness is fresh by construction inside the
+  queue (the queue base SHA equals current `main`).
 - **Audit record**: the job emits a `merge_queue_gate.v1` audit with the evaluated head SHA, the
-  source-head SHA encoded in the queue ref and its binding verdict, base SHA, label set,
-  gate-verdict status, staleness verdict, CI conclusion, and reviewer-thread resolution, so every
-  merge decision is inspectable and reproducible.
+  source-head SHA encoded in the queue ref and its binding verdict, queue merging strategy, base
+  SHA, label set, gate-verdict status, staleness verdict, CI conclusion, and reviewer-thread
+  resolution, so every merge decision is inspectable and reproducible.
 - **Self-test**: `uv run python scripts/dev/merge_queue_gate.py --self-test` exercises the
   fail-closed contract deterministically (the issue #6274 validation scenarios).
 
 **Required maintainer toggle (cannot be done from a worktree).** The gate fails closed only after
 a maintainer adds the status check **`Merge Queue Gate / merge-queue-gate`** to the merge queue's
-required status checks in the branch protection rules for `main` (Settings → Branches → `main` →
-merge queue → required status checks). Until that toggle is applied, the workflow runs but does not
-block the queue; the in-repo `gh-pr-merger` preflight remains the binding contract for guarded
-merges. Enabling GitHub's native merge queue itself also requires maintainer approval to toggle
-branch-protection settings, consistent with the gate-side rationale above.
+required status checks and enables **Only merge non-failing pull requests** (`ALLGREEN`) in the
+branch protection rules for `main` (Settings → Branches → `main` → merge queue). The workflow
+verifies `ALLGREEN` at runtime and fails closed if the queue is configured as `HEADGREEN`. Until
+these toggles are applied, the workflow does not provide the queue-side contract; the in-repo
+`gh-pr-merger` preflight remains binding for guarded merges. Enabling GitHub's native merge queue
+itself also requires maintainer approval to toggle branch-protection settings, consistent with the
+gate-side rationale above.
 
 **Relationship to the gate-side staleness check.** The staleness preflight (step 6 of
 `gh-pr-merger`) remains as a safety net for guarded merges performed by `gh-pr-merger` and for

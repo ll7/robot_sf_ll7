@@ -113,6 +113,8 @@ CAMPAIGN_RUNTIME_PATH = REPO_ROOT / "scripts/benchmark/run_fidelity_sensitivity_
 SYNTHESIZER_PATH = REPO_ROOT / "robot_sf/benchmark/issue_5578_speed_tier_synthesis.py"
 AUTHORIZED_EXECUTION_ISSUE = 6102
 AUTHORIZED_EXECUTION_SCHEMA_VERSION = "robot_sf.issue_5578_authorized_campaign_execution.v1"
+ROW_PROVENANCE_SCHEMA_VERSION = "benchmark_row_provenance.v1"
+VALID_PLANNER_EXECUTION_MODES = frozenset({"native", "native_command", "adapter", "mixed"})
 CAMPAIGN_SCENARIO_MATRIX = REPO_ROOT / "configs/scenarios/classic_interactions.yaml"
 EPISODE_SCHEMA_PATH = REPO_ROOT / "robot_sf/benchmark/schemas/episode.schema.v1.json"
 EVIDENCE_BASE_DIR = REPO_ROOT / "docs/context/evidence/issue_5578_robot_speed_tier_sweep"
@@ -1127,7 +1129,94 @@ def _binary_metric(value: Any, field_name: str) -> float:
     return 1.0 if number > 0.0 else 0.0
 
 
-def _campaign_execution_disposition(  # noqa: C901
+def _is_hex(value: Any, *, length: int) -> bool:
+    """Return whether ``value`` is a lower/upper-case hexadecimal identifier."""
+    return (
+        isinstance(value, str)
+        and len(value) == length
+        and all(character in "0123456789abcdefABCDEF" for character in value)
+    )
+
+
+def _episode_integer(value: Any, field_name: str) -> int:
+    """Read one integer-valued episode field without silently truncating it."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise AuthorizedCampaignError(
+            f"episode field {field_name} must be an integer, got {value!r}"
+        )
+    return int(value)
+
+
+def _validate_episode_provenance(  # noqa: C901
+    record: Mapping[str, Any],
+    *,
+    scenario_id: str,
+    seed: int,
+    horizon_steps: int,
+    dt_seconds: float,
+) -> str:
+    """Validate the row provenance required before a cell can become campaign input."""
+    provenance = record.get("result_provenance")
+    if not isinstance(provenance, Mapping):
+        raise AuthorizedCampaignError("raw episode missing result_provenance")
+    if provenance.get("schema_version") != ROW_PROVENANCE_SCHEMA_VERSION:
+        raise AuthorizedCampaignError(
+            "raw episode result_provenance.schema_version is missing or unsupported"
+        )
+    if str(provenance.get("scenario_id", "")).strip() != scenario_id:
+        raise AuthorizedCampaignError("raw episode result_provenance scenario mismatch")
+    if _episode_integer(provenance.get("seed"), "result_provenance.seed") != int(seed):
+        raise AuthorizedCampaignError("raw episode result_provenance seed mismatch")
+
+    config_hash = provenance.get("config_hash")
+    if not _is_hex(config_hash, length=16):
+        raise AuthorizedCampaignError(
+            "raw episode result_provenance.config_hash must be a 16-character hexadecimal hash"
+        )
+    record_config_hash = record.get("config_hash")
+    if record_config_hash is not None and record_config_hash != config_hash:
+        raise AuthorizedCampaignError("raw episode config_hash disagrees with result_provenance")
+
+    repo_commit = provenance.get("repo_commit")
+    if not _is_hex(repo_commit, length=40):
+        raise AuthorizedCampaignError(
+            "raw episode result_provenance.repo_commit must be a 40-character git SHA"
+        )
+    record_git_hash = record.get("git_hash")
+    if record_git_hash is not None and record_git_hash != repo_commit:
+        raise AuthorizedCampaignError("raw episode git_hash disagrees with result_provenance")
+
+    simulator_settings = provenance.get("simulator_settings")
+    if not isinstance(simulator_settings, Mapping):
+        raise AuthorizedCampaignError("raw episode result_provenance.simulator_settings is missing")
+    if _episode_integer(
+        simulator_settings.get("horizon"),
+        "result_provenance.simulator_settings.horizon",
+    ) != int(horizon_steps):
+        raise AuthorizedCampaignError("raw episode result_provenance horizon mismatch")
+    provenance_dt = _finite_episode_number(
+        simulator_settings.get("dt"),
+        "result_provenance.simulator_settings.dt",
+    )
+    if not math.isclose(provenance_dt, dt_seconds, abs_tol=1e-9):
+        raise AuthorizedCampaignError(
+            f"raw episode result_provenance dt drift: expected {dt_seconds}, got {provenance_dt}"
+        )
+
+    postprocessing = provenance.get("postprocessing")
+    if not isinstance(postprocessing, list):
+        raise AuthorizedCampaignError("raw episode result_provenance.postprocessing is missing")
+    completed_steps = {
+        str(step.get("step"))
+        for step in postprocessing
+        if isinstance(step, Mapping) and step.get("status") == "completed"
+    }
+    if {"compute_all_metrics", "post_process_metrics"} - completed_steps:
+        raise AuthorizedCampaignError("raw episode result_provenance.postprocessing is incomplete")
+    return str(repo_commit)
+
+
+def _campaign_execution_disposition(  # noqa: C901, PLR0912
     record: Mapping[str, Any],
 ) -> tuple[str, str | None]:
     """Classify planner runtime availability without confusing adapters with fallback.
@@ -1153,30 +1242,49 @@ def _campaign_execution_disposition(  # noqa: C901
         return "degraded", f"algorithm_metadata.status={status}"
 
     timeout_metadata = metadata.get("policy_step_timeout")
+    if timeout_metadata is not None and not isinstance(timeout_metadata, Mapping):
+        return "failed", "malformed algorithm_metadata.policy_step_timeout"
     if isinstance(timeout_metadata, Mapping):
         fallback_actions = timeout_metadata.get("fallback_actions")
         if fallback_actions is not None:
             try:
-                if float(fallback_actions) > 0.0:
+                fallback_count = float(fallback_actions)
+                if not math.isfinite(fallback_count) or fallback_count < 0.0:
+                    return "failed", "malformed policy_step_timeout.fallback_actions"
+                if fallback_count > 0.0:
                     return "degraded", "policy_step_timeout.fallback_actions>0"
             except (TypeError, ValueError):
                 return "failed", "malformed policy_step_timeout.fallback_actions"
 
-    if metadata.get("fallback_or_degraded") is True:
+    fallback_marker = metadata.get("fallback_or_degraded")
+    if fallback_marker is True:
         return "degraded", "algorithm_metadata.fallback_or_degraded=true"
+    if fallback_marker not in (None, False):
+        return "failed", "malformed algorithm_metadata.fallback_or_degraded"
 
     foresight = metadata.get("foresight_prediction")
+    if foresight is not None and not isinstance(foresight, Mapping):
+        return "failed", "malformed algorithm_metadata.foresight_prediction"
     if isinstance(foresight, Mapping):
-        if foresight.get("fallback_used") is True:
+        fallback_used = foresight.get("fallback_used")
+        if fallback_used is True:
             return "degraded", "foresight_prediction.fallback_used=true"
-        if foresight.get("evidence_eligible") is False:
+        if fallback_used not in (None, False):
+            return "failed", "malformed foresight_prediction.fallback_used"
+        evidence_eligible = foresight.get("evidence_eligible")
+        if evidence_eligible is False:
             return "degraded", "foresight_prediction.evidence_eligible=false"
+        if evidence_eligible not in (None, True):
+            return "failed", "malformed foresight_prediction.evidence_eligible"
 
     planner_kinematics = metadata.get("planner_kinematics")
-    if isinstance(planner_kinematics, Mapping):
-        planner_mode = str(planner_kinematics.get("execution_mode", "")).strip().lower()
-        if planner_mode in {"fallback", "degraded"}:
-            return "degraded", f"planner_kinematics.execution_mode={planner_mode}"
+    if not isinstance(planner_kinematics, Mapping):
+        return "failed", "missing algorithm_metadata.planner_kinematics"
+    planner_mode = str(planner_kinematics.get("execution_mode", "")).strip().lower()
+    if planner_mode in {"fallback", "degraded"}:
+        return "degraded", f"planner_kinematics.execution_mode={planner_mode}"
+    if planner_mode not in VALID_PLANNER_EXECUTION_MODES:
+        return "failed", f"unsupported planner_kinematics.execution_mode={planner_mode}"
 
     if status == "ok":
         return "native", None
@@ -1185,7 +1293,7 @@ def _campaign_execution_disposition(  # noqa: C901
     return "failed", f"unsupported algorithm_metadata.status={status}"
 
 
-def _trace_speed_diagnostics(
+def _trace_speed_diagnostics(  # noqa: C901
     record: Mapping[str, Any],
     *,
     cap_m_s: float,
@@ -1199,7 +1307,7 @@ def _trace_speed_diagnostics(
     steps = trace["steps"]
     if not steps:
         raise AuthorizedCampaignError("episode simulation_step_trace.steps is empty")
-    trace_dt = _finite_episode_number(trace.get("dt", expected_dt), "simulation_step_trace.dt")
+    trace_dt = _finite_episode_number(trace.get("dt"), "simulation_step_trace.dt")
     if not math.isclose(trace_dt, expected_dt, abs_tol=1e-9):
         raise AuthorizedCampaignError(
             f"episode trace dt drift: expected {expected_dt}, got {trace_dt}"
@@ -1232,10 +1340,20 @@ def _trace_speed_diagnostics(
             realized.append(_finite_episode_number(velocity, f"trace[{index}].robot.velocity"))
 
     count = len(realized)
+    commanded_mean = sum(commanded) / len(commanded)
+    realized_peak = max(realized)
+    if commanded_mean > cap_m_s + 1e-9:
+        raise AuthorizedCampaignError(
+            f"commanded speed mean exceeds tier cap: cap={cap_m_s}, mean={commanded_mean}"
+        )
+    if realized_peak > cap_m_s + 1e-9:
+        raise AuthorizedCampaignError(
+            f"realized speed peak exceeds tier cap: cap={cap_m_s}, peak={realized_peak}"
+        )
     return {
-        "commanded_speed_mean_m_s": sum(commanded) / len(commanded),
+        "commanded_speed_mean_m_s": commanded_mean,
         "realized_speed_mean_m_s": sum(realized) / count,
-        "realized_speed_peak_m_s": max(realized),
+        "realized_speed_peak_m_s": realized_peak,
         "fraction_above_2_0_mps": sum(speed > 2.0 for speed in realized) / count,
         "cap_saturation_fraction": sum(speed >= cap_m_s - 1e-6 for speed in realized) / count,
     }
@@ -1256,14 +1374,24 @@ def _cell_summary_from_episode(
         raise AuthorizedCampaignError(
             f"raw episode scenario mismatch: expected {scenario_id}, got {record.get('scenario_id')!r}"
         )
-    if int(record.get("seed", -1)) != int(seed):
+    if _episode_integer(record.get("seed"), "seed") != int(seed):
         raise AuthorizedCampaignError(
             f"raw episode seed mismatch: expected {seed}, got {record.get('seed')!r}"
         )
-    if int(record.get("horizon", -1)) != horizon_steps:
+    if _episode_integer(record.get("horizon"), "horizon") != horizon_steps:
         raise AuthorizedCampaignError(
             f"raw episode horizon mismatch: expected {horizon_steps}, got {record.get('horizon')!r}"
         )
+    episode_id = record.get("episode_id")
+    if not isinstance(episode_id, str) or not episode_id.strip():
+        raise AuthorizedCampaignError("raw episode is missing a non-empty episode_id")
+    raw_repo_commit = _validate_episode_provenance(
+        record,
+        scenario_id=scenario_id,
+        seed=seed,
+        horizon_steps=horizon_steps,
+        dt_seconds=dt_seconds,
+    )
 
     metadata = record.get("algorithm_metadata")
     if not isinstance(metadata, Mapping):
@@ -1336,12 +1464,8 @@ def _cell_summary_from_episode(
         "travel_distance_m": _episode_metric(metrics, "socnavbench_path_length"),
         "mean_clearance_m": _episode_metric(metrics, "mean_clearance"),
         "min_clearance_m": _episode_metric(metrics, "min_clearance"),
-        "raw_episode_id": str(record.get("episode_id", "")),
-        "raw_repo_commit": str(
-            (record.get("result_provenance") or {}).get(
-                "repo_commit", record.get("git_hash", "unknown")
-            )
-        ),
+        "raw_episode_id": episode_id,
+        "raw_repo_commit": raw_repo_commit,
     }
 
 
@@ -1409,6 +1533,97 @@ def _run_native_batch(
         workers=1,
         resume=resume,
     )
+
+
+def _summary_count(summary: Mapping[str, Any], field_name: str) -> int:
+    """Read a non-negative integer count from a canonical runner summary."""
+    value = summary.get(field_name, 0)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise AuthorizedCampaignError(
+            f"runner summary {field_name} must be a non-negative integer, got {value!r}"
+        )
+    return int(value)
+
+
+def _validate_runner_summary(  # noqa: C901
+    summary: Mapping[str, Any],
+    *,
+    batch_name: str,
+    expected_count: int,
+    resume: bool,
+) -> None:
+    """Reject runner-level failures before any rows enter the campaign grid."""
+    if not isinstance(summary, Mapping):
+        raise AuthorizedCampaignError(f"runner summary for {batch_name} is not an object")
+    failed_jobs = _summary_count(summary, "failed_jobs")
+    skipped_jobs = _summary_count(summary, "skipped_jobs")
+    written = _summary_count(summary, "written")
+    if failed_jobs:
+        raise AuthorizedCampaignError(
+            f"runner batch {batch_name} reported {failed_jobs} failed jobs"
+        )
+    if skipped_jobs:
+        raise AuthorizedCampaignError(
+            f"runner batch {batch_name} reported {skipped_jobs} skipped jobs"
+        )
+    failures = summary.get("failures", [])
+    if failures is not None and not isinstance(failures, list):
+        raise AuthorizedCampaignError(
+            f"runner batch {batch_name} reported malformed failure details"
+        )
+    if failures:
+        raise AuthorizedCampaignError(
+            f"runner batch {batch_name} reported failure details despite zero failed_jobs"
+        )
+    if not resume and written != expected_count:
+        raise AuthorizedCampaignError(
+            f"runner batch {batch_name} wrote {written} rows; expected {expected_count}"
+        )
+
+    availability = summary.get("benchmark_availability")
+    if isinstance(availability, Mapping):
+        if availability.get("availability_status") != "available":
+            raise AuthorizedCampaignError(
+                f"runner batch {batch_name} is not benchmark-available: "
+                f"{availability.get('availability_status')!r}"
+            )
+        if availability.get("benchmark_success") is not True:
+            raise AuthorizedCampaignError(
+                f"runner batch {batch_name} did not report benchmark_success=true"
+            )
+
+    provenance = summary.get("provenance")
+    if isinstance(provenance, Mapping):
+        manifest_status = provenance.get("result_manifest_status")
+        if manifest_status is not None and manifest_status != "available":
+            raise AuthorizedCampaignError(
+                f"runner batch {batch_name} result provenance is not available: {manifest_status!r}"
+            )
+
+
+def _campaign_command_environment_manifest(manifest: CampaignManifest) -> dict[str, Any]:
+    """Describe the exact deterministic execution surface recorded with the campaign."""
+    return {
+        "authorized_command": (
+            "uv run python scripts/benchmark/run_issue_5578_speed_tier_campaign.py "
+            "--authorized-full-run --authorization-issue 6102"
+        ),
+        "entrypoint": "scripts/benchmark/run_issue_5578_speed_tier_campaign.py",
+        "runner": "robot_sf.benchmark.map_runner.run_map_batch",
+        "scenario_matrix": _repo_rel(CAMPAIGN_SCENARIO_MATRIX),
+        "episode_schema": _repo_rel(EPISODE_SCHEMA_PATH),
+        "planner_configs": sorted(
+            planner.config_path for planner in manifest.planners if planner.config_path is not None
+        ),
+        "benchmark_profile": "experimental",
+        "socnav_missing_prereq_policy": "fail-fast",
+        "record_forces": False,
+        "record_simulation_step_trace": True,
+        "workers": 1,
+        "horizon_steps": manifest.horizon_steps,
+        "dt_seconds": manifest.dt_seconds,
+        "manifest_hash": manifest.manifest_hash,
+    }
 
 
 def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
@@ -1484,6 +1699,8 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
         "seeds": list(preflight_seeds),
         "batches": [],
         "status": "running",
+        "git_provenance": _git_provenance(),
+        "command_environment_manifest": _campaign_command_environment_manifest(manifest),
     }
     try:
         for tier in manifest.speed_tiers:
@@ -1503,6 +1720,12 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
                     algo_config_path=planner.config_path,
                     resume=False,
                 )
+                _validate_runner_summary(
+                    runner_summary,
+                    batch_name=batch_name,
+                    expected_count=len(preflight_seeds),
+                    resume=False,
+                )
                 records = _read_jsonl_records(raw_batch_path)
                 if len(records) != len(preflight_seeds):
                     raise AuthorizedCampaignError(
@@ -1513,7 +1736,7 @@ def run_authorized_runtime_preflight(  # noqa: C901, PLR0912, PLR0915
                 seen_keys: set[tuple[str, int]] = set()
                 modes: dict[str, int] = {}
                 for record in records:
-                    record_seed = int(record.get("seed", -1))
+                    record_seed = _episode_integer(record.get("seed"), "seed")
                     record_key = (str(record.get("scenario_id")), record_seed)
                     if record_key in seen_keys:
                         raise AuthorizedCampaignError(
@@ -1723,6 +1946,8 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
         "fallback_or_degraded_policy": "reject",
         "batches": [],
         "exclusions": [],
+        "git_provenance": _git_provenance(),
+        "command_environment_manifest": _campaign_command_environment_manifest(manifest),
     }
     rows: list[dict[str, Any]] = []
     seen_keys: set[tuple[str, str, str, int]] = set()
@@ -1748,8 +1973,14 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
                     algo_config_path=planner.config_path,
                     resume=resume,
                 )
-                batch_records = _read_jsonl_records(raw_batch_path)
                 expected_batch_count = len(manifest.scenarios) * len(manifest.seeds)
+                _validate_runner_summary(
+                    summary,
+                    batch_name=batch_name,
+                    expected_count=expected_batch_count,
+                    resume=resume,
+                )
+                batch_records = _read_jsonl_records(raw_batch_path)
                 if len(batch_records) != expected_batch_count:
                     raise AuthorizedCampaignError(
                         f"batch {batch_name} has {len(batch_records)} rows; "
@@ -1766,7 +1997,7 @@ def execute_authorized_campaign(  # noqa: C901, PLR0912, PLR0915
                 }
                 for record in batch_records:
                     scenario_id = str(record.get("scenario_id"))
-                    seed = int(record.get("seed", -1))
+                    seed = _episode_integer(record.get("seed"), "seed")
                     if scenario_id not in declared_scenario_ids:
                         raise AuthorizedCampaignError(
                             f"batch {batch_name} contains undeclared scenario: {scenario_id}"

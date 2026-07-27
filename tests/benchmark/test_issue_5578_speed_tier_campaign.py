@@ -309,6 +309,60 @@ def test_execution_disposition_allows_expected_adapter_but_rejects_fallback() ->
     assert campaign._campaign_execution_disposition(degraded_record)[0] == "degraded"
 
 
+def test_execution_disposition_requires_explicit_planner_execution_mode() -> None:
+    """A healthy status without a native/adapter mode must not become campaign evidence."""
+    missing_mode = {"algorithm_metadata": {"status": "ok"}}
+    unknown_mode = {
+        "algorithm_metadata": {
+            "status": "ok",
+            "planner_kinematics": {"execution_mode": "unknown"},
+        }
+    }
+    assert campaign._campaign_execution_disposition(missing_mode)[0] == "failed"
+    assert campaign._campaign_execution_disposition(unknown_mode)[0] == "failed"
+
+
+def test_episode_provenance_requires_canonical_row_contract() -> None:
+    """Missing or fabricated row provenance must fail before cell conversion."""
+    with pytest.raises(campaign.AuthorizedCampaignError, match="result_provenance"):
+        campaign._validate_episode_provenance(
+            {},
+            scenario_id=PREFLIGHT_SCENARIO,
+            seed=211,
+            horizon_steps=600,
+            dt_seconds=0.1,
+        )
+
+    malformed = {
+        "result_provenance": {
+            "schema_version": "benchmark_row_provenance.v1",
+            "scenario_id": PREFLIGHT_SCENARIO,
+            "seed": 211,
+            "config_hash": "not-a-hash",
+            "repo_commit": "not-a-commit",
+        }
+    }
+    with pytest.raises(campaign.AuthorizedCampaignError, match="config_hash"):
+        campaign._validate_episode_provenance(
+            malformed,
+            scenario_id=PREFLIGHT_SCENARIO,
+            seed=211,
+            horizon_steps=600,
+            dt_seconds=0.1,
+        )
+
+
+def test_runner_summary_rejects_failed_jobs_before_reading_rows() -> None:
+    """A runner-level failure cannot be hidden by a later row-count check."""
+    with pytest.raises(campaign.AuthorizedCampaignError, match="failed jobs"):
+        campaign._validate_runner_summary(
+            {"failed_jobs": 1, "written": EXPECTED_CELL_COUNT},
+            batch_name="cap_2_0_nominal__orca",
+            expected_count=EXPECTED_CELL_COUNT,
+            resume=False,
+        )
+
+
 def test_authorized_campaign_fake_runner_covers_exact_2160_native_cells(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -377,7 +431,20 @@ def test_authorized_campaign_fake_runner_covers_exact_2160_native_cells(
                             "interaction_exposure_share": 0.0,
                             "interaction_exposure_denominator_steps": 2,
                         },
-                        "result_provenance": {"repo_commit": "test"},
+                        "config_hash": "a" * 16,
+                        "git_hash": "a" * 40,
+                        "result_provenance": {
+                            "schema_version": "benchmark_row_provenance.v1",
+                            "scenario_id": scenario["name"],
+                            "seed": seed,
+                            "config_hash": "a" * 16,
+                            "repo_commit": "a" * 40,
+                            "simulator_settings": {"horizon": 600, "dt": 0.1},
+                            "postprocessing": [
+                                {"step": "compute_all_metrics", "status": "completed"},
+                                {"step": "post_process_metrics", "status": "completed"},
+                            ],
+                        },
                     }
                 )
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -395,6 +462,10 @@ def test_authorized_campaign_fake_runner_covers_exact_2160_native_cells(
     )
     assert report["status"] == "complete_native"
     assert report["native_cell_count"] == EXPECTED_CELL_COUNT
+    assert report["git_provenance"]["git_head"]
+    assert report["command_environment_manifest"]["runner"] == (
+        "robot_sf.benchmark.map_runner.run_map_batch"
+    )
     cells = (tmp_path / "cells.jsonl").read_text(encoding="utf-8").splitlines()
     assert len(cells) == EXPECTED_CELL_COUNT
     assert all(json.loads(line)["execution_mode"] == "native" for line in cells)
@@ -471,7 +542,20 @@ def test_authorized_campaign_rejection_quarantines_non_native_rows(
                             "interaction_exposure_share": 0.0,
                             "interaction_exposure_denominator_steps": 2,
                         },
-                        "result_provenance": {"repo_commit": "test"},
+                        "config_hash": "a" * 16,
+                        "git_hash": "a" * 40,
+                        "result_provenance": {
+                            "schema_version": "benchmark_row_provenance.v1",
+                            "scenario_id": scenario["name"],
+                            "seed": seed,
+                            "config_hash": "a" * 16,
+                            "repo_commit": "a" * 40,
+                            "simulator_settings": {"horizon": 600, "dt": 0.1},
+                            "postprocessing": [
+                                {"step": "compute_all_metrics", "status": "completed"},
+                                {"step": "post_process_metrics", "status": "completed"},
+                            ],
+                        },
                     }
                 )
         out_path.parent.mkdir(parents=True, exist_ok=True)

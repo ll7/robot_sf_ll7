@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
 from pathlib import Path
 
 import yaml
@@ -122,61 +123,30 @@ def _write_complete_outcomes(path: Path, *, duplicate_first_optuna_hash: bool = 
 
 
 def test_diagnostic_cli_requires_the_frozen_execution_bindings() -> None:
-    """The runner parser accepts the complete native diagnostic command shape."""
-    args = parse_args(
-        [
-            "--policy",
-            "hybrid_rule_local_planner",
-            "--algo-config",
-            "configs/policy_search/candidates/scenario_adaptive_hybrid_orca_v2_collision_guard.yaml",
-            "--reference-algo-config",
-            "configs/policy_search/candidates/scenario_adaptive_orca_v1.yaml",
-            "--scenario-template",
-            "configs/adversarial/issue_5303_classic_group_crossing_medium.yaml",
-            "--scenario-family",
-            "classic_group_crossing_medium",
-            "--search-space",
-            "configs/adversarial/crossing_ttc_space.yaml",
-            "--sampler",
-            "random",
-            "--sampler",
-            "optuna",
-            "--budget",
-            "64",
-            "--seed",
-            "530301",
-            "--seed",
-            "530302",
-            "--seed",
-            "530303",
-            "--objective",
-            "constraints_first_lexicographic_v1",
-            "--horizon",
-            "100",
-            "--dt",
-            "0.1",
-            "--require-certification",
-            "--benchmark-profile",
-            "experimental",
-            "--issue-5303-diagnostic-only",
-            "--execution-context-label",
-            "diagnostic_native_context_a",
-            "--output-dir",
-            "output/adversarial/issue_5303_search_promotion",
-            "--out-json",
-            "output/adversarial/issue_5303_search_promotion/report.json",
-            "--out-md",
-            "output/adversarial/issue_5303_search_promotion/comparison_table.md",
-            "--outcomes-jsonl",
-            "output/adversarial/issue_5303_search_promotion/outcomes.jsonl",
-        ]
-    )
+    """The runner parser accepts the exact frozen diagnostic command."""
+    step3_execution = FROZEN_CONTRACT["step3_execution"]
+    assert isinstance(step3_execution, dict)
+    command = step3_execution["diagnostic_search_command"]
+    assert isinstance(command, str)
+    command_parts = shlex.split(command)
+    assert command_parts[:4] == [
+        "uv",
+        "run",
+        "python",
+        "scripts/tools/compare_adversarial_samplers.py",
+    ]
+    args = parse_args(command_parts[4:])
 
     assert args.policy == "hybrid_rule_local_planner"
     assert args.require_certification is True
     assert args.issue_5303_diagnostic_only is True
     assert args.samplers == ["random", "optuna"]
     assert args.seed == [530301, 530302, 530303]
+    assert args.execution_context_label == "diagnostic_adapter_context_a"
+    assert args.warm_start_record == [
+        "issue5305_classic_cross_trap_medium_fbbd96687d61",
+        "issue5305_classic_cross_trap_medium_fe24f0ff86a1",
+    ]
 
 
 def test_diagnostic_analysis_retains_duplicate_attempt_in_primary_denominator(

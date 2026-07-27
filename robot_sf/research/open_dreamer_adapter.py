@@ -807,7 +807,11 @@ def _coerce_action_step(
             )
         values = [raw_action[key] for key in required_keys]
     elif isinstance(raw_action, Sequence | np.ndarray) and not isinstance(raw_action, str | bytes):
-        values = list(raw_action)
+        values = (
+            list(np.atleast_1d(raw_action))
+            if isinstance(raw_action, np.ndarray)
+            else list(raw_action)
+        )
     else:
         raise OpenDreamerAdapterError(
             f"action at step {step_index} must be a recorder action mapping or sequence, "

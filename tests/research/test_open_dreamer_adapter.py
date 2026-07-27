@@ -684,6 +684,14 @@ def test_fail_closed_on_incompatible_action_dimensionality() -> None:
         adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
 
 
+def test_fail_closed_on_zero_dimensional_numpy_action() -> None:
+    """A scalar NumPy action raises the public adapter error rather than leaking TypeError."""
+    episode = _make_episode(step_count=1, actions=(np.asarray(0.5),))
+
+    with pytest.raises(OpenDreamerAdapterError, match="incompatible action space"):
+        adapt_episode(episode, action_bounds=_DEFAULT_BOUNDS)
+
+
 def test_fail_closed_on_action_mapping_with_unrecognized_extra_dimension() -> None:
     """A mapping cannot smuggle an extra action dimension past the canonical two-key contract."""
     actions = ({"linear_velocity": 0.5, "angular_velocity": 0.0, "camera_pitch": 0.1},)
